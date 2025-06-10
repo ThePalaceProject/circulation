@@ -22,7 +22,6 @@ from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.classification import Genre
 from palace.manager.sqlalchemy.model.collection import Collection
-from palace.manager.sqlalchemy.model.coverage import WorkCoverageRecord
 from palace.manager.sqlalchemy.model.credential import Credential
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.devicetokens import DeviceToken, DeviceTokenTypes
@@ -149,10 +148,6 @@ class TestWorkReaper:
         for work in works:
             l.add_entry(work)
 
-        # Each work has a WorkCoverageRecord.
-        for work in works:
-            WorkCoverageRecord.add_for(work, operation="some operation")
-
         # Run the reaper.
         work_reaper.delay().wait()
 
@@ -169,12 +164,8 @@ class TestWorkReaper:
         # theoretically be used by other parts of the system.
         assert set(db.session.query(Edition).all()) == set(presentation_editions)
 
-        # The surviving work is still assigned to the Genre, and still
-        # has WorkCoverageRecords.
+        # The surviving work is still assigned to the Genre
         assert genre.works == [has_license_pool]
-        surviving_records = db.session.query(WorkCoverageRecord)
-        assert surviving_records.count() > 0
-        assert all(x.work == has_license_pool for x in surviving_records)
 
         # The CustomListEntries still exist, but two of them have lost
         # their work.

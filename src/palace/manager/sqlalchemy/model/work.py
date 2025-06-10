@@ -41,6 +41,10 @@ from palace.manager.data_layer.policy.presentation import (
     PresentationCalculationPolicy,
 )
 from palace.manager.search.service import SearchDocument
+from palace.manager.service.redis.models.work import (
+    WaitingForPresentationCalculation,
+    WorkIdAndPolicy,
+)
 from palace.manager.service.redis.redis import Redis
 from palace.manager.sqlalchemy.constants import (
     DataSourceConstants,
@@ -53,7 +57,6 @@ from palace.manager.sqlalchemy.model.classification import (
     Subject,
 )
 from palace.manager.sqlalchemy.model.contributor import Contribution
-from palace.manager.sqlalchemy.model.coverage import CoverageRecord, WorkCoverageRecord
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import (
@@ -163,11 +166,6 @@ class Work(Base, LoggerMixin):
     presentation_edition_id = Column(Integer, ForeignKey("editions.id"), index=True)
     presentation_edition: Mapped[Edition | None] = relationship(
         "Edition", back_populates="work"
-    )
-
-    # One Work may have many associated WorkCoverageRecords.
-    coverage_records: Mapped[list[WorkCoverageRecord]] = relationship(
-        "WorkCoverageRecord", back_populates="work", cascade="all, delete-orphan"
     )
 
     # One Work may be associated with many CustomListEntries.
@@ -348,30 +346,6 @@ class Work(Base, LoggerMixin):
             self.language,
             len(self.license_pools),
         )
-
-    @classmethod
-    def missing_coverage_from(
-        cls, _db, operation=None, count_as_covered=None, count_as_missing_before=None
-    ):
-        """Find Works which have no WorkCoverageRecord for the given
-        `operation`.
-        """
-
-        clause = and_(
-            Work.id == WorkCoverageRecord.work_id,
-            WorkCoverageRecord.operation == operation,
-        )
-        q = (
-            _db.query(Work)
-            .outerjoin(WorkCoverageRecord, clause)
-            .order_by(Work.id, WorkCoverageRecord.id)
-        )
-
-        missing = WorkCoverageRecord.not_covered(
-            count_as_covered, count_as_missing_before
-        )
-        q2 = q.filter(missing)
-        return q2
 
     @classmethod
     def for_unchecked_subjects(cls, _db):
@@ -613,11 +587,7 @@ class Work(Base, LoggerMixin):
         for pool in self.license_pools:
             other_work.license_pools.append(pool)
 
-        # All WorkGenres and WorkCoverageRecords for this Work are
-        # deleted. (WorkGenres are deleted via cascade.)
         _db = Session.object_session(self)
-        for cr in self.coverage_records:
-            _db.delete(cr)
         _db.delete(self)
 
         other_work.calculate_presentation()
@@ -639,7 +609,6 @@ class Work(Base, LoggerMixin):
             )
         else:
             self.summary_text = ""
-        WorkCoverageRecord.add_for(self, operation=WorkCoverageRecord.SUMMARY_OPERATION)
 
     @classmethod
     def with_genre(cls, _db, genre):
@@ -917,11 +886,6 @@ class Work(Base, LoggerMixin):
             # did we find a pool whose presentation edition was better than the work's?
             self.set_presentation_edition(new_presentation_edition)
 
-        # tell everyone else we tried to set work's presentation edition
-        WorkCoverageRecord.add_for(
-            self, operation=WorkCoverageRecord.CHOOSE_EDITION_OPERATION
-        )
-
         changed = (
             edition_metadata_changed
             or old_presentation_edition != self.presentation_edition
@@ -1009,9 +973,6 @@ class Work(Base, LoggerMixin):
                 all_identifier_ids,
                 default_fiction=default_fiction,
                 default_audience=default_audience,
-            )
-            WorkCoverageRecord.add_for(
-                self, operation=WorkCoverageRecord.CLASSIFY_OPERATION
             )
 
         if policy.choose_summary:
@@ -1218,22 +1179,6 @@ class Work(Base, LoggerMixin):
                 active_license_pool = p
         return active_license_pool
 
-    def _reset_coverage(self, operation):
-        """Put this work's WorkCoverageRecord for the given `operation`
-        into the REGISTERED state.
-
-        This is useful for erasing the record of work that was done,
-        so that automated scripts know the work needs to be done
-        again.
-
-        :return: A WorkCoverageRecord.
-        """
-        _db = Session.object_session(self)
-        record, is_new = WorkCoverageRecord.add_for(
-            self, operation=operation, status=CoverageRecord.REGISTERED
-        )
-        return record
-
     def external_index_needs_updating(self) -> None:
         """Mark this work as needing to have its search document reindexed."""
         return self.queue_indexing(self.id)
@@ -1252,25 +1197,18 @@ class Work(Base, LoggerMixin):
         if work_id is not None:
             waiting.add(work_id)
 
-    def needs_full_presentation_recalculation(self):
-        """Mark this work as needing to have its presentation completely
-        recalculated.
-
-        This shifts the time spent recalculating presentation to a
-        script dedicated to this purpose, rather than a script that
-        interacts with APIs. It's also more efficient, since a work
-        might be flagged multiple times before we actually get around
-        to recalculating the presentation.
-        """
-        return self._reset_coverage(WorkCoverageRecord.CLASSIFY_OPERATION)
-
-    def needs_new_presentation_edition(self):
-        """Mark this work as needing to have its presentation edition
-        regenerated. This is significantly less work than
-        calling needs_full_presentation_recalculation, but it will
-        not update a Work's quality score, summary, or genre classification.
-        """
-        return self._reset_coverage(WorkCoverageRecord.CHOOSE_EDITION_OPERATION)
+    @staticmethod
+    @inject
+    def queue_presentation_recalculation(
+        work_id: int | None,
+        policy: PresentationCalculationPolicy,
+        *,
+        redis_client: Redis = Provide["redis.client"],
+    ):
+        """Queue an async background task to have this work's presentation  recalculated"""
+        waiting = WaitingForPresentationCalculation(redis_client)
+        if work_id is not None:
+            waiting.add(WorkIdAndPolicy(work_id=work_id, policy=policy))
 
     def set_presentation_ready(self, as_of=None, exclude_search=False):
         """Set this work as presentation-ready, no matter what.
@@ -1309,9 +1247,6 @@ class Work(Base, LoggerMixin):
             or not self.presentation_edition.medium
         ):
             self.presentation_ready = False
-            # The next time the search index WorkCoverageRecords are
-            # processed, this work will be removed from the search
-            # index.
             self.external_index_needs_updating()
             self.log.warning("Work is not presentation ready: %r", self)
         else:
@@ -1336,7 +1271,6 @@ class Work(Base, LoggerMixin):
         self.quality = Measurement.overall_quality(
             measurements, default_value=default_quality
         )
-        WorkCoverageRecord.add_for(self, operation=WorkCoverageRecord.QUALITY_OPERATION)
 
     def assign_genres(
         self,

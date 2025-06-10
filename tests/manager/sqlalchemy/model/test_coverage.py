@@ -9,7 +9,6 @@ from palace.manager.sqlalchemy.model.coverage import (
     CoverageRecord,
     EquivalencyCoverageRecord,
     Timestamp,
-    WorkCoverageRecord,
 )
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
@@ -465,129 +464,6 @@ class TestCoverageRecord:
                 edition.data_source,
                 CoverageRecord.IMPORT_OPERATION,
             )
-
-
-class TestWorkCoverageRecord:
-    def test_lookup(self, db: DatabaseTransactionFixture):
-        work = db.work()
-        operation = "foo"
-
-        lookup = WorkCoverageRecord.lookup(work, operation)
-        assert None == lookup
-
-        record = db.work_coverage_record(work, operation)
-
-        lookup = WorkCoverageRecord.lookup(work, operation)
-        assert lookup == record
-
-        assert None == WorkCoverageRecord.lookup(work, "another operation")
-
-    def test_add_for(self, db: DatabaseTransactionFixture):
-        work = db.work()
-        operation = "foo"
-        record, is_new = WorkCoverageRecord.add_for(work, operation)
-        assert True == is_new
-
-        # If we call add_for again we get the same record back, but we
-        # can modify the timestamp.
-        a_week_ago = utc_now() - datetime.timedelta(days=7)
-        record2, is_new = WorkCoverageRecord.add_for(work, operation, a_week_ago)
-        assert record == record2
-        assert False == is_new
-        assert a_week_ago == record2.timestamp
-
-        # If we don't specify an operation we get a totally different
-        # record.
-        record3, ignore = WorkCoverageRecord.add_for(work, None)
-        assert record3 != record
-        assert None == record3.operation
-        seconds = (utc_now() - record3.timestamp).seconds
-        assert seconds < 10
-
-        # If we call lookup we get the same record.
-        record4 = WorkCoverageRecord.lookup(work, None)
-        assert record3 == record4
-
-        # We can change the status.
-        record5, is_new = WorkCoverageRecord.add_for(
-            work, operation, status=WorkCoverageRecord.PERSISTENT_FAILURE
-        )
-        assert record5 == record
-        assert WorkCoverageRecord.PERSISTENT_FAILURE == record.status
-
-    def test_bulk_add(self, db: DatabaseTransactionFixture):
-        operation = "relevant"
-        irrelevant_operation = "irrelevant"
-
-        # This Work will get a new WorkCoverageRecord for the relevant
-        # operation, even though it already has a WorkCoverageRecord
-        # for an irrelevant operation.
-        not_already_covered = db.work()
-        irrelevant_record, ignore = WorkCoverageRecord.add_for(
-            not_already_covered, irrelevant_operation, status=WorkCoverageRecord.SUCCESS
-        )
-
-        # This Work will have its existing, relevant CoverageRecord
-        # updated.
-        already_covered = db.work()
-        previously_failed, ignore = WorkCoverageRecord.add_for(
-            already_covered,
-            operation,
-            status=WorkCoverageRecord.TRANSIENT_FAILURE,
-        )
-        previously_failed.exception = "Some exception"
-
-        # This work will not have a record created for it, because
-        # we're not passing it in to the method.
-        not_affected = db.work()
-        WorkCoverageRecord.add_for(
-            not_affected, irrelevant_operation, status=WorkCoverageRecord.SUCCESS
-        )
-
-        # This work will not have its existing record updated, because
-        # we're not passing it in to the method.
-        not_affected_2 = db.work()
-        not_modified, ignore = WorkCoverageRecord.add_for(
-            not_affected_2, operation, status=WorkCoverageRecord.SUCCESS
-        )
-
-        # Tell bulk_add to update or create WorkCoverageRecords for
-        # not_already_covered and already_covered, but not not_affected.
-        new_timestamp = utc_now()
-        new_status = WorkCoverageRecord.REGISTERED
-        WorkCoverageRecord.bulk_add(
-            [not_already_covered, already_covered],
-            operation,
-            new_timestamp,
-            status=new_status,
-        )
-        db.session.commit()
-
-        def relevant_records(work):
-            return [x for x in work.coverage_records if x.operation == operation]
-
-        # No coverage records were added or modified for works not
-        # passed in to the method.
-        assert [] == relevant_records(not_affected)
-        assert not_modified.timestamp < new_timestamp
-
-        # The record associated with already_covered has been updated,
-        # and its exception removed.
-        [record] = relevant_records(already_covered)
-        assert new_timestamp == record.timestamp
-        assert new_status == record.status
-        assert None == previously_failed.exception
-
-        # A new record has been associated with not_already_covered
-        [record] = relevant_records(not_already_covered)
-        assert new_timestamp == record.timestamp
-        assert new_status == record.status
-
-        # The irrelevant WorkCoverageRecord is not affected by the update,
-        # even though its Work was affected, because it's a record for
-        # a different operation.
-        assert WorkCoverageRecord.SUCCESS == irrelevant_record.status
-        assert irrelevant_record.timestamp < new_timestamp
 
 
 class ExampleEquivalencyCoverageRecordFixture:

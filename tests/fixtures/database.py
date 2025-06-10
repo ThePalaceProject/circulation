@@ -69,7 +69,7 @@ from palace.manager.sqlalchemy.model.classification import (
 )
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.contributor import Contributor
-from palace.manager.sqlalchemy.model.coverage import CoverageRecord, WorkCoverageRecord
+from palace.manager.sqlalchemy.model.coverage import CoverageRecord
 from palace.manager.sqlalchemy.model.credential import Credential
 from palace.manager.sqlalchemy.model.customlist import CustomList
 from palace.manager.sqlalchemy.model.datasource import DataSource
@@ -1145,21 +1145,6 @@ class DatabaseTransactionFixture:
                 test_password=test_password,
             ),
         )
-
-    def work_coverage_record(
-        self, work, operation=None, status=CoverageRecord.SUCCESS
-    ) -> WorkCoverageRecord:
-        record, ignore = get_one_or_create(
-            self.session,
-            WorkCoverageRecord,
-            work=work,
-            operation=operation,
-            create_method_kwargs=dict(
-                timestamp=utc_now(),
-                status=status,
-            ),
-        )
-        return record
 
     def classification(
         self, identifier, subject, data_source, weight=1

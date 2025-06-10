@@ -19,12 +19,6 @@ HOME=/var/www/circulation
 # the collections.
 #
 
-# If any works are missing presentation editions, add them.
-0 */3 * * * root bin/run work_presentation_editions >> /var/log/cron.log 2>&1
-
-# If any works are missing up-to-date classifications, classify them
-0 */3 * * * root bin/run work_classification >> /var/log/cron.log 2>&1
-
 # If any works are classified under unprocessed subjects, reclassify
 # those works.
 30 22 * * * root bin/run work_classify_unchecked_subjects >> /var/log/cron.log 2>&1

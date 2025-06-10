@@ -12,11 +12,12 @@ from palace.manager.data_layer.contributor import ContributorData
 from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.data_layer.link import LinkData
 from palace.manager.data_layer.measurement import MeasurementData
+from palace.manager.data_layer.policy.presentation import PresentationCalculationPolicy
 from palace.manager.data_layer.policy.replacement import ReplacementPolicy
 from palace.manager.data_layer.subject import SubjectData
 from palace.manager.sqlalchemy.model.classification import Subject
 from palace.manager.sqlalchemy.model.contributor import Contributor
-from palace.manager.sqlalchemy.model.coverage import CoverageRecord, WorkCoverageRecord
+from palace.manager.sqlalchemy.model.coverage import CoverageRecord
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
@@ -26,6 +27,9 @@ from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
 from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.util.datetime_helpers import datetime_utc, utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.work import (
+    WorkIdPolicyQueuePresentationRecalculationFixture,
+)
 from tests.mocks.mock import LogCaptureHandler
 
 
@@ -494,8 +498,10 @@ class TestBibliographicData:
         # BibliographicData.apply() does not create a Work if no Work exists.
         assert 0 == db.session.query(Work).count()
 
-    def test_apply_wipes_presentation_calculation_records(
-        self, db: DatabaseTransactionFixture
+    def test_apply_causes_presentation_recalculation(
+        self,
+        db: DatabaseTransactionFixture,
+        work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
     ):
         # We have a work.
         work = db.work(title="The Wrong Title", with_license_pool=True)
@@ -511,65 +517,54 @@ class TestBibliographicData:
         edition, ignore = bibliographic.edition(db.session)
         bibliographic.apply(db.session, edition, None)
 
-        # The work still has the wrong title.
+        assert work_policy_recalc_fixture.is_queued(
+            work.id,
+            PresentationCalculationPolicy.recalculate_presentation_edition(),
+            clear=True,
+        )
+
+        # The work still has the wrong title, but a full recalculation has been queued.
         assert "The Wrong Title" == work.title
-
-        # However, the work is now slated to have its presentation
-        # edition recalculated -- that will fix it.
-        def assert_registered(full):
-            """Verify that the WorkCoverageRecord for a full (full=True) or
-            partial (full=false) presentation recalculation operation
-            is in the 'registered' state, and that the
-            WorkCoverageRecord for the other presentation
-            recalculation operation is in the 'success' state.
-
-            The verified WorkCoverageRecord will be reset to the 'success'
-            state so that this can be called over and over without any
-            extra setup.
-            """
-            WCR = WorkCoverageRecord
-            for x in work.coverage_records:
-                if x.operation == WCR.CLASSIFY_OPERATION:
-                    if full:
-                        assert WCR.REGISTERED == x.status
-                        x.status = WCR.SUCCESS
-                    else:
-                        assert WCR.SUCCESS == x.status
-                elif x.operation == WCR.CHOOSE_EDITION_OPERATION:
-                    if full:
-                        assert WCR.SUCCESS == x.status
-                    else:
-                        assert WCR.REGISTERED == x.status
-                        x.status = WCR.SUCCESS
-
-        assert_registered(full=False)
 
         # We then learn about a subject under which the work
         # is classified.
         bibliographic.title = None
         bibliographic.subjects = [SubjectData(type=Subject.TAG, identifier="subject")]
-        bibliographic.apply(db.session, edition, None)
 
+        bibliographic.apply(db.session, edition, None)
         # The work is now slated to have its presentation completely
         # recalculated.
+        assert work_policy_recalc_fixture.is_queued(
+            work.id,
+            PresentationCalculationPolicy.recalculate_everything(),
+            clear=True,
+        )
 
         # We then find a new description for the work.
         bibliographic.subjects = []
         bibliographic.links = [
             LinkData(rel=Hyperlink.DESCRIPTION, content="a description")
         ]
-        bibliographic.apply(db.session, edition, None)
 
+        bibliographic.apply(db.session, edition, None)
         # We need to do a full recalculation again.
-        assert_registered(full=True)
+        assert work_policy_recalc_fixture.is_queued(
+            work.id,
+            PresentationCalculationPolicy.recalculate_everything(),
+            clear=True,
+        )
 
         # We then find a new cover image for the work.
         bibliographic.subjects = []
         bibliographic.links = [LinkData(rel=Hyperlink.IMAGE, href="http://image/")]
-        bibliographic.apply(db.session, edition, None)
 
+        bibliographic.apply(db.session, edition, None)
         # We need to choose a new presentation edition.
-        assert_registered(full=False)
+        assert work_policy_recalc_fixture.is_queued(
+            work.id,
+            PresentationCalculationPolicy.recalculate_presentation_edition(),
+            clear=True,
+        )
 
     def test_apply_identifier_equivalency(self, db: DatabaseTransactionFixture):
         # Set up an Edition.

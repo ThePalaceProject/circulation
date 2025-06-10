@@ -6,12 +6,16 @@ import pytest
 
 from palace.manager.api.overdrive.coverage import OverdriveBibliographicCoverageProvider
 from palace.manager.core.coverage import CoverageFailure
+from palace.manager.data_layer.policy.presentation import PresentationCalculationPolicy
 from palace.manager.scripts.coverage_provider import RunCollectionCoverageProviderScript
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism
 from palace.manager.sqlalchemy.model.resource import Representation
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.overdrive import OverdriveAPIFixture
+from tests.fixtures.work import (
+    WorkIdPolicyQueuePresentationRecalculationFixture,
+)
 from tests.mocks.overdrive import MockOverdriveAPI
 
 
@@ -20,19 +24,26 @@ class OverdriveBibliographicCoverageProviderFixture:
     overdrive: OverdriveAPIFixture
     provider: OverdriveBibliographicCoverageProvider
     api: MockOverdriveAPI
+    work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture
 
 
 @pytest.fixture
 def overdrive_biblio_provider_fixture(
     db: DatabaseTransactionFixture,
     overdrive_api_fixture: OverdriveAPIFixture,
+    work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
 ) -> OverdriveBibliographicCoverageProviderFixture:
     overdrive = overdrive_api_fixture
     api = overdrive_api_fixture.api
     provider = OverdriveBibliographicCoverageProvider(
         overdrive_api_fixture.collection, api=api
     )
-    return OverdriveBibliographicCoverageProviderFixture(overdrive, provider, api)
+    return OverdriveBibliographicCoverageProviderFixture(
+        overdrive,
+        provider,
+        api,
+        work_policy_recalc_fixture,
+    )
 
 
 class TestOverdriveBibliographicCoverageProvider:
@@ -112,8 +123,13 @@ class TestOverdriveBibliographicCoverageProvider:
         http.queue_response(200, content=raw)
 
         [result] = fixture.provider.process_batch([identifier])
+
         assert result == identifier
 
+        assert fixture.work_policy_recalc_fixture.is_queued(
+            identifier.work.id,
+            PresentationCalculationPolicy.recalculate_everything(),
+        )
         # A LicensePool was created, not because we know anything
         # about how we've licensed this book, but to have a place to
         # store the information about what formats the book is

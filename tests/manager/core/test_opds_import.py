@@ -40,7 +40,7 @@ from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.classification import Subject
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.contributor import Contributor
-from palace.manager.sqlalchemy.model.coverage import CoverageRecord, WorkCoverageRecord
+from palace.manager.sqlalchemy.model.coverage import CoverageRecord
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
@@ -59,6 +59,9 @@ from palace.manager.util.http import BadResponseException
 from palace.manager.util.opds_writer import AtomFeed, OPDSFeed, OPDSMessage
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import OPDSFilesFixture
+from tests.fixtures.work import (
+    WorkIdPolicyQueuePresentationRecalculationFixture,
+)
 from tests.mocks.mock import MockHTTPClient, MockRequestsResponse
 
 
@@ -86,7 +89,10 @@ class DoomedWorkOPDSImporter(OPDSImporter):
 
 class OPDSImporterFixture:
     def __init__(
-        self, db: DatabaseTransactionFixture, opds_files_fixture: OPDSFilesFixture
+        self,
+        db: DatabaseTransactionFixture,
+        opds_files_fixture: OPDSFilesFixture,
+        work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
     ):
         self.db = db
         self.content_server_feed = opds_files_fixture.sample_data("content_server.opds")
@@ -102,13 +108,16 @@ class OPDSImporterFixture:
             OPDSImporter, _db=self.db.session, collection=self.db.default_collection()
         )
 
+        self.work_policy_recalc_fixture = work_policy_recalc_fixture
+
 
 @pytest.fixture()
 def opds_importer_fixture(
     db: DatabaseTransactionFixture,
     opds_files_fixture: OPDSFilesFixture,
+    work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
 ) -> OPDSImporterFixture:
-    data = OPDSImporterFixture(db, opds_files_fixture)
+    data = OPDSImporterFixture(db, opds_files_fixture, work_policy_recalc_fixture)
     return data
 
 
@@ -929,6 +938,7 @@ class TestOPDSImporter:
         # This import will create Editions, but not LicensePools or
         # Works, because there is no Collection.
         importer = opds_importer_fixture.importer()
+
         imported_editions, pools, works, failures = importer.import_from_feed(feed)
 
         # Both editions were imported, because they were new.
@@ -976,6 +986,7 @@ class TestOPDSImporter:
             protocol=OPDSAPI, settings=db.opds_settings(data_source="some new source")
         )
         importer = opds_importer_fixture.importer(collection=collection)
+
         imported_editions, pools, works, failures = importer.import_from_feed(feed)
         assert {} == failures
 
@@ -1126,6 +1137,7 @@ class TestOPDSImporter:
         # meaningful error message.
 
         feed = data.content_server_mini_feed
+
         imported_editions, pools, works, failures = DoomedOPDSImporter(
             session,
             collection=db.default_collection(),
@@ -1305,6 +1317,7 @@ class TestOPDSImporter:
         )
 
         importer = opds_importer_fixture.importer()
+
         returned_pool, returned_work = importer.update_work_for_edition(edition)
         assert returned_pool == pool
         assert returned_work == work
@@ -1325,7 +1338,6 @@ class TestOPDSImporter:
 
         # The work's presentation edition has been chosen.
         work.calculate_presentation()
-        op = WorkCoverageRecord.CHOOSE_EDITION_OPERATION
 
         # But we're about to find out a new title for the book.
         i = edition.primary_identifier

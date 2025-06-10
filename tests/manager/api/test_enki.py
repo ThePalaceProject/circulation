@@ -41,6 +41,9 @@ from palace.manager.util.datetime_helpers import datetime_utc, utc_now
 from palace.manager.util.http import RemoteIntegrationException, RequestTimedOut
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import FilesFixture
+from tests.fixtures.work import (
+    WorkIdPolicyQueuePresentationRecalculationFixture,
+)
 from tests.mocks.enki import MockEnkiAPI
 from tests.mocks.mock import MockRequestsResponse
 
@@ -59,7 +62,12 @@ def enki_files_fixture() -> EnkiFilesFixture:
 
 
 class EnkiTestFixure:
-    def __init__(self, db: DatabaseTransactionFixture, files: EnkiFilesFixture):
+    def __init__(
+        self,
+        db: DatabaseTransactionFixture,
+        files: EnkiFilesFixture,
+        work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
+    ):
         self.db = db
         self.files = files
         self.library = db.default_library()
@@ -74,12 +82,16 @@ class EnkiTestFixure:
             EnkiLibrarySettings(enki_library_id="c"),
         )
 
+        self.work_policy_recalc_fixture = work_policy_recalc_fixture
+
 
 @pytest.fixture(scope="function")
 def enki_test_fixture(
-    db: DatabaseTransactionFixture, enki_files_fixture: EnkiFilesFixture
+    db: DatabaseTransactionFixture,
+    enki_files_fixture: EnkiFilesFixture,
+    work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
 ) -> EnkiTestFixure:
-    return EnkiTestFixure(db, enki_files_fixture)
+    return EnkiTestFixure(db, enki_files_fixture, work_policy_recalc_fixture)
 
 
 class TestEnkiAPI:

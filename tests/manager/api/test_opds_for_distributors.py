@@ -39,6 +39,9 @@ from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.opds_writer import OPDSFeed
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import FilesFixture
+from tests.fixtures.work import (
+    WorkIdPolicyQueuePresentationRecalculationFixture,
+)
 from tests.mocks.mock import MockRequestsResponse
 from tests.mocks.opds_for_distributors import MockOPDSForDistributorsAPI
 
@@ -92,12 +95,16 @@ def authentication_document() -> Callable[[str], str]:
 
 class OPDSForDistributorsAPIFixture:
     def __init__(
-        self, db: DatabaseTransactionFixture, files: OPDSForDistributorsFilesFixture
+        self,
+        db: DatabaseTransactionFixture,
+        files: OPDSForDistributorsFilesFixture,
+        work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
     ):
         self.db = db
         self.collection = self.mock_collection(db.default_library())
         self.api = MockOPDSForDistributorsAPI(db.session, self.collection)
         self.files = files
+        self.work_policy_recalc_fixture = work_policy_recalc_fixture
 
     def mock_collection(
         self,
@@ -123,8 +130,11 @@ class OPDSForDistributorsAPIFixture:
 def opds_dist_api_fixture(
     db: DatabaseTransactionFixture,
     opds_dist_files_fixture: OPDSForDistributorsFilesFixture,
+    work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
 ) -> OPDSForDistributorsAPIFixture:
-    return OPDSForDistributorsAPIFixture(db, opds_dist_files_fixture)
+    return OPDSForDistributorsAPIFixture(
+        db, opds_dist_files_fixture, work_policy_recalc_fixture
+    )
 
 
 class TestOPDSForDistributorsAPI:

@@ -214,11 +214,7 @@ class CustomList(Base):
           in the list.
 
         :param update_external_index: When a Work is added to a list,
-          its external index needs to be updated. The only reason not to
-          do this is when the current database session already contains
-          a new WorkCoverageRecord for this purpose (e.g. because the
-          Work was just created) and creating another one would violate
-          the workcoveragerecords table's unique constraint. TODO: This
+          its external index needs to be updated. TODO: This
           is probably no longer be necessary since we no longer update the
           external index in real time.
         """

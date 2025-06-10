@@ -12,6 +12,7 @@ from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.util.datetime_helpers import datetime_utc
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import AxisFilesFixture
+from tests.fixtures.work import WorkIdPolicyQueuePresentationRecalculationFixture
 from tests.mocks.axis import MockAxis360API
 
 
@@ -55,13 +56,19 @@ class Axis360Fixture:
         circulation=CIRCULATION_DATA,
     )
 
-    def __init__(self, db: DatabaseTransactionFixture, files: AxisFilesFixture):
+    def __init__(
+        self,
+        db: DatabaseTransactionFixture,
+        files: AxisFilesFixture,
+        work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
+    ):
         self.db = db
         self.files = files
         self.collection = MockAxis360API.mock_collection(
             db.session, db.default_library()
         )
         self.api = MockAxis360API(db.session, self.collection)
+        self.work_policy_recalc_fixture = work_policy_recalc_fixture
 
     def sample_data(self, filename):
         return self.files.sample_data(filename)
@@ -72,6 +79,8 @@ class Axis360Fixture:
 
 @pytest.fixture(scope="function")
 def axis360(
-    db: DatabaseTransactionFixture, axis_files_fixture: AxisFilesFixture
+    db: DatabaseTransactionFixture,
+    axis_files_fixture: AxisFilesFixture,
+    work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
 ) -> Axis360Fixture:
-    return Axis360Fixture(db, axis_files_fixture)
+    return Axis360Fixture(db, axis_files_fixture, work_policy_recalc_fixture)

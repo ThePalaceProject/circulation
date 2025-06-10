@@ -217,7 +217,16 @@ def beat_schedule() -> dict[str, Any]:
             "task": "novelist.update_novelists_for_all_libraries",
             "schedule": crontab(
                 minute="0", hour="0", day_of_week="0"
-            ),  # Every Sundary at midnight
+            ),  # Every Sunday at midnight
+        },
+        "calculate_work_presentations": {
+            "task": "work.calculate_work_presentations",
+            "schedule": crontab(minute="*/10"),  # Every 10 minutes
+        },
+        # TODO: THIS scheduled task is TEMPORARY and should be removed in the next release
+        "migrate_work_coverage_records": {
+            "task": "work.migrate_work_coverage_records",
+            "schedule": crontab(minute="0", hour="0"),  # Every day at midnight
         },
     }
 

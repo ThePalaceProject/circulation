@@ -21,6 +21,7 @@ from palace.manager.api.odl.importer import (
 from palace.manager.api.odl.settings import OPDS2AuthType, OPDS2WithODLSettings
 from palace.manager.core.coverage import CoverageFailure
 from palace.manager.data_layer.license import LicenseData
+from palace.manager.data_layer.policy.presentation import PresentationCalculationPolicy
 from palace.manager.opds.odl.info import LicenseStatus
 from palace.manager.sqlalchemy.constants import (
     EditionConstants,
@@ -191,6 +192,13 @@ class TestOPDS2WithODLImporter:
 
         assert "2 validation errors" in huck_finn_failure.exception
 
+        # 5. Make sure that expected work id are queued for recalculation
+        policy = PresentationCalculationPolicy.recalculate_everything()
+        for w in works:
+            assert opds2_with_odl_importer_fixture.work_policy_recalc_fixture.is_queued(
+                w.id, policy
+            )
+
     @freeze_time("2016-01-01T00:00:00+00:00")
     def test_import_audiobook_with_streaming(
         self,
@@ -198,8 +206,8 @@ class TestOPDS2WithODLImporter:
         opds2_with_odl_importer_fixture: OPDS2WithODLImporterFixture,
     ) -> None:
         """Ensure that OPDSWithODLImporter correctly processes and imports a feed with an audiobook."""
-        opds2_with_odl_importer_fixture.queue_fixture_file("license-audiobook.json")
 
+        opds2_with_odl_importer_fixture.queue_fixture_file("license-audiobook.json")
         (
             imported_editions,
             pools,
@@ -372,6 +380,7 @@ class TestOPDS2WithODLImporter:
         importer.settings = db.opds2_odl_settings(
             auth_type=auth_type,
         )
+
         (
             imported_editions,
             pools,
@@ -782,6 +791,7 @@ class TestOPDS2WithODLImporter:
                 left=40,
             ),
         ]
+
         (
             imported_editions,
             imported_pools,

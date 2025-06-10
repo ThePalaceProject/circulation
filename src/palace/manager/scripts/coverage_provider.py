@@ -58,17 +58,6 @@ class RunCollectionCoverageProviderScript(RunCoverageProvidersScript):
         return list(provider_class.all(_db, **kwargs))
 
 
-class RunWorkCoverageProviderScript(RunCollectionCoverageProviderScript):
-    """Run a WorkCoverageProvider on every relevant Work in the system."""
-
-    # This class overrides RunCollectionCoverageProviderScript just to
-    # take advantage of the constructor; it doesn't actually use the
-    # concept of 'collections' at all.
-
-    def get_providers(self, _db, provider_class, **kwargs):
-        return [provider_class(_db, **kwargs)]
-
-
 class RunCoverageProviderScript(IdentifierInputScript):
     """Run a single coverage provider."""
 
@@ -125,7 +114,6 @@ class RunCoverageProviderScript(IdentifierInputScript):
         to the CoverageProvider constructor.
 
         By default, pass in a value used only by CoverageProvider
-        (as opposed to WorkCoverageProvider).
         """
         return {
             "input_identifiers": self.identifiers,

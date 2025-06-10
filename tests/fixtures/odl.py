@@ -31,6 +31,9 @@ from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import FilesFixture, OPDS2WithODLFilesFixture
+from tests.fixtures.work import (
+    WorkIdPolicyQueuePresentationRecalculationFixture,
+)
 from tests.mocks.mock import MockHTTPClient, MockRequestsResponse
 from tests.mocks.odl import MockOPDS2WithODLApi
 
@@ -288,6 +291,7 @@ class OPDS2WithODLImporterFixture:
         self,
         db: DatabaseTransactionFixture,
         api_fixture: OPDS2WithODLApiFixture,
+        work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
     ):
         self.db = db
         self.api_fixture = api_fixture
@@ -302,6 +306,8 @@ class OPDS2WithODLImporterFixture:
             collection=self.collection,
             http_get=self.get_response,
         )
+
+        self.work_policy_recalc_fixture = work_policy_recalc_fixture
 
     def get_response(self, *args: Any, **kwargs: Any) -> Response:
         return MockRequestsResponse(200, content=self.responses.pop(0))
@@ -367,5 +373,8 @@ class OPDS2WithODLImporterFixture:
 def opds2_with_odl_importer_fixture(
     db: DatabaseTransactionFixture,
     opds2_with_odl_api_fixture: OPDS2WithODLApiFixture,
+    work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
 ) -> OPDS2WithODLImporterFixture:
-    return OPDS2WithODLImporterFixture(db, opds2_with_odl_api_fixture)
+    return OPDS2WithODLImporterFixture(
+        db, opds2_with_odl_api_fixture, work_policy_recalc_fixture
+    )

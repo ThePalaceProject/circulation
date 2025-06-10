@@ -1,14 +1,10 @@
 import logging
 import traceback
 
-from sqlalchemy.orm import Load
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.functions import func
 
 from palace.manager.core.monitor import TimestampData
-from palace.manager.data_layer.policy.presentation import (
-    PresentationCalculationPolicy,
-)
 from palace.manager.data_layer.policy.replacement import ReplacementPolicy
 from palace.manager.service.container import container_instance
 from palace.manager.sqlalchemy.model.collection import Collection, CollectionMissing
@@ -17,13 +13,11 @@ from palace.manager.sqlalchemy.model.coverage import (
     CoverageRecord,
     EquivalencyCoverageRecord,
     Timestamp,
-    WorkCoverageRecord,
 )
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import LicensePool
-from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.sqlalchemy.util import get_one
 from palace.manager.util.datetime_helpers import utc_now
 
@@ -62,16 +56,6 @@ class CoverageFailure:
         record, ignore = CoverageRecord.add_for(
             self.obj, self.data_source, operation=operation, collection=self.collection
         )
-        record.exception = self.exception
-        if self.transient:
-            record.status = CoverageRecord.TRANSIENT_FAILURE
-        else:
-            record.status = CoverageRecord.PERSISTENT_FAILURE
-        return record
-
-    def to_work_coverage_record(self, operation):
-        """Convert this failure into a WorkCoverageRecord."""
-        record, ignore = WorkCoverageRecord.add_for(self.obj, operation=operation)
         record.exception = self.exception
         if self.transient:
             record.status = CoverageRecord.TRANSIENT_FAILURE
@@ -139,13 +123,10 @@ class BaseCoverageProvider:
     coverage record.
 
     Instead of instantiating this class directly, subclass one of its
-    subclasses: either IdentifierCoverageProvider or
-    WorkCoverageProvider.
+    subclasses, e.g. IdentifierCoverageProvider.
 
     In IdentifierCoverageProvider the 'objects' are Identifier objects
-    and the coverage records are CoverageRecord objects. In
-    WorkCoverageProvider the 'objects' are Work objects and the
-    coverage records are WorkCoverageRecord objects.
+    and the coverage records are CoverageRecord objects.
     """
 
     # In your subclass, set this to the name of the service,
@@ -560,21 +541,21 @@ class BaseCoverageProvider:
             only items that need coverage *and* are associated with one
             of these identifiers.
 
-        Implemented in CoverageProvider and WorkCoverageProvider.
+        Implemented in CoverageProvider.
         """
         raise NotImplementedError()
 
     def add_coverage_record_for(self, item):
         """Add a coverage record for the given item.
 
-        Implemented in IdentifierCoverageProvider and WorkCoverageProvider.
+        Implemented in IdentifierCoverageProvider
         """
         raise NotImplementedError()
 
     def record_failure_as_coverage_record(self, failure):
         """Convert the given CoverageFailure to a coverage record.
 
-        Implemented in IdentifierCoverageProvider and WorkCoverageProvider.
+        Implemented in IdentifierCoverageProvider
         """
         raise NotImplementedError()
 
@@ -582,8 +563,7 @@ class BaseCoverageProvider:
         """Create a CoverageFailure recording the coverage provider's
         failure to even try to process an item.
 
-        Implemented in IdentifierCoverageProvider and
-        WorkCoverageProvider.
+        Implemented in IdentifierCoverageProvider.
         """
         raise NotImplementedError()
 
@@ -591,8 +571,7 @@ class BaseCoverageProvider:
         """Do the work necessary to give coverage to one specific item.
 
         Since this is where the actual work happens, this is not
-        implemented in IdentifierCoverageProvider or
-        WorkCoverageProvider, and must be handled in a subclass.
+        implemented in IdentifierCoverageProvider, and must be handled in a subclass.
         """
         raise NotImplementedError()
 
@@ -1397,192 +1376,3 @@ class BibliographicCoverageProvider(CollectionCoverageProvider):
         work and made presentation ready.
         """
         self.set_presentation_ready(identifier)
-
-
-class WorkCoverageProvider(BaseCoverageProvider):
-    """Perform coverage operations on Works rather than Identifiers."""
-
-    @classmethod
-    def register(cls, work, force=False):
-        """Registers a work for future coverage.
-
-        This method is primarily for use with CoverageProviders that use the
-        `registered_only` flag to process items. It's currently only in use
-        on the Metadata Wrangler.
-
-        :param force: Set to True to reset an existing CoverageRecord's status
-            "registered", regardless of its current status.
-        """
-        was_registered = True
-        if not force:
-            record = WorkCoverageRecord.lookup(work, cls.OPERATION)
-            if record:
-                was_registered = False
-                return record, was_registered
-
-        # WorkCoverageRecord.add_for overwrites the status already,
-        # so it can be used to create and to force-register records.
-        record, is_new = WorkCoverageRecord.add_for(
-            work, cls.OPERATION, status=CoverageRecord.REGISTERED
-        )
-        return record, was_registered
-
-    #
-    # Implementation of BaseCoverageProvider virtual methods.
-    #
-
-    def items_that_need_coverage(self, identifiers=None, **kwargs):
-        """Find all Works lacking coverage from this CoverageProvider.
-
-        By default, all Works which don't already have coverage are
-        chosen.
-
-        :param: Only Works connected with one of the given identifiers
-            are chosen.
-        """
-        qu = Work.missing_coverage_from(
-            self._db,
-            operation=self.operation,
-            count_as_missing_before=self.cutoff_time,
-            **kwargs
-        )
-        qu = qu.options(Load(Work).lazyload("*"))
-
-        if identifiers:
-            ids = [x.id for x in identifiers]
-            qu = qu.join(Work.license_pools).filter(LicensePool.identifier_id.in_(ids))
-
-        if self.registered_only:
-            # Return Identifiers that have been "registered" for coverage
-            # or already have a failure from previous coverage attempts.
-            qu = qu.filter(WorkCoverageRecord.id != None)
-
-        return qu
-
-    def failure(self, work, error, transient=True):
-        """Create a CoverageFailure object."""
-        return CoverageFailure(work, error, transient=transient)
-
-    def failure_for_ignored_item(self, work):
-        """Create a CoverageFailure recording the WorkCoverageProvider's
-        failure to even try to process a Work.
-        """
-        return CoverageFailure(
-            work, "Was ignored by WorkCoverageProvider.", transient=True
-        )
-
-    def add_coverage_records_for(self, works):
-        """Add WorkCoverageRecords for a group of works from a batch,
-        each of which was successful.
-        """
-        WorkCoverageRecord.bulk_add(works, operation=self.operation)
-
-        # We can't return the specific WorkCoverageRecords that were
-        # created, but it doesn't matter because they're not used except
-        # in tests.
-        return []
-
-    def add_coverage_record_for(self, work):
-        """Record this CoverageProvider's coverage for the given
-        Edition/Identifier, as a WorkCoverageRecord.
-        """
-        return WorkCoverageRecord.add_for(work, operation=self.operation)
-
-    def record_failure_as_coverage_record(self, failure):
-        """Turn a CoverageFailure into a WorkCoverageRecord object."""
-        return failure.to_work_coverage_record(operation=self.operation)
-
-
-class PresentationReadyWorkCoverageProvider(WorkCoverageProvider):
-    """A WorkCoverageProvider that only covers presentation-ready works."""
-
-    def items_that_need_coverage(self, identifiers=None, **kwargs):
-        qu = super().items_that_need_coverage(identifiers, **kwargs)
-        qu = qu.filter(Work.presentation_ready == True)
-        return qu
-
-
-class WorkPresentationProvider(PresentationReadyWorkCoverageProvider):
-    """Recalculate some part of presentation for works that are
-    presentation-ready.
-
-    A Work's presentation is set when it's made presentation-ready
-    (thus the name). When that happens, a number of WorkCoverageRecords
-    are set for that Work.
-
-    A migration script may remove a coverage record if it knows a work
-    needs to have some aspect of its presentation recalculated. These
-    providers give back the 'missing' coverage.
-    """
-
-    DEFAULT_BATCH_SIZE = 100
-
-
-class WorkPresentationEditionCoverageProvider(WorkPresentationProvider):
-    """Make sure each Work has an up-to-date presentation edition.
-
-    This basically means comparing all the Editions associated with the
-    Work and building a composite Edition.
-
-    Expensive operations -- calculating work quality, summary, and genre
-    classification -- are reserved for WorkClassificationCoverageProvider
-    """
-
-    SERVICE_NAME = "Calculated presentation coverage provider"
-
-    OPERATION = WorkCoverageRecord.CHOOSE_EDITION_OPERATION
-
-    POLICY = PresentationCalculationPolicy(
-        choose_edition=True,
-        set_edition_metadata=True,
-        verbose=True,
-        # These are the expensive ones, and they're covered by
-        # WorkSummaryQualityClassificationCoverageProvider.
-        classify=False,
-        choose_summary=False,
-        calculate_quality=False,
-        # It would be better if there were a separate class for this
-        # operation (COVER_OPERATION), but it's a little complicated because
-        # that's not a WorkCoverageRecord operation.
-        choose_cover=True,
-        # This will flag the Work as
-        # needing a search index update, and SearchIndexCoverageProvider
-        # will take care of it.
-        update_search_index=True,
-    )
-
-    def process_item(self, work):
-        """Recalculate the presentation for a Work."""
-
-        # Calling calculate_presentation_edition won't, on its own,
-        # regenerate the OPDS feeds or update the search index.  So we
-        # call calculate_presentation with a policy that ensures the
-        # presentation edition will be reevaluated, but nothing
-        # expensive will happen.
-        work.calculate_presentation(self.POLICY)
-        return work
-
-
-class WorkClassificationCoverageProvider(WorkPresentationEditionCoverageProvider):
-    """Calculates the 'expensive' parts of a work's presentation:
-    classifications, summary, and quality.
-
-    We do all three at once because these gathering together all
-    equivalent identifiers for the work, which can be, by far, the
-    most expensive part of the work.
-
-    This is called 'classification' because that's the most likely use
-    of this coverage provider. If you want to make sure a bunch of
-    works get their summaries recalculated, you need to remember that
-    the coverage record to delete is CLASSIFY_OPERATION.
-    """
-
-    SERVICE_NAME = "Work classification coverage provider"
-
-    DEFAULT_BATCH_SIZE = 20
-
-    OPERATION = WorkCoverageRecord.CLASSIFY_OPERATION
-
-    # This is going to be expensive -- we might as well recalculate
-    # everything.
-    POLICY = PresentationCalculationPolicy.recalculate_everything()

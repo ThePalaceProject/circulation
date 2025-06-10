@@ -396,20 +396,10 @@ class Explain(IdentifierInputScript):
             else:
                 collection = "!collection"
             self.write(f"  {active}: {pool.identifier!r} {collection}")
-        wcrs = sorted(work.coverage_records, key=lambda x: x.timestamp)
-        if wcrs:
-            self.write(" %s work coverage records" % len(wcrs))
-            for wcr in wcrs:
-                self.explain_work_coverage_record(wcr)
 
     def explain_coverage_record(self, cr):
         self._explain_coverage_record(
             cr.timestamp, cr.data_source, cr.operation, cr.status, cr.exception
-        )
-
-    def explain_work_coverage_record(self, cr):
-        self._explain_coverage_record(
-            cr.timestamp, None, cr.operation, cr.status, cr.exception
         )
 
     def _explain_coverage_record(
