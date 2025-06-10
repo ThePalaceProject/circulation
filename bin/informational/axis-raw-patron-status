@@ -2,7 +2,7 @@
 import sys
 from xml.dom import minidom
 
-from palace.manager.api.axis import Axis360API
+from palace.manager.api.axis.api import Axis360API
 from palace.manager.scripts.base import Script
 from palace.manager.sqlalchemy.model.collection import Collection
 

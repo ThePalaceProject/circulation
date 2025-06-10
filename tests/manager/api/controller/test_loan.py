@@ -10,7 +10,8 @@ import pytest
 from flask import Response as FlaskResponse, url_for
 from werkzeug import Response as wkResponse
 
-from palace.manager.api.axis import Axis360API, Axis360Fulfillment
+from palace.manager.api.axis.api import Axis360API
+from palace.manager.api.axis.fulfillment import Axis360Fulfillment
 from palace.manager.api.bibliotheca import BibliothecaAPI
 from palace.manager.api.circulation import (
     BaseCirculationAPI,

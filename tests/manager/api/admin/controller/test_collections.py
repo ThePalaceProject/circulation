@@ -26,7 +26,7 @@ from palace.manager.api.admin.problem_details import (
     PROTOCOL_DOES_NOT_SUPPORT_PARENTS,
     UNKNOWN_PROTOCOL,
 )
-from palace.manager.api.axis import Axis360API
+from palace.manager.api.axis.api import Axis360API
 from palace.manager.api.odl.api import OPDS2WithODLApi
 from palace.manager.api.overdrive.api import OverdriveAPI
 from palace.manager.api.overdrive.settings import OverdriveLibrarySettings
