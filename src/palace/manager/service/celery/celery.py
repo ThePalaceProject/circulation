@@ -235,6 +235,10 @@ def beat_schedule() -> dict[str, Any]:
                 hour="5",
             ),  # Every day at 5 am
         },
+        "classify_unchecked_subjects": {
+            "task": "work.classify_unchecked_subjects",
+            "schedule": crontab(minute="30", hour="22"),  # Every night at 10:30pm
+        },
     }
 
 

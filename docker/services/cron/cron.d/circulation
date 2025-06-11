@@ -15,14 +15,6 @@ HOME=/var/www/circulation
 0 2 * * * root bin/run update_lane_size >> /var/log/cron.log 2>&1
 */30 * * * * root bin/run -d 5 equivalent_identifiers_refresh >> /var/log/cron.log 2>&1
 
-# These scripts improve the bibliographic information associated with
-# the collections.
-#
-
-# If any works are classified under unprocessed subjects, reclassify
-# those works.
-30 22 * * * root bin/run work_classify_unchecked_subjects >> /var/log/cron.log 2>&1
-
 # The remaining scripts keep the circulation manager in sync with
 # specific types of collections.
 
