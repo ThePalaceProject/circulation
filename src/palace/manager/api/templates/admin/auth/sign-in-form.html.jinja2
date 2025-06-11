@@ -1,0 +1,14 @@
+<form action="{{ password_sign_in_url }}" method="post">
+  <input type="hidden" name="redirect" value="{{ redirect }}"/>
+  <label style="{{ label_style }}">
+      Email
+      <input type="text" name="email" style="{{ input_style }}" />
+  </label>
+  <label style="{{ label_style }}">
+      Password
+      <input type="password" name="password" style="{{ input_style }}" />
+  </label>
+  <button type="submit" style="{{ button_style }}">Sign In</button>
+</form>
+
+<a href="{{ forgot_password_url }}">Forgot password?</a>

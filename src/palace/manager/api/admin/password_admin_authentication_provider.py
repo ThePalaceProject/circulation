@@ -1,4 +1,4 @@
-from flask import render_template_string, url_for
+from flask import render_template, render_template_string, url_for
 from sqlalchemy.orm.session import Session
 
 from palace.manager.api.admin.admin_authentication_provider import (
@@ -50,10 +50,14 @@ class PasswordAdminAuthenticationProvider(AdminAuthenticationProvider, LoggerMix
     def sign_in_template(self, redirect):
         password_sign_in_url = url_for("password_auth")
         forgot_password_url = url_for("admin_forgot_password")
-        return self.SIGN_IN_TEMPLATE % dict(
+        return render_template(
+            "admin/auth/sign-in-form.html.jinja2",
             redirect=redirect,
             password_sign_in_url=password_sign_in_url,
             forgot_password_url=forgot_password_url,
+            label_style=label_style,
+            input_style=input_style,
+            button_style=button_style,
         )
 
     def forgot_password_template(self, redirect):

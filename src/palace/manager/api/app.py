@@ -1,4 +1,5 @@
 import logging
+import os
 
 import flask_babel
 from flask import request
@@ -30,7 +31,8 @@ def get_locale():
     return request.accept_languages.best_match(languages, "en")
 
 
-app = PalaceFlask(__name__)
+template_dir = os.path.join(os.path.dirname(__file__), "templates")
+app = PalaceFlask(__name__, template_folder=template_dir)
 app._db = None  # type: ignore [assignment]
 app.config["BABEL_DEFAULT_LOCALE"] = LanguageCodes.three_to_two[
     Configuration.localization_languages()[0]

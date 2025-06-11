@@ -49,7 +49,7 @@ button_style = """
     font-size: 1rem;
     cursor: pointer;
     display: block;
-    width: 100%%;
+    width: 100%;
     margin: 2vh auto;
 """
 
