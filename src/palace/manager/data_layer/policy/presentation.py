@@ -123,3 +123,15 @@ class PresentationCalculationPolicy(BaseFrozenData):
             # This will flag the Work as needing a search index update
             update_search_index=True,
         )
+
+    @classmethod
+    def recalculate_classification(cls) -> Self:
+        return cls(
+            choose_edition=False,
+            set_edition_metadata=False,
+            classify=True,
+            choose_summary=False,
+            calculate_quality=False,
+            choose_cover=False,
+            update_search_index=False,
+        )
