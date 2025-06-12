@@ -113,7 +113,7 @@ def classify_unchecked_subjects(task: Task) -> None:
                 Work.queue_presentation_recalculation(work_id=work.id, policy=policy)
 
 
-def _optimized_query(_db: Session) -> Query:
+def _optimized_query(_db: Session) -> Query:  # type: ignore[type-arg]
     """Optimizations include
     - Order by each joined table's PK, so that paging is consistent
     - Deferred loading of large text columns"""
@@ -158,7 +158,9 @@ def _unchecked_subjects(_db: Session) -> Generator[Subject, None, None]:
 
 
 def paginate_query(
-    _db: Session, query: Query, batch_size: int
+    _db: Session,
+    query: Query,  # type: ignore[type-arg]
+    batch_size: int,
 ) -> Generator[list[Work], None, None]:
     """Page this query using the row-wise comparison
     technique unique to this job. We have already ensured
