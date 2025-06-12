@@ -1,7 +1,6 @@
 from unittest.mock import patch
 
 import pytest
-from fixtures.work import WorkIdPolicyQueuePresentationRecalculationFixture
 from sqlalchemy import select
 
 from palace.manager.celery.tasks.work import (
@@ -26,6 +25,7 @@ from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.celery import CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.redis import RedisFixture
+from tests.fixtures.work import WorkIdPolicyQueuePresentationRecalculationFixture
 
 
 @pytest.mark.parametrize(
@@ -135,7 +135,7 @@ def test_optimized_query(db: DatabaseTransactionFixture):
     """
     query = _optimized_query(db.session)
     # Assert all joins have been included in the Order By
-    ordered_by = query._order_by_clauses
+    ordered_by = query._order_by_clauses  # type: ignore[attr-defined]
     for join in [Work, LicensePool, Identifier, Classification]:
         assert join.id in ordered_by  # type: ignore[attr-defined]
 

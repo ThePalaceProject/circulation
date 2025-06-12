@@ -103,10 +103,12 @@ def classify_unchecked_subjects(task: Task) -> None:
         query = _optimized_query(session)
 
         paged_query = paginate_query(session, query, 1000)
-        works = True
+
         policy = PresentationCalculationPolicy.recalculate_classification()
-        while works:
+        while True:
             works = next(paged_query, [])
+            if not works:
+                break
             for work in works:
                 Work.queue_presentation_recalculation(work_id=work.id, policy=policy)
 
@@ -138,7 +140,7 @@ def _optimized_query(_db: Session) -> Query:
     return query
 
 
-def _unchecked_subjects(_db: Session) -> Generator:
+def _unchecked_subjects(_db: Session) -> Generator[Subject, None, None]:
     """Yield one unchecked subject at a time"""
     query = _db.query(Subject).filter(Subject.checked == False).order_by(Subject.id)
     last_id = None
@@ -155,7 +157,9 @@ def _unchecked_subjects(_db: Session) -> Generator:
         yield subject
 
 
-def paginate_query(_db: Session, query: Query, batch_size: int) -> Generator:
+def paginate_query(
+    _db: Session, query: Query, batch_size: int
+) -> Generator[list[Work], None, None]:
     """Page this query using the row-wise comparison
     technique unique to this job. We have already ensured
     the ordering of the rows follows all the joined tables"""
@@ -172,7 +176,7 @@ def paginate_query(_db: Session, query: Query, batch_size: int) -> Generator:
 
         while True:
             # We are a "per subject" filter, this is the MOST efficient method
-            qu: Query = query.filter(Subject.id == subject.id)
+            qu = query.filter(Subject.id == subject.id)
             # Add the columns we need to page with explicitly in the query
             qu = qu.add_columns(LicensePool.id, Identifier.id, Classification.id)
             # We're not on the first page, add the row-wise comparison
