@@ -1,0 +1,7 @@
+#!/usr/bin/env python
+"""
+Refreshes SAML federated metadata asynchronously.
+"""
+from palace.manager.scripts.saml import UpdateSamlMetadata
+
+UpdateSamlMetadata().run()
