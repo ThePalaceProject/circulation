@@ -47,7 +47,7 @@ def _update_saml_federation_idps_metadata(
 def update_saml_federation_idps_metadata(task: Task) -> None:
     """
     For each SAML Fedoration in the CM, update the federations IdPs metadata
-    Please note that the monitor looks up for federations in `samlfederations` table.
+    Please note that the monitor looks for federations in the `samlfederations` table.
     Currently, there is no way to configure SAML federations in the admin interface.
     """
 

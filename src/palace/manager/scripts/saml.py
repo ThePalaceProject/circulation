@@ -3,7 +3,7 @@ from palace.manager.scripts.base import Script
 
 
 class UpdateSamlMetadata(Script):
-    """A convenient script for manually kicking an asynchronous saml update task."""
+    """A convenient script for manually kicking off an asynchronous saml update task."""
 
     def do_run(self, *args, **kwargs):
         update_saml_federation_idps_metadata.delay()

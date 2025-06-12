@@ -11,13 +11,14 @@ from palace.manager.sqlalchemy.model.saml import (
     SAMLFederatedIdentityProvider,
     SAMLFederation,
 )
-from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.celery import CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.mocks import saml_strings
 
 
-def test(db: DatabaseTransactionFixture, celery_fixture: CeleryFixture):
+def test_update_saml_federation_idps_metadata_task(
+    db: DatabaseTransactionFixture, celery_fixture: CeleryFixture
+):
     # Arrange
     expected_federation = SAMLFederation(
         "Test federation", "http://incommon.org/metadata"
@@ -43,7 +44,6 @@ def test(db: DatabaseTransactionFixture, celery_fixture: CeleryFixture):
     loader = create_autospec(spec=SAMLFederatedIdentityProviderLoader)
     loader.load = MagicMock(return_value=expected_federated_identity_providers)
 
-    current_time = utc_now()
     with patch(
         "palace.manager.celery.tasks.saml._create_saml_federated_identity_provider_loader"
     ) as create_loader:
