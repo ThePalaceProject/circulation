@@ -17,10 +17,13 @@ from sqlalchemy.orm import Query, Session
 from sqlalchemy.sql.functions import coalesce, count, max as sql_max, sum
 
 from palace.manager.api.config import Configuration
+from palace.manager.api.odl.api import OPDS2WithODLApi
+from palace.manager.api.opds_for_distributors import OPDSForDistributorsAPI
 from palace.manager.celery.task import Task
 from palace.manager.service.celery.celery import QueueNames
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.identifier import Identifier
+from palace.manager.sqlalchemy.model.integration import IntegrationConfiguration
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.time_tracking import PlaytimeEntry, PlaytimeSummary
 from palace.manager.util.datetime_helpers import previous_months, utc_now
@@ -176,15 +179,11 @@ def generate_playtime_report(
     # create directory hierarchy
     root_folder_id: str | None = google_drive_container.config.parent_folder_id()
 
-    with task.session() as session:
+    with task.transaction() as session:
         # get list of collections
-        data_source_names = [
-            x[0]
-            for x in _fetch_distinct_data_source_names_in_range(
-                session=session, start=start, until=until
-            )
-        ]
-
+        data_source_names = _fetch_distinct_eligible_data_source_names(
+            session=session,
+        )
         for data_source_name in data_source_names:
             reporting_name_with_no_spaces = (
                 f"{reporting_name}-{data_source_name}".replace(" ", "_")
@@ -238,22 +237,24 @@ def generate_playtime_report(
                 )
 
 
-def _fetch_distinct_data_source_names_in_range(
-    session: Session, start: date, until: date
-) -> Query[str]:
-    return session.query(
-        select(
-            distinct(PlaytimeSummary.data_source_name),
+def _fetch_distinct_eligible_data_source_names(
+    session: Session,
+) -> list[str]:
+    query = (
+        select(Collection)
+        .join(
+            IntegrationConfiguration,
+            Collection.integration_configuration_id == IntegrationConfiguration.id,
         )
         .where(
-            and_(
-                PlaytimeSummary.timestamp >= start,
-                PlaytimeSummary.timestamp < until,
+            IntegrationConfiguration.protocol.in_(
+                [OPDS2WithODLApi.label(), OPDSForDistributorsAPI.label()]
             )
         )
-        .order_by(PlaytimeSummary.data_source_name)
-        .subquery()
     )
+    ds_names = [c[0].data_source.name for c in session.execute(query).all()]
+    ds_names.sort()
+    return ds_names
 
 
 def _fetch_report_records(
