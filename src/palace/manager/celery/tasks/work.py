@@ -1,8 +1,10 @@
+from __future__ import annotations
+
 from collections.abc import Generator
 
 from celery import shared_task
 from sqlalchemy import delete, select, tuple_
-from sqlalchemy.orm import Query, Session, defer
+from sqlalchemy.orm import Session, defer
 
 from palace.manager.celery.task import Task
 from palace.manager.data_layer.policy.presentation import PresentationCalculationPolicy
@@ -100,9 +102,7 @@ def classify_unchecked_subjects(task: Task) -> None:
     Subjects because the rules for processing them changed.
     """
     with task.session() as session:
-        query = _optimized_query(session)
-
-        paged_query = paginate_query(session, query, 1000)
+        paged_query = paginate_query(session, 1000)
 
         policy = PresentationCalculationPolicy.recalculate_classification()
         while True:
@@ -113,34 +113,7 @@ def classify_unchecked_subjects(task: Task) -> None:
                 Work.queue_presentation_recalculation(work_id=work.id, policy=policy)
 
 
-def _optimized_query(_db: Session) -> Query:  # type: ignore[type-arg]
-    """Optimizations include
-    - Order by each joined table's PK, so that paging is consistent
-    - Deferred loading of large text columns"""
-
-    # No filter clause yet, we will filter this PER SUBJECT ID
-    # in the paginate query
-    query = (
-        _db.query(Work)
-        .join(Work.license_pools)
-        .join(LicensePool.identifier)
-        .join(Identifier.classifications)
-        .join(Classification.subject)
-    )
-
-    # Must order by all joined attributes
-    query = (
-        query.order_by(None)
-        .order_by(Subject.id, Work.id, LicensePool.id, Identifier.id, Classification.id)
-        .options(
-            defer(Work.summary_text),
-        )
-    )
-
-    return query
-
-
-def _unchecked_subjects(_db: Session) -> Generator[Subject, None, None]:
+def _unchecked_subjects(_db: Session) -> Generator[Subject]:
     """Yield one unchecked subject at a time"""
     query = _db.query(Subject).filter(Subject.checked == False).order_by(Subject.id)
     last_id = None
@@ -157,11 +130,7 @@ def _unchecked_subjects(_db: Session) -> Generator[Subject, None, None]:
         yield subject
 
 
-def paginate_query(
-    _db: Session,
-    query: Query,  # type: ignore[type-arg]
-    batch_size: int,
-) -> Generator[list[Work], None, None]:
+def paginate_query(_db: Session, batch_size: int) -> Generator[list[Work]]:
     """Page this query using the row-wise comparison
     technique unique to this job. We have already ensured
     the ordering of the rows follows all the joined tables"""
@@ -176,11 +145,34 @@ def paginate_query(
             None,
         )
 
+        query = (
+            _db.query(Work, LicensePool.id, Identifier.id, Classification.id)
+            .join(Work.license_pools)
+            .join(LicensePool.identifier)
+            .join(Identifier.classifications)
+            .join(Classification.subject)
+        )
+
         while True:
+
+            # Must order by all joined attributes
+            query = (
+                query.order_by(None)
+                .order_by(
+                    Subject.id,
+                    Work.id,
+                    LicensePool.id,
+                    Identifier.id,
+                    Classification.id,
+                )
+                .options(
+                    defer(Work.summary_text),
+                )
+            )
             # We are a "per subject" filter, this is the MOST efficient method
             qu = query.filter(Subject.id == subject.id)
-            # Add the columns we need to page with explicitly in the query
-            qu = qu.add_columns(LicensePool.id, Identifier.id, Classification.id)
+            # # Add the columns we need to page with explicitly in the query
+            # qu: Query[Tuple[Work, int, int, int]] = qu.add_columns(LicensePool.id, Identifier.id, Classification.id)
             # We're not on the first page, add the row-wise comparison
             if last_work is not None:
                 qu = qu.filter(
@@ -193,8 +185,8 @@ def paginate_query(
                     > (work_id, license_id, iden_id, classn_id)
                 )
 
-            qu = qu.limit(batch_size)
-            works = qu.all()
+            qu2 = qu.limit(batch_size)
+            works = qu2.all()
             if not len(works):
                 break
 

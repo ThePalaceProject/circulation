@@ -4,7 +4,6 @@ import pytest
 from sqlalchemy import select
 
 from palace.manager.celery.tasks.work import (
-    _optimized_query,
     calculate_work_presentations,
     classify_unchecked_subjects,
     migrate_work_coverage_records,
@@ -15,10 +14,8 @@ from palace.manager.service.redis.models.work import (
     WaitingForPresentationCalculation,
     WorkIdAndPolicy,
 )
-from palace.manager.sqlalchemy.model.classification import Classification, Subject
+from palace.manager.sqlalchemy.model.classification import Subject
 from palace.manager.sqlalchemy.model.coverage import WorkCoverageRecord
-from palace.manager.sqlalchemy.model.identifier import Identifier
-from palace.manager.sqlalchemy.model.licensing import LicensePool
 from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.sqlalchemy.util import get_one_or_create
 from palace.manager.util.datetime_helpers import utc_now
@@ -129,19 +126,6 @@ def test_calculate_presentations_non_existent_work(
             assert calc_pres.call_count == 0
 
 
-def test_optimized_query(db: DatabaseTransactionFixture):
-    """Make sure that we're only going to classify works
-    with unchecked subjects.
-    """
-    query = _optimized_query(db.session)
-    # Assert all joins have been included in the Order By
-    ordered_by = query._order_by_clauses  # type: ignore[attr-defined]
-    for join in [Work, LicensePool, Identifier, Classification]:
-        assert join.id in ordered_by  # type: ignore[attr-defined]
-
-    assert Work.id in ordered_by
-
-
 def test_paginate(db: DatabaseTransactionFixture):
     """Pagination is changed to be row-wise comparison
     Ensure we are paginating correctly within the same Subject page"""
@@ -156,9 +140,7 @@ def test_paginate(db: DatabaseTransactionFixture):
         )
         works.append(work)
 
-    for ix, [work] in enumerate(
-        paginate_query(db.session, _optimized_query(db.session), batch_size=1)
-    ):
+    for ix, [work] in enumerate(paginate_query(db.session, batch_size=1)):
         # We are coming in via "id" order
         assert work == works[ix]
 
@@ -171,9 +153,7 @@ def test_paginate(db: DatabaseTransactionFixture):
         other_subject,
         last_work.license_pools[0].data_source,
     )
-    next_works = next(
-        paginate_query(db.session, _optimized_query(db.session), batch_size=100)
-    )
+    next_works = next(paginate_query(db.session, batch_size=100))
     # Works are only iterated over ONCE per loop
     assert len(next_works) == 20
 
@@ -187,9 +167,7 @@ def test_paginate(db: DatabaseTransactionFixture):
     )
     another_subject.checked = True
     db.session.commit()
-    next_works = next(
-        paginate_query(db.session, _optimized_query(db.session), batch_size=100)
-    )
+    next_works = next(paginate_query(db.session, batch_size=100))
     assert len(next_works) == 20
     assert not_work not in next_works
 
