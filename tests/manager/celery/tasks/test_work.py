@@ -4,10 +4,10 @@ import pytest
 from sqlalchemy import select
 
 from palace.manager.celery.tasks.work import (
+    _paginate_query,
     calculate_work_presentations,
     classify_unchecked_subjects,
     migrate_work_coverage_records,
-    paginate_query,
 )
 from palace.manager.data_layer.policy.presentation import PresentationCalculationPolicy
 from palace.manager.service.redis.models.work import (
@@ -140,7 +140,7 @@ def test_paginate(db: DatabaseTransactionFixture):
         )
         works.append(work)
 
-    for ix, [work] in enumerate(paginate_query(db.session, batch_size=1)):
+    for ix, [work] in enumerate(_paginate_query(db.session, batch_size=1)):
         # We are coming in via "id" order
         assert work == works[ix]
 
@@ -153,7 +153,7 @@ def test_paginate(db: DatabaseTransactionFixture):
         other_subject,
         last_work.license_pools[0].data_source,
     )
-    next_works = next(paginate_query(db.session, batch_size=100))
+    next_works = next(_paginate_query(db.session, batch_size=100))
     # Works are only iterated over ONCE per loop
     assert len(next_works) == 20
 
@@ -167,7 +167,7 @@ def test_paginate(db: DatabaseTransactionFixture):
     )
     another_subject.checked = True
     db.session.commit()
-    next_works = next(paginate_query(db.session, batch_size=100))
+    next_works = next(_paginate_query(db.session, batch_size=100))
     assert len(next_works) == 20
     assert not_work not in next_works
 
