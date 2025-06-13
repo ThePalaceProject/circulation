@@ -636,7 +636,7 @@ class CheckoutResponseParser(XMLResponseParser[datetime.datetime | None]):
             expiration_date = expiration_date.text
             expiration_date = self._pd(expiration_date)
 
-        return expiration_date  # type: ignore[no-any-return]
+        return expiration_date
 
 
 class HoldResponseParser(XMLResponseParser[int | None], LoggerMixin):

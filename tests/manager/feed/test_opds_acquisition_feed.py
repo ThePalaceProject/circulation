@@ -979,14 +979,14 @@ def entrypoint_link_insertion_fixture(
         """
         return []
 
-    data.no_eps.works = works  # type: ignore[method-assign, assignment]
-    data.wl.works = works  # type: ignore[method-assign, assignment]
+    data.no_eps.works = works  # type: ignore[assignment]
+    data.wl.works = works  # type: ignore[assignment]
 
     data.annotator = MockAnnotator
     data.old_add_entrypoint_links = OPDSAcquisitionFeed.add_entrypoint_links
-    OPDSAcquisitionFeed.add_entrypoint_links = data.mock.add_entrypoint_links  # type: ignore[method-assign]
+    OPDSAcquisitionFeed.add_entrypoint_links = data.mock.add_entrypoint_links
     yield data
-    OPDSAcquisitionFeed.add_entrypoint_links = data.old_add_entrypoint_links  # type: ignore[method-assign]
+    OPDSAcquisitionFeed.add_entrypoint_links = data.old_add_entrypoint_links
 
 
 class TestEntrypointLinkInsertion:
@@ -1142,8 +1142,8 @@ class TestEntrypointLinkInsertion:
         def mock_search(self, *args, **kwargs):
             return []
 
-        data.no_eps.search = mock_search  # type: ignore[method-assign, assignment]
-        data.wl.search = mock_search  # type: ignore[method-assign, assignment]
+        data.no_eps.search = mock_search  # type: ignore[assignment]
+        data.wl.search = mock_search  # type: ignore[assignment]
 
         # This WorkList has no entry points, so the mock method is not
         # even called.

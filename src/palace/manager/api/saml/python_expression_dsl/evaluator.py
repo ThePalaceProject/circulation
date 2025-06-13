@@ -210,7 +210,7 @@ class DSLEvaluationVisitor(Visitor):
         return self._safe_classes
 
     @safe_classes.setter
-    def safe_classes(self, value: list[type]):
+    def safe_classes(self, value: list[type] | None):
         """Set safe classes which methods can be called.
 
         :param value: List of safe classes which methods be called

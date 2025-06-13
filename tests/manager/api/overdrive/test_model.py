@@ -257,7 +257,9 @@ class TestAction:
         )
 
         make_request = MagicMock()
-        result = action.request(make_request, testField1="value1", testField3="option1")
+        result: MagicMock = action.request(
+            make_request, testField1="value1", testField3="option1"
+        )
         make_request.assert_called_once_with(
             method="PUT",
             url="http://example.com/action",
@@ -478,7 +480,7 @@ class TestCheckout:
             )
         )
         make_request = MagicMock()
-        action = checkout.action("early_return", make_request)
+        action: MagicMock = checkout.action("early_return", make_request)
         assert action == make_request.return_value
         make_request.assert_called_once_with(
             method="DELETE",

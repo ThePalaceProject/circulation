@@ -68,14 +68,14 @@ def integration_settings_update(
         the new settings taking precedence. If False, the new settings will replace the existing
         settings.
     """
-    settings_dict = integration.settings_dict if merge else {}
+    settings_dict: dict[str, Any] = integration.settings_dict if merge else {}
     new_settings_dict = (
         new_settings.model_dump()
         if isinstance(new_settings, BaseSettings)
         else new_settings
     )
     settings_dict.update(new_settings_dict)
-    integration.settings_dict = settings_cls.model_validate(settings_dict).model_dump()
+    integration.settings_dict = settings_cls.model_validate(settings_dict).model_dump()  # type: ignore[assignment]
     flag_modified(integration, "settings_dict")
 
 

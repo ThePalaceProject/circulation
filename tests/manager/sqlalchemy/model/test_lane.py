@@ -306,7 +306,7 @@ class TestFacets:
         library._settings = None
 
     def test_facet_groups(self, db: DatabaseTransactionFixture):
-        db.default_collection().data_source = DataSource.AMAZON  # type: ignore[assignment]
+        db.default_collection().data_source = DataSource.AMAZON
         facets = Facets(
             db.default_library(),
             Facets.AVAILABLE_ALL,
@@ -4112,7 +4112,7 @@ class TestLane:
 
         old_lane_search_target = Lane.search_target
         old_wl_search = WorkList.search
-        Lane.search_target = mock  # type: ignore[method-assign, assignment]
+        Lane.search_target = mock  # type: ignore[assignment]
         facets = SearchFacets()
         lane.search(db.session, "query", None, facets=facets)
         assert facets == mock.called_with
@@ -4159,7 +4159,7 @@ class TestLane:
             return []
 
         old_value = Lane._groups_for_lanes
-        Lane._groups_for_lanes = mock  # type: ignore[method-assign, assignment]
+        Lane._groups_for_lanes = mock  # type: ignore[assignment]
         lane = db.lane()
         facets = FeaturedFacets(0)
         lane.groups(db.session, facets=facets)

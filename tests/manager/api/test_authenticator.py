@@ -2140,7 +2140,7 @@ class TestBasicAuthenticationProvider:
                 authorization_identifier=patron1.authorization_identifier,
             ),
         ]:
-            patrondata = PatronData(**patrondata_args)  # type: ignore[arg-type]
+            patrondata = PatronData(**patrondata_args)
             assert patron1 == provider.local_patron_lookup(
                 db.session, patron2.authorization_identifier, patrondata
             )

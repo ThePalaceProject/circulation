@@ -473,8 +473,12 @@ class OverdriveRepresentationExtractor(LoggerMixin):
                     "Could not process medium %s for %s", overdrive_medium, overdrive_id
                 )
 
-            medium = cls.overdrive_medium_to_simplified_medium.get(
-                overdrive_medium, Edition.BOOK_MEDIUM
+            medium = (
+                cls.overdrive_medium_to_simplified_medium.get(
+                    overdrive_medium, Edition.BOOK_MEDIUM
+                )
+                if overdrive_medium is not None
+                else Edition.BOOK_MEDIUM
             )
 
             measurements = []

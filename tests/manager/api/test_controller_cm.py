@@ -103,7 +103,7 @@ class TestCirculationManager:
         # The Authenticator has been reloaded with information about
         # how to authenticate patrons of the new library.
         assert isinstance(
-            manager.auth.library_authenticators[library.short_name],  # type: ignore
+            manager.auth.library_authenticators[library.short_name],
             LibraryAuthenticator,
         )
 
@@ -231,7 +231,7 @@ class TestCirculationManager:
         presenting the WorkList) is where we enforce this.
         """
         wl = WorkList()
-        wl.accessible_to = MagicMock(return_value=True)  # type: ignore
+        wl.accessible_to = MagicMock(return_value=True)
 
         # The authenticated patron, if any, is passed into
         # WorkList.accessible_to.
@@ -249,7 +249,7 @@ class TestCirculationManager:
 
         # The request is short-circuited if accessible_to returns
         # False.
-        wl.accessible_to = MagicMock(return_value=False)  # type: ignore
+        wl.accessible_to = MagicMock(return_value=False)
         with circulation_fixture.request_context_with_library("/"):
             facets = circulation_fixture.manager.load_facets_from_request(worklist=wl)
             assert isinstance(facets, ProblemDetail)
