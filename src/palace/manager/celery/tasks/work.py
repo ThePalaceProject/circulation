@@ -102,7 +102,7 @@ def classify_unchecked_subjects(task: Task) -> None:
     Subjects because the rules for processing them changed.
     """
     with task.session() as session:
-        paged_query = paginate_query(session, 1000)
+        paged_query = _paginate_query(session, 1000)
 
         policy = PresentationCalculationPolicy.recalculate_classification()
         while True:
@@ -130,7 +130,7 @@ def _unchecked_subjects(_db: Session) -> Generator[Subject]:
         yield subject
 
 
-def paginate_query(_db: Session, batch_size: int) -> Generator[list[Work]]:
+def _paginate_query(_db: Session, batch_size: int) -> Generator[list[Work]]:
     """Page this query using the row-wise comparison
     technique unique to this job. We have already ensured
     the ordering of the rows follows all the joined tables"""
