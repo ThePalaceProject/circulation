@@ -529,7 +529,7 @@ class Collection(Base, HasSessionCache, RedisKeyMixin):
         return data_source
 
     @data_source.setter
-    def data_source(self, new_value: DataSource | str) -> None:
+    def data_source(self, new_value: DataSource | str | None) -> None:
         new_datasource_name = (
             new_value.name if isinstance(new_value, DataSource) else new_value
         )

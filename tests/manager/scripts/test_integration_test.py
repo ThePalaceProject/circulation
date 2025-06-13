@@ -165,7 +165,7 @@ class TestIntegrationTest:
 
     def test__do_run(self, integration_test: IntegrationTestFixture):
         script = integration_test.script
-        script.parse_command_line = Mock()  # type: ignore
+        script.parse_command_line = Mock()
 
         script.parse_command_line.return_value = Namespace(generate_key_file="keyfile")
         with patch.object(script, "_generate_key_file") as generate_key_file:

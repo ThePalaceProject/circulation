@@ -431,7 +431,7 @@ class TestOPDSFeedController:
             self.called_with = (args, kwargs)
             return old_navigation(*args, **kwargs)
 
-        NavigationFeed.navigation = mock_navigation  # type: ignore
+        NavigationFeed.navigation = mock_navigation
 
         with circulation_fixture.request_context_with_library("/"):
             response = circulation_fixture.manager.opds_feeds.navigation(lane.id)
@@ -447,7 +447,7 @@ class TestOPDSFeedController:
         args, kwargs = self.called_with
         facets = kwargs["facets"]
         assert isinstance(facets, NavigationFacets)
-        NavigationFeed.navigation = old_navigation  # type: ignore
+        NavigationFeed.navigation = old_navigation
 
     def mock_search(self, *args, **kwargs):
         self.called_with = (args, kwargs)

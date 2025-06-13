@@ -615,7 +615,7 @@ class TestBibliothecaAPI:
         # Randomly scramble the Findaway manifest to make sure it gets
         # properly sorted when converted to a Webpub-like manifest.
         document = json.loads(document)
-        document["items"].sort(key=lambda x: random.random())  # type: ignore
+        document["items"].sort(key=lambda x: random.random())
         document = json.dumps(document)  # type: ignore
 
         m = BibliothecaAPI.findaway_license_to_webpub_manifest

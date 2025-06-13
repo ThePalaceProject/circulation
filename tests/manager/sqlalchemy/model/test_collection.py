@@ -200,17 +200,17 @@ class TestCollection:
         assert "Foo" == opds.data_source.name
 
         # Trying to change the Bibliotheca collection's data_source does nothing.
-        bibliotheca.data_source = DataSource.AXIS_360  # type: ignore[assignment]
+        bibliotheca.data_source = DataSource.AXIS_360
         assert isinstance(bibliotheca.data_source, DataSource)
         assert DataSource.BIBLIOTHECA == bibliotheca.data_source.name
 
         # Trying to change the opds collection's data_source is fine.
-        opds.data_source = DataSource.PLYMPTON  # type: ignore[assignment]
+        opds.data_source = DataSource.PLYMPTON
         assert isinstance(opds.data_source, DataSource)
         assert DataSource.PLYMPTON == opds.data_source.name
 
         # Resetting it to something else is fine.
-        opds.data_source = DataSource.OA_CONTENT_SERVER  # type: ignore[assignment]
+        opds.data_source = DataSource.OA_CONTENT_SERVER
         assert isinstance(opds.data_source, DataSource)
         assert DataSource.OA_CONTENT_SERVER == opds.data_source.name
 

@@ -6,7 +6,7 @@ from abc import abstractmethod
 from collections import namedtuple
 from collections.abc import Callable, Hashable
 from types import SimpleNamespace
-from typing import TypeVar
+from typing import TypeVar, cast
 
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Mapped, Session
@@ -120,7 +120,7 @@ class HasSessionCache(LoggerMixin):
             cache.stats.misses += 1
             obj, new = cache_miss_hook()
             if obj is not None:
-                cls._cache_insert(obj, cache)
+                cls._cache_insert(cast("HasSessionCache", obj), cache)
             return obj, new
 
     @classmethod

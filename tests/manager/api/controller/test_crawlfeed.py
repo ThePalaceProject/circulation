@@ -276,6 +276,7 @@ class TestCrawlableFeed:
 
         # Verify the arguments passed in to page().
         out_kwargs = self.page_called_with
+        assert out_kwargs is not None
         assert circulation_fixture.db.session == out_kwargs.pop("_db")
         assert circulation_fixture.manager.opds_feeds.search_engine == out_kwargs.pop(
             "search_engine"

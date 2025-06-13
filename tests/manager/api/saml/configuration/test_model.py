@@ -128,7 +128,7 @@ class TestSAMLConfiguration:
         ]
 
         metadata_parser = SAMLMetadataParser()
-        metadata_parser.parse = MagicMock(side_effect=metadata_parser.parse)  # type: ignore
+        metadata_parser.parse = MagicMock(side_effect=metadata_parser.parse)
 
         federation = SAMLFederation("Test federation", "http://localhost")
         federated_idp_1 = SAMLFederatedIdentityProvider(

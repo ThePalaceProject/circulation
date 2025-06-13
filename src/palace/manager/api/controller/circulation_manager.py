@@ -140,7 +140,7 @@ class CirculationManagerController(BaseCirculationManagerController):
                 )
             )
 
-        return lane  # type: ignore[no-any-return]
+        return lane
 
     def load_work(
         self, library: Library, identifier_type: str, identifier: str

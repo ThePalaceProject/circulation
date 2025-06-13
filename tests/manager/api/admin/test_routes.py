@@ -285,23 +285,23 @@ class TestAdminSignIn:
     def test_sign_in_with_password(self, fixture: AdminRouteFixture):
         url = "/admin/sign_in_with_password"
         fixture.assert_request_calls(
-            url, fixture.controller.password_sign_in, http_method="POST"  # type: ignore
+            url, fixture.controller.password_sign_in, http_method="POST"
         )
 
         fixture.assert_supported_methods(url, "POST")
 
     def test_sign_in(self, fixture: AdminRouteFixture):
         url = "/admin/sign_in"
-        fixture.assert_request_calls(url, fixture.controller.sign_in)  # type: ignore
+        fixture.assert_request_calls(url, fixture.controller.sign_in)
 
     def test_sign_out(self, fixture: AdminRouteFixture):
         url = "/admin/sign_out"
-        fixture.assert_authenticated_request_calls(url, fixture.controller.sign_out)  # type: ignore
+        fixture.assert_authenticated_request_calls(url, fixture.controller.sign_out)
 
     def test_change_password(self, fixture: AdminRouteFixture):
         url = "/admin/change_password"
         fixture.assert_authenticated_request_calls(
-            url, fixture.controller.change_password, http_method="POST"  # type: ignore
+            url, fixture.controller.change_password, http_method="POST"
         )
         fixture.assert_supported_methods(url, "POST")
 
@@ -328,7 +328,7 @@ class TestAdminWork:
     def test_details(self, fixture: AdminRouteFixture):
         url = "/admin/works/<identifier_type>/an/identifier"
         fixture.assert_authenticated_request_calls(
-            url, fixture.controller.details, "<identifier_type>", "an/identifier"  # type: ignore
+            url, fixture.controller.details, "<identifier_type>", "an/identifier"
         )
         fixture.assert_supported_methods(url, "GET")
 
@@ -336,7 +336,7 @@ class TestAdminWork:
         url = "/admin/works/<identifier_type>/an/identifier/classifications"
         fixture.assert_authenticated_request_calls(
             url,
-            fixture.controller.classifications,  # type: ignore
+            fixture.controller.classifications,
             "<identifier_type>",
             "an/identifier",
         )
@@ -346,7 +346,7 @@ class TestAdminWork:
         url = "/admin/works/<identifier_type>/an/identifier/lists"
         fixture.assert_authenticated_request_calls(
             url,
-            fixture.controller.custom_lists,  # type: ignore
+            fixture.controller.custom_lists,
             "<identifier_type>",
             "an/identifier",
             http_method="POST",
@@ -357,7 +357,7 @@ class TestAdminWork:
         url = "/admin/works/<identifier_type>/an/identifier/edit"
         fixture.assert_authenticated_request_calls(
             url,
-            fixture.controller.edit,  # type: ignore
+            fixture.controller.edit,
             "<identifier_type>",
             "an/identifier",
             http_method="POST",
@@ -367,7 +367,7 @@ class TestAdminWork:
         url = "/admin/works/<identifier_type>/an/identifier/suppression"
         fixture.assert_authenticated_request_calls(
             url,
-            fixture.controller.suppress,  # type: ignore
+            fixture.controller.suppress,
             "<identifier_type>",
             "an/identifier",
             http_method="POST",
@@ -377,7 +377,7 @@ class TestAdminWork:
         url = "/admin/works/<identifier_type>/an/identifier/suppression"
         fixture.assert_authenticated_request_calls(
             url,
-            fixture.controller.unsuppress,  # type: ignore
+            fixture.controller.unsuppress,
             "<identifier_type>",
             "an/identifier",
             http_method="DELETE",
@@ -390,7 +390,7 @@ class TestAdminWork:
         url = "/admin/works/<identifier_type>/an/identifier/suppress"
         fixture.assert_authenticated_request_calls(
             url,
-            fixture.controller.suppress,  # type: ignore
+            fixture.controller.suppress,
             "<identifier_type>",
             "an/identifier",
             http_method="POST",
@@ -402,7 +402,7 @@ class TestAdminWork:
         url = "/admin/works/<identifier_type>/an/identifier/unsuppress"
         fixture.assert_authenticated_request_calls(
             url,
-            fixture.controller.unsuppress,  # type: ignore
+            fixture.controller.unsuppress,
             "<identifier_type>",
             "an/identifier",
             http_method="POST",
@@ -412,7 +412,7 @@ class TestAdminWork:
         url = "/admin/works/<identifier_type>/an/identifier/refresh"
         fixture.assert_authenticated_request_calls(
             url,
-            fixture.controller.refresh_metadata,  # type: ignore
+            fixture.controller.refresh_metadata,
             "<identifier_type>",
             "an/identifier",
             http_method="POST",
@@ -422,7 +422,7 @@ class TestAdminWork:
         url = "/admin/works/<identifier_type>/an/identifier/edit_classifications"
         fixture.assert_authenticated_request_calls(
             url,
-            fixture.controller.edit_classifications,  # type: ignore
+            fixture.controller.edit_classifications,
             "<identifier_type>",
             "an/identifier",
             http_method="POST",
@@ -430,19 +430,19 @@ class TestAdminWork:
 
     def test_roles(self, fixture: AdminRouteFixture):
         url = "/admin/roles"
-        fixture.assert_request_calls(url, fixture.controller.roles)  # type: ignore
+        fixture.assert_request_calls(url, fixture.controller.roles)
 
     def test_languages(self, fixture: AdminRouteFixture):
         url = "/admin/languages"
-        fixture.assert_request_calls(url, fixture.controller.languages)  # type: ignore
+        fixture.assert_request_calls(url, fixture.controller.languages)
 
     def test_media(self, fixture: AdminRouteFixture):
         url = "/admin/media"
-        fixture.assert_request_calls(url, fixture.controller.media)  # type: ignore
+        fixture.assert_request_calls(url, fixture.controller.media)
 
     def test_right_status(self, fixture: AdminRouteFixture):
         url = "/admin/rights_status"
-        fixture.assert_request_calls(url, fixture.controller.rights_status)  # type: ignore
+        fixture.assert_request_calls(url, fixture.controller.rights_status)
 
 
 class TestAdminFeed:
@@ -455,11 +455,11 @@ class TestAdminFeed:
 
     def test_suppressed(self, fixture: AdminRouteFixture):
         url = "/admin/suppressed"
-        fixture.assert_authenticated_request_calls(url, fixture.controller.suppressed)  # type: ignore
+        fixture.assert_authenticated_request_calls(url, fixture.controller.suppressed)
 
     def test_genres(self, fixture: AdminRouteFixture):
         url = "/admin/genres"
-        fixture.assert_authenticated_request_calls(url, fixture.controller.genres)  # type: ignore
+        fixture.assert_authenticated_request_calls(url, fixture.controller.genres)
 
 
 class TestAdminDashboard:
@@ -473,13 +473,13 @@ class TestAdminDashboard:
     def test_bulk_circulation_events(self, fixture: AdminRouteFixture):
         url = "/admin/bulk_circulation_events"
         fixture.assert_authenticated_request_calls(
-            url, fixture.controller.bulk_circulation_events, file_response=True  # type: ignore
+            url, fixture.controller.bulk_circulation_events, file_response=True
         )
 
     def test_circulation_events(self, fixture: AdminRouteFixture):
         url = "/admin/circulation_events"
         fixture.assert_authenticated_request_calls(
-            url, fixture.controller.circulation_events  # type: ignore
+            url, fixture.controller.circulation_events
         )
 
 
@@ -494,7 +494,7 @@ class TestAdminLibrarySettings:
     def test_process_libraries(self, fixture: AdminRouteFixture):
         url = "/admin/libraries"
         fixture.assert_authenticated_request_calls(
-            url, fixture.controller.process_libraries  # type: ignore
+            url, fixture.controller.process_libraries
         )
         fixture.assert_supported_methods(url, "GET", "POST")
 
@@ -502,7 +502,7 @@ class TestAdminLibrarySettings:
         url = "/admin/library/<library_uuid>"
         fixture.assert_authenticated_request_calls(
             url,
-            fixture.controller.process_delete,  # type: ignore
+            fixture.controller.process_delete,
             "<library_uuid>",
             http_method="DELETE",
         )
@@ -520,7 +520,7 @@ class TestAdminCollectionSettings:
     def test_process_get(self, fixture: AdminRouteFixture):
         url = "/admin/collections"
         fixture.assert_authenticated_request_calls(
-            url, fixture.controller.process_collections  # type: ignore
+            url, fixture.controller.process_collections
         )
         fixture.assert_supported_methods(url, "GET", "POST")
 
@@ -528,7 +528,7 @@ class TestAdminCollectionSettings:
         url = "/admin/collection/<collection_id>"
         fixture.assert_authenticated_request_calls(
             url,
-            fixture.controller.process_delete,  # type: ignore
+            fixture.controller.process_delete,
             "<collection_id>",
             http_method="DELETE",
         )
@@ -537,7 +537,7 @@ class TestAdminCollectionSettings:
     def test_process_collection_self_tests(self, fixture: AdminRouteFixture):
         url = "/admin/collection_self_tests/<identifier>"
         fixture.assert_authenticated_request_calls(
-            url, fixture.controller.process_collection_self_tests, "<identifier>"  # type: ignore
+            url, fixture.controller.process_collection_self_tests, "<identifier>"
         )
 
 
@@ -552,14 +552,14 @@ class TestAdminIndividualAdminSettings:
     def test_process_individual_admins(self, fixture: AdminRouteFixture):
         url = "/admin/individual_admins"
         fixture.assert_authenticated_request_calls(
-            url, fixture.controller.process_individual_admins  # type: ignore
+            url, fixture.controller.process_individual_admins
         )
         fixture.assert_supported_methods(url, "GET", "POST")
 
     def test_process_delete(self, fixture: AdminRouteFixture):
         url = "/admin/individual_admin/<email>"
         fixture.assert_authenticated_request_calls(
-            url, fixture.controller.process_delete, "<email>", http_method="DELETE"  # type: ignore
+            url, fixture.controller.process_delete, "<email>", http_method="DELETE"
         )
         fixture.assert_supported_methods(url, "DELETE")
 
@@ -575,14 +575,14 @@ class TestAdminPatronAuthServices:
     def test_process_patron_auth_services(self, fixture: AdminRouteFixture):
         url = "/admin/patron_auth_services"
         fixture.assert_authenticated_request_calls(
-            url, fixture.controller.process_patron_auth_services  # type: ignore
+            url, fixture.controller.process_patron_auth_services
         )
         fixture.assert_supported_methods(url, "GET", "POST")
 
     def test_process_delete(self, fixture: AdminRouteFixture):
         url = "/admin/patron_auth_service/<service_id>"
         fixture.assert_authenticated_request_calls(
-            url, fixture.controller.process_delete, "<service_id>", http_method="DELETE"  # type: ignore
+            url, fixture.controller.process_delete, "<service_id>", http_method="DELETE"
         )
         fixture.assert_supported_methods(url, "DELETE")
 
@@ -590,7 +590,7 @@ class TestAdminPatronAuthServices:
         url = "/admin/patron_auth_service_self_tests/<identifier>"
         fixture.assert_authenticated_request_calls(
             url,
-            fixture.controller.process_patron_auth_service_self_tests,  # type: ignore
+            fixture.controller.process_patron_auth_service_self_tests,
             "<identifier>",
         )
         fixture.assert_supported_methods(url, "GET", "POST")
@@ -607,14 +607,14 @@ class TestAdminPatron:
     def test_lookup_patron(self, fixture: AdminRouteFixture):
         url = "/admin/manage_patrons"
         fixture.assert_authenticated_request_calls(
-            url, fixture.controller.lookup_patron, http_method="POST"  # type: ignore
+            url, fixture.controller.lookup_patron, http_method="POST"
         )
         fixture.assert_supported_methods(url, "POST")
 
     def test_reset_adobe_id(self, fixture: AdminRouteFixture):
         url = "/admin/manage_patrons/reset_adobe_id"
         fixture.assert_authenticated_request_calls(
-            url, fixture.controller.reset_adobe_id, http_method="POST"  # type: ignore
+            url, fixture.controller.reset_adobe_id, http_method="POST"
         )
         fixture.assert_supported_methods(url, "POST")
 
@@ -630,14 +630,14 @@ class TestAdminMetadataServices:
     def test_process_metadata_services(self, fixture: AdminRouteFixture):
         url = "/admin/metadata_services"
         fixture.assert_authenticated_request_calls(
-            url, fixture.controller.process_metadata_services  # type: ignore
+            url, fixture.controller.process_metadata_services
         )
         fixture.assert_supported_methods(url, "GET", "POST")
 
     def test_process_delete(self, fixture: AdminRouteFixture):
         url = "/admin/metadata_service/<service_id>"
         fixture.assert_authenticated_request_calls(
-            url, fixture.controller.process_delete, "<service_id>", http_method="DELETE"  # type: ignore
+            url, fixture.controller.process_delete, "<service_id>", http_method="DELETE"
         )
         fixture.assert_supported_methods(url, "DELETE")
 
@@ -653,14 +653,14 @@ class TestAdminCatalogServices:
     def test_process_catalog_services(self, fixture: AdminRouteFixture):
         url = "/admin/catalog_services"
         fixture.assert_authenticated_request_calls(
-            url, fixture.controller.process_catalog_services  # type: ignore
+            url, fixture.controller.process_catalog_services
         )
         fixture.assert_supported_methods(url, "GET", "POST")
 
     def test_process_delete(self, fixture: AdminRouteFixture):
         url = "/admin/catalog_service/<service_id>"
         fixture.assert_authenticated_request_calls(
-            url, fixture.controller.process_delete, "<service_id>", http_method="DELETE"  # type: ignore
+            url, fixture.controller.process_delete, "<service_id>", http_method="DELETE"
         )
         fixture.assert_supported_methods(url, "DELETE")
 
@@ -676,14 +676,14 @@ class TestAdminDiscoveryServices:
     def test_process_discovery_services(self, fixture: AdminRouteFixture):
         url = "/admin/discovery_services"
         fixture.assert_authenticated_request_calls(
-            url, fixture.controller.process_discovery_services  # type: ignore
+            url, fixture.controller.process_discovery_services
         )
         fixture.assert_supported_methods(url, "GET", "POST")
 
     def test_process_delete(self, fixture: AdminRouteFixture):
         url = "/admin/discovery_service/<service_id>"
         fixture.assert_authenticated_request_calls(
-            url, fixture.controller.process_delete, "<service_id>", http_method="DELETE"  # type: ignore
+            url, fixture.controller.process_delete, "<service_id>", http_method="DELETE"
         )
         fixture.assert_supported_methods(url, "DELETE")
 
@@ -701,7 +701,7 @@ class TestAdminDiscoveryServiceLibraryRegistrations:
     ):
         url = "/admin/discovery_service_library_registrations"
         fixture.assert_authenticated_request_calls(
-            url, fixture.controller.process_discovery_service_library_registrations  # type: ignore
+            url, fixture.controller.process_discovery_service_library_registrations
         )
         fixture.assert_supported_methods(url, "GET", "POST")
 
@@ -716,13 +716,13 @@ class TestAdminCustomListsServices:
 
     def test_custom_lists(self, fixture: AdminRouteFixture):
         url = "/admin/custom_lists"
-        fixture.assert_authenticated_request_calls(url, fixture.controller.custom_lists)  # type: ignore
+        fixture.assert_authenticated_request_calls(url, fixture.controller.custom_lists)
         fixture.assert_supported_methods(url, "GET", "POST")
 
     def test_custom_list(self, fixture: AdminRouteFixture):
         url = "/admin/custom_list/<list_id>"
         fixture.assert_authenticated_request_calls(
-            url, fixture.controller.custom_list, "<list_id>"  # type: ignore
+            url, fixture.controller.custom_list, "<list_id>"
         )
         fixture.assert_supported_methods(url, "GET", "POST", "DELETE")
 
@@ -737,41 +737,41 @@ class TestAdminLanes:
 
     def test_lanes(self, fixture: AdminRouteFixture):
         url = "/admin/lanes"
-        fixture.assert_authenticated_request_calls(url, fixture.controller.lanes)  # type: ignore
+        fixture.assert_authenticated_request_calls(url, fixture.controller.lanes)
         fixture.assert_supported_methods(url, "GET", "POST")
 
     def test_lane(self, fixture: AdminRouteFixture):
         url = "/admin/lane/<lane_identifier>"
         fixture.assert_authenticated_request_calls(
-            url, fixture.controller.lane, "<lane_identifier>", http_method="DELETE"  # type: ignore
+            url, fixture.controller.lane, "<lane_identifier>", http_method="DELETE"
         )
         fixture.assert_supported_methods(url, "DELETE")
 
     def test_show_lane(self, fixture: AdminRouteFixture):
         url = "/admin/lane/<lane_identifier>/show"
         fixture.assert_authenticated_request_calls(
-            url, fixture.controller.show_lane, "<lane_identifier>", http_method="POST"  # type: ignore
+            url, fixture.controller.show_lane, "<lane_identifier>", http_method="POST"
         )
         fixture.assert_supported_methods(url, "POST")
 
     def test_hide_lane(self, fixture: AdminRouteFixture):
         url = "/admin/lane/<lane_identifier>/hide"
         fixture.assert_authenticated_request_calls(
-            url, fixture.controller.hide_lane, "<lane_identifier>", http_method="POST"  # type: ignore
+            url, fixture.controller.hide_lane, "<lane_identifier>", http_method="POST"
         )
         fixture.assert_supported_methods(url, "POST")
 
     def test_reset(self, fixture: AdminRouteFixture):
         url = "/admin/lanes/reset"
         fixture.assert_authenticated_request_calls(
-            url, fixture.controller.reset, http_method="POST"  # type: ignore
+            url, fixture.controller.reset, http_method="POST"
         )
         fixture.assert_supported_methods(url, "POST")
 
     def test_change_order(self, fixture: AdminRouteFixture):
         url = "/admin/lanes/change_order"
         fixture.assert_authenticated_request_calls(
-            url, fixture.controller.change_order, http_method="POST"  # type: ignore
+            url, fixture.controller.change_order, http_method="POST"
         )
         fixture.assert_supported_methods(url, "POST")
 
@@ -799,9 +799,11 @@ class TestAdminInventoryReports:
                 mimetype=MediaTypes.APPLICATION_JSON_MEDIA_TYPE,
             )
         )
-        monkeypatch.setattr(fixture.controller.inventory_report_info, "response", mock_response)  # type: ignore
+        monkeypatch.setattr(
+            fixture.controller.inventory_report_info, "response", mock_response
+        )
         fixture.assert_authenticated_request_calls(
-            url, fixture.controller.inventory_report_info, http_method="GET"  # type: ignore
+            url, fixture.controller.inventory_report_info, http_method="GET"
         )
 
     def test_generate_inventory_report(
@@ -815,9 +817,11 @@ class TestAdminInventoryReports:
                 mimetype=MediaTypes.APPLICATION_JSON_MEDIA_TYPE,
             )
         )
-        monkeypatch.setattr(fixture.controller.generate_inventory_report, "response", mock_response)  # type: ignore
+        monkeypatch.setattr(
+            fixture.controller.generate_inventory_report, "response", mock_response
+        )
         fixture.assert_authenticated_request_calls(
-            url, fixture.controller.generate_inventory_report, http_method="POST"  # type: ignore
+            url, fixture.controller.generate_inventory_report, http_method="POST"
         )
 
 
@@ -831,7 +835,7 @@ class TestTimestamps:
 
     def test_diagnostics(self, fixture: AdminRouteFixture):
         url = "/admin/diagnostics"
-        fixture.assert_authenticated_request_calls(url, fixture.controller.diagnostics)  # type: ignore
+        fixture.assert_authenticated_request_calls(url, fixture.controller.diagnostics)
 
 
 class TestAdminView:

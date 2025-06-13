@@ -2516,7 +2516,7 @@ class TestQuery:
         original_base = Filter.universal_base_filter
         original_nested = Filter.universal_nested_filters
         Filter.universal_base_filter = MockFilter.universal_base_filter  # type: ignore[assignment]
-        Filter.universal_nested_filters = MockFilter.universal_nested_filters  # type: ignore[method-assign]
+        Filter.universal_nested_filters = MockFilter.universal_nested_filters
 
         # Test the simple case where the Query has no filter.
         qu = MockQuery("query string", filter=None)
@@ -3694,7 +3694,7 @@ class TestFilter:
         assert parent.media == filter.media
         assert parent.languages == filter.languages
         assert parent.fiction == filter.fiction
-        assert parent.audiences + [Classifier.AUDIENCE_ALL_AGES] == filter.audiences  # type: ignore[operator]
+        assert parent.audiences + [Classifier.AUDIENCE_ALL_AGES] == filter.audiences
         assert [parent.license_datasource_id] == filter.license_datasources
         assert (parent.target_age.lower, parent.target_age.upper) == filter.target_age
         assert filter.allow_holds is True
