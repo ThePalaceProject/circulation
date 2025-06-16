@@ -388,14 +388,11 @@ class Explain(IdentifierInputScript):
             self.write("  %s" % genre)
         self.write(" License pools:")
         for pool in work.license_pools:
-            active = "SUPERCEDED"
-            if not pool.superceded:
-                active = "ACTIVE"
             if pool.collection:
                 collection = pool.collection.name
             else:
                 collection = "!collection"
-            self.write(f"  {active}: {pool.identifier!r} {collection}")
+            self.write(f"  ACTIVE: {pool.identifier!r} {collection}")
 
     def explain_coverage_record(self, cr):
         self._explain_coverage_record(

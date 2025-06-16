@@ -181,8 +181,8 @@ class TestWork:
             with_open_access_download=True,
             authors=[],
         )
-        edition3.title = "The 2nd Title"
-        edition3.subtitle = "The 2nd Subtitle"
+        edition3.title = "The 3rd Title"
+        edition3.subtitle = "The 3rd Subtitle"
         edition3.add_contributor(bob, Contributor.Role.AUTHOR)
         edition3.add_contributor(alice, Contributor.Role.AUTHOR)
 
@@ -240,11 +240,6 @@ class TestWork:
         # The author of the Work is the author of its primary work record.
         assert "Alice Adder, Bob Bitshifter" == work.author
 
-        # pools aren't yet aware of each other
-        assert pool1.superceded == False
-        assert pool2.superceded == False
-        assert pool3.superceded == False
-
         work.last_update_time = None
         work.presentation_ready = True
         index = external_search_fake_fixture.external_search
@@ -253,11 +248,6 @@ class TestWork:
 
         # The author of the Work has not changed.
         assert "Alice Adder, Bob Bitshifter" == work.author
-
-        # one and only one license pool should be un-superceded
-        assert pool1.superceded == True
-        assert pool2.superceded == False
-        assert pool3.superceded == True
 
         # sanity check
         assert work.presentation_edition == pool2.presentation_edition
@@ -288,41 +278,6 @@ class TestWork:
 
         assert work_queue_indexing.is_queued(work)
 
-        # Now mark the pool with the presentation edition as suppressed.
-        # work.calculate_presentation() will call work.mark_licensepools_as_superceded(),
-        # which will mark the suppressed pool as superseded and take its edition out of the running.
-        # Make sure that work's presentation edition and work's author, etc.
-        # fields are updated accordingly, and that the superseded pool's edition
-        # knows it's no longer the champ.
-        pool2.suppressed = True
-
-        work.calculate_presentation()
-
-        # The title of the Work is the title of its new primary work record.
-        assert "The 1st Title" == work.title
-        assert "The 1st Subtitle" == work.subtitle
-
-        # author of composite edition is now just Bob
-        assert "Bob Bitshifter" == work.author
-        assert "Bitshifter, Bob" == work.sort_author
-
-        # sanity check
-        assert work.presentation_edition == pool1.presentation_edition
-        assert work.presentation_edition == edition1
-
-        # editions that aren't the presentation edition have no work
-        assert edition1.work == work
-        assert edition2.work == None
-        assert edition3.work == None
-
-        # The last update time has been set.
-        # Updating availability also modified work.last_update_time.
-        assert (utc_now() - work.last_update_time) < datetime.timedelta(seconds=2)
-
-        # make a staff (admin interface) edition.  its fields should supersede all others below it
-        # except when it has no contributors, and they do.
-        pool2.suppressed = False
-
         staff_edition = db.edition(
             data_source_name=DataSource.LIBRARY_STAFF,
             with_license_pool=False,
@@ -349,6 +304,10 @@ class TestWork:
         # The author of the Work is still the author of edition2 and was not clobbered.
         assert "Alice Adder, Bob Bitshifter" == work.author
         assert "Adder, Alice ; Bitshifter, Bob" == work.sort_author
+
+        # The last update time has been set.
+        # Updating availability also modified work.last_update_time.
+        assert (utc_now() - work.last_update_time) < datetime.timedelta(seconds=2)
 
     def test_calculate_presentation_with_no_presentation_edition(
         self, db: DatabaseTransactionFixture
@@ -573,106 +532,6 @@ class TestWork:
 
         assert [classification2, classification1] == results
 
-    def test_mark_licensepools_as_superceded(self, db: DatabaseTransactionFixture):
-        # A commercial LP that somehow got superceded will be
-        # un-superceded.
-        commercial = db.licensepool(None, data_source_name=DataSource.OVERDRIVE)
-        work, is_new = commercial.calculate_work()
-        commercial.superceded = True
-        work.mark_licensepools_as_superceded()
-        assert False == commercial.superceded
-
-        # An open-access LP that was superceded will be un-superceded if
-        # chosen.
-        gutenberg = db.licensepool(
-            None,
-            data_source_name=DataSource.GUTENBERG,
-            open_access=True,
-            with_open_access_download=True,
-        )
-        work, is_new = gutenberg.calculate_work()
-        gutenberg.superceded = True
-        work.mark_licensepools_as_superceded()
-        assert False == gutenberg.superceded
-
-        # Of two open-access LPs, the one from the higher-quality data
-        # source will be un-superceded, and the one from the
-        # lower-quality data source will be superceded.
-        standard_ebooks = db.licensepool(
-            None,
-            data_source_name=DataSource.STANDARD_EBOOKS,
-            open_access=True,
-            with_open_access_download=True,
-        )
-        work.license_pools.append(standard_ebooks)
-        gutenberg.superceded = False
-        standard_ebooks.superceded = True
-        work.mark_licensepools_as_superceded()
-        assert True == gutenberg.superceded
-        assert False == standard_ebooks.superceded
-
-        # Of three open-access pools, 1 and only 1 will be chosen as non-superceded.
-        gitenberg1 = db.licensepool(
-            edition=None,
-            open_access=True,
-            data_source_name=DataSource.PROJECT_GITENBERG,
-            with_open_access_download=True,
-        )
-
-        gitenberg2 = db.licensepool(
-            edition=None,
-            open_access=True,
-            data_source_name=DataSource.PROJECT_GITENBERG,
-            with_open_access_download=True,
-        )
-
-        gutenberg1 = db.licensepool(
-            edition=None,
-            open_access=True,
-            data_source_name=DataSource.GUTENBERG,
-            with_open_access_download=True,
-        )
-
-        work_multipool = db.work(presentation_edition=None)
-        work_multipool.license_pools.append(gutenberg1)
-        work_multipool.license_pools.append(gitenberg2)
-        work_multipool.license_pools.append(gitenberg1)
-
-        # pools aren't yet aware of each other
-        assert gutenberg1.superceded == False
-        assert gitenberg1.superceded == False
-        assert gitenberg2.superceded == False
-
-        # make pools figure out who's best
-        work_multipool.mark_licensepools_as_superceded()
-
-        assert gutenberg1.superceded == True
-        # There's no way to choose between the two gitenberg pools,
-        # so making sure only one has been chosen is enough.
-        chosen_count = 0
-        for chosen_pool in gutenberg1, gitenberg1, gitenberg2:
-            if chosen_pool.superceded is False:
-                chosen_count += 1
-        assert chosen_count == 1
-
-        # throw wrench in
-        gitenberg1.suppressed = True
-
-        # recalculate bests
-        work_multipool.mark_licensepools_as_superceded()
-        assert gutenberg1.superceded == True
-        assert gitenberg1.superceded == True
-        assert gitenberg2.superceded == False
-
-        # A suppressed pool won't be superceded if it's the only pool for a work.
-        only_pool = db.licensepool(
-            None, open_access=True, with_open_access_download=True
-        )
-        work, ignore = only_pool.calculate_work()
-        only_pool.suppressed = True
-        work.mark_licensepools_as_superceded()
-        assert False == only_pool.superceded
-
     def test_work_remains_viable_on_pools_suppressed(
         self, db: DatabaseTransactionFixture
     ):
@@ -696,22 +555,22 @@ class TestWork:
         assert pool_git.suppressed == False
         assert pool_gut.suppressed == False
 
-        # sanity check - we like standard ebooks and it got determined to be the best
-        assert work.presentation_edition == pool_std_ebooks.presentation_edition
-        assert work.presentation_edition == edition_std_ebooks
+        # sanity check - GItenburg was determined to be the best
+        assert work.presentation_edition == pool_git.presentation_edition
+        assert work.presentation_edition == edition_git
 
-        # editions know who's the presentation edition
-        assert edition_std_ebooks.work == work
-        assert edition_git.work == None
+        # Editions know if they're the presentation edition.
+        assert edition_std_ebooks.work == None
+        assert edition_git.work == work
         assert edition_gut.work == None
 
         # The title of the Work is the title of its presentation edition.
-        assert "The Standard Ebooks Title" == work.title
-        assert "The Standard Ebooks Subtitle" == work.subtitle
+        assert "The GItenberg Title" == work.title
+        assert "The GItenberg Subtitle" == work.subtitle
 
         # The author of the Work is the author of its presentation edition.
-        assert "Alice Adder" == work.author
-        assert "Adder, Alice" == work.sort_author
+        assert "Alice Adder, Bob Bitshifter" == work.author
+        assert "Adder, Alice ; Bitshifter, Bob" == work.sort_author
 
         # now suppress all of the license pools
         pool_std_ebooks.suppressed = True
@@ -721,22 +580,22 @@ class TestWork:
         # and let work know
         work.calculate_presentation()
 
-        # standard ebooks was last viable pool, and it stayed as work's choice
-        assert work.presentation_edition == pool_std_ebooks.presentation_edition
-        assert work.presentation_edition == edition_std_ebooks
+        # GItenberg was last viable pool, and it remains as work's choice.
+        assert work.presentation_edition == pool_git.presentation_edition
+        assert work.presentation_edition == edition_git
 
-        # editions know who's the presentation edition
-        assert edition_std_ebooks.work == work
-        assert edition_git.work == None
+        # Editions know if they're the presentation edition.
+        assert edition_std_ebooks.work == None
+        assert edition_git.work == work
         assert edition_gut.work == None
 
         # The title of the Work is still the title of its last viable presentation edition.
-        assert "The Standard Ebooks Title" == work.title
-        assert "The Standard Ebooks Subtitle" == work.subtitle
+        assert "The GItenberg Title" == work.title
+        assert "The GItenberg Subtitle" == work.subtitle
 
         # The author of the Work is still the author of its last viable presentation edition.
-        assert "Alice Adder" == work.author
-        assert "Adder, Alice" == work.sort_author
+        assert "Alice Adder, Bob Bitshifter" == work.author
+        assert "Adder, Alice ; Bitshifter, Bob" == work.sort_author
 
     def test_work_updates_info_on_pool_suppressed(self, db: DatabaseTransactionFixture):
         """If the provider of the work's presentation edition gets suppressed,
@@ -760,45 +619,45 @@ class TestWork:
         assert pool_git.suppressed == False
         assert pool_gut.suppressed == False
 
-        # sanity check - we like standard ebooks and it got determined to be the best
-        assert work.presentation_edition == pool_std_ebooks.presentation_edition
-        assert work.presentation_edition == edition_std_ebooks
-
-        # editions know who's the presentation edition
-        assert edition_std_ebooks.work == work
-        assert edition_git.work == None
-        assert edition_gut.work == None
-
-        # The title of the Work is the title of its presentation edition.
-        assert "The Standard Ebooks Title" == work.title
-        assert "The Standard Ebooks Subtitle" == work.subtitle
-
-        # The author of the Work is the author of its presentation edition.
-        assert "Alice Adder" == work.author
-        assert "Adder, Alice" == work.sort_author
-
-        # now suppress the primary license pool
-        pool_std_ebooks.suppressed = True
-
-        # and let work know
-        work.calculate_presentation()
-
-        # gitenberg is next best and it got determined to be the best
+        # sanity check - GItenburg was determined to be the best
         assert work.presentation_edition == pool_git.presentation_edition
         assert work.presentation_edition == edition_git
 
-        # editions know who's the presentation edition
+        # Editions know if they're the presentation edition.
         assert edition_std_ebooks.work == None
         assert edition_git.work == work
         assert edition_gut.work == None
 
-        # The title of the Work is still the title of its last viable presentation edition.
+        # The title of the Work is the title of its presentation edition.
         assert "The GItenberg Title" == work.title
         assert "The GItenberg Subtitle" == work.subtitle
 
-        # The author of the Work is still the author of its last viable presentation edition.
+        # The author of the Work is the author of its presentation edition.
         assert "Alice Adder, Bob Bitshifter" == work.author
         assert "Adder, Alice ; Bitshifter, Bob" == work.sort_author
+
+        # now suppress the primary license pool
+        pool_git.suppressed = True
+
+        # and let work know
+        work.calculate_presentation()
+
+        # GUtenberg is now determined to be the best
+        assert work.presentation_edition == pool_gut.presentation_edition
+        assert work.presentation_edition == edition_gut
+
+        # Editions know if they're the presentation edition.
+        assert edition_std_ebooks.work == None
+        assert edition_git.work == None
+        assert edition_gut.work == work
+
+        # The title of the Work is now the title of the new presentation edition.
+        assert "The GUtenberg Title" == work.title
+        assert "The GUtenberg Subtitle" == work.subtitle
+
+        # The author of the Work is now the author of the new presentation edition.
+        assert "Bob Bitshifter" == work.author
+        assert "Bitshifter, Bob" == work.sort_author
 
     def test_suppressed_for_delete_work(self, db: DatabaseTransactionFixture):
         work = db.work()
@@ -873,8 +732,6 @@ class TestWork:
             with_open_access_download=True,
         )
         w2 = lp2.calculate_work()
-        for l in (lp1, lp2):
-            assert False == l.superceded
         assert w1 != w2
 
     def test_reject_covers(
@@ -1752,9 +1609,7 @@ class TestWork:
         classification2.subject.checked = True
         assert [] == qu.all()
 
-    def test_active_licensepool_ignores_superceded_licensepools(
-        self, db: DatabaseTransactionFixture
-    ):
+    def test_active_license_pool(self, db: DatabaseTransactionFixture):
         work = db.work(with_license_pool=True, with_open_access_download=True)
         [pool1] = work.license_pools
         edition, pool2 = db.edition(with_license_pool=True)
@@ -1769,28 +1624,10 @@ class TestWork:
         pool2.open_access = False
         pool2.licenses_owned = 1
 
-        # If there are multiple non-superceded non-open-access license
+        # If there are multiple non-open-access license
         # pools for a work, the active license pool is one of them,
         # though we don't really know or care which one.
         assert work.active_license_pool() is not None
-
-        # Neither license pool is open-access, and pool1 is superceded.
-        # The active license pool is pool2.
-        pool1.superceded = True
-        assert pool2 == work.active_license_pool()
-
-        # pool2 is superceded and pool1 is not. The active licensepool
-        # is pool1.
-        pool1.superceded = False
-        pool2.superceded = True
-        assert pool1 == work.active_license_pool()
-
-        # If both license pools are superceded, there is no active license
-        # pool for the book.
-        pool1.superceded = True
-        assert None == work.active_license_pool()
-        pool1.superceded = False
-        pool2.superceded = False
 
         # If one license pool is open-access and the other is not, the
         # open-access pool wins.

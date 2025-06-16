@@ -30,7 +30,6 @@ class AdminFeed(OPDSAcquisitionFeed):
             .filter(
                 and_(
                     LicensePool.suppressed == false(),
-                    LicensePool.superceded == false(),
                     Work.suppressed_for.contains(library),
                 )
             )
