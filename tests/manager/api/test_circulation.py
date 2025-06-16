@@ -129,7 +129,7 @@ class TestFetchFulfillment:
         fulfillment = FetchFulfillment(
             "http://some.location", allowed_response_codes=["2xx"]
         )
-        with (pytest.raises(BadResponseException) as excinfo,):
+        with pytest.raises(BadResponseException) as excinfo:
             fulfillment.response()
 
         assert (
