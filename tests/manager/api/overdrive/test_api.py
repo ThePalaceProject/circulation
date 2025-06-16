@@ -78,6 +78,7 @@ class TestOverdriveAPI:
         overdrive_api_fixture: OverdriveAPIFixture,
         mock_web_server: MockAPIServer,
     ):
+        overdrive_api_fixture.mock_http.stop_patch()
         collection = overdrive_api_fixture.collection
 
         # Enqueue a response for the request that the server will make for a token.

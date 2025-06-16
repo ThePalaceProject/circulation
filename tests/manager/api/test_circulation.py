@@ -7,7 +7,7 @@ from palace.manager.api.circulation import (
     RedirectFulfillment,
 )
 from palace.manager.util.http import BadResponseException
-from tests.mocks.mock import MockHTTPClient
+from tests.fixtures.http import MockHttpClientFixture
 
 
 class TestDirectFulfillment:
@@ -52,17 +52,15 @@ class TestRedirectFulfillment:
 
 
 class TestFetchFulfillment:
-    def test_fetch_fulfillment(self) -> None:
-        http = MockHTTPClient()
-        http.queue_response(
+    def test_fetch_fulfillment(self, http_client: MockHttpClientFixture) -> None:
+        http_client.queue_response(
             204,
             content="This is some content.",
             media_type="application/xyz",
             other_headers={"X-Test": "test"},
         )
         fulfillment = FetchFulfillment("http://some.location", "foo/bar")
-        with http.patch():
-            response = fulfillment.response()
+        response = fulfillment.response()
         assert isinstance(response, Response)
         # The external requests status code is passed through.
         assert response.status_code == 204
@@ -70,60 +68,59 @@ class TestFetchFulfillment:
         assert response.get_data(as_text=True) == "This is some content."
         # Any content type set on the fulfillment, overrides the content type from the request.
         assert response.content_type == "foo/bar"
-        assert http.requests == ["http://some.location"]
+        assert http_client.requests == ["http://some.location"]
         assert "X-Test" not in response.headers
 
         # If no content type is set on the fulfillment, the content type from the request is used.
-        http = MockHTTPClient()
-        http.queue_response(200, content="Other content.", media_type="application/xyz")
+        http_client.reset_mock()
+        http_client.queue_response(
+            200, content="Other content.", media_type="application/xyz"
+        )
         fulfillment = FetchFulfillment("http://some.other.location")
-        with http.patch():
-            response = fulfillment.response()
+        response = fulfillment.response()
         assert isinstance(response, Response)
         assert response.status_code == 200
         assert response.get_data(as_text=True) == "Other content."
         assert response.content_type == "application/xyz"
-        assert http.requests == ["http://some.other.location"]
-        [kwargs] = http.requests_args
+        assert http_client.requests == ["http://some.other.location"]
+        [kwargs] = http_client.requests_args
         assert kwargs["allow_redirects"] is True
 
         # If the content type is not set on the fulfillment, and the response does not have a content type,
         # we fall back to no content type.
-        http = MockHTTPClient()
-        http.queue_response(200, content="Other content.")
+        http_client.reset_mock()
+        http_client.queue_response(200, content="Other content.")
         fulfillment = FetchFulfillment("http://some.other.location")
-        with http.patch():
-            response = fulfillment.response()
+        response = fulfillment.response()
         assert isinstance(response, Response)
         assert response.content_type is None
 
-    def test_fetch_fulfillment_include_headers(self) -> None:
+    def test_fetch_fulfillment_include_headers(
+        self, http_client: MockHttpClientFixture
+    ) -> None:
         # If include_headers is set, the headers are set when the fetch is made, but
         # not included in the response.
-        http = MockHTTPClient()
-        http.queue_response(
+        http_client.queue_response(
             204, content="This is some content.", media_type="application/xyz"
         )
         fulfillment = FetchFulfillment(
             "http://some.location", "foo/bar", include_headers={"X-Test": "test"}
         )
-        with http.patch():
-            response = fulfillment.response()
+        response = fulfillment.response()
         assert isinstance(response, Response)
         assert response.status_code == 204
         assert response.get_data(as_text=True) == "This is some content."
         assert response.content_type == "foo/bar"
         assert "X-Test" not in response.headers
-        assert http.requests == ["http://some.location"]
-        [kwargs] = http.requests_args
+        assert http_client.requests == ["http://some.location"]
+        [kwargs] = http_client.requests_args
         assert kwargs["headers"] is not None
         assert kwargs["headers"]["X-Test"] == "test"
 
     def test_fetch_fulfillment_allowed_response_codes(
-        self, caplog: pytest.LogCaptureFixture
+        self, caplog: pytest.LogCaptureFixture, http_client: MockHttpClientFixture
     ) -> None:
-        http = MockHTTPClient()
-        http.queue_response(
+        http_client.queue_response(
             403,
             content='{"type":"http://opds-spec.org/odl/error/checkout/expired",'
             '"title":"the license has expired","detail":"["loan_term_limit_reached"]","status":403}',
@@ -132,10 +129,7 @@ class TestFetchFulfillment:
         fulfillment = FetchFulfillment(
             "http://some.location", allowed_response_codes=["2xx"]
         )
-        with (
-            http.patch(),
-            pytest.raises(BadResponseException) as excinfo,
-        ):
+        with (pytest.raises(BadResponseException) as excinfo,):
             fulfillment.response()
 
         assert (

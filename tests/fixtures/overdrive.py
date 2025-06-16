@@ -19,10 +19,10 @@ from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.patron import Patron
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import OverdriveFilesFixture
+from tests.fixtures.http import MockHttpClientFixture
 from tests.fixtures.work import (
     WorkIdPolicyQueuePresentationRecalculationFixture,
 )
-from tests.mocks.mock import MockHTTPClient
 from tests.mocks.overdrive import MockOverdriveAPI
 
 
@@ -30,6 +30,7 @@ class OverdriveAPIFixture:
     def __init__(
         self,
         db: DatabaseTransactionFixture,
+        http_client: MockHttpClientFixture,
         data: OverdriveFilesFixture,
         monkeypatch: pytest.MonkeyPatch,
         work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
@@ -46,16 +47,14 @@ class OverdriveAPIFixture:
             f"{Configuration.OD_PREFIX_TESTING_PREFIX}_{Configuration.OD_FULFILLMENT_CLIENT_SECRET_SUFFIX}",
             "TestingSecret",
         )
-        self.mock_http = MockHTTPClient()
-        self.api = MockOverdriveAPI(db.session, self.collection, self.mock_http)
+        self.mock_http = http_client
+        self.api = MockOverdriveAPI(db.session, self.collection)
         self.circulation = CirculationAPI(
             db.session,
             self.library,
             {self.collection.id: self.api},
         )
-        self.create_mock_api = partial(
-            MockOverdriveAPI, db.session, mock_http=self.mock_http
-        )
+        self.create_mock_api = partial(MockOverdriveAPI, db.session)
 
         self.work_policy_recalc_fixture = work_policy_recalc_fixture
 
@@ -127,12 +126,14 @@ class OverdriveAPIFixture:
 @pytest.fixture(scope="function")
 def overdrive_api_fixture(
     db: DatabaseTransactionFixture,
+    http_client: MockHttpClientFixture,
     overdrive_files_fixture: OverdriveFilesFixture,
     monkeypatch: pytest.MonkeyPatch,
     work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
 ) -> OverdriveAPIFixture:
     return OverdriveAPIFixture(
         db,
+        http_client,
         overdrive_files_fixture,
         monkeypatch,
         work_policy_recalc_fixture,

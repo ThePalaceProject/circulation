@@ -69,11 +69,11 @@ from palace.manager.util.opds_writer import AtomFeed, OPDSFeed
 from palace.manager.util.problem_detail import ProblemDetail
 from tests.fixtures.api_controller import CirculationControllerFixture
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.http import MockHttpClientFixture
 from tests.fixtures.library import LibraryFixture
 from tests.fixtures.redis import RedisFixture
 from tests.fixtures.services import ServicesFixture
 from tests.mocks.circulation import MockPatronActivityCirculationAPI
-from tests.mocks.mock import MockHTTPClient
 
 
 class LoanFixture(CirculationControllerFixture):
@@ -261,6 +261,7 @@ class TestLoanController:
     def test_borrow_success(
         self,
         loan_fixture: LoanFixture,
+        http_client: MockHttpClientFixture,
         accept_header: str | None,
         expected_content_type: str,
     ):
@@ -418,8 +419,6 @@ class TestLoanController:
             # external request to obtain the book.
             loan_fixture.pool.open_access = False
 
-            http = MockHTTPClient()
-
             assert fulfillable_mechanism.resource.url is not None
             fetch = FetchFulfillment(
                 content_link=fulfillable_mechanism.resource.url,
@@ -429,16 +428,13 @@ class TestLoanController:
             # Now that we've set a mechanism, we can fulfill the loan
             # again without specifying a mechanism.
             loan_fixture.manager.d_circulation.queue_fulfill(loan_fixture.pool, fetch)
-            http.queue_response(200, content="I am an ACSM file")
+            http_client.queue_response(200, content="I am an ACSM file")
 
-            with http.patch():
-                fulfill_response = loan_fixture.manager.loans.fulfill(
-                    loan_fixture.pool_id
-                )
+            fulfill_response = loan_fixture.manager.loans.fulfill(loan_fixture.pool_id)
             assert isinstance(fulfill_response, wkResponse)
             assert 200 == fulfill_response.status_code
             assert "I am an ACSM file" == fulfill_response.get_data(as_text=True)
-            assert http.requests == [fulfillable_mechanism.resource.url]
+            assert http_client.requests == [fulfillable_mechanism.resource.url]
 
             # But we can't use some other mechanism -- we're stuck with
             # the first one we chose.
@@ -468,7 +464,9 @@ class TestLoanController:
             assert 502 == fulfill_response.status_code
 
     def test_borrow_and_fulfill_with_streaming_delivery_mechanism(
-        self, loan_fixture: LoanFixture
+        self,
+        loan_fixture: LoanFixture,
+        http_client: MockHttpClientFixture,
     ):
         # Create a pool with a streaming delivery mechanism
         work = loan_fixture.db.work(
@@ -582,8 +580,7 @@ class TestLoanController:
             assert None == loan.fulfillment
 
             # We can still use the other mechanism too.
-            http = MockHTTPClient()
-            http.queue_response(200, content="I am an ACSM file")
+            http_client.queue_response(200, content="I am an ACSM file")
 
             loan_fixture.manager.d_circulation.queue_fulfill(
                 pool,
@@ -592,10 +589,9 @@ class TestLoanController:
                     Representation.TEXT_HTML_MEDIA_TYPE,
                 ),
             )
-            with http.patch():
-                fulfill_response = loan_fixture.manager.loans.fulfill(
-                    pool.id, mech1.delivery_mechanism.id
-                )
+            fulfill_response = loan_fixture.manager.loans.fulfill(
+                pool.id, mech1.delivery_mechanism.id
+            )
             assert isinstance(fulfill_response, wkResponse)
             assert 200 == fulfill_response.status_code
 

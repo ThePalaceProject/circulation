@@ -31,10 +31,11 @@ from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import FilesFixture, OPDS2WithODLFilesFixture
+from tests.fixtures.http import MockHttpClientFixture
 from tests.fixtures.work import (
     WorkIdPolicyQueuePresentationRecalculationFixture,
 )
-from tests.mocks.mock import MockHTTPClient, MockRequestsResponse
+from tests.mocks.mock import MockRequestsResponse
 from tests.mocks.odl import MockOPDS2WithODLApi
 
 
@@ -42,6 +43,7 @@ class OPDS2WithODLApiFixture:
     def __init__(
         self,
         db: DatabaseTransactionFixture,
+        http_client: MockHttpClientFixture,
         files: FilesFixture,
     ):
         self.db = db
@@ -51,8 +53,8 @@ class OPDS2WithODLApiFixture:
         self.collection = self.create_collection(self.library)
         self.work = self.create_work(self.collection)
         self.license = self.setup_license()
-        self.mock_http = MockHTTPClient()
-        self.api = MockOPDS2WithODLApi(self.db.session, self.collection, self.mock_http)
+        self.mock_http = http_client
+        self.api = MockOPDS2WithODLApi(self.db.session, self.collection)
         self.patron = db.patron()
         self.pool = self.license.license_pool
         self.license_document = partial(
@@ -211,9 +213,10 @@ class OPDS2WithODLApiFixture:
 @pytest.fixture(scope="function")
 def opds2_with_odl_api_fixture(
     db: DatabaseTransactionFixture,
+    http_client: MockHttpClientFixture,
     opds2_with_odl_files_fixture: OPDS2WithODLFilesFixture,
 ) -> OPDS2WithODLApiFixture:
-    return OPDS2WithODLApiFixture(db, opds2_with_odl_files_fixture)
+    return OPDS2WithODLApiFixture(db, http_client, opds2_with_odl_files_fixture)
 
 
 class LicenseHelper:
