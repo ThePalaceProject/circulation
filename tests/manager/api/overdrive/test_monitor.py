@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-from functools import partial
 from typing import cast
 from unittest.mock import MagicMock
 
@@ -342,11 +341,8 @@ class TestNewTitlesOverdriveCollectionMonitor:
         self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
     ):
         db = overdrive_api_fixture.db
-        mock_api_partial = partial(
-            MockOverdriveAPI, mock_http=overdrive_api_fixture.mock_http
-        )
         monitor = NewTitlesOverdriveCollectionMonitor(
-            db.session, overdrive_api_fixture.collection, api_class=mock_api_partial
+            db.session, overdrive_api_fixture.collection, api_class=MockOverdriveAPI
         )
 
         # for this test, we will not count consecutive out of scope dates: if one
@@ -393,11 +389,8 @@ class TestNewTitlesOverdriveCollectionMonitor:
     ):
         caplog.set_level(logging.INFO)
 
-        mock_api_partial = partial(
-            MockOverdriveAPI, mock_http=overdrive_api_fixture.mock_http
-        )
         monitor = NewTitlesOverdriveCollectionMonitor(
-            db.session, overdrive_api_fixture.collection, api_class=mock_api_partial
+            db.session, overdrive_api_fixture.collection, api_class=MockOverdriveAPI
         )
 
         # for this test, we will count consecutive out of scope date
@@ -439,11 +432,8 @@ class TestNewTitlesOverdriveCollectionMonitor:
     def test_should_stop_again(
         self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
     ):
-        mock_api_partial = partial(
-            MockOverdriveAPI, mock_http=overdrive_api_fixture.mock_http
-        )
         monitor = RecentOverdriveCollectionMonitor(
-            db.session, overdrive_api_fixture.collection, api_class=mock_api_partial
+            db.session, overdrive_api_fixture.collection, api_class=MockOverdriveAPI
         )
         assert monitor.consecutive_unchanged_books == 0
         # This book hasn't been changed, but we're under the limit, so we should
@@ -475,23 +465,17 @@ class TestReaper:
         self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
     ):
         # Validate the standard CollectionMonitor interface.
-        mock_api_partial = partial(
-            MockOverdriveAPI, mock_http=overdrive_api_fixture.mock_http
-        )
         monitor = OverdriveCollectionReaper(
-            db.session, overdrive_api_fixture.collection, api_class=mock_api_partial  # type: ignore[arg-type]
+            db.session, overdrive_api_fixture.collection, api_class=MockOverdriveAPI
         )
 
 
 class TestOverdriveFormatSweep:
     def test_process_item(self, overdrive_api_fixture: OverdriveAPIFixture):
         db = overdrive_api_fixture.db
-        mock_api_partial = partial(
-            MockOverdriveAPI, mock_http=overdrive_api_fixture.mock_http
-        )
         # Validate the standard CollectionMonitor interface.
         monitor = OverdriveFormatSweep(
-            db.session, overdrive_api_fixture.collection, api_class=mock_api_partial  # type: ignore[arg-type]
+            db.session, overdrive_api_fixture.collection, api_class=MockOverdriveAPI
         )
         overdrive_api_fixture.queue_collection_token()
         # We're not testing that the work actually gets done (that's
@@ -514,9 +498,8 @@ class TestOverdriveFormatSweep:
             def update_formats(self, licensepool):
                 self.update_format_calls += 1
 
-        mock_api_partial = partial(MockApi, mock_http=overdrive_api_fixture.mock_http)
         monitor = OverdriveFormatSweep(
-            db.session, overdrive_api_fixture.collection, api_class=mock_api_partial  # type: ignore[arg-type]
+            db.session, overdrive_api_fixture.collection, api_class=MockApi
         )
         overdrive_api_fixture.queue_collection_token()
         overdrive_api_fixture.mock_http.queue_response(404)

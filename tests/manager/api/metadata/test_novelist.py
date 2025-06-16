@@ -20,7 +20,8 @@ from palace.manager.sqlalchemy.model.resource import HttpResponseTuple, Represen
 from palace.manager.util.http import HTTP
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import FilesFixture
-from tests.mocks.mock import MockHTTPClient, MockRequestsResponse
+from tests.fixtures.http import MockHttpClientFixture
+from tests.mocks.mock import MockRequestsResponse
 
 
 class NoveListFilesFixture(FilesFixture):
@@ -165,10 +166,11 @@ class TestNoveListAPI:
         assert novelist_id.identifier == "267510"
         assert len(recommendations) == 5
 
-    def test_lookup_recommendations(self, novelist_fixture: NoveListFixture):
+    def test_lookup_recommendations(
+        self, novelist_fixture: NoveListFixture, http_client: MockHttpClientFixture
+    ):
         # Test the lookup_recommendations() method.
-        http = MockHTTPClient()
-        http.queue_response(200, "text/html", content="yay")
+        http_client.queue_response(200, "text/html", content="yay")
 
         novelist = novelist_fixture.novelist
 
@@ -196,8 +198,7 @@ class TestNoveListAPI:
         identifier = novelist_fixture.db.identifier(identifier_type=Identifier.ISBN)
 
         # Do the lookup.
-        with http.patch():
-            result = novelist.lookup_recommendations(identifier)
+        result = novelist.lookup_recommendations(identifier)
 
         # A number of parameters were passed into build_query_url() to
         # get the URL of the HTTP request. The same parameters were
@@ -214,7 +215,7 @@ class TestNoveListAPI:
         )
 
         # The HTTP request went out to the query URL -- not the scrubbed URL.
-        assert ["http://query-url/"] == http.requests
+        assert ["http://query-url/"] == http_client.requests
 
         # The HTTP response was passed into novelist.review_response()
         mock_review_response.assert_called_once_with(

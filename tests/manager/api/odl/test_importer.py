@@ -37,12 +37,12 @@ from palace.manager.util import datetime_helpers
 from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.http import HTTP
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.http import MockHttpClientFixture
 from tests.fixtures.odl import (
     LicenseHelper,
     LicenseInfoHelper,
     OPDS2WithODLImporterFixture,
 )
-from tests.mocks.mock import MockHTTPClient
 
 
 class TestOPDS2WithODLImporter:
@@ -987,45 +987,43 @@ class TestOPDS2WithODLImporter:
         )
         assert parsed.content_types == ("format1", "format2")
 
-    def test_fetch_license_info(self):
+    def test_fetch_license_info(self, http_client: MockHttpClientFixture):
         """Ensure that OPDS2WithODLImporter correctly retrieves license data from an OPDS2 feed."""
 
-        http = MockHTTPClient()
-
         # Bad status code
-        http.queue_response(400, content=b"Bad Request")
+        http_client.queue_response(400, content=b"Bad Request")
 
         assert (
             OPDS2WithODLImporter.fetch_license_info(
-                "http://example.org/feed", http.do_get
+                "http://example.org/feed", http_client.do_get
             )
             is None
         )
-        assert len(http.requests) == 1
-        assert http.requests.pop() == "http://example.org/feed"
+        assert len(http_client.requests) == 1
+        assert http_client.requests.pop() == "http://example.org/feed"
 
         # 200 status - directly returns response body
         content = b"data"
-        http.queue_response(200, content=content)
+        http_client.queue_response(200, content=content)
         assert (
             OPDS2WithODLImporter.fetch_license_info(
-                "http://example.org/feed", http.do_get
+                "http://example.org/feed", http_client.do_get
             )
             == content
         )
-        assert len(http.requests) == 1
-        assert http.requests.pop() == "http://example.org/feed"
+        assert len(http_client.requests) == 1
+        assert http_client.requests.pop() == "http://example.org/feed"
 
         # 201 status - directly returns response body
-        http.queue_response(201, content=content)
+        http_client.queue_response(201, content=content)
         assert (
             OPDS2WithODLImporter.fetch_license_info(
-                "http://example.org/feed", http.do_get
+                "http://example.org/feed", http_client.do_get
             )
             == content
         )
-        assert len(http.requests) == 1
-        assert http.requests.pop() == "http://example.org/feed"
+        assert len(http_client.requests) == 1
+        assert http_client.requests.pop() == "http://example.org/feed"
 
     def test_get_license_data(self, monkeypatch: pytest.MonkeyPatch):
         expires = utc_now() + datetime.timedelta(days=1)
