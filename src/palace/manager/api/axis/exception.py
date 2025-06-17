@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
+from typing import NamedTuple
 
 from lxml import etree
 
@@ -35,6 +36,15 @@ class Axis360ValidationError(BadResponseException):
 
 ErrorType = type[CirculationException | RemoteInitiatedServerError]
 ErrorLookupType = Mapping[int | tuple[int, str], ErrorType]
+
+
+class AxisStatusTuple(NamedTuple):
+    """
+    A named tuple to hold the status code and message from an Axis 360 response.
+    """
+
+    code: int
+    message: str
 
 
 class StatusResponseParser:
@@ -132,7 +142,7 @@ class StatusResponseParser:
                 cls._do_raise(d[code], message)
 
     @classmethod
-    def parse_xml(cls, data: bytes) -> tuple[int, str] | None:
+    def parse_xml(cls, data: bytes) -> AxisStatusTuple | None:
         """
         Best effort attempt to parse an XML response from Axis 360,
         returning a tuple of (status_code, message) if successful,
@@ -160,12 +170,12 @@ class StatusResponseParser:
                 return None
             message = str(message_results[0].text)
 
-            return status_code, message
+            return AxisStatusTuple(status_code, message)
         except (etree.XMLSyntaxError, AssertionError, ValueError):
             return None
 
     @classmethod
-    def parse_json(cls, data: bytes) -> tuple[int, str] | None:
+    def parse_json(cls, data: bytes) -> AxisStatusTuple | None:
         """
         Best effort attempt to parse an JSON response from Axis 360,
         returning a tuple of (status_code, message) if successful,
@@ -179,12 +189,12 @@ class StatusResponseParser:
             message = status.get("Message")
             if not isinstance(code, str) or not isinstance(message, str):
                 return None
-            return int(code), str(message)
+            return AxisStatusTuple(int(code), str(message))
         except (AssertionError, ValueError, TypeError):
             return None
 
     @classmethod
-    def parse(cls, data: bytes) -> tuple[int, str] | None:
+    def parse(cls, data: bytes) -> AxisStatusTuple | None:
         """
         Parse the given data as either XML or JSON, returning
         a tuple of (status_code, message) if successful or None
@@ -194,7 +204,7 @@ class StatusResponseParser:
         return cls.parse_xml(data) or cls.parse_json(data)
 
     @classmethod
-    def parse_and_raise(cls, data: bytes) -> tuple[int, str] | None:
+    def parse_and_raise(cls, data: bytes) -> AxisStatusTuple | None:
         """
         Parse the given data and raise an exception if we are able to parse
         it and the status code indicates an error that we have an exception for.
@@ -203,6 +213,5 @@ class StatusResponseParser:
         if (parsed := cls.parse(data)) is None:
             return parsed
 
-        code, message = parsed
-        cls.raise_on_error(code, message)
-        return code, message
+        cls.raise_on_error(parsed.code, parsed.message)
+        return parsed

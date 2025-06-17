@@ -39,6 +39,13 @@ if TYPE_CHECKING:
 
 
 class Axis360Requests(LoggerMixin):
+    """
+    Make requests to the Axis 360 API.
+
+    Handles authentication, bearer token management, and
+    response parsing.
+    """
+
     PRODUCTION_BASE_URL = "https://axis360api.baker-taylor.com/Services/VendorAPI/"
     QA_BASE_URL = "http://axis360apiqa.baker-taylor.com/Services/VendorAPI/"
     SERVER_NICKNAMES = {
@@ -132,7 +139,7 @@ class Axis360Requests(LoggerMixin):
         response = _make_request()
         if response.status_code == 401:
             parsed_error = StatusResponseParser.parse(response.content)
-            if parsed_error is None or parsed_error[0] in [1001, 1002]:
+            if parsed_error is None or parsed_error.code in [1001, 1002]:
                 # The token is probably expired. Get a new token and try again.
                 # Axis 360's status codes mean:
                 #   1001: Invalid token

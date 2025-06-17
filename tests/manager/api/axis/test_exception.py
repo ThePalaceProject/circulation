@@ -15,30 +15,26 @@ class TestStatusResponseParser:
         data = axis_files_fixture.sample_data("availability_patron_not_found.xml")
         parsed = StatusResponseParser.parse(data)
         assert parsed is not None
-        status, message = parsed
-        assert status == 3122
-        assert message == "Patron information is not found."
+        assert parsed.code == 3122
+        assert parsed.message == "Patron information is not found."
 
         data = axis_files_fixture.sample_data("availability_with_loans.xml")
         parsed = StatusResponseParser.parse(data)
         assert parsed is not None
-        status, message = parsed
-        assert status == 0
-        assert message == "Availability Data is Successfully retrieved."
+        assert parsed.code == 0
+        assert parsed.message == "Availability Data is Successfully retrieved."
 
         data = axis_files_fixture.sample_data("availability_with_ebook_fulfillment.xml")
         parsed = StatusResponseParser.parse(data)
         assert parsed is not None
-        status, message = parsed
-        assert status == 0
-        assert message == "Availability Data is Successfully retrieved."
+        assert parsed.code == 0
+        assert parsed.message == "Availability Data is Successfully retrieved."
 
         data = axis_files_fixture.sample_data("checkin_failure.xml")
         parsed = StatusResponseParser.parse(data)
         assert parsed is not None
-        status, message = parsed
-        assert status == 3103
-        assert message == "Invalid Title Id"
+        assert parsed.code == 3103
+        assert parsed.message == "Invalid Title Id"
 
         data = axis_files_fixture.sample_data("invalid_error_code.xml")
         parsed = StatusResponseParser.parse(data)
@@ -61,23 +57,20 @@ class TestStatusResponseParser:
         data = axis_files_fixture.sample_data("audiobook_metadata.json")
         parsed = StatusResponseParser.parse(data)
         assert parsed is not None
-        status, message = parsed
-        assert status == 0
-        assert message == "SUCCESS"
+        assert parsed.code == 0
+        assert parsed.message == "SUCCESS"
 
         data = axis_files_fixture.sample_data("audiobook_fulfillment_info.json")
         parsed = StatusResponseParser.parse(data)
         assert parsed is not None
-        status, message = parsed
-        assert status == 0
-        assert message == "SUCCESS"
+        assert parsed.code == 0
+        assert parsed.message == "SUCCESS"
 
         data = axis_files_fixture.sample_data("ebook_fulfillment_info.json")
         parsed = StatusResponseParser.parse(data)
         assert parsed is not None
-        status, message = parsed
-        assert status == 0
-        assert message == "SUCCESS"
+        assert parsed.code == 0
+        assert parsed.message == "SUCCESS"
 
         parsed = StatusResponseParser.parse(json.dumps({}).encode())
         assert parsed is None
@@ -104,9 +97,8 @@ class TestStatusResponseParser:
             json.dumps({"Status": {"Code": "123", "Message": "Wow"}}).encode()
         )
         assert parsed is not None
-        status, message = parsed
-        assert status == 123
-        assert message == "Wow"
+        assert parsed.code == 123
+        assert parsed.message == "Wow"
 
     def test_parse_and_raise(self, axis_files_fixture: AxisFilesFixture):
         assert StatusResponseParser.parse_and_raise(b"") is None
