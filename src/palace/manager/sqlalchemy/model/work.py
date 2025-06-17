@@ -842,20 +842,16 @@ class Work(Base, LoggerMixin):
         if not policy.choose_edition:
             return changed
 
-        # For each owned edition, see if its LicensePool was superceded or suppressed
+        # For each owned edition, see if its LicensePool was suppressed.
         # if yes, the edition is unlikely to be the best.
-        # An open access pool may be "superceded", if there's a better-quality
-        # open-access pool available.
-        self.mark_licensepools_as_superceded()
         edition_metadata_changed = False
         old_presentation_edition = self.presentation_edition
         new_presentation_edition = None
 
         for pool in self.license_pools:
-            # a superceded pool's composite edition is not good enough
             # Note:  making the assumption here that we won't have a situation
-            # where we marked all of the work's pools as superceded or suppressed.
-            if pool.superceded or pool.suppressed:
+            # where we marked all of the work's pools as suppressed.
+            if pool.suppressed:
                 continue
 
             # make sure the pool has most up-to-date idea of its presentation edition,
@@ -864,6 +860,8 @@ class Work(Base, LoggerMixin):
             edition_metadata_changed = edition_metadata_changed or pool_edition_changed
             potential_presentation_edition = pool.presentation_edition
 
+            # TODO: I'm leaving this next old comment behind. We may need to deal with
+            #  this, since we've eliminated the "superceded" [sic] (superseded) concept:
             # We currently have no real way to choose between
             # competing presentation editions. But it doesn't matter much
             # because in the current system there should never be more
@@ -1122,8 +1120,6 @@ class Work(Base, LoggerMixin):
         downloads = []
         expect_downloads = False
         for pool in self.license_pools:
-            if pool.superceded:
-                continue
             if pool.open_access:
                 expect_downloads = True
             for lpdm in pool.available_delivery_mechanisms:
@@ -1161,8 +1157,6 @@ class Work(Base, LoggerMixin):
         collections = [] if not library else [c for c in library.active_collections]
         for p in self.license_pools:
             if collections and p.collection not in collections:
-                continue
-            if p.superceded:
                 continue
             edition = p.presentation_edition
             if p.open_access:
@@ -1732,25 +1726,6 @@ class Work(Base, LoggerMixin):
             )
 
         return Work.to_search_documents(db, [self.id])[0]
-
-    def mark_licensepools_as_superceded(self):
-        """Make sure that all but the single best open-access LicensePool for
-        this Work are superceded. A non-open-access LicensePool should
-        never be superceded, and this method will mark them as
-        un-superceded.
-        """
-        champion_open_access_license_pool = None
-        for pool in self.license_pools:
-            if not pool.open_access:
-                pool.superceded = False
-                continue
-            if pool.better_open_access_pool_than(champion_open_access_license_pool):
-                if champion_open_access_license_pool:
-                    champion_open_access_license_pool.superceded = True
-                champion_open_access_license_pool = pool
-                pool.superceded = False
-            else:
-                pool.superceded = True
 
     @classmethod
     def restrict_to_custom_lists_from_data_source(

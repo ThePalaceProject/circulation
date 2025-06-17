@@ -190,17 +190,11 @@ class TestOPDS:
         work1.suppressed_for.append(library)
         work2.suppressed_for.append(library)
 
-        # This work won't be included in the feed, since its
-        # license pool is superceded.
-        work3 = db.work(with_open_access_download=True)
-        work3.license_pools[0].superceded = True
-        work3.suppressed_for.append(library)
-
         # This work won't be included in the feed, since it is
         # also suppressed at the collection (license pool) level.
-        work4 = db.work(with_open_access_download=True)
-        work4.license_pools[0].suppressed = True
-        work4.suppressed_for.append(library)
+        work3 = db.work(with_open_access_download=True)
+        work3.license_pools[0].suppressed = True
+        work3.suppressed_for.append(library)
 
         pagination = Pagination(size=1)
         pagination_page_1 = pagination

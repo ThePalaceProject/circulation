@@ -2313,12 +2313,7 @@ class DatabaseBackedWorkList(WorkList):
         """Return a query that contains the joins set up as necessary to
         create OPDS feeds.
         """
-        qu = (
-            _db.query(Work)
-            .join(Work.license_pools)
-            .join(Work.presentation_edition)
-            .filter(LicensePool.superceded == False)
-        )
+        qu = _db.query(Work).join(Work.license_pools).join(Work.presentation_edition)
 
         # Apply optimizations.
         qu = cls._modify_loading(qu)

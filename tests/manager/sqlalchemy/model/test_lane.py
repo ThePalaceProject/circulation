@@ -3002,7 +3002,6 @@ class TestDatabaseBackedWorkList:
             db.session.query(Work)
             .join(Work.license_pools)
             .join(Work.presentation_edition)
-            .filter(LicensePool.superceded == False)
         )
         assert str(expect) == str(base_query)
         assert "_modify_loading" == m
@@ -3482,20 +3481,6 @@ class TestDatabaseBackedWorkList:
             l.remove_entry(work)
             assert [] == _run(both_lists_qu, both_lists_clauses)
             l.add_entry(work)
-
-    def test_works_from_database_with_superceded_pool(
-        self, db: DatabaseTransactionFixture
-    ):
-        work = db.work(with_license_pool=True)
-        work.license_pools[0].superceded = True
-        ignore, pool = db.edition(with_license_pool=True)
-        work.license_pools.append(pool)
-        db.session.commit()
-
-        lane = db.lane()
-        [w] = lane.works_from_database(db.session).all()
-        # Only one pool is loaded, and it's the non-superceded one.
-        assert [pool] == w.license_pools
 
 
 class TestHierarchyWorkList:
