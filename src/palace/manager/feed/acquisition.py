@@ -686,6 +686,7 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
         *,
         search_engine: ExternalSearchIndex = Provide["search.index"],
         search_debug: bool = False,
+        work_ids_to_exclude: list[int] | None = None,
     ) -> OPDSAcquisitionFeed:
         """Internal method called by groups() when a grouped feed
         must be regenerated.
@@ -706,6 +707,11 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
         # Make a typical grouped feed.
         all_works = []
         for work, sublane in works_and_lanes:
+
+            # skip works in the exclusion list
+            if work_ids_to_exclude and work.id in work_ids_to_exclude:
+                continue
+
             if sublane == worklist:
                 # We are looking at the groups feed for (e.g.)
                 # "Science Fiction", and we're seeing a book
