@@ -123,7 +123,7 @@ def list_identifiers_for_import(
             # loop through feed :  for every {batch_size} items, pack them in a list and pass along to sub task for
             # processing
             try:
-                api = Axis360API(session, collection, None)
+                api = Axis360API(session, collection)
                 if not _check_api_credentials(task, collection, api.api_requests):
                     return None
 
@@ -480,7 +480,7 @@ def reap_collection(
                 log_completion_message()
                 return
 
-            api = Axis360API(session, collection, None)
+            api = Axis360API(session, collection)
 
             _check_api_credentials(task, collection, api.api_requests)
 
