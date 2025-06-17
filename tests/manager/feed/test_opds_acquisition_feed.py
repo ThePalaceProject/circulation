@@ -3,7 +3,7 @@ import logging
 from collections import defaultdict
 from collections.abc import Callable, Generator
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, create_autospec, patch
 
 import pytest
 from sqlalchemy.orm import Session
@@ -1388,3 +1388,29 @@ class TestNavigationFeed:
         assert "http://%s/" % data.fantasy.id == fantasy_link.href
         assert "subsection" == fantasy_link.rel
         assert OPDSFeed.ACQUISITION_FEED_TYPE == fantasy_link.type
+
+
+class TestGroupFeed:
+    def test_exclude_by_work_ids(self, db: DatabaseTransactionFixture):
+        wl = create_autospec(WorkList)
+        # Create two works.
+        w1: Work = db.work(with_license_pool=True)
+        w2: Work = db.work(with_license_pool=True)
+        wl.groups.return_value = [
+            (w1, wl),
+            (w2, wl),
+        ]
+        annotator = create_autospec(LibraryAnnotator)
+        feed = OPDSAcquisitionFeed.groups(
+            _db=db.session,
+            title="title",
+            url="http://localhost/",
+            worklist=wl,
+            annotator=annotator,
+            pagination=None,
+            facets=None,
+            work_ids_to_exclude=[w1.id],
+        )
+        assert annotator.lanes_by_work[w2].append.call_count == 1
+        assert len(feed._feed.entries) == 1
+        assert feed._feed.entries[0].work == w2
