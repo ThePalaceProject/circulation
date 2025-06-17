@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import flask
-from flask import Response
+from flask import Response, request
 from flask_babel import lazy_gettext as _
 from pydantic import TypeAdapter
 from werkzeug import Response as wkResponse
@@ -352,11 +352,27 @@ class LoanController(CirculationManagerController):
                 )
 
         try:
+            # Get any additional information that may be present in the request that is
+            # needed to fulfill the loan.
+            # These parameters are used by Boundless DRM.
+            modulus = request.args.get("modulus")
+            exponent = request.args.get("exponent")
+            device_id = request.args.get("device_id")
+            client_ip = (
+                request_ip[0].strip()
+                if (request_ip := request.headers.get("X-Forwarded-For", "").split(","))
+                else request.remote_addr
+            )
+
             fulfillment = self.circulation.fulfill(
                 patron,  # type: ignore[arg-type]
                 credential,
                 requested_license_pool,
                 mechanism,
+                modulus=modulus,
+                exponent=exponent,
+                device_id=device_id,
+                client_ip=client_ip,
             )
         except (CirculationException, RemoteInitiatedServerError) as e:
             return e.problem_detail

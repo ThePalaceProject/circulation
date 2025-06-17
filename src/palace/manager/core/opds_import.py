@@ -20,6 +20,7 @@ from flask_babel import lazy_gettext as _
 from lxml import etree
 from requests import Response
 from sqlalchemy.orm.session import Session
+from typing_extensions import Unpack
 
 from palace.manager.api.circulation import (
     BaseCirculationAPI,
@@ -295,6 +296,7 @@ class BaseOPDSAPI(
         pin: str,
         licensepool: LicensePool,
         delivery_mechanism: LicensePoolDeliveryMechanism,
+        **kwargs: Unpack[BaseCirculationAPI.FulfillKwargs],
     ) -> RedirectFulfillment:
         requested_mechanism = delivery_mechanism.delivery_mechanism
         rep = None

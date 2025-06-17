@@ -1,10 +1,8 @@
 from __future__ import annotations
 
 from flask_babel import lazy_gettext as _
-from pydantic import field_validator
 
-from palace.manager.api.admin.validator import Validator
-from palace.manager.api.axis.requests import Axis360Requests
+from palace.manager.api.axis.constants import ServerNickname
 from palace.manager.api.circulation import (
     BaseCirculationApiSettings,
     BaseCirculationLoanSettings,
@@ -29,14 +27,22 @@ class Axis360Settings(BaseCirculationApiSettings):
             required=True,
         )
     )
-    url: str = FormField(
-        default=Axis360Requests.PRODUCTION_BASE_URL,
+    # TODO: Need to figure out how to handle the migration for this setting
+    #   before this goes in.
+    server_nickname: ServerNickname = FormField(
+        default=ServerNickname.production,
         form=ConfigurationFormItem(
-            label=_("Server"),
-            required=True,
+            label=_("Server family"),
+            type=ConfigurationFormItemType.SELECT,
+            required=False,
+            description=f"This should generally be set to '{ServerNickname.production}'.",
+            options={
+                ServerNickname.production: (ServerNickname.production),
+                ServerNickname.qa: _(ServerNickname.qa),
+            },
         ),
     )
-    verify_certificate: bool | None = FormField(
+    verify_certificate: bool = FormField(
         default=True,
         form=ConfigurationFormItem(
             label=_("Verify SSL Certificate"),
@@ -51,17 +57,6 @@ class Axis360Settings(BaseCirculationApiSettings):
             },
         ),
     )
-
-    @field_validator("url")
-    @classmethod
-    def _validate_url(cls, v: str) -> str:
-        # Validate if the url provided is valid http or a valid nickname
-        valid_names = list(Axis360Requests.SERVER_NICKNAMES.keys())
-        if not Validator._is_url(v, valid_names):
-            raise ValueError(
-                f"Server nickname must be one of {valid_names}, or an 'http[s]' URL."
-            )
-        return v
 
 
 class Axis360LibrarySettings(BaseCirculationLoanSettings):

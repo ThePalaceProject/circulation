@@ -10,6 +10,7 @@ from functools import cached_property, partial
 from flask import url_for
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
+from typing_extensions import Unpack
 from uritemplate import URITemplate
 
 from palace.manager.api.circulation import (
@@ -484,6 +485,7 @@ class OPDS2WithODLApi(
         pin: str,
         licensepool: LicensePool,
         delivery_mechanism: LicensePoolDeliveryMechanism,
+        **kwargs: Unpack[BaseCirculationAPI.FulfillKwargs],
     ) -> Fulfillment:
         """Get the actual resource file to the patron."""
         _db = Session.object_session(patron)

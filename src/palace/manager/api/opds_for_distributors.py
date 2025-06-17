@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any
 import feedparser
 from flask_babel import lazy_gettext as _
 from sqlalchemy.orm import Session
+from typing_extensions import Unpack
 
 from palace.manager.api.circulation import (
     BaseCirculationAPI,
@@ -287,6 +288,7 @@ class OPDSForDistributorsAPI(
         pin: str,
         licensepool: LicensePool,
         delivery_mechanism: LicensePoolDeliveryMechanism,
+        **kwargs: Unpack[BaseCirculationAPI.FulfillKwargs],
     ) -> DirectFulfillment:
         """Retrieve a bearer token that can be used to download the book.
 
