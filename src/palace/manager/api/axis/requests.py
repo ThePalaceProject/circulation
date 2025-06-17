@@ -12,7 +12,9 @@ from pydantic_xml import ParsingError
 from requests import Response as RequestsResponse
 from typing_extensions import Unpack
 
+from palace.manager.api.axis.constants import API_BASE_URLS, LICENSE_SERVER_BASE_URLS
 from palace.manager.api.axis.exception import (
+    Axis360LicenseError,
     Axis360ValidationError,
     StatusResponseParser,
 )
@@ -21,6 +23,7 @@ from palace.manager.api.axis.models.json import (
     AudiobookMetadataResponse,
     FulfillmentInfoResponse,
     FulfillmentInfoResponseT,
+    LicenseServerStatus,
     Token,
 )
 from palace.manager.api.axis.models.xml import (
@@ -30,7 +33,7 @@ from palace.manager.api.axis.models.xml import (
     EarlyCheckinResponse,
     RemoveHoldResponse,
 )
-from palace.manager.util.http import HTTP, RequestKwargs
+from palace.manager.util.http import HTTP, BadResponseException, RequestKwargs
 from palace.manager.util.log import LoggerMixin
 from palace.manager.util.sentinel import SentinelType
 
@@ -46,13 +49,6 @@ class Axis360Requests(LoggerMixin):
     response parsing.
     """
 
-    PRODUCTION_BASE_URL = "https://axis360api.baker-taylor.com/Services/VendorAPI/"
-    QA_BASE_URL = "http://axis360apiqa.baker-taylor.com/Services/VendorAPI/"
-    SERVER_NICKNAMES = {
-        "production": PRODUCTION_BASE_URL,
-        "qa": QA_BASE_URL,
-    }
-
     DATE_FORMAT = "%m-%d-%Y %H:%M:%S"
 
     def __init__(self, settings: Axis360Settings) -> None:
@@ -61,19 +57,11 @@ class Axis360Requests(LoggerMixin):
         self._password = settings.password
 
         # Convert the nickname for a server into an actual URL.
-        base_url = settings.url or self.PRODUCTION_BASE_URL
-        if base_url in self.SERVER_NICKNAMES:
-            base_url = self.SERVER_NICKNAMES[base_url]
-        if not base_url.endswith("/"):
-            base_url += "/"
-        self._base_url = base_url
+        self._base_url = API_BASE_URLS[settings.server_nickname]
+        self._license_server_url = LICENSE_SERVER_BASE_URLS[settings.server_nickname]
 
         self._cached_bearer_token: Token | None = None
-        self._verify_certificate: bool = (
-            settings.verify_certificate
-            if settings.verify_certificate is not None
-            else True
-        )
+        self._verify_certificate = settings.verify_certificate
 
     @classmethod
     def _make_request(
@@ -269,3 +257,48 @@ class Axis360Requests(LoggerMixin):
         params = {"titleId": title_id, "patronId": patron_id}
         response = self._request("GET", url, RemoveHoldResponse.from_xml, params=params)
         return response
+
+    def license(
+        self,
+        book_vault_uuid: str,
+        device_id: str,
+        client_ip: str,
+        isbn: str,
+        modulus: str,
+        exponent: str,
+    ) -> bytes:
+        """
+        Make a request to the license server to fetch a license document.
+
+        This function does not use the normal request flow because the license server
+        uses a different URL structure, response format, and it does not require the
+        same authentication as the main API.
+
+        This function doesn't parse the response, but rather just fetch the license
+        document as bytes and passes it back to the caller.
+        """
+        url = (
+            self._license_server_url
+            + f"license/{book_vault_uuid}/{device_id}/{client_ip}/{isbn}/{modulus}/{exponent}"
+        )
+        try:
+            response = self._make_request("GET", url, allowed_response_codes=["2xx"])
+        except BadResponseException as e:
+            self.log.exception(
+                "Error fetching license document: %s. Status: %d. Content: %s",
+                str(e),
+                e.response.status_code,
+                e.response.text,
+            )
+            try:
+                parsed_error = LicenseServerStatus.model_validate_json(
+                    e.response.content
+                )
+                raise Axis360LicenseError(parsed_error, e.response.status_code) from e
+            except ValidationError:
+                # If we can't parse the error, just raise the original exception.
+                ...
+
+            raise
+
+        return response.content

@@ -20,6 +20,7 @@ from flask_babel import lazy_gettext as _
 from lxml.etree import Error, _Element
 from pymarc import parse_xml_to_array
 from sqlalchemy.orm import Session
+from typing_extensions import Unpack
 
 from palace.manager.api.circulation import (
     BaseCirculationAPI,
@@ -482,6 +483,7 @@ class BibliothecaAPI(
         password: str,
         pool: LicensePool,
         delivery_mechanism: LicensePoolDeliveryMechanism,
+        **kwargs: Unpack[BaseCirculationAPI.FulfillKwargs],
     ) -> DirectFulfillment:
         """Get the actual resource file to the patron."""
         if (

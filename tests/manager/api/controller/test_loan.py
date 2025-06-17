@@ -825,7 +825,11 @@ class TestLoanController:
         controller.manager.circulation_apis[loan_fixture.db.default_library().id] = mock
 
         with loan_fixture.request_context_with_library(
-            "/", headers=dict(Authorization=loan_fixture.valid_auth)
+            "/?modulus=modulus&exponent=exponent&device_id=device_id",
+            headers={
+                "Authorization": loan_fixture.valid_auth,
+                "X-Forwarded-For": "1.1.1.1, 0.0.0.0",
+            },
         ):
             authenticated = controller.authenticated_patron_from_request()
             assert isinstance(authenticated, Patron)
@@ -843,6 +847,10 @@ class TestLoanController:
                 loan_fixture.valid_credentials["password"],
                 loan_fixture.pool,
                 loan_fixture.mech2,
+                modulus="modulus",
+                exponent="exponent",
+                device_id="device_id",
+                client_ip="1.1.1.1",
             )
 
     @pytest.mark.parametrize(
