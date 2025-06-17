@@ -44,7 +44,7 @@ class AxisStatusTuple(NamedTuple):
     """
 
     code: int
-    message: str
+    message: str | None
 
 
 class StatusResponseParser:
@@ -108,13 +108,13 @@ class StatusResponseParser:
     }
 
     @classmethod
-    def _do_raise(cls, error_class: ErrorType, message: str) -> None:
+    def _do_raise(cls, error_class: ErrorType, message: str | None) -> None:
         """
         Raise an exception with the given class and message.
         This is a helper method to avoid repeating the raise statement.
         """
         if issubclass(error_class, RemoteInitiatedServerError):
-            raise error_class(message, cls.SERVICE_NAME)
+            raise error_class(message or "error", cls.SERVICE_NAME)
 
         raise error_class(message)
 
@@ -122,7 +122,7 @@ class StatusResponseParser:
     def raise_on_error(
         cls,
         code: int,
-        message: str,
+        message: str | None = None,
         custom_error_classes: ErrorLookupType | None = None,
         ignore_error_codes: list[int] | None = None,
     ) -> None:
@@ -136,7 +136,7 @@ class StatusResponseParser:
         if custom_error_classes is None:
             custom_error_classes = {}
         for d in custom_error_classes, cls.CODE_TO_EXCEPTION:
-            if (code, message) in d:
+            if message is not None and (code, message) in d:
                 cls._do_raise(d[(code, message)], message)
             elif code in d:
                 cls._do_raise(d[code], message)
@@ -166,9 +166,11 @@ class StatusResponseParser:
             message_results = parsed.xpath(
                 "//axis:status/axis:statusMessage", namespaces=cls.NAMESPACES
             )
-            if not message_results or not message_results[0].text:
-                return None
-            message = str(message_results[0].text)
+            message = (
+                None
+                if not message_results or not message_results[0].text
+                else str(message_results[0].text)
+            )
 
             return AxisStatusTuple(status_code, message)
         except (etree.XMLSyntaxError, AssertionError, ValueError):
@@ -187,9 +189,11 @@ class StatusResponseParser:
             status = response_data.get("Status", {})
             code = status.get("Code")
             message = status.get("Message")
-            if not isinstance(code, str) or not isinstance(message, str):
+            if code is None:
                 return None
-            return AxisStatusTuple(int(code), str(message))
+            return AxisStatusTuple(
+                int(code), str(message) if message is not None else None
+            )
         except (AssertionError, ValueError, TypeError):
             return None
 

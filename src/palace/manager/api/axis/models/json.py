@@ -51,7 +51,7 @@ class Status(BaseAxisJsonModel):
     """
 
     code: int
-    message: str
+    message: str | None = None
 
     def raise_on_error(
         self,

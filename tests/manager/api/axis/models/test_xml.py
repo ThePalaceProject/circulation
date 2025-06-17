@@ -331,6 +331,16 @@ class TestCheckoutResponse:
         assert parsed.status.message == "Title Checked out Successfully."
         assert parsed.expiration_date == datetime_utc(2015, 8, 11, 18, 57, 42)
 
+    def test_parse_checkout_success_no_status_message(
+        self, axis_files_fixture: AxisFilesFixture
+    ):
+        data = axis_files_fixture.sample_data("checkout_success_no_status_message.xml")
+        parsed = CheckoutResponse.from_xml(data)
+        parsed.raise_on_error()
+        assert parsed.status.code == 0
+        assert parsed.status.message is None
+        assert parsed.expiration_date == datetime_utc(2025, 6, 20, 13, 50)
+
     @pytest.mark.parametrize(
         "filename, exception, code",
         [

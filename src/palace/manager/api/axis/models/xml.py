@@ -202,7 +202,10 @@ class Status(BaseAxisXmlModel):
     """
 
     code: int = element()
-    message: str = element(tag="statusMessage")
+
+    # The status message is required according to the API documentation, but it is
+    # missing from some responses we have seen in practice, so we make it optional.
+    message: str | None = element(default=None, tag="statusMessage")
 
     def raise_on_error(
         self,

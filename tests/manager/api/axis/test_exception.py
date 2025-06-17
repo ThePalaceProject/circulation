@@ -44,6 +44,12 @@ class TestStatusResponseParser:
         parsed = StatusResponseParser.parse(data)
         assert parsed is None
 
+        data = axis_files_fixture.sample_data("checkout_success_no_status_message.xml")
+        parsed = StatusResponseParser.parse(data)
+        assert parsed is not None
+        assert parsed.code == 0
+        assert parsed.message is None
+
     def test_parser_bad_data(self, axis_files_fixture: AxisFilesFixture):
         # Test with None and empty data
         assert StatusResponseParser.parse(None) is None  # type: ignore[arg-type]
@@ -86,7 +92,9 @@ class TestStatusResponseParser:
         parsed = StatusResponseParser.parse(
             json.dumps({"Status": {"Code": "123"}}).encode()
         )
-        assert parsed is None
+        assert parsed is not None
+        assert parsed.code == 123
+        assert parsed.message is None
 
         parsed = StatusResponseParser.parse(
             json.dumps({"Status": {"Message": "Wow"}}).encode()
