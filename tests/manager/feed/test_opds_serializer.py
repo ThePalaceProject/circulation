@@ -95,7 +95,7 @@ class TestOPDSSerializer:
         # No more children
         assert list(element) == []
 
-    def test__serialize_acquistion_link(self):
+    def test__serialize_acquisition_link(self):
         link = Acquisition(
             href="http://acquisition",
             holds_total="0",
@@ -107,7 +107,7 @@ class TestOPDSSerializer:
                 vendor="vendor", clientToken=FeedEntryType(text="token")
             ),
         )
-        element = OPDS1Version1Serializer()._serialize_acquistion_link(link)
+        element = OPDS1Version1Serializer()._serialize_acquisition_link(link)
         assert element.tag == "link"
         assert dict(element.attrib) == dict(href=link.href)
 

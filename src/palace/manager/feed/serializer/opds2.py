@@ -163,6 +163,9 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]]):
     def _serialize_acquisition_link(self, link: Acquisition) -> dict[str, Any]:
         item = self._serialize_link(link)
 
+        if link.templated:
+            item["templated"] = True
+
         def _indirect(indirect: IndirectAcquisition) -> dict[str, Any]:
             result: dict[str, Any] = dict(type=indirect.type)
             if indirect.children:
