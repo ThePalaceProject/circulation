@@ -9,7 +9,7 @@ else:
     from backports.strenum import StrEnum
 
 
-class Axis360Formats(StrEnum):
+class Axis360Format(StrEnum):
     axis_now = "AxisNow"
     blio = "Blio"
     epub = "ePub"

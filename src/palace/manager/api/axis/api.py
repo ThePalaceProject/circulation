@@ -7,7 +7,7 @@ from datetime import timedelta
 
 from sqlalchemy.orm import Session
 
-from palace.manager.api.axis.constants import Axis360Formats
+from palace.manager.api.axis.constants import Axis360Format
 from palace.manager.api.axis.fulfillment import (
     Axis360AcsFulfillment,
 )
@@ -72,12 +72,12 @@ class Axis360API(
     axisnow_drm = DeliveryMechanism.AXISNOW_DRM
 
     delivery_mechanism_to_internal_format = {
-        (epub, no_drm): Axis360Formats.epub,
-        (epub, adobe_drm): Axis360Formats.epub,
-        (pdf, no_drm): Axis360Formats.pdf,
-        (pdf, adobe_drm): Axis360Formats.pdf,
-        (None, findaway_drm): Axis360Formats.acoustik,
-        (None, axisnow_drm): Axis360Formats.axis_now,
+        (epub, no_drm): Axis360Format.epub,
+        (epub, adobe_drm): Axis360Format.epub,
+        (pdf, no_drm): Axis360Format.pdf,
+        (pdf, adobe_drm): Axis360Format.pdf,
+        (None, findaway_drm): Axis360Format.acoustik,
+        (None, axisnow_drm): Axis360Format.axis_now,
     }
 
     @classmethod
@@ -298,8 +298,8 @@ class Axis360API(
         checkout_format = title.availability.checkout_format
 
         # We treat the Blio format as equivalent to AxisNow for the purposes of fulfillment.
-        if checkout_format == Axis360Formats.blio:
-            checkout_format = Axis360Formats.axis_now
+        if checkout_format == Axis360Format.blio:
+            checkout_format = Axis360Format.axis_now
 
         if checkout_format != internal_format:
             # The book is checked out in a format that does not match the requested internal format.
@@ -314,8 +314,8 @@ class Axis360API(
             raise FormatNotAvailable()
 
         if (
-            checkout_format == Axis360Formats.epub
-            or checkout_format == Axis360Formats.pdf
+            checkout_format == Axis360Format.epub
+            or checkout_format == Axis360Format.pdf
         ):
             return self._fulfill_acs(title)
 
@@ -331,12 +331,12 @@ class Axis360API(
 
         fulfillment_info = self.api_requests.fulfillment_info(transaction_id)
 
-        if checkout_format == Axis360Formats.acoustik and isinstance(
+        if checkout_format == Axis360Format.acoustik and isinstance(
             fulfillment_info, FindawayFulfillmentInfoResponse
         ):
             return self._fulfill_acoustik(title, fulfillment_info, licensepool)
 
-        elif checkout_format == Axis360Formats.axis_now and isinstance(
+        elif checkout_format == Axis360Format.axis_now and isinstance(
             fulfillment_info, AxisNowFulfillmentInfoResponse
         ):
             return self._fulfill_axisnow(title, fulfillment_info)
@@ -399,8 +399,8 @@ class Axis360API(
                 # the item supports other formats, it can only be fulfilled in the format that was checked out.
                 # This format is stored in availability.checkout_format.
                 if (
-                    availability.checkout_format == Axis360Formats.axis_now
-                    or availability.checkout_format == Axis360Formats.blio
+                    availability.checkout_format == Axis360Format.axis_now
+                    or availability.checkout_format == Axis360Format.blio
                 ):
                     # Ignore any AxisNow or Blio formats, since
                     # we can't fulfill them. If we add AxisNow and Blio support in the future, we can remove

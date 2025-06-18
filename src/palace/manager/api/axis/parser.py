@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from collections.abc import Generator
 
-from palace.manager.api.axis.constants import Axis360Formats
+from palace.manager.api.axis.constants import Axis360Format
 from palace.manager.api.axis.models.xml import AvailabilityResponse, Title
 from palace.manager.data_layer.bibliographic import BibliographicData
 from palace.manager.data_layer.circulation import CirculationData
@@ -25,14 +25,14 @@ from palace.manager.util.log import LoggerMixin
 
 class BibliographicParser(LoggerMixin):
     DELIVERY_DATA_FOR_AXIS_FORMAT: dict[str, tuple[str | None, str] | None] = {
-        Axis360Formats.blio: None,  # Legacy format, handled the same way as AxisNow
-        Axis360Formats.acoustik: (None, DeliveryMechanism.FINDAWAY_DRM),  # Audiobooks
-        Axis360Formats.axis_now: None,  # Handled specially, for ebooks only.
-        Axis360Formats.epub: (
+        Axis360Format.blio: None,  # Legacy format, handled the same way as AxisNow
+        Axis360Format.acoustik: (None, DeliveryMechanism.FINDAWAY_DRM),  # Audiobooks
+        Axis360Format.axis_now: None,  # Handled specially, for ebooks only.
+        Axis360Format.epub: (
             Representation.EPUB_MEDIA_TYPE,
             DeliveryMechanism.ADOBE_DRM,
         ),
-        Axis360Formats.pdf: (
+        Axis360Format.pdf: (
             Representation.PDF_MEDIA_TYPE,
             DeliveryMechanism.ADOBE_DRM,
         ),
@@ -210,11 +210,11 @@ class BibliographicParser(LoggerMixin):
         for axis_format in title.availability.available_formats:
             seen_formats.append(axis_format)
 
-            if axis_format == Axis360Formats.blio:
+            if axis_format == Axis360Format.blio:
                 # We will be adding an AxisNow FormatData.
                 blio_seen = True
                 continue
-            elif axis_format == Axis360Formats.axis_now:
+            elif axis_format == Axis360Format.axis_now:
                 # We will only be adding an AxisNow FormatData if this
                 # turns out to be an ebook.
                 axisnow_seen = True
