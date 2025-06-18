@@ -13,7 +13,7 @@ from typing import Any, Protocol
 import pytz
 from celery import shared_task
 from sqlalchemy import and_, distinct, false, select, true
-from sqlalchemy.orm import Query, Session
+from sqlalchemy.orm import Query, Session, joinedload
 from sqlalchemy.sql.functions import coalesce, count, max as sql_max, sum
 
 from palace.manager.api.config import Configuration
@@ -179,7 +179,7 @@ def generate_playtime_report(
     # create directory hierarchy
     root_folder_id: str | None = google_drive_container.config.parent_folder_id()
 
-    with task.transaction() as session:
+    with task.session() as session:
         # get list of collections
         data_source_names = _fetch_distinct_eligible_data_source_names(
             session=session,
@@ -251,8 +251,17 @@ def _fetch_distinct_eligible_data_source_names(
                 [OPDS2WithODLApi.label(), OPDSForDistributorsAPI.label()]
             )
         )
+        .options(joinedload(Collection.integration_configuration))
     )
-    ds_names = [c[0].data_source.name for c in session.execute(query).all()]
+    ds_names = {c[0].data_source.name for c in session.execute(query).all()}
+
+    for ds_name in session.execute(
+        select(
+            distinct(PlaytimeSummary.data_source_name),
+        )
+    ).all():
+        ds_names.add(ds_name[0])
+    ds_names = list(ds_names)
     ds_names.sort()
     return ds_names
 
