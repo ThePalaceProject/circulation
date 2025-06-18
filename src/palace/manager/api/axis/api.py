@@ -4,14 +4,22 @@ import datetime
 import html
 from collections.abc import Generator, Sequence
 from datetime import timedelta
+from typing import cast
 
+from flask_babel import lazy_gettext as _
 from sqlalchemy.orm import Session
+from typing_extensions import Unpack
 
-from palace.manager.api.axis.constants import Axis360Format
+from palace.manager.api.axis.constants import (
+    BAKER_TAYLOR_KDRM_PARAMS,
+    DELIVERY_MECHANISM_TO_INTERNAL_FORMAT,
+    INTERNAL_FORMAT_TO_DELIVERY_MECHANISM,
+    Axis360Format,
+    DeliveryMechanismTuple,
+)
 from palace.manager.api.axis.fulfillment import (
     Axis360AcsFulfillment,
 )
-from palace.manager.api.axis.manifest import AxisNowManifest
 from palace.manager.api.axis.models.json import (
     AxisNowFulfillmentInfoResponse,
     FindawayFulfillmentInfoResponse,
@@ -22,7 +30,6 @@ from palace.manager.api.axis.requests import Axis360Requests
 from palace.manager.api.axis.settings import Axis360LibrarySettings, Axis360Settings
 from palace.manager.api.circulation import (
     BaseCirculationAPI,
-    CirculationInternalFormatsMixin,
     DirectFulfillment,
     Fulfillment,
     HoldInfo,
@@ -31,7 +38,9 @@ from palace.manager.api.circulation import (
 )
 from palace.manager.api.circulation_exceptions import (
     CannotFulfill,
+    DeliveryMechanismError,
     FormatNotAvailable,
+    InvalidInputException,
     NoActiveLoan,
     RemoteInitiatedServerError,
 )
@@ -40,6 +49,7 @@ from palace.manager.api.web_publication_manifest import FindawayManifest, SpineI
 from palace.manager.core.selftest import SelfTestResult
 from palace.manager.data_layer.bibliographic import BibliographicData
 from palace.manager.data_layer.circulation import CirculationData
+from palace.manager.data_layer.format import FormatData
 from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.data_layer.policy.replacement import ReplacementPolicy
 from palace.manager.sqlalchemy.model.collection import Collection
@@ -51,34 +61,14 @@ from palace.manager.sqlalchemy.model.licensing import (
     LicensePoolDeliveryMechanism,
 )
 from palace.manager.sqlalchemy.model.patron import Patron
-from palace.manager.sqlalchemy.model.resource import Representation
 from palace.manager.util.datetime_helpers import utc_now
 
 
 class Axis360API(
     PatronActivityCirculationAPI[Axis360Settings, Axis360LibrarySettings],
     HasCollectionSelfTests,
-    CirculationInternalFormatsMixin,
 ):
     SET_DELIVERY_MECHANISM_AT = BaseCirculationAPI.BORROW_STEP
-
-    # Create a lookup table between common DeliveryMechanism identifiers
-    # and Axis 360 format types.
-    epub = Representation.EPUB_MEDIA_TYPE
-    pdf = Representation.PDF_MEDIA_TYPE
-    adobe_drm = DeliveryMechanism.ADOBE_DRM
-    findaway_drm = DeliveryMechanism.FINDAWAY_DRM
-    no_drm = DeliveryMechanism.NO_DRM
-    axisnow_drm = DeliveryMechanism.AXISNOW_DRM
-
-    delivery_mechanism_to_internal_format = {
-        (epub, no_drm): Axis360Format.epub,
-        (epub, adobe_drm): Axis360Format.epub,
-        (pdf, no_drm): Axis360Format.pdf,
-        (pdf, adobe_drm): Axis360Format.pdf,
-        (None, findaway_drm): Axis360Format.acoustik,
-        (None, axisnow_drm): Axis360Format.axis_now,
-    }
 
     @classmethod
     def settings_class(cls) -> type[Axis360Settings]:
@@ -106,6 +96,27 @@ class Axis360API(
         self.api_requests = (
             Axis360Requests(self.settings) if requests is None else requests
         )
+
+    @staticmethod
+    def _delivery_mechanism_to_internal_format(
+        delivery_mechanism: LicensePoolDeliveryMechanism,
+    ) -> str:
+        """Look up the internal format for this delivery mechanism or
+        raise an exception.
+
+        :param delivery_mechanism: A LicensePoolDeliveryMechanism
+        """
+        d = delivery_mechanism.delivery_mechanism
+        key = DeliveryMechanismTuple(d.content_type, d.drm_scheme)
+        internal_format = DELIVERY_MECHANISM_TO_INTERNAL_FORMAT.get(key)
+        if internal_format is None:
+            raise DeliveryMechanismError(
+                _(
+                    "Could not map delivery mechanism %(mechanism_name)s to internal delivery mechanism!",
+                    mechanism_name=d.name,
+                )
+            )
+        return internal_format
 
     def _run_self_tests(self, _db: Session) -> Generator[SelfTestResult]:
         def _refresh() -> str:
@@ -179,7 +190,9 @@ class Axis360API(
         title_id = licensepool.identifier.identifier
         patron_id = patron.authorization_identifier
         response = self.api_requests.checkout(
-            title_id, patron_id, self.internal_format(delivery_mechanism)
+            title_id,
+            patron_id,
+            self._delivery_mechanism_to_internal_format(delivery_mechanism),
         )
         return LoanInfo.from_license_pool(
             licensepool, end_date=response.expiration_date
@@ -239,14 +252,42 @@ class Axis360API(
         )
         return DirectFulfillment(str(fnd_manifest), fnd_manifest.MEDIA_TYPE)
 
-    def _fulfill_axisnow(
-        self, title: Title, fulfillment_info: AxisNowFulfillmentInfoResponse
+    def _fulfill_baker_taylor_kdrm(
+        self,
+        title: Title,
+        fulfillment_info: AxisNowFulfillmentInfoResponse,
+        **kwargs: Unpack[BaseCirculationAPI.FulfillKwargs],
     ) -> DirectFulfillment:
-        axis_manifest = AxisNowManifest(
-            fulfillment_info.book_vault_uuid,
-            fulfillment_info.isbn,
+        kdrm_params = set(BAKER_TAYLOR_KDRM_PARAMS) | {"client_ip"}
+        missing_params = {param for param in kdrm_params if not kwargs.get(param)}
+        params: dict[str, str] = {
+            param: cast(str, kwargs.get(param))
+            for param in kdrm_params - missing_params
+        }
+
+        if missing_params:
+            debug_message = (
+                f"Missing parameters ({', '.join(missing_params)}) for Baker & Taylor KDRM fulfillment: "
+                f"title_id={title.title_id} isbn={fulfillment_info.isbn} device_id={params.get('device_id')}"
+            )
+            self.log.error(debug_message)
+            raise InvalidInputException(
+                "Missing required URL parameters for fulfillment",
+                debug_message,
+            )
+
+        license_response = self.api_requests.license(
+            book_vault_uuid=fulfillment_info.book_vault_uuid,
+            isbn=fulfillment_info.isbn,
+            exponent=params["exponent"],
+            modulus=params["modulus"],
+            device_id=params["device_id"],
+            client_ip=params["client_ip"],
         )
-        return DirectFulfillment(str(axis_manifest), axis_manifest.MEDIA_TYPE)
+
+        return DirectFulfillment(
+            license_response, DeliveryMechanism.BAKER_TAYLOR_KDRM_DRM
+        )
 
     def fulfill(
         self,
@@ -254,11 +295,13 @@ class Axis360API(
         pin: str,
         licensepool: LicensePool,
         delivery_mechanism: LicensePoolDeliveryMechanism,
+        **kwargs: Unpack[BaseCirculationAPI.FulfillKwargs],
     ) -> Fulfillment:
         """Fulfill a patron's request for a specific book."""
         identifier = licensepool.identifier
-        # This should include only one 'activity'.
-        internal_format = self.internal_format(delivery_mechanism)
+        internal_format = self._delivery_mechanism_to_internal_format(
+            delivery_mechanism
+        )
 
         availability_response = self.api_requests.availability(
             patron_id=patron.authorization_identifier,
@@ -339,7 +382,7 @@ class Axis360API(
         elif checkout_format == Axis360Format.axis_now and isinstance(
             fulfillment_info, AxisNowFulfillmentInfoResponse
         ):
-            return self._fulfill_axisnow(title, fulfillment_info)
+            return self._fulfill_baker_taylor_kdrm(title, fulfillment_info, **kwargs)
 
         self.log.error(
             "Unknown format %s for identifier %s. Fulfillment info: %r",
@@ -398,14 +441,26 @@ class Axis360API(
                 # When the item is checked out, it can be locked to a particular DRM format. So even though
                 # the item supports other formats, it can only be fulfilled in the format that was checked out.
                 # This format is stored in availability.checkout_format.
-                if (
-                    availability.checkout_format == Axis360Format.axis_now
-                    or availability.checkout_format == Axis360Format.blio
-                ):
-                    # Ignore any AxisNow or Blio formats, since
-                    # we can't fulfill them. If we add AxisNow and Blio support in the future, we can remove
-                    # this check.
-                    continue
+                if availability.checkout_format is not None:
+                    if (
+                        checkout_format := INTERNAL_FORMAT_TO_DELIVERY_MECHANISM.get(
+                            availability.checkout_format
+                        )
+                    ) is None:
+                        self.log.error(
+                            "Unknown checkout format %s for identifier %s. %r",
+                            availability.checkout_format,
+                            axis_identifier,
+                            title,
+                        )
+                        continue
+
+                    locked_to = FormatData(
+                        content_type=checkout_format.content_type,
+                        drm_scheme=checkout_format.drm_scheme,
+                    )
+                else:
+                    locked_to = None
 
                 yield LoanInfo(
                     collection_id=self.collection_id,
@@ -413,6 +468,7 @@ class Axis360API(
                     identifier=axis_identifier,
                     start_date=availability.checkout_start_date,
                     end_date=availability.checkout_end_date,
+                    locked_to=locked_to,
                 )
 
             elif availability.is_reserved:

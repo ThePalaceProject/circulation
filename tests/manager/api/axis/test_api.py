@@ -10,6 +10,7 @@ import pytest
 from freezegun import freeze_time
 
 from palace.manager.api.axis.api import Axis360API
+from palace.manager.api.axis.constants import Axis360Format
 from palace.manager.api.axis.exception import Axis360ValidationError
 from palace.manager.api.axis.fulfillment import (
     Axis360AcsFulfillment,
@@ -17,17 +18,23 @@ from palace.manager.api.axis.fulfillment import (
 from palace.manager.api.circulation import DirectFulfillment, HoldInfo, LoanInfo
 from palace.manager.api.circulation_exceptions import (
     CannotFulfill,
+    DeliveryMechanismError,
     FormatNotAvailable,
+    InvalidInputException,
     NoActiveLoan,
     NotFoundOnRemote,
     RemoteInitiatedServerError,
 )
 from palace.manager.data_layer.bibliographic import BibliographicData
 from palace.manager.data_layer.circulation import CirculationData
+from palace.manager.data_layer.format import FormatData
 from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.identifier import Identifier
-from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism
+from palace.manager.sqlalchemy.model.licensing import (
+    DeliveryMechanism,
+    LicensePoolDeliveryMechanism,
+)
 from palace.manager.sqlalchemy.model.resource import Representation
 from palace.manager.util.datetime_helpers import datetime_utc, utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
@@ -333,8 +340,12 @@ class TestAxis360API:
 
         # If axis shows the title as checked out, but in a format that we did
         # not request, we get a FormatNotAvailable exception.
-        delivery_mechanism.delivery_mechanism.content_type = None
-        delivery_mechanism.delivery_mechanism.drm_scheme = DeliveryMechanism.AXISNOW_DRM
+        delivery_mechanism.delivery_mechanism.content_type = (
+            Representation.EPUB_MEDIA_TYPE
+        )
+        delivery_mechanism.delivery_mechanism.drm_scheme = (
+            DeliveryMechanism.BAKER_TAYLOR_KDRM_DRM
+        )
         pool.identifier.identifier = "0016820953"
         data = axis360.files.sample_data("availability_with_ebook_fulfillment.xml")
         axis360.http_client.queue_response(200, content=data)
@@ -445,45 +456,72 @@ class TestAxis360API:
             == "http://adobe.acsm/?src=library&transactionId=2a34598b-12af-41e4-a926-af5e42da7fe5&isbn=9780763654573&format=F2"
         )
 
-    def test_fulfill_axis_now(self, axis360: Axis360Fixture):
-        # Test our ability to fulfill an Axis 360 title.
+    def test_fulfill_baker_taylor_kdrm(self, axis360: Axis360Fixture):
+        # Test our ability to fulfill an AxisNow ebook.
         edition, pool = axis360.db.edition(
             identifier_type=Identifier.AXIS_360_ID,
-            identifier_id="0015176429",
+            identifier_id="0016820953",
             data_source_name=DataSource.AXIS_360,
             with_license_pool=True,
         )
 
         patron = axis360.db.patron()
         patron.authorization_identifier = "a barcode"
-        delivery_mechanism = pool.delivery_mechanisms[0]
+        lpdm = pool.delivery_mechanisms[0]
+        delivery_mechanism = lpdm.delivery_mechanism
+        delivery_mechanism.content_type = Representation.EPUB_MEDIA_TYPE
+        delivery_mechanism.drm_scheme = DeliveryMechanism.BAKER_TAYLOR_KDRM_DRM
 
         fulfill = partial(
             axis360.api.fulfill,
             patron,
             "pin",
             licensepool=pool,
-            delivery_mechanism=delivery_mechanism,
+            delivery_mechanism=lpdm,
         )
 
-        # If we ask for AxisNow format, we start the axisnow fulfillment workflow which
+        # If we ask for AxisNow format, we start the Baker & Taylor KDRM fulfillment workflow which
         # makes several api requests, and then returns a DirectFulfillment with the correct
         # content type and content link.
-        data = axis360.files.sample_data("availability_with_axisnow_fulfillment.xml")
-        data = data.replace(b"0016820953", pool.identifier.identifier.encode("utf8"))
-        axis360.http_client.queue_response(200, content=data)
+
+        # This fulfillment requires additional parameters to be passed to the fulfill call. If they
+        # are not provided we raise a InvalidInputException.
+        axis360.http_client.queue_response(
+            200,
+            content=axis360.files.sample_data(
+                "availability_with_axisnow_fulfillment.xml"
+            ),
+        )
         axis360.http_client.queue_response(
             200, content=axis360.files.sample_data("ebook_fulfillment_info.json")
         )
-        delivery_mechanism.delivery_mechanism.content_type = None
-        delivery_mechanism.delivery_mechanism.drm_scheme = DeliveryMechanism.AXISNOW_DRM
-        fulfillment = fulfill()
-        assert isinstance(fulfillment, DirectFulfillment)
-        assert fulfillment.content_type == DeliveryMechanism.AXISNOW_DRM
-        assert (
-            fulfillment.content
-            == '{"book_vault_uuid": "1c11c31f-81c2-41bb-9179-491114c3f121", "isbn": "9780547351551"}'
+        with pytest.raises(
+            InvalidInputException, match="Missing required URL parameters"
+        ):
+            fulfill()
+
+        # Test a successful fulfillment with the required parameters.
+        axis360.http_client.queue_response(
+            200,
+            content=axis360.files.sample_data(
+                "availability_with_axisnow_fulfillment.xml"
+            ),
         )
+        axis360.http_client.queue_response(
+            200, content=axis360.files.sample_data("ebook_fulfillment_info.json")
+        )
+        license_data = axis360.files.sample_data("license.json")
+        axis360.http_client.queue_response(200, content=license_data)
+        fulfillment = fulfill(
+            client_ip="2.2.2.2",
+            device_id="device-id",
+            modulus="modulus",
+            exponent="exponent",
+        )
+
+        assert isinstance(fulfillment, DirectFulfillment)
+        assert fulfillment.content_type == DeliveryMechanism.BAKER_TAYLOR_KDRM_DRM
+        assert fulfillment.content == license_data
 
     def test_fulfill_findaway(self, axis360: Axis360Fixture):
         # Test our ability to fulfill an Axis 360 title.
@@ -574,6 +612,10 @@ class TestAxis360API:
         assert loan.identifier_type == Identifier.AXIS_360_ID
         assert loan.identifier == "0015176429"
         assert loan.end_date == datetime_utc(2015, 8, 12, 17, 40, 27)
+        assert loan.locked_to == FormatData(
+            content_type=Representation.EPUB_MEDIA_TYPE,
+            drm_scheme=DeliveryMechanism.ADOBE_DRM,
+        )
 
         assert isinstance(reserved, HoldInfo)
         assert reserved.collection_id == axis360.api.collection.id
@@ -817,3 +859,26 @@ class TestAxis360API:
         }
 
         assert len(activity) == 2
+
+    def test__delivery_mechanism_to_internal_format(self) -> None:
+        lpdm = LicensePoolDeliveryMechanism(delivery_mechanism=DeliveryMechanism())
+
+        lpdm.delivery_mechanism.content_type = "unknown/content-type"
+        lpdm.delivery_mechanism.drm_scheme = "unknown_drm_scheme"
+
+        # If we are called with an unknown delivery mechanism, we raise an exception.
+        with pytest.raises(
+            DeliveryMechanismError,
+            match=r"Could not map delivery mechanism unknown/content-type "
+            r"\(unknown_drm_scheme\) to internal delivery mechanism!",
+        ):
+            Axis360API._delivery_mechanism_to_internal_format(lpdm)
+
+        # Otherwise, the internal format is returned.
+        lpdm.delivery_mechanism.content_type = Representation.EPUB_MEDIA_TYPE
+        lpdm.delivery_mechanism.drm_scheme = DeliveryMechanism.ADOBE_DRM
+
+        assert (
+            Axis360API._delivery_mechanism_to_internal_format(lpdm)
+            == Axis360Format.epub
+        )

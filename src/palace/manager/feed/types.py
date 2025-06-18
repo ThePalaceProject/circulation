@@ -132,6 +132,9 @@ class Acquisition(Link):
     is_loan: bool = False
     is_hold: bool = False
 
+    # Signal if the acquisition link href is templated
+    templated: bool = False
+
 
 @dataclass
 class Author(FeedEntryType):

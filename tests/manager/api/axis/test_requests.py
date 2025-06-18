@@ -6,7 +6,15 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from palace.manager.api.axis.exception import Axis360ValidationError
+from palace.manager.api.axis.constants import (
+    API_BASE_URLS,
+    LICENSE_SERVER_BASE_URLS,
+    ServerNickname,
+)
+from palace.manager.api.axis.exception import (
+    Axis360LicenseError,
+    Axis360ValidationError,
+)
 from palace.manager.api.axis.models.json import AudiobookMetadataResponse
 from palace.manager.api.axis.models.xml import AddHoldResponse, RemoveHoldResponse
 from palace.manager.api.axis.requests import Axis360Requests
@@ -31,7 +39,6 @@ class Axis360RequestsFixture:
             external_account_id="test_library_id",
             username="test_username",
             password="test_password",
-            url="http://axis360apiqa.baker-taylor.com/Services/VendorAPI/",
         )
         self.settings = self.create_settings()
         self.requests = Axis360Requests(self.settings)
@@ -379,40 +386,74 @@ class TestAxis360Requests:
             assert len(axis360_requests.client.requests) == 2
 
     @pytest.mark.parametrize(
-        ("setting_value", "attribute_value"),
+        "server_nickname,base_url,license_url",
         [
-            (None, True),
-            (True, True),
-            (False, False),
-        ],
-    )
-    def test_integration_settings(
-        self,
-        axis360_requests: Axis360RequestsFixture,
-        setting_value: bool | None,
-        attribute_value: bool,
-    ):
-        settings = axis360_requests.create_settings(verify_certificate=setting_value)
-        requests = Axis360Requests(settings)
-        assert requests._verify_certificate == attribute_value
-
-    @pytest.mark.parametrize(
-        "setting_value,expected",
-        [
-            (
-                "production",
-                Axis360Requests.SERVER_NICKNAMES["production"],
+            pytest.param(
+                ServerNickname.production,
+                API_BASE_URLS[ServerNickname.production],
+                LICENSE_SERVER_BASE_URLS[ServerNickname.production],
+                id="production",
             ),
-            ("qa", Axis360Requests.SERVER_NICKNAMES["qa"]),
-            ("http://any.url.will.do", "http://any.url.will.do/"),
+            pytest.param(
+                ServerNickname.qa,
+                API_BASE_URLS[ServerNickname.qa],
+                LICENSE_SERVER_BASE_URLS[ServerNickname.qa],
+                id="qa",
+            ),
         ],
     )
     def test_integration_settings_url(
         self,
         axis360_requests: Axis360RequestsFixture,
-        setting_value: str,
-        expected: str | None,
+        server_nickname: str,
+        base_url: str,
+        license_url: str,
     ):
-        settings = axis360_requests.create_settings(url=setting_value)
+        settings = axis360_requests.create_settings(server_nickname=server_nickname)
         requests = Axis360Requests(settings)
-        assert requests._base_url == expected
+        assert requests._base_url == base_url
+        assert requests._license_server_url == license_url
+
+    def test_license(
+        self,
+        axis360_requests: Axis360RequestsFixture,
+        axis_files_fixture: AxisFilesFixture,
+    ):
+        license_request = partial(
+            axis360_requests.requests.license,
+            "book_vault_uuid",
+            "device_id",
+            "client_id",
+            "isbn",
+            "modulus",
+            "exponent",
+        )
+
+        axis360_requests.client.reset_mock()
+        data = axis_files_fixture.sample_data("license.json")
+        axis360_requests.client.queue_response(200, content=data)
+        response = license_request()
+
+        assert response == data
+        assert axis360_requests.client.requests_methods[0] == "GET"
+        assert (
+            "license/book_vault_uuid/device_id/client_id/isbn/modulus/exponent"
+            in axis360_requests.client.requests[0]
+        )
+
+        # Test error handling
+        axis360_requests.client.queue_response(500, content=b"")
+        with pytest.raises(
+            RemoteIntegrationException, match="Got status code 500 from external server"
+        ):
+            license_request()
+
+        data = axis_files_fixture.sample_data("license_internal_server_error.json")
+        axis360_requests.client.queue_response(500, content=data)
+        with pytest.raises(Axis360LicenseError, match="Internal Server Error"):
+            license_request()
+
+        data = axis_files_fixture.sample_data("license_invalid_isbn.json")
+        axis360_requests.client.queue_response(500, content=data)
+        with pytest.raises(Axis360LicenseError, match="Invalid ISBN"):
+            license_request()

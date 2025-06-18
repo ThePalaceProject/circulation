@@ -7,15 +7,18 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from collections import defaultdict
+from collections.abc import Sequence
 from functools import cached_property
 from typing import Any
 
 from dependency_injector.wiring import Provide, inject
 from flask import url_for
+from frozendict import frozendict
 from sqlalchemy.orm import Session
 
 from palace.manager.api.adobe_vendor_id import AuthdataUtility
 from palace.manager.api.annotations import AnnotationWriter
+from palace.manager.api.axis.constants import BAKER_TAYLOR_KDRM_PARAMS
 from palace.manager.api.circulation import (
     BaseCirculationAPI,
     CirculationAPI,
@@ -662,6 +665,7 @@ class CirculationManagerAnnotator(Annotator):
         href: str,
         types: list[str] | None,
         active_loan: Loan | None = None,
+        templated: bool = False,
     ) -> Acquisition:
         if types:
             initial_type = types[0]
@@ -674,6 +678,7 @@ class CirculationManagerAnnotator(Annotator):
             rel=rel,
             type=initial_type,
             is_loan=True if active_loan else False,
+            templated=templated,
         )
         indirect = cls.indirect_acquisition(indirect_types)
 
@@ -698,6 +703,18 @@ class CirculationManagerAnnotator(Annotator):
 
 
 class LibraryAnnotator(CirculationManagerAnnotator):
+    FULFILL_LINK_TEMPLATED_TYPES: frozendict[str | None, Sequence[str]] = frozendict(
+        {DeliveryMechanism.BAKER_TAYLOR_KDRM_DRM: BAKER_TAYLOR_KDRM_PARAMS}
+    )
+    """
+    Provides a mapping of delivery mechanism types to a list of
+    query parameters that should be included in the fulfillment link
+    template.
+
+    If a delivery mechanism type is not in this mapping, its
+    fulfillment link will not be templated.
+    """
+
     def __init__(
         self,
         circulation: CirculationAPI | None,
@@ -1454,8 +1471,18 @@ class LibraryAnnotator(CirculationManagerAnnotator):
             _external=True,
         )
 
+        if template_vars := self.FULFILL_LINK_TEMPLATED_TYPES.get(format_types[0]):
+            fulfill_url = fulfill_url + "{?" + ",".join(template_vars) + "}"
+            templated = True
+        else:
+            templated = False
+
         link_tag = self.acquisition_link(
-            rel=rel, href=fulfill_url, types=format_types, active_loan=active_loan
+            rel=rel,
+            href=fulfill_url,
+            types=format_types,
+            active_loan=active_loan,
+            templated=templated,
         )
 
         children = AcquisitionHelper.license_tags(license_pool, active_loan, None)

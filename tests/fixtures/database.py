@@ -606,7 +606,6 @@ class DatabaseTransactionFixture:
         Axis360Settings,
         username="a",
         password="b",
-        url="http://axis.test/",
         external_account_id="c",
     )
 

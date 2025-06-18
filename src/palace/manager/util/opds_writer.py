@@ -43,6 +43,8 @@ class AtomFeed:
 
     LCP_NS = "http://readium.org/lcp-specs/ns"
 
+    ODL_NS = "http://drafts.opds.io/odl-1.0#"
+
     PALACE_REL_NS = "http://palaceproject.io/terms/rel/"
     PALACE_PROPS_NS = "http://palaceproject.io/terms/properties/"
 
@@ -63,11 +65,13 @@ class AtomFeed:
         "opensearch": OPENSEARCH_NS,
         "lcp": LCP_NS,
         "palaceproperties": PALACE_PROPS_NS,
+        "odl": ODL_NS,
     }
 
     E = ElementMaker(nsmap=nsmap)
     SIMPLIFIED = ElementMaker(nsmap=nsmap, namespace=SIMPLIFIED_NS)
     SCHEMA = ElementMaker(nsmap=nsmap, namespace=SCHEMA_NS)
+    ODL = ElementMaker(nsmap=nsmap, namespace=ODL_NS)
 
     @classmethod
     def _strftime(cls, date):
@@ -102,6 +106,10 @@ class AtomFeed:
     @classmethod
     def link(cls, *args, **kwargs):
         return cls.E.link(*args, **kwargs)
+
+    @classmethod
+    def tlink(cls, *args, **kwargs):
+        return cls.ODL.tlink(*args, **kwargs)
 
     @classmethod
     def category(cls, *args, **kwargs):

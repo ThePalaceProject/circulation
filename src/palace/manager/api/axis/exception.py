@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
-from typing import NamedTuple
+from typing import TYPE_CHECKING, NamedTuple
 
 from lxml import etree
 
@@ -23,15 +23,49 @@ from palace.manager.api.circulation_exceptions import (
     PatronLoanLimitReached,
     RemoteInitiatedServerError,
 )
+from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.util.http import BadResponseException
+from palace.manager.util.problem_detail import BaseProblemDetailException, ProblemDetail
+
+if TYPE_CHECKING:
+    from palace.manager.api.axis.models.json import LicenseServerStatus
 
 
-class Axis360ValidationError(BadResponseException):
+class Axis360Exception(BasePalaceException): ...
+
+
+class Axis360ValidationError(BadResponseException, Axis360Exception):
     """
     Raise when we are unable to validate a response from Axis 360.
     """
 
     ...
+
+
+class Axis360LicenseError(Axis360Exception, BaseProblemDetailException):
+    """
+    Raise when there is a license-related error with Axis 360.
+    """
+
+    def __init__(self, status_doc: LicenseServerStatus, http_status_code: int) -> None:
+        self._status_doc = status_doc
+        self._http_status_code = http_status_code
+        super().__init__(self._status_doc.title)
+
+    @property
+    def uri(self) -> str:
+        return (
+            f"http://palaceproject.io/terms/problem/boundless/{self._status_doc.code}"
+        )
+
+    @property
+    def problem_detail(self) -> ProblemDetail:
+        return ProblemDetail(
+            uri=self.uri,
+            status_code=self._http_status_code,
+            title=self._status_doc.title,
+            detail=self._status_doc.message,
+        )
 
 
 ErrorType = type[CirculationException | RemoteInitiatedServerError]

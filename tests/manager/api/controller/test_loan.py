@@ -825,7 +825,12 @@ class TestLoanController:
         controller.manager.circulation_apis[loan_fixture.db.default_library().id] = mock
 
         with loan_fixture.request_context_with_library(
-            "/", headers=dict(Authorization=loan_fixture.valid_auth)
+            "/?modulus=modulus&exponent=exponent&device_id=device_id",
+            headers={
+                "Authorization": loan_fixture.valid_auth,
+                "X-Forwarded-For": "1.1.1.1, 0.0.0.0",
+            },
+            environ_base={"REMOTE_ADDR": "5.5.5.5"},
         ):
             authenticated = controller.authenticated_patron_from_request()
             assert isinstance(authenticated, Patron)
@@ -843,6 +848,37 @@ class TestLoanController:
                 loan_fixture.valid_credentials["password"],
                 loan_fixture.pool,
                 loan_fixture.mech2,
+                modulus="modulus",
+                exponent="exponent",
+                device_id="device_id",
+                client_ip="1.1.1.1",
+            )
+
+        # Test with no x-forwarded-for header set.
+        mock.reset_mock()
+        with loan_fixture.request_context_with_library(
+            "/?modulus=modulus&exponent=exponent&device_id=device_id",
+            headers={
+                "Authorization": loan_fixture.valid_auth,
+            },
+            environ_base={"REMOTE_ADDR": "5.5.5.5"},
+        ):
+            # Try to fulfill the loan.
+            controller.fulfill(
+                loan_fixture.pool_id, loan_fixture.mech2.delivery_mechanism.id
+            )
+
+            # Verify that the right arguments were passed into
+            # CirculationAPI.
+            mock.fulfill.assert_called_once_with(
+                authenticated,
+                loan_fixture.valid_credentials["password"],
+                loan_fixture.pool,
+                loan_fixture.mech2,
+                modulus="modulus",
+                exponent="exponent",
+                device_id="device_id",
+                client_ip="5.5.5.5",
             )
 
     @pytest.mark.parametrize(
