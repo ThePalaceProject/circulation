@@ -1,5 +1,6 @@
 import pytest
 
+from palace.manager.api.axis.api import Axis360API
 from palace.manager.data_layer.bibliographic import BibliographicData
 from palace.manager.data_layer.circulation import CirculationData
 from palace.manager.data_layer.contributor import ContributorData
@@ -12,8 +13,8 @@ from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.util.datetime_helpers import datetime_utc
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import AxisFilesFixture
+from tests.fixtures.http import MockHttpClientFixture
 from tests.fixtures.work import WorkIdPolicyQueuePresentationRecalculationFixture
-from tests.mocks.axis import MockAxis360API
 
 
 class Axis360Fixture:
@@ -59,28 +60,34 @@ class Axis360Fixture:
     def __init__(
         self,
         db: DatabaseTransactionFixture,
+        http_client: MockHttpClientFixture,
         files: AxisFilesFixture,
         work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
     ):
         self.db = db
         self.files = files
-        self.collection = MockAxis360API.mock_collection(
-            db.session, db.default_library()
+        self.collection = db.collection(
+            protocol=Axis360API, library=db.default_library()
         )
-        self.api = MockAxis360API(db.session, self.collection)
+        self.http_client = http_client
+        self.api = Axis360API(db.session, self.collection)
         self.work_policy_recalc_fixture = work_policy_recalc_fixture
-
-    def sample_data(self, filename):
-        return self.files.sample_data(filename)
-
-    def sample_text(self, filename):
-        return self.files.sample_text(filename)
 
 
 @pytest.fixture(scope="function")
 def axis360(
     db: DatabaseTransactionFixture,
+    http_client: MockHttpClientFixture,
     axis_files_fixture: AxisFilesFixture,
     work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
 ) -> Axis360Fixture:
-    return Axis360Fixture(db, axis_files_fixture, work_policy_recalc_fixture)
+    # Typically the first request to the api will trigger a token refresh, so we queue
+    # up a response for that.
+    http_client.queue_response(
+        200,
+        content=axis_files_fixture.sample_text("token.json"),
+    )
+
+    return Axis360Fixture(
+        db, http_client, axis_files_fixture, work_policy_recalc_fixture
+    )

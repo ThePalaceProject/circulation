@@ -11,92 +11,9 @@ import pytest
 
 from palace.manager.api.axis.fulfillment import (
     Axis360AcsFulfillment,
-    Axis360Fulfillment,
 )
-from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism
 from palace.manager.util.flask_util import Response
 from palace.manager.util.problem_detail import BaseProblemDetailException
-from tests.manager.api.axis.conftest import Axis360Fixture
-
-
-class TestAxis360Fulfillment:
-    """An Axis360Fulfillment can fulfill a title whether it's an ebook
-    (fulfilled through AxisNow) or an audiobook (fulfilled through
-    Findaway).
-    """
-
-    def test_fetch_audiobook(self, axis360: Axis360Fixture):
-        # When Findaway information is present in the response from
-        # the fulfillment API, a second request is made to get
-        # spine-item metadata. Information from both requests is
-        # combined into a Findaway fulfillment document.
-        fulfillment_info = axis360.sample_data("audiobook_fulfillment_info.json")
-        axis360.api.queue_response(200, {}, fulfillment_info)
-
-        metadata = axis360.sample_data("audiobook_metadata.json")
-        axis360.api.queue_response(200, {}, metadata)
-
-        # Setup.
-        edition, pool = axis360.db.edition(with_license_pool=True)
-        identifier = pool.identifier
-        fulfillment = Axis360Fulfillment(
-            axis360.api,
-            pool.data_source.name,
-            identifier.type,
-            identifier.identifier,
-            "transaction_id",
-        )
-        assert fulfillment.content_type is None
-        assert fulfillment.content is None
-
-        # Turn the crank.
-        fulfillment.response()
-
-        # The Axis360Fulfillment now contains a Findaway manifest
-        # document.
-        assert fulfillment.content_type == DeliveryMechanism.FINDAWAY_DRM
-        assert fulfillment.content is not None
-        assert isinstance(fulfillment.content, str)
-
-        # The manifest document combines information from the
-        # fulfillment document and the metadata document.
-        for required in (
-            '"findaway:sessionKey": "0f547af1-38c1-4b1c-8a1a-169d353065d0"',
-            '"duration": 8150.87',
-        ):
-            assert required in fulfillment.content
-
-    def test_fetch_ebook(self, axis360: Axis360Fixture):
-        # When no Findaway information is present in the response from
-        # the fulfillment API, information from the request is
-        # used to make an AxisNow fulfillment document.
-
-        fulfillment_info = axis360.sample_data("ebook_fulfillment_info.json")
-        axis360.api.queue_response(200, {}, fulfillment_info)
-
-        # Setup.
-        edition, pool = axis360.db.edition(with_license_pool=True)
-        identifier = pool.identifier
-        fulfillment = Axis360Fulfillment(
-            axis360.api,
-            pool.data_source.name,
-            identifier.type,
-            identifier.identifier,
-            "transaction_id",
-        )
-        assert fulfillment.content_type is None
-        assert fulfillment.content is None
-
-        # Turn the crank.
-        fulfillment.response()
-
-        # The Axis360Fulfillment now contains an AxisNow manifest
-        # document derived from the fulfillment document.
-        assert fulfillment.content_type == DeliveryMechanism.AXISNOW_DRM
-        assert (
-            fulfillment.content
-            == '{"book_vault_uuid": "1c11c31f-81c2-41bb-9179-491114c3f121", "isbn": "9780547351551"}'
-        )
 
 
 class Axis360AcsFulfillmentFixture:

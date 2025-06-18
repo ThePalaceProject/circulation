@@ -29,6 +29,8 @@ from palace.manager.api.authentication.base import (
     AuthenticationProvider,
     SettingsType as TAuthProviderSettings,
 )
+from palace.manager.api.axis.api import Axis360API
+from palace.manager.api.axis.settings import Axis360Settings
 from palace.manager.api.circulation import (
     BaseCirculationAPI,
     BaseCirculationApiSettings,
@@ -600,6 +602,14 @@ class DatabaseTransactionFixture:
         data_source=DataSource.FEEDBOOKS,
     )
 
+    axis_settings = functools.partial(
+        Axis360Settings,
+        username="a",
+        password="b",
+        url="http://axis.test/",
+        external_account_id="c",
+    )
+
     def collection_settings(
         self, protocol: type[BaseCirculationAPI[TCirculationSettings, Any]]
     ) -> TCirculationSettings | None:
@@ -609,6 +619,8 @@ class DatabaseTransactionFixture:
             return self.overdrive_settings()  # type: ignore[return-value]
         elif protocol == OPDS2WithODLApi:
             return self.opds2_odl_settings()  # type: ignore[return-value]
+        elif protocol == Axis360API:
+            return self.axis_settings()  # type: ignore[return-value]
         return None
 
     def collection(

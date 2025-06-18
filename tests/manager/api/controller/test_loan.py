@@ -10,8 +10,6 @@ import pytest
 from flask import Response as FlaskResponse, url_for
 from werkzeug import Response as wkResponse
 
-from palace.manager.api.axis.api import Axis360API
-from palace.manager.api.axis.fulfillment import Axis360Fulfillment
 from palace.manager.api.bibliotheca import BibliothecaAPI
 from palace.manager.api.circulation import (
     BaseCirculationAPI,
@@ -1035,39 +1033,6 @@ class TestLoanController:
         assert isinstance(response, wkResponse)
         assert response.status_code == 302
         assert response.location == "https://example.org/redirect_to_epub"
-
-        # Axis360 variant
-        api = MagicMock(spec=Axis360API)
-        api.collection = loan_fixture.db.default_collection()
-        api._db = loan_fixture.db.session
-        axis360_ff = Axis360Fulfillment(
-            api=api,
-            data_source_name=DataSource.AXIS_360,
-            identifier_type="Axis 360 ID",
-            identifier="xxxxxx",
-            key="xxxxxx",
-        )
-        api.get_fulfillment_info.return_value = MagicMock(
-            content={
-                "ExpirationDate": "2020-01-01 00:00:00",
-                "Status": dict(Code=1, Message="Worked."),
-                "ISBN": "ISBN ID",
-                "BookVaultUUID": "Vault ID",
-            }
-        )
-        api.fulfill.return_value = axis360_ff
-        assert isinstance(pool.id, int)
-        with loan_fixture.request_context_with_library(
-            "/",
-            library=loan_fixture.db.default_library(),
-            headers=dict(Authorization=loan_fixture.valid_auth),
-        ):
-            controller.circulation.api_for_license_pool = MagicMock(return_value=api)
-            response = controller.fulfill(pool.id, lpdm.delivery_mechanism.id)
-
-        assert isinstance(response, wkResponse)
-        assert response.status_code == 200
-        assert response.json == {"book_vault_uuid": "Vault ID", "isbn": "ISBN ID"}
 
     @pytest.mark.parametrize(
         *OPDSSerializationTestHelper.PARAMETRIZED_SINGLE_ENTRY_ACCEPT_HEADERS

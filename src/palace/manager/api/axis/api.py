@@ -1,32 +1,29 @@
 from __future__ import annotations
 
-import base64
 import datetime
-import json
-import urllib
-from collections.abc import Generator, Mapping, Sequence
+import html
+from collections.abc import Generator, Sequence
 from datetime import timedelta
-from typing import Any
 
-from lxml import etree
-from requests import Response as RequestsResponse
 from sqlalchemy.orm import Session
 
-from palace.manager.api.axis.constants import Axis360APIConstants
-from palace.manager.api.axis.loan_info import AxisLoanInfo
-from palace.manager.api.axis.parser import (
-    AvailabilityResponseParser,
-    BibliographicParser,
-    CheckinResponseParser,
-    CheckoutResponseParser,
-    HoldReleaseResponseParser,
-    HoldResponseParser,
-    StatusResponseParser,
+from palace.manager.api.axis.constants import Axis360Format
+from palace.manager.api.axis.fulfillment import (
+    Axis360AcsFulfillment,
 )
+from palace.manager.api.axis.manifest import AxisNowManifest
+from palace.manager.api.axis.models.json import (
+    AxisNowFulfillmentInfoResponse,
+    FindawayFulfillmentInfoResponse,
+)
+from palace.manager.api.axis.models.xml import Title
+from palace.manager.api.axis.parser import BibliographicParser
+from palace.manager.api.axis.requests import Axis360Requests
 from palace.manager.api.axis.settings import Axis360LibrarySettings, Axis360Settings
 from palace.manager.api.circulation import (
     BaseCirculationAPI,
     CirculationInternalFormatsMixin,
+    DirectFulfillment,
     Fulfillment,
     HoldInfo,
     LoanInfo,
@@ -34,19 +31,18 @@ from palace.manager.api.circulation import (
 )
 from palace.manager.api.circulation_exceptions import (
     CannotFulfill,
+    FormatNotAvailable,
     NoActiveLoan,
-    NotOnHold,
     RemoteInitiatedServerError,
 )
 from palace.manager.api.selftest import HasCollectionSelfTests
-from palace.manager.core.config import CannotLoadConfiguration
+from palace.manager.api.web_publication_manifest import FindawayManifest, SpineItem
 from palace.manager.core.selftest import SelfTestResult
 from palace.manager.data_layer.bibliographic import BibliographicData
 from palace.manager.data_layer.circulation import CirculationData
 from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.data_layer.policy.replacement import ReplacementPolicy
 from palace.manager.sqlalchemy.model.collection import Collection
-from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import (
@@ -57,23 +53,14 @@ from palace.manager.sqlalchemy.model.licensing import (
 from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.sqlalchemy.model.resource import Representation
 from palace.manager.util.datetime_helpers import utc_now
-from palace.manager.util.http import HTTP
 
 
 class Axis360API(
     PatronActivityCirculationAPI[Axis360Settings, Axis360LibrarySettings],
     HasCollectionSelfTests,
     CirculationInternalFormatsMixin,
-    Axis360APIConstants,
 ):
     SET_DELIVERY_MECHANISM_AT = BaseCirculationAPI.BORROW_STEP
-
-    DATE_FORMAT = "%m-%d-%Y %H:%M:%S"
-
-    access_token_endpoint = "accesstoken"
-    availability_endpoint = "availability/v2"
-    fulfillment_endpoint = "getfullfillmentInfo/v2"
-    audiobook_metadata_endpoint = "getaudiobookmetadata/v2"
 
     # Create a lookup table between common DeliveryMechanism identifiers
     # and Axis 360 format types.
@@ -85,12 +72,12 @@ class Axis360API(
     axisnow_drm = DeliveryMechanism.AXISNOW_DRM
 
     delivery_mechanism_to_internal_format = {
-        (epub, no_drm): "ePub",
-        (epub, adobe_drm): "ePub",
-        (pdf, no_drm): "PDF",
-        (pdf, adobe_drm): "PDF",
-        (None, findaway_drm): "Acoustik",
-        (None, axisnow_drm): Axis360APIConstants.AXISNOW,
+        (epub, no_drm): Axis360Format.epub,
+        (epub, adobe_drm): Axis360Format.epub,
+        (pdf, no_drm): Axis360Format.pdf,
+        (pdf, adobe_drm): Axis360Format.pdf,
+        (None, findaway_drm): Axis360Format.acoustik,
+        (None, axisnow_drm): Axis360Format.axis_now,
     }
 
     @classmethod
@@ -110,47 +97,21 @@ class Axis360API(
         return ""
 
     def __init__(
-        self, _db: Session, collection: Collection, bearer_token: str | None = None
+        self,
+        _db: Session,
+        collection: Collection,
+        requests: Axis360Requests | None = None,
     ) -> None:
         super().__init__(_db, collection)
-        settings = self.settings
-        self.library_id = settings.external_account_id
-        self.username = settings.username
-        self.password = settings.password
-
-        # Convert the nickname for a server into an actual URL.
-        base_url = settings.url or self.PRODUCTION_BASE_URL
-        if base_url in self.SERVER_NICKNAMES:
-            base_url = self.SERVER_NICKNAMES[base_url]
-        if not base_url.endswith("/"):
-            base_url += "/"
-        self.base_url = base_url
-
-        if not self.library_id or not self.username or not self.password:
-            raise CannotLoadConfiguration("Axis 360 configuration is incomplete.")
-
-        self._cached_bearer_token: str | None = bearer_token
-        self.verify_certificate: bool = (
-            settings.verify_certificate
-            if settings.verify_certificate is not None
-            else True
+        self.api_requests = (
+            Axis360Requests(self.settings) if requests is None else requests
         )
-
-    @property
-    def source(self) -> DataSource:
-        return DataSource.lookup(self._db, DataSource.AXIS_360, autocreate=True)
-
-    @property
-    def authorization_headers(self) -> dict[str, str]:
-        authorization = ":".join([self.username, self.password, self.library_id])
-        authorization_encoded = authorization.encode("utf_16_le")
-        authorization_b64 = base64.standard_b64encode(authorization_encoded).decode(
-            "utf-8"
-        )
-        return dict(Authorization="Basic " + authorization_b64)
 
     def _run_self_tests(self, _db: Session) -> Generator[SelfTestResult]:
-        result = self.run_test("Refreshing bearer token", self._refresh_bearer_token)
+        def _refresh() -> str:
+            return self.api_requests.refresh_bearer_token().access_token
+
+        result = self.run_test("Refreshing bearer token", _refresh)
         yield result
         if not result.success:
             # If we can't get a bearer token, there's no point running
@@ -177,7 +138,7 @@ class Axis360API(
             library, patron, pin = library_result
 
             def _count_activity() -> str:
-                result = self.patron_activity(patron, pin)
+                result = list(self.patron_activity(patron, pin))
                 return "Found %d loans/holds" % len(result)
 
             yield self.run_test(
@@ -189,145 +150,19 @@ class Axis360API(
         for result in super()._run_self_tests(_db):
             yield result
 
-    def _refresh_bearer_token(self) -> str:
-        url = self.base_url + self.access_token_endpoint
-        headers = self.authorization_headers
-        response = self._make_request(
-            url, "post", headers, allowed_response_codes=[200]
-        )
-        return self.parse_token(response.content)
-
-    def bearer_token(self) -> str:
-        if not self._cached_bearer_token:
-            self._cached_bearer_token = self._refresh_bearer_token()
-        return self._cached_bearer_token
-
-    def request(
-        self,
-        url: str,
-        method: str = "get",
-        extra_headers: dict[str, str] | None = None,
-        data: Mapping[str, Any] | None = None,
-        params: Mapping[str, Any] | None = None,
-        request_retried: bool = False,
-        **kwargs: Any,
-    ) -> RequestsResponse:
-        """Make an HTTP request, acquiring/refreshing a bearer token
-        if necessary.
-        """
-        if not extra_headers:
-            extra_headers = {}
-        headers = dict(extra_headers)
-        headers["Authorization"] = "Bearer " + self.bearer_token()
-        headers["Library"] = self.library_id
-        response = self._make_request(
-            url=url,
-            method=method,
-            headers=headers,
-            data=data,
-            params=params,
-            **kwargs,
-        )
-        if response.status_code == 401 and not request_retried:
-            parsed = StatusResponseParser().process_first(response.content)
-            if parsed is None or parsed[0] in [1001, 1002]:
-                # The token is probably expired. Get a new token and try again.
-                # Axis 360's status codes mean:
-                #   1001: Invalid token
-                #   1002: Token expired
-                self._cached_bearer_token = None
-                return self.request(
-                    url=url,
-                    method=method,
-                    extra_headers=extra_headers,
-                    data=data,
-                    params=params,
-                    request_retried=True,
-                    **kwargs,
-                )
-
-        return response
-
-    def availability(
-        self,
-        patron_id: str | None = None,
-        since: datetime.datetime | None = None,
-        title_ids: list[str] | None = None,
-    ) -> RequestsResponse:
-        url = self.base_url + self.availability_endpoint
-        args = dict()
-        if since:
-            since_str = since.strftime(self.DATE_FORMAT)
-            args["updatedDate"] = since_str
-        if patron_id:
-            args["patronId"] = patron_id
-        if title_ids:
-            args["titleIds"] = ",".join(title_ids)
-        response = self.request(url, params=args, timeout=None)
-        return response
-
-    def get_fulfillment_info(self, transaction_id: str) -> RequestsResponse:
-        """Make a call to the getFulfillmentInfoAPI."""
-        url = self.base_url + self.fulfillment_endpoint
-        params = dict(TransactionID=transaction_id)
-        # We set an explicit timeout because this request can take a long time and
-        # the default was too short. Ideally B&T would fix this on their end, but
-        # in the meantime we need to work around it.
-        # TODO: Revisit this timeout. Hopefully B&T will fix the performance
-        #   of this endpoint and we can remove this. We should be able to query
-        #   our logs to see how long these requests are taking.
-        return self.request(url, "POST", params=params, timeout=15)
-
-    def get_audiobook_metadata(self, findaway_content_id: str) -> RequestsResponse:
-        """Make a call to the getaudiobookmetadata endpoint."""
-        base_url = self.base_url
-        url = base_url + self.audiobook_metadata_endpoint
-        params = dict(fndcontentid=findaway_content_id)
-        # We set an explicit timeout because this request can take a long time and
-        # the default was too short. Ideally B&T would fix this on their end, but
-        # in the meantime we need to work around it.
-        # TODO: Revisit this timeout. Hopefully B&T will fix the performance
-        #   of this endpoint and we can remove this. We should be able to query
-        #   our logs to see how long these requests are taking.
-        response = self.request(url, "POST", params=params, timeout=15)
-        return response
-
     def checkin(self, patron: Patron, pin: str, licensepool: LicensePool) -> None:
         """Return a book early.
 
         :param patron: The Patron who wants to return their book.
         :param pin: Not used.
         :param licensepool: LicensePool for the book to be returned.
+
         :raise CirculationException: If the API can't carry out the operation.
-        :raise RemoteInitiatedServerError: If the API is down.
+        :raise Axis360ValidationError: If the API returns an invalid response.
         """
         title_id = licensepool.identifier.identifier
         patron_id = patron.authorization_identifier
-        response = self._checkin(title_id, patron_id)
-        try:
-            CheckinResponseParser().process_first(response.content)
-        except etree.XMLSyntaxError:
-            raise RemoteInitiatedServerError(response.text, self.label())
-
-    def _checkin(self, title_id: str | None, patron_id: str | None) -> RequestsResponse:
-        """Make a request to the EarlyCheckInTitle endpoint."""
-        if title_id is None:
-            self.log.warning(
-                f"Calling _checkin with title_id None. This is likely a bug. Patron_id: {patron_id}."
-            )
-            title_id = ""
-
-        if patron_id is None:
-            self.log.warning(
-                f"Calling _checkin with patron_id None. This is likely a bug. Title_id: {title_id}."
-            )
-            patron_id = ""
-
-        url = self.base_url + "EarlyCheckInTitle/v3?itemID={}&patronID={}".format(
-            urllib.parse.quote(title_id),
-            urllib.parse.quote(patron_id),
-        )
-        return self.request(url, method="GET", verbose=True)
+        self.api_requests.early_checkin(title_id, patron_id)
 
     def checkout(
         self,
@@ -343,33 +178,75 @@ class Axis360API(
 
         title_id = licensepool.identifier.identifier
         patron_id = patron.authorization_identifier
-        response = self._checkout(
+        response = self.api_requests.checkout(
             title_id, patron_id, self.internal_format(delivery_mechanism)
         )
-
-        try:
-            response_text = response.text
-            self.log.info(
-                f"patron_id={patron_id} tried to checkout title_id={title_id}: "
-                f"response_code = {response.status_code}, response_content={response_text}"
-            )
-            expiration_date = CheckoutResponseParser().process_first(response_text)
-            return LoanInfo.from_license_pool(licensepool, end_date=expiration_date)
-        except etree.XMLSyntaxError:
-            raise RemoteInitiatedServerError(response.text, self.label())
-
-    def _checkout(
-        self, title_id: str | None, patron_id: str | None, internal_format: str
-    ) -> RequestsResponse:
-        url = self.base_url + "checkout/v2"
-        args = dict(titleId=title_id, patronId=patron_id, format=internal_format)
-        self.log.info(
-            f"patron_id={patron_id} about to checkout title_id={title_id}, using format={internal_format} "
-            f"posting to url={url}"
+        return LoanInfo.from_license_pool(
+            licensepool, end_date=response.expiration_date
         )
-        response = self.request(url, data=args, method="POST")
 
-        return response
+    def _fulfill_acs(self, title: Title) -> Axis360AcsFulfillment:
+        # The patron wants a direct link to the book, which we can deliver
+        # immediately, without making any more API requests.
+        download_url = title.availability.download_url
+        identifier = title.title_id
+        if download_url is None:
+            # If there's no download URL, we can't fulfill the request.
+            self.log.error(
+                "No download URL found for identifier %s. %r",
+                identifier,
+                title,
+            )
+            raise CannotFulfill()
+        return Axis360AcsFulfillment(
+            content_link=html.unescape(download_url),
+            content_type=DeliveryMechanism.ADOBE_DRM,
+            verify=self.api_requests._verify_certificate,
+        )
+
+    def _fulfill_acoustik(
+        self,
+        title: Title,
+        fulfillment_info: FindawayFulfillmentInfoResponse,
+        licensepool: LicensePool,
+    ) -> DirectFulfillment:
+        session_key = fulfillment_info.session_key
+        if session_key == "Expired":
+            message = (
+                f"Expired findaway session key for {title.title_id}. "
+                f"Title: {title!r}. Fulfillment: {fulfillment_info!r}"
+            )
+            self.log.error(message)
+            raise RemoteInitiatedServerError(
+                message,
+                self.label(),
+            )
+
+        metadata_response = self.api_requests.audiobook_metadata(
+            fulfillment_info.content_id
+        )
+        fnd_manifest = FindawayManifest(
+            licensepool,
+            accountId=metadata_response.account_id,
+            checkoutId=fulfillment_info.transaction_id,
+            fulfillmentId=fulfillment_info.content_id,
+            licenseId=fulfillment_info.license_id,
+            sessionKey=session_key,
+            spine_items=[
+                SpineItem(item.title, item.duration, item.part, item.sequence)
+                for item in metadata_response.reading_order
+            ],
+        )
+        return DirectFulfillment(str(fnd_manifest), fnd_manifest.MEDIA_TYPE)
+
+    def _fulfill_axisnow(
+        self, title: Title, fulfillment_info: AxisNowFulfillmentInfoResponse
+    ) -> DirectFulfillment:
+        axis_manifest = AxisNowManifest(
+            fulfillment_info.book_vault_uuid,
+            fulfillment_info.isbn,
+        )
+        return DirectFulfillment(str(axis_manifest), axis_manifest.MEDIA_TYPE)
 
     def fulfill(
         self,
@@ -382,43 +259,97 @@ class Axis360API(
         identifier = licensepool.identifier
         # This should include only one 'activity'.
         internal_format = self.internal_format(delivery_mechanism)
-        log_messages: list[str] = [
-            f"arguments for patron_activity method: "
-            f"patron.id={patron.id},"
-            f"internal_format={internal_format}, "
-            f"licensepool.identifier={identifier}, "
-            f"patron_id={patron.id}"
+
+        availability_response = self.api_requests.availability(
+            patron_id=patron.authorization_identifier,
+            title_ids=[identifier.identifier],
+        )
+
+        titles = [
+            title
+            for title in availability_response.titles
+            if title.title_id == identifier.identifier
+            and title.availability.is_checked_out
         ]
-        activities = self.patron_activity(
-            patron, pin, licensepool.identifier, internal_format, log_messages
+
+        if not titles:
+            # The Axis 360 API did not return any titles for this identifier, so
+            # the patron does not have this book checked out.
+            if availability_response.titles:
+                # If there are titles but none match, we log a warning.
+                self.log.warning(
+                    "No active loan found for identifier %s. Titles returned: %r",
+                    identifier.identifier,
+                    availability_response.titles,
+                )
+            raise NoActiveLoan()
+
+        title = titles.pop()
+
+        if titles:
+            # If there are multiple titles, we log a warning and use the first one.
+            self.log.warning(
+                "Multiple titles found for identifier %s, using the first one: %r. Other titles: %r",
+                identifier.identifier,
+                title,
+                titles,
+            )
+
+        checkout_format = title.availability.checkout_format
+
+        # We treat the Blio format as equivalent to AxisNow for the purposes of fulfillment.
+        if checkout_format == Axis360Format.blio:
+            checkout_format = Axis360Format.axis_now
+
+        if checkout_format != internal_format:
+            # The book is checked out in a format that does not match the requested internal format.
+            self.log.error(
+                "Cannot fulfill request for identifier %s in format %s. "
+                "Checked out format is %s. %r",
+                identifier.identifier,
+                internal_format,
+                checkout_format,
+                title,
+            )
+            raise FormatNotAvailable()
+
+        if (
+            checkout_format == Axis360Format.epub
+            or checkout_format == Axis360Format.pdf
+        ):
+            return self._fulfill_acs(title)
+
+        transaction_id = title.availability.transaction_id
+        if not transaction_id:
+            # If there's no transaction ID, we can't fulfill the request.
+            self.log.error(
+                "No transaction ID found for identifier %s. %r",
+                identifier.identifier,
+                title,
+            )
+            raise CannotFulfill()
+
+        fulfillment_info = self.api_requests.fulfillment_info(transaction_id)
+
+        if checkout_format == Axis360Format.acoustik and isinstance(
+            fulfillment_info, FindawayFulfillmentInfoResponse
+        ):
+            return self._fulfill_acoustik(title, fulfillment_info, licensepool)
+
+        elif checkout_format == Axis360Format.axis_now and isinstance(
+            fulfillment_info, AxisNowFulfillmentInfoResponse
+        ):
+            return self._fulfill_axisnow(title, fulfillment_info)
+
+        self.log.error(
+            "Unknown format %s for identifier %s. Fulfillment info: %r",
+            checkout_format,
+            identifier.identifier,
+            fulfillment_info,
         )
 
-        log_messages.append(
-            f"Patron activities returned from patron_activity method: {activities}"
-        )
-
-        for loan in activities:
-            if not isinstance(loan, AxisLoanInfo):
-                continue
-            if not (
-                loan.identifier_type == identifier.type
-                and loan.identifier == identifier.identifier
-            ):
-                continue
-            # We've found the remote loan corresponding to this
-            # license pool.
-            fulfillment = loan.fulfillment
-            if not fulfillment or not isinstance(fulfillment, Fulfillment):
-                raise CannotFulfill()
-            return fulfillment
-        # If we made it to this point, the patron does not have this
-        # book checked out.
-        log_messages.insert(
-            0,
-            "Unable to fulfill because there is no active loan. See info statements below for details:",
-        )
-        self.log.error("\n  ".join(log_messages))
-        raise NoActiveLoan()
+        # If we get here, we are dealing with an unknown format that we cannot fulfill.
+        raise FormatNotAvailable()
 
     def place_hold(
         self,
@@ -432,70 +363,74 @@ class Axis360API(
                 patron, pin
             )
 
-        url = self.base_url + "addtoHold/v2"
         identifier = licensepool.identifier
         title_id = identifier.identifier
         patron_id = patron.authorization_identifier
-        params = dict(
-            titleId=title_id, patronId=patron_id, email=hold_notification_email
+        response = self.api_requests.add_hold(
+            title_id, patron_id, hold_notification_email
         )
-        response = self.request(url, params=params)
-        hold_position = HoldResponseParser().process_first(response.content)
         hold_info = HoldInfo.from_license_pool(
             licensepool,
             start_date=utc_now(),
-            hold_position=hold_position,
+            hold_position=response.holds_queue_position,
         )
         return hold_info
 
     def release_hold(self, patron: Patron, pin: str, licensepool: LicensePool) -> None:
-        url = self.base_url + "removeHold/v2"
         identifier = licensepool.identifier
         title_id = identifier.identifier
         patron_id = patron.authorization_identifier
-        params = dict(titleId=title_id, patronId=patron_id)
-        response = self.request(url, params=params)
-        try:
-            HoldReleaseResponseParser().process_first(response.content)
-        except NotOnHold:
-            # Fine, it wasn't on hold and now it's still not on hold.
-            pass
-        # If we didn't raise an exception, we're fine.
-        return None
+        self.api_requests.remove_hold(title_id, patron_id)
 
     def patron_activity(
         self,
         patron: Patron,
         pin: str | None,
-        identifier: Identifier | None = None,
-        internal_format: str | None = None,
-        log_messages: list[str] | None = None,
-    ) -> list[AxisLoanInfo | HoldInfo]:
-        if identifier:
-            assert identifier.identifier is not None
-            title_ids = [identifier.identifier]
-        else:
-            title_ids = None
+    ) -> Generator[LoanInfo | HoldInfo]:
+        patron_id = patron.authorization_identifier
+        availability_response = self.api_requests.availability(patron_id=patron_id)
+        for title in availability_response.titles:
+            # Figure out which book we're talking about.
+            axis_identifier = title.title_id
+            axis_identifier_type = Identifier.AXIS_360_ID
+            availability = title.availability
+            if availability.is_checked_out:
+                # When the item is checked out, it can be locked to a particular DRM format. So even though
+                # the item supports other formats, it can only be fulfilled in the format that was checked out.
+                # This format is stored in availability.checkout_format.
+                if (
+                    availability.checkout_format == Axis360Format.axis_now
+                    or availability.checkout_format == Axis360Format.blio
+                ):
+                    # Ignore any AxisNow or Blio formats, since
+                    # we can't fulfill them. If we add AxisNow and Blio support in the future, we can remove
+                    # this check.
+                    continue
 
-        availability = self.availability(
-            patron_id=patron.authorization_identifier, title_ids=title_ids
-        )
+                yield LoanInfo(
+                    collection_id=self.collection_id,
+                    identifier_type=axis_identifier_type,
+                    identifier=axis_identifier,
+                    start_date=availability.checkout_start_date,
+                    end_date=availability.checkout_end_date,
+                )
 
-        availability_content_str = availability.text
-        if log_messages:
-            log_messages.append(
-                f"arguments to availability call: title_ids={title_ids}"
-            )
-            log_messages.append(
-                f"response to availability call: status={availability.status_code}, content={availability_content_str}"
-            )
-        loan_info_list = list(
-            AvailabilityResponseParser(self, internal_format).process_all(
-                availability_content_str
-            )
-        )
+            elif availability.is_reserved:
+                yield HoldInfo(
+                    collection_id=self.collection_id,
+                    identifier_type=axis_identifier_type,
+                    identifier=axis_identifier,
+                    end_date=availability.reserved_end_date,
+                    hold_position=0,
+                )
 
-        return loan_info_list
+            elif availability.is_in_hold_queue:
+                yield HoldInfo(
+                    collection_id=self.collection_id,
+                    identifier_type=axis_identifier_type,
+                    identifier=axis_identifier,
+                    hold_position=availability.holds_queue_position,
+                )
 
     def update_availability(self, licensepool: LicensePool) -> None:
         """Update the availability information for a single LicensePool.
@@ -606,9 +541,8 @@ class Axis360API(
 
         :yield: A sequence of (BibliographicData, CirculationData) 2-tuples
         """
-        availability = self.availability(since=since)
-        content = availability.content
-        yield from BibliographicParser().process_all(content)
+        availability_response = self.api_requests.availability(since=since)
+        yield from BibliographicParser.parse(availability_response)
 
     def availability_by_title_ids(
         self,
@@ -617,9 +551,8 @@ class Axis360API(
         """Find title availability for a list of titles
         :yield: A sequence of (BibliographicData, CirculationData) 2-tuples
         """
-        availability = self.availability(title_ids=title_ids)
-        content = availability.content
-        yield from BibliographicParser().process_all(content)
+        availability_response = self.api_requests.availability(title_ids=title_ids)
+        yield from BibliographicParser.parse(availability_response)
 
     @classmethod
     def create_identifier_strings(
@@ -635,22 +568,3 @@ class Axis360API(
             identifier_strings.append(value)
 
         return identifier_strings
-
-    @classmethod
-    def parse_token(cls, token: bytes) -> str:
-        data = json.loads(token)
-        return data["access_token"]  # type: ignore[no-any-return]
-
-    def _make_request(
-        self,
-        url: str,
-        method: str,
-        headers: Mapping[str, str],
-        data: Mapping[str, Any] | None = None,
-        params: Mapping[str, Any] | None = None,
-        **kwargs: Any,
-    ) -> RequestsResponse:
-        """Actually make an HTTP request."""
-        return HTTP.request_with_timeout(
-            method, url, headers=headers, data=data, params=params, **kwargs
-        )

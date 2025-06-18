@@ -43,7 +43,6 @@ from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailExcep
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.flask import FlaskAppFixture
 from tests.fixtures.services import ServicesFixture
-from tests.mocks.axis import MockAxis360API
 
 
 @pytest.fixture
@@ -863,10 +862,7 @@ class TestCollectionSettings:
         flask_app_fixture: FlaskAppFixture,
         monkeypatch: MonkeyPatch,
     ):
-        collection = MockAxis360API.mock_collection(
-            db.session,
-            db.default_library(),
-        )
+        collection = db.collection(protocol=Axis360API)
 
         self_test_results = dict(
             duration=0.9,
@@ -902,10 +898,7 @@ class TestCollectionSettings:
         controller: CollectionSettingsController,
         monkeypatch: MonkeyPatch,
     ):
-        collection = MockAxis360API.mock_collection(
-            db.session,
-            db.default_library(),
-        )
+        collection = db.collection(protocol=Axis360API)
 
         # This makes HasSelfTests.run_self_tests return no values
         self_test_results = (None, None)

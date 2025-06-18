@@ -4,7 +4,7 @@ from flask_babel import lazy_gettext as _
 from pydantic import field_validator
 
 from palace.manager.api.admin.validator import Validator
-from palace.manager.api.axis.constants import Axis360APIConstants
+from palace.manager.api.axis.requests import Axis360Requests
 from palace.manager.api.circulation import (
     BaseCirculationApiSettings,
     BaseCirculationLoanSettings,
@@ -30,7 +30,7 @@ class Axis360Settings(BaseCirculationApiSettings):
         )
     )
     url: str = FormField(
-        default=Axis360APIConstants.PRODUCTION_BASE_URL,
+        default=Axis360Requests.PRODUCTION_BASE_URL,
         form=ConfigurationFormItem(
             label=_("Server"),
             required=True,
@@ -56,7 +56,7 @@ class Axis360Settings(BaseCirculationApiSettings):
     @classmethod
     def _validate_url(cls, v: str) -> str:
         # Validate if the url provided is valid http or a valid nickname
-        valid_names = list(Axis360APIConstants.SERVER_NICKNAMES.keys())
+        valid_names = list(Axis360Requests.SERVER_NICKNAMES.keys())
         if not Validator._is_url(v, valid_names):
             raise ValueError(
                 f"Server nickname must be one of {valid_names}, or an 'http[s]' URL."

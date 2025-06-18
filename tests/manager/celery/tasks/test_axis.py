@@ -8,6 +8,7 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm.exc import ObjectDeletedError, StaleDataError
 
 from palace.manager.api.axis.api import Axis360API
+from palace.manager.api.axis.requests import Axis360Requests
 from palace.manager.celery.task import Task
 from palace.manager.celery.tasks import axis
 from palace.manager.celery.tasks.axis import (
@@ -34,11 +35,11 @@ from palace.manager.util.http import BadResponseException
 from tests.fixtures.celery import CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import AxisFilesFixture
+from tests.fixtures.http import MockHttpClientFixture
 from tests.fixtures.redis import RedisFixture
 from tests.fixtures.work import (
     WorkIdPolicyQueuePresentationRecalculationFixture,
 )
-from tests.mocks.axis import MockAxis360API
 from tests.mocks.mock import MockRequestsResponse
 
 
@@ -81,9 +82,9 @@ def test_list_identifiers_for_import_configuration_error(
     caplog: pytest.LogCaptureFixture,
 ):
     collection = db.collection(name="test_collection", protocol=Axis360API)
-    with patch.object(axis, "create_api") as mock_create_api:
-        mock_create_api.return_value.bearer_token.side_effect = BadResponseException(
-            "service", "uh oh", MockRequestsResponse(401)
+    with patch.object(axis, "Axis360API") as mock_create_api:
+        mock_create_api.return_value.api_requests.refresh_bearer_token.side_effect = (
+            BadResponseException("service", "uh oh", MockRequestsResponse(401))
         )
         list_identifiers_for_import.delay(collection_id=collection.id).wait()
     assert "Failed to authenticate with Axis 360 API" in caplog.text
@@ -97,7 +98,7 @@ def test_list_identifiers_for_import_integration_error(
 ):
     collection = db.collection(name="test_collection", protocol=Axis360API)
     test_ids = ["a", "b", "c"]
-    with patch.object(axis, "create_api") as mock_create_api:
+    with patch.object(axis, "Axis360API") as mock_create_api:
         mock_create_api.return_value.recent_activity.side_effect = [
             IntegrationException("service", "uh oh"),
             generate_test_bibliographic_and_circulation_objects(test_ids),
@@ -197,7 +198,7 @@ def test_list_identifiers_for_import(
     mock_api.recent_activity.return_value = (
         generate_test_bibliographic_and_circulation_objects(test_ids)
     )
-    with patch.object(axis, "create_api") as mock_create_api:
+    with patch.object(axis, "Axis360API") as mock_create_api:
         mock_create_api.return_value = mock_api
         identifiers = list_identifiers_for_import.delay(
             collection_id=collection.id
@@ -248,7 +249,7 @@ def test_import_items(
     collection = db.collection(name="test_collection", protocol=Axis360API.label())
 
     mock_api = MagicMock()
-    with (patch.object(axis, "create_api") as mock_create_api,):
+    with (patch.object(axis, "Axis360API") as mock_create_api,):
         mock_create_api.return_value = mock_api
         edition_1, lp_1 = db.edition(with_license_pool=True)
         edition_2, lp_2 = db.edition(with_license_pool=True)
@@ -290,7 +291,7 @@ def test_import_identifiers_with_requeue(
     collection = db.collection(name="test_collection", protocol=Axis360API.label())
 
     mock_api = MagicMock()
-    with (patch.object(axis, "create_api") as mock_create_api,):
+    with (patch.object(axis, "Axis360API") as mock_create_api,):
         mock_create_api.return_value = mock_api
         edition_1, lp_1 = db.edition(with_license_pool=True)
         edition_2, lp_2 = db.edition(with_license_pool=True)
@@ -366,9 +367,9 @@ def test_reap_collection_configuration_error(
         collection=collection,
     )
 
-    with patch.object(axis, "create_api") as mock_create_api:
-        mock_create_api.return_value.bearer_token.side_effect = BadResponseException(
-            "service", "uh oh", MockRequestsResponse(401)
+    with patch.object(axis, "Axis360API") as mock_create_api:
+        mock_create_api.return_value.api_requests.refresh_bearer_token.side_effect = (
+            BadResponseException("service", "uh oh", MockRequestsResponse(401))
         )
         reap_collection.delay(collection_id=collection.id).wait()
 
@@ -394,7 +395,7 @@ def test_reap_collection_with_requeue(
 
     identifiers = [x.primary_identifier for x in editions]
     mock_api = MagicMock()
-    with patch.object(axis, "create_api") as mock_create_api:
+    with patch.object(axis, "Axis360API") as mock_create_api:
         mock_create_api.return_value = mock_api
 
         reap_collection.delay(collection_id=collection.id, batch_size=2).wait()
@@ -430,7 +431,7 @@ def test_retry_import_identifiers_due_to_integration_exception(
     )
 
     mock_api = MagicMock()
-    with patch.object(axis, "create_api") as mock_create_api:
+    with patch.object(axis, "Axis360API") as mock_create_api:
         mock_create_api.return_value = mock_api
         edition, lp = db.edition(with_license_pool=True)
 
@@ -487,7 +488,7 @@ def test_retry_import_identifiers(
     )
 
     mock_api = MagicMock()
-    with patch.object(axis, "create_api") as mock_create_api:
+    with patch.object(axis, "Axis360API") as mock_create_api:
         mock_create_api.return_value = mock_api
         edition, lp = db.edition(with_license_pool=True)
 
@@ -549,7 +550,7 @@ def test_retry_reap_collection(
         None,  # second call is successful
     ]
 
-    with patch.object(axis, "create_api") as mock_create_api:
+    with patch.object(axis, "Axis360API") as mock_create_api:
         mock_create_api.return_value = mock_api
 
         if no_retry_expected:
@@ -565,6 +566,7 @@ def test_retry_reap_collection(
 def test_process_item_creates_presentation_ready_work(
     axis_files_fixture: AxisFilesFixture,
     db: DatabaseTransactionFixture,
+    http_client: MockHttpClientFixture,
     celery_fixture: CeleryFixture,
     work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
 ):
@@ -572,48 +574,49 @@ def test_process_item_creates_presentation_ready_work(
     Axis provides it, and we create a presentation-ready work.
     """
     library = db.default_library()
-    collection = MockAxis360API.mock_collection(db.session, library=library)
-    data = axis_files_fixture.sample_data("single_item.xml")
+    collection = db.collection(protocol=Axis360API, library=library)
+    http_client.queue_response(
+        200, content=axis_files_fixture.sample_data("token.json")
+    )
+    http_client.queue_response(
+        200, content=axis_files_fixture.sample_data("single_item.xml")
+    )
 
-    with patch.object(axis, "create_api") as mock_create_api:
-        api = MockAxis360API(_db=db.session, collection=collection)
-        mock_create_api.return_value = api
-        api.queue_response(200, content=data)
+    # Here's the book mentioned in single_item.xml.
+    identifier = db.identifier(identifier_type=Identifier.AXIS_360_ID)
+    identifier.identifier = "0003642860"
 
-        # Here's the book mentioned in single_item.xml.
-        identifier = db.identifier(identifier_type=Identifier.AXIS_360_ID)
-        identifier.identifier = "0003642860"
+    # This book has no LicensePool.
+    assert [] == identifier.licensed_through
 
-        # This book has no LicensePool.
-        assert [] == identifier.licensed_through
+    import_identifiers.delay(
+        collection_id=collection.id, identifiers=[identifier.identifier]
+    ).wait()
 
-        import_identifiers.delay(
-            collection_id=collection.id, identifiers=[identifier.identifier]
-        ).wait()
+    assert work_policy_recalc_fixture.is_queued(
+        identifier.work.id,
+        PresentationCalculationPolicy.recalculate_everything(),
+    )
 
-        assert work_policy_recalc_fixture.is_queued(
-            identifier.work.id,
-            PresentationCalculationPolicy.recalculate_everything(),
-        )
+    # A LicensePool was created. We know both how many copies of this
+    # book are available, and what formats it's available in.
+    [pool] = identifier.licensed_through
+    assert 9 == pool.licenses_owned
+    [lpdm] = pool.delivery_mechanisms
+    assert (
+        "application/epub+zip (application/vnd.adobe.adept+xml)"
+        == lpdm.delivery_mechanism.name
+    )
 
-        # A LicensePool was created. We know both how many copies of this
-        # book are available, and what formats it's available in.
-        [pool] = identifier.licensed_through
-        assert 9 == pool.licenses_owned
-        [lpdm] = pool.delivery_mechanisms
-        assert (
-            "application/epub+zip (application/vnd.adobe.adept+xml)"
-            == lpdm.delivery_mechanism.name
-        )
-
-        # A Work was created and made presentation ready.
-        assert "Faith of My Fathers : A Family Memoir" == pool.work.title
-        assert pool.work.presentation_ready is True
+    # A Work was created and made presentation ready.
+    assert "Faith of My Fathers : A Family Memoir" == pool.work.title
+    assert pool.work.presentation_ready is True
 
 
 def test_transient_failure_if_requested_book_not_mentioned(
     axis_files_fixture: AxisFilesFixture,
     db: DatabaseTransactionFixture,
+    http_client: MockHttpClientFixture,
     celery_fixture: CeleryFixture,
     work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
 ):
@@ -621,60 +624,65 @@ def test_transient_failure_if_requested_book_not_mentioned(
     it tells us about a totally different book.
     """
     library = db.default_library()
-    collection = MockAxis360API.mock_collection(db.session, library=library)
+    collection = db.collection(protocol=Axis360API, library=library)
 
-    with patch.object(axis, "create_api") as mock_create_api:
-        api = MockAxis360API(_db=db.session, collection=collection)
-        mock_create_api.return_value = api
+    # We're going to ask about abcdef
+    identifier = db.identifier(identifier_type=Identifier.AXIS_360_ID)
+    identifier.identifier = "abcdef"
 
-        # We're going to ask about abcdef
-        identifier = db.identifier(identifier_type=Identifier.AXIS_360_ID)
-        identifier.identifier = "abcdef"
+    # But we're going to get told about 0003642860.
+    http_client.queue_response(
+        200, content=axis_files_fixture.sample_data("token.json")
+    )
+    data = axis_files_fixture.sample_data("single_item.xml")
+    http_client.queue_response(200, content=data)
 
-        # But we're going to get told about 0003642860.
-        data = axis_files_fixture.sample_data("single_item.xml")
-        api.queue_response(200, content=data)
+    import_identifiers.delay(
+        collection_id=collection.id, identifiers=[identifier.identifier]
+    ).wait()
 
-        import_identifiers.delay(
-            collection_id=collection.id, identifiers=[identifier.identifier]
-        ).wait()
+    # And nothing major was done about the book we were told
+    # about. We created an Identifier record for its identifier,
+    # but no LicensePool or Edition.
+    wrong_identifier = Identifier.for_foreign_id(
+        db.session, Identifier.AXIS_360_ID, "0003642860"
+    )
+    assert [] == identifier.licensed_through
+    assert [] == identifier.primarily_identifies
 
-        # And nothing major was done about the book we were told
-        # about. We created an Identifier record for its identifier,
-        # but no LicensePool or Edition.
-        wrong_identifier = Identifier.for_foreign_id(
-            db.session, Identifier.AXIS_360_ID, "0003642860"
-        )
-        assert [] == identifier.licensed_through
-        assert [] == identifier.primarily_identifies
-
-        work = Work.from_identifiers(_db=db.session, identifiers=[identifier])
-        assert work_policy_recalc_fixture.queue_size() == 1
+    work = Work.from_identifiers(_db=db.session, identifiers=[identifier])
+    assert work_policy_recalc_fixture.queue_size() == 1
 
 
 def test__check_api_credentials():
     mock_task = create_autospec(Task)
     mock_collection = create_autospec(Collection)
-    mock_api = create_autospec(Axis360API)
+    mock_api_requests = create_autospec(Axis360Requests)
 
     # If api.bearer_token() runs successfully, the function should return True
-    assert axis._check_api_credentials(mock_task, mock_collection, mock_api) is True
-    mock_api.bearer_token.assert_called_once()
+    assert (
+        axis._check_api_credentials(mock_task, mock_collection, mock_api_requests)
+        is True
+    )
+    mock_api_requests.refresh_bearer_token.assert_called_once()
 
     # If a BadResponseException is raised with a 401 status code, the function should return False
-    mock_api.bearer_token.side_effect = BadResponseException(
+    mock_api_requests.refresh_bearer_token.side_effect = BadResponseException(
         "service", "uh oh", MockRequestsResponse(401)
     )
-    assert axis._check_api_credentials(mock_task, mock_collection, mock_api) is False
+    assert (
+        axis._check_api_credentials(mock_task, mock_collection, mock_api_requests)
+        is False
+    )
 
     # If a BadResponseException is raised with a status code other than 401, the function should raise the exception
-    mock_api.bearer_token.side_effect = BadResponseException(
+    mock_api_requests.refresh_bearer_token.side_effect = BadResponseException(
         "service", "uh oh", MockRequestsResponse(500)
     )
     with pytest.raises(BadResponseException):
-        axis._check_api_credentials(mock_task, mock_collection, mock_api)
+        axis._check_api_credentials(mock_task, mock_collection, mock_api_requests)
 
     # Any other exception should be raised
-    mock_api.bearer_token.side_effect = ValueError
+    mock_api_requests.refresh_bearer_token.side_effect = ValueError
     with pytest.raises(ValueError):
-        axis._check_api_credentials(mock_task, mock_collection, mock_api)
+        axis._check_api_credentials(mock_task, mock_collection, mock_api_requests)

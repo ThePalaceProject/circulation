@@ -9,12 +9,14 @@ from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import ObjectDeletedError, StaleDataError
 
 from palace.manager.api.axis.api import Axis360API
+from palace.manager.api.axis.requests import Axis360Requests
 from palace.manager.api.circulation import (
     BaseCirculationAPI,
     LibrarySettingsType,
     SettingsType,
 )
 from palace.manager.celery.task import Task
+from palace.manager.celery.utils import load_from_id
 from palace.manager.core.exceptions import IntegrationException
 from palace.manager.data_layer.bibliographic import BibliographicData
 from palace.manager.service.celery.celery import QueueNames
@@ -121,8 +123,8 @@ def list_identifiers_for_import(
             # loop through feed :  for every {batch_size} items, pack them in a list and pass along to sub task for
             # processing
             try:
-                api = create_api(collection, session)
-                if not _check_api_credentials(task, collection, api):
+                api = Axis360API(session, collection)
+                if not _check_api_credentials(task, collection, api.api_requests):
                     return None
 
                 task.log.info(
@@ -164,16 +166,12 @@ def list_identifiers_for_import(
             return title_ids
 
 
-def create_api(
-    collection: Collection, session: Session, bearer_token: str | None = None
-) -> Axis360API:
-    return Axis360API(session, collection, bearer_token)
-
-
-def _check_api_credentials(task: Task, collection: Collection, api: Axis360API) -> bool:
+def _check_api_credentials(
+    task: Task, collection: Collection, requests: Axis360Requests
+) -> bool:
     # Try to get a bearer token, to make sure the collection is configured correctly.
     try:
-        api.bearer_token()
+        requests.refresh_bearer_token()
         return True
     except BadResponseException as e:
         if e.response.status_code == 401:
@@ -231,7 +229,6 @@ def import_identifiers(
     transaction.  If it has not finished processing the list of identifiers, it will requeue the task with the
     remaining unprocessed identifiers.
     """
-    count = 0
     total_imported_in_current_task = 0
 
     def log_run_end_message() -> None:
@@ -265,8 +262,8 @@ def import_identifiers(
             return
 
         try:
-            api = create_api(session=session, collection=collection)
-            bearer_token = api.bearer_token()
+            api = Axis360API(session, collection)
+            api_requests = api.api_requests
             identifier_batch = identifiers[:batch_size]
 
             circ_data = [
@@ -285,8 +282,8 @@ def import_identifiers(
 
     for metadata, circulation in circ_data:
         with task.transaction() as session:
-            collection = Collection.by_id(session, id=collection_id)
-            api = create_api(session=session, collection=collection, bearer_token=bearer_token)  # type: ignore[arg-type]
+            collection = load_from_id(session, Collection, collection_id)
+            api = Axis360API(session, collection, api_requests)
             try:
                 process_book(task, session, api, metadata)
                 total_imported_in_current_task += 1
@@ -483,12 +480,9 @@ def reap_collection(
                 log_completion_message()
                 return
 
-            api = create_api(
-                session=session,
-                collection=collection,
-            )
+            api = Axis360API(session, collection)
 
-            _check_api_credentials(task, collection, api)
+            _check_api_credentials(task, collection, api.api_requests)
 
             api.update_licensepools_for_identifiers(identifiers=identifiers)
         except (IntegrationException, OperationalError) as e:
