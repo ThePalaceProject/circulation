@@ -7,7 +7,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from collections import defaultdict
-from collections.abc import Iterable
+from collections.abc import Collection as CollectionT
 from functools import cached_property
 from typing import Any
 
@@ -703,7 +703,7 @@ class CirculationManagerAnnotator(Annotator):
 
 
 class LibraryAnnotator(CirculationManagerAnnotator):
-    FULFILL_LINK_TEMPLATED_TYPES: frozendict[str | None, Iterable[str]] = frozendict(
+    FULFILL_LINK_TEMPLATED_TYPES: frozendict[str | None, CollectionT[str]] = frozendict(
         {DeliveryMechanism.BOUNDLESS_DRM: BOUNDLESS_DRM_PARAMS}
     )
     """
@@ -1470,13 +1470,12 @@ class LibraryAnnotator(CirculationManagerAnnotator):
             library_short_name=self.library.short_name,
             _external=True,
         )
-        templated = False
 
-        if format_types and format_types[0] in self.FULFILL_LINK_TEMPLATED_TYPES:
-            template_vars = self.FULFILL_LINK_TEMPLATED_TYPES[format_types[0]]
-            template = "{?" + ",".join(template_vars) + "}"
-            fulfill_url = fulfill_url + template
+        if template_vars := self.FULFILL_LINK_TEMPLATED_TYPES.get(format_types[0]):
+            fulfill_url = fulfill_url + "{?" + ",".join(template_vars) + "}"
             templated = True
+        else:
+            templated = False
 
         link_tag = self.acquisition_link(
             rel=rel,
