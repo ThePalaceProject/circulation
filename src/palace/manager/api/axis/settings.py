@@ -1,8 +1,11 @@
 from __future__ import annotations
 
-from flask_babel import lazy_gettext as _
+from typing import Any
 
-from palace.manager.api.axis.constants import ServerNickname
+from flask_babel import lazy_gettext as _
+from pydantic import model_validator
+
+from palace.manager.api.axis.constants import API_BASE_URLS, ServerNickname
 from palace.manager.api.circulation import (
     BaseCirculationApiSettings,
     BaseCirculationLoanSettings,
@@ -27,8 +30,6 @@ class Axis360Settings(BaseCirculationApiSettings):
             required=True,
         )
     )
-    # TODO: Need to figure out how to handle the migration for this setting
-    #   before this goes in.
     server_nickname: ServerNickname = FormField(
         default=ServerNickname.production,
         form=ConfigurationFormItem(
@@ -57,6 +58,25 @@ class Axis360Settings(BaseCirculationApiSettings):
             },
         ),
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _migrate_url_to_server_nickname(cls, data: Any) -> Any:
+        """
+        This is a temporary migration to handle the change from  `url` to `server_nickname` in the settings.
+
+        Once this is rolled out everywhere, we can do a migration in the database to set this field
+        and remove this method.
+
+        TODO: Remove in next release.
+        """
+        if isinstance(data, dict):
+            if "url" in data:
+                if "server_nickname" not in data:
+                    if data["url"] == API_BASE_URLS[ServerNickname.qa]:
+                        data["server_nickname"] = ServerNickname.qa
+                del data["url"]
+        return data
 
 
 class Axis360LibrarySettings(BaseCirculationLoanSettings):
