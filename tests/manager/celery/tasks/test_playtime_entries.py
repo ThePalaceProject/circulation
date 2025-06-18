@@ -11,6 +11,8 @@ import pytz
 from sqlalchemy.sql.expression import and_, null
 
 from palace.manager.api.model.time_tracking import PlaytimeTimeEntry
+from palace.manager.api.odl.api import OPDS2WithODLApi
+from palace.manager.api.opds_for_distributors import OPDSForDistributorsAPI
 from palace.manager.celery.tasks.playtime_entries import (
     REPORT_DATE_FORMAT,
     generate_playtime_report,
@@ -551,7 +553,7 @@ def playtime(
 
 
 class TestGeneratePlaytimeReport:
-    def test(
+    def test_generate_playtime_reports(
         self,
         db: DatabaseTransactionFixture,
         celery_fixture: CeleryFixture,
@@ -559,23 +561,39 @@ class TestGeneratePlaytimeReport:
         monkeypatch: pytest.MonkeyPatch,
     ):
         identifier = db.identifier()
-        collection = db.collection("collection b")
+        collection = db.collection(
+            "collection b", protocol=OPDSForDistributorsAPI.label()
+        )
         collection.data_source = DataSource.lookup(
             db.session, name="ds_b", autocreate=True
         )
+
         library = db.default_library()
         edition = db.edition(data_source_name=collection.data_source.name)
         identifier2 = edition.primary_identifier
-        collection2 = db.collection("collection a")
+        collection2 = db.collection("collection a", protocol=OPDS2WithODLApi.label())
         collection2.data_source = DataSource.lookup(
             db.session, name="ds_a", autocreate=True
+        )
+
+        # a data source with no playtime data - we expect an empty report for ds_c
+        collection3 = db.collection("collection c", protocol=OPDS2WithODLApi.label())
+        collection3.data_source = DataSource.lookup(
+            db.session, name="ds_c", autocreate=True
+        )
+
+        # A collection and datasource that will be removed after the playtime is recorded, but before the report
+        # is generated.
+        collection4 = db.collection("collection d", protocol=OPDS2WithODLApi.label())
+        collection4.data_source = DataSource.lookup(
+            db.session, name="ds_d", autocreate=True
         )
 
         library2 = db.library()
 
         identifier3 = db.identifier()
 
-        loan_identifiers = [f"loan_id:{x}" for x in range(1, 7)]
+        loan_identifiers = [f"loan_id:{x}" for x in range(1, 8)]
         (
             loan_identifier,
             loan_identifier2,
@@ -583,6 +601,7 @@ class TestGeneratePlaytimeReport:
             loan_identifier4,
             loan_identifier5,
             loan_identifier6,
+            loan_identifier7,
         ) = loan_identifiers
 
         isbn_ids: dict[str, Identifier] = {
@@ -693,6 +712,16 @@ class TestGeneratePlaytimeReport:
             loan_identifier6,
         )
 
+        # # collection 4:  in scope
+        playtime(
+            db.session, identifier, collection4, library, dt1m(3), 1, loan_identifier7
+        )
+        #
+        # # now delete the collection and data source for collection 4
+        ds4 = collection4.data_source
+        db.session.delete(collection4)
+        db.session.delete(ds4)
+
         reporting_name = "test cm"
         parent_folder_id = "palace-test"
 
@@ -722,13 +751,18 @@ class TestGeneratePlaytimeReport:
         generate_playtime_report.delay().wait()
 
         # Assert
-        assert len(output_data) == 2
-        [(ds_a_filename, ds_a_data), (ds_b_filename, ds_b_data)] = [
-            (k, [r for r in csv.reader(StringIO(v))]) for k, v in output_data.items()
-        ]
+        assert len(output_data) == 4
+        [
+            (ds_a_filename, ds_a_data),
+            (ds_b_filename, ds_b_data),
+            (ds_c_filename, ds_c_data),
+            (ds_d_filename, ds_d_data),
+        ] = [(k, list(csv.reader(StringIO(v)))) for k, v in output_data.items()]
 
         assert len(ds_a_data) == 6
         assert len(ds_b_data) == 4
+        assert len(ds_c_data) == 1
+        assert len(ds_d_data) == 2
 
         cutoff = date1m(0).replace(day=1)
         until = utc_now().date().replace(day=1)
@@ -842,10 +876,38 @@ class TestGeneratePlaytimeReport:
             ],  # Identifier with edition
         ]
 
-        assert mock_google_drive_service.create_file.call_count == 2
+        assert (
+            f"{cutoff.strftime(REPORT_DATE_FORMAT)}-{until.strftime(REPORT_DATE_FORMAT)}-playtime-summary-test_cm-ds_c-"
+            in ds_c_filename
+        )
+
+        assert ds_c_data == [
+            headers,
+        ]
+
+        assert (
+            f"{cutoff.strftime(REPORT_DATE_FORMAT)}-{until.strftime(REPORT_DATE_FORMAT)}-playtime-summary-test_cm-ds_d-"
+            in ds_d_filename
+        )
+
+        assert ds_d_data == [
+            headers,
+            [
+                column1,
+                identifier.urn,
+                strongest_isbn,
+                "collection d",
+                library.name,
+                "",
+                "1",
+                "1",
+            ],
+        ]
+
+        assert mock_google_drive_service.create_file.call_count == 4
 
         nested_method = mock_google_drive_service.create_nested_folders_if_not_exist
-        assert nested_method.call_count == 2
+        assert nested_method.call_count == 4
         assert nested_method.call_args_list[0].kwargs == {
             "parent_folder_id": parent_folder_id,
             "folders": [
@@ -859,6 +921,26 @@ class TestGeneratePlaytimeReport:
             "parent_folder_id": parent_folder_id,
             "folders": [
                 "ds_b",
+                "Usage Reports",
+                "test cm",
+                "2025",
+            ],
+        }
+
+        assert nested_method.call_args_list[2].kwargs == {
+            "parent_folder_id": parent_folder_id,
+            "folders": [
+                "ds_c",
+                "Usage Reports",
+                "test cm",
+                "2025",
+            ],
+        }
+
+        assert nested_method.call_args_list[3].kwargs == {
+            "parent_folder_id": parent_folder_id,
+            "folders": [
+                "ds_d",
                 "Usage Reports",
                 "test cm",
                 "2025",

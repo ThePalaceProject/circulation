@@ -13,14 +13,17 @@ from typing import Any, Protocol
 import pytz
 from celery import shared_task
 from sqlalchemy import and_, distinct, false, select, true
-from sqlalchemy.orm import Query, Session
+from sqlalchemy.orm import Query, Session, joinedload
 from sqlalchemy.sql.functions import coalesce, count, max as sql_max, sum
 
 from palace.manager.api.config import Configuration
+from palace.manager.api.odl.api import OPDS2WithODLApi
+from palace.manager.api.opds_for_distributors import OPDSForDistributorsAPI
 from palace.manager.celery.task import Task
 from palace.manager.service.celery.celery import QueueNames
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.identifier import Identifier
+from palace.manager.sqlalchemy.model.integration import IntegrationConfiguration
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.time_tracking import PlaytimeEntry, PlaytimeSummary
 from palace.manager.util.datetime_helpers import previous_months, utc_now
@@ -178,13 +181,9 @@ def generate_playtime_report(
 
     with task.session() as session:
         # get list of collections
-        data_source_names = [
-            x[0]
-            for x in _fetch_distinct_data_source_names_in_range(
-                session=session, start=start, until=until
-            )
-        ]
-
+        data_source_names = _fetch_distinct_eligible_data_source_names(
+            session=session,
+        )
         for data_source_name in data_source_names:
             reporting_name_with_no_spaces = (
                 f"{reporting_name}-{data_source_name}".replace(" ", "_")
@@ -238,22 +237,33 @@ def generate_playtime_report(
                 )
 
 
-def _fetch_distinct_data_source_names_in_range(
-    session: Session, start: date, until: date
-) -> Query[str]:
-    return session.query(
+def _fetch_distinct_eligible_data_source_names(
+    session: Session,
+) -> list[str]:
+    query = (
+        select(Collection)
+        .join(
+            IntegrationConfiguration,
+            Collection.integration_configuration_id == IntegrationConfiguration.id,
+        )
+        .where(
+            IntegrationConfiguration.protocol.in_(
+                [OPDS2WithODLApi.label(), OPDSForDistributorsAPI.label()]
+            )
+        )
+        .options(joinedload(Collection.integration_configuration))
+    )
+    ds_names = {c[0].data_source.name for c in session.execute(query).all()}
+
+    for ds_name in session.execute(
         select(
             distinct(PlaytimeSummary.data_source_name),
         )
-        .where(
-            and_(
-                PlaytimeSummary.timestamp >= start,
-                PlaytimeSummary.timestamp < until,
-            )
-        )
-        .order_by(PlaytimeSummary.data_source_name)
-        .subquery()
-    )
+    ).all():
+        ds_names.add(ds_name[0])
+    ds_names_list = list(ds_names)
+    ds_names_list.sort()
+    return ds_names_list
 
 
 def _fetch_report_records(
