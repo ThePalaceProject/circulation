@@ -7,7 +7,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from collections import defaultdict
-from collections.abc import Collection as CollectionT
+from collections.abc import Sequence
 from functools import cached_property
 from typing import Any
 
@@ -703,7 +703,7 @@ class CirculationManagerAnnotator(Annotator):
 
 
 class LibraryAnnotator(CirculationManagerAnnotator):
-    FULFILL_LINK_TEMPLATED_TYPES: frozendict[str | None, CollectionT[str]] = frozendict(
+    FULFILL_LINK_TEMPLATED_TYPES: frozendict[str | None, Sequence[str]] = frozendict(
         {DeliveryMechanism.BOUNDLESS_DRM: BOUNDLESS_DRM_PARAMS}
     )
     """

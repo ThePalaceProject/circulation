@@ -264,7 +264,7 @@ class Axis360API(
         }
         params: dict[str, str] = {
             param: cast(str, kwargs.get(param))
-            for param in BOUNDLESS_DRM_PARAMS - missing_params
+            for param in set(BOUNDLESS_DRM_PARAMS) - missing_params
         }
 
         if missing_params:

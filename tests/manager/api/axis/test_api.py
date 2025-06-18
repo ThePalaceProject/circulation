@@ -10,6 +10,7 @@ import pytest
 from freezegun import freeze_time
 
 from palace.manager.api.axis.api import Axis360API
+from palace.manager.api.axis.constants import Axis360Format
 from palace.manager.api.axis.exception import Axis360ValidationError
 from palace.manager.api.axis.fulfillment import (
     Axis360AcsFulfillment,
@@ -17,6 +18,7 @@ from palace.manager.api.axis.fulfillment import (
 from palace.manager.api.circulation import DirectFulfillment, HoldInfo, LoanInfo
 from palace.manager.api.circulation_exceptions import (
     CannotFulfill,
+    DeliveryMechanismError,
     FormatNotAvailable,
     InvalidInputException,
     NoActiveLoan,
@@ -29,7 +31,10 @@ from palace.manager.data_layer.format import FormatData
 from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.identifier import Identifier
-from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism
+from palace.manager.sqlalchemy.model.licensing import (
+    DeliveryMechanism,
+    LicensePoolDeliveryMechanism,
+)
 from palace.manager.sqlalchemy.model.resource import Representation
 from palace.manager.util.datetime_helpers import datetime_utc, utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
@@ -857,3 +862,26 @@ class TestAxis360API:
         }
 
         assert len(activity) == 2
+
+    def test__delivery_mechanism_to_internal_format(self) -> None:
+        lpdm = LicensePoolDeliveryMechanism(delivery_mechanism=DeliveryMechanism())
+
+        lpdm.delivery_mechanism.content_type = "unknown/content-type"
+        lpdm.delivery_mechanism.drm_scheme = "unknown_drm_scheme"
+
+        # If we are called with an unknown delivery mechanism, we raise an exception.
+        with pytest.raises(
+            DeliveryMechanismError,
+            match=r"Could not map delivery mechanism unknown/content-type "
+            r"\(unknown_drm_scheme\) to internal delivery mechanism!",
+        ):
+            Axis360API._delivery_mechanism_to_internal_format(lpdm)
+
+        # Otherwise, the internal format is returned.
+        lpdm.delivery_mechanism.content_type = Representation.EPUB_MEDIA_TYPE
+        lpdm.delivery_mechanism.drm_scheme = DeliveryMechanism.ADOBE_DRM
+
+        assert (
+            Axis360API._delivery_mechanism_to_internal_format(lpdm)
+            == Axis360Format.epub
+        )
