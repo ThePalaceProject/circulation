@@ -137,6 +137,13 @@ class TestOPDSSerializer:
             assert len(children) == 1
             assert test_fn(children[0])
 
+        # Test serializing a templated link
+        link.templated = True
+        link.href = "http://templated.acquisition/{?foo,bar}"
+        element = OPDS1Version1Serializer()._serialize_acquisition_link(link)
+        assert element.tag == "{http://drafts.opds.io/odl-1.0#}tlink"
+        assert element.get("href") == link.href
+
     def test_serialize_work_entry(self):
         data = WorkEntryData(
             additionalType="type",

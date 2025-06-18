@@ -217,6 +217,15 @@ class TestOPDS2Serializer:
         result = serializer._serialize_acquisition_link(acquisition)
         assert result["properties"]["availability"]["state"] == "ready"
 
+        # Test templated link
+        acquisition = Acquisition(
+            href="http://templated.acquisition/{?foo,bar}",
+            templated=True,
+        )
+        result = serializer._serialize_acquisition_link(acquisition)
+        assert result["templated"] is True
+        assert result["href"] == acquisition.href
+
     def test__serialize_contributor(self):
         author = Author(
             name="Author",

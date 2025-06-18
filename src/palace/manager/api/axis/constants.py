@@ -75,4 +75,4 @@ DELIVERY_MECHANISM_TO_INTERNAL_FORMAT: frozenbidict[DeliveryMechanismTuple, str]
 
 INTERNAL_FORMAT_TO_DELIVERY_MECHANISM = DELIVERY_MECHANISM_TO_INTERNAL_FORMAT.inverse
 
-BOUNDLESS_DRM_PARAMS = frozenset({"modulus", "exponent", "device_id", "client_ip"})
+BOUNDLESS_DRM_PARAMS = ("modulus", "exponent", "device_id", "client_ip")
