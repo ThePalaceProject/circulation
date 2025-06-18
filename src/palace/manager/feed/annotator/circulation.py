@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 
 from palace.manager.api.adobe_vendor_id import AuthdataUtility
 from palace.manager.api.annotations import AnnotationWriter
-from palace.manager.api.axis.constants import BOUNDLESS_DRM_PARAMS
+from palace.manager.api.axis.constants import BAKER_TAYLOR_KDRM_PARAMS
 from palace.manager.api.circulation import (
     BaseCirculationAPI,
     CirculationAPI,
@@ -704,7 +704,7 @@ class CirculationManagerAnnotator(Annotator):
 
 class LibraryAnnotator(CirculationManagerAnnotator):
     FULFILL_LINK_TEMPLATED_TYPES: frozendict[str | None, Sequence[str]] = frozendict(
-        {DeliveryMechanism.BOUNDLESS_DRM: BOUNDLESS_DRM_PARAMS}
+        {DeliveryMechanism.BAKER_TAYLOR_KDRM_DRM: BAKER_TAYLOR_KDRM_PARAMS}
     )
     """
     Provides a mapping of delivery mechanism types to a list of

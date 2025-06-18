@@ -195,7 +195,7 @@ class BibliographicParser(LoggerMixin):
                     format_data.append(
                         FormatData(
                             content_type=Representation.EPUB_MEDIA_TYPE,
-                            drm_scheme=DeliveryMechanism.BOUNDLESS_DRM,
+                            drm_scheme=DeliveryMechanism.BAKER_TAYLOR_KDRM_DRM,
                         )
                     )
 
