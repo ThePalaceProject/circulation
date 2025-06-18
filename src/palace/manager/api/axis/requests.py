@@ -285,8 +285,16 @@ class Axis360Requests(LoggerMixin):
             response = self._make_request("GET", url, allowed_response_codes=["2xx"])
         except BadResponseException as e:
             self.log.exception(
-                "Error fetching license document: %s. Status: %d. Content: %s",
+                "Error fetching license document: %s. "
+                "book_vault_uuid=%s device_id=%s client_ip=%s isbn=%s modulus=%s exponent=%s "
+                "Status=%d. Content=%s",
                 str(e),
+                book_vault_uuid,
+                device_id,
+                client_ip,
+                isbn,
+                modulus,
+                exponent,
                 e.response.status_code,
                 e.response.text,
             )

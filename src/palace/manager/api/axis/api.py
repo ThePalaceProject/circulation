@@ -258,12 +258,11 @@ class Axis360API(
         fulfillment_info: AxisNowFulfillmentInfoResponse,
         **kwargs: Unpack[BaseCirculationAPI.FulfillKwargs],
     ) -> DirectFulfillment:
-        missing_params = {
-            param for param in BAKER_TAYLOR_KDRM_PARAMS if not kwargs.get(param)
-        }
+        kdrm_params = set(BAKER_TAYLOR_KDRM_PARAMS) | {"client_ip"}
+        missing_params = {param for param in kdrm_params if not kwargs.get(param)}
         params: dict[str, str] = {
             param: cast(str, kwargs.get(param))
-            for param in set(BAKER_TAYLOR_KDRM_PARAMS) - missing_params
+            for param in kdrm_params - missing_params
         }
 
         if missing_params:

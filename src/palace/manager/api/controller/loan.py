@@ -6,6 +6,7 @@ from flask_babel import lazy_gettext as _
 from pydantic import TypeAdapter
 from werkzeug import Response as wkResponse
 
+from palace.manager.api.axis.constants import BAKER_TAYLOR_KDRM_PARAMS
 from palace.manager.api.circulation import UrlFulfillment
 from palace.manager.api.circulation_exceptions import (
     CirculationException,
@@ -354,9 +355,9 @@ class LoanController(CirculationManagerController):
         try:
             # Get any additional information that may be present in the request that is
             # needed to fulfill the loan.
-            modulus = request.args.get("modulus")
-            exponent = request.args.get("exponent")
-            device_id = request.args.get("device_id")
+            baker_taylor_request_args = {
+                k: request.args.get(k) for k in BAKER_TAYLOR_KDRM_PARAMS
+            }
             client_ip = request.remote_addr
             if forward_for_header := request.headers.get("X-Forwarded-For"):
                 # If the request has an X-Forwarded-For header, use that to determine the client IP.
@@ -368,10 +369,8 @@ class LoanController(CirculationManagerController):
                 credential,
                 requested_license_pool,
                 mechanism,
-                modulus=modulus,
-                exponent=exponent,
-                device_id=device_id,
                 client_ip=client_ip,
+                **baker_taylor_request_args,
             )
         except (CirculationException, RemoteInitiatedServerError) as e:
             return e.problem_detail
