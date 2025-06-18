@@ -117,6 +117,8 @@ class TestAxisValidators:
     def test_axis_runtime(self) -> None:
         adaptor = TypeAdapter(AxisRuntime)
 
+        assert adaptor.validate_python("0:00") == 0
+
         # Can validate a runtime string in the format HH:mm and convert it to seconds
         assert adaptor.validate_python("01:30") == 1 * 3600 + 30 * 60
 
@@ -134,3 +136,12 @@ class TestAxisValidators:
             ValidationError, match="Invalid runtime values: foo:bar. Expected integers."
         ):
             adaptor.validate_python("foo:bar")
+        with pytest.raises(
+            ValidationError, match="Invalid value for HH: -51. Hours must be >= 0."
+        ):
+            adaptor.validate_python("-51:49")
+        with pytest.raises(
+            ValidationError,
+            match="Invalid value for mm: 82. Minutes must be >= 0 and < 60.",
+        ):
+            adaptor.validate_python("01:82")

@@ -1,7 +1,7 @@
 from datetime import date, datetime, timezone
 from typing import Annotated, Any
 
-from pydantic import AwareDatetime, BeforeValidator, PositiveInt
+from pydantic import AwareDatetime, BeforeValidator, NonNegativeInt
 
 
 def _axis_datetime_before_validator(value: Any) -> Any:
@@ -130,11 +130,17 @@ def _axis_runtime_before_validator(value: Any) -> Any:
             minutes = int(minutes_str)
         except ValueError:
             raise ValueError(f"Invalid runtime values: {value}. Expected integers.")
+        if hours < 0:
+            raise ValueError(f"Invalid value for HH: {hours_str}. Hours must be >= 0.")
+        if minutes < 0 or minutes >= 60:
+            raise ValueError(
+                f"Invalid value for mm: {minutes_str}. Minutes must be >= 0 and < 60."
+            )
         return hours * 3600 + minutes * 60
     return value
 
 
-AxisRuntime = Annotated[PositiveInt, BeforeValidator(_axis_runtime_before_validator)]
+AxisRuntime = Annotated[NonNegativeInt, BeforeValidator(_axis_runtime_before_validator)]
 """
 A pydantic type that represents a runtime in seconds.
 

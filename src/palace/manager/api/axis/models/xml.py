@@ -61,9 +61,6 @@ class BaseAxisXmlModel(
 class BaseAxisXmlResponse(BaseAxisXmlModel, BaseAxisResponse, ABC):
     """
     Base for Axis XML responses.
-
-    This class extends BaseAxisXmlModel and BaseAxisResponse to provide a common
-    base for all Axis XML responses.
     """
 
 
