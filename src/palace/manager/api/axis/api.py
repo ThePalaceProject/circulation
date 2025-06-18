@@ -269,7 +269,7 @@ class Axis360API(
         if missing_params:
             debug_message = (
                 f"Missing parameters ({', '.join(missing_params)}) for Baker & Taylor KDRM fulfillment: "
-                f"title_id={title.title_id} device_id={params.get('device_id')}"
+                f"title_id={title.title_id} isbn={fulfillment_info.isbn} device_id={params.get('device_id')}"
             )
             self.log.error(debug_message)
             raise InvalidInputException(
@@ -279,7 +279,7 @@ class Axis360API(
 
         license_response = self.api_requests.license(
             book_vault_uuid=fulfillment_info.book_vault_uuid,
-            isbn=title.title_id,
+            isbn=fulfillment_info.isbn,
             exponent=params["exponent"],
             modulus=params["modulus"],
             device_id=params["device_id"],
