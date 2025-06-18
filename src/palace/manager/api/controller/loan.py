@@ -354,13 +354,14 @@ class LoanController(CirculationManagerController):
         try:
             # Get any additional information that may be present in the request that is
             # needed to fulfill the loan.
-            # These parameters are used by Boundless DRM.
             modulus = request.args.get("modulus")
             exponent = request.args.get("exponent")
             device_id = request.args.get("device_id")
             client_ip = (
-                request_ip[0].strip()
-                if (request_ip := request.headers.get("X-Forwarded-For", "").split(","))
+                request_ips[0].strip()
+                if (
+                    request_ips := request.headers.get("X-Forwarded-For", "").split(",")
+                )
                 else request.remote_addr
             )
 

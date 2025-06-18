@@ -657,7 +657,7 @@ class BaseCirculationAPI(
         provider API implementations to fulfill a loan.
         """
 
-        # These parameters are used for Boundless DRM fulfillment.
+        # These parameters are used for Baker & Taylor KDRM fulfillment.
         client_ip: str | None
         """The IP address of the client requesting fulfillment."""
         device_id: str | None

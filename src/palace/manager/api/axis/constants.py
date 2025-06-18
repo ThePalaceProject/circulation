@@ -67,7 +67,7 @@ DELIVERY_MECHANISM_TO_INTERNAL_FORMAT: frozenbidict[DeliveryMechanismTuple, str]
             ): Axis360Format.acoustik,
             DeliveryMechanismTuple(
                 Representation.EPUB_MEDIA_TYPE,
-                DeliveryMechanism.BOUNDLESS_DRM,
+                DeliveryMechanism.BAKER_TAYLOR_KDRM_DRM,
             ): Axis360Format.axis_now,
         }
     )
@@ -75,4 +75,4 @@ DELIVERY_MECHANISM_TO_INTERNAL_FORMAT: frozenbidict[DeliveryMechanismTuple, str]
 
 INTERNAL_FORMAT_TO_DELIVERY_MECHANISM = DELIVERY_MECHANISM_TO_INTERNAL_FORMAT.inverse
 
-BOUNDLESS_DRM_PARAMS = ("modulus", "exponent", "device_id", "client_ip")
+BAKER_TAYLOR_KDRM_PARAMS = ("modulus", "exponent", "device_id", "client_ip")

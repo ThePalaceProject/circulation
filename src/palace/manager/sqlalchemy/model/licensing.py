@@ -1801,7 +1801,7 @@ class DeliveryMechanism(Base, HasSessionCache):
     NO_DRM = None
     ADOBE_DRM = "application/vnd.adobe.adept+xml"
     FINDAWAY_DRM = "application/vnd.librarysimplified.findaway.license+json"
-    BOUNDLESS_DRM = "application/vnd.thepalaceproject.boundless.lcp+json"
+    BAKER_TAYLOR_KDRM_DRM = "application/vnd.thepalaceproject.baker-taylor.kdrm+json"
     KINDLE_DRM = "Kindle DRM"
     NOOK_DRM = "Nook DRM"
     STREAMING_DRM = "Streaming"
@@ -1820,7 +1820,7 @@ class DeliveryMechanism(Base, HasSessionCache):
     KNOWN_DRM_TYPES = {
         ADOBE_DRM,
         FINDAWAY_DRM,
-        BOUNDLESS_DRM,
+        BAKER_TAYLOR_KDRM_DRM,
         KINDLE_DRM,
         NOOK_DRM,
         STREAMING_DRM,

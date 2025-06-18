@@ -137,13 +137,13 @@ class TestBibliographicParser:
         assert adobe.drm_scheme == DeliveryMechanism.ADOBE_DRM
 
         assert axisnow.content_type == Representation.EPUB_MEDIA_TYPE
-        assert axisnow.drm_scheme == DeliveryMechanism.BOUNDLESS_DRM
+        assert axisnow.drm_scheme == DeliveryMechanism.BAKER_TAYLOR_KDRM_DRM
 
         # The second book is available in 'Blio' format, which
         # is treated as an alternate name for 'AxisNow'
         [axisnow] = bib2.circulation.formats
         assert axisnow.content_type == Representation.EPUB_MEDIA_TYPE
-        assert axisnow.drm_scheme == DeliveryMechanism.BOUNDLESS_DRM
+        assert axisnow.drm_scheme == DeliveryMechanism.BAKER_TAYLOR_KDRM_DRM
 
     def test_bibliographic_parser_audiobook(self, axis_files_fixture: AxisFilesFixture):
         # TODO - we need a real example to test from. The example we were
@@ -190,7 +190,7 @@ class TestBibliographicParser:
         assert bib.medium == Edition.BOOK_MEDIUM
         [axisnow] = bib.circulation.formats
         assert axisnow.content_type == Representation.EPUB_MEDIA_TYPE
-        assert axisnow.drm_scheme == DeliveryMechanism.BOUNDLESS_DRM
+        assert axisnow.drm_scheme == DeliveryMechanism.BAKER_TAYLOR_KDRM_DRM
 
     def test_bibliographic_parser_blio_and_axisnow_format(
         self, axis_files_fixture: AxisFilesFixture
@@ -212,7 +212,7 @@ class TestBibliographicParser:
         assert adobe.drm_scheme == DeliveryMechanism.ADOBE_DRM
 
         assert Representation.EPUB_MEDIA_TYPE == axisnow.content_type
-        assert DeliveryMechanism.BOUNDLESS_DRM == axisnow.drm_scheme
+        assert DeliveryMechanism.BAKER_TAYLOR_KDRM_DRM == axisnow.drm_scheme
 
     def test_bibliographic_parser_unsupported_format(
         self, axis_files_fixture: AxisFilesFixture

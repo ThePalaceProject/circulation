@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from typing_extensions import Unpack
 
 from palace.manager.api.axis.constants import (
-    BOUNDLESS_DRM_PARAMS,
+    BAKER_TAYLOR_KDRM_PARAMS,
     DELIVERY_MECHANISM_TO_INTERNAL_FORMAT,
     INTERNAL_FORMAT_TO_DELIVERY_MECHANISM,
     Axis360Format,
@@ -252,24 +252,23 @@ class Axis360API(
         )
         return DirectFulfillment(str(fnd_manifest), fnd_manifest.MEDIA_TYPE)
 
-    def _fulfill_boundless_drm(
+    def _fulfill_baker_taylor_kdrm(
         self,
         title: Title,
         fulfillment_info: AxisNowFulfillmentInfoResponse,
         **kwargs: Unpack[BaseCirculationAPI.FulfillKwargs],
     ) -> DirectFulfillment:
-        # Required parameters for AxisNow fulfillment
         missing_params = {
-            param for param in BOUNDLESS_DRM_PARAMS if not kwargs.get(param)
+            param for param in BAKER_TAYLOR_KDRM_PARAMS if not kwargs.get(param)
         }
         params: dict[str, str] = {
             param: cast(str, kwargs.get(param))
-            for param in set(BOUNDLESS_DRM_PARAMS) - missing_params
+            for param in set(BAKER_TAYLOR_KDRM_PARAMS) - missing_params
         }
 
         if missing_params:
             debug_message = (
-                f"Missing parameters ({', '.join(missing_params)}) for AxisNow fulfillment: "
+                f"Missing parameters ({', '.join(missing_params)}) for Baker & Taylor KDRM fulfillment: "
                 f"title_id={title.title_id} device_id={params.get('device_id')}"
             )
             self.log.error(debug_message)
@@ -287,7 +286,9 @@ class Axis360API(
             client_ip=params["client_ip"],
         )
 
-        return DirectFulfillment(license_response, DeliveryMechanism.BOUNDLESS_DRM)
+        return DirectFulfillment(
+            license_response, DeliveryMechanism.BAKER_TAYLOR_KDRM_DRM
+        )
 
     def fulfill(
         self,
@@ -382,7 +383,7 @@ class Axis360API(
         elif checkout_format == Axis360Format.axis_now and isinstance(
             fulfillment_info, AxisNowFulfillmentInfoResponse
         ):
-            return self._fulfill_boundless_drm(title, fulfillment_info, **kwargs)
+            return self._fulfill_baker_taylor_kdrm(title, fulfillment_info, **kwargs)
 
         self.log.error(
             "Unknown format %s for identifier %s. Fulfillment info: %r",
