@@ -194,6 +194,7 @@ class WorkController(CirculationManagerController):
             pagination=None,
             facets=facets,
             search_engine=search_engine,
+            work_ids_to_exclude=[work.id],
         ).as_response(
             max_age=lane.max_cache_age(), mime_types=flask.request.accept_mimetypes
         )

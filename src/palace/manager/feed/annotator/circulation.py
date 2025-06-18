@@ -736,12 +736,16 @@ class LibraryAnnotator(CirculationManagerAnnotator):
         self.circulation = circulation
         self.library: Library = library
         self.patron = patron
-        self.lanes_by_work: dict[Work, list[Any]] = defaultdict(list)
+        self._lanes_by_work: dict[Work, list[Any]] = defaultdict(list)
         self.facet_view = facet_view
         self._adobe_id_cache: dict[str, Any] = {}
         self._top_level_title = top_level_title
         self.identifies_patrons = library_identifies_patrons
         self.facets = facets or None
+
+    @property
+    def lanes_by_work(self) -> dict[Work, list[Any]]:
+        return self._lanes_by_work
 
     @cached_property
     def is_novelist_configured(self) -> bool:

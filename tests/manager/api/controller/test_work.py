@@ -788,6 +788,7 @@ class TestWorkController:
             )
         assert kwargs.pop("url") == expect_url
         assert kwargs.pop("pagination") == None
+        assert kwargs.pop("work_ids_to_exclude") == [work.id]
         # That's it!
         assert {} == kwargs
 
