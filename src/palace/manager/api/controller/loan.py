@@ -357,13 +357,11 @@ class LoanController(CirculationManagerController):
             modulus = request.args.get("modulus")
             exponent = request.args.get("exponent")
             device_id = request.args.get("device_id")
-            client_ip = (
-                request_ips[0].strip()
-                if (
-                    request_ips := request.headers.get("X-Forwarded-For", "").split(",")
-                )
-                else request.remote_addr
-            )
+            client_ip = request.remote_addr
+            if forward_for_header := request.headers.get("X-Forwarded-For"):
+                # If the request has an X-Forwarded-For header, use that to determine the client IP.
+                # This is useful for integrations that require the client IP for DRM or other purposes.
+                client_ip = forward_for_header.split(",")[0].strip()
 
             fulfillment = self.circulation.fulfill(
                 patron,  # type: ignore[arg-type]
