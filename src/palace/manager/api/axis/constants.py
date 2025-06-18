@@ -75,4 +75,4 @@ DELIVERY_MECHANISM_TO_INTERNAL_FORMAT: frozenbidict[DeliveryMechanismTuple, str]
 
 INTERNAL_FORMAT_TO_DELIVERY_MECHANISM = DELIVERY_MECHANISM_TO_INTERNAL_FORMAT.inverse
 
-BAKER_TAYLOR_KDRM_PARAMS = ("modulus", "exponent", "device_id", "client_ip")
+BAKER_TAYLOR_KDRM_PARAMS = ("modulus", "exponent", "device_id")
