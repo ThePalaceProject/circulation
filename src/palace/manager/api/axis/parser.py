@@ -182,17 +182,15 @@ class BibliographicParser(LoggerMixin):
     @classmethod
     def _extract_formats(cls, title: Title, medium: str) -> list[FormatData]:
         format_data = []
-        formats = [fmat for fmat in title.availability.available_formats]
-        if Axis360Format.blio in formats:
+        available_formats = title.availability.available_formats.copy()
+        if Axis360Format.blio in available_formats:
             # Blio is a legacy format that should be treated as an alias for AxisNow.
-            # I've never seen the case where Blio is present without AxisNow, but
-            # we handle it just in case.
-            formats.remove(Axis360Format.blio)
-            if Axis360Format.axis_now not in formats:
-                formats.append(Axis360Format.axis_now)
+            available_formats.remove(Axis360Format.blio)
+            if Axis360Format.axis_now not in available_formats:
+                available_formats.append(Axis360Format.axis_now)
 
-        for axis_format in formats:
-            if axis_format == Axis360Format.axis_now:
+        for internal_format in available_formats:
+            if internal_format == Axis360Format.axis_now:
                 if medium == Edition.BOOK_MEDIUM:
                     format_data.append(
                         FormatData(
@@ -202,7 +200,7 @@ class BibliographicParser(LoggerMixin):
                     )
 
             elif delivery_data := INTERNAL_FORMAT_TO_DELIVERY_MECHANISM.get(
-                axis_format
+                internal_format
             ):
                 format_data.append(
                     FormatData(
@@ -214,7 +212,7 @@ class BibliographicParser(LoggerMixin):
             else:
                 cls.logger().warning(
                     "Unrecognized Axis format for %s: %s"
-                    % (title.title_id, axis_format)
+                    % (title.title_id, internal_format)
                 )
 
         if not format_data:
