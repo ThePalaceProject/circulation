@@ -261,9 +261,9 @@ def _fetch_distinct_eligible_data_source_names(
         )
     ).all():
         ds_names.add(ds_name[0])
-    ds_names = list(ds_names)
-    ds_names.sort()
-    return ds_names
+    ds_names_list = list(ds_names)
+    ds_names_list.sort()
+    return ds_names_list
 
 
 def _fetch_report_records(
