@@ -612,40 +612,6 @@ Index(
 )
 
 
-class WorkCoverageRecord(Base, BaseCoverageRecord):
-    """A record of some operation that was performed on a Work.
-    This is similar to CoverageRecord, which operates on Identifiers,
-    but since Work identifiers have no meaning outside of the database,
-    we presume that all the operations involve internal work only,
-    and as such there is no data_source_id.
-    """
-
-    __tablename__ = "workcoveragerecords"
-
-    CHOOSE_EDITION_OPERATION = "choose-edition"
-    CLASSIFY_OPERATION = "classify"
-    SUMMARY_OPERATION = "summary"
-    QUALITY_OPERATION = "quality"
-
-    id: Mapped[int] = Column(Integer, primary_key=True)
-    work_id = Column(Integer, ForeignKey("works.id"), index=True)
-    operation = Column(String(255), index=True, default=None)
-
-    timestamp = Column(DateTime(timezone=True), index=True)
-
-    status = Column(BaseCoverageRecord.status_enum, index=True)
-    exception = Column(Unicode, index=True)
-
-    __table_args__ = (UniqueConstraint("work_id", "operation"),)
-
-
-Index(
-    "ix_workcoveragerecords_operation_work_id",
-    WorkCoverageRecord.operation,
-    WorkCoverageRecord.work_id,
-)
-
-
 class EquivalencyCoverageRecord(Base, BaseCoverageRecord):
     """A coverage record that tracks work needs to be done
     on identifier equivalents
