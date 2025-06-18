@@ -373,6 +373,7 @@ def delete_patron_devices():
 
 @library_dir_route("/patrons/me/token", methods=["POST"])
 @has_library
+@allows_patron_web
 @requires_auth
 @returns_problem_detail
 def patron_auth_token():
