@@ -5,7 +5,7 @@ from typing import Any
 from flask_babel import lazy_gettext as _
 from pydantic import model_validator
 
-from palace.manager.api.axis.constants import API_BASE_URLS, ServerNickname
+from palace.manager.api.axis.constants import ServerNickname
 from palace.manager.api.circulation import (
     BaseCirculationApiSettings,
     BaseCirculationLoanSettings,
@@ -73,8 +73,13 @@ class Axis360Settings(BaseCirculationApiSettings):
         if isinstance(data, dict):
             if "url" in data:
                 if "server_nickname" not in data:
-                    if data["url"] == API_BASE_URLS[ServerNickname.qa]:
+                    existing_url = data["url"]
+                    if "axis360apiqa.baker-taylor.com" in existing_url:
                         data["server_nickname"] = ServerNickname.qa
+                    elif "axis360api.baker-taylor.com" in existing_url:
+                        data["server_nickname"] = ServerNickname.production
+                    else:
+                        raise ValueError(f"Unexpected value URL: {existing_url}.")
                 del data["url"]
         return data
 
