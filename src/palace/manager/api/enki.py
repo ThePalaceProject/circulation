@@ -9,6 +9,7 @@ from typing import Any, cast
 from flask_babel import lazy_gettext as _
 from requests import Response as RequestsResponse
 from sqlalchemy.orm import Session
+from typing_extensions import Unpack
 
 from palace.manager.api.circulation import (
     BaseCirculationAPI,
@@ -465,6 +466,7 @@ class EnkiAPI(
         pin: str,
         licensepool: LicensePool,
         delivery_mechanism: LicensePoolDeliveryMechanism,
+        **kwargs: Unpack[BaseCirculationAPI.FulfillKwargs],
     ) -> UrlFulfillment:
         """Get the actual resource file to the patron."""
         book_id = licensepool.identifier.identifier

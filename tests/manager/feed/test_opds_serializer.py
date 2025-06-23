@@ -95,7 +95,7 @@ class TestOPDSSerializer:
         # No more children
         assert list(element) == []
 
-    def test__serialize_acquistion_link(self):
+    def test__serialize_acquisition_link(self):
         link = Acquisition(
             href="http://acquisition",
             holds_total="0",
@@ -107,7 +107,7 @@ class TestOPDSSerializer:
                 vendor="vendor", clientToken=FeedEntryType(text="token")
             ),
         )
-        element = OPDS1Version1Serializer()._serialize_acquistion_link(link)
+        element = OPDS1Version1Serializer()._serialize_acquisition_link(link)
         assert element.tag == "link"
         assert dict(element.attrib) == dict(href=link.href)
 
@@ -136,6 +136,13 @@ class TestOPDSSerializer:
             children = element.findall(tag)
             assert len(children) == 1
             assert test_fn(children[0])
+
+        # Test serializing a templated link
+        link.templated = True
+        link.href = "http://templated.acquisition/{?foo,bar}"
+        element = OPDS1Version1Serializer()._serialize_acquisition_link(link)
+        assert element.tag == "{http://drafts.opds.io/odl-1.0#}tlink"
+        assert element.get("href") == link.href
 
     def test_serialize_work_entry(self):
         data = WorkEntryData(

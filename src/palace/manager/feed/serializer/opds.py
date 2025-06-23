@@ -278,7 +278,7 @@ class BaseOPDS1Serializer(SerializerInterface[etree._Element], OPDSFeed, abc.ABC
             entry.append(OPDSFeed.link(**link.asdict()))
 
         for link in feed_entry.acquisition_links:
-            element = self._serialize_acquistion_link(link)
+            element = self._serialize_acquisition_link(link)
             entry.append(element)
 
         for link in feed_entry.other_links:
@@ -354,8 +354,10 @@ class BaseOPDS1Serializer(SerializerInterface[etree._Element], OPDSFeed, abc.ABC
             entry.append(_tag("sameas", author.lc))
         return entry
 
-    def _serialize_acquistion_link(self, link: Acquisition) -> etree._Element:
-        element = OPDSFeed.link(**link.link_attribs())
+    def _serialize_acquisition_link(self, link: Acquisition) -> etree._Element:
+
+        link_func = OPDSFeed.tlink if link.templated else OPDSFeed.link
+        element = link_func(**link.link_attribs())
 
         def _indirect(item: IndirectAcquisition) -> etree._Element:
             tag = self._tag("indirectAcquisition")

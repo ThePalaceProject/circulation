@@ -1072,6 +1072,7 @@ class OverdriveAPI(
         pin: str,
         licensepool: LicensePool,
         delivery_mechanism: LicensePoolDeliveryMechanism,
+        **kwargs: Unpack[BaseCirculationAPI.FulfillKwargs],
     ) -> Fulfillment:
         """Get the actual resource file to the patron."""
         internal_format = self.internal_format(delivery_mechanism)

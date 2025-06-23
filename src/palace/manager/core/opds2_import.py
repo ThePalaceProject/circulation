@@ -10,9 +10,10 @@ from flask_babel import lazy_gettext as _
 from pydantic import ValidationError
 from requests import Response
 from sqlalchemy.orm import Session
+from typing_extensions import Unpack
 from uritemplate import URITemplate
 
-from palace.manager.api.circulation import RedirectFulfillment
+from palace.manager.api.circulation import BaseCirculationAPI, RedirectFulfillment
 from palace.manager.api.circulation_exceptions import CannotFulfill
 from palace.manager.core.coverage import CoverageFailure
 from palace.manager.core.opds_import import (
@@ -180,8 +181,11 @@ class OPDS2API(BaseOPDSAPI):
         pin: str,
         licensepool: LicensePool,
         delivery_mechanism: LicensePoolDeliveryMechanism,
+        **kwargs: Unpack[BaseCirculationAPI.FulfillKwargs],
     ) -> RedirectFulfillment:
-        fulfillment = super().fulfill(patron, pin, licensepool, delivery_mechanism)
+        fulfillment = super().fulfill(
+            patron, pin, licensepool, delivery_mechanism, **kwargs
+        )
         if self.token_auth_configuration:
             fulfillment = self.fulfill_token_auth(patron, licensepool, fulfillment)
         return fulfillment

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+from functools import cached_property
 from typing import Annotated, Any, Literal
 
 from pydantic import (
@@ -11,6 +12,7 @@ from pydantic import (
     PositiveInt,
     Tag,
     TypeAdapter,
+    field_validator,
 )
 from pydantic.alias_generators import to_pascal
 
@@ -177,3 +179,40 @@ class Token(BaseAxisJsonModel):
         Returns True if the token is expired.
         """
         return utc_now() >= self._expires_at
+
+
+class LicenseServerStatus(BaseAxisJsonModel):
+    """
+    A different style of status response, given by the Axis license server.
+
+    This is semi-documented in "Baker and Taylor KDRM Enhanced Implemtation - AxisNow Node-1.pdf" (sic),
+    but the actual response format that is given in that document does not match the actual responses
+    that we see coming back.
+
+    This model is based on the observed API responses.
+    """
+
+    model_config = ConfigDict(
+        frozen=True,
+    )
+
+    code: int = Field(..., alias="ReturnCode")
+    title: str
+    messages: list[str] = Field(default_factory=list)
+
+    @field_validator("messages", mode="after")
+    @classmethod
+    def _strip_empty_messages(cls, value: list[str]) -> list[str]:
+        """
+        In most of the responses we have observed, the messages field is a list of strings,
+        where some or all of them are empty or whitespace-only. This validator strips those empty strings
+        from the list to ensure that we only have meaningful messages.
+        """
+        return [stripped for message in value if (stripped := message.strip())]
+
+    @cached_property
+    def message(self) -> str:
+        """
+        Returns a single string containing all the messages.
+        """
+        return " ".join(self.messages)

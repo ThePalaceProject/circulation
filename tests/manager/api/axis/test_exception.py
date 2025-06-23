@@ -2,12 +2,41 @@ import json
 
 import pytest
 
-from palace.manager.api.axis.exception import StatusResponseParser
+from palace.manager.api.axis.exception import Axis360LicenseError, StatusResponseParser
+from palace.manager.api.axis.models.json import LicenseServerStatus
 from palace.manager.api.circulation_exceptions import (
     NotFoundOnRemote,
     RemoteInitiatedServerError,
 )
+from palace.manager.util.problem_detail import ProblemDetail
 from tests.fixtures.files import AxisFilesFixture
+
+
+class TestAxis360LicenseError:
+    @pytest.mark.parametrize(
+        "status_code, file_name",
+        [
+            pytest.param(405, "license_invalid_isbn.json", id="invalid_isbn"),
+            pytest.param(
+                500, "license_internal_server_error.json", id="internal_server_error"
+            ),
+        ],
+    )
+    def test_problem_detail(
+        self, axis_files_fixture: AxisFilesFixture, status_code: int, file_name: str
+    ):
+        # Test that the Axis360LicenseError generates a ProblemDetail containing the information
+        # from the LicenseServerStatus document.
+        status_doc = LicenseServerStatus.model_validate_json(
+            axis_files_fixture.sample_data(file_name)
+        )
+        error = Axis360LicenseError(status_doc, status_code)
+        assert error.problem_detail == ProblemDetail(
+            uri=f"http://palaceproject.io/terms/problem/boundless/{status_doc.code}",
+            status_code=status_code,
+            title=status_doc.title,
+            detail=status_doc.message,
+        )
 
 
 class TestStatusResponseParser:

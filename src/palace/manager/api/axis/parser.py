@@ -3,7 +3,10 @@ from __future__ import annotations
 import re
 from collections.abc import Generator
 
-from palace.manager.api.axis.constants import Axis360Format
+from palace.manager.api.axis.constants import (
+    INTERNAL_FORMAT_TO_DELIVERY_MECHANISM,
+    Axis360Format,
+)
 from palace.manager.api.axis.models.xml import AvailabilityResponse, Title
 from palace.manager.data_layer.bibliographic import BibliographicData
 from palace.manager.data_layer.circulation import CirculationData
@@ -24,20 +27,6 @@ from palace.manager.util.log import LoggerMixin
 
 
 class BibliographicParser(LoggerMixin):
-    DELIVERY_DATA_FOR_AXIS_FORMAT: dict[str, tuple[str | None, str] | None] = {
-        Axis360Format.blio: None,  # Legacy format, handled the same way as AxisNow
-        Axis360Format.acoustik: (None, DeliveryMechanism.FINDAWAY_DRM),  # Audiobooks
-        Axis360Format.axis_now: None,  # Handled specially, for ebooks only.
-        Axis360Format.epub: (
-            Representation.EPUB_MEDIA_TYPE,
-            DeliveryMechanism.ADOBE_DRM,
-        ),
-        Axis360Format.pdf: (
-            Representation.PDF_MEDIA_TYPE,
-            DeliveryMechanism.ADOBE_DRM,
-        ),
-    }
-
     # Axis authors with a special role have an abbreviation after their names,
     # e.g. "San Ruby (FRW)"
     ROLE_ABBREVIATION_REGEX = re.compile(r"\(([A-Z][A-Z][A-Z])\)$")
@@ -191,66 +180,54 @@ class BibliographicParser(LoggerMixin):
         return primary_identifier, identifiers
 
     @classmethod
-    def _extract_formats(cls, title: Title) -> tuple[str, list[FormatData]]:
-        formats = []
-        seen_formats = []
+    def _extract_formats(cls, title: Title, medium: str) -> list[FormatData]:
+        format_data = []
+        available_formats = title.availability.available_formats.copy()
+        if Axis360Format.blio in available_formats:
+            # Blio is a legacy format that should be treated as an alias for AxisNow.
+            available_formats.remove(Axis360Format.blio)
+            if Axis360Format.axis_now not in available_formats:
+                available_formats.append(Axis360Format.axis_now)
 
-        # All of the formats we don't support, like Blio, are ebook
-        # formats. If this is an audiobook format (Acoustik), we'll
-        # hear about it below.
-        medium = Edition.BOOK_MEDIUM
+        for internal_format in available_formats:
+            if internal_format == Axis360Format.axis_now:
+                if medium == Edition.BOOK_MEDIUM:
+                    format_data.append(
+                        FormatData(
+                            content_type=Representation.EPUB_MEDIA_TYPE,
+                            drm_scheme=DeliveryMechanism.BAKER_TAYLOR_KDRM_DRM,
+                        )
+                    )
 
-        # If AxisNow is mentioned as a format, and this turns out to be a book,
-        # we'll be adding an extra delivery mechanism.
-        axisnow_seen = False
+            elif delivery_data := INTERNAL_FORMAT_TO_DELIVERY_MECHANISM.get(
+                internal_format
+            ):
+                format_data.append(
+                    FormatData(
+                        content_type=delivery_data.content_type,
+                        drm_scheme=delivery_data.drm_scheme,
+                    )
+                )
 
-        # Blio is an older ebook format now used as an alias for AxisNow.
-        blio_seen = False
-
-        for axis_format in title.availability.available_formats:
-            seen_formats.append(axis_format)
-
-            if axis_format == Axis360Format.blio:
-                # We will be adding an AxisNow FormatData.
-                blio_seen = True
-                continue
-            elif axis_format == Axis360Format.axis_now:
-                # We will only be adding an AxisNow FormatData if this
-                # turns out to be an ebook.
-                axisnow_seen = True
-                continue
-
-            if axis_format not in cls.DELIVERY_DATA_FOR_AXIS_FORMAT:
+            else:
                 cls.logger().warning(
-                    "Unrecognized Axis format name for %s: %s"
-                    % (title.title_id, axis_format)
-                )
-            elif delivery_data := cls.DELIVERY_DATA_FOR_AXIS_FORMAT.get(axis_format):
-                content_type, drm_scheme = delivery_data
-                formats.append(
-                    FormatData(content_type=content_type, drm_scheme=drm_scheme)
+                    "Unrecognized Axis format for %s: %s"
+                    % (title.title_id, internal_format)
                 )
 
-                if drm_scheme == DeliveryMechanism.FINDAWAY_DRM:
-                    medium = Edition.AUDIO_MEDIUM
-                else:
-                    medium = Edition.BOOK_MEDIUM
-        if blio_seen or (axisnow_seen and medium == Edition.BOOK_MEDIUM):
-            # This ebook is available through AxisNow. Add an
-            # appropriate FormatData.
-            #
-            # Audiobooks may also be available through AxisNow, but we
-            # currently ignore that fact.
-            formats.append(
-                FormatData(content_type=None, drm_scheme=DeliveryMechanism.AXISNOW_DRM)
-            )
-
-        if not formats:
+        if not format_data:
             cls.logger().error(
-                f"No supported format for {title.title_id} ({title!r})! Saw: {', '.join(seen_formats)}"
+                f"No supported format for {title.title_id} ({title!r})! Saw: {', '.join(title.availability.available_formats)}"
             )
 
-        return medium, formats
+        return format_data
+
+    @classmethod
+    def _extract_medium(cls, title: Title) -> str:
+        """Extract the medium from the title."""
+        return (
+            Edition.AUDIO_MEDIUM if title.format_type == "ABT" else Edition.BOOK_MEDIUM
+        )
 
     @classmethod
     def _extract(cls, title: Title) -> tuple[BibliographicData, CirculationData]:
@@ -258,7 +235,8 @@ class BibliographicParser(LoggerMixin):
         and return them as a tuple."""
 
         primary_identifier, identifiers = cls._extract_identifiers(title)
-        medium, formats = cls._extract_formats(title)
+        medium = cls._extract_medium(title)
+        formats = cls._extract_formats(title, medium)
 
         circulationdata = CirculationData(
             data_source_name=DataSource.AXIS_360,

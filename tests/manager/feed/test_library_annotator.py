@@ -7,8 +7,10 @@ import feedparser
 import pytest
 from freezegun import freeze_time
 from lxml import etree
+from uritemplate import URITemplate
 
 from palace.manager.api.adobe_vendor_id import AuthdataUtility
+from palace.manager.api.axis.constants import BAKER_TAYLOR_KDRM_PARAMS
 from palace.manager.api.circulation import (
     BaseCirculationAPI,
     CirculationAPI,
@@ -235,6 +237,20 @@ class TestLibraryAnnotator:
         )
         assert link is not None
         assert OPDSFeed.OPEN_ACCESS_REL == link.rel
+
+    def test_fulfill_is_templated_when_delivery_mechanism_requires_it(
+        self, annotator_fixture: LibraryAnnotatorFixture
+    ):
+        [pool] = annotator_fixture.work.license_pools
+        [lpdm] = pool.delivery_mechanisms
+        lpdm.delivery_mechanism.content_type = Representation.EPUB_MEDIA_TYPE
+        lpdm.delivery_mechanism.drm_scheme = DeliveryMechanism.BAKER_TAYLOR_KDRM_DRM
+        link = annotator_fixture.annotator.fulfill_link(pool, None, lpdm)
+
+        assert link is not None
+        assert link.templated is True
+        assert link.href is not None
+        assert URITemplate(link.href).variable_names == BAKER_TAYLOR_KDRM_PARAMS
 
     # We freeze the test time here, because this test checks that the client token
     # in the feed matches a generated client token. The client token contains an

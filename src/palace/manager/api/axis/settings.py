@@ -1,10 +1,12 @@
 from __future__ import annotations
 
-from flask_babel import lazy_gettext as _
-from pydantic import field_validator
+from typing import Any
+from urllib.parse import urlparse
 
-from palace.manager.api.admin.validator import Validator
-from palace.manager.api.axis.requests import Axis360Requests
+from flask_babel import lazy_gettext as _
+from pydantic import model_validator
+
+from palace.manager.api.axis.constants import ServerNickname
 from palace.manager.api.circulation import (
     BaseCirculationApiSettings,
     BaseCirculationLoanSettings,
@@ -29,14 +31,20 @@ class Axis360Settings(BaseCirculationApiSettings):
             required=True,
         )
     )
-    url: str = FormField(
-        default=Axis360Requests.PRODUCTION_BASE_URL,
+    server_nickname: ServerNickname = FormField(
+        default=ServerNickname.production,
         form=ConfigurationFormItem(
-            label=_("Server"),
-            required=True,
+            label=_("Server family"),
+            type=ConfigurationFormItemType.SELECT,
+            required=False,
+            description=f"This should generally be set to '{ServerNickname.production}'.",
+            options={
+                ServerNickname.production: (ServerNickname.production),
+                ServerNickname.qa: _(ServerNickname.qa),
+            },
         ),
     )
-    verify_certificate: bool | None = FormField(
+    verify_certificate: bool = FormField(
         default=True,
         form=ConfigurationFormItem(
             label=_("Verify SSL Certificate"),
@@ -52,16 +60,29 @@ class Axis360Settings(BaseCirculationApiSettings):
         ),
     )
 
-    @field_validator("url")
+    @model_validator(mode="before")
     @classmethod
-    def _validate_url(cls, v: str) -> str:
-        # Validate if the url provided is valid http or a valid nickname
-        valid_names = list(Axis360Requests.SERVER_NICKNAMES.keys())
-        if not Validator._is_url(v, valid_names):
-            raise ValueError(
-                f"Server nickname must be one of {valid_names}, or an 'http[s]' URL."
-            )
-        return v
+    def _migrate_url_to_server_nickname(cls, data: Any) -> Any:
+        """
+        This is a temporary migration to handle the change from  `url` to `server_nickname` in the settings.
+
+        Once this is rolled out everywhere, we can do a migration in the database to set this field
+        and remove this method.
+
+        TODO: Remove in next release.
+        """
+        if isinstance(data, dict):
+            if "url" in data:
+                if "server_nickname" not in data:
+                    existing_url = urlparse(data["url"])
+                    if existing_url.hostname == "axis360apiqa.baker-taylor.com":
+                        data["server_nickname"] = ServerNickname.qa
+                    elif existing_url.hostname == "axis360api.baker-taylor.com":
+                        data["server_nickname"] = ServerNickname.production
+                    else:
+                        raise ValueError(f"Unexpected value URL: {data['url']}.")
+                del data["url"]
+        return data
 
 
 class Axis360LibrarySettings(BaseCirculationLoanSettings):

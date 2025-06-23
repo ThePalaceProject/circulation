@@ -5,7 +5,7 @@ import datetime
 import logging
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Mapping
-from typing import Literal, TypeVar
+from typing import Literal, TypedDict, TypeVar
 
 import flask
 import requests
@@ -14,7 +14,7 @@ from flask_babel import lazy_gettext as _
 from pydantic import PositiveInt
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-from typing_extensions import Self
+from typing_extensions import Self, Unpack
 
 from palace.manager.api.admin.config import Configuration as AdminConfiguration
 from palace.manager.api.circulation_exceptions import (
@@ -138,7 +138,7 @@ class DirectFulfillment(Fulfillment):
     that we know about locally.
     """
 
-    def __init__(self, content: str, content_type: str | None) -> None:
+    def __init__(self, content: str | bytes, content_type: str | None) -> None:
         self.content = content
         self.content_type = content_type
 
@@ -649,6 +649,24 @@ class BaseCirculationAPI(
         """In general, you can't fulfill a book without a loan."""
         return False
 
+    class FulfillKwargs(TypedDict, total=False):
+        """
+        Keyword arguments for the fulfill method.
+
+        These are used to pass parameters that are necessary for some specific
+        provider API implementations to fulfill a loan.
+        """
+
+        # These parameters are used for Baker & Taylor KDRM fulfillment.
+        client_ip: str | None
+        """The IP address of the client requesting fulfillment."""
+        device_id: str | None
+        """A unique identifier for the device requesting fulfillment."""
+        modulus: str | None
+        """The modulus part of the RSA public key used for DRM."""
+        exponent: str | None
+        """The exponent part of the RSA public key used for DRM."""
+
     @abstractmethod
     def fulfill(
         self,
@@ -656,6 +674,7 @@ class BaseCirculationAPI(
         pin: str,
         licensepool: LicensePool,
         delivery_mechanism: LicensePoolDeliveryMechanism,
+        **kwargs: Unpack[FulfillKwargs],
     ) -> Fulfillment:
         """Get the actual resource file to the patron."""
         ...
@@ -1272,6 +1291,7 @@ class CirculationAPI(LoggerMixin):
         pin: str,
         licensepool: LicensePool,
         delivery_mechanism: LicensePoolDeliveryMechanism,
+        **kwargs: Unpack[BaseCirculationAPI.FulfillKwargs],
     ) -> Fulfillment:
         """Fulfil a book that a patron has previously checked out.
 
@@ -1317,6 +1337,7 @@ class CirculationAPI(LoggerMixin):
             pin,
             licensepool,
             delivery_mechanism=delivery_mechanism,
+            **kwargs,
         )
         if not fulfillment:
             raise NoAcceptableFormat()

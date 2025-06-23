@@ -7,6 +7,7 @@ from palace.manager.api.axis.models.json import (
     AxisNowFulfillmentInfoResponse,
     FindawayFulfillmentInfoResponse,
     FulfillmentInfoResponse,
+    LicenseServerStatus,
     Token,
 )
 from palace.manager.util.datetime_helpers import datetime_utc
@@ -89,3 +90,21 @@ class TestToken:
 
             frozen_time.tick(delta=datetime.timedelta(seconds=400))
             assert token.expired
+
+
+class TestLicenseServerStatus:
+    def test_license_invalid_isbn(self, axis_files_fixture: AxisFilesFixture):
+        data = axis_files_fixture.sample_data("license_invalid_isbn.json")
+        parsed = LicenseServerStatus.model_validate_json(data)
+
+        assert parsed.code == 9400
+        assert parsed.title == "Invalid ISBN"
+        assert parsed.message == "ISBN KeyId association does not exist."
+
+    def test_license_internal_server_error(self, axis_files_fixture: AxisFilesFixture):
+        data = axis_files_fixture.sample_data("license_internal_server_error.json")
+        parsed = LicenseServerStatus.model_validate_json(data)
+
+        assert parsed.code == 500
+        assert parsed.title == "Internal Server Error"
+        assert parsed.message == "Unexpected error occurred."

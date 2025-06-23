@@ -34,23 +34,23 @@ class TestBibliographicParser:
         assert bib1 is not None
         assert bib2 is not None
 
-        assert "Faith of My Fathers : A Family Memoir" == bib1.title
-        assert "eng" == bib1.language
-        assert datetime.date(2000, 3, 7) == bib1.published
+        assert bib1.title == "Faith of My Fathers : A Family Memoir"
+        assert bib1.language == "eng"
+        assert bib1.published == datetime.date(2000, 3, 7)
 
-        assert "Simon & Schuster" == bib2.publisher
-        assert "Pocket Books" == bib2.imprint
+        assert bib2.publisher == "Simon & Schuster"
+        assert bib2.imprint == "Pocket Books"
 
-        assert Edition.BOOK_MEDIUM == bib1.medium
+        assert bib1.medium == Edition.BOOK_MEDIUM
 
         # TODO: Would be nicer if we could test getting a real value
         # for this.
-        assert None == bib2.series
+        assert bib2.series is None
 
         # Book #1 has two links -- a description and a cover image.
         [description, cover] = bib1.links
-        assert Hyperlink.DESCRIPTION == description.rel
-        assert Representation.TEXT_PLAIN == description.media_type
+        assert description.rel == Hyperlink.DESCRIPTION
+        assert description.media_type == Representation.TEXT_PLAIN
         assert isinstance(description.content, str)
         assert description.content.startswith("John McCain's deeply moving memoir")
 
@@ -58,19 +58,19 @@ class TestBibliographicParser:
         # service, where we get a thumbnail-sized image URL in the
         # Axis 360 API response and we can hack the URL to get the
         # full-sized image URL.
-        assert LinkRelations.IMAGE == cover.rel
+        assert cover.rel == LinkRelations.IMAGE
         assert (
-            "http://contentcafecloud.baker-taylor.com/Jacket.svc/D65D0665-050A-487B-9908-16E6D8FF5C3E/9780375504587/Large/Empty"
-            == cover.href
+            cover.href
+            == "http://contentcafecloud.baker-taylor.com/Jacket.svc/D65D0665-050A-487B-9908-16E6D8FF5C3E/9780375504587/Large/Empty"
         )
-        assert MediaTypes.JPEG_MEDIA_TYPE == cover.media_type
+        assert cover.media_type == MediaTypes.JPEG_MEDIA_TYPE
 
-        assert LinkRelations.THUMBNAIL_IMAGE == cover.thumbnail.rel
+        assert cover.thumbnail.rel == LinkRelations.THUMBNAIL_IMAGE
         assert (
-            "http://contentcafecloud.baker-taylor.com/Jacket.svc/D65D0665-050A-487B-9908-16E6D8FF5C3E/9780375504587/Medium/Empty"
-            == cover.thumbnail.href
+            cover.thumbnail.href
+            == "http://contentcafecloud.baker-taylor.com/Jacket.svc/D65D0665-050A-487B-9908-16E6D8FF5C3E/9780375504587/Medium/Empty"
         )
-        assert MediaTypes.JPEG_MEDIA_TYPE == cover.thumbnail.media_type
+        assert cover.thumbnail.media_type == MediaTypes.JPEG_MEDIA_TYPE
 
         # Book #1 has a primary author, another author and a narrator.
         #
@@ -78,44 +78,44 @@ class TestBibliographicParser:
         # verified that Axis 360 sends narrator information in the
         # same format as author information.
         [cont1, cont2, narrator] = bib1.contributors
-        assert "McCain, John" == cont1.sort_name
-        assert (Contributor.Role.PRIMARY_AUTHOR,) == cont1.roles
+        assert cont1.sort_name == "McCain, John"
+        assert cont1.roles == (Contributor.Role.PRIMARY_AUTHOR,)
 
-        assert "Salter, Mark" == cont2.sort_name
-        assert (Contributor.Role.AUTHOR,) == cont2.roles
+        assert cont2.sort_name == "Salter, Mark"
+        assert cont2.roles == (Contributor.Role.AUTHOR,)
 
-        assert "McCain, John S. III" == narrator.sort_name
-        assert (Contributor.Role.NARRATOR,) == narrator.roles
+        assert narrator.sort_name == "McCain, John S. III"
+        assert narrator.roles == (Contributor.Role.NARRATOR,)
 
         # Book #2 only has a primary author.
         [cont] = bib2.contributors
-        assert "Pollero, Rhonda" == cont.sort_name
-        assert (Contributor.Role.PRIMARY_AUTHOR,) == cont.roles
+        assert cont.sort_name == "Pollero, Rhonda"
+        assert cont.roles == (Contributor.Role.PRIMARY_AUTHOR,)
 
         axis_id, isbn = sorted(bib1.identifiers, key=lambda x: x.identifier)
-        assert "0003642860" == axis_id.identifier
-        assert "9780375504587" == isbn.identifier
+        assert axis_id.identifier == "0003642860"
+        assert isbn.identifier == "9780375504587"
 
         # Check the subjects for #2 because it includes an audience,
         # unlike #1.
         subjects = sorted(bib2.subjects, key=lambda x: x.identifier or "")
-        assert [
+        assert [x.type for x in subjects] == [
             Subject.BISAC,
             Subject.BISAC,
             Subject.BISAC,
             Subject.AXIS_360_AUDIENCE,
-        ] == [x.type for x in subjects]
+        ]
         general_fiction, women_sleuths, romantic_suspense = sorted(
             x.name for x in subjects if x.type == Subject.BISAC and x.name is not None
         )
-        assert "FICTION / General" == general_fiction
-        assert "FICTION / Mystery & Detective / Women Sleuths" == women_sleuths
-        assert "FICTION / Romance / Suspense" == romantic_suspense
+        assert general_fiction == "FICTION / General"
+        assert women_sleuths == "FICTION / Mystery & Detective / Women Sleuths"
+        assert romantic_suspense == "FICTION / Romance / Suspense"
 
         [adult] = [
             x.identifier for x in subjects if x.type == Subject.AXIS_360_AUDIENCE
         ]
-        assert "General Adult" == adult
+        assert adult == "General Adult"
 
         # The second book has a cover image simulating some possible
         # future case, where B&T change their cover service so that
@@ -123,27 +123,27 @@ class TestBibliographicParser:
         # the image URL as both the full-sized image and the
         # thumbnail.
         [cover] = bib2.links
-        assert LinkRelations.IMAGE == cover.rel
-        assert "http://some-other-server/image.jpg" == cover.href
-        assert MediaTypes.JPEG_MEDIA_TYPE == cover.media_type
+        assert cover.rel == LinkRelations.IMAGE
+        assert cover.href == "http://some-other-server/image.jpg"
+        assert cover.media_type == MediaTypes.JPEG_MEDIA_TYPE
 
-        assert LinkRelations.THUMBNAIL_IMAGE == cover.thumbnail.rel
-        assert "http://some-other-server/image.jpg" == cover.thumbnail.href
-        assert MediaTypes.JPEG_MEDIA_TYPE == cover.thumbnail.media_type
+        assert cover.thumbnail.rel == LinkRelations.THUMBNAIL_IMAGE
+        assert cover.thumbnail.href == "http://some-other-server/image.jpg"
+        assert cover.thumbnail.media_type == MediaTypes.JPEG_MEDIA_TYPE
 
         # The first book is available in two formats -- "ePub" and "AxisNow"
         [adobe, axisnow] = bib1.circulation.formats
-        assert Representation.EPUB_MEDIA_TYPE == adobe.content_type
-        assert DeliveryMechanism.ADOBE_DRM == adobe.drm_scheme
+        assert adobe.content_type == Representation.EPUB_MEDIA_TYPE
+        assert adobe.drm_scheme == DeliveryMechanism.ADOBE_DRM
 
-        assert None == axisnow.content_type
-        assert DeliveryMechanism.AXISNOW_DRM == axisnow.drm_scheme
+        assert axisnow.content_type == Representation.EPUB_MEDIA_TYPE
+        assert axisnow.drm_scheme == DeliveryMechanism.BAKER_TAYLOR_KDRM_DRM
 
         # The second book is available in 'Blio' format, which
         # is treated as an alternate name for 'AxisNow'
         [axisnow] = bib2.circulation.formats
-        assert None == axisnow.content_type
-        assert DeliveryMechanism.AXISNOW_DRM == axisnow.drm_scheme
+        assert axisnow.content_type == Representation.EPUB_MEDIA_TYPE
+        assert axisnow.drm_scheme == DeliveryMechanism.BAKER_TAYLOR_KDRM_DRM
 
     def test_bibliographic_parser_audiobook(self, axis_files_fixture: AxisFilesFixture):
         # TODO - we need a real example to test from. The example we were
@@ -159,14 +159,14 @@ class TestBibliographicParser:
         assert av is not None
         assert bib is not None
 
-        assert "Back Spin" == bib.title
-        assert Edition.AUDIO_MEDIUM == bib.medium
+        assert bib.title == "Back Spin"
+        assert bib.medium == Edition.AUDIO_MEDIUM
 
         # The audiobook has one DeliveryMechanism, in which the Findaway licensing document
         # acts as both the content type and the DRM scheme.
         [findaway] = bib.circulation.formats
-        assert None == findaway.content_type
-        assert DeliveryMechanism.FINDAWAY_DRM == findaway.drm_scheme
+        assert findaway.content_type is None
+        assert findaway.drm_scheme == DeliveryMechanism.FINDAWAY_DRM
 
         # Although the audiobook is also available in the "AxisNow"
         # format, no second delivery mechanism was created for it, the
@@ -177,11 +177,8 @@ class TestBibliographicParser:
         self, axis_files_fixture: AxisFilesFixture
     ):
         # This book is available as 'Blio' but not 'AxisNow'.
-        data = axis_files_fixture.sample_data(
-            "availability_with_audiobook_fulfillment.xml"
-        )
-        data = data.replace(b"Acoustik", b"Blio")
-        data = data.replace(b"AxisNow", b"No Such Format")
+        data = axis_files_fixture.sample_data("availability_without_fulfillment.xml")
+        data = data.replace(b"ePub", b"No Such Format")
 
         [[bib, av]] = list(
             BibliographicParser().parse(AvailabilityResponse.from_xml(data))
@@ -190,19 +187,16 @@ class TestBibliographicParser:
         assert bib is not None
 
         # A book in Blio format is treated as an AxisNow ebook.
-        assert Edition.BOOK_MEDIUM == bib.medium
+        assert bib.medium == Edition.BOOK_MEDIUM
         [axisnow] = bib.circulation.formats
-        assert None == axisnow.content_type
-        assert DeliveryMechanism.AXISNOW_DRM == axisnow.drm_scheme
+        assert axisnow.content_type == Representation.EPUB_MEDIA_TYPE
+        assert axisnow.drm_scheme == DeliveryMechanism.BAKER_TAYLOR_KDRM_DRM
 
     def test_bibliographic_parser_blio_and_axisnow_format(
         self, axis_files_fixture: AxisFilesFixture
     ):
         # This book is available as both 'Blio' and 'AxisNow'.
-        data = axis_files_fixture.sample_data(
-            "availability_with_audiobook_fulfillment.xml"
-        )
-        data = data.replace(b"Acoustik", b"Blio")
+        data = axis_files_fixture.sample_data("availability_with_ebook_fulfillment.xml")
 
         [[bib, av]] = list(
             BibliographicParser().parse(AvailabilityResponse.from_xml(data))
@@ -210,11 +204,15 @@ class TestBibliographicParser:
         assert av is not None
         assert bib is not None
 
-        # There is only one FormatData -- 'Blio' and 'AxisNow' mean the same thing.
-        assert Edition.BOOK_MEDIUM == bib.medium
-        [axisnow] = bib.circulation.formats
-        assert None == axisnow.content_type
-        assert DeliveryMechanism.AXISNOW_DRM == axisnow.drm_scheme
+        # There is only one FormatData for 'Blio' and 'AxisNow', since they mean the same thing.
+        assert bib.medium == Edition.BOOK_MEDIUM
+        [adobe, axisnow] = bib.circulation.formats
+
+        assert adobe.content_type == Representation.EPUB_MEDIA_TYPE
+        assert adobe.drm_scheme == DeliveryMechanism.ADOBE_DRM
+
+        assert axisnow.content_type == Representation.EPUB_MEDIA_TYPE
+        assert axisnow.drm_scheme == DeliveryMechanism.BAKER_TAYLOR_KDRM_DRM
 
     def test_bibliographic_parser_unsupported_format(
         self, axis_files_fixture: AxisFilesFixture
@@ -232,31 +230,31 @@ class TestBibliographicParser:
         assert bib is not None
 
         # We don't support any of the formats, so no FormatData objects were created.
-        assert [] == bib.circulation.formats
+        assert bib.circulation.formats == []
 
     def test_parse_author_role(self, axis_files_fixture: AxisFilesFixture):
         """Suffixes on author names are turned into roles."""
         author = "Dyssegaard, Elisabeth Kallick (TRN)"
         parse = BibliographicParser._parse_contributor
         c = parse(author)
-        assert "Dyssegaard, Elisabeth Kallick" == c.sort_name
-        assert (Contributor.Role.TRANSLATOR,) == c.roles
+        assert c.sort_name == "Dyssegaard, Elisabeth Kallick"
+        assert c.roles == (Contributor.Role.TRANSLATOR,)
 
         # A corporate author is given a normal author role.
         author = "Bob, Inc. (COR)"
         c = parse(author, primary_author_found=False)
-        assert "Bob, Inc." == c.sort_name
-        assert (Contributor.Role.PRIMARY_AUTHOR,) == c.roles
+        assert c.sort_name == "Bob, Inc."
+        assert c.roles == (Contributor.Role.PRIMARY_AUTHOR,)
 
         c = parse(author, primary_author_found=True)
-        assert "Bob, Inc." == c.sort_name
-        assert (Contributor.Role.AUTHOR,) == c.roles
+        assert c.sort_name == "Bob, Inc."
+        assert c.roles == (Contributor.Role.AUTHOR,)
 
         # An unknown author type is given an unknown role
         author = "Eve, Mallory (ZZZ)"
         c = parse(author, primary_author_found=False)
-        assert "Eve, Mallory" == c.sort_name
-        assert (Contributor.Role.UNKNOWN,) == c.roles
+        assert c.sort_name == "Eve, Mallory"
+        assert c.roles == (Contributor.Role.UNKNOWN,)
 
         # force_role overwrites whatever other role might be
         # assigned.
@@ -264,7 +262,7 @@ class TestBibliographicParser:
         c = parse(
             author, primary_author_found=False, force_role=Contributor.Role.NARRATOR
         )
-        assert (Contributor.Role.NARRATOR,) == c.roles
+        assert c.roles == (Contributor.Role.NARRATOR,)
 
     def test_availability_parser(self, axis_files_fixture: AxisFilesFixture):
         """Make sure the availability information gets properly
@@ -286,7 +284,7 @@ class TestBibliographicParser:
         assert av1 is not None
         assert av2 is not None
 
-        assert "0003642860" == av1.primary_identifier_data.identifier
-        assert 9 == av1.licenses_owned
-        assert 9 == av1.licenses_available
-        assert 0 == av1.patrons_in_hold_queue
+        assert av1.primary_identifier_data.identifier == "0003642860"
+        assert av1.licenses_owned == 9
+        assert av1.licenses_available == 9
+        assert av1.patrons_in_hold_queue == 0
