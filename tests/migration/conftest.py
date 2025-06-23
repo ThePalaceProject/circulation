@@ -11,6 +11,8 @@ import pytest_alembic
 from pytest_alembic.config import Config
 from sqlalchemy import text
 
+from palace.manager.integration.goals import Goals
+from palace.manager.integration.settings import BaseSettings
 from palace.manager.sqlalchemy.session import json_serializer
 from tests.fixtures.database import DatabaseFixture
 from tests.fixtures.services import ServicesFixture
@@ -121,6 +123,70 @@ class AlembicDatabaseFixture:
         assert library is not None
         assert isinstance(library.id, int)
         return library.id
+
+    def fetch_integration(self, integration_id: int) -> Row:
+        with self._engine.connect() as connection:
+            result = connection.execute(
+                text("SELECT * FROM integration_configurations WHERE id = :id"),
+                id=integration_id,
+            )
+            return result.one()
+
+    def integration(
+        self,
+        protocol: str | None = None,
+        goal: Goals | str | None = None,
+        name: str | None = None,
+        settings: dict[str, Any] | BaseSettings | None = None,
+        context: dict[str, Any] | None = None,
+        self_test_results: dict[str, Any] | None = None,
+    ) -> int:
+        if protocol is None:
+            protocol = self.random_name()
+
+        if goal is None:
+            goal = Goals.LICENSE_GOAL.name
+        elif isinstance(goal, Goals):
+            goal = goal.name
+
+        if name is None:
+            name = self.random_name()
+
+        if settings is None:
+            settings = {}
+        elif isinstance(settings, BaseSettings):
+            settings = settings.model_dump()
+
+        if context is None:
+            context = {}
+
+        if self_test_results is None:
+            self_test_results = {}
+
+        settings_json = json_serializer(settings)
+        context_json = json_serializer(context)
+        self_test_results_json = json_serializer(self_test_results)
+
+        with self._engine.connect() as connection:
+            integration = connection.execute(
+                text(
+                    "INSERT INTO integration_configurations "
+                    "(protocol, goal, name, settings, context, self_test_results) "
+                    "VALUES (:protocol, :goal, :name, :settings, :context, :test_results) "
+                    "returning id"
+                ).bindparams(
+                    protocol=protocol,
+                    goal=goal,
+                    name=name,
+                    settings=settings_json,
+                    context=context_json,
+                    test_results=self_test_results_json,
+                )
+            ).fetchone()
+
+        assert integration is not None
+        assert isinstance(integration.id, int)
+        return integration.id
 
 
 @pytest.fixture
