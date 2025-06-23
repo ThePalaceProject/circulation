@@ -11,6 +11,7 @@ from palace.manager.api.circulation import (
     BaseCirculationApiSettings,
     BaseCirculationLoanSettings,
 )
+from palace.manager.integration.configuration.formats import FormatPrioritiesSettings
 from palace.manager.integration.settings import (
     ConfigurationFormItem,
     ConfigurationFormItemType,
@@ -18,7 +19,7 @@ from palace.manager.integration.settings import (
 )
 
 
-class Axis360Settings(BaseCirculationApiSettings):
+class Axis360Settings(BaseCirculationApiSettings, FormatPrioritiesSettings):
     username: str = FormField(
         form=ConfigurationFormItem(label=_("Username"), required=True)
     )
