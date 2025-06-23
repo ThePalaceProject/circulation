@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any
+from urllib.parse import urlparse
 
 from flask_babel import lazy_gettext as _
 from pydantic import model_validator
@@ -73,13 +74,13 @@ class Axis360Settings(BaseCirculationApiSettings):
         if isinstance(data, dict):
             if "url" in data:
                 if "server_nickname" not in data:
-                    existing_url = data["url"]
-                    if "axis360apiqa.baker-taylor.com" in existing_url:
+                    existing_url = urlparse(data["url"])
+                    if existing_url.hostname == "axis360apiqa.baker-taylor.com":
                         data["server_nickname"] = ServerNickname.qa
-                    elif "axis360api.baker-taylor.com" in existing_url:
+                    elif existing_url.hostname == "axis360api.baker-taylor.com":
                         data["server_nickname"] = ServerNickname.production
                     else:
-                        raise ValueError(f"Unexpected value URL: {existing_url}.")
+                        raise ValueError(f"Unexpected value URL: {data['url']}.")
                 del data["url"]
         return data
 
