@@ -241,7 +241,6 @@ class TestLibraryAnnotator:
     def test_fulfill_is_templated_when_delivery_mechanism_requires_it(
         self, annotator_fixture: LibraryAnnotatorFixture
     ):
-        # Because of this, normal fulfillment links are not generated.
         [pool] = annotator_fixture.work.license_pools
         [lpdm] = pool.delivery_mechanisms
         lpdm.delivery_mechanism.content_type = Representation.EPUB_MEDIA_TYPE

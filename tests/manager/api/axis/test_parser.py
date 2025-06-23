@@ -211,8 +211,8 @@ class TestBibliographicParser:
         assert adobe.content_type == Representation.EPUB_MEDIA_TYPE
         assert adobe.drm_scheme == DeliveryMechanism.ADOBE_DRM
 
-        assert Representation.EPUB_MEDIA_TYPE == axisnow.content_type
-        assert DeliveryMechanism.BAKER_TAYLOR_KDRM_DRM == axisnow.drm_scheme
+        assert axisnow.content_type == Representation.EPUB_MEDIA_TYPE
+        assert axisnow.drm_scheme == DeliveryMechanism.BAKER_TAYLOR_KDRM_DRM
 
     def test_bibliographic_parser_unsupported_format(
         self, axis_files_fixture: AxisFilesFixture
