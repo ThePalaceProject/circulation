@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Generator
 
 from celery import shared_task
-from sqlalchemy import delete, select, tuple_
+from sqlalchemy import tuple_
 from sqlalchemy.orm import Session, defer
 
 from palace.manager.celery.task import Task
@@ -62,6 +62,7 @@ def calculate_work_presentations(
         raise task.replace(calculate_work_presentations.s(batch_size=batch_size))
 
     task.log.info(f"Finished calculating presentation for works.")
+
 
 @shared_task(queue=QueueNames.default, bind=True)
 def classify_unchecked_subjects(task: Task) -> None:
