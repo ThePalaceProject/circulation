@@ -339,7 +339,7 @@ class TestBibliothecaAPI:
         # Create a LicensePool that needs updating.
         edition, pool = db.edition(
             identifier_type=Identifier.THREEM_ID,
-            data_source_name=DataSource.THREEM,
+            data_source_name=DataSource.BIBLIOTHECA,
             with_license_pool=True,
             collection=bibliotheca_fixture.collection,
         )

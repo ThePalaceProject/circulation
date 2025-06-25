@@ -42,7 +42,6 @@ class DataSourceConstants:
     PROQUEST = "ProQuest"
 
     DEPRECATED_NAMES = {"3M": BIBLIOTHECA}
-    THREEM = BIBLIOTHECA
 
     # Some sources of open-access ebooks are better than others. This
     # list shows which sources we prefer, in ascending order of

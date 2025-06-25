@@ -72,7 +72,7 @@ class TestDataSource:
     def test_license_source_for_string(self, db: DatabaseTransactionFixture):
         session = db.session
         source = DataSource.license_source_for(session, Identifier.THREEM_ID)
-        assert DataSource.THREEM == source.name
+        assert DataSource.BIBLIOTHECA == source.name
 
     def test_license_source_fails_if_identifier_type_does_not_provide_licenses(
         self, db

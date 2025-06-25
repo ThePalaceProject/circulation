@@ -644,7 +644,7 @@ class TestLoanController:
     ):
         threem_edition, pool = loan_fixture.db.edition(
             with_open_access_download=False,
-            data_source_name=DataSource.THREEM,
+            data_source_name=DataSource.BIBLIOTHECA,
             identifier_type=Identifier.THREEM_ID,
             with_license_pool=True,
         )
@@ -707,7 +707,7 @@ class TestLoanController:
         """
         threem_edition, pool = loan_fixture.db.edition(
             with_open_access_download=False,
-            data_source_name=DataSource.THREEM,
+            data_source_name=DataSource.BIBLIOTHECA,
             identifier_type=Identifier.THREEM_ID,
             with_license_pool=True,
         )
@@ -746,7 +746,7 @@ class TestLoanController:
     ):
         threem_edition, pool = loan_fixture.db.edition(
             with_open_access_download=False,
-            data_source_name=DataSource.THREEM,
+            data_source_name=DataSource.BIBLIOTHECA,
             identifier_type=Identifier.THREEM_ID,
             with_license_pool=True,
         )
@@ -1319,7 +1319,7 @@ class TestLoanController:
     ):
         threem_edition, pool = loan_fixture.db.edition(
             with_open_access_download=False,
-            data_source_name=DataSource.THREEM,
+            data_source_name=DataSource.BIBLIOTHECA,
             identifier_type=Identifier.THREEM_ID,
             with_license_pool=True,
         )
@@ -1373,7 +1373,7 @@ class TestLoanController:
     def test_3m_cant_revoke_hold_if_reserved(self, loan_fixture: LoanFixture):
         threem_edition, pool = loan_fixture.db.edition(
             with_open_access_download=False,
-            data_source_name=DataSource.THREEM,
+            data_source_name=DataSource.BIBLIOTHECA,
             identifier_type=Identifier.THREEM_ID,
             with_license_pool=True,
         )

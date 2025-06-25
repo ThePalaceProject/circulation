@@ -181,7 +181,7 @@ class MockCirculationAPI(CirculationAPI):
             can_revoke_hold_when_reserved = True
             if source == DataSource.AXIS_360:
                 set_delivery_mechanism_at = BaseCirculationAPI.BORROW_STEP
-            if source == DataSource.THREEM:
+            if source == DataSource.BIBLIOTHECA:
                 can_revoke_hold_when_reserved = False
             remote = MockBaseCirculationAPI(
                 self._db,
