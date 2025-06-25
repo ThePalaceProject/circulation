@@ -104,10 +104,12 @@ def generate_report(
         )
     ]
 
+    MAX_LICENSE_COUNT = 1_000_000_000_000
     # generate inventory report csv file
     sql_params: dict[str, Any] = {
         "library_id": library.id,
         "integration_ids": tuple(integration_ids),
+        "licenses_owned": MAX_LICENSE_COUNT,
     }
 
     with tempfile.NamedTemporaryFile() as report_zip:
@@ -116,6 +118,7 @@ def generate_report(
         with (
             create_temp_file() as inventory_report_file,
             create_temp_file() as holds_report_file,
+            create_temp_file() as holds_with_no_licenses_report_file,
         ):
             generate_csv_report(
                 session,
@@ -131,6 +134,14 @@ def generate_report(
                 query=holds_report_query(),
             )
 
+            sql_params_for_holds_no_licenses = {**sql_params, "licenses_owned": 0}
+            generate_csv_report(
+                session,
+                csv_file=holds_with_no_licenses_report_file,
+                sql_params=sql_params_for_holds_no_licenses,
+                query=holds_report_query(),
+            )
+
             with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as archive:
                 archive.write(
                     filename=holds_report_file.name,
@@ -139,6 +150,11 @@ def generate_report(
                 archive.write(
                     filename=inventory_report_file.name,
                     arcname=f"palace-inventory-report-for-library-{file_name_modifier}.csv",
+                )
+
+                archive.write(
+                    filename=holds_with_no_licenses_report_file.name,
+                    arcname=f"palace-holds-with-no-licenses-report-for-library-{file_name_modifier}.csv",
                 )
 
             uid = uuid_encode(uuid.uuid4())
@@ -331,6 +347,7 @@ def holds_report_query() -> str:
             JOIN patrons p ON h.patron_id = p.id
             WHERE h.license_pool_id = lp.id AND p.library_id = lib.id
               AND (h.end IS NULL OR h.end > NOW() OR h.position > 0)
+              AND lp.licenses_owned <= :licenses_owned
         ) lib_holds ON TRUE
        JOIN LATERAL (
             -- Do other libraries share this collection?

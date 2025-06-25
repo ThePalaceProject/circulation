@@ -155,6 +155,46 @@ def test_generate_report(
         work=work,
     )
 
+    # Add a second book with no copies
+    title2 = "Test Book 2"
+    author2 = "Tom Pen"
+    identifier2_value = "urn:identifier-2"
+    edition2 = db.edition(data_source_name=ds.name)
+    edition2.language = language
+    edition2.publisher = publisher
+    edition2.title = title2
+    edition2.medium = edition.BOOK_MEDIUM
+    edition2.author = author2
+
+    # Grab identifier and give it an ISBN equivalent.
+    identifier2 = edition2.primary_identifier
+    identifier2_value = identifier2.identifier
+    isbn_identifier2 = db.identifier(identifier_type=Identifier.ISBN)
+    isbn2 = isbn_identifier2.identifier
+    identifier2.equivalent_to(edition2.data_source, isbn_identifier2, strength=1)
+    assert identifier2.type != Identifier.ISBN
+
+    work2 = db.work(
+        language="eng",
+        fiction=True,
+        with_license_pool=False,
+        data_source_name=ds.name,
+        presentation_edition=edition2,
+        collection=collection,
+        genre="genre_z",
+    )
+
+    licensepool_no_licenses_owned = db.licensepool(
+        edition=edition2,
+        open_access=False,
+        data_source_name=ds.name,
+        set_edition_as_presentation=True,
+        collection=collection,
+        work=work2,
+    )
+
+    licensepool_no_licenses_owned.licenses_owned = 0
+
     days_remaining = 10
     expiration = utc_now() + timedelta(days=days_remaining)
     db.license(
@@ -172,11 +212,16 @@ def test_generate_report(
         expires=utc_now(),
     )
 
+    db.license(
+        pool=licensepool_no_licenses_owned,
+        status=LicenseStatus.available,
+        terms_concurrency=1,
+    )
     patron1 = db.patron(library=library)
     patron2 = db.patron(library=library)
     patron3 = db.patron(library=library)
     patron4 = db.patron(library=library)
-
+    patron5 = db.patron(library=library)
     # this one should be counted because the end is in the future.
     hold1, _ = get_one_or_create(
         db.session,
@@ -218,6 +263,17 @@ def test_generate_report(
         start=utc_now(),
         end=utc_now() - timedelta(minutes=1),
         position=0,
+    )
+
+    # this hold should be counted because the end is in the future.
+    hold5, _ = get_one_or_create(
+        db.session,
+        Hold,
+        patron=patron1,
+        license_pool=licensepool_no_licenses_owned,
+        position=1,
+        start=utc_now(),
+        end=utc_now() + timedelta(days=1),
     )
 
     shared_patrons_in_hold_queue = 4
@@ -266,17 +322,18 @@ def test_generate_report(
     try:
         with zipfile.ZipFile(reports_zip, mode="r") as archive:
             entry_list = archive.namelist()
-            assert len(entry_list) == 2
+            assert len(entry_list) == 3
             with (
                 archive.open(entry_list[0]) as holds_report_zip_entry,
                 archive.open(entry_list[1]) as inventory_report_zip_entry,
+                archive.open(entry_list[2]) as holds_with_no_licenses_report_zip_entry,
             ):
                 assert inventory_report_zip_entry
                 assert "test_library" in inventory_report_zip_entry.name
                 inventory_report_csv = zip_csv_entry_to_dict(inventory_report_zip_entry)
 
-                # The inventory report should have two rows, since we have two books.
-                assert len(inventory_report_csv) == 2
+                # The inventory report should have two rows, since we have three books.
+                assert len(inventory_report_csv) == 3
                 # One row should be our well-described test book...
                 row = next(
                     r
@@ -318,7 +375,7 @@ def test_generate_report(
                 assert holds_report_zip_entry
                 holds_report_csv = zip_csv_entry_to_dict(holds_report_zip_entry)
                 # Only our well-described test book should be in the holds report, since the other has no holds.
-                assert len(holds_report_csv) == 1
+                assert len(holds_report_csv) == 2
                 row = next(
                     r for r in holds_report_csv if r["identifier"] == identifier_value
                 )
@@ -349,6 +406,47 @@ def test_generate_report(
                     int(row["shared_active_hold_count"]) == shared_patrons_in_hold_queue
                 )
                 assert int(row["library_active_hold_count"]) == 3
+
+                # holds with no licenses.
+                assert holds_with_no_licenses_report_zip_entry
+                assert "test_library" in holds_with_no_licenses_report_zip_entry.name
+                assert holds_with_no_licenses_report_zip_entry
+                holds_with_no_licenses_report_csv = zip_csv_entry_to_dict(
+                    holds_with_no_licenses_report_zip_entry
+                )
+                # Only our single book with no licenses should be in the holds report.
+                assert len(holds_with_no_licenses_report_csv) == 1
+
+                row = next(
+                    r
+                    for r in holds_with_no_licenses_report_csv
+                    if r["identifier"] == identifier2_value
+                )
+                no_holds_row = next(
+                    (
+                        r
+                        for r in holds_with_no_licenses_report_csv
+                        if r["identifier"] == no_holds_identifier_value
+                    ),
+                    None,
+                )
+                assert no_holds_row is None
+
+                # Ensure that our test book is described properly in the holds report.
+                assert len(row) == 13
+                assert row["title"] == title2
+                assert row["author"] == author2
+                assert row["identifier"] == identifier2_value
+                assert row["isbn"] == isbn2
+                assert row["language"] == language
+                assert row["publisher"] == publisher
+                assert row["audience"] == "Adult"
+                assert row["genres"] == "genre_z"
+                assert row["format"] == edition.BOOK_MEDIUM
+                assert row["data_source"] == data_source
+                assert row["collection_name"] == collection_name
+                assert int(row["shared_active_hold_count"]) == 0
+                assert int(row["library_active_hold_count"]) == 1
     finally:
         os.remove(reports_zip)
 
