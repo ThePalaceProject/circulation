@@ -87,7 +87,7 @@ def test_list_identifiers_for_import_configuration_error(
             BadResponseException("service", "uh oh", MockRequestsResponse(401))
         )
         list_identifiers_for_import.delay(collection_id=collection.id).wait()
-    assert "Failed to authenticate with Axis 360 API" in caplog.text
+    assert "Failed to authenticate with Boundless API" in caplog.text
 
 
 def test_list_identifiers_for_import_integration_error(
@@ -373,7 +373,7 @@ def test_reap_collection_configuration_error(
         )
         reap_collection.delay(collection_id=collection.id).wait()
 
-    assert "Failed to authenticate with Axis 360 API" in caplog.text
+    assert "Failed to authenticate with Boundless API" in caplog.text
 
 
 def test_reap_collection_with_requeue(
@@ -570,8 +570,8 @@ def test_process_item_creates_presentation_ready_work(
     celery_fixture: CeleryFixture,
     work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
 ):
-    """Test the normal workflow where we ask Axis for data,
-    Axis provides it, and we create a presentation-ready work.
+    """Test the normal workflow where we ask for data,
+    Boundless provides it, and we create a presentation-ready work.
     """
     library = db.default_library()
     collection = db.collection(protocol=BoundlessApi, library=library)
@@ -620,7 +620,7 @@ def test_transient_failure_if_requested_book_not_mentioned(
     celery_fixture: CeleryFixture,
     work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
 ):
-    """Test an unrealistic case where we ask Axis 360 about one book and
+    """Test an unrealistic case where we ask Boundless about one book and
     it tells us about a totally different book.
     """
     library = db.default_library()

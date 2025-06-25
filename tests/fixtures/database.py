@@ -602,7 +602,7 @@ class DatabaseTransactionFixture:
         data_source=DataSource.FEEDBOOKS,
     )
 
-    axis_settings = functools.partial(
+    boundless_settings = functools.partial(
         BoundlessSettings,
         username="a",
         password="b",
@@ -619,7 +619,7 @@ class DatabaseTransactionFixture:
         elif protocol == OPDS2WithODLApi:
             return self.opds2_odl_settings()  # type: ignore[return-value]
         elif protocol == BoundlessApi:
-            return self.axis_settings()  # type: ignore[return-value]
+            return self.boundless_settings()  # type: ignore[return-value]
         return None
 
     def collection(

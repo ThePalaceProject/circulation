@@ -176,7 +176,7 @@ def _check_api_credentials(
     except BadResponseException as e:
         if e.response.status_code == 401:
             task.log.error(
-                f"Failed to authenticate with Axis 360 API for collection {collection.name} "
+                f"Failed to authenticate with Boundless API for collection {collection.name} "
                 f"(id={collection.id}). Please check the collection configuration."
             )
             return False
@@ -396,9 +396,9 @@ def reap_all_collections(
     delay_in_seconds_between_reap_collection_tasks: int = MAX_DELAY_IN_SECONDS_BETWEEN_REAP_TASKS,
 ) -> None:
     """
-    A shared task that  kicks off a reap_collection task for each Axis 360 collection.
-    Palace Managers can be configured with many Axis collections which may have identical or nearly identical
-    lists of identifiers.  As a result reaping Axis collections in parallel can lead to frequent
+    A shared task that kicks off a reap_collection task for each Boundless collection.
+    Palace Managers can be configured with many Boundless collections which may have identical or nearly identical
+    lists of identifiers.  As a result reaping Boundless collections in parallel can lead to frequent
     deadlocks when launched in parallel.
 
     The default delay of 20 seconds between launching of reap_collection sub-tasks is based on
