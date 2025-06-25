@@ -356,8 +356,8 @@ class Library(Base, HasSessionCache):
 
         if group_name == FacetConstants.DISTRIBUTOR_FACETS_GROUP_NAME:
             for collection in collections:
-                if collection.data_source and collection.data_source.name:
-                    enabled.append(collection.data_source.name)
+                if collection.data_source:
+                    enabled.append(collection.data_source.active_name)
             return list(set(enabled))
 
         if group_name == FacetConstants.COLLECTION_NAME_FACETS_GROUP_NAME:
