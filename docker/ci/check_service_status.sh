@@ -16,6 +16,14 @@ function check_service_status()
   # The location of the runit service should be passed.
   service="$2"
 
+  # Wait up to 15 seconds for the service file to exist
+  timeout --foreground 15s docker compose exec "$container" bash -c "until test -e $service; do sleep 1; done"
+  file_status=$?
+  if [[ "$file_status" != 0 ]]; then
+    echo "  FAIL: $service file does not exist after waiting"
+    exit 1
+  fi
+
   # Check the status of the service.
   service_status=$(docker compose exec "$container" /bin/bash -c "sv check $service")
 
