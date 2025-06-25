@@ -5,7 +5,7 @@ from collections import defaultdict
 from collections.abc import Generator
 from typing import TYPE_CHECKING, Literal, overload
 
-from sqlalchemy import Boolean, Column, Integer, String
+from sqlalchemy import Boolean, Column, Integer, String, or_
 from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.ext.mutable import MutableDict
 from sqlalchemy.orm import Mapped, Query, Session, relationship
@@ -39,6 +39,15 @@ class DataSource(Base, HasSessionCache, DataSourceConstants):
     __tablename__ = "datasources"
     id: Mapped[int] = Column(Integer, primary_key=True)
     name: Mapped[str] = Column(String, unique=True, index=True, nullable=False)
+
+    @property
+    def active_name(self) -> str:
+        """
+        The name of this DataSource, normalized to replace any
+        deprecated names with their current equivalents.
+        """
+        return self.DEPRECATED_NAMES.get(self.name, self.name)
+
     offers_licenses: Mapped[bool] = Column(Boolean, default=False, nullable=False)
     primary_identifier_type = Column(String, index=True)
     extra: Mapped[dict[str, str]] = Column(
@@ -155,31 +164,48 @@ class DataSource(Base, HasSessionCache, DataSourceConstants):
     ) -> DataSource | None:
         # Turn a deprecated name (e.g. "3M" into the current name
         # (e.g. "Bibliotheca").
-        name = cls.DEPRECATED_NAMES.get(name, name)
+
+        if name in cls.DEPRECATED_NAMES:
+            primary_name = cls.DEPRECATED_NAMES[name]
+            secondary_name = name
+        elif name in cls.DEPRECATED_NAMES.inverse:
+            primary_name = name
+            secondary_name = cls.DEPRECATED_NAMES.inverse[name]
+        else:
+            primary_name = name
+            secondary_name = None
 
         def lookup_hook() -> tuple[DataSource | None, bool]:
             """There was no such DataSource in the cache. Look one up or
             create one.
             """
+            constraint = (
+                DataSource.name == primary_name
+                if secondary_name is None
+                else or_(
+                    DataSource.name == primary_name, DataSource.name == secondary_name
+                )
+            )
             data_source: DataSource | None
             if autocreate:
                 data_source, is_new = get_one_or_create(
                     _db,
                     DataSource,
-                    name=name,
+                    constraint=constraint,
                     create_method_kwargs=dict(
+                        name=primary_name,
                         offers_licenses=offers_licenses,
                         primary_identifier_type=primary_identifier_type,
                     ),
                 )
             else:
-                data_source = get_one(_db, DataSource, name=name)
+                data_source = get_one(_db, DataSource, constraint=constraint)
                 is_new = False
             return data_source, is_new
 
         # Look up the DataSource in the full-table cache, falling back
         # to the database if necessary.
-        obj, is_new = cls.by_cache_key(_db, name, lookup_hook)
+        obj, is_new = cls.by_cache_key(_db, primary_name, lookup_hook)
         return obj
 
     URI_PREFIX = "http://librarysimplified.org/terms/sources/"

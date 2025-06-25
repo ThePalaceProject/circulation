@@ -1,9 +1,10 @@
 import functools
-from unittest.mock import patch
+from unittest.mock import MagicMock, call, patch
 
 import pytest
 from psycopg2.extras import NumericRange
 from sqlalchemy import not_
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.exc import MultipleResultsFound
 
 from palace.manager.service.logging.configuration import LogLevel
@@ -85,12 +86,71 @@ class TestDatabaseInterface:
         # object returned
         caplog.clear()
         caplog.set_level(LogLevel.debug)
-        with patch.object(util, "get_one", return_value=None):
+        with patch.object(util, "get_one", side_effect=[None, credential]):
             credential_existing, is_new = get_one_or_create()
         assert not is_new
         assert isinstance(credential_existing, Credential)
         assert credential_existing == credential
         assert "INTEGRITY ERROR" in caplog.text
+
+        # If there is a race condition, and we cannot create or find an existing object,
+        # we just raise the IntegrityError.
+        caplog.clear()
+        caplog.set_level(LogLevel.error)
+        with (
+            patch.object(util, "get_one", return_value=None),
+            pytest.raises(IntegrityError),
+        ):
+            get_one_or_create()
+        assert "Unable to retrieve with get_one after IntegrityError" in caplog.text
+
+        # Test that all the methods get called with the correct parameters
+        with (
+            patch.object(util, "get_one", side_effect=[None, None]) as mock_get_one,
+            patch.object(
+                util, "create", side_effect=IntegrityError(None, None, None)
+            ) as mock_create,
+            pytest.raises(IntegrityError),
+        ):
+            obj_type = MagicMock()
+            create_method = "create_method"
+            create_method_kwargs = {"test": "value"}
+            constraint = MagicMock()
+            util.get_one_or_create(
+                db.session,
+                obj_type,
+                "create_method",
+                create_method_kwargs,
+                id=123,
+                on_multiple="interchangeable",
+                constraint=constraint,
+            )
+        mock_create.assert_called_once_with(
+            db.session,
+            obj_type,
+            create_method,
+            create_method_kwargs,
+            id=123,
+        )
+        assert mock_get_one.call_count == 2
+        mock_get_one.assert_has_calls(
+            [
+                call(
+                    db.session,
+                    obj_type,
+                    id=123,
+                    on_multiple="interchangeable",
+                    constraint=constraint,
+                ),
+                call(
+                    db.session,
+                    obj_type,
+                    id=123,
+                    on_multiple="interchangeable",
+                    constraint=constraint,
+                ),
+            ]
+        )
 
 
 class TestNumericRangeConversion:

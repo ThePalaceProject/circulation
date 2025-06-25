@@ -125,10 +125,12 @@ def get_one_or_create(
             with db.begin_nested():
                 # These kwargs are supported by get_one() but not by create().
                 get_one_keys = ["on_multiple", "constraint"]
-                for key in get_one_keys:
-                    if key in kwargs:
-                        del kwargs[key]
-                obj = create(db, model, create_method, create_method_kwargs, **kwargs)
+                filtered_kwargs = {
+                    k: v for k, v in kwargs.items() if k not in get_one_keys
+                }
+                obj = create(
+                    db, model, create_method, create_method_kwargs, **filtered_kwargs
+                )
                 return obj
         except IntegrityError as e:
             log.debug(
@@ -138,7 +140,16 @@ def get_one_or_create(
                 kwargs,
                 e,
             )
-            return db.query(model).filter_by(**kwargs).one(), False
+            one = get_one(db, model, **kwargs)
+            if one is None:
+                # If we still don't have an object, raise the error.
+                log.error(
+                    "Unable to retrieve with get_one after IntegrityError with %r %r",
+                    model,
+                    kwargs,
+                )
+                raise
+            return one, False
 
 
 def numericrange_to_string(r: NumericRange | None) -> str:

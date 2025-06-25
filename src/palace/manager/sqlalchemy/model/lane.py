@@ -56,7 +56,6 @@ from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.licensing import LicensePool
 from palace.manager.sqlalchemy.model.work import Work, WorkGenre
 from palace.manager.sqlalchemy.util import (
-    get_one,
     get_one_or_create,
     tuple_to_numericrange,
 )
@@ -692,7 +691,7 @@ class Facets(FacetsWithEntryPoint):
             _db = Session.object_session(self.library)
 
             if self.distributor and self.distributor != self.DISTRIBUTOR_ALL:
-                distributor = get_one(_db, DataSource, name=self.distributor)
+                distributor = DataSource.lookup(_db, self.distributor, autocreate=False)
                 if distributor:
                     filter.license_datasources = [distributor.id]
 

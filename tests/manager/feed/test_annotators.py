@@ -1,8 +1,10 @@
 from datetime import timedelta
 from functools import cmp_to_key
+from unittest.mock import patch
 
 import feedparser
 import pytest
+from bidict import frozenbidict
 
 from palace.manager.core.classifier import Classifier
 from palace.manager.feed.acquisition import OPDSAcquisitionFeed
@@ -476,6 +478,8 @@ class TestAnnotator:
         assert data.publisher == FeedEntryType(text="publisher")
         assert data.issued == edition.issued
         assert data.duration == edition.duration
+        assert data.distribution is not None
+        assert data.distribution.get("provider_name") == "Gutenberg"
 
         # Missing values
         assert data.language == None
@@ -488,6 +492,22 @@ class TestAnnotator:
         assert other_links[2].type != MediaTypes.EPUB_MEDIA_TYPE
         assert other_links[3].type != MediaTypes.EPUB_MEDIA_TYPE
         assert other_links[4].type != MediaTypes.EPUB_MEDIA_TYPE
+
+        # If the distributor is using a deprecated name, we get the
+        # new name instead.
+        entry = WorkEntry(
+            work=work,
+            edition=edition,
+            identifier=edition.primary_identifier,
+            license_pool=pool,
+        )
+        with patch.object(
+            DataSource,
+            "DEPRECATED_NAMES",
+            frozenbidict({DataSource.GUTENBERG: "Project Gutenberg"}),
+        ):
+            Annotator().annotate_work_entry(entry)
+        assert entry.computed.distribution.get("provider_name") == "Project Gutenberg"
 
 
 class CirculationManagerAnnotatorFixture:

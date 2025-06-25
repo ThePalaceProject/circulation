@@ -1,4 +1,8 @@
+from functools import partial
+from unittest.mock import patch
+
 import pytest
+from bidict import frozenbidict
 from sqlalchemy.orm.exc import NoResultFound
 
 from palace.manager.sqlalchemy.model.datasource import DataSource
@@ -30,11 +34,29 @@ class TestDataSource:
 
         assert (new_source, False) == DataSource.by_cache_key(db.session, key, None)  # type: ignore[arg-type]
 
+    @patch.object(
+        DataSource, "DEPRECATED_NAMES", frozenbidict({"Old Name": "New Name"})
+    )
     def test_lookup_by_deprecated_name(self, db: DatabaseTransactionFixture):
         session = db.session
-        threem = DataSource.lookup(session, "3M")
-        assert DataSource.BIBLIOTHECA == threem.name
-        assert DataSource.BIBLIOTHECA != "3M"
+        lookup = partial(DataSource.lookup, session, autocreate=True)
+
+        # Looking up a deprecated name should return the new name.
+        assert lookup("Old Name").name == "New Name"
+        assert lookup("Old Name", autocreate=False).name == "New Name"
+        assert lookup("New Name").name == "New Name"
+        assert lookup("New Name", autocreate=False).name == "New Name"
+
+        # The old name exists, and the new name does not
+        session.delete(lookup("Old Name"))
+        session.add(DataSource(name="Old Name"))
+        session.commit()
+
+        # In this case, the lookup will return the old name
+        assert lookup("Old Name").name == "Old Name"
+        assert lookup("Old Name", autocreate=False).name == "Old Name"
+        assert lookup("New Name").name == "Old Name"
+        assert lookup("New Name", autocreate=False).name == "Old Name"
 
     def test_lookup_returns_none_for_nonexistent_source(
         self, db: DatabaseTransactionFixture
