@@ -1,10 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
-from urllib.parse import urlparse
-
 from flask_babel import lazy_gettext as _
-from pydantic import model_validator
 
 from palace.manager.api.axis.constants import ServerNickname
 from palace.manager.api.circulation import (
@@ -60,30 +56,6 @@ class Axis360Settings(BaseCirculationApiSettings, FormatPrioritiesSettings):
             },
         ),
     )
-
-    @model_validator(mode="before")
-    @classmethod
-    def _migrate_url_to_server_nickname(cls, data: Any) -> Any:
-        """
-        This is a temporary migration to handle the change from  `url` to `server_nickname` in the settings.
-
-        Once this is rolled out everywhere, we can do a migration in the database to set this field
-        and remove this method.
-
-        TODO: Remove in next release.
-        """
-        if isinstance(data, dict):
-            if "url" in data:
-                if "server_nickname" not in data:
-                    existing_url = urlparse(data["url"])
-                    if existing_url.hostname == "axis360apiqa.baker-taylor.com":
-                        data["server_nickname"] = ServerNickname.qa
-                    elif existing_url.hostname == "axis360api.baker-taylor.com":
-                        data["server_nickname"] = ServerNickname.production
-                    else:
-                        raise ValueError(f"Unexpected value URL: {data['url']}.")
-                del data["url"]
-        return data
 
 
 class Axis360LibrarySettings(BaseCirculationLoanSettings):
