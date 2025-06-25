@@ -3,7 +3,7 @@ from unittest.mock import patch
 import pytest
 
 from palace.manager.api.boundless.api import BoundlessApi
-from palace.manager.celery.tasks.axis import import_identifiers
+from palace.manager.celery.tasks.boundless import import_identifiers
 from palace.manager.scripts.boundless_import import ImportCollection
 from tests.fixtures.database import DatabaseTransactionFixture
 

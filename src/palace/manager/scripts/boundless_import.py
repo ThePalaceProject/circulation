@@ -1,6 +1,6 @@
 import argparse
 
-from palace.manager.celery.tasks.axis import (
+from palace.manager.celery.tasks.boundless import (
     import_identifiers,
     list_identifiers_for_import,
 )

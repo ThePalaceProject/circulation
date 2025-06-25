@@ -42,7 +42,7 @@ def import_all_collections(
     task: Task, import_all: bool = False, batch_size: int = DEFAULT_BATCH_SIZE
 ) -> None:
     """
-    A shared task that loops through all Axis360 Api based collections and kick off an
+    A shared task that loops through all Boundless Api based collections and kick off an
     import task for each.
     """
     with task.session() as session:
@@ -58,7 +58,7 @@ def import_all_collections(
                 countdown=count * 5,  # stagger the execution of the collection import
                 # in order to minimize chance of deadlocks caused by
                 # simultaneous updates to the metadata when CM has multiple
-                # axis collections configured with overlapping content
+                # Boundless collections configured with overlapping content
                 link=import_identifiers.s(
                     collection_id=collection.id,
                     batch_size=batch_size,
@@ -76,7 +76,7 @@ def list_identifiers_for_import(
     import_all: bool = False,
 ) -> list[str] | None:
     """
-    A task for resolving a list identifiers to import an axis collection based on the
+    A task for resolving a list identifiers to import an Boundless collection based on the
      most recent timestamp's start date.
     """
 
@@ -225,7 +225,7 @@ def import_identifiers(
 ) -> None:
     """
     This method creates or updates editions and license pools for each identifier in the list of identifiers.
-    It will query the axis availability api in batches of {batch_size} IDs and process each result in a single database
+    It will query the availability api in batches of {batch_size} IDs and process each result in a single database
     transaction.  If it has not finished processing the list of identifiers, it will requeue the task with the
     remaining unprocessed identifiers.
     """
@@ -405,7 +405,7 @@ def reap_all_collections(
     observations of performance in a local environment.  I observed that reaping in batches 10 seconds
     can take from 2-4 seconds in my development environment. The production environment was
     observed to be about 2 to 3 times slower.  Therefore,a 20 second delay between task initiation provides a reasonable
-    empirically based time buffer such that batches of axis identifiers are not reaped simultaneously and won't likely
+    empirically based time buffer such that batches of boundless identifiers are not reaped simultaneously and won't likely
     cause a pile-up in the case of occasional deadlocks.  With the redis visibility_timeout set to one hour, this will
     allow for a maximum of 180 collections.  Due to the visibility_timeout constraint,  20 seconds will be the maximum
     delay:  any value over 20 will be ignored and the default will be used in its place.
@@ -430,7 +430,7 @@ def reap_all_collections(
                 * delay_in_seconds_between_reap_collection_tasks,  # stagger the execution subtasks
                 # in order to minimize chance of deadlocks caused by
                 # simultaneous updates to the metadata when CM has multiple
-                # axis collections configured with overlapping content
+                # Boundless collections configured with overlapping content
             )
             count += 1
 

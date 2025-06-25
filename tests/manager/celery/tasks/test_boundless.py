@@ -10,8 +10,8 @@ from sqlalchemy.orm.exc import ObjectDeletedError, StaleDataError
 from palace.manager.api.boundless.api import BoundlessApi
 from palace.manager.api.boundless.requests import BoundlessRequests
 from palace.manager.celery.task import Task
-from palace.manager.celery.tasks import axis
-from palace.manager.celery.tasks.axis import (
+from palace.manager.celery.tasks import boundless
+from palace.manager.celery.tasks.boundless import (
     DEFAULT_BATCH_SIZE,
     DEFAULT_START_TIME,
     _redis_lock_list_identifiers_for_import,
@@ -82,7 +82,7 @@ def test_list_identifiers_for_import_configuration_error(
     caplog: pytest.LogCaptureFixture,
 ):
     collection = db.collection(name="test_collection", protocol=BoundlessApi)
-    with patch.object(axis, "Axis360API") as mock_create_api:
+    with patch.object(boundless, "BoundlessApi") as mock_create_api:
         mock_create_api.return_value.api_requests.refresh_bearer_token.side_effect = (
             BadResponseException("service", "uh oh", MockRequestsResponse(401))
         )
@@ -98,7 +98,7 @@ def test_list_identifiers_for_import_integration_error(
 ):
     collection = db.collection(name="test_collection", protocol=BoundlessApi)
     test_ids = ["a", "b", "c"]
-    with patch.object(axis, "Axis360API") as mock_create_api:
+    with patch.object(boundless, "BoundlessApi") as mock_create_api:
         mock_create_api.return_value.recent_activity.side_effect = [
             IntegrationException("service", "uh oh"),
             generate_test_bibliographic_and_circulation_objects(test_ids),
@@ -116,7 +116,7 @@ def test_list_identifiers_for_import_integration_error(
 def set_caplog_level_to_info(caplog):
     caplog.set_level(
         logging.INFO,
-        "palace.manager.celery.tasks.axis",
+        "palace.manager.celery.tasks.boundless",
     )
 
 
@@ -129,7 +129,7 @@ def test_import_all_collections(
     db.default_collection()
     collection2 = db.collection(name="test_collection", protocol=BoundlessApi.label())
     with patch.object(
-        axis, "list_identifiers_for_import"
+        boundless, "list_identifiers_for_import"
     ) as mock_list_identifiers_for_import:
         import_all_collections.delay().wait()
 
@@ -198,7 +198,7 @@ def test_list_identifiers_for_import(
     mock_api.recent_activity.return_value = (
         generate_test_bibliographic_and_circulation_objects(test_ids)
     )
-    with patch.object(axis, "Axis360API") as mock_create_api:
+    with patch.object(boundless, "BoundlessApi") as mock_create_api:
         mock_create_api.return_value = mock_api
         identifiers = list_identifiers_for_import.delay(
             collection_id=collection.id
@@ -208,14 +208,14 @@ def test_list_identifiers_for_import(
     ts = timestamp(
         _db=db.session,
         collection=collection,
-        service_name="palace.manager.celery.tasks.axis.list_identifiers_for_import",
+        service_name="palace.manager.celery.tasks.boundless.list_identifiers_for_import",
         default_start_time=DEFAULT_START_TIME,
     )
 
     assert ts.start and ts.start > current_time
     assert not queue_collection_import_lock_fixture.task_lock.locked()
     assert mock_api.recent_activity.call_count == 1
-    assert mock_api.recent_activity.call_args[0][0] == axis.DEFAULT_START_TIME
+    assert mock_api.recent_activity.call_args[0][0] == boundless.DEFAULT_START_TIME
     assert "Finished listing identifiers in collection" in caplog.text
 
 
@@ -249,7 +249,7 @@ def test_import_items(
     collection = db.collection(name="test_collection", protocol=BoundlessApi.label())
 
     mock_api = MagicMock()
-    with (patch.object(axis, "Axis360API") as mock_create_api,):
+    with (patch.object(boundless, "BoundlessApi") as mock_create_api,):
         mock_create_api.return_value = mock_api
         edition_1, lp_1 = db.edition(with_license_pool=True)
         edition_2, lp_2 = db.edition(with_license_pool=True)
@@ -291,7 +291,7 @@ def test_import_identifiers_with_requeue(
     collection = db.collection(name="test_collection", protocol=BoundlessApi.label())
 
     mock_api = MagicMock()
-    with (patch.object(axis, "Axis360API") as mock_create_api,):
+    with (patch.object(boundless, "BoundlessApi") as mock_create_api,):
         mock_create_api.return_value = mock_api
         edition_1, lp_1 = db.edition(with_license_pool=True)
         edition_2, lp_2 = db.edition(with_license_pool=True)
@@ -336,7 +336,7 @@ def test_reap_all_collections(
     set_caplog_level_to_info(caplog)
     db.default_collection()
     collection2 = db.collection(name="test_collection", protocol=BoundlessApi.label())
-    with patch.object(axis, "reap_collection") as mock_reap_collection:
+    with patch.object(boundless, "reap_collection") as mock_reap_collection:
         reap_all_collections.delay().wait()
 
         assert mock_reap_collection.apply_async.call_count == 1
@@ -367,7 +367,7 @@ def test_reap_collection_configuration_error(
         collection=collection,
     )
 
-    with patch.object(axis, "Axis360API") as mock_create_api:
+    with patch.object(boundless, "BoundlessApi") as mock_create_api:
         mock_create_api.return_value.api_requests.refresh_bearer_token.side_effect = (
             BadResponseException("service", "uh oh", MockRequestsResponse(401))
         )
@@ -395,7 +395,7 @@ def test_reap_collection_with_requeue(
 
     identifiers = [x.primary_identifier for x in editions]
     mock_api = MagicMock()
-    with patch.object(axis, "Axis360API") as mock_create_api:
+    with patch.object(boundless, "BoundlessApi") as mock_create_api:
         mock_create_api.return_value = mock_api
 
         reap_collection.delay(collection_id=collection.id, batch_size=2).wait()
@@ -431,7 +431,7 @@ def test_retry_import_identifiers_due_to_integration_exception(
     )
 
     mock_api = MagicMock()
-    with patch.object(axis, "Axis360API") as mock_create_api:
+    with patch.object(boundless, "BoundlessApi") as mock_create_api:
         mock_create_api.return_value = mock_api
         edition, lp = db.edition(with_license_pool=True)
 
@@ -488,7 +488,7 @@ def test_retry_import_identifiers(
     )
 
     mock_api = MagicMock()
-    with patch.object(axis, "Axis360API") as mock_create_api:
+    with patch.object(boundless, "BoundlessApi") as mock_create_api:
         mock_create_api.return_value = mock_api
         edition, lp = db.edition(with_license_pool=True)
 
@@ -550,7 +550,7 @@ def test_retry_reap_collection(
         None,  # second call is successful
     ]
 
-    with patch.object(axis, "Axis360API") as mock_create_api:
+    with patch.object(boundless, "BoundlessApi") as mock_create_api:
         mock_create_api.return_value = mock_api
 
         if no_retry_expected:
@@ -661,7 +661,7 @@ def test__check_api_credentials():
 
     # If api.bearer_token() runs successfully, the function should return True
     assert (
-        axis._check_api_credentials(mock_task, mock_collection, mock_api_requests)
+        boundless._check_api_credentials(mock_task, mock_collection, mock_api_requests)
         is True
     )
     mock_api_requests.refresh_bearer_token.assert_called_once()
@@ -671,7 +671,7 @@ def test__check_api_credentials():
         "service", "uh oh", MockRequestsResponse(401)
     )
     assert (
-        axis._check_api_credentials(mock_task, mock_collection, mock_api_requests)
+        boundless._check_api_credentials(mock_task, mock_collection, mock_api_requests)
         is False
     )
 
@@ -680,9 +680,9 @@ def test__check_api_credentials():
         "service", "uh oh", MockRequestsResponse(500)
     )
     with pytest.raises(BadResponseException):
-        axis._check_api_credentials(mock_task, mock_collection, mock_api_requests)
+        boundless._check_api_credentials(mock_task, mock_collection, mock_api_requests)
 
     # Any other exception should be raised
     mock_api_requests.refresh_bearer_token.side_effect = ValueError
     with pytest.raises(ValueError):
-        axis._check_api_credentials(mock_task, mock_collection, mock_api_requests)
+        boundless._check_api_credentials(mock_task, mock_collection, mock_api_requests)
