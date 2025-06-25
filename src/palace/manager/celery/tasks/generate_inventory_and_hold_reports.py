@@ -134,8 +134,7 @@ def generate_report(
                 query=holds_report_query(),
             )
 
-            sql_params_for_holds_no_licenses = sql_params.copy()
-            sql_params_for_holds_no_licenses["licenses_owned"] = 0
+            sql_params_for_holds_no_licenses = {**sql_params, "licenses_owned": 0}
             generate_csv_report(
                 session,
                 csv_file=holds_with_no_licenses_report_file,
