@@ -162,7 +162,7 @@ class TestAxis360API:
         # Create a LicensePool that needs updating.
         edition, pool = axis360.db.edition(
             identifier_type=Identifier.AXIS_360_ID,
-            data_source_name=DataSource.AXIS_360,
+            data_source_name=DataSource.BOUNDLESS,
             with_license_pool=True,
             collection=axis360.collection,
         )
@@ -199,7 +199,7 @@ class TestAxis360API:
         # endpoint and get a good response.
         edition, pool = axis360.db.edition(
             identifier_type=Identifier.AXIS_360_ID,
-            data_source_name=DataSource.AXIS_360,
+            data_source_name=DataSource.BOUNDLESS,
             with_license_pool=True,
         )
         data = axis360.files.sample_data("checkin_success.xml")
@@ -222,7 +222,7 @@ class TestAxis360API:
         # the EarlyCheckInTitle endpoint.
         edition, pool = axis360.db.edition(
             identifier_type=Identifier.AXIS_360_ID,
-            data_source_name=DataSource.AXIS_360,
+            data_source_name=DataSource.BOUNDLESS,
             with_license_pool=True,
         )
         data = axis360.files.sample_data("checkin_failure.xml")
@@ -235,7 +235,7 @@ class TestAxis360API:
     def test_place_hold(self, axis360: Axis360Fixture, library_fixture: LibraryFixture):
         edition, pool = axis360.db.edition(
             identifier_type=Identifier.AXIS_360_ID,
-            data_source_name=DataSource.AXIS_360,
+            data_source_name=DataSource.BOUNDLESS,
             with_license_pool=True,
         )
         data = axis360.files.sample_data("place_hold_success.xml")
@@ -258,7 +258,7 @@ class TestAxis360API:
     def test_release_hold(self, axis360: Axis360Fixture):
         edition, pool = axis360.db.edition(
             identifier_type=Identifier.AXIS_360_ID,
-            data_source_name=DataSource.AXIS_360,
+            data_source_name=DataSource.BOUNDLESS,
             with_license_pool=True,
         )
         data = axis360.files.sample_data("release_hold_success.xml")
@@ -282,7 +282,7 @@ class TestAxis360API:
         # endpoint and get a good response.
         edition, pool = axis360.db.edition(
             identifier_type=Identifier.AXIS_360_ID,
-            data_source_name=DataSource.AXIS_360,
+            data_source_name=DataSource.BOUNDLESS,
             with_license_pool=True,
         )
         data = axis360.files.sample_data("checkout_success.xml")
@@ -307,7 +307,7 @@ class TestAxis360API:
         # Test our ability to fulfill an Axis 360 title.
         edition, pool = axis360.db.edition(
             identifier_type=Identifier.AXIS_360_ID,
-            data_source_name=DataSource.AXIS_360,
+            data_source_name=DataSource.BOUNDLESS,
             with_license_pool=True,
         )
 
@@ -416,7 +416,7 @@ class TestAxis360API:
         edition, pool = axis360.db.edition(
             identifier_type=Identifier.AXIS_360_ID,
             identifier_id="0015176429",
-            data_source_name=DataSource.AXIS_360,
+            data_source_name=DataSource.BOUNDLESS,
             with_license_pool=True,
         )
 
@@ -461,7 +461,7 @@ class TestAxis360API:
         edition, pool = axis360.db.edition(
             identifier_type=Identifier.AXIS_360_ID,
             identifier_id="0016820953",
-            data_source_name=DataSource.AXIS_360,
+            data_source_name=DataSource.BOUNDLESS,
             with_license_pool=True,
         )
 
@@ -528,7 +528,7 @@ class TestAxis360API:
         edition, pool = axis360.db.edition(
             identifier_type=Identifier.AXIS_360_ID,
             identifier_id="0015176429",
-            data_source_name=DataSource.AXIS_360,
+            data_source_name=DataSource.BOUNDLESS,
             with_license_pool=True,
         )
 
@@ -652,11 +652,11 @@ class TestAxis360API:
                 # available.
                 identifier_data = IdentifierData.from_identifier(identifier)
                 bibliographic = BibliographicData(
-                    data_source_name=DataSource.AXIS_360,
+                    data_source_name=DataSource.BOUNDLESS,
                     primary_identifier_data=identifier_data,
                 )
                 availability = CirculationData(
-                    data_source_name=DataSource.AXIS_360,
+                    data_source_name=DataSource.BOUNDLESS,
                     primary_identifier_data=identifier_data,
                     licenses_owned=7,
                     licenses_available=6,
@@ -736,7 +736,7 @@ class TestAxis360API:
             edition,
             pool,
         ) = axis360.db.edition(
-            data_source_name=DataSource.AXIS_360,
+            data_source_name=DataSource.BOUNDLESS,
             identifier_type=id1.type,
             identifier_id=id1.identifier,
             with_license_pool=True,
@@ -751,7 +751,7 @@ class TestAxis360API:
             edition2,
             pool2,
         ) = axis360.db.edition(
-            data_source_name=DataSource.AXIS_360,
+            data_source_name=DataSource.BOUNDLESS,
             identifier_type=id1.type,
             identifier_id=id1.identifier,
             with_license_pool=True,
@@ -807,7 +807,7 @@ class TestAxis360API:
 
         # Now change a bit of the data and call the method again.
         new_circulation = CirculationData(
-            data_source_name=DataSource.AXIS_360,
+            data_source_name=DataSource.BOUNDLESS,
             primary_identifier_data=axis360.BIBLIOGRAPHIC_DATA.primary_identifier_data,
             licenses_owned=8,
             licenses_available=7,

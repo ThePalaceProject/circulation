@@ -467,7 +467,7 @@ class TestWorkController:
         primary_identifier = work.presentation_edition.primary_identifier
         work.audience = "Adult"
         work.fiction = True
-        axis_360 = DataSource.lookup(work_fixture.ctrl.db.session, DataSource.AXIS_360)
+        axis_360 = DataSource.lookup(work_fixture.ctrl.db.session, DataSource.BOUNDLESS)
         classification1 = primary_identifier.classify(
             data_source=axis_360,
             subject_type=Subject.BISAC,
@@ -895,7 +895,7 @@ class TestWorkController:
         subject2.genre = genres[1]
         subject3 = work_fixture.ctrl.db.subject(type="type2", identifier="subject3")
         subject3.genre = None
-        source = DataSource.lookup(work_fixture.ctrl.db.session, DataSource.AXIS_360)
+        source = DataSource.lookup(work_fixture.ctrl.db.session, DataSource.BOUNDLESS)
         classification1 = work_fixture.ctrl.db.classification(
             identifier=identifier, subject=subject1, data_source=source, weight=1
         )
