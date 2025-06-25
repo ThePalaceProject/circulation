@@ -3,8 +3,8 @@ from unittest.mock import patch
 import pytest
 
 from palace.manager.api.boundless.api import BoundlessApi
-from palace.manager.celery.tasks import boundless
 from palace.manager.celery.tasks.boundless import import_identifiers
+from palace.manager.scripts import boundless_import
 from palace.manager.scripts.boundless_import import ImportCollection
 from tests.fixtures.database import DatabaseTransactionFixture
 
@@ -15,7 +15,9 @@ class TestBoundlessCollectionImportScript:
 
         collection_name = "test_collection"
         collection = db.collection(collection_name, protocol=BoundlessApi)
-        with patch.object(boundless, "list_identifiers_for_import") as list_import:
+        with patch.object(
+            boundless_import, "list_identifiers_for_import"
+        ) as list_import:
             ImportCollection(db.session).do_run(
                 ["--collection-name", collection.name, "--import-all"]
             )
