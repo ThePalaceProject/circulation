@@ -32,10 +32,9 @@ def calculate_work_presentations(
         work_policies = waiting.pop(batch_size)
 
         if work_policies:
-
             try:
+                remaining_work_policies = work_policies.copy()
                 with (
-                    task.session() as session,
                     elapsed_time_logging(
                         log_method=task.log.info,
                         message_prefix=f"Presentation calculated presentation for works: count={len(work_policies)}, "
@@ -44,16 +43,24 @@ def calculate_work_presentations(
                     ),
                 ):
                     for wp in work_policies:
-                        work = get_one(session, Work, id=wp.work_id)
-                        if not work:
-                            task.log.warning(
-                                f"No work with id={wp.work_id}. Skipping..."
-                            )
-                            continue
-                        work.calculate_presentation(policy=wp.policy)
+                        with task.transaction() as tx:
+                            work = get_one(tx, Work, id=wp.work_id)
+                            if not work:
+                                task.log.warning(
+                                    f"No work with id={wp.work_id}. Skipping..."
+                                )
+                                continue
+                            work.calculate_presentation(policy=wp.policy)
+                            remaining_work_policies.remove(wp)
             except Exception as e:
                 # if a failure occurs requeue the items so that can be recalculated in the next round
-                waiting.add(*work_policies)
+                task.log.error(
+                    f"Failed to calculate_presentation for {wp.work_id}. "
+                    f"Re-queuing remaining {len(remaining_work_policies)} of {len(work_policies)} "
+                    f"for future processing.",
+                    exc_info=e,
+                )
+                waiting.add(*remaining_work_policies)
                 raise e
 
     if len(work_policies) == batch_size:
