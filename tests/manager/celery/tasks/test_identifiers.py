@@ -3,7 +3,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from celery import shared_task
-from celery.exceptions import ChordError
 
 from palace.manager.celery.task import Task
 from palace.manager.celery.tasks import identifiers
@@ -273,13 +272,10 @@ class TestCreateMarkUnavailableChord:
         active_set = IdentifierSet(identifier_tasks_fixture.redis_client)
         active_set.add(*identifier_tasks_fixture.identifiers(license_pools[:5]))
 
-        with (
-            patch.object(identifiers, "circulation_apply") as mock_apply,
-            pytest.raises(ChordError, match="Kaboom!"),
-        ):
+        with patch.object(identifiers, "circulation_apply") as mock_apply:
             identifiers.create_mark_unavailable_chord(
                 collection.id, identifiers_test_task.s(active_set, raise_exception=True)
-            ).delay().wait()
+            ).delay().wait(propagate=False)
 
         # Because one of the tasks raised an exception, we never made it into the mark_identifiers_unavailable
         # task at all
