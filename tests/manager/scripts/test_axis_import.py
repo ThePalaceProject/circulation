@@ -4,8 +4,7 @@ import pytest
 
 from palace.manager.api.boundless.api import BoundlessApi
 from palace.manager.celery.tasks.axis import import_identifiers
-from palace.manager.scripts import axis_import
-from palace.manager.scripts.axis_import import ImportCollection
+from palace.manager.scripts.boundless_import import ImportCollection
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

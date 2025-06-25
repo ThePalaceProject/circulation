@@ -453,7 +453,7 @@ class CirculationInternalFormatsMixin:
     # 2-tuples to those internal names.
     #
     # For instance, the combination ("application/epub+zip",
-    # "vnd.adobe/adept+xml") is called "ePub" in Axis 360 and 3M, but
+    # "vnd.adobe/adept+xml") is called "ePub" in Boundless and Bibliotheca, but
     # is called "ebook-epub-adobe" in Overdrive.
     delivery_mechanism_to_internal_format: dict[tuple[str | None, str | None], str] = {}
 
@@ -559,10 +559,10 @@ class BaseCirculationAPI(
     CAN_REVOKE_HOLD_WHEN_RESERVED = True
 
     # If the client must set a delivery mechanism at the point of
-    # checkout (Axis 360), set this to BORROW_STEP. If the client may
+    # checkout (Boundless), set this to BORROW_STEP. If the client may
     # wait til the point of fulfillment to set a delivery mechanism
     # (Overdrive), set this to FULFILL_STEP. If there is no choice of
-    # delivery mechanisms (3M), set this to None.
+    # delivery mechanisms (Bibliotheca), set this to None.
     SET_DELIVERY_MECHANISM_AT: str | None = FULFILL_STEP
 
     def __init__(self, _db: Session, collection: Collection):

@@ -437,8 +437,8 @@ class BoundlessApi(
         availability_response = self.api_requests.availability(patron_id=patron_id)
         for title in availability_response.titles:
             # Figure out which book we're talking about.
-            axis_identifier = title.title_id
-            axis_identifier_type = Identifier.AXIS_360_ID
+            title_id = title.title_id
+            identifier_type = Identifier.AXIS_360_ID
             availability = title.availability
             if availability.is_checked_out:
                 # When the item is checked out, it can be locked to a particular DRM format. So even though
@@ -453,7 +453,7 @@ class BoundlessApi(
                         self.log.error(
                             "Unknown checkout format %s for identifier %s. %r",
                             availability.checkout_format,
-                            axis_identifier,
+                            title_id,
                             title,
                         )
                         continue
@@ -467,8 +467,8 @@ class BoundlessApi(
 
                 yield LoanInfo(
                     collection_id=self.collection_id,
-                    identifier_type=axis_identifier_type,
-                    identifier=axis_identifier,
+                    identifier_type=identifier_type,
+                    identifier=title_id,
                     start_date=availability.checkout_start_date,
                     end_date=availability.checkout_end_date,
                     locked_to=locked_to,
@@ -477,8 +477,8 @@ class BoundlessApi(
             elif availability.is_reserved:
                 yield HoldInfo(
                     collection_id=self.collection_id,
-                    identifier_type=axis_identifier_type,
-                    identifier=axis_identifier,
+                    identifier_type=identifier_type,
+                    identifier=title_id,
                     end_date=availability.reserved_end_date,
                     hold_position=0,
                 )
@@ -486,8 +486,8 @@ class BoundlessApi(
             elif availability.is_in_hold_queue:
                 yield HoldInfo(
                     collection_id=self.collection_id,
-                    identifier_type=axis_identifier_type,
-                    identifier=axis_identifier,
+                    identifier_type=identifier_type,
+                    identifier=title_id,
                     hold_position=availability.holds_queue_position,
                 )
 

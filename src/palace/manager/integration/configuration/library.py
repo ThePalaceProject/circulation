@@ -144,8 +144,7 @@ class LibrarySettings(BaseSettings):
         form=LibraryConfFormItem(
             label="Enabled entry points",
             description="Patrons will see the selected entry points at the "
-            "top level and in search results. <p>Currently supported "
-            "audiobook vendors: Bibliotheca, Axis 360",
+            "top level and in search results.",
             type=ConfigurationFormItemType.MENU,
             options={
                 entrypoint.INTERNAL_NAME: EntryPoint.DISPLAY_TITLES[entrypoint]

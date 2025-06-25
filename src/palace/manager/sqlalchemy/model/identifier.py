@@ -391,7 +391,7 @@ class Identifier(Base, IdentifierConstants, LoggerMixin):
             forbidden_characters = ",/"
         elif type == Identifier.AXIS_360_ID:
             # IDs are joined with commas during a lookup. Embedded
-            # commas will confuse the Axis 360 API.
+            # commas will confuse the Boundless API.
             forbidden_characters = ","
         if any(x in id for x in forbidden_characters):
             return False
