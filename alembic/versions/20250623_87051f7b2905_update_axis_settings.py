@@ -1,7 +1,7 @@
 """Update axis settings
 
 Revision ID: 87051f7b2905
-Revises: d671b95566fb
+Revises: 01b1e464a9d1
 Create Date: 2025-06-23 13:15:35.619911+00:00
 
 """
@@ -16,7 +16,7 @@ from palace.manager.util.migration.helpers import migration_logger
 
 # revision identifiers, used by Alembic.
 revision = "87051f7b2905"
-down_revision = "d671b95566fb"
+down_revision = "01b1e464a9d1"
 branch_labels = None
 depends_on = None
 
