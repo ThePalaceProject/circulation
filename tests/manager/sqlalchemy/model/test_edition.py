@@ -477,7 +477,7 @@ class TestEdition:
         # there are no descriptions from that data source, a
         # head-to-head evaluation is performed, and OCLC Linked Data
         # wins.
-        threem = DataSource.lookup(db.session, DataSource.THREEM, autocreate=True)
+        threem = DataSource.lookup(db.session, DataSource.BIBLIOTHECA, autocreate=True)
         champ3, resources3 = Identifier.evaluate_summary_quality(
             db.session, ids, [threem]
         )

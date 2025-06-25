@@ -29,7 +29,7 @@ class AvailabilityRefreshScript(IdentifierInputScript):
     def refresh_availability(self, identifiers):
         provider = None
         identifier = identifiers[0]
-        if identifier.type == Identifier.THREEM_ID:
+        if identifier.type == Identifier.BIBLIOTHECA_ID:
             sweeper = BibliothecaCirculationSweep(self._db)
             sweeper.process_batch(identifiers)
         elif identifier.type == Identifier.OVERDRIVE_ID:

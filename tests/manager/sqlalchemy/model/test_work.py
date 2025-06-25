@@ -894,7 +894,7 @@ class TestWork:
             if c.role == Contributor.Role.AUTHOR
         ]
 
-        data_source = DataSource.lookup(db.session, DataSource.THREEM)
+        data_source = DataSource.lookup(db.session, DataSource.BIBLIOTHECA)
 
         # This identifier is strongly equivalent to the edition's.
         identifier1 = db.identifier(identifier_type=Identifier.ISBN)

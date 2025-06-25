@@ -338,8 +338,8 @@ class TestBibliothecaAPI:
 
         # Create a LicensePool that needs updating.
         edition, pool = db.edition(
-            identifier_type=Identifier.THREEM_ID,
-            data_source_name=DataSource.THREEM,
+            identifier_type=Identifier.BIBLIOTHECA_ID,
+            data_source_name=DataSource.BIBLIOTHECA,
             with_license_pool=True,
             collection=bibliotheca_fixture.collection,
         )
@@ -1812,7 +1812,7 @@ class TestItemListParser:
 
         primary = cooked.primary_identifier_data
         assert "ddf4gr9" == primary.identifier
-        assert Identifier.THREEM_ID == primary.type
+        assert Identifier.BIBLIOTHECA_ID == primary.type
 
         identifiers = sorted(cooked.identifiers, key=lambda x: x.identifier)
         assert ["9781250015280", "9781250031112", "ddf4gr9"] == [
