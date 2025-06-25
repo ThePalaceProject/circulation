@@ -24,7 +24,7 @@ from palace.manager.util.datetime_helpers import utc_now
 
 class BaseBoundlessJsonModel(BaseModel):
     """
-    Base model for Axis JSON models.
+    Base model for Boundless (Axis 360) JSON models.
     """
 
     model_config = ConfigDict(
@@ -35,7 +35,7 @@ class BaseBoundlessJsonModel(BaseModel):
 
 class BaseBoundlessJsonResponse(BaseBoundlessJsonModel, BaseBoundlessResponse):
     """
-    Base model for Axis JSON API responses.
+    Base model for JSON API responses.
     """
 
     status: Status
@@ -46,9 +46,9 @@ class BaseBoundlessJsonResponse(BaseBoundlessJsonModel, BaseBoundlessResponse):
 
 class Status(BaseBoundlessJsonModel):
     """
-    The JSON version of the Axis status response information.
+    The JSON version of the status response information.
 
-    This is included with all the Axis API responses, and gives information about
+    This is included with all the API responses, and gives information about
     the success or failure of the request.
     """
 
@@ -137,7 +137,7 @@ class AudiobookMetadataReadingOrder(BaseBoundlessJsonModel):
 
 class AudiobookMetadataResponse(BaseBoundlessJsonResponse):
     """
-    This response is returned by the Axis audiobook metadata API endpoint.
+    This response is returned by the audiobook metadata API endpoint.
 
     It is not documented in any api documentation we have been provided. This
     model is based on the observed API responses and the old parser code.
@@ -151,7 +151,7 @@ class AudiobookMetadataResponse(BaseBoundlessJsonResponse):
 
 class Token(BaseBoundlessJsonModel):
     """
-    Represents a bearer token response from the Axis API.
+    Represents a bearer token response from the API.
 
     This model provides some helper methods to check if the token is expired.
     """
@@ -183,7 +183,7 @@ class Token(BaseBoundlessJsonModel):
 
 class LicenseServerStatus(BaseBoundlessJsonModel):
     """
-    A different style of status response, given by the Axis license server.
+    A different style of status response, given by the Boundless license server.
 
     This is semi-documented in "Baker and Taylor KDRM Enhanced Implemtation - AxisNow Node-1.pdf" (sic),
     but the actual response format that is given in that document does not match the actual responses

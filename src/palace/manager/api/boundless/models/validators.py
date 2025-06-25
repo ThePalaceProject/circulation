@@ -4,9 +4,8 @@ from typing import Annotated, Any
 from pydantic import AwareDatetime, BeforeValidator, NonNegativeInt
 
 
-def _boundless_datetime_before_validator(value: Any) -> Any:
+def _boundless_xml_datetime_before_validator(value: Any) -> Any:
     if isinstance(value, str):
-        # Attempt to parse the string using the format we expect from Axis 360
         try:
             return datetime.strptime(value, "%m/%d/%Y %I:%M:%S %p %z")
         except ValueError:
@@ -20,12 +19,12 @@ def _boundless_datetime_before_validator(value: Any) -> Any:
     return value
 
 
-BoundlessDateTime = Annotated[
-    AwareDatetime, BeforeValidator(_boundless_datetime_before_validator)
+BoundlessXmlDateTime = Annotated[
+    AwareDatetime, BeforeValidator(_boundless_xml_datetime_before_validator)
 ]
 """
 A pydantic type that represents a datetime object. It is annotated with a validator that
-parses the datetime string format used in Axis 360 XML responses.
+parses the datetime string format used in Boundless XML responses.
 
 This validator attempts to parse the datetime string in two formats:
 1. "10/19/2018 7:42:00 PM +00:00" - This format includes the timezone offset.
@@ -37,7 +36,7 @@ This validator attempts to parse the datetime string in two formats:
 def _boundless_json_datetime_before_validator(value: Any) -> Any:
     if isinstance(value, str):
         try:
-            # In its JSON responses Axis gives us datetime strings in this format:
+            # In its JSON responses the API gives us datetime strings in this format:
             # 2018-09-29 18:34:00.0001398 +00:00
             # There are two issues with this string that cause us to not be
             # able to parse it:
@@ -62,7 +61,7 @@ BoundlessJsonDateTime = Annotated[
 ]
 """
 A pydantic type that represents a datetime object. It is annotated with a validator that
-parses the datetime string format used in Axis 360 JSON responses.
+parses the datetime string format used in Boundless JSON responses.
 
 An example of the datetime string format is:
   - "2018-09-29 18:34:00.0001398 +00:00"
@@ -74,9 +73,9 @@ This format is tantalizingly close to actually being a standard ISO 8601 format,
 """
 
 
-def _boundless_date_before_validator(value: Any) -> Any:
+def _boundless_xml_date_before_validator(value: Any) -> Any:
     if isinstance(value, str):
-        # Attempt to parse the string using the format we expect from Axis 360
+        # Attempt to parse the date string using the format we expect from in API responses.
         try:
             return datetime.strptime(value, "%m/%d/%Y").date()
         except ValueError:
@@ -84,9 +83,11 @@ def _boundless_date_before_validator(value: Any) -> Any:
     return value
 
 
-BoundlessDate = Annotated[date, BeforeValidator(_boundless_date_before_validator)]
+BoundlessXmlDate = Annotated[
+    date, BeforeValidator(_boundless_xml_date_before_validator)
+]
 """
-The date type used in Axis 360 XML responses.
+The date type used in Boundless XML responses.
 
 Example: 10/19/2018
 """

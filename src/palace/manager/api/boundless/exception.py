@@ -36,7 +36,7 @@ class BoundlessException(BasePalaceException): ...
 
 class BoundlessValidationError(BadResponseException, BoundlessException):
     """
-    Raise when we are unable to validate a response from Axis 360.
+    Raise when we are unable to validate a response from Boundless (Axis 360).
     """
 
     ...
@@ -44,7 +44,7 @@ class BoundlessValidationError(BadResponseException, BoundlessException):
 
 class BoundlessLicenseError(BoundlessException, BaseProblemDetailException):
     """
-    Raise when there is a license-related error with Axis 360.
+    Raise when there is a license-related error.
     """
 
     def __init__(self, status_doc: LicenseServerStatus, http_status_code: int) -> None:
@@ -74,7 +74,7 @@ ErrorLookupType = Mapping[int | tuple[int, str], ErrorType]
 
 class BoundlessStatusTuple(NamedTuple):
     """
-    A named tuple to hold the status code and message from an Axis 360 response.
+    A named tuple to hold the status code and message from a Boundless response.
     """
 
     code: int
@@ -82,10 +82,10 @@ class BoundlessStatusTuple(NamedTuple):
 
 
 class StatusResponseParser:
-    SERVICE_NAME = "Axis 360"
+    SERVICE_NAME = "Boundless"
     NAMESPACES = {"axis": "http://axis360api.baker-taylor.com/vendorAPI"}
 
-    # Map Axis 360 error codes to our circulation exceptions.
+    # Map Boundless error codes to our circulation exceptions.
     CODE_TO_EXCEPTION: ErrorLookupType = {
         315: InvalidInputException,  # Bad password
         316: InvalidInputException,  # DRM account already exists
@@ -178,7 +178,7 @@ class StatusResponseParser:
     @classmethod
     def parse_xml(cls, data: bytes) -> BoundlessStatusTuple | None:
         """
-        Best effort attempt to parse an XML response from Axis 360,
+        Best effort attempt to parse an XML response,
         returning a tuple of (status_code, message) if successful,
         or None if parsing fails or the response is not valid.
         """
@@ -213,7 +213,7 @@ class StatusResponseParser:
     @classmethod
     def parse_json(cls, data: bytes) -> BoundlessStatusTuple | None:
         """
-        Best effort attempt to parse an JSON response from Axis 360,
+        Best effort attempt to parse an JSON response from,
         returning a tuple of (status_code, message) if successful,
         or None if parsing fails or the response is not valid.
         """

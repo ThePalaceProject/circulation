@@ -4,18 +4,18 @@ import pytest
 from pydantic import TypeAdapter, ValidationError
 
 from palace.manager.api.boundless.models.validators import (
-    BoundlessDate,
-    BoundlessDateTime,
     BoundlessJsonDateTime,
     BoundlessRuntime,
     BoundlessStringList,
+    BoundlessXmlDate,
+    BoundlessXmlDateTime,
 )
 from palace.manager.util.datetime_helpers import datetime_utc
 
 
 class TestAxisValidators:
     def test_axis_date_time(self) -> None:
-        adaptor = TypeAdapter(BoundlessDateTime)
+        adaptor = TypeAdapter(BoundlessXmlDateTime)
 
         # Can validate a datetime object
         assert adaptor.validate_python(
@@ -65,7 +65,7 @@ class TestAxisValidators:
         )
 
     def test_axis_date(self) -> None:
-        adaptor = TypeAdapter(BoundlessDate)
+        adaptor = TypeAdapter(BoundlessXmlDate)
 
         # If the object isn't in a format we expect, it will raise a validation error
         with pytest.raises(ValidationError):

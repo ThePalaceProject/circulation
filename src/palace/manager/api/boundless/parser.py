@@ -27,7 +27,7 @@ from palace.manager.util.log import LoggerMixin
 
 
 class BibliographicParser(LoggerMixin):
-    # Axis authors with a special role have an abbreviation after their names,
+    # Authors with a special role have an abbreviation after their names,
     # e.g. "San Ruby (FRW)"
     ROLE_ABBREVIATION_REGEX = re.compile(r"\(([A-Z][A-Z][A-Z])\)$")
     ROLE_ABBREVIATION_TO_ROLE = dict(
@@ -48,7 +48,7 @@ class BibliographicParser(LoggerMixin):
         primary_author_found: bool = False,
         force_role: Contributor.Role | None = None,
     ) -> ContributorData:
-        """Parse an Axis 360 contributor string.
+        """Parse a contributor string.
 
         The contributor string looks like "Butler, Octavia" or "Walt
         Disney Pictures (COR)" or "Rex, Adam (ILT)". The optional
@@ -211,7 +211,7 @@ class BibliographicParser(LoggerMixin):
 
             else:
                 cls.logger().warning(
-                    "Unrecognized Axis format for %s: %s"
+                    "Unrecognized Boundless format for %s: %s"
                     % (title.title_id, internal_format)
                 )
 
@@ -271,7 +271,7 @@ class BibliographicParser(LoggerMixin):
     def parse(
         cls, availability: AvailabilityResponse
     ) -> Generator[tuple[BibliographicData, CirculationData]]:
-        """Parse an Axis 360 availability response into a list of
+        """Parse an AvailabilityResponse object into a list of
         BibliographicData and CirculationData objects.
         """
         for title in availability.titles:

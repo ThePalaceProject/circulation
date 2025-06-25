@@ -172,7 +172,7 @@ class BoundlessApi(
         :param licensepool: LicensePool for the book to be returned.
 
         :raise CirculationException: If the API can't carry out the operation.
-        :raise Axis360ValidationError: If the API returns an invalid response.
+        :raise BoundlessValidationError: If the API returns an invalid response.
         """
         title_id = licensepool.identifier.identifier
         patron_id = patron.authorization_identifier
@@ -319,7 +319,7 @@ class BoundlessApi(
         ]
 
         if not titles:
-            # The Axis 360 API did not return any titles for this identifier, so
+            # The API did not return any titles for this identifier, so
             # the patron does not have this book checked out.
             if availability_response.titles:
                 # If there are titles but none match, we log a warning.
@@ -517,7 +517,7 @@ class BoundlessApi(
             if identifier in remainder:
                 remainder.remove(identifier)
 
-        # We asked Axis about n books. It sent us n-k responses. Those
+        # We asked Boundless about n books. It sent us n-k responses. Those
         # k books are the identifiers in `remainder`. These books have
         # been removed from the collection without us being notified.
         for removed_identifier in remainder:
@@ -528,7 +528,7 @@ class BoundlessApi(
         bibliographic: BibliographicData,
     ) -> tuple[Edition, bool, LicensePool, bool]:
         """Create or update a single book based on bibliographic
-        and availability data from the Axis 360 API.
+        and availability data from the Boundless API.
 
         :param bibliographic: A BibliographicData object containing
             bibliographic and circulation (ie availability) data about this title

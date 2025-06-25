@@ -47,7 +47,7 @@ class BoundlessSettings(BaseCirculationApiSettings, FormatPrioritiesSettings):
             label=_("Verify SSL Certificate"),
             description=_(
                 "This should always be True in production; though, it may need "
-                "to be set to False to use the Axis 360 QA Environment."
+                "to be set to False to use the Boundless QA Environment."
             ),
             type=ConfigurationFormItemType.SELECT,
             options={

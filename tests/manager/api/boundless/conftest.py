@@ -75,7 +75,7 @@ class BoundlessFixture:
 
 
 @pytest.fixture(scope="function")
-def axis360(
+def boundless(
     db: DatabaseTransactionFixture,
     http_client: MockHttpClientFixture,
     axis_files_fixture: AxisFilesFixture,

@@ -46,7 +46,7 @@ if TYPE_CHECKING:
 
 class BoundlessRequests(LoggerMixin):
     """
-    Make requests to the Axis 360 API.
+    Make requests to the Boundless (Axis 360) API.
 
     Handles authentication, bearer token management, and
     response parsing.
@@ -99,16 +99,16 @@ class BoundlessRequests(LoggerMixin):
 
         return f"{token.token_type} {token.access_token}"
 
-    _TAxisResponse = TypeVar("_TAxisResponse", bound=BaseBoundlessResponse)
+    _TBoundlessResponse = TypeVar("_TBoundlessResponse", bound=BaseBoundlessResponse)
 
     def _request(
         self,
         http_method: str,
         url: str,
-        response_parser: Callable[[bytes], _TAxisResponse],
+        response_parser: Callable[[bytes], _TBoundlessResponse],
         params: Mapping[str, Any] | None = None,
         timeout: int | None | Literal[SentinelType.NotGiven] = SentinelType.NotGiven,
-    ) -> _TAxisResponse:
+    ) -> _TBoundlessResponse:
         """
         Make an HTTP request, acquiring/refreshing a bearer token if necessary.
         """
@@ -132,7 +132,7 @@ class BoundlessRequests(LoggerMixin):
             parsed_error = StatusResponseParser.parse(response.content)
             if parsed_error is None or parsed_error.code in [1001, 1002]:
                 # The token is probably expired. Get a new token and try again.
-                # Axis 360's status codes mean:
+                # These status codes mean:
                 #   1001: Invalid token
                 #   1002: Token expired
                 self.refresh_bearer_token()
@@ -156,7 +156,7 @@ class BoundlessRequests(LoggerMixin):
             # The best we can do is raise a generic validation error.
             raise BoundlessValidationError(
                 response.url,
-                "Unexpected response from Axis 360 API",
+                "Unexpected response from Boundless API",
                 response,
                 debug_message=str(e),
             ) from e
