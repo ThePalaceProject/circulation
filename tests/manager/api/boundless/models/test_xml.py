@@ -4,7 +4,7 @@ from typing import Literal
 
 import pytest
 
-from palace.manager.api.axis.models.xml import (
+from palace.manager.api.boundless.models.xml import (
     AddHoldResponse,
     AvailabilityResponse,
     Checkout,

@@ -2,7 +2,7 @@
 import sys
 from xml.dom import minidom
 
-from palace.manager.api.axis.api import Axis360API
+from palace.manager.api.boundless.api import BoundlessApi
 from palace.manager.scripts.base import Script
 from palace.manager.sqlalchemy.model.collection import Collection
 
@@ -14,8 +14,8 @@ class Axis360RawPatronActivityScript(Script):
 
     def run(self):
         for patron_identifier in sys.argv[1:]:
-            for collection in Collection.by_protocol(self._db, Axis360API.label()):
-                api = Axis360API(self._db, collection)
+            for collection in Collection.by_protocol(self._db, BoundlessApi.label()):
+                api = BoundlessApi(self._db, collection)
                 response = api.availability(patron_id=patron_identifier)
                 xml = minidom.parseString(response.content)
                 print(xml.toprettyxml(), "\n")

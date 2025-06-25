@@ -2,8 +2,11 @@ import json
 
 import pytest
 
-from palace.manager.api.axis.exception import Axis360LicenseError, StatusResponseParser
-from palace.manager.api.axis.models.json import LicenseServerStatus
+from palace.manager.api.boundless.exception import (
+    BoundlessLicenseError,
+    StatusResponseParser,
+)
+from palace.manager.api.boundless.models.json import LicenseServerStatus
 from palace.manager.api.circulation_exceptions import (
     NotFoundOnRemote,
     RemoteInitiatedServerError,
@@ -30,7 +33,7 @@ class TestAxis360LicenseError:
         status_doc = LicenseServerStatus.model_validate_json(
             axis_files_fixture.sample_data(file_name)
         )
-        error = Axis360LicenseError(status_doc, status_code)
+        error = BoundlessLicenseError(status_doc, status_code)
         assert error.problem_detail == ProblemDetail(
             uri=f"http://palaceproject.io/terms/problem/boundless/{status_doc.code}",
             status_code=status_code,

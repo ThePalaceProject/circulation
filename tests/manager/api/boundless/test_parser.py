@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import datetime
 
-from palace.manager.api.axis.models.xml import AvailabilityResponse
-from palace.manager.api.axis.parser import (
+from palace.manager.api.boundless.models.xml import AvailabilityResponse
+from palace.manager.api.boundless.parser import (
     BibliographicParser,
 )
 from palace.manager.sqlalchemy.constants import LinkRelations, MediaTypes

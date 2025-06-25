@@ -2,7 +2,7 @@ from unittest.mock import patch
 
 import pytest
 
-from palace.manager.api.axis.api import Axis360API
+from palace.manager.api.boundless.api import BoundlessApi
 from palace.manager.celery.tasks.axis import import_identifiers
 from palace.manager.scripts import axis_import
 from palace.manager.scripts.axis_import import ImportCollection
@@ -14,7 +14,7 @@ class TestAxisCollectionImportScript:
     def test_axis_import(self, db: DatabaseTransactionFixture):
 
         collection_name = "test_collection"
-        collection = db.collection(collection_name, protocol=Axis360API)
+        collection = db.collection(collection_name, protocol=BoundlessApi)
         with patch.object(axis_import, "list_identifiers_for_import") as list_import:
             ImportCollection(db.session).do_run(
                 ["--collection-name", collection.name, "--import-all"]

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from flask_babel import lazy_gettext as _
 
-from palace.manager.api.axis.constants import ServerNickname
+from palace.manager.api.boundless.constants import ServerNickname
 from palace.manager.api.circulation import (
     BaseCirculationApiSettings,
     BaseCirculationLoanSettings,
@@ -15,7 +15,7 @@ from palace.manager.integration.settings import (
 )
 
 
-class Axis360Settings(BaseCirculationApiSettings, FormatPrioritiesSettings):
+class BoundlessSettings(BaseCirculationApiSettings, FormatPrioritiesSettings):
     username: str = FormField(
         form=ConfigurationFormItem(label=_("Username"), required=True)
     )
@@ -58,5 +58,5 @@ class Axis360Settings(BaseCirculationApiSettings, FormatPrioritiesSettings):
     )
 
 
-class Axis360LibrarySettings(BaseCirculationLoanSettings):
+class BoundlessLibrarySettings(BaseCirculationLoanSettings):
     pass

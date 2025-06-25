@@ -6,19 +6,19 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from palace.manager.api.axis.constants import (
+from palace.manager.api.boundless.constants import (
     API_BASE_URLS,
     LICENSE_SERVER_BASE_URLS,
     ServerNickname,
 )
-from palace.manager.api.axis.exception import (
-    Axis360LicenseError,
-    Axis360ValidationError,
+from palace.manager.api.boundless.exception import (
+    BoundlessLicenseError,
+    BoundlessValidationError,
 )
-from palace.manager.api.axis.models.json import AudiobookMetadataResponse
-from palace.manager.api.axis.models.xml import AddHoldResponse, RemoveHoldResponse
-from palace.manager.api.axis.requests import Axis360Requests
-from palace.manager.api.axis.settings import Axis360Settings
+from palace.manager.api.boundless.models.json import AudiobookMetadataResponse
+from palace.manager.api.boundless.models.xml import AddHoldResponse, RemoveHoldResponse
+from palace.manager.api.boundless.requests import BoundlessRequests
+from palace.manager.api.boundless.settings import BoundlessSettings
 from palace.manager.api.circulation_exceptions import (
     AlreadyCheckedOut,
     AlreadyOnHold,
@@ -35,13 +35,13 @@ from tests.fixtures.http import MockHttpClientFixture
 class Axis360RequestsFixture:
     def __init__(self, http_client: MockHttpClientFixture) -> None:
         self.create_settings = partial(
-            Axis360Settings,
+            BoundlessSettings,
             external_account_id="test_library_id",
             username="test_username",
             password="test_password",
         )
         self.settings = self.create_settings()
-        self.requests = Axis360Requests(self.settings)
+        self.requests = BoundlessRequests(self.settings)
         self.client = http_client
         self.request = partial(self.requests._request, "GET", "endpoint")
 
@@ -76,7 +76,7 @@ class TestAxis360Requests:
         content: str,
     ):
         axis360_requests.client.queue_response(200, content=content)
-        with pytest.raises(Axis360ValidationError):
+        with pytest.raises(BoundlessValidationError):
             axis360_requests.request(
                 AddHoldResponse.from_xml,
             )
@@ -116,7 +116,7 @@ class TestAxis360Requests:
     ):
         data = axis_files_fixture.sample_data(filename)
         axis360_requests.client.queue_response(400, content=data)
-        with pytest.raises(Axis360ValidationError):
+        with pytest.raises(BoundlessValidationError):
             axis360_requests.request(AudiobookMetadataResponse.model_validate_json)
 
     @pytest.mark.parametrize(
@@ -410,7 +410,7 @@ class TestAxis360Requests:
         license_url: str,
     ):
         settings = axis360_requests.create_settings(server_nickname=server_nickname)
-        requests = Axis360Requests(settings)
+        requests = BoundlessRequests(settings)
         assert requests._base_url == base_url
         assert requests._license_server_url == license_url
 
@@ -450,10 +450,10 @@ class TestAxis360Requests:
 
         data = axis_files_fixture.sample_data("license_internal_server_error.json")
         axis360_requests.client.queue_response(500, content=data)
-        with pytest.raises(Axis360LicenseError, match="Internal Server Error"):
+        with pytest.raises(BoundlessLicenseError, match="Internal Server Error"):
             license_request()
 
         data = axis_files_fixture.sample_data("license_invalid_isbn.json")
         axis360_requests.client.queue_response(500, content=data)
-        with pytest.raises(Axis360LicenseError, match="Invalid ISBN"):
+        with pytest.raises(BoundlessLicenseError, match="Invalid ISBN"):
             license_request()

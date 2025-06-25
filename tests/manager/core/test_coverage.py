@@ -3,7 +3,7 @@ from typing import cast
 
 import pytest
 
-from palace.manager.api.axis.api import Axis360API
+from palace.manager.api.boundless.api import BoundlessApi
 from palace.manager.api.overdrive.api import OverdriveAPI
 from palace.manager.core.coverage import (
     BaseCoverageProvider,
@@ -778,7 +778,7 @@ class TestIdentifierCoverageProvider:
     def test_bulk_register_with_collection(self, db: DatabaseTransactionFixture):
         identifier = db.identifier()
         provider = AlwaysSuccessfulCoverageProvider
-        collection = db.collection(protocol=Axis360API)
+        collection = db.collection(protocol=BoundlessApi)
 
         try:
             # If a DataSource or data source name is provided and

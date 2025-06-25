@@ -12,21 +12,24 @@ from pydantic_xml import ParsingError
 from requests import Response as RequestsResponse
 from typing_extensions import Unpack
 
-from palace.manager.api.axis.constants import API_BASE_URLS, LICENSE_SERVER_BASE_URLS
-from palace.manager.api.axis.exception import (
-    Axis360LicenseError,
-    Axis360ValidationError,
+from palace.manager.api.boundless.constants import (
+    API_BASE_URLS,
+    LICENSE_SERVER_BASE_URLS,
+)
+from palace.manager.api.boundless.exception import (
+    BoundlessLicenseError,
+    BoundlessValidationError,
     StatusResponseParser,
 )
-from palace.manager.api.axis.models.base import BaseAxisResponse
-from palace.manager.api.axis.models.json import (
+from palace.manager.api.boundless.models.base import BaseBoundlessResponse
+from palace.manager.api.boundless.models.json import (
     AudiobookMetadataResponse,
     FulfillmentInfoResponse,
     FulfillmentInfoResponseT,
     LicenseServerStatus,
     Token,
 )
-from palace.manager.api.axis.models.xml import (
+from palace.manager.api.boundless.models.xml import (
     AddHoldResponse,
     AvailabilityResponse,
     CheckoutResponse,
@@ -38,10 +41,10 @@ from palace.manager.util.log import LoggerMixin
 from palace.manager.util.sentinel import SentinelType
 
 if TYPE_CHECKING:
-    from palace.manager.api.axis.settings import Axis360Settings
+    from palace.manager.api.boundless.settings import BoundlessSettings
 
 
-class Axis360Requests(LoggerMixin):
+class BoundlessRequests(LoggerMixin):
     """
     Make requests to the Axis 360 API.
 
@@ -51,7 +54,7 @@ class Axis360Requests(LoggerMixin):
 
     DATE_FORMAT = "%m-%d-%Y %H:%M:%S"
 
-    def __init__(self, settings: Axis360Settings) -> None:
+    def __init__(self, settings: BoundlessSettings) -> None:
         self._library_id = settings.external_account_id
         self._username = settings.username
         self._password = settings.password
@@ -96,7 +99,7 @@ class Axis360Requests(LoggerMixin):
 
         return f"{token.token_type} {token.access_token}"
 
-    _TAxisResponse = TypeVar("_TAxisResponse", bound=BaseAxisResponse)
+    _TAxisResponse = TypeVar("_TAxisResponse", bound=BaseBoundlessResponse)
 
     def _request(
         self,
@@ -151,7 +154,7 @@ class Axis360Requests(LoggerMixin):
             StatusResponseParser.parse_and_raise(response.content)
 
             # The best we can do is raise a generic validation error.
-            raise Axis360ValidationError(
+            raise BoundlessValidationError(
                 response.url,
                 "Unexpected response from Axis 360 API",
                 response,
@@ -302,7 +305,7 @@ class Axis360Requests(LoggerMixin):
                 parsed_error = LicenseServerStatus.model_validate_json(
                     e.response.content
                 )
-                raise Axis360LicenseError(parsed_error, e.response.status_code) from e
+                raise BoundlessLicenseError(parsed_error, e.response.status_code) from e
             except ValidationError:
                 # If we can't parse the error, just raise the original exception.
                 ...

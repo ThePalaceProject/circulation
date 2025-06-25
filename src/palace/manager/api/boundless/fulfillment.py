@@ -13,7 +13,7 @@ from palace.manager.util.http import RemoteIntegrationException
 from palace.manager.util.log import LoggerMixin
 
 
-class Axis360AcsFulfillment(UrlFulfillment, LoggerMixin):
+class BoundlessAcsFulfillment(UrlFulfillment, LoggerMixin):
     """This implements a Axis 360 specific Fulfillment for ACS content
     served through AxisNow. The AxisNow API gives us a link that we can use
     to get the ACSM file that we serve to the mobile apps.

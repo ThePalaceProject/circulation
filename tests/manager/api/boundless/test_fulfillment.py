@@ -9,8 +9,8 @@ from unittest.mock import MagicMock, Mock, PropertyMock, patch
 
 import pytest
 
-from palace.manager.api.axis.fulfillment import (
-    Axis360AcsFulfillment,
+from palace.manager.api.boundless.fulfillment import (
+    BoundlessAcsFulfillment,
 )
 from palace.manager.util.flask_util import Response
 from palace.manager.util.problem_detail import BaseProblemDetailException
@@ -19,7 +19,7 @@ from palace.manager.util.problem_detail import BaseProblemDetailException
 class Axis360AcsFulfillmentFixture:
     def __init__(self, mock_urlopen: MagicMock):
         self.fulfillment_info = partial(
-            Axis360AcsFulfillment,
+            BoundlessAcsFulfillment,
             content_link="https://fake.url",
             verify=False,
         )

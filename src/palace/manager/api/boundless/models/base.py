@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 
 
-class BaseAxisResponse(ABC):
+class BaseBoundlessResponse(ABC):
     """
     Abstract base class for Axis API responses.
 

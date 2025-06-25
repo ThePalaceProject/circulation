@@ -8,8 +8,8 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import ObjectDeletedError, StaleDataError
 
-from palace.manager.api.axis.api import Axis360API
-from palace.manager.api.axis.requests import Axis360Requests
+from palace.manager.api.boundless.api import BoundlessApi
+from palace.manager.api.boundless.requests import BoundlessRequests
 from palace.manager.api.circulation import (
     BaseCirculationAPI,
     LibrarySettingsType,
@@ -48,7 +48,7 @@ def import_all_collections(
     with task.session() as session:
         count = 0
         for collection in get_collections_by_protocol(
-            task=task, session=session, protocol_class=Axis360API
+            task=task, session=session, protocol_class=BoundlessApi
         ):
             task.log.info(
                 f'Queued collection("{collection.name}" [id={collection.id}] for importing...'
@@ -123,7 +123,7 @@ def list_identifiers_for_import(
             # loop through feed :  for every {batch_size} items, pack them in a list and pass along to sub task for
             # processing
             try:
-                api = Axis360API(session, collection)
+                api = BoundlessApi(session, collection)
                 if not _check_api_credentials(task, collection, api.api_requests):
                     return None
 
@@ -167,7 +167,7 @@ def list_identifiers_for_import(
 
 
 def _check_api_credentials(
-    task: Task, collection: Collection, requests: Axis360Requests
+    task: Task, collection: Collection, requests: BoundlessRequests
 ) -> bool:
     # Try to get a bearer token, to make sure the collection is configured correctly.
     try:
@@ -262,7 +262,7 @@ def import_identifiers(
             return
 
         try:
-            api = Axis360API(session, collection)
+            api = BoundlessApi(session, collection)
             api_requests = api.api_requests
             identifier_batch = identifiers[:batch_size]
 
@@ -283,7 +283,7 @@ def import_identifiers(
     for metadata, circulation in circ_data:
         with task.transaction() as session:
             collection = load_from_id(session, Collection, collection_id)
-            api = Axis360API(session, collection, api_requests)
+            api = BoundlessApi(session, collection, api_requests)
             try:
                 process_book(task, session, api, metadata)
                 total_imported_in_current_task += 1
@@ -350,7 +350,7 @@ def import_identifiers(
 def process_book(
     task: Task,
     _db: Session,
-    api: Axis360API,
+    api: BoundlessApi,
     metadata: BibliographicData,
 ) -> None:
     edition, new_edition, license_pool, new_license_pool = api.update_book(
@@ -420,7 +420,7 @@ def reap_all_collections(
 
     with task.session() as session:
         count = 0
-        for collection in get_collections_by_protocol(task, session, Axis360API):
+        for collection in get_collections_by_protocol(task, session, BoundlessApi):
             task.log.info(
                 f'Queued collection("{collection.name}" [id={collection.id}] for reaping...'
             )
@@ -480,7 +480,7 @@ def reap_collection(
                 log_completion_message()
                 return
 
-            api = Axis360API(session, collection)
+            api = BoundlessApi(session, collection)
 
             _check_api_credentials(task, collection, api.api_requests)
 

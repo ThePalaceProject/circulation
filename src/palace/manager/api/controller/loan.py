@@ -6,7 +6,7 @@ from flask_babel import lazy_gettext as _
 from pydantic import TypeAdapter
 from werkzeug import Response as wkResponse
 
-from palace.manager.api.axis.constants import BAKER_TAYLOR_KDRM_PARAMS
+from palace.manager.api.boundless.constants import BAKER_TAYLOR_KDRM_PARAMS
 from palace.manager.api.circulation import UrlFulfillment
 from palace.manager.api.circulation_exceptions import (
     CirculationException,

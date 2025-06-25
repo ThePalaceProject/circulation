@@ -3,19 +3,19 @@ import datetime
 import pytest
 from pydantic import TypeAdapter, ValidationError
 
-from palace.manager.api.axis.models.validators import (
-    AxisDate,
-    AxisDateTime,
-    AxisJsonDateTime,
-    AxisRuntime,
-    AxisStringList,
+from palace.manager.api.boundless.models.validators import (
+    BoundlessDate,
+    BoundlessDateTime,
+    BoundlessJsonDateTime,
+    BoundlessRuntime,
+    BoundlessStringList,
 )
 from palace.manager.util.datetime_helpers import datetime_utc
 
 
 class TestAxisValidators:
     def test_axis_date_time(self) -> None:
-        adaptor = TypeAdapter(AxisDateTime)
+        adaptor = TypeAdapter(BoundlessDateTime)
 
         # Can validate a datetime object
         assert adaptor.validate_python(
@@ -43,7 +43,7 @@ class TestAxisValidators:
         )
 
     def test_axis_json_date_time(self) -> None:
-        adaptor = TypeAdapter(AxisJsonDateTime)
+        adaptor = TypeAdapter(BoundlessJsonDateTime)
 
         # Can validate a datetime object
         assert adaptor.validate_python(
@@ -65,7 +65,7 @@ class TestAxisValidators:
         )
 
     def test_axis_date(self) -> None:
-        adaptor = TypeAdapter(AxisDate)
+        adaptor = TypeAdapter(BoundlessDate)
 
         # If the object isn't in a format we expect, it will raise a validation error
         with pytest.raises(ValidationError):
@@ -81,7 +81,7 @@ class TestAxisValidators:
         assert adaptor.validate_python("07/22/2015") == datetime.date(2015, 7, 22)
 
     def test_axis_string_list(self) -> None:
-        adaptor = TypeAdapter(AxisStringList)
+        adaptor = TypeAdapter(BoundlessStringList)
 
         # Can validate a list of strings
         assert adaptor.validate_python(
@@ -115,7 +115,7 @@ class TestAxisValidators:
             adaptor.validate_python(None)
 
     def test_axis_runtime(self) -> None:
-        adaptor = TypeAdapter(AxisRuntime)
+        adaptor = TypeAdapter(BoundlessRuntime)
 
         assert adaptor.validate_python("0:00") == 0
 

@@ -9,11 +9,11 @@ from unittest.mock import MagicMock, create_autospec, patch
 import pytest
 from freezegun import freeze_time
 
-from palace.manager.api.axis.api import Axis360API
-from palace.manager.api.axis.constants import Axis360Format
-from palace.manager.api.axis.exception import Axis360ValidationError
-from palace.manager.api.axis.fulfillment import (
-    Axis360AcsFulfillment,
+from palace.manager.api.boundless.api import BoundlessApi
+from palace.manager.api.boundless.constants import BoundlessFormat
+from palace.manager.api.boundless.exception import BoundlessValidationError
+from palace.manager.api.boundless.fulfillment import (
+    BoundlessAcsFulfillment,
 )
 from palace.manager.api.circulation import DirectFulfillment, HoldInfo, LoanInfo
 from palace.manager.api.circulation_exceptions import (
@@ -39,14 +39,14 @@ from palace.manager.sqlalchemy.model.resource import Representation
 from palace.manager.util.datetime_helpers import datetime_utc, utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.library import LibraryFixture
-from tests.manager.api.axis.conftest import Axis360Fixture
+from tests.manager.api.boundless.conftest import BoundlessFixture
 
 
 class TestAxis360API:
     def test__run_self_tests(
         self,
         db: DatabaseTransactionFixture,
-        axis360: Axis360Fixture,
+        axis360: BoundlessFixture,
     ):
         # Verify that Axis360API._run_self_tests() calls the right
         # methods.
@@ -133,7 +133,7 @@ class TestAxis360API:
             == "All titles in this collection have delivery mechanisms."
         )
 
-    def test__run_self_tests_short_circuit(self, axis360: Axis360Fixture):
+    def test__run_self_tests_short_circuit(self, axis360: BoundlessFixture):
         # If we can't refresh the bearer token, the rest of the
         # self-tests aren't even run.
 
@@ -150,12 +150,12 @@ class TestAxis360API:
         assert failure.exception is not None
         assert failure.exception.args[0] == "no way"
 
-    def test_create_identifier_strings(self, axis360: Axis360Fixture):
+    def test_create_identifier_strings(self, axis360: BoundlessFixture):
         identifier = axis360.db.identifier()
-        values = Axis360API.create_identifier_strings(["foo", identifier])
+        values = BoundlessApi.create_identifier_strings(["foo", identifier])
         assert ["foo", identifier.identifier] == values
 
-    def test_update_availability(self, axis360: Axis360Fixture):
+    def test_update_availability(self, axis360: BoundlessFixture):
         # Test the Axis 360 implementation of the update_availability method
         # defined by the CirculationAPI interface.
 
@@ -194,7 +194,7 @@ class TestAxis360API:
         assert 0 == pool.patrons_in_hold_queue
         assert pool.last_checked is not None
 
-    def test_checkin_success(self, axis360: Axis360Fixture):
+    def test_checkin_success(self, axis360: BoundlessFixture):
         # Verify that we can make a request to the EarlyCheckInTitle
         # endpoint and get a good response.
         edition, pool = axis360.db.edition(
@@ -217,7 +217,7 @@ class TestAxis360API:
             "patronID": barcode,
         }
 
-    def test_checkin_failure(self, axis360: Axis360Fixture):
+    def test_checkin_failure(self, axis360: BoundlessFixture):
         # Verify that we correctly handle failure conditions sent from
         # the EarlyCheckInTitle endpoint.
         edition, pool = axis360.db.edition(
@@ -232,7 +232,9 @@ class TestAxis360API:
         with pytest.raises(NotFoundOnRemote):
             axis360.api.checkin(patron, "pin", pool)
 
-    def test_place_hold(self, axis360: Axis360Fixture, library_fixture: LibraryFixture):
+    def test_place_hold(
+        self, axis360: BoundlessFixture, library_fixture: LibraryFixture
+    ):
         edition, pool = axis360.db.edition(
             identifier_type=Identifier.AXIS_360_ID,
             data_source_name=DataSource.AXIS_360,
@@ -255,7 +257,7 @@ class TestAxis360API:
         assert params is not None
         assert params["email"] == "notifications@example.com"
 
-    def test_release_hold(self, axis360: Axis360Fixture):
+    def test_release_hold(self, axis360: BoundlessFixture):
         edition, pool = axis360.db.edition(
             identifier_type=Identifier.AXIS_360_ID,
             data_source_name=DataSource.AXIS_360,
@@ -277,7 +279,7 @@ class TestAxis360API:
             "patronId": barcode,
         }
 
-    def test_checkout(self, axis360: Axis360Fixture):
+    def test_checkout(self, axis360: BoundlessFixture):
         # Verify that we can make a request to the CheckoutTitle
         # endpoint and get a good response.
         edition, pool = axis360.db.edition(
@@ -303,7 +305,7 @@ class TestAxis360API:
             "format": "ePub",
         }
 
-    def test_fulfill_errors(self, axis360: Axis360Fixture):
+    def test_fulfill_errors(self, axis360: BoundlessFixture):
         # Test our ability to fulfill an Axis 360 title.
         edition, pool = axis360.db.edition(
             identifier_type=Identifier.AXIS_360_ID,
@@ -380,7 +382,7 @@ class TestAxis360API:
                 ),
             )
             axis360.http_client.queue_response(200, content=json.dumps(missing_field))
-            with pytest.raises(Axis360ValidationError):
+            with pytest.raises(BoundlessValidationError):
                 fulfill()
 
         # Try with a bad expiration date.
@@ -393,7 +395,7 @@ class TestAxis360API:
             ),
         )
         axis360.http_client.queue_response(200, content=json.dumps(bad_date))
-        with pytest.raises(Axis360ValidationError):
+        with pytest.raises(BoundlessValidationError):
             fulfill()
 
         # Try with an expired session key.
@@ -411,7 +413,7 @@ class TestAxis360API:
         ):
             fulfill()
 
-    def test_fulfill_acs(self, axis360: Axis360Fixture):
+    def test_fulfill_acs(self, axis360: BoundlessFixture):
         # Test our ability to fulfill an Axis 360 title.
         edition, pool = axis360.db.edition(
             identifier_type=Identifier.AXIS_360_ID,
@@ -438,7 +440,7 @@ class TestAxis360API:
         data = axis360.files.sample_data("availability_with_loan_and_hold.xml")
         axis360.http_client.queue_response(200, content=data)
         fulfillment = fulfill()
-        assert isinstance(fulfillment, Axis360AcsFulfillment)
+        assert isinstance(fulfillment, BoundlessAcsFulfillment)
         assert fulfillment.content_type == DeliveryMechanism.ADOBE_DRM
         assert fulfillment.content_link == "http://fulfillment/"
 
@@ -450,13 +452,13 @@ class TestAxis360API:
         data = data.replace(b"0016820953", pool.identifier.identifier.encode("utf8"))
         axis360.http_client.queue_response(200, content=data)
         fulfillment = fulfill()
-        assert isinstance(fulfillment, Axis360AcsFulfillment)
+        assert isinstance(fulfillment, BoundlessAcsFulfillment)
         assert (
             fulfillment.content_link
             == "http://adobe.acsm/?src=library&transactionId=2a34598b-12af-41e4-a926-af5e42da7fe5&isbn=9780763654573&format=F2"
         )
 
-    def test_fulfill_baker_taylor_kdrm(self, axis360: Axis360Fixture):
+    def test_fulfill_baker_taylor_kdrm(self, axis360: BoundlessFixture):
         # Test our ability to fulfill an AxisNow ebook.
         edition, pool = axis360.db.edition(
             identifier_type=Identifier.AXIS_360_ID,
@@ -523,7 +525,7 @@ class TestAxis360API:
         assert fulfillment.content_type == DeliveryMechanism.BAKER_TAYLOR_KDRM_DRM
         assert fulfillment.content == license_data
 
-    def test_fulfill_findaway(self, axis360: Axis360Fixture):
+    def test_fulfill_findaway(self, axis360: BoundlessFixture):
         # Test our ability to fulfill an Axis 360 title.
         edition, pool = axis360.db.edition(
             identifier_type=Identifier.AXIS_360_ID,
@@ -581,7 +583,7 @@ class TestAxis360API:
         assert metadata_args["params"] is not None
         assert metadata_args["params"] == {"fndcontentid": "04960"}
 
-    def test_patron_activity(self, axis360: Axis360Fixture):
+    def test_patron_activity(self, axis360: BoundlessFixture):
         """Test the method that locates all current activity
         for a patron.
         """
@@ -645,7 +647,7 @@ class TestAxis360API:
         axis360.http_client.queue_response(200, content=data)
         assert len(list(axis360.api.patron_activity(patron, "pin"))) == 0
 
-    def test_update_licensepools_for_identifiers(self, axis360: Axis360Fixture):
+    def test_update_licensepools_for_identifiers(self, axis360: BoundlessFixture):
         def _fetch_remote_availability(identifiers):
             for i, identifier in enumerate(identifiers):
                 # The first identifer in the list is still
@@ -692,7 +694,7 @@ class TestAxis360API:
         # The second was reaped.
         mock_reap.assert_called_once_with(no_longer_in_collection)
 
-    def test_fetch_remote_availability(self, axis360: Axis360Fixture):
+    def test_fetch_remote_availability(self, axis360: BoundlessFixture):
         # Test the _fetch_remote_availability method, as
         # used by update_licensepools_for_identifiers.
 
@@ -719,7 +721,7 @@ class TestAxis360API:
         )
         assert circulation.licenses_owned == 2
 
-    def test_reap(self, axis360: Axis360Fixture):
+    def test_reap(self, axis360: BoundlessFixture):
         # Test the _reap method, as used by
         # update_licensepools_for_identifiers.
 
@@ -782,7 +784,7 @@ class TestAxis360API:
         assert 0 == pool.licenses_reserved
         assert 0 == pool.patrons_in_hold_queue
 
-    def test_update_book(self, axis360: Axis360Fixture):
+    def test_update_book(self, axis360: BoundlessFixture):
         # Verify that the update_book method takes a BibliographicData object,
         # and creates appropriate data model objects.
 
@@ -834,14 +836,14 @@ class TestAxis360API:
         assert 8 == lp.licenses_owned
         assert 7 == lp.licenses_available
 
-    def test_availability_by_title_ids(self, axis360: Axis360Fixture):
+    def test_availability_by_title_ids(self, axis360: BoundlessFixture):
         ids = ["my_id"]
         with patch.object(axis360.api.api_requests, "availability") as availability:
             list(axis360.api.availability_by_title_ids(title_ids=ids))
 
         assert availability.call_args_list[0].kwargs["title_ids"] == ids
 
-    def test_recent_activity(self, axis360: Axis360Fixture):
+    def test_recent_activity(self, axis360: BoundlessFixture):
         # Test the recent_activity method, which returns a list of
         # recent activity for the collection.
         api = axis360.api
@@ -872,13 +874,13 @@ class TestAxis360API:
             match=r"Could not map delivery mechanism unknown/content-type "
             r"\(unknown_drm_scheme\) to internal delivery mechanism!",
         ):
-            Axis360API._delivery_mechanism_to_internal_format(lpdm)
+            BoundlessApi._delivery_mechanism_to_internal_format(lpdm)
 
         # Otherwise, the internal format is returned.
         lpdm.delivery_mechanism.content_type = Representation.EPUB_MEDIA_TYPE
         lpdm.delivery_mechanism.drm_scheme = DeliveryMechanism.ADOBE_DRM
 
         assert (
-            Axis360API._delivery_mechanism_to_internal_format(lpdm)
-            == Axis360Format.epub
+            BoundlessApi._delivery_mechanism_to_internal_format(lpdm)
+            == BoundlessFormat.epub
         )

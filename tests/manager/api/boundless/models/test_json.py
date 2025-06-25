@@ -2,7 +2,7 @@ import datetime
 
 from freezegun import freeze_time
 
-from palace.manager.api.axis.models.json import (
+from palace.manager.api.boundless.models.json import (
     AudiobookMetadataResponse,
     AxisNowFulfillmentInfoResponse,
     FindawayFulfillmentInfoResponse,

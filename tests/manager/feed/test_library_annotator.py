@@ -10,7 +10,7 @@ from lxml import etree
 from uritemplate import URITemplate
 
 from palace.manager.api.adobe_vendor_id import AuthdataUtility
-from palace.manager.api.axis.constants import BAKER_TAYLOR_KDRM_PARAMS
+from palace.manager.api.boundless.constants import BAKER_TAYLOR_KDRM_PARAMS
 from palace.manager.api.circulation import (
     BaseCirculationAPI,
     CirculationAPI,

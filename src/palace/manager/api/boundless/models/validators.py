@@ -4,7 +4,7 @@ from typing import Annotated, Any
 from pydantic import AwareDatetime, BeforeValidator, NonNegativeInt
 
 
-def _axis_datetime_before_validator(value: Any) -> Any:
+def _boundless_datetime_before_validator(value: Any) -> Any:
     if isinstance(value, str):
         # Attempt to parse the string using the format we expect from Axis 360
         try:
@@ -20,8 +20,8 @@ def _axis_datetime_before_validator(value: Any) -> Any:
     return value
 
 
-AxisDateTime = Annotated[
-    AwareDatetime, BeforeValidator(_axis_datetime_before_validator)
+BoundlessDateTime = Annotated[
+    AwareDatetime, BeforeValidator(_boundless_datetime_before_validator)
 ]
 """
 A pydantic type that represents a datetime object. It is annotated with a validator that
@@ -34,7 +34,7 @@ This validator attempts to parse the datetime string in two formats:
 """
 
 
-def _axis_json_datetime_before_validator(value: Any) -> Any:
+def _boundless_json_datetime_before_validator(value: Any) -> Any:
     if isinstance(value, str):
         try:
             # In its JSON responses Axis gives us datetime strings in this format:
@@ -57,8 +57,8 @@ def _axis_json_datetime_before_validator(value: Any) -> Any:
     return value
 
 
-AxisJsonDateTime = Annotated[
-    AwareDatetime, BeforeValidator(_axis_json_datetime_before_validator)
+BoundlessJsonDateTime = Annotated[
+    AwareDatetime, BeforeValidator(_boundless_json_datetime_before_validator)
 ]
 """
 A pydantic type that represents a datetime object. It is annotated with a validator that
@@ -74,7 +74,7 @@ This format is tantalizingly close to actually being a standard ISO 8601 format,
 """
 
 
-def _axis_date_before_validator(value: Any) -> Any:
+def _boundless_date_before_validator(value: Any) -> Any:
     if isinstance(value, str):
         # Attempt to parse the string using the format we expect from Axis 360
         try:
@@ -84,7 +84,7 @@ def _axis_date_before_validator(value: Any) -> Any:
     return value
 
 
-AxisDate = Annotated[date, BeforeValidator(_axis_date_before_validator)]
+BoundlessDate = Annotated[date, BeforeValidator(_boundless_date_before_validator)]
 """
 The date type used in Axis 360 XML responses.
 
@@ -92,7 +92,7 @@ Example: 10/19/2018
 """
 
 
-def _axis_string_list_before_validator(value: Any) -> Any:
+def _boundless_string_list_before_validator(value: Any) -> Any:
     """
     Before validator to turn strings like this into lists:
     FICTION / Thrillers; FICTION / Suspense; FICTION / General
@@ -102,7 +102,7 @@ def _axis_string_list_before_validator(value: Any) -> Any:
     if isinstance(value, list):
         updated_value = []
         for sub_value in value:
-            updated_value.extend(_axis_string_list_before_validator(sub_value))
+            updated_value.extend(_boundless_string_list_before_validator(sub_value))
         return updated_value
     elif isinstance(value, str):
         # If it's a string, split it and return as a list
@@ -111,12 +111,12 @@ def _axis_string_list_before_validator(value: Any) -> Any:
     return value
 
 
-AxisStringList = Annotated[
-    list[str], BeforeValidator(_axis_string_list_before_validator)
+BoundlessStringList = Annotated[
+    list[str], BeforeValidator(_boundless_string_list_before_validator)
 ]
 
 
-def _axis_runtime_before_validator(value: Any) -> Any:
+def _boundless_runtime_before_validator(value: Any) -> Any:
     """
     Before validator to convert runtime strings in the format HH:mm to seconds.""
     """
@@ -140,7 +140,9 @@ def _axis_runtime_before_validator(value: Any) -> Any:
     return value
 
 
-AxisRuntime = Annotated[NonNegativeInt, BeforeValidator(_axis_runtime_before_validator)]
+BoundlessRuntime = Annotated[
+    NonNegativeInt, BeforeValidator(_boundless_runtime_before_validator)
+]
 """
 A pydantic type that represents a runtime in seconds.
 

@@ -7,8 +7,8 @@ from psycopg2.errors import DeadlockDetected
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm.exc import ObjectDeletedError, StaleDataError
 
-from palace.manager.api.axis.api import Axis360API
-from palace.manager.api.axis.requests import Axis360Requests
+from palace.manager.api.boundless.api import BoundlessApi
+from palace.manager.api.boundless.requests import BoundlessRequests
 from palace.manager.celery.task import Task
 from palace.manager.celery.tasks import axis
 from palace.manager.celery.tasks.axis import (
@@ -49,7 +49,7 @@ class QueueCollectionImportLockFixture:
         self.redis_client = redis_fixture.client
         self.task = MagicMock()
         self.task.request.root_id = "fake"
-        self.collection = db.collection(protocol=Axis360API)
+        self.collection = db.collection(protocol=BoundlessApi)
         self.task_lock = _redis_lock_list_identifiers_for_import(
             self.redis_client, collection_id=self.collection.id
         )
@@ -81,7 +81,7 @@ def test_list_identifiers_for_import_configuration_error(
     redis_fixture: RedisFixture,
     caplog: pytest.LogCaptureFixture,
 ):
-    collection = db.collection(name="test_collection", protocol=Axis360API)
+    collection = db.collection(name="test_collection", protocol=BoundlessApi)
     with patch.object(axis, "Axis360API") as mock_create_api:
         mock_create_api.return_value.api_requests.refresh_bearer_token.side_effect = (
             BadResponseException("service", "uh oh", MockRequestsResponse(401))
@@ -96,7 +96,7 @@ def test_list_identifiers_for_import_integration_error(
     redis_fixture: RedisFixture,
     caplog: pytest.LogCaptureFixture,
 ):
-    collection = db.collection(name="test_collection", protocol=Axis360API)
+    collection = db.collection(name="test_collection", protocol=BoundlessApi)
     test_ids = ["a", "b", "c"]
     with patch.object(axis, "Axis360API") as mock_create_api:
         mock_create_api.return_value.recent_activity.side_effect = [
@@ -127,7 +127,7 @@ def test_import_all_collections(
 ):
     set_caplog_level_to_info(caplog)
     db.default_collection()
-    collection2 = db.collection(name="test_collection", protocol=Axis360API.label())
+    collection2 = db.collection(name="test_collection", protocol=BoundlessApi.label())
     with patch.object(
         axis, "list_identifiers_for_import"
     ) as mock_list_identifiers_for_import:
@@ -191,7 +191,7 @@ def test_list_identifiers_for_import(
     caplog: pytest.LogCaptureFixture,
 ):
     set_caplog_level_to_info(caplog)
-    collection = db.collection(name="test_collection", protocol=Axis360API.label())
+    collection = db.collection(name="test_collection", protocol=BoundlessApi.label())
     mock_api = MagicMock()
     current_time = utc_now()
     test_ids = ["a", "b", "c"]
@@ -246,7 +246,7 @@ def test_import_items(
     caplog: pytest.LogCaptureFixture,
 ):
     set_caplog_level_to_info(caplog)
-    collection = db.collection(name="test_collection", protocol=Axis360API.label())
+    collection = db.collection(name="test_collection", protocol=BoundlessApi.label())
 
     mock_api = MagicMock()
     with (patch.object(axis, "Axis360API") as mock_create_api,):
@@ -288,7 +288,7 @@ def test_import_identifiers_with_requeue(
     caplog: pytest.LogCaptureFixture,
 ):
     set_caplog_level_to_info(caplog)
-    collection = db.collection(name="test_collection", protocol=Axis360API.label())
+    collection = db.collection(name="test_collection", protocol=BoundlessApi.label())
 
     mock_api = MagicMock()
     with (patch.object(axis, "Axis360API") as mock_create_api,):
@@ -335,7 +335,7 @@ def test_reap_all_collections(
 ):
     set_caplog_level_to_info(caplog)
     db.default_collection()
-    collection2 = db.collection(name="test_collection", protocol=Axis360API.label())
+    collection2 = db.collection(name="test_collection", protocol=BoundlessApi.label())
     with patch.object(axis, "reap_collection") as mock_reap_collection:
         reap_all_collections.delay().wait()
 
@@ -360,7 +360,7 @@ def test_reap_collection_configuration_error(
     queue_collection_import_lock_fixture: QueueCollectionImportLockFixture,
     caplog: pytest.LogCaptureFixture,
 ):
-    collection = db.collection(name="test_collection", protocol=Axis360API.label())
+    collection = db.collection(name="test_collection", protocol=BoundlessApi.label())
     db.edition(
         with_license_pool=True,
         identifier_type=Identifier.AXIS_360_ID,
@@ -383,7 +383,7 @@ def test_reap_collection_with_requeue(
     caplog: pytest.LogCaptureFixture,
 ):
     set_caplog_level_to_info(caplog)
-    collection = db.collection(name="test_collection", protocol=Axis360API.label())
+    collection = db.collection(name="test_collection", protocol=BoundlessApi.label())
     editions = []
     for i in range(0, 3):
         edition, lp = db.edition(
@@ -421,7 +421,7 @@ def test_retry_import_identifiers_due_to_integration_exception(
     celery_fixture: CeleryFixture,
     queue_collection_import_lock_fixture: QueueCollectionImportLockFixture,
 ):
-    collection = db.collection(name="test_collection", protocol=Axis360API.label())
+    collection = db.collection(name="test_collection", protocol=BoundlessApi.label())
 
     edition, licensepool = db.edition(
         collection=collection,
@@ -479,7 +479,7 @@ def test_retry_import_identifiers(
     no_retry_expected: bool,
 ):
     set_caplog_level_to_info(caplog)
-    collection = db.collection(protocol=Axis360API.label())
+    collection = db.collection(protocol=BoundlessApi.label())
 
     edition, licensepool = db.edition(
         collection=collection,
@@ -537,7 +537,7 @@ def test_retry_reap_collection(
     no_retry_expected: bool,
 ):
     set_caplog_level_to_info(caplog)
-    collection = db.collection(protocol=Axis360API.label())
+    collection = db.collection(protocol=BoundlessApi.label())
     db.edition(
         with_license_pool=True,
         identifier_type=Identifier.AXIS_360_ID,
@@ -574,7 +574,7 @@ def test_process_item_creates_presentation_ready_work(
     Axis provides it, and we create a presentation-ready work.
     """
     library = db.default_library()
-    collection = db.collection(protocol=Axis360API, library=library)
+    collection = db.collection(protocol=BoundlessApi, library=library)
     http_client.queue_response(
         200, content=axis_files_fixture.sample_data("token.json")
     )
@@ -624,7 +624,7 @@ def test_transient_failure_if_requested_book_not_mentioned(
     it tells us about a totally different book.
     """
     library = db.default_library()
-    collection = db.collection(protocol=Axis360API, library=library)
+    collection = db.collection(protocol=BoundlessApi, library=library)
 
     # We're going to ask about abcdef
     identifier = db.identifier(identifier_type=Identifier.AXIS_360_ID)
@@ -657,7 +657,7 @@ def test_transient_failure_if_requested_book_not_mentioned(
 def test__check_api_credentials():
     mock_task = create_autospec(Task)
     mock_collection = create_autospec(Collection)
-    mock_api_requests = create_autospec(Axis360Requests)
+    mock_api_requests = create_autospec(BoundlessRequests)
 
     # If api.bearer_token() runs successfully, the function should return True
     assert (

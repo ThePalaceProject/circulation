@@ -28,13 +28,13 @@ from palace.manager.util.http import BadResponseException
 from palace.manager.util.problem_detail import BaseProblemDetailException, ProblemDetail
 
 if TYPE_CHECKING:
-    from palace.manager.api.axis.models.json import LicenseServerStatus
+    from palace.manager.api.boundless.models.json import LicenseServerStatus
 
 
-class Axis360Exception(BasePalaceException): ...
+class BoundlessException(BasePalaceException): ...
 
 
-class Axis360ValidationError(BadResponseException, Axis360Exception):
+class BoundlessValidationError(BadResponseException, BoundlessException):
     """
     Raise when we are unable to validate a response from Axis 360.
     """
@@ -42,7 +42,7 @@ class Axis360ValidationError(BadResponseException, Axis360Exception):
     ...
 
 
-class Axis360LicenseError(Axis360Exception, BaseProblemDetailException):
+class BoundlessLicenseError(BoundlessException, BaseProblemDetailException):
     """
     Raise when there is a license-related error with Axis 360.
     """
@@ -72,7 +72,7 @@ ErrorType = type[CirculationException | RemoteInitiatedServerError]
 ErrorLookupType = Mapping[int | tuple[int, str], ErrorType]
 
 
-class AxisStatusTuple(NamedTuple):
+class BoundlessStatusTuple(NamedTuple):
     """
     A named tuple to hold the status code and message from an Axis 360 response.
     """
@@ -176,7 +176,7 @@ class StatusResponseParser:
                 cls._do_raise(d[code], message)
 
     @classmethod
-    def parse_xml(cls, data: bytes) -> AxisStatusTuple | None:
+    def parse_xml(cls, data: bytes) -> BoundlessStatusTuple | None:
         """
         Best effort attempt to parse an XML response from Axis 360,
         returning a tuple of (status_code, message) if successful,
@@ -206,12 +206,12 @@ class StatusResponseParser:
                 else str(message_results[0].text)
             )
 
-            return AxisStatusTuple(status_code, message)
+            return BoundlessStatusTuple(status_code, message)
         except (etree.XMLSyntaxError, AssertionError, ValueError):
             return None
 
     @classmethod
-    def parse_json(cls, data: bytes) -> AxisStatusTuple | None:
+    def parse_json(cls, data: bytes) -> BoundlessStatusTuple | None:
         """
         Best effort attempt to parse an JSON response from Axis 360,
         returning a tuple of (status_code, message) if successful,
@@ -225,14 +225,14 @@ class StatusResponseParser:
             message = status.get("Message")
             if code is None:
                 return None
-            return AxisStatusTuple(
+            return BoundlessStatusTuple(
                 int(code), str(message) if message is not None else None
             )
         except (AssertionError, ValueError, TypeError):
             return None
 
     @classmethod
-    def parse(cls, data: bytes) -> AxisStatusTuple | None:
+    def parse(cls, data: bytes) -> BoundlessStatusTuple | None:
         """
         Parse the given data as either XML or JSON, returning
         a tuple of (status_code, message) if successful or None
@@ -242,7 +242,7 @@ class StatusResponseParser:
         return cls.parse_xml(data) or cls.parse_json(data)
 
     @classmethod
-    def parse_and_raise(cls, data: bytes) -> AxisStatusTuple | None:
+    def parse_and_raise(cls, data: bytes) -> BoundlessStatusTuple | None:
         """
         Parse the given data and raise an exception if we are able to parse
         it and the status code indicates an error that we have an exception for.

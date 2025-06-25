@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 from xml.dom import minidom
 
-from palace.manager.api.axis.api import Axis360API
+from palace.manager.api.boundless.api import BoundlessApi
 from palace.manager.scripts.input import IdentifierInputScript
 from palace.manager.sqlalchemy.model.collection import Collection
 
 
 class Axis360RawBibliographicScript(IdentifierInputScript):
     def run(self):
-        for collection in Collection.by_protocol(self._db, Axis360API.label()):
-            api = Axis360API(self._db, collection)
+        for collection in Collection.by_protocol(self._db, BoundlessApi.label()):
+            api = BoundlessApi(self._db, collection)
             args = self.parse_command_line(self._db)
             for identifier in args.identifiers:
                 response = api.availability(title_ids=[identifier.identifier])
