@@ -34,7 +34,7 @@ from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.http import BadResponseException
 from tests.fixtures.celery import CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
-from tests.fixtures.files import AxisFilesFixture
+from tests.fixtures.files import BoundlessFilesFixture
 from tests.fixtures.http import MockHttpClientFixture
 from tests.fixtures.redis import RedisFixture
 from tests.fixtures.work import (
@@ -564,7 +564,7 @@ def test_retry_reap_collection(
 
 
 def test_process_item_creates_presentation_ready_work(
-    axis_files_fixture: AxisFilesFixture,
+    boundless_files_fixture: BoundlessFilesFixture,
     db: DatabaseTransactionFixture,
     http_client: MockHttpClientFixture,
     celery_fixture: CeleryFixture,
@@ -576,10 +576,10 @@ def test_process_item_creates_presentation_ready_work(
     library = db.default_library()
     collection = db.collection(protocol=BoundlessApi, library=library)
     http_client.queue_response(
-        200, content=axis_files_fixture.sample_data("token.json")
+        200, content=boundless_files_fixture.sample_data("token.json")
     )
     http_client.queue_response(
-        200, content=axis_files_fixture.sample_data("single_item.xml")
+        200, content=boundless_files_fixture.sample_data("single_item.xml")
     )
 
     # Here's the book mentioned in single_item.xml.
@@ -614,7 +614,7 @@ def test_process_item_creates_presentation_ready_work(
 
 
 def test_transient_failure_if_requested_book_not_mentioned(
-    axis_files_fixture: AxisFilesFixture,
+    boundless_files_fixture: BoundlessFilesFixture,
     db: DatabaseTransactionFixture,
     http_client: MockHttpClientFixture,
     celery_fixture: CeleryFixture,
@@ -632,9 +632,9 @@ def test_transient_failure_if_requested_book_not_mentioned(
 
     # But we're going to get told about 0003642860.
     http_client.queue_response(
-        200, content=axis_files_fixture.sample_data("token.json")
+        200, content=boundless_files_fixture.sample_data("token.json")
     )
-    data = axis_files_fixture.sample_data("single_item.xml")
+    data = boundless_files_fixture.sample_data("single_item.xml")
     http_client.queue_response(200, content=data)
 
     import_identifiers.delay(

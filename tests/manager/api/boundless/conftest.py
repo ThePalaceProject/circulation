@@ -12,7 +12,7 @@ from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.util.datetime_helpers import datetime_utc
 from tests.fixtures.database import DatabaseTransactionFixture
-from tests.fixtures.files import AxisFilesFixture
+from tests.fixtures.files import BoundlessFilesFixture
 from tests.fixtures.http import MockHttpClientFixture
 from tests.fixtures.work import WorkIdPolicyQueuePresentationRecalculationFixture
 
@@ -61,7 +61,7 @@ class BoundlessFixture:
         self,
         db: DatabaseTransactionFixture,
         http_client: MockHttpClientFixture,
-        files: AxisFilesFixture,
+        files: BoundlessFilesFixture,
         work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
     ):
         self.db = db
@@ -78,16 +78,16 @@ class BoundlessFixture:
 def boundless(
     db: DatabaseTransactionFixture,
     http_client: MockHttpClientFixture,
-    axis_files_fixture: AxisFilesFixture,
+    boundless_files_fixture: BoundlessFilesFixture,
     work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
 ) -> BoundlessFixture:
     # Typically the first request to the api will trigger a token refresh, so we queue
     # up a response for that.
     http_client.queue_response(
         200,
-        content=axis_files_fixture.sample_text("token.json"),
+        content=boundless_files_fixture.sample_text("token.json"),
     )
 
     return BoundlessFixture(
-        db, http_client, axis_files_fixture, work_policy_recalc_fixture
+        db, http_client, boundless_files_fixture, work_policy_recalc_fixture
     )

@@ -28,11 +28,11 @@ from palace.manager.api.circulation_exceptions import (
 )
 from palace.manager.util.datetime_helpers import datetime_utc
 from palace.manager.util.http import RemoteIntegrationException
-from tests.fixtures.files import AxisFilesFixture
+from tests.fixtures.files import BoundlessFilesFixture
 from tests.fixtures.http import MockHttpClientFixture
 
 
-class Axis360RequestsFixture:
+class BoundlessRequestsFixture:
     def __init__(self, http_client: MockHttpClientFixture) -> None:
         self.create_settings = partial(
             BoundlessSettings,
@@ -47,19 +47,19 @@ class Axis360RequestsFixture:
 
 
 @pytest.fixture
-def axis360_requests(
-    axis_files_fixture: AxisFilesFixture,
+def boundless_requests(
+    boundless_files_fixture: BoundlessFilesFixture,
     http_client: MockHttpClientFixture,
-) -> Generator[Axis360RequestsFixture]:
-    fixture = Axis360RequestsFixture(http_client)
+) -> Generator[BoundlessRequestsFixture]:
+    fixture = BoundlessRequestsFixture(http_client)
     # Make sure we have a valid token before running tests.
     fixture.client.queue_response(
-        200, content=axis_files_fixture.sample_data("token.json")
+        200, content=boundless_files_fixture.sample_data("token.json")
     )
     yield fixture
 
 
-class TestAxis360Requests:
+class TestBoundlessRequests:
     @pytest.mark.parametrize(
         "content",
         [
@@ -71,13 +71,13 @@ class TestAxis360Requests:
     )
     def test__request_bad_responses(
         self,
-        axis_files_fixture: AxisFilesFixture,
-        axis360_requests: Axis360RequestsFixture,
+        boundless_files_fixture: BoundlessFilesFixture,
+        boundless_requests: BoundlessRequestsFixture,
         content: str,
     ):
-        axis360_requests.client.queue_response(200, content=content)
+        boundless_requests.client.queue_response(200, content=content)
         with pytest.raises(BoundlessValidationError):
-            axis360_requests.request(
+            boundless_requests.request(
                 AddHoldResponse.from_xml,
             )
 
@@ -90,14 +90,14 @@ class TestAxis360Requests:
     )
     def test__request_internal_server_error(
         self,
-        axis_files_fixture: AxisFilesFixture,
-        axis360_requests: Axis360RequestsFixture,
+        boundless_files_fixture: BoundlessFilesFixture,
+        boundless_requests: BoundlessRequestsFixture,
         func: Callable,
     ):
-        data = axis_files_fixture.sample_data("internal_server_error.xml")
-        axis360_requests.client.queue_response(400, content=data)
+        data = boundless_files_fixture.sample_data("internal_server_error.xml")
+        boundless_requests.client.queue_response(400, content=data)
         with pytest.raises(RemoteInitiatedServerError, match="Internal Server Error"):
-            axis360_requests.request(
+            boundless_requests.request(
                 func,
             )
 
@@ -110,14 +110,14 @@ class TestAxis360Requests:
     )
     def test__request_invalid_response(
         self,
-        axis_files_fixture: AxisFilesFixture,
-        axis360_requests: Axis360RequestsFixture,
+        boundless_files_fixture: BoundlessFilesFixture,
+        boundless_requests: BoundlessRequestsFixture,
         filename: str,
     ):
-        data = axis_files_fixture.sample_data(filename)
-        axis360_requests.client.queue_response(400, content=data)
+        data = boundless_files_fixture.sample_data(filename)
+        boundless_requests.client.queue_response(400, content=data)
         with pytest.raises(BoundlessValidationError):
-            axis360_requests.request(AudiobookMetadataResponse.model_validate_json)
+            boundless_requests.request(AudiobookMetadataResponse.model_validate_json)
 
     @pytest.mark.parametrize(
         "filename",
@@ -128,32 +128,34 @@ class TestAxis360Requests:
     )
     def test_early_checkin_success(
         self,
-        axis_files_fixture: AxisFilesFixture,
-        axis360_requests: Axis360RequestsFixture,
+        boundless_files_fixture: BoundlessFilesFixture,
+        boundless_requests: BoundlessRequestsFixture,
         filename: str,
     ):
-        data = axis_files_fixture.sample_data(filename)
-        axis360_requests.client.queue_response(200, content=data)
-        axis360_requests.requests.early_checkin("title_id", "patron_id")
+        data = boundless_files_fixture.sample_data(filename)
+        boundless_requests.client.queue_response(200, content=data)
+        boundless_requests.requests.early_checkin("title_id", "patron_id")
 
     def test_early_checkin_fail(
         self,
-        axis_files_fixture: AxisFilesFixture,
-        axis360_requests: Axis360RequestsFixture,
+        boundless_files_fixture: BoundlessFilesFixture,
+        boundless_requests: BoundlessRequestsFixture,
     ):
-        data = axis_files_fixture.sample_data("checkin_failure.xml")
-        axis360_requests.client.queue_response(404, content=data)
+        data = boundless_files_fixture.sample_data("checkin_failure.xml")
+        boundless_requests.client.queue_response(404, content=data)
         with pytest.raises(NotFoundOnRemote):
-            axis360_requests.requests.early_checkin("title_id", "patron_id")
+            boundless_requests.requests.early_checkin("title_id", "patron_id")
 
     def test_checkout_success(
         self,
-        axis_files_fixture: AxisFilesFixture,
-        axis360_requests: Axis360RequestsFixture,
+        boundless_files_fixture: BoundlessFilesFixture,
+        boundless_requests: BoundlessRequestsFixture,
     ):
-        data = axis_files_fixture.sample_data("checkout_success.xml")
-        axis360_requests.client.queue_response(200, content=data)
-        response = axis360_requests.requests.checkout("title_id", "patron_id", "format")
+        data = boundless_files_fixture.sample_data("checkout_success.xml")
+        boundless_requests.client.queue_response(200, content=data)
+        response = boundless_requests.requests.checkout(
+            "title_id", "patron_id", "format"
+        )
         assert response.expiration_date == datetime_utc(2015, 8, 11, 18, 57, 42)
 
     @pytest.mark.parametrize(
@@ -165,38 +167,38 @@ class TestAxis360Requests:
     )
     def test_checkout_failures(
         self,
-        axis_files_fixture: AxisFilesFixture,
-        axis360_requests: Axis360RequestsFixture,
+        boundless_files_fixture: BoundlessFilesFixture,
+        boundless_requests: BoundlessRequestsFixture,
         filename: str,
         exception: type[Exception],
     ):
-        data = axis_files_fixture.sample_data(filename)
-        axis360_requests.client.queue_response(400, content=data)
+        data = boundless_files_fixture.sample_data(filename)
+        boundless_requests.client.queue_response(400, content=data)
         with pytest.raises(exception):
-            axis360_requests.requests.checkout("title_id", "patron_id", "format")
+            boundless_requests.requests.checkout("title_id", "patron_id", "format")
 
     def test_add_hold_success(
         self,
-        axis_files_fixture: AxisFilesFixture,
-        axis360_requests: Axis360RequestsFixture,
+        boundless_files_fixture: BoundlessFilesFixture,
+        boundless_requests: BoundlessRequestsFixture,
     ):
-        data = axis_files_fixture.sample_data("place_hold_success.xml")
-        axis360_requests.client.queue_response(200, content=data)
-        response = axis360_requests.requests.add_hold("title_id", "patron_id", None)
+        data = boundless_files_fixture.sample_data("place_hold_success.xml")
+        boundless_requests.client.queue_response(200, content=data)
+        response = boundless_requests.requests.add_hold("title_id", "patron_id", None)
         assert response.holds_queue_position == 1
 
         # Make sure the checkout request doesn't set a timeout
-        assert "timeout" not in axis360_requests.client.requests_args[1]
+        assert "timeout" not in boundless_requests.client.requests_args[1]
 
     def test_add_hold_fail(
         self,
-        axis_files_fixture: AxisFilesFixture,
-        axis360_requests: Axis360RequestsFixture,
+        boundless_files_fixture: BoundlessFilesFixture,
+        boundless_requests: BoundlessRequestsFixture,
     ):
-        data = axis_files_fixture.sample_data("already_on_hold.xml")
-        axis360_requests.client.queue_response(400, content=data)
+        data = boundless_files_fixture.sample_data("already_on_hold.xml")
+        boundless_requests.client.queue_response(400, content=data)
         with pytest.raises(AlreadyOnHold):
-            axis360_requests.requests.add_hold("title_id", "patron_id", None)
+            boundless_requests.requests.add_hold("title_id", "patron_id", None)
 
     @pytest.mark.parametrize(
         "filename",
@@ -207,25 +209,25 @@ class TestAxis360Requests:
     )
     def test_remove_hold_success(
         self,
-        axis_files_fixture: AxisFilesFixture,
-        axis360_requests: Axis360RequestsFixture,
+        boundless_files_fixture: BoundlessFilesFixture,
+        boundless_requests: BoundlessRequestsFixture,
         filename: str,
     ):
-        data = axis_files_fixture.sample_data(filename)
-        axis360_requests.client.queue_response(200, content=data)
-        axis360_requests.requests.remove_hold("title_id", "patron_id")
+        data = boundless_files_fixture.sample_data(filename)
+        boundless_requests.client.queue_response(200, content=data)
+        boundless_requests.requests.remove_hold("title_id", "patron_id")
 
     def test_audiobook_metadata_success(
         self,
-        axis_files_fixture: AxisFilesFixture,
-        axis360_requests: Axis360RequestsFixture,
+        boundless_files_fixture: BoundlessFilesFixture,
+        boundless_requests: BoundlessRequestsFixture,
     ):
-        data = axis_files_fixture.sample_data("audiobook_metadata.json")
-        axis360_requests.client.queue_response(200, content=data)
-        response = axis360_requests.requests.audiobook_metadata("content_id")
+        data = boundless_files_fixture.sample_data("audiobook_metadata.json")
+        boundless_requests.client.queue_response(200, content=data)
+        response = boundless_requests.requests.audiobook_metadata("content_id")
         assert response.account_id == "BTTest"
-        assert axis360_requests.client.requests_methods[1] == "POST"
-        assert axis360_requests.client.requests_args[1]["params"] == {
+        assert boundless_requests.client.requests_methods[1] == "POST"
+        assert boundless_requests.client.requests_args[1]["params"] == {
             "fndcontentid": "content_id"
         }
 
@@ -238,15 +240,15 @@ class TestAxis360Requests:
     )
     def test_fulfillment_info_success(
         self,
-        axis_files_fixture: AxisFilesFixture,
-        axis360_requests: Axis360RequestsFixture,
+        boundless_files_fixture: BoundlessFilesFixture,
+        boundless_requests: BoundlessRequestsFixture,
         filename: str,
     ):
-        data = axis_files_fixture.sample_data(filename)
-        axis360_requests.client.queue_response(200, content=data)
-        axis360_requests.requests.fulfillment_info("transaction_id")
-        assert axis360_requests.client.requests_methods[1] == "POST"
-        assert axis360_requests.client.requests_args[1]["params"] == {
+        data = boundless_files_fixture.sample_data(filename)
+        boundless_requests.client.queue_response(200, content=data)
+        boundless_requests.requests.fulfillment_info("transaction_id")
+        assert boundless_requests.client.requests_methods[1] == "POST"
+        assert boundless_requests.client.requests_args[1]["params"] == {
             "TransactionID": "transaction_id"
         }
 
@@ -261,18 +263,18 @@ class TestAxis360Requests:
     )
     def test_availability_success(
         self,
-        axis_files_fixture: AxisFilesFixture,
-        axis360_requests: Axis360RequestsFixture,
+        boundless_files_fixture: BoundlessFilesFixture,
+        boundless_requests: BoundlessRequestsFixture,
         filename: str,
     ):
-        data = axis_files_fixture.sample_data(filename)
-        axis360_requests.client.queue_response(200, content=data)
-        axis360_requests.requests.availability()
+        data = boundless_files_fixture.sample_data(filename)
+        boundless_requests.client.queue_response(200, content=data)
+        boundless_requests.requests.availability()
 
         # The availability API request has no timeout set, because it
         # may take time proportionate to the total size of the
         # collection.
-        assert axis360_requests.client.requests_args[1]["timeout"] is None
+        assert boundless_requests.client.requests_args[1]["timeout"] is None
 
     @pytest.mark.parametrize(
         "filename",
@@ -283,71 +285,73 @@ class TestAxis360Requests:
     )
     def test_availability_fail(
         self,
-        axis_files_fixture: AxisFilesFixture,
-        axis360_requests: Axis360RequestsFixture,
+        boundless_files_fixture: BoundlessFilesFixture,
+        boundless_requests: BoundlessRequestsFixture,
         filename: str,
     ):
-        data = axis_files_fixture.sample_data(filename)
-        axis360_requests.client.queue_response(200, content=data)
+        data = boundless_files_fixture.sample_data(filename)
+        boundless_requests.client.queue_response(200, content=data)
         with pytest.raises(PatronAuthorizationFailedException):
-            axis360_requests.requests.availability()
+            boundless_requests.requests.availability()
 
-    def test_availability_exception(self, axis360_requests: Axis360RequestsFixture):
-        axis360_requests.client.queue_response(500)
+    def test_availability_exception(self, boundless_requests: BoundlessRequestsFixture):
+        boundless_requests.client.queue_response(500)
         with pytest.raises(
             RemoteIntegrationException,
             match="Got status code 500 from external server, cannot continue.",
         ):
-            axis360_requests.requests.availability()
+            boundless_requests.requests.availability()
 
     def test_refresh_bearer_token_after_401(
         self,
-        axis360_requests: Axis360RequestsFixture,
-        axis_files_fixture: AxisFilesFixture,
+        boundless_requests: BoundlessRequestsFixture,
+        boundless_files_fixture: BoundlessFilesFixture,
     ):
         # If we get a 401, we will fetch a new bearer token and try the
         # request again.
-        axis360_requests.client.queue_response(401)
-        axis360_requests.client.queue_response(
-            200, content=axis_files_fixture.sample_data("token.json")
+        boundless_requests.client.queue_response(401)
+        boundless_requests.client.queue_response(
+            200, content=boundless_files_fixture.sample_data("token.json")
         )
-        axis360_requests.client.queue_response(
-            200, content=axis_files_fixture.sample_data("checkout_success.xml")
+        boundless_requests.client.queue_response(
+            200, content=boundless_files_fixture.sample_data("checkout_success.xml")
         )
-        axis360_requests.requests.checkout("title_id", "patron_id", "format")
+        boundless_requests.requests.checkout("title_id", "patron_id", "format")
 
         # We made four requests:
         # 1. The initial request to initialize the token.
         # 2. The checkout request that returned a 401.
         # 3. The request to refresh the bearer token.
         # 4. The request that succeeded after refreshing the token.
-        assert len(axis360_requests.client.requests) == 4
+        assert len(boundless_requests.client.requests) == 4
 
-    def test_refresh_bearer_token_error(self, axis360_requests: Axis360RequestsFixture):
+    def test_refresh_bearer_token_error(
+        self, boundless_requests: BoundlessRequestsFixture
+    ):
         # Raise an exception if we don't get a 200 status code when
         # refreshing the bearer token.
-        axis360_requests.client.reset_mock()
-        axis360_requests.client.queue_response(412)
+        boundless_requests.client.reset_mock()
+        boundless_requests.client.queue_response(412)
         with pytest.raises(
             RemoteIntegrationException, match="Got status code 412 from external server"
         ):
-            axis360_requests.requests.refresh_bearer_token()
+            boundless_requests.requests.refresh_bearer_token()
 
     def test_bearer_token_only_refreshed_once_after_401(
         self,
-        axis360_requests: Axis360RequestsFixture,
-        axis_files_fixture: AxisFilesFixture,
+        boundless_requests: BoundlessRequestsFixture,
+        boundless_files_fixture: BoundlessFilesFixture,
     ):
         # If we get a 401 immediately after refreshing the token, we just
         # return the response instead of refreshing the token again.
-        axis360_requests.client.queue_response(401)
-        axis360_requests.client.queue_response(
-            200, content=axis_files_fixture.sample_data("token.json")
+        boundless_requests.client.queue_response(401)
+        boundless_requests.client.queue_response(
+            200, content=boundless_files_fixture.sample_data("token.json")
         )
-        axis360_requests.client.queue_response(401, content="data")
+        boundless_requests.client.queue_response(401, content="data")
 
         mock_response_callable = MagicMock()
-        axis360_requests.request(mock_response_callable)
+        boundless_requests.request(mock_response_callable)
         mock_response_callable.assert_called_once_with(b"data")
 
     @pytest.mark.parametrize(
@@ -363,27 +367,27 @@ class TestAxis360Requests:
     )
     def test_refresh_bearer_token_based_on_token_status(
         self,
-        axis360_requests: Axis360RequestsFixture,
-        axis_files_fixture: AxisFilesFixture,
+        boundless_requests: BoundlessRequestsFixture,
+        boundless_files_fixture: BoundlessFilesFixture,
         file: str | None,
         should_refresh: bool,
     ):
-        data = axis_files_fixture.sample_data(file) if file else b""
+        data = boundless_files_fixture.sample_data(file) if file else b""
 
-        axis360_requests.client.queue_response(401, content=data)
-        axis360_requests.client.queue_response(
-            200, content=axis_files_fixture.sample_data("token.json")
+        boundless_requests.client.queue_response(401, content=data)
+        boundless_requests.client.queue_response(
+            200, content=boundless_files_fixture.sample_data("token.json")
         )
-        axis360_requests.client.queue_response(200, content="The data")
+        boundless_requests.client.queue_response(200, content="The data")
         mock_response_callable = MagicMock()
-        axis360_requests.request(mock_response_callable)
+        boundless_requests.request(mock_response_callable)
 
         if should_refresh:
             mock_response_callable.assert_called_once_with(b"The data")
-            assert len(axis360_requests.client.requests) == 4
+            assert len(boundless_requests.client.requests) == 4
         else:
             mock_response_callable.assert_called_once_with(data)
-            assert len(axis360_requests.client.requests) == 2
+            assert len(boundless_requests.client.requests) == 2
 
     @pytest.mark.parametrize(
         "server_nickname,base_url,license_url",
@@ -404,23 +408,23 @@ class TestAxis360Requests:
     )
     def test_integration_settings_url(
         self,
-        axis360_requests: Axis360RequestsFixture,
+        boundless_requests: BoundlessRequestsFixture,
         server_nickname: str,
         base_url: str,
         license_url: str,
     ):
-        settings = axis360_requests.create_settings(server_nickname=server_nickname)
+        settings = boundless_requests.create_settings(server_nickname=server_nickname)
         requests = BoundlessRequests(settings)
         assert requests._base_url == base_url
         assert requests._license_server_url == license_url
 
     def test_license(
         self,
-        axis360_requests: Axis360RequestsFixture,
-        axis_files_fixture: AxisFilesFixture,
+        boundless_requests: BoundlessRequestsFixture,
+        boundless_files_fixture: BoundlessFilesFixture,
     ):
         license_request = partial(
-            axis360_requests.requests.license,
+            boundless_requests.requests.license,
             "book_vault_uuid",
             "device_id",
             "client_id",
@@ -429,31 +433,31 @@ class TestAxis360Requests:
             "exponent",
         )
 
-        axis360_requests.client.reset_mock()
-        data = axis_files_fixture.sample_data("license.json")
-        axis360_requests.client.queue_response(200, content=data)
+        boundless_requests.client.reset_mock()
+        data = boundless_files_fixture.sample_data("license.json")
+        boundless_requests.client.queue_response(200, content=data)
         response = license_request()
 
         assert response == data
-        assert axis360_requests.client.requests_methods[0] == "GET"
+        assert boundless_requests.client.requests_methods[0] == "GET"
         assert (
             "license/book_vault_uuid/device_id/client_id/isbn/modulus/exponent"
-            in axis360_requests.client.requests[0]
+            in boundless_requests.client.requests[0]
         )
 
         # Test error handling
-        axis360_requests.client.queue_response(500, content=b"")
+        boundless_requests.client.queue_response(500, content=b"")
         with pytest.raises(
             RemoteIntegrationException, match="Got status code 500 from external server"
         ):
             license_request()
 
-        data = axis_files_fixture.sample_data("license_internal_server_error.json")
-        axis360_requests.client.queue_response(500, content=data)
+        data = boundless_files_fixture.sample_data("license_internal_server_error.json")
+        boundless_requests.client.queue_response(500, content=data)
         with pytest.raises(BoundlessLicenseError, match="Internal Server Error"):
             license_request()
 
-        data = axis_files_fixture.sample_data("license_invalid_isbn.json")
-        axis360_requests.client.queue_response(500, content=data)
+        data = boundless_files_fixture.sample_data("license_invalid_isbn.json")
+        boundless_requests.client.queue_response(500, content=data)
         with pytest.raises(BoundlessLicenseError, match="Invalid ISBN"):
             license_request()

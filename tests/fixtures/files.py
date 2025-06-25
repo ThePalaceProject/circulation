@@ -121,14 +121,14 @@ def overdrive_files_fixture() -> OverdriveFilesFixture:
     return OverdriveFilesFixture()
 
 
-class AxisFilesFixture(FilesFixture):
-    """A fixture providing access to Axis files."""
+class BoundlessFilesFixture(FilesFixture):
+    """A fixture providing access to Boundless files."""
 
     def __init__(self):
-        super().__init__("axis")
+        super().__init__("boundless")
 
 
 @pytest.fixture()
-def axis_files_fixture() -> AxisFilesFixture:
-    """A fixture providing access to Axis files."""
-    return AxisFilesFixture()
+def boundless_files_fixture() -> BoundlessFilesFixture:
+    """A fixture providing access to Boundless files."""
+    return BoundlessFilesFixture()

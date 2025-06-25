@@ -42,13 +42,13 @@ from tests.fixtures.library import LibraryFixture
 from tests.manager.api.boundless.conftest import BoundlessFixture
 
 
-class TestAxis360API:
+class TestBoundlessApi:
     def test__run_self_tests(
         self,
         db: DatabaseTransactionFixture,
         boundless: BoundlessFixture,
     ):
-        # Verify that Axis360API._run_self_tests() calls the right
+        # Verify that BoundlessApi._run_self_tests() calls the right
         # methods.
         api = boundless.api
 
@@ -156,7 +156,7 @@ class TestAxis360API:
         assert ["foo", identifier.identifier] == values
 
     def test_update_availability(self, boundless: BoundlessFixture):
-        # Test the Axis 360 implementation of the update_availability method
+        # Test the Boundless implementation of the update_availability method
         # defined by the CirculationAPI interface.
 
         # Create a LicensePool that needs updating.
@@ -306,7 +306,7 @@ class TestAxis360API:
         }
 
     def test_fulfill_errors(self, boundless: BoundlessFixture):
-        # Test our ability to fulfill an Axis 360 title.
+        # Test our ability to fulfill a Boundless title.
         edition, pool = boundless.db.edition(
             identifier_type=Identifier.AXIS_360_ID,
             data_source_name=DataSource.AXIS_360,
@@ -325,14 +325,14 @@ class TestAxis360API:
             delivery_mechanism=delivery_mechanism,
         )
 
-        # If Axis 360 says a patron does not have a title checked out,
+        # If Boundless says a patron does not have a title checked out,
         # an attempt to fulfill that title will fail with NoActiveLoan.
         data = boundless.files.sample_data("availability_with_ebook_fulfillment.xml")
         boundless.http_client.queue_response(200, content=data)
         with pytest.raises(NoActiveLoan):
             fulfill()
 
-        # If the title is checked out but Axis provides no download link,
+        # If the title is checked out but Boundless provides no download link,
         # the exception is CannotFulfill.
         pool.identifier.identifier = "0015176429"
         data = boundless.files.sample_data("availability_without_fulfillment.xml")
@@ -340,7 +340,7 @@ class TestAxis360API:
         with pytest.raises(CannotFulfill):
             fulfill()
 
-        # If axis shows the title as checked out, but in a format that we did
+        # If Boundless shows the title as checked out, but in a format that we did
         # not request, we get a FormatNotAvailable exception.
         delivery_mechanism.delivery_mechanism.content_type = (
             Representation.EPUB_MEDIA_TYPE
@@ -420,7 +420,7 @@ class TestAxis360API:
             fulfill()
 
     def test_fulfill_acs(self, boundless: BoundlessFixture):
-        # Test our ability to fulfill an Axis 360 title.
+        # Test our ability to fulfill a Boundless title.
         edition, pool = boundless.db.edition(
             identifier_type=Identifier.AXIS_360_ID,
             identifier_id="0015176429",
@@ -441,7 +441,7 @@ class TestAxis360API:
         )
 
         # If an ebook is checked out and we're asking for it to be
-        # fulfilled through Adobe DRM, we get a Axis360AcsFulfillment
+        # fulfilled through Adobe DRM, we get a Boundless360AcsFulfillment
         # object with a content link.
         data = boundless.files.sample_data("availability_with_loan_and_hold.xml")
         boundless.http_client.queue_response(200, content=data)
@@ -532,7 +532,7 @@ class TestAxis360API:
         assert fulfillment.content == license_data
 
     def test_fulfill_findaway(self, boundless: BoundlessFixture):
-        # Test our ability to fulfill an Axis 360 title.
+        # Test our ability to fulfill a Boundless audio title.
         edition, pool = boundless.db.edition(
             identifier_type=Identifier.AXIS_360_ID,
             identifier_id="0015176429",
@@ -675,7 +675,7 @@ class TestAxis360API:
                 bibliographic.circulation = availability
                 yield bibliographic, availability
 
-                # The rest have been 'forgotten' by Axis 360.
+                # The rest have been 'forgotten' by Boundless.
                 break
 
         api = boundless.api
@@ -755,7 +755,7 @@ class TestAxis360API:
 
         # This LicensePool has licenses, but it's not in a different
         # collection from the collection associated with this
-        # Axis360API object, so it's not affected.
+        # BoundlessApi object, so it's not affected.
         collection2 = boundless.db.collection()
         (
             edition2,
