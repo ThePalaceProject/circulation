@@ -412,7 +412,7 @@ def test_stats_collections(admin_statistics_session: AdminStatisticsSessionFixtu
     _, pool = db.edition(
         with_license_pool=True,
         with_open_access_download=False,
-        data_source_name=DataSource.AXIS_360,
+        data_source_name=DataSource.BOUNDLESS,
         collection=c2,
     )
     pool.open_access = False

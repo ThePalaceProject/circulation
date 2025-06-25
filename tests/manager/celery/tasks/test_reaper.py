@@ -385,7 +385,7 @@ def test_hold_reaper(
         edition, open_access=False, data_source_name=DataSource.BIBLIOTHECA
     )
     not_open_access_2 = db.licensepool(
-        edition, open_access=False, data_source_name=DataSource.AXIS_360
+        edition, open_access=False, data_source_name=DataSource.BOUNDLESS
     )
     not_open_access_3 = db.licensepool(
         edition, open_access=False, data_source_name=DataSource.BIBBLIO
@@ -458,7 +458,7 @@ def test_loan_reaper(
         edition, open_access=False, data_source_name=DataSource.OVERDRIVE
     )
     not_open_access_2 = db.licensepool(
-        edition, open_access=False, data_source_name=DataSource.AXIS_360
+        edition, open_access=False, data_source_name=DataSource.BOUNDLESS
     )
     not_open_access_3 = db.licensepool(
         edition, open_access=False, data_source_name=DataSource.BIBBLIO
