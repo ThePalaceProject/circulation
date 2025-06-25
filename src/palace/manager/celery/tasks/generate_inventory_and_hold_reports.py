@@ -104,7 +104,7 @@ def generate_report(
         )
     ]
 
-    MAX_LICENSE_COUNT = 1000 * 1000 * 1000 * 1000
+    MAX_LICENSE_COUNT = 1_000_000_000_000
     # generate inventory report csv file
     sql_params: dict[str, Any] = {
         "library_id": library.id,
