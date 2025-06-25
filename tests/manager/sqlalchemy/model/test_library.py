@@ -1,10 +1,15 @@
 import datetime
+from unittest.mock import patch
 
 import pytest
+from bidict import frozenbidict
 from Crypto.PublicKey.RSA import RsaKey, import_key
 
+from palace.manager.api.overdrive.api import OverdriveAPI
+from palace.manager.core.facets import FacetConstants
 from palace.manager.core.opds_import import OPDSAPI, OPDSImporterSettings
 from palace.manager.integration.base import integration_settings_update
+from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.library import Library
 from tests.fixtures.database import DatabaseTransactionFixture
 
@@ -301,3 +306,23 @@ class TestLibraryCollections:
         assert never_collection not in library.active_collections
         # ... the test collection is only active when we expect it to be.
         assert (test_collection in library.active_collections) == expect_active
+
+    def test_enabled_facets_distributor(self, db: DatabaseTransactionFixture) -> None:
+        library = db.library()
+        collection1 = db.collection(library=library, protocol=OPDSAPI)
+        collection2 = db.collection(library=library, protocol=OverdriveAPI)
+
+        # The enabled_facets method should return the names of the data sources
+        assert set(
+            library.enabled_facets(FacetConstants.DISTRIBUTOR_FACETS_GROUP_NAME)
+        ) == {collection1.data_source.name, collection2.data_source.name}
+
+        # If one of the data sources is deprecated, its new name should be returned instead.
+        with patch.object(
+            DataSource,
+            "DEPRECATED_NAMES",
+            frozenbidict({collection2.data_source.name: "New Data Source"}),
+        ):
+            assert set(
+                library.enabled_facets(FacetConstants.DISTRIBUTOR_FACETS_GROUP_NAME)
+            ) == {collection1.data_source.name, "New Data Source"}

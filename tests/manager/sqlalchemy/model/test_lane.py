@@ -3,9 +3,10 @@ import logging
 import random
 from dataclasses import dataclass, fields
 from typing import cast
-from unittest.mock import MagicMock, call
+from unittest.mock import MagicMock, call, patch
 
 import pytest
+from bidict import frozenbidict
 from opensearchpy.exceptions import OpenSearchException
 from sqlalchemy import and_, text
 
@@ -795,6 +796,26 @@ class TestFacets:
         filter = Filter()
         facets.modify_search_filter(filter)
         assert [db.default_collection().id] == filter.collection_ids
+
+        # If you use a deprecated datasource, it is converted to the active one.
+        filter = Filter()
+        facets = Facets(
+            db.default_library(),
+            "some availability",
+            order=Facets.ORDER_ADDED_TO_COLLECTION,
+            distributor="deprecated datasource",
+            collection_name=None,
+        )
+        with patch.object(
+            DataSource,
+            "DEPRECATED_NAMES",
+            frozenbidict({"deprecated datasource": DataSource.GUTENBERG}),
+        ):
+            facets.modify_search_filter(filter)
+        facets.modify_search_filter(filter)
+        assert [
+            DataSource.lookup(db.session, DataSource.GUTENBERG).id
+        ] == filter.license_datasources
 
     def test_modify_database_query(self, db: DatabaseTransactionFixture):
         # Make sure that modify_database_query handles the various
