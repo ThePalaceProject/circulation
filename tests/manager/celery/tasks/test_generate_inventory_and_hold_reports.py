@@ -414,7 +414,7 @@ def test_generate_report(
                 holds_with_no_licenses_report_csv = zip_csv_entry_to_dict(
                     holds_with_no_licenses_report_zip_entry
                 )
-                # Only our single book with no licenses  should be in the holds report.
+                # Only our single book with no licenses should be in the holds report.
                 assert len(holds_with_no_licenses_report_csv) == 1
 
                 row = next(
