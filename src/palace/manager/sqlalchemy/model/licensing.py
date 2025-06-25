@@ -2117,7 +2117,7 @@ class RightsStatus(Base):
         DataSourceConstants.OA_CONTENT_SERVER: GENERIC_OPEN_ACCESS,
         DataSourceConstants.OVERDRIVE: IN_COPYRIGHT,
         DataSourceConstants.BIBLIOTHECA: IN_COPYRIGHT,
-        DataSourceConstants.AXIS_360: IN_COPYRIGHT,
+        DataSourceConstants.BOUNDLESS: IN_COPYRIGHT,
     }
 
     __tablename__ = "rightsstatus"

@@ -1064,7 +1064,7 @@ class TestWorkClassifier:
         subject1.genre = genre1
         subject2 = data.transaction.subject(type="type2", identifier="subject2")
         subject2.genre = genre2
-        source = DataSource.lookup(session, DataSource.AXIS_360)
+        source = DataSource.lookup(session, DataSource.BOUNDLESS)
         staff_source = DataSource.lookup(session, DataSource.LIBRARY_STAFF)
         classification1 = data.transaction.classification(
             identifier=data.identifier, subject=subject1, data_source=source, weight=10
@@ -1085,7 +1085,7 @@ class TestWorkClassifier:
     ):
         data = work_classifier_fixture
         session = data.transaction.session
-        source = DataSource.lookup(session, DataSource.AXIS_360)
+        source = DataSource.lookup(session, DataSource.BOUNDLESS)
         staff_source = DataSource.lookup(session, DataSource.LIBRARY_STAFF)
         genre1, is_new = Genre.lookup(session, "Poetry")
         subject1 = data.transaction.subject(type="type1", identifier="subject1")
@@ -1112,7 +1112,7 @@ class TestWorkClassifier:
     ):
         data = work_classifier_fixture
         session = data.transaction.session
-        source = DataSource.lookup(session, DataSource.AXIS_360)
+        source = DataSource.lookup(session, DataSource.BOUNDLESS)
         staff_source = DataSource.lookup(session, DataSource.LIBRARY_STAFF)
         subject1 = data.transaction.subject(type="type1", identifier="Cooking")
         subject1.fiction = False
@@ -1144,7 +1144,7 @@ class TestWorkClassifier:
     ):
         data = work_classifier_fixture
         session = data.transaction.session
-        pool = data.transaction.licensepool(None, data_source_name=DataSource.AXIS_360)
+        pool = data.transaction.licensepool(None, data_source_name=DataSource.BOUNDLESS)
         license_source = pool.data_source
         staff_source = DataSource.lookup(session, DataSource.LIBRARY_STAFF)
         subject1 = data.transaction.subject(type="type1", identifier="subject1")
@@ -1183,7 +1183,7 @@ class TestWorkClassifier:
     ):
         data = work_classifier_fixture
         session = data.transaction.session
-        source = DataSource.lookup(session, DataSource.AXIS_360)
+        source = DataSource.lookup(session, DataSource.BOUNDLESS)
         staff_source = DataSource.lookup(session, DataSource.LIBRARY_STAFF)
         subject1 = data.transaction.subject(type="type1", identifier="subject1")
         subject1.target_age = NumericRange(6, 8, "[)")
