@@ -325,7 +325,7 @@ class Annotator(LoggerMixin):
             Field(
                 tag="264",
                 indicators=Indicators(" ", "2"),
-                subfields=[Subfield("b", str(pool.data_source.name))],
+                subfields=[Subfield("b", str(pool.data_source.active_name))],
             )
         )
 

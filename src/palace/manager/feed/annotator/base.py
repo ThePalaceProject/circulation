@@ -360,7 +360,7 @@ class Annotator(ToFeedEntry):
             computed.identifier = identifier.urn
 
         if pool:
-            data_source = pool.data_source.name
+            data_source = pool.data_source.active_name
             if data_source != DataSource.INTERNAL_PROCESSING:
                 # INTERNAL_PROCESSING indicates a dummy LicensePool
                 # created as a stand-in, e.g. by the metadata wrangler.
