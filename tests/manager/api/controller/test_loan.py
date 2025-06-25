@@ -645,7 +645,7 @@ class TestLoanController:
         threem_edition, pool = loan_fixture.db.edition(
             with_open_access_download=False,
             data_source_name=DataSource.BIBLIOTHECA,
-            identifier_type=Identifier.THREEM_ID,
+            identifier_type=Identifier.BIBLIOTHECA_ID,
             with_license_pool=True,
         )
         threem_book = loan_fixture.db.work(
@@ -708,7 +708,7 @@ class TestLoanController:
         threem_edition, pool = loan_fixture.db.edition(
             with_open_access_download=False,
             data_source_name=DataSource.BIBLIOTHECA,
-            identifier_type=Identifier.THREEM_ID,
+            identifier_type=Identifier.BIBLIOTHECA_ID,
             with_license_pool=True,
         )
         threem_book = loan_fixture.db.work(
@@ -747,7 +747,7 @@ class TestLoanController:
         threem_edition, pool = loan_fixture.db.edition(
             with_open_access_download=False,
             data_source_name=DataSource.BIBLIOTHECA,
-            identifier_type=Identifier.THREEM_ID,
+            identifier_type=Identifier.BIBLIOTHECA_ID,
             with_license_pool=True,
         )
         threem_book = loan_fixture.db.work(
@@ -1320,7 +1320,7 @@ class TestLoanController:
         threem_edition, pool = loan_fixture.db.edition(
             with_open_access_download=False,
             data_source_name=DataSource.BIBLIOTHECA,
-            identifier_type=Identifier.THREEM_ID,
+            identifier_type=Identifier.BIBLIOTHECA_ID,
             with_license_pool=True,
         )
         threem_book = loan_fixture.db.work(
@@ -1374,7 +1374,7 @@ class TestLoanController:
         threem_edition, pool = loan_fixture.db.edition(
             with_open_access_download=False,
             data_source_name=DataSource.BIBLIOTHECA,
-            identifier_type=Identifier.THREEM_ID,
+            identifier_type=Identifier.BIBLIOTHECA_ID,
             with_license_pool=True,
         )
         threem_book = loan_fixture.db.work(

@@ -166,7 +166,6 @@ class IdentifierConstants:
     DEPRECATED_NAMES = {
         "3M ID": BIBLIOTHECA_ID,
     }
-    THREEM_ID = BIBLIOTHECA_ID
 
     LICENSE_PROVIDING_IDENTIFIER_TYPES = [
         BIBLIOTHECA_ID,
