@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Generator
 
 from celery import shared_task
-from sqlalchemy import delete, select, tuple_
+from sqlalchemy import tuple_
 from sqlalchemy.orm import Session, defer
 
 from palace.manager.celery.task import Task
@@ -14,7 +14,6 @@ from palace.manager.service.redis.models.work import (
     WaitingForPresentationCalculation,
 )
 from palace.manager.sqlalchemy.model.classification import Classification, Subject
-from palace.manager.sqlalchemy.model.coverage import WorkCoverageRecord
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import LicensePool
 from palace.manager.sqlalchemy.model.work import Work
@@ -63,34 +62,6 @@ def calculate_work_presentations(
         raise task.replace(calculate_work_presentations.s(batch_size=batch_size))
 
     task.log.info(f"Finished calculating presentation for works.")
-
-
-@shared_task(queue=QueueNames.default, bind=True)
-def migrate_work_coverage_records(task: Task) -> None:
-    """
-    TODO: Remove in next release
-    This task is TEMPORARY and should be removed in the next release along with the reference to it in
-    palace/manager/service/celery/celery.py
-    Initially I had implemented this routine as an alembic migration but caused issues with the tests
-    and introduced unnecessary complexity into the migration process.
-    """
-    with task.transaction() as session:
-        rows = session.execute(
-            select(WorkCoverageRecord.work_id).where(
-                WorkCoverageRecord.status == WorkCoverageRecord.REGISTERED
-            )
-        ).all()
-
-        policy = PresentationCalculationPolicy.recalculate_everything()
-
-        for row in rows:
-            Work.queue_presentation_recalculation(work_id=row["work_id"], policy=policy)
-
-        session.execute(
-            delete(WorkCoverageRecord).where(
-                WorkCoverageRecord.status == WorkCoverageRecord.REGISTERED
-            )
-        )
 
 
 @shared_task(queue=QueueNames.default, bind=True)

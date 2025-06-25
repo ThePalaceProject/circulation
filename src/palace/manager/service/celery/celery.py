@@ -223,11 +223,6 @@ def beat_schedule() -> dict[str, Any]:
             "task": "work.calculate_work_presentations",
             "schedule": crontab(minute="*/10"),  # Every 10 minutes
         },
-        # TODO: THIS scheduled task is TEMPORARY and should be removed in the next release
-        "migrate_work_coverage_records": {
-            "task": "work.migrate_work_coverage_records",
-            "schedule": crontab(minute="0", hour="0"),  # Every day at midnight
-        },
         "update_saml_federation_idps_metadata": {
             "task": "saml.update_saml_federation_idps_metadata",
             "schedule": crontab(

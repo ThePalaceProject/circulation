@@ -1,13 +1,11 @@
 from unittest.mock import patch
 
 import pytest
-from sqlalchemy import select
 
 from palace.manager.celery.tasks.work import (
     _paginate_query,
     calculate_work_presentations,
     classify_unchecked_subjects,
-    migrate_work_coverage_records,
 )
 from palace.manager.data_layer.policy.presentation import PresentationCalculationPolicy
 from palace.manager.service.redis.models.work import (
@@ -15,10 +13,7 @@ from palace.manager.service.redis.models.work import (
     WorkIdAndPolicy,
 )
 from palace.manager.sqlalchemy.model.classification import Subject
-from palace.manager.sqlalchemy.model.coverage import WorkCoverageRecord
 from palace.manager.sqlalchemy.model.work import Work
-from palace.manager.sqlalchemy.util import get_one_or_create
-from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.celery import CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.redis import RedisFixture
@@ -64,43 +59,6 @@ def test_calculate_work_presentations(
                 policy1,
                 policy2,
             }
-
-
-def test_migrate_work_coverage_records(
-    db: DatabaseTransactionFixture,
-    celery_fixture: CeleryFixture,
-    redis_fixture: RedisFixture,
-):
-    """ "
-    This test will be removed in the next release along with the migrate_work_coverage_records task.
-    """
-    select_all_work_coverage_records = select(WorkCoverageRecord.work_id)
-    rows = db.session.execute(select_all_work_coverage_records).all()
-    assert len(rows) == 0
-
-    work1 = db.work()
-    get_one_or_create(
-        db.session,
-        WorkCoverageRecord,
-        create_method_kwargs={
-            "work_id": work1.id,
-            "status": WorkCoverageRecord.REGISTERED,
-            "operation": WorkCoverageRecord.CLASSIFY_OPERATION,
-            "timestamp": utc_now(),
-        },
-    )
-
-    rows = db.session.execute(select_all_work_coverage_records).all()
-    assert len(rows) == 1
-    policy1 = PresentationCalculationPolicy.recalculate_everything()
-    with redis_fixture.services_fixture.wired():
-        waiting = WaitingForPresentationCalculation(redis_fixture.client)
-        assert waiting.len() == 0
-        migrate_work_coverage_records.delay().wait()
-        assert waiting.len() == 1
-        assert waiting.pop(1) == {WorkIdAndPolicy(work_id=work1.id, policy=policy1)}
-    rows = db.session.execute(select_all_work_coverage_records).all()
-    assert len(rows) == 0
 
 
 def test_calculate_presentations_non_existent_work(
