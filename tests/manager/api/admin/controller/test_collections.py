@@ -26,7 +26,7 @@ from palace.manager.api.admin.problem_details import (
     PROTOCOL_DOES_NOT_SUPPORT_PARENTS,
     UNKNOWN_PROTOCOL,
 )
-from palace.manager.api.axis.api import Axis360API
+from palace.manager.api.boundless.api import BoundlessApi
 from palace.manager.api.odl.api import OPDS2WithODLApi
 from palace.manager.api.overdrive.api import OverdriveAPI
 from palace.manager.api.overdrive.settings import OverdriveLibrarySettings
@@ -670,7 +670,7 @@ class TestCollectionSettings:
         db: DatabaseTransactionFixture,
     ):
         # The collection exists.
-        collection = db.collection(name="Collection 1", protocol=Axis360API)
+        collection = db.collection(name="Collection 1", protocol=BoundlessApi)
 
         l1 = db.library(
             name="Library 1",
@@ -690,7 +690,7 @@ class TestCollectionSettings:
                 [
                     ("id", str(collection.integration_configuration.id)),
                     ("name", "Collection 1"),
-                    ("protocol", db.protocol_string(Goals.LICENSE_GOAL, Axis360API)),
+                    ("protocol", db.protocol_string(Goals.LICENSE_GOAL, BoundlessApi)),
                     ("external_account_id", "1234"),
                     ("username", "user2"),
                     ("password", "password"),
@@ -726,7 +726,7 @@ class TestCollectionSettings:
                 [
                     ("id", str(collection.integration_configuration.id)),
                     ("name", "Collection 1"),
-                    ("protocol", Axis360API.label()),
+                    ("protocol", BoundlessApi.label()),
                     ("external_account_id", "1234"),
                     ("username", "user2"),
                     ("password", "password"),
@@ -862,7 +862,7 @@ class TestCollectionSettings:
         flask_app_fixture: FlaskAppFixture,
         monkeypatch: MonkeyPatch,
     ):
-        collection = db.collection(protocol=Axis360API)
+        collection = db.collection(protocol=BoundlessApi)
 
         self_test_results = dict(
             duration=0.9,
@@ -898,7 +898,7 @@ class TestCollectionSettings:
         controller: CollectionSettingsController,
         monkeypatch: MonkeyPatch,
     ):
-        collection = db.collection(protocol=Axis360API)
+        collection = db.collection(protocol=BoundlessApi)
 
         # This makes HasSelfTests.run_self_tests return no values
         self_test_results = (None, None)

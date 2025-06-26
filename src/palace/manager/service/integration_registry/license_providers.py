@@ -16,8 +16,8 @@ class LicenseProvidersRegistry(IntegrationRegistry["CirculationApiType"]):
     def __init__(self) -> None:
         super().__init__(Goals.LICENSE_GOAL)
 
-        from palace.manager.api.axis.api import Axis360API
         from palace.manager.api.bibliotheca import BibliothecaAPI
+        from palace.manager.api.boundless.api import BoundlessApi
         from palace.manager.api.enki import EnkiAPI
         from palace.manager.api.odl.api import OPDS2WithODLApi
         from palace.manager.api.opds_for_distributors import OPDSForDistributorsAPI
@@ -27,7 +27,7 @@ class LicenseProvidersRegistry(IntegrationRegistry["CirculationApiType"]):
 
         self.register(OverdriveAPI, canonical=OverdriveAPI.label())
         self.register(BibliothecaAPI, canonical=BibliothecaAPI.label())
-        self.register(Axis360API, canonical=Axis360API.label())
+        self.register(BoundlessApi, canonical=BoundlessApi.label())
         self.register(EnkiAPI, canonical=EnkiAPI.label())
         self.register(OPDSForDistributorsAPI, canonical=OPDSForDistributorsAPI.label())
         self.register(OPDS2WithODLApi, canonical=OPDS2WithODLApi.label())

@@ -13,9 +13,9 @@ from palace.manager.util.http import RemoteIntegrationException
 from palace.manager.util.log import LoggerMixin
 
 
-class Axis360AcsFulfillment(UrlFulfillment, LoggerMixin):
-    """This implements a Axis 360 specific Fulfillment for ACS content
-    served through AxisNow. The AxisNow API gives us a link that we can use
+class BoundlessAcsFulfillment(UrlFulfillment, LoggerMixin):
+    """This implements Boundless specific Fulfillment for ACS content
+    served through AxisNow. The API gives us a link that we can use
     to get the ACSM file that we serve to the mobile apps.
 
     This link resolves to a redirect, which resolves to the actual ACSM file.
@@ -27,7 +27,7 @@ class Axis360AcsFulfillment(UrlFulfillment, LoggerMixin):
     before doing the actual request. In doing the normalization it follows the
     recommendation of RFC 3986 and uppercases the percent encoded bytes.
 
-    This causes the Axis360 API to return an error from Adobe ACS:
+    This causes the API to return an error from Adobe ACS:
     ```
     <error xmlns="http://ns.adobe.com/adept" data="E_URLLINK_AUTH
     https://acsqa.digitalcontentcafe.com/fulfillment/URLLink.acsm"/>
@@ -41,7 +41,7 @@ class Axis360AcsFulfillment(UrlFulfillment, LoggerMixin):
 
     This Fulfillment implementation uses the built in Python urllib
     implementation instead of requests (and urllib3) to make this request
-    to the Axis 360 API, sidestepping the problem, but taking a different
+    to the API, sidestepping the problem, but taking a different
     code path than most of our external HTTP requests.
     """
 

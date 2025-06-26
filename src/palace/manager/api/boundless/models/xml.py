@@ -7,24 +7,24 @@ from pydantic.alias_generators import to_camel, to_pascal
 from pydantic_xml import BaseXmlModel, ParsingError, element, wrapped
 from typing_extensions import Self
 
-from palace.manager.api.axis.exception import ErrorLookupType, StatusResponseParser
-from palace.manager.api.axis.models.base import BaseAxisResponse
-from palace.manager.api.axis.models.validators import (
-    AxisDate,
-    AxisDateTime,
-    AxisRuntime,
-    AxisStringList,
+from palace.manager.api.boundless.exception import ErrorLookupType, StatusResponseParser
+from palace.manager.api.boundless.models.base import BaseBoundlessResponse
+from palace.manager.api.boundless.models.validators import (
+    BoundlessRuntime,
+    BoundlessStringList,
+    BoundlessXmlDate,
+    BoundlessXmlDateTime,
 )
 from palace.manager.api.circulation_exceptions import AlreadyOnHold
 
 
-class BaseAxisXmlModel(
+class BaseBoundlessXmlModel(
     BaseXmlModel,
     nsmap={"": "http://axis360api.baker-taylor.com/vendorAPI"},
     search_mode="unordered",
 ):
     """
-    Base for Axis XML models.
+    Base for Boundless (Axis 360) XML models.
     """
 
     model_config = ConfigDict(
@@ -43,7 +43,7 @@ class BaseAxisXmlModel(
         Parse XML source into a Pydantic model.
 
         We override the `from_xml` method to ensure that we use a lenient XML parser
-        that can recover from errors, as Axis XML responses can be quite messy.
+        that can recover from errors, as Boundless XML responses can be quite messy.
         """
 
         if "parser" not in kwargs:
@@ -58,13 +58,13 @@ class BaseAxisXmlModel(
             raise ParsingError()
 
 
-class BaseAxisXmlResponse(BaseAxisXmlModel, BaseAxisResponse, ABC):
+class BaseBoundlessXmlResponse(BaseBoundlessXmlModel, BaseBoundlessResponse, ABC):
     """
-    Base for Axis XML responses.
+    Base for API XML responses.
     """
 
 
-class Checkout(BaseAxisXmlModel):
+class Checkout(BaseBoundlessXmlModel):
     """
     A checkout for a patron.
 
@@ -78,13 +78,13 @@ class Checkout(BaseAxisXmlModel):
     )
 
     patron: str = element()
-    start_date: AxisDateTime = element()
-    end_date: AxisDateTime = element()
+    start_date: BoundlessXmlDateTime = element()
+    end_date: BoundlessXmlDateTime = element()
     format: str = element()
     active: bool = element()
 
 
-class Hold(BaseAxisXmlModel):
+class Hold(BaseBoundlessXmlModel):
     """
     A hold for a patron.
 
@@ -103,11 +103,11 @@ class Hold(BaseAxisXmlModel):
     # so we make it optional.
     email: str | None = element(default=None)
 
-    hold_date: AxisDateTime = element()
+    hold_date: BoundlessXmlDateTime = element()
     reserved: bool = element()
 
 
-class Availability(BaseAxisXmlModel):
+class Availability(BaseBoundlessXmlModel):
     """
     Availability information for a title.
 
@@ -124,14 +124,14 @@ class Availability(BaseAxisXmlModel):
     holds_queue_position: NonNegativeInt | None = element(default=None)
     is_in_hold_queue: bool = element(default=False)
     is_reserved: bool = element(default=False)
-    reserved_end_date: AxisDateTime | None = element(default=None)
+    reserved_end_date: BoundlessXmlDateTime | None = element(default=None)
     is_checked_out: bool = element(default=False, tag="isCheckedout")
     checkout_format: str | None = element(default=None)
     download_url: str | None = element(default=None)
     transaction_id: str | None = element(default=None, tag="transactionID")
-    checkout_start_date: AxisDateTime | None = element(default=None)
-    checkout_end_date: AxisDateTime | None = element(default=None)
-    update_date: AxisDateTime | None = element(default=None)
+    checkout_start_date: BoundlessXmlDateTime | None = element(default=None)
+    checkout_end_date: BoundlessXmlDateTime | None = element(default=None)
+    update_date: BoundlessXmlDateTime | None = element(default=None)
 
     # Note: The inconsistency between the `Checkouts` and `checkout` tag. This isn't
     # in the API documentation, but is present in the responses we receive.
@@ -142,7 +142,7 @@ class Availability(BaseAxisXmlModel):
 
 
 class Title(
-    BaseAxisXmlModel,
+    BaseBoundlessXmlModel,
 ):
     """
     Information about a title.
@@ -156,10 +156,10 @@ class Title(
 
     # This is not documented in the API documentation, but it is present in the response and was
     # used by our previous Axis parser implementation.
-    contributors: AxisStringList = element(default_factory=list, tag="contributor")
+    contributors: BoundlessStringList = element(default_factory=list, tag="contributor")
 
     isbn: str = element()
-    subjects: AxisStringList = element(default_factory=list, tag="subject")
+    subjects: BoundlessStringList = element(default_factory=list, tag="subject")
     series: str | None = element(default=None)
     publisher: str | None = element(default=None)
     language: str = element()
@@ -171,10 +171,10 @@ class Title(
 
     # This is not documented in the API documentation, but it is present in the response and was
     # used by our previous Axis parser implementation.
-    narrators: AxisStringList = element(default_factory=list, tag="narrator")
+    narrators: BoundlessStringList = element(default_factory=list, tag="narrator")
 
-    runtime: AxisRuntime | None = element(default=None)
-    publication_date: AxisDate | None = element(default=None)
+    runtime: BoundlessRuntime | None = element(default=None)
+    publication_date: BoundlessXmlDate | None = element(default=None)
     availability: Availability = element()
     min_loan_period: PositiveInt = element()
     max_loan_period: PositiveInt = element()
@@ -187,11 +187,11 @@ class Title(
     format_type: Literal["EBT", "ABT"] | None = element(default=None)
 
 
-class Status(BaseAxisXmlModel):
+class Status(BaseBoundlessXmlModel):
     """
     The status of an XML API response.
 
-    This is included in all the Axis XML responses to indicate the success or failure
+    This is included in all the API XML responses to indicate the success or failure
     of the request. It contains a status code and a message.
 
     It is based on "Boundless Vendor API v3.0 - Palace.pdf". This is defined and redefined in
@@ -216,7 +216,7 @@ class Status(BaseAxisXmlModel):
 
 
 class AvailabilityResponse(
-    BaseAxisXmlResponse,
+    BaseBoundlessXmlResponse,
     tag="availabilityResponse",
 ):
     """
@@ -237,7 +237,7 @@ class AvailabilityResponse(
 
 
 class EarlyCheckinResponse(
-    BaseAxisXmlResponse,
+    BaseBoundlessXmlResponse,
     tag="EarlyCheckinRestResponse",
 ):
     """
@@ -256,7 +256,7 @@ class EarlyCheckinResponse(
 
 
 class CheckoutResponse(
-    BaseAxisXmlResponse,
+    BaseBoundlessXmlResponse,
     tag="checkoutResponse",
 ):
     """
@@ -267,7 +267,7 @@ class CheckoutResponse(
     """
 
     status: Status = wrapped("checkoutResult", element())
-    expiration_date: AxisDateTime | None = wrapped(
+    expiration_date: BoundlessXmlDateTime | None = wrapped(
         "checkoutResult", element(default=None)
     )
 
@@ -276,7 +276,7 @@ class CheckoutResponse(
 
 
 class AddHoldResponse(
-    BaseAxisXmlResponse,
+    BaseBoundlessXmlResponse,
     tag="addtoholdResponse",
 ):
     """
@@ -296,7 +296,7 @@ class AddHoldResponse(
 
 
 class RemoveHoldResponse(
-    BaseAxisXmlResponse,
+    BaseBoundlessXmlResponse,
     tag="removeholdResponse",
 ):
     """

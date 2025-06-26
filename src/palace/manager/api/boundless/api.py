@@ -10,24 +10,27 @@ from flask_babel import lazy_gettext as _
 from sqlalchemy.orm import Session
 from typing_extensions import Unpack
 
-from palace.manager.api.axis.constants import (
+from palace.manager.api.boundless.constants import (
     BAKER_TAYLOR_KDRM_PARAMS,
     DELIVERY_MECHANISM_TO_INTERNAL_FORMAT,
     INTERNAL_FORMAT_TO_DELIVERY_MECHANISM,
-    Axis360Format,
+    BoundlessFormat,
     DeliveryMechanismTuple,
 )
-from palace.manager.api.axis.fulfillment import (
-    Axis360AcsFulfillment,
+from palace.manager.api.boundless.fulfillment import (
+    BoundlessAcsFulfillment,
 )
-from palace.manager.api.axis.models.json import (
+from palace.manager.api.boundless.models.json import (
     AxisNowFulfillmentInfoResponse,
     FindawayFulfillmentInfoResponse,
 )
-from palace.manager.api.axis.models.xml import Title
-from palace.manager.api.axis.parser import BibliographicParser
-from palace.manager.api.axis.requests import Axis360Requests
-from palace.manager.api.axis.settings import Axis360LibrarySettings, Axis360Settings
+from palace.manager.api.boundless.models.xml import Title
+from palace.manager.api.boundless.parser import BibliographicParser
+from palace.manager.api.boundless.requests import BoundlessRequests
+from palace.manager.api.boundless.settings import (
+    BoundlessLibrarySettings,
+    BoundlessSettings,
+)
 from palace.manager.api.circulation import (
     BaseCirculationAPI,
     DirectFulfillment,
@@ -64,19 +67,19 @@ from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.util.datetime_helpers import utc_now
 
 
-class Axis360API(
-    PatronActivityCirculationAPI[Axis360Settings, Axis360LibrarySettings],
+class BoundlessApi(
+    PatronActivityCirculationAPI[BoundlessSettings, BoundlessLibrarySettings],
     HasCollectionSelfTests,
 ):
     SET_DELIVERY_MECHANISM_AT = BaseCirculationAPI.BORROW_STEP
 
     @classmethod
-    def settings_class(cls) -> type[Axis360Settings]:
-        return Axis360Settings
+    def settings_class(cls) -> type[BoundlessSettings]:
+        return BoundlessSettings
 
     @classmethod
-    def library_settings_class(cls) -> type[Axis360LibrarySettings]:
-        return Axis360LibrarySettings
+    def library_settings_class(cls) -> type[BoundlessLibrarySettings]:
+        return BoundlessLibrarySettings
 
     @classmethod
     def label(cls) -> str:
@@ -90,11 +93,11 @@ class Axis360API(
         self,
         _db: Session,
         collection: Collection,
-        requests: Axis360Requests | None = None,
+        requests: BoundlessRequests | None = None,
     ) -> None:
         super().__init__(_db, collection)
         self.api_requests = (
-            Axis360Requests(self.settings) if requests is None else requests
+            BoundlessRequests(self.settings) if requests is None else requests
         )
 
     @staticmethod
@@ -169,7 +172,7 @@ class Axis360API(
         :param licensepool: LicensePool for the book to be returned.
 
         :raise CirculationException: If the API can't carry out the operation.
-        :raise Axis360ValidationError: If the API returns an invalid response.
+        :raise BoundlessValidationError: If the API returns an invalid response.
         """
         title_id = licensepool.identifier.identifier
         patron_id = patron.authorization_identifier
@@ -198,7 +201,7 @@ class Axis360API(
             licensepool, end_date=response.expiration_date
         )
 
-    def _fulfill_acs(self, title: Title) -> Axis360AcsFulfillment:
+    def _fulfill_acs(self, title: Title) -> BoundlessAcsFulfillment:
         # The patron wants a direct link to the book, which we can deliver
         # immediately, without making any more API requests.
         download_url = title.availability.download_url
@@ -211,7 +214,7 @@ class Axis360API(
                 title,
             )
             raise CannotFulfill()
-        return Axis360AcsFulfillment(
+        return BoundlessAcsFulfillment(
             content_link=html.unescape(download_url),
             content_type=DeliveryMechanism.ADOBE_DRM,
             verify=self.api_requests._verify_certificate,
@@ -316,7 +319,7 @@ class Axis360API(
         ]
 
         if not titles:
-            # The Axis 360 API did not return any titles for this identifier, so
+            # The API did not return any titles for this identifier, so
             # the patron does not have this book checked out.
             if availability_response.titles:
                 # If there are titles but none match, we log a warning.
@@ -341,8 +344,8 @@ class Axis360API(
         checkout_format = title.availability.checkout_format
 
         # We treat the Blio format as equivalent to AxisNow for the purposes of fulfillment.
-        if checkout_format == Axis360Format.blio:
-            checkout_format = Axis360Format.axis_now
+        if checkout_format == BoundlessFormat.blio:
+            checkout_format = BoundlessFormat.axis_now
 
         if checkout_format != internal_format:
             # The book is checked out in a format that does not match the requested internal format.
@@ -357,8 +360,8 @@ class Axis360API(
             raise FormatNotAvailable()
 
         if (
-            checkout_format == Axis360Format.epub
-            or checkout_format == Axis360Format.pdf
+            checkout_format == BoundlessFormat.epub
+            or checkout_format == BoundlessFormat.pdf
         ):
             return self._fulfill_acs(title)
 
@@ -374,12 +377,12 @@ class Axis360API(
 
         fulfillment_info = self.api_requests.fulfillment_info(transaction_id)
 
-        if checkout_format == Axis360Format.acoustik and isinstance(
+        if checkout_format == BoundlessFormat.acoustik and isinstance(
             fulfillment_info, FindawayFulfillmentInfoResponse
         ):
             return self._fulfill_acoustik(title, fulfillment_info, licensepool)
 
-        elif checkout_format == Axis360Format.axis_now and isinstance(
+        elif checkout_format == BoundlessFormat.axis_now and isinstance(
             fulfillment_info, AxisNowFulfillmentInfoResponse
         ):
             return self._fulfill_baker_taylor_kdrm(title, fulfillment_info, **kwargs)
@@ -434,8 +437,8 @@ class Axis360API(
         availability_response = self.api_requests.availability(patron_id=patron_id)
         for title in availability_response.titles:
             # Figure out which book we're talking about.
-            axis_identifier = title.title_id
-            axis_identifier_type = Identifier.AXIS_360_ID
+            title_id = title.title_id
+            identifier_type = Identifier.AXIS_360_ID
             availability = title.availability
             if availability.is_checked_out:
                 # When the item is checked out, it can be locked to a particular DRM format. So even though
@@ -450,7 +453,7 @@ class Axis360API(
                         self.log.error(
                             "Unknown checkout format %s for identifier %s. %r",
                             availability.checkout_format,
-                            axis_identifier,
+                            title_id,
                             title,
                         )
                         continue
@@ -464,8 +467,8 @@ class Axis360API(
 
                 yield LoanInfo(
                     collection_id=self.collection_id,
-                    identifier_type=axis_identifier_type,
-                    identifier=axis_identifier,
+                    identifier_type=identifier_type,
+                    identifier=title_id,
                     start_date=availability.checkout_start_date,
                     end_date=availability.checkout_end_date,
                     locked_to=locked_to,
@@ -474,8 +477,8 @@ class Axis360API(
             elif availability.is_reserved:
                 yield HoldInfo(
                     collection_id=self.collection_id,
-                    identifier_type=axis_identifier_type,
-                    identifier=axis_identifier,
+                    identifier_type=identifier_type,
+                    identifier=title_id,
                     end_date=availability.reserved_end_date,
                     hold_position=0,
                 )
@@ -483,8 +486,8 @@ class Axis360API(
             elif availability.is_in_hold_queue:
                 yield HoldInfo(
                     collection_id=self.collection_id,
-                    identifier_type=axis_identifier_type,
-                    identifier=axis_identifier,
+                    identifier_type=identifier_type,
+                    identifier=title_id,
                     hold_position=availability.holds_queue_position,
                 )
 
@@ -514,7 +517,7 @@ class Axis360API(
             if identifier in remainder:
                 remainder.remove(identifier)
 
-        # We asked Axis about n books. It sent us n-k responses. Those
+        # We asked Boundless about n books. It sent us n-k responses. Those
         # k books are the identifiers in `remainder`. These books have
         # been removed from the collection without us being notified.
         for removed_identifier in remainder:
@@ -525,7 +528,7 @@ class Axis360API(
         bibliographic: BibliographicData,
     ) -> tuple[Edition, bool, LicensePool, bool]:
         """Create or update a single book based on bibliographic
-        and availability data from the Axis 360 API.
+        and availability data from the Boundless API.
 
         :param bibliographic: A BibliographicData object containing
             bibliographic and circulation (ie availability) data about this title

@@ -2,17 +2,20 @@ import json
 
 import pytest
 
-from palace.manager.api.axis.exception import Axis360LicenseError, StatusResponseParser
-from palace.manager.api.axis.models.json import LicenseServerStatus
+from palace.manager.api.boundless.exception import (
+    BoundlessLicenseError,
+    StatusResponseParser,
+)
+from palace.manager.api.boundless.models.json import LicenseServerStatus
 from palace.manager.api.circulation_exceptions import (
     NotFoundOnRemote,
     RemoteInitiatedServerError,
 )
 from palace.manager.util.problem_detail import ProblemDetail
-from tests.fixtures.files import AxisFilesFixture
+from tests.fixtures.files import BoundlessFilesFixture
 
 
-class TestAxis360LicenseError:
+class TestBoundlessLicenseError:
     @pytest.mark.parametrize(
         "status_code, file_name",
         [
@@ -23,14 +26,17 @@ class TestAxis360LicenseError:
         ],
     )
     def test_problem_detail(
-        self, axis_files_fixture: AxisFilesFixture, status_code: int, file_name: str
+        self,
+        boundless_files_fixture: BoundlessFilesFixture,
+        status_code: int,
+        file_name: str,
     ):
-        # Test that the Axis360LicenseError generates a ProblemDetail containing the information
+        # Test that the Boundless360LicenseError generates a ProblemDetail containing the information
         # from the LicenseServerStatus document.
         status_doc = LicenseServerStatus.model_validate_json(
-            axis_files_fixture.sample_data(file_name)
+            boundless_files_fixture.sample_data(file_name)
         )
-        error = Axis360LicenseError(status_doc, status_code)
+        error = BoundlessLicenseError(status_doc, status_code)
         assert error.problem_detail == ProblemDetail(
             uri=f"http://palaceproject.io/terms/problem/boundless/{status_doc.code}",
             status_code=status_code,
@@ -40,46 +46,50 @@ class TestAxis360LicenseError:
 
 
 class TestStatusResponseParser:
-    def test_parser_xml(self, axis_files_fixture: AxisFilesFixture):
-        data = axis_files_fixture.sample_data("availability_patron_not_found.xml")
+    def test_parser_xml(self, boundless_files_fixture: BoundlessFilesFixture):
+        data = boundless_files_fixture.sample_data("availability_patron_not_found.xml")
         parsed = StatusResponseParser.parse(data)
         assert parsed is not None
         assert parsed.code == 3122
         assert parsed.message == "Patron information is not found."
 
-        data = axis_files_fixture.sample_data("availability_with_loans.xml")
+        data = boundless_files_fixture.sample_data("availability_with_loans.xml")
         parsed = StatusResponseParser.parse(data)
         assert parsed is not None
         assert parsed.code == 0
         assert parsed.message == "Availability Data is Successfully retrieved."
 
-        data = axis_files_fixture.sample_data("availability_with_ebook_fulfillment.xml")
+        data = boundless_files_fixture.sample_data(
+            "availability_with_ebook_fulfillment.xml"
+        )
         parsed = StatusResponseParser.parse(data)
         assert parsed is not None
         assert parsed.code == 0
         assert parsed.message == "Availability Data is Successfully retrieved."
 
-        data = axis_files_fixture.sample_data("checkin_failure.xml")
+        data = boundless_files_fixture.sample_data("checkin_failure.xml")
         parsed = StatusResponseParser.parse(data)
         assert parsed is not None
         assert parsed.code == 3103
         assert parsed.message == "Invalid Title Id"
 
-        data = axis_files_fixture.sample_data("invalid_error_code.xml")
+        data = boundless_files_fixture.sample_data("invalid_error_code.xml")
         parsed = StatusResponseParser.parse(data)
         assert parsed is None
 
-        data = axis_files_fixture.sample_data("missing_error_code.xml")
+        data = boundless_files_fixture.sample_data("missing_error_code.xml")
         parsed = StatusResponseParser.parse(data)
         assert parsed is None
 
-        data = axis_files_fixture.sample_data("checkout_success_no_status_message.xml")
+        data = boundless_files_fixture.sample_data(
+            "checkout_success_no_status_message.xml"
+        )
         parsed = StatusResponseParser.parse(data)
         assert parsed is not None
         assert parsed.code == 0
         assert parsed.message is None
 
-    def test_parser_bad_data(self, axis_files_fixture: AxisFilesFixture):
+    def test_parser_bad_data(self, boundless_files_fixture: BoundlessFilesFixture):
         # Test with None and empty data
         assert StatusResponseParser.parse(None) is None  # type: ignore[arg-type]
         assert StatusResponseParser.parse(b"") is None
@@ -88,20 +98,20 @@ class TestStatusResponseParser:
         assert StatusResponseParser.parse(b"{") is None
         assert StatusResponseParser.parse("🔥🗑️".encode()) is None
 
-    def test_parser_json(self, axis_files_fixture: AxisFilesFixture):
-        data = axis_files_fixture.sample_data("audiobook_metadata.json")
+    def test_parser_json(self, boundless_files_fixture: BoundlessFilesFixture):
+        data = boundless_files_fixture.sample_data("audiobook_metadata.json")
         parsed = StatusResponseParser.parse(data)
         assert parsed is not None
         assert parsed.code == 0
         assert parsed.message == "SUCCESS"
 
-        data = axis_files_fixture.sample_data("audiobook_fulfillment_info.json")
+        data = boundless_files_fixture.sample_data("audiobook_fulfillment_info.json")
         parsed = StatusResponseParser.parse(data)
         assert parsed is not None
         assert parsed.code == 0
         assert parsed.message == "SUCCESS"
 
-        data = axis_files_fixture.sample_data("ebook_fulfillment_info.json")
+        data = boundless_files_fixture.sample_data("ebook_fulfillment_info.json")
         parsed = StatusResponseParser.parse(data)
         assert parsed is not None
         assert parsed.code == 0
@@ -137,20 +147,20 @@ class TestStatusResponseParser:
         assert parsed.code == 123
         assert parsed.message == "Wow"
 
-    def test_parse_and_raise(self, axis_files_fixture: AxisFilesFixture):
+    def test_parse_and_raise(self, boundless_files_fixture: BoundlessFilesFixture):
         assert StatusResponseParser.parse_and_raise(b"") is None
 
-        data = axis_files_fixture.sample_data("availability_patron_not_found.xml")
+        data = boundless_files_fixture.sample_data("availability_patron_not_found.xml")
         assert (
             3122,
             "Patron information is not found.",
         ) == StatusResponseParser.parse_and_raise(data)
 
-        data = axis_files_fixture.sample_data("checkin_failure.xml")
+        data = boundless_files_fixture.sample_data("checkin_failure.xml")
         with pytest.raises(NotFoundOnRemote):
             StatusResponseParser.parse_and_raise(data)
 
-        data = axis_files_fixture.sample_data("internal_server_error.xml")
+        data = boundless_files_fixture.sample_data("internal_server_error.xml")
         with pytest.raises(RemoteInitiatedServerError, match="Internal Server Error"):
             StatusResponseParser.parse_and_raise(data)
 

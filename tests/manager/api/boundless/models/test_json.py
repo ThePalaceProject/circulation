@@ -2,7 +2,7 @@ import datetime
 
 from freezegun import freeze_time
 
-from palace.manager.api.axis.models.json import (
+from palace.manager.api.boundless.models.json import (
     AudiobookMetadataResponse,
     AxisNowFulfillmentInfoResponse,
     FindawayFulfillmentInfoResponse,
@@ -11,12 +11,14 @@ from palace.manager.api.axis.models.json import (
     Token,
 )
 from palace.manager.util.datetime_helpers import datetime_utc
-from tests.fixtures.files import AxisFilesFixture
+from tests.fixtures.files import BoundlessFilesFixture
 
 
 class TestFulfillmentInfoResponse:
-    def test_audiobook_fulfillment_info(self, axis_files_fixture: AxisFilesFixture):
-        data = axis_files_fixture.sample_data("audiobook_fulfillment_info.json")
+    def test_audiobook_fulfillment_info(
+        self, boundless_files_fixture: BoundlessFilesFixture
+    ):
+        data = boundless_files_fixture.sample_data("audiobook_fulfillment_info.json")
         parsed = FulfillmentInfoResponse.validate_json(data)
         assert isinstance(parsed, FindawayFulfillmentInfoResponse)
         parsed.raise_on_error()
@@ -31,8 +33,10 @@ class TestFulfillmentInfoResponse:
 
         assert parsed.expiration_date == datetime_utc(2018, 9, 29, 18, 34, 0, 139)
 
-    def test_ebook_fulfillment_info(self, axis_files_fixture: AxisFilesFixture):
-        data = axis_files_fixture.sample_data("ebook_fulfillment_info.json")
+    def test_ebook_fulfillment_info(
+        self, boundless_files_fixture: BoundlessFilesFixture
+    ):
+        data = boundless_files_fixture.sample_data("ebook_fulfillment_info.json")
         parsed = FulfillmentInfoResponse.validate_json(data)
         assert isinstance(parsed, AxisNowFulfillmentInfoResponse)
         parsed.raise_on_error()
@@ -46,8 +50,8 @@ class TestFulfillmentInfoResponse:
 
 
 class TestAudiobookMetadataResponse:
-    def test_audiobook_metadata(self, axis_files_fixture: AxisFilesFixture):
-        data = axis_files_fixture.sample_data("audiobook_metadata.json")
+    def test_audiobook_metadata(self, boundless_files_fixture: BoundlessFilesFixture):
+        data = boundless_files_fixture.sample_data("audiobook_metadata.json")
         parsed = AudiobookMetadataResponse.model_validate_json(data)
         parsed.raise_on_error()
 
@@ -64,8 +68,8 @@ class TestAudiobookMetadataResponse:
 
 
 class TestToken:
-    def test_token_response(self, axis_files_fixture: AxisFilesFixture):
-        data = axis_files_fixture.sample_data("token.json")
+    def test_token_response(self, boundless_files_fixture: BoundlessFilesFixture):
+        data = boundless_files_fixture.sample_data("token.json")
         parsed = Token.model_validate_json(data)
 
         assert parsed.access_token == (
@@ -93,16 +97,18 @@ class TestToken:
 
 
 class TestLicenseServerStatus:
-    def test_license_invalid_isbn(self, axis_files_fixture: AxisFilesFixture):
-        data = axis_files_fixture.sample_data("license_invalid_isbn.json")
+    def test_license_invalid_isbn(self, boundless_files_fixture: BoundlessFilesFixture):
+        data = boundless_files_fixture.sample_data("license_invalid_isbn.json")
         parsed = LicenseServerStatus.model_validate_json(data)
 
         assert parsed.code == 9400
         assert parsed.title == "Invalid ISBN"
         assert parsed.message == "ISBN KeyId association does not exist."
 
-    def test_license_internal_server_error(self, axis_files_fixture: AxisFilesFixture):
-        data = axis_files_fixture.sample_data("license_internal_server_error.json")
+    def test_license_internal_server_error(
+        self, boundless_files_fixture: BoundlessFilesFixture
+    ):
+        data = boundless_files_fixture.sample_data("license_internal_server_error.json")
         parsed = LicenseServerStatus.model_validate_json(data)
 
         assert parsed.code == 500

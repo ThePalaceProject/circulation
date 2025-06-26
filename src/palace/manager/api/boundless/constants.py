@@ -16,7 +16,7 @@ else:
     from backports.strenum import StrEnum
 
 
-class Axis360Format(StrEnum):
+class BoundlessFormat(StrEnum):
     axis_now = "AxisNow"
     # Legacy format, handled the same way as AxisNow
     blio = "Blio"
@@ -56,19 +56,19 @@ DELIVERY_MECHANISM_TO_INTERNAL_FORMAT: frozenbidict[DeliveryMechanismTuple, str]
             DeliveryMechanismTuple(
                 Representation.EPUB_MEDIA_TYPE,
                 DeliveryMechanism.ADOBE_DRM,
-            ): Axis360Format.epub,
+            ): BoundlessFormat.epub,
             DeliveryMechanismTuple(
                 Representation.PDF_MEDIA_TYPE,
                 DeliveryMechanism.ADOBE_DRM,
-            ): Axis360Format.pdf,
+            ): BoundlessFormat.pdf,
             DeliveryMechanismTuple(
                 None,
                 DeliveryMechanism.FINDAWAY_DRM,
-            ): Axis360Format.acoustik,
+            ): BoundlessFormat.acoustik,
             DeliveryMechanismTuple(
                 Representation.EPUB_MEDIA_TYPE,
                 DeliveryMechanism.BAKER_TAYLOR_KDRM_DRM,
-            ): Axis360Format.axis_now,
+            ): BoundlessFormat.axis_now,
         }
     )
 )

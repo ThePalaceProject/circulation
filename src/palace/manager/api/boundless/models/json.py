@@ -16,15 +16,15 @@ from pydantic import (
 )
 from pydantic.alias_generators import to_pascal
 
-from palace.manager.api.axis.exception import ErrorLookupType, StatusResponseParser
-from palace.manager.api.axis.models.base import BaseAxisResponse
-from palace.manager.api.axis.models.validators import AxisJsonDateTime
+from palace.manager.api.boundless.exception import ErrorLookupType, StatusResponseParser
+from palace.manager.api.boundless.models.base import BaseBoundlessResponse
+from palace.manager.api.boundless.models.validators import BoundlessJsonDateTime
 from palace.manager.util.datetime_helpers import utc_now
 
 
-class BaseAxisJsonModel(BaseModel):
+class BaseBoundlessJsonModel(BaseModel):
     """
-    Base model for Axis JSON models.
+    Base model for Boundless (Axis 360) JSON models.
     """
 
     model_config = ConfigDict(
@@ -33,9 +33,9 @@ class BaseAxisJsonModel(BaseModel):
     )
 
 
-class BaseAxisJsonResponse(BaseAxisJsonModel, BaseAxisResponse):
+class BaseBoundlessJsonResponse(BaseBoundlessJsonModel, BaseBoundlessResponse):
     """
-    Base model for Axis JSON API responses.
+    Base model for JSON API responses.
     """
 
     status: Status
@@ -44,11 +44,11 @@ class BaseAxisJsonResponse(BaseAxisJsonModel, BaseAxisResponse):
         self.status.raise_on_error()
 
 
-class Status(BaseAxisJsonModel):
+class Status(BaseBoundlessJsonModel):
     """
-    The JSON version of the Axis status response information.
+    The JSON version of the status response information.
 
-    This is included with all the Axis API responses, and gives information about
+    This is included with all the API responses, and gives information about
     the success or failure of the request.
     """
 
@@ -66,7 +66,7 @@ class Status(BaseAxisJsonModel):
         )
 
 
-class FindawayFulfillmentInfoResponse(BaseAxisJsonResponse):
+class FindawayFulfillmentInfoResponse(BaseBoundlessJsonResponse):
     """
     The Findaway fulfillment info API response.
 
@@ -79,10 +79,10 @@ class FindawayFulfillmentInfoResponse(BaseAxisJsonResponse):
     session_key: str = Field(..., alias="FNDSessionKey")
     transaction_id: str = Field(..., alias="FNDTransactionID")
 
-    expiration_date: AxisJsonDateTime
+    expiration_date: BoundlessJsonDateTime
 
 
-class AxisNowFulfillmentInfoResponse(BaseAxisJsonResponse):
+class AxisNowFulfillmentInfoResponse(BaseBoundlessJsonResponse):
     """
     The AxisNow fulfillment info API response.
 
@@ -93,7 +93,7 @@ class AxisNowFulfillmentInfoResponse(BaseAxisJsonResponse):
     isbn: str = Field(..., alias="ISBN")
     book_vault_uuid: str = Field(..., alias="BookVaultUUID")
 
-    expiration_date: AxisJsonDateTime
+    expiration_date: BoundlessJsonDateTime
 
 
 def _fulfillment_info_discriminator(v: Any) -> str | None:
@@ -124,7 +124,7 @@ A pydantic TypeAdapter for the FulfillmentInfoResponseT type.
 """
 
 
-class AudiobookMetadataReadingOrder(BaseAxisJsonModel):
+class AudiobookMetadataReadingOrder(BaseBoundlessJsonModel):
     model_config = ConfigDict(
         alias_generator=None,
     )
@@ -135,9 +135,9 @@ class AudiobookMetadataReadingOrder(BaseAxisJsonModel):
     sequence: int = Field(0, alias="fndsequence")
 
 
-class AudiobookMetadataResponse(BaseAxisJsonResponse):
+class AudiobookMetadataResponse(BaseBoundlessJsonResponse):
     """
-    This response is returned by the Axis audiobook metadata API endpoint.
+    This response is returned by the audiobook metadata API endpoint.
 
     It is not documented in any api documentation we have been provided. This
     model is based on the observed API responses and the old parser code.
@@ -149,9 +149,9 @@ class AudiobookMetadataResponse(BaseAxisJsonResponse):
     )
 
 
-class Token(BaseAxisJsonModel):
+class Token(BaseBoundlessJsonModel):
     """
-    Represents a bearer token response from the Axis API.
+    Represents a bearer token response from the API.
 
     This model provides some helper methods to check if the token is expired.
     """
@@ -181,9 +181,9 @@ class Token(BaseAxisJsonModel):
         return utc_now() >= self._expires_at
 
 
-class LicenseServerStatus(BaseAxisJsonModel):
+class LicenseServerStatus(BaseBoundlessJsonModel):
     """
-    A different style of status response, given by the Axis license server.
+    A different style of status response, given by the Boundless license server.
 
     This is semi-documented in "Baker and Taylor KDRM Enhanced Implemtation - AxisNow Node-1.pdf" (sic),
     but the actual response format that is given in that document does not match the actual responses

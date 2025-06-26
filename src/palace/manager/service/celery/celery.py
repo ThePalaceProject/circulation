@@ -97,12 +97,12 @@ def beat_schedule() -> dict[str, Any]:
                 minute="*/20",
             ),  # Run every 20 minutes
         },
-        "axis_import_all_collections": {
-            "task": "axis.import_all_collections",
+        "boundless_import_all_collections": {
+            "task": "boundless.import_all_collections",
             "schedule": crontab(minute="*/15"),  # Run every 15 minutes
         },
-        "axis_reap_all_collections": {
-            "task": "axis.reap_all_collections",
+        "boundless_reap_all_collections": {
+            "task": "boundless.reap_all_collections",
             "schedule": crontab(
                 day_of_week="6",
                 minute="0",

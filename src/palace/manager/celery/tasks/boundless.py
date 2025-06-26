@@ -8,8 +8,8 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import ObjectDeletedError, StaleDataError
 
-from palace.manager.api.axis.api import Axis360API
-from palace.manager.api.axis.requests import Axis360Requests
+from palace.manager.api.boundless.api import BoundlessApi
+from palace.manager.api.boundless.requests import BoundlessRequests
 from palace.manager.api.circulation import (
     BaseCirculationAPI,
     LibrarySettingsType,
@@ -42,13 +42,13 @@ def import_all_collections(
     task: Task, import_all: bool = False, batch_size: int = DEFAULT_BATCH_SIZE
 ) -> None:
     """
-    A shared task that loops through all Axis360 Api based collections and kick off an
+    A shared task that loops through all Boundless Api based collections and kick off an
     import task for each.
     """
     with task.session() as session:
         count = 0
         for collection in get_collections_by_protocol(
-            task=task, session=session, protocol_class=Axis360API
+            task=task, session=session, protocol_class=BoundlessApi
         ):
             task.log.info(
                 f'Queued collection("{collection.name}" [id={collection.id}] for importing...'
@@ -58,7 +58,7 @@ def import_all_collections(
                 countdown=count * 5,  # stagger the execution of the collection import
                 # in order to minimize chance of deadlocks caused by
                 # simultaneous updates to the metadata when CM has multiple
-                # axis collections configured with overlapping content
+                # Boundless collections configured with overlapping content
                 link=import_identifiers.s(
                     collection_id=collection.id,
                     batch_size=batch_size,
@@ -76,7 +76,7 @@ def list_identifiers_for_import(
     import_all: bool = False,
 ) -> list[str] | None:
     """
-    A task for resolving a list identifiers to import an axis collection based on the
+    A task for resolving a list identifiers to import an Boundless collection based on the
      most recent timestamp's start date.
     """
 
@@ -123,7 +123,7 @@ def list_identifiers_for_import(
             # loop through feed :  for every {batch_size} items, pack them in a list and pass along to sub task for
             # processing
             try:
-                api = Axis360API(session, collection)
+                api = BoundlessApi(session, collection)
                 if not _check_api_credentials(task, collection, api.api_requests):
                     return None
 
@@ -167,7 +167,7 @@ def list_identifiers_for_import(
 
 
 def _check_api_credentials(
-    task: Task, collection: Collection, requests: Axis360Requests
+    task: Task, collection: Collection, requests: BoundlessRequests
 ) -> bool:
     # Try to get a bearer token, to make sure the collection is configured correctly.
     try:
@@ -176,7 +176,7 @@ def _check_api_credentials(
     except BadResponseException as e:
         if e.response.status_code == 401:
             task.log.error(
-                f"Failed to authenticate with Axis 360 API for collection {collection.name} "
+                f"Failed to authenticate with Boundless API for collection {collection.name} "
                 f"(id={collection.id}). Please check the collection configuration."
             )
             return False
@@ -225,7 +225,7 @@ def import_identifiers(
 ) -> None:
     """
     This method creates or updates editions and license pools for each identifier in the list of identifiers.
-    It will query the axis availability api in batches of {batch_size} IDs and process each result in a single database
+    It will query the availability api in batches of {batch_size} IDs and process each result in a single database
     transaction.  If it has not finished processing the list of identifiers, it will requeue the task with the
     remaining unprocessed identifiers.
     """
@@ -262,7 +262,7 @@ def import_identifiers(
             return
 
         try:
-            api = Axis360API(session, collection)
+            api = BoundlessApi(session, collection)
             api_requests = api.api_requests
             identifier_batch = identifiers[:batch_size]
 
@@ -283,7 +283,7 @@ def import_identifiers(
     for metadata, circulation in circ_data:
         with task.transaction() as session:
             collection = load_from_id(session, Collection, collection_id)
-            api = Axis360API(session, collection, api_requests)
+            api = BoundlessApi(session, collection, api_requests)
             try:
                 process_book(task, session, api, metadata)
                 total_imported_in_current_task += 1
@@ -350,7 +350,7 @@ def import_identifiers(
 def process_book(
     task: Task,
     _db: Session,
-    api: Axis360API,
+    api: BoundlessApi,
     metadata: BibliographicData,
 ) -> None:
     edition, new_edition, license_pool, new_license_pool = api.update_book(
@@ -396,16 +396,16 @@ def reap_all_collections(
     delay_in_seconds_between_reap_collection_tasks: int = MAX_DELAY_IN_SECONDS_BETWEEN_REAP_TASKS,
 ) -> None:
     """
-    A shared task that  kicks off a reap_collection task for each Axis 360 collection.
-    Palace Managers can be configured with many Axis collections which may have identical or nearly identical
-    lists of identifiers.  As a result reaping Axis collections in parallel can lead to frequent
+    A shared task that kicks off a reap_collection task for each Boundless collection.
+    Palace Managers can be configured with many Boundless collections which may have identical or nearly identical
+    lists of identifiers.  As a result reaping Boundless collections in parallel can lead to frequent
     deadlocks when launched in parallel.
 
     The default delay of 20 seconds between launching of reap_collection sub-tasks is based on
     observations of performance in a local environment.  I observed that reaping in batches 10 seconds
     can take from 2-4 seconds in my development environment. The production environment was
     observed to be about 2 to 3 times slower.  Therefore,a 20 second delay between task initiation provides a reasonable
-    empirically based time buffer such that batches of axis identifiers are not reaped simultaneously and won't likely
+    empirically based time buffer such that batches of boundless identifiers are not reaped simultaneously and won't likely
     cause a pile-up in the case of occasional deadlocks.  With the redis visibility_timeout set to one hour, this will
     allow for a maximum of 180 collections.  Due to the visibility_timeout constraint,  20 seconds will be the maximum
     delay:  any value over 20 will be ignored and the default will be used in its place.
@@ -420,7 +420,7 @@ def reap_all_collections(
 
     with task.session() as session:
         count = 0
-        for collection in get_collections_by_protocol(task, session, Axis360API):
+        for collection in get_collections_by_protocol(task, session, BoundlessApi):
             task.log.info(
                 f'Queued collection("{collection.name}" [id={collection.id}] for reaping...'
             )
@@ -430,7 +430,7 @@ def reap_all_collections(
                 * delay_in_seconds_between_reap_collection_tasks,  # stagger the execution subtasks
                 # in order to minimize chance of deadlocks caused by
                 # simultaneous updates to the metadata when CM has multiple
-                # axis collections configured with overlapping content
+                # Boundless collections configured with overlapping content
             )
             count += 1
 
@@ -480,7 +480,7 @@ def reap_collection(
                 log_completion_message()
                 return
 
-            api = Axis360API(session, collection)
+            api = BoundlessApi(session, collection)
 
             _check_api_credentials(task, collection, api.api_requests)
 

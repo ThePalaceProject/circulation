@@ -4,7 +4,7 @@ from typing import Literal
 
 import pytest
 
-from palace.manager.api.axis.models.xml import (
+from palace.manager.api.boundless.models.xml import (
     AddHoldResponse,
     AvailabilityResponse,
     Checkout,
@@ -20,14 +20,16 @@ from palace.manager.api.circulation_exceptions import (
     PatronAuthorizationFailedException,
 )
 from palace.manager.util.datetime_helpers import datetime_utc
-from tests.fixtures.files import AxisFilesFixture
+from tests.fixtures.files import BoundlessFilesFixture
 
 
 class TestAvailabilityResponse:
     def test_availability_with_loan_and_hold(
-        self, axis_files_fixture: AxisFilesFixture
+        self, boundless_files_fixture: BoundlessFilesFixture
     ):
-        data = axis_files_fixture.sample_data("availability_with_loan_and_hold.xml")
+        data = boundless_files_fixture.sample_data(
+            "availability_with_loan_and_hold.xml"
+        )
         parsed = AvailabilityResponse.from_xml(data)
 
         [hold, loan, reserved] = parsed.titles
@@ -66,9 +68,11 @@ class TestAvailabilityResponse:
         assert reserved.availability.available_formats == []
 
     def test_availability_without_fulfillment(
-        self, axis_files_fixture: AxisFilesFixture
+        self, boundless_files_fixture: BoundlessFilesFixture
     ):
-        data = axis_files_fixture.sample_data("availability_without_fulfillment.xml")
+        data = boundless_files_fixture.sample_data(
+            "availability_without_fulfillment.xml"
+        )
         parsed = AvailabilityResponse.from_xml(data)
         [loan] = parsed.titles
 
@@ -79,9 +83,9 @@ class TestAvailabilityResponse:
         )
 
     def test_availability_with_audiobook_fulfillment(
-        self, axis_files_fixture: AxisFilesFixture
+        self, boundless_files_fixture: BoundlessFilesFixture
     ):
-        data = axis_files_fixture.sample_data(
+        data = boundless_files_fixture.sample_data(
             "availability_with_audiobook_fulfillment.xml"
         )
         parsed = AvailabilityResponse.from_xml(data)
@@ -95,11 +99,13 @@ class TestAvailabilityResponse:
         assert loan.availability.checkout_format == "Acoustik"
 
     def test_availability_with_ebook_fulfillment(
-        self, axis_files_fixture: AxisFilesFixture
+        self, boundless_files_fixture: BoundlessFilesFixture
     ):
         # AvailabilityResponseParser will behave differently depending on whether
         # we ask for the book as an ePub or through AxisNow.
-        data = axis_files_fixture.sample_data("availability_with_ebook_fulfillment.xml")
+        data = boundless_files_fixture.sample_data(
+            "availability_with_ebook_fulfillment.xml"
+        )
         parsed = AvailabilityResponse.from_xml(data)
         [loan] = parsed.titles
 
@@ -113,17 +119,17 @@ class TestAvailabilityResponse:
             == "http://adobe.acsm/?src=library&transactionId=2a34598b-12af-41e4-a926-af5e42da7fe5&isbn=9780763654573&format=F2"
         )
 
-    def test_availability_errors(self, axis_files_fixture: AxisFilesFixture):
+    def test_availability_errors(self, boundless_files_fixture: BoundlessFilesFixture):
         # If the patron is not found, the parser will return an empty list, since
         # that patron can't have any loans or holds.
-        data = axis_files_fixture.sample_data("availability_patron_not_found.xml")
+        data = boundless_files_fixture.sample_data("availability_patron_not_found.xml")
         parsed = AvailabilityResponse.from_xml(data)
         assert parsed.titles == []
         assert parsed.status.code == 3122
         assert parsed.status.message == "Patron information is not found."
         parsed.raise_on_error()
 
-        data = axis_files_fixture.sample_data("availability_invalid_token.xml")
+        data = boundless_files_fixture.sample_data("availability_invalid_token.xml")
         parsed = AvailabilityResponse.from_xml(data)
         assert parsed.titles == []
         assert parsed.status.code == 1001
@@ -133,7 +139,7 @@ class TestAvailabilityResponse:
         ):
             parsed.raise_on_error()
 
-        data = axis_files_fixture.sample_data("availability_expired_token.xml")
+        data = boundless_files_fixture.sample_data("availability_expired_token.xml")
         parsed = AvailabilityResponse.from_xml(data)
         assert parsed.titles == []
         assert parsed.status.code == 1002
@@ -143,11 +149,11 @@ class TestAvailabilityResponse:
         ):
             parsed.raise_on_error()
 
-    def test_tiny_collection(self, axis_files_fixture: AxisFilesFixture):
+    def test_tiny_collection(self, boundless_files_fixture: BoundlessFilesFixture):
         # Make sure the bibliographic information gets properly
         # collated in preparation for creating Edition objects.
 
-        data = axis_files_fixture.sample_data("tiny_collection.xml")
+        data = boundless_files_fixture.sample_data("tiny_collection.xml")
 
         [title1, title2] = AvailabilityResponse.from_xml(data).titles
 
@@ -194,10 +200,10 @@ class TestAvailabilityResponse:
         assert title2.availability.available_formats == ["Blio"]
 
     def test_availability_with_checkouts_and_holds(
-        self, axis_files_fixture: AxisFilesFixture
+        self, boundless_files_fixture: BoundlessFilesFixture
     ):
         # Test that the parser can handle a response with multiple checkouts and holds.
-        data = axis_files_fixture.sample_data(
+        data = boundless_files_fixture.sample_data(
             "availability_with_checkouts_and_holds.xml"
         )
         parsed = AvailabilityResponse.from_xml(data)
@@ -305,12 +311,12 @@ class TestEarlyCheckinResponse:
     )
     def test_parse(
         self,
-        axis_files_fixture: AxisFilesFixture,
+        boundless_files_fixture: BoundlessFilesFixture,
         filename: str,
         exception: Literal[False] | type[Exception],
         code: int,
     ) -> None:
-        data = axis_files_fixture.sample_data(filename)
+        data = boundless_files_fixture.sample_data(filename)
 
         context_manager = (
             nullcontext() if exception is False else pytest.raises(exception)
@@ -323,8 +329,10 @@ class TestEarlyCheckinResponse:
 
 
 class TestCheckoutResponse:
-    def test_parse_checkout_success(self, axis_files_fixture: AxisFilesFixture):
-        data = axis_files_fixture.sample_data("checkout_success.xml")
+    def test_parse_checkout_success(
+        self, boundless_files_fixture: BoundlessFilesFixture
+    ):
+        data = boundless_files_fixture.sample_data("checkout_success.xml")
         parsed = CheckoutResponse.from_xml(data)
         parsed.raise_on_error()
         assert parsed.status.code == 0
@@ -332,9 +340,11 @@ class TestCheckoutResponse:
         assert parsed.expiration_date == datetime_utc(2015, 8, 11, 18, 57, 42)
 
     def test_parse_checkout_success_no_status_message(
-        self, axis_files_fixture: AxisFilesFixture
+        self, boundless_files_fixture: BoundlessFilesFixture
     ):
-        data = axis_files_fixture.sample_data("checkout_success_no_status_message.xml")
+        data = boundless_files_fixture.sample_data(
+            "checkout_success_no_status_message.xml"
+        )
         parsed = CheckoutResponse.from_xml(data)
         parsed.raise_on_error()
         assert parsed.status.code == 0
@@ -350,12 +360,12 @@ class TestCheckoutResponse:
     )
     def test_parse_checkout_failures(
         self,
-        axis_files_fixture: AxisFilesFixture,
+        boundless_files_fixture: BoundlessFilesFixture,
         filename: str,
         exception: type[Exception],
         code: int,
     ) -> None:
-        data = axis_files_fixture.sample_data(filename)
+        data = boundless_files_fixture.sample_data(filename)
         parsed = CheckoutResponse.from_xml(data)
         assert parsed.status.code == code
         assert parsed.expiration_date is None
@@ -365,16 +375,18 @@ class TestCheckoutResponse:
 
 
 class TestAddHoldResponse:
-    def test_parse_hold_success(self, axis_files_fixture: AxisFilesFixture):
-        data = axis_files_fixture.sample_data("place_hold_success.xml")
+    def test_parse_hold_success(self, boundless_files_fixture: BoundlessFilesFixture):
+        data = boundless_files_fixture.sample_data("place_hold_success.xml")
         parsed = AddHoldResponse.from_xml(data)
         parsed.raise_on_error()
         assert parsed.status.code == 0
         assert parsed.status.message == "Title placed on Hold Successfully."
         assert parsed.holds_queue_position == 1
 
-    def test_parse_hold_already_on_hold(self, axis_files_fixture: AxisFilesFixture):
-        data = axis_files_fixture.sample_data("already_on_hold.xml")
+    def test_parse_hold_already_on_hold(
+        self, boundless_files_fixture: BoundlessFilesFixture
+    ):
+        data = boundless_files_fixture.sample_data("already_on_hold.xml")
         parsed = AddHoldResponse.from_xml(data)
         assert parsed.status.code == 3109
         assert parsed.status.message == "Title is in Hold List"
@@ -383,15 +395,15 @@ class TestAddHoldResponse:
 
 
 class TestRemoveHoldResponse:
-    def test_parse_success(self, axis_files_fixture: AxisFilesFixture):
-        data = axis_files_fixture.sample_data("release_hold_success.xml")
+    def test_parse_success(self, boundless_files_fixture: BoundlessFilesFixture):
+        data = boundless_files_fixture.sample_data("release_hold_success.xml")
         parsed = RemoveHoldResponse.from_xml(data)
         assert parsed.status.code == 0
         assert parsed.status.message == "Title removed from Hold Successfully."
         parsed.raise_on_error()
 
-    def test_parse_not_on_hold(self, axis_files_fixture: AxisFilesFixture):
-        data = axis_files_fixture.sample_data("release_hold_failure.xml")
+    def test_parse_not_on_hold(self, boundless_files_fixture: BoundlessFilesFixture):
+        data = boundless_files_fixture.sample_data("release_hold_failure.xml")
         parsed = RemoveHoldResponse.from_xml(data)
         assert parsed.status.code == 3109
         assert parsed.status.message == "This title is not in Hold list."

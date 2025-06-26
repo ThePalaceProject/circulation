@@ -29,8 +29,8 @@ from palace.manager.api.authentication.base import (
     AuthenticationProvider,
     SettingsType as TAuthProviderSettings,
 )
-from palace.manager.api.axis.api import Axis360API
-from palace.manager.api.axis.settings import Axis360Settings
+from palace.manager.api.boundless.api import BoundlessApi
+from palace.manager.api.boundless.settings import BoundlessSettings
 from palace.manager.api.circulation import (
     BaseCirculationAPI,
     BaseCirculationApiSettings,
@@ -602,8 +602,8 @@ class DatabaseTransactionFixture:
         data_source=DataSource.FEEDBOOKS,
     )
 
-    axis_settings = functools.partial(
-        Axis360Settings,
+    boundless_settings = functools.partial(
+        BoundlessSettings,
         username="a",
         password="b",
         external_account_id="c",
@@ -618,8 +618,8 @@ class DatabaseTransactionFixture:
             return self.overdrive_settings()  # type: ignore[return-value]
         elif protocol == OPDS2WithODLApi:
             return self.opds2_odl_settings()  # type: ignore[return-value]
-        elif protocol == Axis360API:
-            return self.axis_settings()  # type: ignore[return-value]
+        elif protocol == BoundlessApi:
+            return self.boundless_settings()  # type: ignore[return-value]
         return None
 
     def collection(

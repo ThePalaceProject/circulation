@@ -1,6 +1,6 @@
 import argparse
 
-from palace.manager.celery.tasks.axis import (
+from palace.manager.celery.tasks.boundless import (
     import_identifiers,
     list_identifiers_for_import,
 )
@@ -9,7 +9,7 @@ from palace.manager.sqlalchemy.model.collection import Collection
 
 
 class ImportCollection(Script):
-    """A convenient script for manually kicking off an axis collection import"""
+    """A convenient script for manually kicking off a Boundless collection import"""
 
     @classmethod
     def arg_parser(cls):

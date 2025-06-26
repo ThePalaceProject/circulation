@@ -2,20 +2,22 @@ from unittest.mock import patch
 
 import pytest
 
-from palace.manager.api.axis.api import Axis360API
-from palace.manager.celery.tasks.axis import import_identifiers
-from palace.manager.scripts import axis_import
-from palace.manager.scripts.axis_import import ImportCollection
+from palace.manager.api.boundless.api import BoundlessApi
+from palace.manager.celery.tasks.boundless import import_identifiers
+from palace.manager.scripts import boundless_import
+from palace.manager.scripts.boundless_import import ImportCollection
 from tests.fixtures.database import DatabaseTransactionFixture
 
 
-class TestAxisCollectionImportScript:
+class TestBoundlessCollectionImportScript:
 
-    def test_axis_import(self, db: DatabaseTransactionFixture):
+    def test_boundless_import(self, db: DatabaseTransactionFixture):
 
         collection_name = "test_collection"
-        collection = db.collection(collection_name, protocol=Axis360API)
-        with patch.object(axis_import, "list_identifiers_for_import") as list_import:
+        collection = db.collection(collection_name, protocol=BoundlessApi)
+        with patch.object(
+            boundless_import, "list_identifiers_for_import"
+        ) as list_import:
             ImportCollection(db.session).do_run(
                 ["--collection-name", collection.name, "--import-all"]
             )
@@ -26,7 +28,9 @@ class TestAxisCollectionImportScript:
                 "link": import_identifiers.s(collection_id=collection.id),
             }
 
-    def test_axis_import_collection_not_found(self, db: DatabaseTransactionFixture):
+    def test_boundless_import_collection_not_found(
+        self, db: DatabaseTransactionFixture
+    ):
         collection_name = "test_collection"
         with pytest.raises(ValueError) as e:
             ImportCollection(db.session).do_run(["--collection-name", collection_name])

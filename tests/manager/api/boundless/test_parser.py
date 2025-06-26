@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import datetime
 
-from palace.manager.api.axis.models.xml import AvailabilityResponse
-from palace.manager.api.axis.parser import (
+from palace.manager.api.boundless.models.xml import AvailabilityResponse
+from palace.manager.api.boundless.parser import (
     BibliographicParser,
 )
 from palace.manager.sqlalchemy.constants import LinkRelations, MediaTypes
@@ -12,15 +12,15 @@ from palace.manager.sqlalchemy.model.contributor import Contributor
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
-from tests.fixtures.files import AxisFilesFixture
+from tests.fixtures.files import BoundlessFilesFixture
 
 
 class TestBibliographicParser:
-    def test_bibliographic_parser(self, axis_files_fixture: AxisFilesFixture):
+    def test_bibliographic_parser(self, boundless_files_fixture: BoundlessFilesFixture):
         # Make sure the bibliographic information gets properly
         # collated in preparation for creating Edition objects.
 
-        data = axis_files_fixture.sample_data("tiny_collection.xml")
+        data = boundless_files_fixture.sample_data("tiny_collection.xml")
         [bib1, av1], [bib2, av2] = list(
             BibliographicParser().parse(AvailabilityResponse.from_xml(data))
         )
@@ -56,7 +56,7 @@ class TestBibliographicParser:
 
         # The cover image simulates the current state of the B&T cover
         # service, where we get a thumbnail-sized image URL in the
-        # Axis 360 API response and we can hack the URL to get the
+        # API response and we can hack the URL to get the
         # full-sized image URL.
         assert cover.rel == LinkRelations.IMAGE
         assert (
@@ -73,10 +73,6 @@ class TestBibliographicParser:
         assert cover.thumbnail.media_type == MediaTypes.JPEG_MEDIA_TYPE
 
         # Book #1 has a primary author, another author and a narrator.
-        #
-        # TODO: The narrator data is simulated. we haven't actually
-        # verified that Axis 360 sends narrator information in the
-        # same format as author information.
         [cont1, cont2, narrator] = bib1.contributors
         assert cont1.sort_name == "McCain, John"
         assert cont1.roles == (Contributor.Role.PRIMARY_AUTHOR,)
@@ -92,8 +88,8 @@ class TestBibliographicParser:
         assert cont.sort_name == "Pollero, Rhonda"
         assert cont.roles == (Contributor.Role.PRIMARY_AUTHOR,)
 
-        axis_id, isbn = sorted(bib1.identifiers, key=lambda x: x.identifier)
-        assert axis_id.identifier == "0003642860"
+        boundless_id, isbn = sorted(bib1.identifiers, key=lambda x: x.identifier)
+        assert boundless_id.identifier == "0003642860"
         assert isbn.identifier == "9780375504587"
 
         # Check the subjects for #2 because it includes an audience,
@@ -145,11 +141,13 @@ class TestBibliographicParser:
         assert axisnow.content_type == Representation.EPUB_MEDIA_TYPE
         assert axisnow.drm_scheme == DeliveryMechanism.BAKER_TAYLOR_KDRM_DRM
 
-    def test_bibliographic_parser_audiobook(self, axis_files_fixture: AxisFilesFixture):
+    def test_bibliographic_parser_audiobook(
+        self, boundless_files_fixture: BoundlessFilesFixture
+    ):
         # TODO - we need a real example to test from. The example we were
         # given is a hacked-up ebook. Ideally we would be able to check
         # narrator information here.
-        data = axis_files_fixture.sample_data(
+        data = boundless_files_fixture.sample_data(
             "availability_with_audiobook_fulfillment.xml"
         )
 
@@ -174,10 +172,12 @@ class TestBibliographicParser:
         assert b"<formatName>AxisNow</formatName>" in data
 
     def test_bibliographic_parser_blio_format(
-        self, axis_files_fixture: AxisFilesFixture
+        self, boundless_files_fixture: BoundlessFilesFixture
     ):
         # This book is available as 'Blio' but not 'AxisNow'.
-        data = axis_files_fixture.sample_data("availability_without_fulfillment.xml")
+        data = boundless_files_fixture.sample_data(
+            "availability_without_fulfillment.xml"
+        )
         data = data.replace(b"ePub", b"No Such Format")
 
         [[bib, av]] = list(
@@ -193,10 +193,12 @@ class TestBibliographicParser:
         assert axisnow.drm_scheme == DeliveryMechanism.BAKER_TAYLOR_KDRM_DRM
 
     def test_bibliographic_parser_blio_and_axisnow_format(
-        self, axis_files_fixture: AxisFilesFixture
+        self, boundless_files_fixture: BoundlessFilesFixture
     ):
         # This book is available as both 'Blio' and 'AxisNow'.
-        data = axis_files_fixture.sample_data("availability_with_ebook_fulfillment.xml")
+        data = boundless_files_fixture.sample_data(
+            "availability_with_ebook_fulfillment.xml"
+        )
 
         [[bib, av]] = list(
             BibliographicParser().parse(AvailabilityResponse.from_xml(data))
@@ -215,9 +217,9 @@ class TestBibliographicParser:
         assert axisnow.drm_scheme == DeliveryMechanism.BAKER_TAYLOR_KDRM_DRM
 
     def test_bibliographic_parser_unsupported_format(
-        self, axis_files_fixture: AxisFilesFixture
+        self, boundless_files_fixture: BoundlessFilesFixture
     ):
-        data = axis_files_fixture.sample_data(
+        data = boundless_files_fixture.sample_data(
             "availability_with_audiobook_fulfillment.xml"
         )
         data = data.replace(b"Acoustik", b"No Such Format 1")
@@ -232,7 +234,7 @@ class TestBibliographicParser:
         # We don't support any of the formats, so no FormatData objects were created.
         assert bib.circulation.formats == []
 
-    def test_parse_author_role(self, axis_files_fixture: AxisFilesFixture):
+    def test_parse_author_role(self, boundless_files_fixture: BoundlessFilesFixture):
         """Suffixes on author names are turned into roles."""
         author = "Dyssegaard, Elisabeth Kallick (TRN)"
         parse = BibliographicParser._parse_contributor
@@ -264,12 +266,12 @@ class TestBibliographicParser:
         )
         assert c.roles == (Contributor.Role.NARRATOR,)
 
-    def test_availability_parser(self, axis_files_fixture: AxisFilesFixture):
+    def test_availability_parser(self, boundless_files_fixture: BoundlessFilesFixture):
         """Make sure the availability information gets properly
         collated in preparation for updating a LicensePool.
         """
 
-        data = axis_files_fixture.sample_data("tiny_collection.xml")
+        data = boundless_files_fixture.sample_data("tiny_collection.xml")
 
         [bib1, av1], [bib2, av2] = list(
             BibliographicParser().parse(AvailabilityResponse.from_xml(data))

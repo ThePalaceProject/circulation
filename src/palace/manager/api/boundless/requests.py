@@ -12,21 +12,24 @@ from pydantic_xml import ParsingError
 from requests import Response as RequestsResponse
 from typing_extensions import Unpack
 
-from palace.manager.api.axis.constants import API_BASE_URLS, LICENSE_SERVER_BASE_URLS
-from palace.manager.api.axis.exception import (
-    Axis360LicenseError,
-    Axis360ValidationError,
+from palace.manager.api.boundless.constants import (
+    API_BASE_URLS,
+    LICENSE_SERVER_BASE_URLS,
+)
+from palace.manager.api.boundless.exception import (
+    BoundlessLicenseError,
+    BoundlessValidationError,
     StatusResponseParser,
 )
-from palace.manager.api.axis.models.base import BaseAxisResponse
-from palace.manager.api.axis.models.json import (
+from palace.manager.api.boundless.models.base import BaseBoundlessResponse
+from palace.manager.api.boundless.models.json import (
     AudiobookMetadataResponse,
     FulfillmentInfoResponse,
     FulfillmentInfoResponseT,
     LicenseServerStatus,
     Token,
 )
-from palace.manager.api.axis.models.xml import (
+from palace.manager.api.boundless.models.xml import (
     AddHoldResponse,
     AvailabilityResponse,
     CheckoutResponse,
@@ -38,12 +41,12 @@ from palace.manager.util.log import LoggerMixin
 from palace.manager.util.sentinel import SentinelType
 
 if TYPE_CHECKING:
-    from palace.manager.api.axis.settings import Axis360Settings
+    from palace.manager.api.boundless.settings import BoundlessSettings
 
 
-class Axis360Requests(LoggerMixin):
+class BoundlessRequests(LoggerMixin):
     """
-    Make requests to the Axis 360 API.
+    Make requests to the Boundless (Axis 360) API.
 
     Handles authentication, bearer token management, and
     response parsing.
@@ -51,7 +54,7 @@ class Axis360Requests(LoggerMixin):
 
     DATE_FORMAT = "%m-%d-%Y %H:%M:%S"
 
-    def __init__(self, settings: Axis360Settings) -> None:
+    def __init__(self, settings: BoundlessSettings) -> None:
         self._library_id = settings.external_account_id
         self._username = settings.username
         self._password = settings.password
@@ -96,16 +99,16 @@ class Axis360Requests(LoggerMixin):
 
         return f"{token.token_type} {token.access_token}"
 
-    _TAxisResponse = TypeVar("_TAxisResponse", bound=BaseAxisResponse)
+    _TBoundlessResponse = TypeVar("_TBoundlessResponse", bound=BaseBoundlessResponse)
 
     def _request(
         self,
         http_method: str,
         url: str,
-        response_parser: Callable[[bytes], _TAxisResponse],
+        response_parser: Callable[[bytes], _TBoundlessResponse],
         params: Mapping[str, Any] | None = None,
         timeout: int | None | Literal[SentinelType.NotGiven] = SentinelType.NotGiven,
-    ) -> _TAxisResponse:
+    ) -> _TBoundlessResponse:
         """
         Make an HTTP request, acquiring/refreshing a bearer token if necessary.
         """
@@ -129,7 +132,7 @@ class Axis360Requests(LoggerMixin):
             parsed_error = StatusResponseParser.parse(response.content)
             if parsed_error is None or parsed_error.code in [1001, 1002]:
                 # The token is probably expired. Get a new token and try again.
-                # Axis 360's status codes mean:
+                # These status codes mean:
                 #   1001: Invalid token
                 #   1002: Token expired
                 self.refresh_bearer_token()
@@ -151,9 +154,9 @@ class Axis360Requests(LoggerMixin):
             StatusResponseParser.parse_and_raise(response.content)
 
             # The best we can do is raise a generic validation error.
-            raise Axis360ValidationError(
+            raise BoundlessValidationError(
                 response.url,
-                "Unexpected response from Axis 360 API",
+                "Unexpected response from Boundless API",
                 response,
                 debug_message=str(e),
             ) from e
@@ -302,7 +305,7 @@ class Axis360Requests(LoggerMixin):
                 parsed_error = LicenseServerStatus.model_validate_json(
                     e.response.content
                 )
-                raise Axis360LicenseError(parsed_error, e.response.status_code) from e
+                raise BoundlessLicenseError(parsed_error, e.response.status_code) from e
             except ValidationError:
                 # If we can't parse the error, just raise the original exception.
                 ...
