@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
+from itertools import chain
 from typing import Generic, Literal, TypeVar, cast, overload
 
 from palace.manager.core.exceptions import BasePalaceException
@@ -35,7 +36,7 @@ class IntegrationRegistry(Generic[T]):
         integration: type[T],
         *,
         canonical: str | None = None,
-        aliases: list[str] | None = None,
+        aliases: Iterable[str] | None = None,
     ) -> type[T]:
         """
         Register an integration class.
@@ -47,15 +48,11 @@ class IntegrationRegistry(Generic[T]):
         class.
         """
 
-        if aliases is None:
-            aliases = []
-
         if canonical is None:
             canonical = integration.__name__
-        else:
-            aliases.append(integration.__name__)
-
-        for protocol in [canonical] + aliases:
+        # Use a dict to preserve order and ensure uniqueness of names
+        names = dict.fromkeys(chain([canonical], aliases or [], [integration.__name__]))
+        for protocol in names.keys():
             if protocol in self._lookup and self._lookup[protocol] != integration:
                 raise RegistrationException(
                     f"Integration {protocol} already registered"
