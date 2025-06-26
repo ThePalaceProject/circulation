@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import itertools
 from collections import defaultdict
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from typing import Generic, Literal, TypeVar, cast, overload
+
+from sqlalchemy.sql import Select
 
 from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.integration.goals import Goals
@@ -35,7 +38,7 @@ class IntegrationRegistry(Generic[T]):
         integration: type[T],
         *,
         canonical: str | None = None,
-        aliases: list[str] | None = None,
+        aliases: Sequence[str] | None = None,
     ) -> type[T]:
         """
         Register an integration class.
@@ -47,15 +50,12 @@ class IntegrationRegistry(Generic[T]):
         class.
         """
 
-        if aliases is None:
-            aliases = []
-
         if canonical is None:
             canonical = integration.__name__
-        else:
-            aliases.append(integration.__name__)
-
-        for protocol in [canonical] + aliases:
+        names = dict.fromkeys(
+            itertools.chain([canonical], aliases or [], [integration.__name__])
+        )
+        for protocol in names.keys():
             if protocol in self._lookup and self._lookup[protocol] != integration:
                 raise RegistrationException(
                     f"Integration {protocol} already registered"
@@ -153,6 +153,8 @@ class IntegrationRegistry(Generic[T]):
             return False
 
         return self[protocol1] is self[protocol2]
+
+    def query(self, protocol: str) -> Select: ...
 
     def __iter__(self) -> Iterator[tuple[str, type[T]]]:
         for integration, names in self._reverse_lookup.items():

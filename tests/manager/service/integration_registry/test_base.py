@@ -38,6 +38,19 @@ def test_registry_register_no_args(registry: IntegrationRegistry):
     assert len(registry) == 1
 
 
+def test_registry_register_repeated_name(
+    registry: IntegrationRegistry,
+):
+    """Test that register() works with the same name."""
+    registry.register(
+        object, canonical="test", aliases=["test2", "test3", "object", "test", "test3"]
+    )
+    assert registry.get("test") == object
+    assert registry.get_protocol(object) == "test"
+    assert registry.get_protocols(object) == ["test", "test2", "test3", "object"]
+    assert len(registry) == 1
+
+
 def test_registry_register_raises_value_error_if_name_already_registered(
     registry: IntegrationRegistry,
 ):
@@ -70,6 +83,7 @@ def test_registry_register_canonical(registry: IntegrationRegistry):
     assert registry.get("test") == object
     assert registry.get("object") == object
     assert registry.get_protocol(object) == "test"
+    assert registry.get_protocols(object) == ["test", "object"]
     assert len(registry) == 1
 
 
@@ -88,6 +102,7 @@ def test_registry_register_multiple_classes(registry: IntegrationRegistry):
     assert registry.get_protocol(object) == "object"
     assert registry.get_protocol(list) == "list"
     assert registry.get_protocol(dict) == "Dict"
+    assert registry.get_protocols(dict) == ["Dict", "test1", "test2", "dict"]
     assert len(registry) == 3
 
 
