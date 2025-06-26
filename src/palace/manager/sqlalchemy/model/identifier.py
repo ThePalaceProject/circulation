@@ -9,7 +9,7 @@ from abc import ABC, abstractmethod
 from collections import defaultdict
 from collections.abc import Iterable, Mapping
 from functools import total_ordering
-from typing import TYPE_CHECKING, Literal, overload
+from typing import TYPE_CHECKING, Literal, NamedTuple, overload
 from urllib.parse import quote, unquote
 
 import isbnlib
@@ -353,7 +353,7 @@ class Identifier(Base, IdentifierConstants, LoggerMixin):
         if not foreign_identifier_type or not foreign_id:
             return None, False
 
-        (primary_type, secondary_type), foreign_id = (
+        primary_type, secondary_type, foreign_id = (
             cls.prepare_foreign_type_and_identifier(foreign_identifier_type, foreign_id)
         )
 
@@ -379,10 +379,17 @@ class Identifier(Base, IdentifierConstants, LoggerMixin):
 
         return result, is_new
 
+    class _ForeignIdentifierTuple(NamedTuple):
+        """A tuple representing a foreign identifier and its type."""
+
+        primary_type: str
+        secondary_type: str | None
+        identifier: str
+
     @classmethod
     def prepare_foreign_type_and_identifier(
         cls, foreign_type: str, foreign_identifier: str
-    ) -> tuple[tuple[str, str | None], str]:
+    ) -> _ForeignIdentifierTuple:
         # Turn a deprecated identifier type into a current one.
         if foreign_type in cls.DEPRECATED_NAMES:
             primary_type = cls.DEPRECATED_NAMES[foreign_type]
@@ -400,7 +407,9 @@ class Identifier(Base, IdentifierConstants, LoggerMixin):
         if not cls.valid_as_foreign_identifier(primary_type, foreign_identifier):
             raise ValueError(f'"{foreign_identifier}" is not a valid {primary_type}.')
 
-        return (primary_type, secondary_type), foreign_identifier
+        return cls._ForeignIdentifierTuple(
+            primary_type, secondary_type, foreign_identifier
+        )
 
     @classmethod
     def valid_as_foreign_identifier(cls, type: str, id: str) -> bool:
@@ -509,7 +518,7 @@ class Identifier(Base, IdentifierConstants, LoggerMixin):
         identifier_details = dict()
         for urn in identifier_strings:
             try:
-                (primary_type, secondary_type), identifier = (
+                primary_type, secondary_type, identifier = (
                     cls.prepare_foreign_type_and_identifier(
                         *cls.type_and_identifier_for_urn(urn)
                     )
