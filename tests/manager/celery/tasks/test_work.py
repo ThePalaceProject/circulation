@@ -1,6 +1,8 @@
 from unittest.mock import patch
 
 import pytest
+from psycopg2 import OperationalError
+from pytest import LogCaptureFixture
 from sqlalchemy import select
 
 from palace.manager.celery.tasks.work import (
@@ -101,6 +103,47 @@ def test_migrate_work_coverage_records(
         assert waiting.pop(1) == {WorkIdAndPolicy(work_id=work1.id, policy=policy1)}
     rows = db.session.execute(select_all_work_coverage_records).all()
     assert len(rows) == 0
+
+
+def test_calculate_work_presentations_with_failure_while_processing_batch(
+    db: DatabaseTransactionFixture,
+    celery_fixture: CeleryFixture,
+    redis_fixture: RedisFixture,
+    caplog: LogCaptureFixture,
+):
+    work1 = db.work()
+    work2 = db.work()
+    policy1 = PresentationCalculationPolicy.recalculate_everything()
+    policy2 = PresentationCalculationPolicy.recalculate_presentation_edition()
+
+    with redis_fixture.services_fixture.wired():
+        waiting = WaitingForPresentationCalculation(redis_fixture.client)
+        wp1 = WorkIdAndPolicy(work_id=work1.id, policy=policy1)
+        wp2 = WorkIdAndPolicy(work_id=work2.id, policy=policy2)
+        waiting.add(wp1)
+        waiting.add(wp2)
+
+        assert waiting.len() == 2
+
+        with patch(
+            "palace.manager.sqlalchemy.model.work.Work.calculate_presentation"
+        ) as calc_presentations:
+            calc_presentations.side_effect = [None, OperationalError("test")]
+
+            with pytest.raises(OperationalError):
+                calculate_work_presentations.delay(batch_size=2).wait()
+            assert waiting.len() == 1
+            assert calc_presentations.call_count == 2
+            cal = calc_presentations.call_args_list
+            assert {cal[0].kwargs["policy"], cal[1].kwargs["policy"]} == {
+                policy1,
+                policy2,
+            }
+
+            assert waiting.pop(size=1) == {
+                WorkIdAndPolicy(work_id=work2.id, policy=policy2)
+            }
+            assert "Re-queuing remaining 1 of 2" in caplog.text
 
 
 def test_calculate_presentations_non_existent_work(
