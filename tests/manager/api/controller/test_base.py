@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, patch
 
 import flask
 import pytest
+from bidict import frozenbidict
 from flask import Response
 from werkzeug.datastructures import Authorization
 
@@ -18,6 +19,7 @@ from palace.manager.api.problem_details import (
 )
 from palace.manager.core.classifier import Classifier
 from palace.manager.sqlalchemy.model.datasource import DataSource
+from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.lane import Lane
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.licensing import LicensePoolDeliveryMechanism
@@ -270,6 +272,18 @@ class TestBaseController:
 
         # LicensePool l4 was not loaded, even though it's in a Collection
         # that matches, because the Identifier doesn't match.
+
+        # Let's test loading a license pool using a deprecated identifier type.
+        with patch.object(
+            Identifier,
+            "DEPRECATED_NAMES",
+            frozenbidict({"deprecated": Identifier.GUTENBERG_ID}),
+        ):
+            loaded = circulation_fixture.controller.load_licensepools(
+                circulation_fixture.db.default_library(), "deprecated", i1.identifier
+            )
+        assert not isinstance(loaded, ProblemDetail)
+        assert set(loaded) == {lp1, lp2}
 
         # Now we test various failures.
 

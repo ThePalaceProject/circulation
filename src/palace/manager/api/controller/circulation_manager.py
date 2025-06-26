@@ -181,11 +181,13 @@ class CirculationManagerController(BaseCirculationManagerController):
             to look up an Identifier.
         """
         _db = Session.object_session(library)
+        identifier_obj, ignore = Identifier.for_foreign_id(
+            _db, identifier_type, identifier, autocreate=False
+        )
         pools = (
             _db.scalars(
                 select(LicensePool)
                 .join(Collection, LicensePool.collection_id == Collection.id)
-                .join(Identifier, LicensePool.identifier_id == Identifier.id)
                 .join(
                     IntegrationConfiguration,
                     Collection.integration_configuration_id
@@ -197,8 +199,7 @@ class CirculationManagerController(BaseCirculationManagerController):
                     == IntegrationLibraryConfiguration.parent_id,
                 )
                 .where(
-                    Identifier.type == identifier_type,
-                    Identifier.identifier == identifier,
+                    LicensePool.identifier == identifier_obj,
                     IntegrationLibraryConfiguration.library_id == library.id,
                 )
             )

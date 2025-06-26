@@ -1,7 +1,9 @@
 import datetime
-from unittest.mock import MagicMock, PropertyMock, create_autospec
+from functools import partial
+from unittest.mock import MagicMock, PropertyMock, create_autospec, patch
 
 import pytest
+from bidict import frozenbidict
 
 from palace.manager.core.equivalents_coverage import (
     EquivalentIdentifiersCoverageProvider,
@@ -50,12 +52,37 @@ class TestIdentifier:
         # If we pass in no data we get nothing back.
         assert (None, False) == Identifier.for_foreign_id(db.session, None, None)
 
+    @patch.object(Identifier, "DEPRECATED_NAMES", frozenbidict({"Old ID": "New ID"}))
     def test_for_foreign_id_by_deprecated_type(self, db: DatabaseTransactionFixture):
-        threem_id, is_new = Identifier.for_foreign_id(
-            db.session, "3M ID", db.fresh_str()
+        id_str = db.fresh_str()
+        for_foreign_id = partial(
+            Identifier.for_foreign_id, db.session, foreign_id=id_str
         )
-        assert Identifier.BIBLIOTHECA_ID == threem_id.type
-        assert Identifier.BIBLIOTHECA_ID != "3M ID"
+
+        def assert_identifier_type(
+            result: tuple[Identifier, bool], expected_type: str
+        ) -> None:
+            identifier, was_new = result
+            assert identifier.type == expected_type
+            assert identifier.identifier == id_str
+
+        # Looking up a deprecated identifier type should return the new type.
+        assert_identifier_type(for_foreign_id("Old ID"), "New ID")
+        assert_identifier_type(for_foreign_id("Old ID", autocreate=False), "New ID")
+        assert_identifier_type(for_foreign_id("New ID"), "New ID")
+        assert_identifier_type(for_foreign_id("New ID", autocreate=False), "New ID")
+
+        # Unless the old identifier type exists, and the new one does not.
+        identifier, _ = for_foreign_id("Old ID")
+        db.session.delete(identifier)
+        db.session.add(Identifier(type="Old ID", identifier=id_str))
+        db.session.commit()
+
+        # In this case, looking up the old identifier type returns the old type
+        assert_identifier_type(for_foreign_id("Old ID"), "Old ID")
+        assert_identifier_type(for_foreign_id("Old ID", autocreate=False), "Old ID")
+        assert_identifier_type(for_foreign_id("New ID"), "Old ID")
+        assert_identifier_type(for_foreign_id("New ID", autocreate=False), "Old ID")
 
     def test_for_foreign_id_rejects_invalid_identifiers(
         self, db: DatabaseTransactionFixture

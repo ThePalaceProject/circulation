@@ -22,7 +22,6 @@ from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import LicensePool
 from palace.manager.sqlalchemy.model.patron import Loan
-from palace.manager.sqlalchemy.util import get_one
 
 MISSING_LOAN_IDENTIFIER = "LOAN_NOT_FOUND"
 
@@ -41,8 +40,8 @@ def resolve_loan_identifier(loan: Loan | None) -> str:
 class PlaytimeEntriesController(CirculationManagerController):
     def track_playtimes(self, collection_id, identifier_type, identifier_idn):
         library = get_request_library(default=None)
-        identifier = get_one(
-            self._db, Identifier, type=identifier_type, identifier=identifier_idn
+        identifier, _ = Identifier.for_foreign_id(
+            self._db, identifier_type, identifier_idn, autocreate=False
         )
         collection = Collection.by_id(self._db, collection_id)
 
