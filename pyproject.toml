@@ -250,7 +250,7 @@ itsdangerous = "^2.1.2"
 jsonschema = "^4.22.0"
 jwcrypto = "^1.4.2"
 levenshtein = "^0.27"
-lxml = {extras = ["html-clean"], version = "^5.2.1"}
+lxml = {extras = ["html-clean"], version = "^6.0.0"}
 multipledispatch = "^1.0"
 nameparser = "^1.1"  # nameparser is for author name manipulations
 opensearch-dsl = "~1.0"
