@@ -61,7 +61,7 @@ def calculate_work_presentations(
                     exc_info=e,
                 )
                 waiting.add(*remaining_work_policies)
-                raise e
+                raise
 
     if len(work_policies) == batch_size:
         # This task is complete, but there are more works waiting to be recalculated. Requeue ourselves
