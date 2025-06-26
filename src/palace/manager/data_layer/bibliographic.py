@@ -371,7 +371,8 @@ class BibliographicData(BaseMutableData):
         # Edition's primary identifier.
         if self.primary_identifier_data:
             if (
-                self.primary_identifier_data.type != edition.primary_identifier.type
+                Identifier.get_active_type(self.primary_identifier_data.type)
+                != Identifier.get_active_type(edition.primary_identifier.type)
                 or self.primary_identifier_data.identifier
                 != edition.primary_identifier.identifier
             ):

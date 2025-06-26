@@ -166,9 +166,7 @@ class IdentifierConstants:
     SUDOC_CALL_NUMBER = "SuDoc Call Number"
     PROQUEST_ID = "ProQuest Doc ID"
 
-    DEPRECATED_NAMES = {
-        "3M ID": BIBLIOTHECA_ID,
-    }
+    DEPRECATED_NAMES: frozenbidict[str, str] = frozenbidict()
 
     LICENSE_PROVIDING_IDENTIFIER_TYPES = [
         BIBLIOTHECA_ID,

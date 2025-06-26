@@ -434,13 +434,16 @@ class LicensePool(Base):
         if isinstance(data_source, str):
             data_source = DataSource.lookup(_db, data_source)
 
+        active_foreign_id_type = Identifier.get_active_type(foreign_id_type)
+        active_primary_identifier_type = Identifier.get_active_type(
+            data_source.primary_identifier_type
+        )
+
         # The type of the foreign ID must be the primary identifier
         # type for the data source.
         if (
             data_source.primary_identifier_type
-            and foreign_id_type != data_source.primary_identifier_type
-            and foreign_id_type
-            != Identifier.DEPRECATED_NAMES.get(data_source.primary_identifier_type)
+            and active_foreign_id_type != active_primary_identifier_type
         ):
             raise ValueError(
                 "License pools for data source '%s' are keyed to "

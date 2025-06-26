@@ -4,9 +4,10 @@ from collections.abc import Callable
 from datetime import timedelta
 from functools import partial
 from typing import Any
-from unittest.mock import MagicMock, PropertyMock
+from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
+from bidict import frozenbidict
 from sqlalchemy.exc import IntegrityError
 
 from palace.manager.api.circulation_exceptions import CannotHold, CannotLoan
@@ -611,6 +612,35 @@ class TestLicensePool:
             "541",
             collection=None,
         )
+
+    @patch.object(
+        Identifier,
+        "DEPRECATED_NAMES",
+        frozenbidict({"deprecated": Identifier.GUTENBERG_ID}),
+    )
+    def test_for_foreign_id_with_deprecated_type(self, db: DatabaseTransactionFixture):
+        # Create using an identifier type that has been deprecated.
+        pool, _ = LicensePool.for_foreign_id(
+            db.session,
+            DataSource.GUTENBERG,
+            "deprecated",
+            "541",
+            collection=db.collection(),
+        )
+        assert pool is not None
+        assert pool.identifier.type == Identifier.GUTENBERG_ID
+
+        datasource = DataSource.lookup(db.session, DataSource.GUTENBERG)
+        datasource.primary_identifier_type = "deprecated"
+        pool, _ = LicensePool.for_foreign_id(
+            db.session,
+            DataSource.GUTENBERG,
+            Identifier.GUTENBERG_ID,
+            "541",
+            collection=db.collection(),
+        )
+        assert pool is not None
+        assert pool.identifier.type == Identifier.GUTENBERG_ID
 
     def test_with_no_delivery_mechanisms(self, db: DatabaseTransactionFixture):
         # LicensePool.with_no_delivery_mechanisms returns a

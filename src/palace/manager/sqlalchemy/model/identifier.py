@@ -9,7 +9,7 @@ from abc import ABC, abstractmethod
 from collections import defaultdict
 from collections.abc import Iterable, Mapping
 from functools import total_ordering
-from typing import TYPE_CHECKING, Literal, overload
+from typing import TYPE_CHECKING, Literal, NamedTuple, overload
 from urllib.parse import quote, unquote
 
 import isbnlib
@@ -228,6 +228,15 @@ class Identifier(Base, IdentifierConstants, LoggerMixin):
     __tablename__ = "identifiers"
     id: Mapped[int] = Column(Integer, primary_key=True)
     type: Mapped[str] = Column(String(64), index=True, nullable=False)
+
+    @property
+    def active_type(self) -> str:
+        """
+        The type of this Identifier, normalized to replace any
+        deprecated types with their current equivalents.
+        """
+        return self.get_active_type(self.type)
+
     identifier: Mapped[str] = Column(String, index=True, nullable=False)
 
     collections: Mapped[list[Collection]] = relationship(
@@ -308,6 +317,11 @@ class Identifier(Base, IdentifierConstants, LoggerMixin):
     __table_args__ = (UniqueConstraint("type", "identifier"),)
 
     @classmethod
+    def get_active_type(cls, identifier_type: str) -> str:
+        """Convert a deprecated identifier type to its current equivalent."""
+        return cls.DEPRECATED_NAMES.get(identifier_type, identifier_type)
+
+    @classmethod
     @overload
     def for_foreign_id(
         cls,
@@ -339,38 +353,63 @@ class Identifier(Base, IdentifierConstants, LoggerMixin):
         if not foreign_identifier_type or not foreign_id:
             return None, False
 
-        foreign_identifier_type, foreign_id = cls.prepare_foreign_type_and_identifier(
-            foreign_identifier_type, foreign_id
+        primary_type, secondary_type, foreign_id = (
+            cls.prepare_foreign_type_and_identifier(foreign_identifier_type, foreign_id)
         )
 
+        constraint = (
+            or_(cls.type == primary_type, cls.type == secondary_type)
+            if secondary_type
+            else cls.type == primary_type
+        )
         result: Identifier | None
         if autocreate:
             result, is_new = get_one_or_create(
-                _db, cls, type=foreign_identifier_type, identifier=foreign_id
+                _db,
+                cls,
+                identifier=foreign_id,
+                constraint=constraint,
+                create_method_kwargs={
+                    "type": primary_type,
+                },
             )
         else:
             is_new = False
-            result = get_one(
-                _db, cls, type=foreign_identifier_type, identifier=foreign_id
-            )
+            result = get_one(_db, cls, identifier=foreign_id, constraint=constraint)
 
         return result, is_new
+
+    class _ForeignIdentifierTuple(NamedTuple):
+        """A tuple representing a foreign identifier and its type."""
+
+        primary_type: str
+        secondary_type: str | None
+        identifier: str
 
     @classmethod
     def prepare_foreign_type_and_identifier(
         cls, foreign_type: str, foreign_identifier: str
-    ) -> tuple[str, str]:
-        # Turn a deprecated identifier type (e.g. "3M ID" into the
-        # current type (e.g. "Bibliotheca ID").
-        foreign_type = cls.DEPRECATED_NAMES.get(foreign_type, foreign_type)
+    ) -> _ForeignIdentifierTuple:
+        # Turn a deprecated identifier type into a current one.
+        if foreign_type in cls.DEPRECATED_NAMES:
+            primary_type = cls.DEPRECATED_NAMES[foreign_type]
+            secondary_type = foreign_type
+        elif foreign_type in cls.DEPRECATED_NAMES.inverse:
+            primary_type = foreign_type
+            secondary_type = cls.DEPRECATED_NAMES.inverse[foreign_type]
+        else:
+            primary_type = foreign_type
+            secondary_type = None
 
-        if foreign_type in (Identifier.OVERDRIVE_ID, Identifier.BIBLIOTHECA_ID):
+        if primary_type in (Identifier.OVERDRIVE_ID, Identifier.BIBLIOTHECA_ID):
             foreign_identifier = foreign_identifier.lower()
 
-        if not cls.valid_as_foreign_identifier(foreign_type, foreign_identifier):
-            raise ValueError(f'"{foreign_identifier}" is not a valid {foreign_type}.')
+        if not cls.valid_as_foreign_identifier(primary_type, foreign_identifier):
+            raise ValueError(f'"{foreign_identifier}" is not a valid {primary_type}.')
 
-        return foreign_type, foreign_identifier
+        return cls._ForeignIdentifierTuple(
+            primary_type, secondary_type, foreign_identifier
+        )
 
     @classmethod
     def valid_as_foreign_identifier(cls, type: str, id: str) -> bool:
@@ -479,15 +518,17 @@ class Identifier(Base, IdentifierConstants, LoggerMixin):
         identifier_details = dict()
         for urn in identifier_strings:
             try:
-                (type, identifier) = cls.prepare_foreign_type_and_identifier(
-                    *cls.type_and_identifier_for_urn(urn)
+                primary_type, secondary_type, identifier = (
+                    cls.prepare_foreign_type_and_identifier(
+                        *cls.type_and_identifier_for_urn(urn)
+                    )
                 )
                 if (
-                    type
+                    primary_type
                     and identifier
-                    and (allowed_types_set is None or type in allowed_types_set)
+                    and (allowed_types_set is None or primary_type in allowed_types_set)
                 ):
-                    identifier_details[urn] = (type, identifier)
+                    identifier_details[urn] = (primary_type, identifier)
                 else:
                     failures.append(urn)
             except ValueError:
