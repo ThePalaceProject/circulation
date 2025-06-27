@@ -1,4 +1,4 @@
-from flask import render_template, render_template_string, url_for
+from flask import render_template, url_for
 from sqlalchemy.orm.session import Session
 
 from palace.manager.api.admin.admin_authentication_provider import (
@@ -11,13 +11,6 @@ from palace.manager.api.admin.template_styles import (
     input_style,
     label_style,
 )
-from palace.manager.api.admin.templates import (
-    forgot_password_template,
-    reset_password_email_html,
-    reset_password_email_text,
-    reset_password_template,
-    sign_in_template,
-)
 from palace.manager.service.email.email import SendEmailCallable
 from palace.manager.sqlalchemy.model.admin import Admin
 from palace.manager.sqlalchemy.model.key import Key, KeyType
@@ -27,18 +20,6 @@ from palace.manager.util.problem_detail import ProblemDetail
 
 class PasswordAdminAuthenticationProvider(AdminAuthenticationProvider, LoggerMixin):
     NAME = "Password Auth"
-
-    SIGN_IN_TEMPLATE = sign_in_template.format(
-        label=label_style, input=input_style, button=button_style
-    )
-
-    FORGOT_PASSWORD_TEMPLATE = forgot_password_template.format(
-        label=label_style, input=input_style, button=button_style
-    )
-
-    RESET_PASSWORD_TEMPLATE = reset_password_template.format(
-        label=label_style, input=input_style, button=button_style
-    )
 
     def __init__(self, send_email: SendEmailCallable):
         self.send_email = send_email
@@ -60,20 +41,32 @@ class PasswordAdminAuthenticationProvider(AdminAuthenticationProvider, LoggerMix
             button_style=button_style,
         )
 
-    def forgot_password_template(self, redirect):
+    @staticmethod
+    def forgot_password_template(redirect):
         forgot_password_url = url_for("admin_forgot_password")
-        return self.FORGOT_PASSWORD_TEMPLATE % dict(
-            redirect=redirect, forgot_password_url=forgot_password_url
+        return render_template(
+            "admin/auth/forgot-password.html.jinja2",
+            redirect=redirect,
+            forgot_password_url=forgot_password_url,
+            label_style=label_style,
+            input_style=input_style,
+            button_style=button_style,
         )
 
-    def reset_password_template(self, reset_password_token, admin_id, redirect):
+    @staticmethod
+    def reset_password_template(reset_password_token, admin_id, redirect):
         reset_password_url = url_for(
             "admin_reset_password",
             reset_password_token=reset_password_token,
             admin_id=admin_id,
         )
-        return self.RESET_PASSWORD_TEMPLATE % dict(
-            redirect=redirect, reset_password_url=reset_password_url
+        return render_template(
+            "admin/auth/reset-password-form.html.jinja2",
+            reset_password_url=reset_password_url,
+            redirect=redirect,
+            label_style=label_style,
+            input_style=input_style,
+            button_style=button_style,
         )
 
     def sign_in(self, _db, request={}):
@@ -111,13 +104,14 @@ class PasswordAdminAuthenticationProvider(AdminAuthenticationProvider, LoggerMix
         subject = f"{AdminClientConfig.APP_NAME} - Reset password email"
         receivers = [admin.email]
 
-        mail_text = render_template_string(
-            reset_password_email_text,
+        mail_text = render_template(
+            "admin/email/reset-password.text.jinja2",
             app_name=AdminClientConfig.APP_NAME,
             reset_password_url=reset_password_url,
         )
-        mail_html = render_template_string(
-            reset_password_email_html,
+
+        mail_html = render_template(
+            "admin/email/reset-password.html.jinja2",
             app_name=AdminClientConfig.APP_NAME,
             reset_password_url=reset_password_url,
         )

@@ -10,9 +10,6 @@ from palace.manager.api.admin.config import (
 )
 from palace.manager.api.admin.dashboard_stats import generate_statistics
 from palace.manager.api.admin.model.dashboard_statistics import StatisticsResponse
-from palace.manager.api.admin.templates import (
-    admin_sign_in_again as sign_in_again_template,
-)
 from palace.manager.api.app import app
 from palace.manager.api.controller.static_file import StaticFileController
 from palace.manager.api.routes import allows_library, has_library, library_route
@@ -715,7 +712,9 @@ def admin_sign_in_again():
     ):
         redirect_url = flask.request.url
         return redirect(url_for("admin_sign_in", redirect=redirect_url, _external=True))
-    return flask.render_template_string(sign_in_again_template)
+    return flask.render_template(
+        "admin/signed-back-in.html.jinja2", csrf_token=csrf_token
+    )
 
 
 @app.route("/admin/web/", strict_slashes=False)

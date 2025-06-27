@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import flask
-from flask import Request, Response, redirect, url_for
+from flask import Request, Response, redirect, render_template, url_for
 from flask_babel import lazy_gettext as _
 from werkzeug import Response as WerkzeugResponse
 
@@ -22,9 +22,6 @@ from palace.manager.api.admin.template_styles import (
     hr_style,
     small_link_style,
 )
-from palace.manager.api.admin.templates import (
-    response_template_with_message_and_redirect_button,
-)
 from palace.manager.sqlalchemy.model.admin import Admin
 from palace.manager.sqlalchemy.util import get_one
 from palace.manager.util.problem_detail import ProblemDetail
@@ -33,14 +30,6 @@ from palace.manager.util.problem_detail import ProblemDetail
 class ResetPasswordController(AdminController):
     FORGOT_PASSWORD_TEMPLATE = SignInController.SIGN_IN_TEMPLATE
     RESET_PASSWORD_TEMPLATE = SignInController.SIGN_IN_TEMPLATE
-
-    HEAD_TEMPLATE = SignInController.HEAD_TEMPLATE
-
-    RESPONSE_TEMPLATE_WITH_MESSAGE = (
-        response_template_with_message_and_redirect_button.format(
-            head_html=HEAD_TEMPLATE, hr=hr_style, link=small_link_style
-        )
-    )
 
     def forgot_password(self) -> ProblemDetail | WerkzeugResponse:
         """Shows forgot password page or starts off forgot password workflow"""
@@ -194,8 +183,8 @@ class ResetPasswordController(AdminController):
 
         return None
 
+    @staticmethod
     def _response_with_message_and_redirect_button(
-        self,
         message: str | None,
         redirect_button_link: str,
         redirect_button_text: str,
@@ -204,11 +193,15 @@ class ResetPasswordController(AdminController):
     ) -> Response:
         style = error_style if is_error else body_style
 
-        html = self.RESPONSE_TEMPLATE_WITH_MESSAGE % dict(
+        html = render_template(
+            "admin/response-message-redirect-button.html.jinja2",
             body_style=style,
             message=message,
             redirect_link=redirect_button_link,
             button_text=redirect_button_text,
+            head_html=SignInController.HEAD_TEMPLATE,
+            hr=hr_style,
+            link=small_link_style,
         )
 
         return Response(html, status_code)
