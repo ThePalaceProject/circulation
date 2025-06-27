@@ -8,7 +8,6 @@ from flask_babel import lazy_gettext as _
 
 from palace.manager.api.admin.config import Configuration as AdminClientConfig
 from palace.manager.api.admin.controller.base import AdminController
-from palace.manager.api.admin.templates import admin as admin_template
 from palace.manager.api.config import Configuration
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.util.problem_detail import ProblemDetail
@@ -68,8 +67,8 @@ class ViewController(AdminController):
         admin_css = AdminClientConfig.lookup_asset_url(key="admin_css")
 
         response = Response(
-            flask.render_template_string(
-                admin_template,
+            flask.render_template(
+                "admin/app-home-page.html.jinja2",
                 app_name=AdminClientConfig.APP_NAME,
                 csrf_token=csrf_token,
                 sitewide_tos_href=Configuration.DEFAULT_TOS_HREF,
