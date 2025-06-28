@@ -277,12 +277,6 @@ class LicensePool(Base):
     # (the date we first discovered that ​we had that book in ​our collection).
     availability_time = Column(DateTime(timezone=True), index=True)
 
-    # A LicensePool may be superceded by some other LicensePool
-    # associated with the same Work. This may happen if it's an
-    # open-access LicensePool and a better-quality version of the same
-    # book is available from another Open-Access source.
-    superceded: Mapped[bool] = Column(Boolean, default=False, nullable=False)
-
     # A LicensePool that seemingly looks fine may be manually suppressed
     # to be temporarily or permanently removed from the collection.
     suppressed: Mapped[bool] = Column(
