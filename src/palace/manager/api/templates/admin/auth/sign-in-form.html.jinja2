@@ -12,3 +12,8 @@
 </form>
 
 <a href="{{ forgot_password_url }}">Forgot password?</a>
+
+{%- if support_contact_url %}
+<br/>
+<a href="{{ support_contact_url }}">Need help? Contact support.</a>
+{%- endif %}

@@ -13,6 +13,9 @@
         tos_link_href: "{{ sitewide_tos_href }}",
         tos_link_text: "{{ sitewide_tos_text }}",
         showCircEventsDownload: {{ "true" if show_circ_events_download else "false" }},
+{%- if support_contact_url %}
+        support_contact_url: "{{ support_contact_url }}",
+{%- endif %}
         settingUp: {{ "true" if setting_up else "false" }},
         email: "{{ email }}",
         roles: [{% for role in roles %}{"role": "{{role.role}}"{% if role.library %}, "library": "{{role.library.short_name}}"{% endif %} },{% endfor %}],
