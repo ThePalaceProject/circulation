@@ -21,6 +21,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # Initially create the column with a default of False, to
+    # populate the value efficiently.
     op.add_column(
         "licensepools",
         sa.Column(
@@ -30,4 +32,11 @@ def downgrade() -> None:
             nullable=False,
             server_default=sa.false(),
         ),
+    )
+    # Then remove the database default constraint.
+    op.alter_column(
+        "licensepools",
+        "superceded",
+        existing_type=sa.BOOLEAN(),
+        server_default=None,
     )
