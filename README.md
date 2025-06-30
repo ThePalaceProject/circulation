@@ -305,6 +305,14 @@ where each quicksight dashboard gets treated with an arbitrary "name", and a lis
 The first the "authorized arns" is always considered as the `InitialDashboardID` when creating an embed URL
 for the respective "dashboard name".
 
+#### Support Contact URL
+
+Setting this value causes a help link to be displayed on the admin web client page footer and with the sign in dialog.
+
+```sh
+export PALACE_ADMINUI_SUPPORT_CONTACT_URL=mailto:helpdesk@example.com
+```
+
 #### Analytics
 
 Local analytics are enabled by default. S3 analytics can be enabled via the following environment variable:

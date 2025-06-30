@@ -50,6 +50,9 @@ class AdminClientSettings(ServiceConfiguration):
 
     # This flag suppresses visibility of the collection subscription config in the admin UI.
     hide_subscription_config: bool = True
+    # This is an optional support contact URL. This will be embedded in
+    # web pages. http[s] and mailto URLs work best here.
+    support_contact_url: str | None = None
 
 
 class OperationalMode(str, Enum):
