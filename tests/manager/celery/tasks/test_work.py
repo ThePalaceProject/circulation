@@ -6,6 +6,7 @@ from pytest import LogCaptureFixture
 
 from palace.manager.celery.tasks.work import (
     _paginate_query,
+    calculate_work_presentation,
     calculate_work_presentations,
     classify_unchecked_subjects,
 )
@@ -20,6 +21,40 @@ from tests.fixtures.celery import CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.redis import RedisFixture
 from tests.fixtures.work import WorkIdPolicyQueuePresentationRecalculationFixture
+
+
+def test_calculate_work_presentation(
+    db: DatabaseTransactionFixture,
+    celery_fixture: CeleryFixture,
+):
+    work = db.work()
+    policy = PresentationCalculationPolicy.recalculate_everything()
+
+    with patch(
+        "palace.manager.sqlalchemy.model.work.Work.calculate_presentation"
+    ) as calc_presentations:
+        calculate_work_presentation.delay(work_id=work.id, policy=policy).wait()
+        assert calc_presentations.call_count == 1
+        cal = calc_presentations.call_args_list
+        assert cal[0].kwargs["policy"] == policy
+
+
+def test_calculate_work_presentation_retry(
+    db: DatabaseTransactionFixture,
+    celery_fixture: CeleryFixture,
+):
+    work = db.work()
+    policy = PresentationCalculationPolicy.recalculate_everything()
+
+    with patch(
+        "palace.manager.sqlalchemy.model.work.Work.calculate_presentation"
+    ) as calc_presentations:
+        calc_presentations.side_effect = [OperationalError("Deadlock"), None]
+        calculate_work_presentation.delay(work_id=work.id, policy=policy).wait()
+        assert calc_presentations.call_count == 2
+        cal = calc_presentations.call_args_list
+        for i in range(0, 2):
+            assert cal[i].kwargs["policy"] == policy
 
 
 @pytest.mark.parametrize(
