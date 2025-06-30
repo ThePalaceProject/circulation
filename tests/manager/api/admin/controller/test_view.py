@@ -1,5 +1,5 @@
 import re
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import flask
 import pytest
@@ -168,8 +168,10 @@ class TestViewController:
                 in html
             )
 
+    @patch("palace.manager.api.admin.config.Configuration.admin_client_settings")
     def test_support_contact_url(
         self,
+        admin_client_settings: MagicMock,
         admin_ctrl_fixture: AdminControllerFixture,
         monkeypatch: pytest.MonkeyPatch,
     ):
@@ -178,30 +180,27 @@ class TestViewController:
         setting_env_var = "PALACE_ADMINUI_SUPPORT_CONTACT_URL"
         expected_support_contact_url = "mailto:helpdesk@example.com"
 
-        with patch(
-            "palace.manager.api.admin.config.Configuration.admin_client_settings"
-        ) as admin_client_settings:
-            # When the setting is set, the value should be passed to the admin client.
-            monkeypatch.setenv(setting_env_var, expected_support_contact_url)
-            with admin_ctrl_fixture.ctrl.app.test_request_context("/admin"):
-                # Ensure that we will get the most current values from the environment.
-                admin_client_settings.return_value = AdminClientSettings()
+        # When the setting is set, the value should be passed to the admin client.
+        monkeypatch.setenv(setting_env_var, expected_support_contact_url)
+        with admin_ctrl_fixture.ctrl.app.test_request_context("/admin"):
+            # Ensure that we will get the most current values from the environment.
+            admin_client_settings.return_value = AdminClientSettings()
 
-                response = admin_ctrl_fixture.manager.admin_view_controller(None, None)
-                assert 200 == response.status_code
-                html = response.get_data(as_text=True)
-                assert f'support_contact_url: "{expected_support_contact_url}"' in html
+            response = admin_ctrl_fixture.manager.admin_view_controller(None, None)
+            assert 200 == response.status_code
+            html = response.get_data(as_text=True)
+            assert f'support_contact_url: "{expected_support_contact_url}"' in html
 
-            # When the setting is not set, the setting should not be passed at all.
-            monkeypatch.delenv(setting_env_var)
-            with admin_ctrl_fixture.ctrl.app.test_request_context("/admin"):
-                # Ensure that we will get the most current values from the environment.
-                admin_client_settings.return_value = AdminClientSettings()
+        # When the setting is not set, the setting should not be passed at all.
+        monkeypatch.delenv(setting_env_var)
+        with admin_ctrl_fixture.ctrl.app.test_request_context("/admin"):
+            # Ensure that we will get the most current values from the environment.
+            admin_client_settings.return_value = AdminClientSettings()
 
-                response = admin_ctrl_fixture.manager.admin_view_controller(None, None)
-                assert 200 == response.status_code
-                html = response.get_data(as_text=True)
-                assert f"support_contact_url:" not in html
+            response = admin_ctrl_fixture.manager.admin_view_controller(None, None)
+            assert 200 == response.status_code
+            html = response.get_data(as_text=True)
+            assert f"support_contact_url:" not in html
 
     def test_feature_flags_defaults(
         self,
