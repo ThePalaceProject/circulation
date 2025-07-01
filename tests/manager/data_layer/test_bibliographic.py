@@ -1,6 +1,7 @@
 import datetime
 import logging
 from copy import deepcopy
+from unittest.mock import patch
 
 from palace.manager.core.classifier import NO_NUMBER, NO_VALUE
 from palace.manager.data_layer.bibliographic import (
@@ -27,9 +28,6 @@ from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
 from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.util.datetime_helpers import datetime_utc, utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
-from tests.fixtures.work import (
-    WorkIdPolicyQueuePresentationRecalculationFixture,
-)
 from tests.mocks.mock import LogCaptureHandler
 
 
@@ -501,7 +499,6 @@ class TestBibliographicData:
     def test_apply_causes_presentation_recalculation(
         self,
         db: DatabaseTransactionFixture,
-        work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
     ):
         # We have a work.
         work = db.work(title="The Wrong Title", with_license_pool=True)
@@ -515,56 +512,65 @@ class TestBibliographicData:
             title="The Harry Otter and the Seaweed of Ages",
         )
         edition, ignore = bibliographic.edition(db.session)
-        bibliographic.apply(db.session, edition, None)
 
-        assert work_policy_recalc_fixture.is_queued(
-            work.id,
-            PresentationCalculationPolicy.recalculate_presentation_edition(),
-            clear=True,
-        )
+        with patch(
+            "palace.manager.celery.tasks.work.calculate_work_presentation"
+        ) as calculate:
+            bibliographic.apply(db.session, edition, None)
+            assert calculate.delay.call_count == 1
+            policy = PresentationCalculationPolicy.recalculate_presentation_edition()
+            assert calculate.delay.call_args_list[0].kwargs == {
+                "work_id": work.id,
+                "policy": policy,
+            }
 
-        # The work still has the wrong title, but a full recalculation has been queued.
-        assert "The Wrong Title" == work.title
+            # The work still has the wrong title, but a full recalculation has been queued.
+            assert "The Wrong Title" == work.title
 
-        # We then learn about a subject under which the work
-        # is classified.
-        bibliographic.title = None
-        bibliographic.subjects = [SubjectData(type=Subject.TAG, identifier="subject")]
+            # We then learn about a subject under which the work
+            # is classified.
+            bibliographic.title = None
+            bibliographic.subjects = [
+                SubjectData(type=Subject.TAG, identifier="subject")
+            ]
 
-        bibliographic.apply(db.session, edition, None)
-        # The work is now slated to have its presentation completely
-        # recalculated.
-        assert work_policy_recalc_fixture.is_queued(
-            work.id,
-            PresentationCalculationPolicy.recalculate_everything(),
-            clear=True,
-        )
+            bibliographic.apply(db.session, edition, None)
+            # The work is now slated to have its presentation completely
+            # recalculated.
+            assert calculate.delay.call_count == 2
+            policy = PresentationCalculationPolicy.recalculate_everything()
+            assert calculate.delay.call_args_list[1].kwargs == {
+                "work_id": work.id,
+                "policy": policy,
+            }
 
-        # We then find a new description for the work.
-        bibliographic.subjects = []
-        bibliographic.links = [
-            LinkData(rel=Hyperlink.DESCRIPTION, content="a description")
-        ]
+            # We then find a new description for the work.
+            bibliographic.subjects = []
+            bibliographic.links = [
+                LinkData(rel=Hyperlink.DESCRIPTION, content="a description")
+            ]
 
-        bibliographic.apply(db.session, edition, None)
-        # We need to do a full recalculation again.
-        assert work_policy_recalc_fixture.is_queued(
-            work.id,
-            PresentationCalculationPolicy.recalculate_everything(),
-            clear=True,
-        )
+            bibliographic.apply(db.session, edition, None)
+            # We need to do a full recalculation again.
+            assert calculate.delay.call_count == 3
+            policy = PresentationCalculationPolicy.recalculate_everything()
+            assert calculate.delay.call_args_list[2].kwargs == {
+                "work_id": work.id,
+                "policy": policy,
+            }
 
-        # We then find a new cover image for the work.
-        bibliographic.subjects = []
-        bibliographic.links = [LinkData(rel=Hyperlink.IMAGE, href="http://image/")]
+            # We then find a new cover image for the work.
+            bibliographic.subjects = []
+            bibliographic.links = [LinkData(rel=Hyperlink.IMAGE, href="http://image/")]
 
-        bibliographic.apply(db.session, edition, None)
-        # We need to choose a new presentation edition.
-        assert work_policy_recalc_fixture.is_queued(
-            work.id,
-            PresentationCalculationPolicy.recalculate_presentation_edition(),
-            clear=True,
-        )
+            bibliographic.apply(db.session, edition, None)
+            # We need to choose a new presentation edition.
+            assert calculate.delay.call_count == 4
+            policy = PresentationCalculationPolicy.recalculate_presentation_edition()
+            assert calculate.delay.call_args_list[3].kwargs == {
+                "work_id": work.id,
+                "policy": policy,
+            }
 
     def test_apply_identifier_equivalency(self, db: DatabaseTransactionFixture):
         # Set up an Edition.

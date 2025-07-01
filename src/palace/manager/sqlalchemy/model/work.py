@@ -41,10 +41,6 @@ from palace.manager.data_layer.policy.presentation import (
     PresentationCalculationPolicy,
 )
 from palace.manager.search.service import SearchDocument
-from palace.manager.service.redis.models.work import (
-    WaitingForPresentationCalculation,
-    WorkIdAndPolicy,
-)
 from palace.manager.service.redis.redis import Redis
 from palace.manager.sqlalchemy.constants import (
     DataSourceConstants,
@@ -1196,13 +1192,12 @@ class Work(Base, LoggerMixin):
     def queue_presentation_recalculation(
         work_id: int | None,
         policy: PresentationCalculationPolicy,
-        *,
-        redis_client: Redis = Provide["redis.client"],
     ):
         """Queue an async background task to have this work's presentation  recalculated"""
-        waiting = WaitingForPresentationCalculation(redis_client)
+        from palace.manager.celery.tasks.work import calculate_work_presentation
+
         if work_id is not None:
-            waiting.add(WorkIdAndPolicy(work_id=work_id, policy=policy))
+            calculate_work_presentation.delay(work_id=work_id, policy=policy)
 
     def set_presentation_ready(self, as_of=None, exclude_search=False):
         """Set this work as presentation-ready, no matter what.
