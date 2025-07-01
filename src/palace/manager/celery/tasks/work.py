@@ -4,6 +4,7 @@ from collections.abc import Generator
 
 from celery import shared_task
 from sqlalchemy import tuple_
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, defer
 
 from palace.manager.celery.task import Task
@@ -28,23 +29,22 @@ def calculate_work_presentation(
     work_id: int,
     policy: PresentationCalculationPolicy,
 ) -> None:
-    try:
-        with elapsed_time_logging(
-            log_method=task.log.info,
-            message_prefix=f"Presentation calculated for work: work_id={work_id}, policy={policy}",
-            skip_start=True,
-        ):
-
+    with elapsed_time_logging(
+        log_method=task.log.info,
+        message_prefix=f"Presentation calculated for work: work_id={work_id}, policy={policy}",
+        skip_start=True,
+    ):
+        try:
             with task.transaction() as tx:
                 work = get_one(tx, Work, id=work_id)
                 if not work:
                     task.log.warning(f"No work with id={work_id}. Skipping...")
                     return
                 work.calculate_presentation(policy=policy)
-    except Exception as e:
-        wait_time = exponential_backoff(task.request.retries)
-        task.log.error(f"{e}. Retrying in {wait_time} seconds.")
-        raise task.retry(countdown=wait_time)
+        except SQLAlchemyError as e:
+            wait_time = exponential_backoff(task.request.retries)
+            task.log.error(f"{e}. Retrying in {wait_time} seconds.")
+            raise task.retry(countdown=wait_time)
 
 
 @shared_task(queue=QueueNames.default, bind=True)

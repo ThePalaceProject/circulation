@@ -3,6 +3,7 @@ from unittest.mock import patch
 import pytest
 from psycopg2 import OperationalError
 from pytest import LogCaptureFixture
+from sqlalchemy.exc import SQLAlchemyError
 
 from palace.manager.celery.tasks.work import (
     _paginate_query,
@@ -49,7 +50,7 @@ def test_calculate_work_presentation_retry(
     with patch(
         "palace.manager.sqlalchemy.model.work.Work.calculate_presentation"
     ) as calc_presentations:
-        calc_presentations.side_effect = [OperationalError("Deadlock"), None]
+        calc_presentations.side_effect = [SQLAlchemyError(), None]
         calculate_work_presentation.delay(work_id=work.id, policy=policy).wait()
         assert calc_presentations.call_count == 2
         cal = calc_presentations.call_args_list
