@@ -37,7 +37,7 @@ class TestBibliographicData:
     ):
         # Set up an edition whose primary identifier has two
         # classifications.
-        source1 = DataSource.lookup(db.session, DataSource.AXIS_360)
+        source1 = DataSource.lookup(db.session, DataSource.BOUNDLESS)
         source2 = DataSource.lookup(db.session, DataSource.METADATA_WRANGLER)
         edition = db.edition()
         identifier = edition.primary_identifier
@@ -65,7 +65,7 @@ class TestBibliographicData:
         # error message and no new classification.
         subjects = [SubjectData(type=Subject.TAG, name=None, identifier=None)]
 
-        source1 = DataSource.lookup(db.session, DataSource.AXIS_360)
+        source1 = DataSource.lookup(db.session, DataSource.BOUNDLESS)
         edition = db.edition()
         identifier = edition.primary_identifier
         bibliographic = BibliographicData(

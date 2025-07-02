@@ -274,7 +274,7 @@ class DataSource(Base, HasSessionCache, DataSourceConstants):
                 IdentifierConstants.BIBLIOTHECA_ID,
                 60 * 60 * 6,
             ),
-            (cls.AXIS_360, True, False, IdentifierConstants.AXIS_360_ID, 0),
+            (cls.BOUNDLESS, True, False, IdentifierConstants.AXIS_360_ID, 0),
             (cls.OCLC, False, False, None, None),
             (cls.OCLC_LINKED_DATA, False, False, None, None),
             (cls.AMAZON, False, False, None, None),
