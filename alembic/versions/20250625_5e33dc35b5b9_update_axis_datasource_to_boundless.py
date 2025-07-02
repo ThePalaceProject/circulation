@@ -1,7 +1,7 @@
 """Update axis datasource to boundless
 
 Revision ID: 5e33dc35b5b9
-Revises: 87051f7b2905
+Revises: bc471d8a83fb
 Create Date: 2025-06-25 16:06:33.738280+00:00
 
 """
@@ -11,7 +11,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "5e33dc35b5b9"
-down_revision = "87051f7b2905"
+down_revision = "bc471d8a83fb"
 branch_labels = None
 depends_on = None
 
