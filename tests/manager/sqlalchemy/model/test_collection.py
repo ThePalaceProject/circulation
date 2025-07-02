@@ -200,7 +200,7 @@ class TestCollection:
         assert "Foo" == opds.data_source.name
 
         # Trying to change the Bibliotheca collection's data_source does nothing.
-        bibliotheca.data_source = DataSource.BOUNDLESS
+        bibliotheca.data_source = DataSource.AXIS_360
         assert isinstance(bibliotheca.data_source, DataSource)
         assert DataSource.BIBLIOTHECA == bibliotheca.data_source.name
 

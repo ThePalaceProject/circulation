@@ -19,6 +19,7 @@ class DataSourceConstants:
     OCLC_LINKED_DATA = "OCLC Linked Data"
     AMAZON = "Amazon"
     XID = "WorldCat xID"
+    AXIS_360 = "Axis 360"
     BOUNDLESS = "Boundless"
     WEB = "Web"
     OPEN_LIBRARY = "Open Library"
@@ -43,7 +44,7 @@ class DataSourceConstants:
     ENKI = "Enki"
     PROQUEST = "ProQuest"
 
-    DEPRECATED_NAMES: frozenbidict[str, str] = frozenbidict({})
+    DEPRECATED_NAMES = frozenbidict({AXIS_360: BOUNDLESS})
 
     # Some sources of open-access ebooks are better than others. This
     # list shows which sources we prefer, in ascending order of

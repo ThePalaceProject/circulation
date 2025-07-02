@@ -423,7 +423,7 @@ class TestWork:
 
         # But if there is no summary from a preferred data source, the
         # normal rules apply.
-        source3 = DataSource.lookup(db.session, DataSource.BOUNDLESS)
+        source3 = DataSource.lookup(db.session, DataSource.AXIS_360)
         m([i1.id], [], [source3])
         assert good_summary == w.summary_text
 
@@ -519,7 +519,7 @@ class TestWork:
         subject2.genre = genres[1]
         subject3 = db.subject(type="type2", identifier="subject3")
         subject3.genre = None
-        source = DataSource.lookup(db.session, DataSource.BOUNDLESS)
+        source = DataSource.lookup(db.session, DataSource.AXIS_360)
         classification1 = db.classification(
             identifier=identifier, subject=subject1, data_source=source, weight=1
         )
@@ -835,7 +835,7 @@ class TestWork:
         work = db.work()
         identifier = work.presentation_edition.primary_identifier
         genres = db.session.query(Genre).all()
-        source = DataSource.lookup(db.session, DataSource.BOUNDLESS)
+        source = DataSource.lookup(db.session, DataSource.AXIS_360)
 
         # returns None when work has no genres
         assert None == work.top_genre()

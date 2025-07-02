@@ -179,7 +179,7 @@ class MockCirculationAPI(CirculationAPI):
         if source not in self.remotes:
             set_delivery_mechanism_at = BaseCirculationAPI.FULFILL_STEP
             can_revoke_hold_when_reserved = True
-            if source == DataSource.BOUNDLESS:
+            if source == DataSource.AXIS_360:
                 set_delivery_mechanism_at = BaseCirculationAPI.BORROW_STEP
             if source == DataSource.BIBLIOTHECA:
                 can_revoke_hold_when_reserved = False

@@ -239,7 +239,7 @@ class BibliographicParser(LoggerMixin):
         formats = cls._extract_formats(title, medium)
 
         circulationdata = CirculationData(
-            data_source_name=DataSource.BOUNDLESS,
+            data_source_name=DataSource.AXIS_360,
             primary_identifier_data=primary_identifier,
             formats=formats,
             licenses_owned=title.availability.total_copies,
@@ -249,7 +249,7 @@ class BibliographicParser(LoggerMixin):
         )
 
         bibliographic = BibliographicData(
-            data_source_name=DataSource.BOUNDLESS,
+            data_source_name=DataSource.AXIS_360,
             title=title.product_title,
             language=title.language,
             medium=medium,

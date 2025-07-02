@@ -392,7 +392,7 @@ class TestPatron:
 
         # Get identifiers to use when identifying that patron on two
         # different remote services.
-        axis = DataSource.BOUNDLESS
+        axis = DataSource.AXIS_360
         axis_identifier = patron.identifier_to_remote_service(axis)
 
         feedbooks = DataSource.lookup(db.session, DataSource.FEEDBOOKS, autocreate=True)

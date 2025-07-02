@@ -143,7 +143,7 @@ class Work(Base, LoggerMixin):
         DataSourceConstants.GUTENBERG: 0,
         DataSourceConstants.OVERDRIVE: 0.4,
         DataSourceConstants.BIBLIOTHECA: 0.65,
-        DataSourceConstants.BOUNDLESS: 0.65,
+        DataSourceConstants.AXIS_360: 0.65,
         DataSourceConstants.STANDARD_EBOOKS: 0.8,
         DataSourceConstants.UNGLUE_IT: 0.4,
         DataSourceConstants.PLYMPTON: 0.5,

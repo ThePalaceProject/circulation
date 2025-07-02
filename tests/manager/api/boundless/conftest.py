@@ -22,7 +22,7 @@ class BoundlessFixture:
     # without having to parse it from an XML file.
 
     CIRCULATION_DATA = CirculationData(
-        data_source_name=DataSource.BOUNDLESS,
+        data_source_name=DataSource.AXIS_360,
         primary_identifier_data=IdentifierData(
             type=Identifier.AXIS_360_ID, identifier="0003642860"
         ),
@@ -34,7 +34,7 @@ class BoundlessFixture:
     )
 
     BIBLIOGRAPHIC_DATA = BibliographicData(
-        data_source_name=DataSource.BOUNDLESS,
+        data_source_name=DataSource.AXIS_360,
         publisher="Random House Inc",
         language="eng",
         title="Faith of My Fathers : A Family Memoir",

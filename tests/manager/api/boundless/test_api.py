@@ -162,7 +162,7 @@ class TestBoundlessApi:
         # Create a LicensePool that needs updating.
         edition, pool = boundless.db.edition(
             identifier_type=Identifier.AXIS_360_ID,
-            data_source_name=DataSource.BOUNDLESS,
+            data_source_name=DataSource.AXIS_360,
             with_license_pool=True,
             collection=boundless.collection,
         )
@@ -199,7 +199,7 @@ class TestBoundlessApi:
         # endpoint and get a good response.
         edition, pool = boundless.db.edition(
             identifier_type=Identifier.AXIS_360_ID,
-            data_source_name=DataSource.BOUNDLESS,
+            data_source_name=DataSource.AXIS_360,
             with_license_pool=True,
         )
         data = boundless.files.sample_data("checkin_success.xml")
@@ -222,7 +222,7 @@ class TestBoundlessApi:
         # the EarlyCheckInTitle endpoint.
         edition, pool = boundless.db.edition(
             identifier_type=Identifier.AXIS_360_ID,
-            data_source_name=DataSource.BOUNDLESS,
+            data_source_name=DataSource.AXIS_360,
             with_license_pool=True,
         )
         data = boundless.files.sample_data("checkin_failure.xml")
@@ -237,7 +237,7 @@ class TestBoundlessApi:
     ):
         edition, pool = boundless.db.edition(
             identifier_type=Identifier.AXIS_360_ID,
-            data_source_name=DataSource.BOUNDLESS,
+            data_source_name=DataSource.AXIS_360,
             with_license_pool=True,
         )
         data = boundless.files.sample_data("place_hold_success.xml")
@@ -260,7 +260,7 @@ class TestBoundlessApi:
     def test_release_hold(self, boundless: BoundlessFixture):
         edition, pool = boundless.db.edition(
             identifier_type=Identifier.AXIS_360_ID,
-            data_source_name=DataSource.BOUNDLESS,
+            data_source_name=DataSource.AXIS_360,
             with_license_pool=True,
         )
         data = boundless.files.sample_data("release_hold_success.xml")
@@ -284,7 +284,7 @@ class TestBoundlessApi:
         # endpoint and get a good response.
         edition, pool = boundless.db.edition(
             identifier_type=Identifier.AXIS_360_ID,
-            data_source_name=DataSource.BOUNDLESS,
+            data_source_name=DataSource.AXIS_360,
             with_license_pool=True,
         )
         data = boundless.files.sample_data("checkout_success.xml")
@@ -309,7 +309,7 @@ class TestBoundlessApi:
         # Test our ability to fulfill a Boundless title.
         edition, pool = boundless.db.edition(
             identifier_type=Identifier.AXIS_360_ID,
-            data_source_name=DataSource.BOUNDLESS,
+            data_source_name=DataSource.AXIS_360,
             with_license_pool=True,
         )
 
@@ -424,7 +424,7 @@ class TestBoundlessApi:
         edition, pool = boundless.db.edition(
             identifier_type=Identifier.AXIS_360_ID,
             identifier_id="0015176429",
-            data_source_name=DataSource.BOUNDLESS,
+            data_source_name=DataSource.AXIS_360,
             with_license_pool=True,
         )
 
@@ -469,7 +469,7 @@ class TestBoundlessApi:
         edition, pool = boundless.db.edition(
             identifier_type=Identifier.AXIS_360_ID,
             identifier_id="0016820953",
-            data_source_name=DataSource.BOUNDLESS,
+            data_source_name=DataSource.AXIS_360,
             with_license_pool=True,
         )
 
@@ -536,7 +536,7 @@ class TestBoundlessApi:
         edition, pool = boundless.db.edition(
             identifier_type=Identifier.AXIS_360_ID,
             identifier_id="0015176429",
-            data_source_name=DataSource.BOUNDLESS,
+            data_source_name=DataSource.AXIS_360,
             with_license_pool=True,
         )
 
@@ -662,11 +662,11 @@ class TestBoundlessApi:
                 # available.
                 identifier_data = IdentifierData.from_identifier(identifier)
                 bibliographic = BibliographicData(
-                    data_source_name=DataSource.BOUNDLESS,
+                    data_source_name=DataSource.AXIS_360,
                     primary_identifier_data=identifier_data,
                 )
                 availability = CirculationData(
-                    data_source_name=DataSource.BOUNDLESS,
+                    data_source_name=DataSource.AXIS_360,
                     primary_identifier_data=identifier_data,
                     licenses_owned=7,
                     licenses_available=6,
@@ -746,7 +746,7 @@ class TestBoundlessApi:
             edition,
             pool,
         ) = boundless.db.edition(
-            data_source_name=DataSource.BOUNDLESS,
+            data_source_name=DataSource.AXIS_360,
             identifier_type=id1.type,
             identifier_id=id1.identifier,
             with_license_pool=True,
@@ -761,7 +761,7 @@ class TestBoundlessApi:
             edition2,
             pool2,
         ) = boundless.db.edition(
-            data_source_name=DataSource.BOUNDLESS,
+            data_source_name=DataSource.AXIS_360,
             identifier_type=id1.type,
             identifier_id=id1.identifier,
             with_license_pool=True,
@@ -817,7 +817,7 @@ class TestBoundlessApi:
 
         # Now change a bit of the data and call the method again.
         new_circulation = CirculationData(
-            data_source_name=DataSource.BOUNDLESS,
+            data_source_name=DataSource.AXIS_360,
             primary_identifier_data=boundless.BIBLIOGRAPHIC_DATA.primary_identifier_data,
             licenses_owned=8,
             licenses_available=7,

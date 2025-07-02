@@ -62,7 +62,7 @@ class Collection(Base, HasSessionCache, RedisKeyMixin):
     DATA_SOURCE_FOR_LICENSE_PROTOCOL = [
         DataSourceConstants.OVERDRIVE,
         DataSourceConstants.BIBLIOTHECA,
-        DataSourceConstants.BOUNDLESS,
+        DataSourceConstants.AXIS_360,
         DataSourceConstants.ENKI,
         DataSourceConstants.FEEDBOOKS,
     ]
