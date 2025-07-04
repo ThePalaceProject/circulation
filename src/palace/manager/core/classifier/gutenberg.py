@@ -261,6 +261,3 @@ class GutenbergBookshelfClassifier(Classifier):
             if identifier == v or (isinstance(v, list) and identifier in v):
                 return l
         return None
-
-
-Classifier.classifiers[Classifier.GUTENBERG_BOOKSHELF] = GutenbergBookshelfClassifier

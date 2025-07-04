@@ -198,6 +198,3 @@ class DeweyDecimalClassifier(Classifier):
             ):
                 return genre
         return None
-
-
-Classifier.classifiers[Classifier.DDC] = DeweyDecimalClassifier

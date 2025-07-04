@@ -139,6 +139,3 @@ class BICClassifier(Classifier):
                 if identifier.startswith(v.lower()):
                     return l
         return None
-
-
-Classifier.classifiers[Classifier.BIC] = BICClassifier

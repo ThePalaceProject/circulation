@@ -158,6 +158,3 @@ class LCCClassifier(classifier.Classifier):
         # Everything else is _supposedly_ for adults, but we don't
         # trust that assumption.
         return None
-
-
-classifier.Classifier.classifiers[classifier.Classifier.LCC] = LCCClassifier

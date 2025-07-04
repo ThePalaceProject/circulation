@@ -233,6 +233,3 @@ class OverdriveClassifier(classifier.Classifier):
         if identifier == "Gay/Lesbian" and fiction:
             return classifier.LGBTQ_Fiction
         return None
-
-
-classifier.Classifier.classifiers[classifier.Classifier.OVERDRIVE] = OverdriveClassifier

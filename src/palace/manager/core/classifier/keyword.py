@@ -2,7 +2,6 @@ import re
 from collections import Counter
 
 from palace.manager.core import classifier
-from palace.manager.core.classifier import Classifier
 from palace.manager.core.classifier.age import AgeOrGradeClassifier
 
 
@@ -1273,8 +1272,3 @@ class FASTClassifier(KeywordBasedClassifier):
 
 class TAGClassifier(KeywordBasedClassifier):
     pass
-
-
-Classifier.classifiers[Classifier.FAST] = FASTClassifier
-Classifier.classifiers[Classifier.LCSH] = LCSHClassifier
-Classifier.classifiers[Classifier.TAG] = TAGClassifier
