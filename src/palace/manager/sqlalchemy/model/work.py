@@ -1187,17 +1187,24 @@ class Work(Base, LoggerMixin):
         if work_id is not None:
             waiting.add(work_id)
 
-    @staticmethod
-    @inject
+    # @staticmethod
+    # @inject
+    @classmethod
     def queue_presentation_recalculation(
+        cls,
         work_id: int | None,
         policy: PresentationCalculationPolicy,
     ):
         """Queue an async background task to have this work's presentation  recalculated"""
-        from palace.manager.celery.tasks.work import calculate_work_presentation
-
-        if work_id is not None:
-            calculate_work_presentation.delay(work_id=work_id, policy=policy)
+        cls.logger().info(
+            "Ignoring recalculation of presentation for work %s with policy %r",
+            work_id,
+            policy,
+        )
+        # from palace.manager.celery.tasks.work import calculate_work_presentation
+        #
+        # if work_id is not None:
+        #     calculate_work_presentation.delay(work_id=work_id, policy=policy)
 
     def set_presentation_ready(self, as_of=None, exclude_search=False):
         """Set this work as presentation-ready, no matter what.
