@@ -756,6 +756,3 @@ class BISACClassifier(Classifier):
         else:
             parts = [name]
         return parts
-
-
-Classifier.classifiers[Classifier.BISAC] = BISACClassifier

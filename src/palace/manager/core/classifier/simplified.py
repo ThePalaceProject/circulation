@@ -65,9 +65,3 @@ class SimplifiedFictionClassifier(Classifier):
             return False
         else:
             return None
-
-
-Classifier.classifiers[Classifier.SIMPLIFIED_GENRE] = SimplifiedGenreClassifier
-Classifier.classifiers[Classifier.SIMPLIFIED_FICTION_STATUS] = (
-    SimplifiedFictionClassifier
-)

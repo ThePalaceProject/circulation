@@ -24,6 +24,7 @@ from palace.manager.api.saml.metadata.model import (
     SAMLNameIDFormat,
     SAMLSubject,
 )
+from palace.manager.core.classifier import Classifier
 from palace.manager.core.coverage import CoverageFailure
 from palace.manager.core.opds_import import (
     OPDSAPI,
@@ -887,10 +888,6 @@ class TestOPDSImporter:
         assert "7" == seven.subject.identifier
         assert 100 == seven.weight
         assert Subject.AGE_RANGE == seven.subject.type
-        from palace.manager.core.classifier import Classifier
-
-        classifier = Classifier.classifiers[seven.subject.type]
-        classifier.classify(seven.subject)
 
         def sort_key(x: LicensePool) -> str:
             assert x.presentation_edition.title is not None

@@ -11,6 +11,7 @@ from palace.manager.core.classifier import (
     Lowercased,
     Science,
     Science_Fiction,
+    lookup_classifier,
 )
 from palace.manager.core.classifier.age import (
     AgeClassifier,
@@ -24,6 +25,7 @@ from palace.manager.core.classifier.keyword import (
     LCSHClassifier as LCSH,
 )
 from palace.manager.core.classifier.lcc import LCCClassifier as LCC
+from palace.manager.core.classifier.overdrive import OverdriveClassifier
 from palace.manager.core.classifier.simplified import SimplifiedGenreClassifier
 from palace.manager.core.classifier.work import WorkClassifier
 from palace.manager.sqlalchemy.model.classification import Genre, Subject
@@ -163,15 +165,16 @@ class TestClassifier:
 
 
 class TestClassifierLookup:
-    def test_lookup(self):
-        assert DDC == Classifier.lookup(Classifier.DDC)
-        assert LCC == Classifier.lookup(Classifier.LCC)
-        assert LCSH == Classifier.lookup(Classifier.LCSH)
-        assert FAST == Classifier.lookup(Classifier.FAST)
-        assert GradeLevelClassifier == Classifier.lookup(Classifier.GRADE_LEVEL)
-        assert AgeClassifier == Classifier.lookup(Classifier.AGE_RANGE)
-        assert InterestLevelClassifier == Classifier.lookup(Classifier.INTEREST_LEVEL)
-        assert None == Classifier.lookup("no-such-key")
+    def test_lookup_classifier(self) -> None:
+        assert lookup_classifier(Classifier.DDC) == DDC
+        assert lookup_classifier(Classifier.LCC) == LCC
+        assert lookup_classifier(Classifier.LCSH) == LCSH
+        assert lookup_classifier(Classifier.FAST) == FAST
+        assert lookup_classifier(Classifier.GRADE_LEVEL) == GradeLevelClassifier
+        assert lookup_classifier(Classifier.AGE_RANGE) == AgeClassifier
+        assert lookup_classifier(Classifier.INTEREST_LEVEL) == InterestLevelClassifier
+        assert lookup_classifier(Classifier.OVERDRIVE) == OverdriveClassifier
+        assert lookup_classifier("no-such-key") is None
 
 
 class TestNestedSubgenres:

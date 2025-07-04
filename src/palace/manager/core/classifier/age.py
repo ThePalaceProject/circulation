@@ -317,10 +317,3 @@ class FreeformAudienceClassifier(AgeOrGradeClassifier):
 
         # Default to assuming it's an unmarked age.
         return AgeClassifier.target_age(identifier, name, False)
-
-
-Classifier.classifiers[Classifier.AGE_RANGE] = AgeClassifier
-Classifier.classifiers[Classifier.GRADE_LEVEL] = GradeLevelClassifier
-Classifier.classifiers[Classifier.INTEREST_LEVEL] = InterestLevelClassifier
-Classifier.classifiers[Classifier.FREEFORM_AUDIENCE] = FreeformAudienceClassifier
-Classifier.classifiers[Classifier.AXIS_360_AUDIENCE] = AgeOrGradeClassifier

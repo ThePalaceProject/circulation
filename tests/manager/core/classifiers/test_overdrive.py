@@ -1,10 +1,10 @@
-from palace.manager.core.classifier import Classifier
+from palace.manager.core.classifier import Classifier, lookup_classifier
 from palace.manager.core.classifier.overdrive import OverdriveClassifier as Overdrive
 
 
 class TestOverdriveClassifier:
     def test_lookup(self):
-        assert Overdrive == Classifier.lookup(Classifier.OVERDRIVE)
+        assert Overdrive == lookup_classifier(Classifier.OVERDRIVE)
 
     def test_scrub_identifier(self):
         scrub = Overdrive.scrub_identifier
