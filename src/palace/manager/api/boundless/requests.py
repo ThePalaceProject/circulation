@@ -269,7 +269,7 @@ class BoundlessRequests(LoggerMixin):
         isbn: str,
         modulus: str,
         exponent: str,
-    ) -> bytes:
+    ) -> dict[str, Any]:
         """
         Make a request to the license server to fetch a license document.
 
@@ -312,4 +312,13 @@ class BoundlessRequests(LoggerMixin):
 
             raise
 
-        return response.content
+        return response.json()  # type: ignore[no-any-return]
+
+    def encrypted_content_url(
+        self,
+        isbn: str,
+    ) -> str:
+        """
+        Get the URL to download the encrypted content for a given ISBN.
+        """
+        return self._license_server_url + f"content/download/{isbn}"

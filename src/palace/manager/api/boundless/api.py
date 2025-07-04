@@ -24,6 +24,7 @@ from palace.manager.api.boundless.models.json import (
     AxisNowFulfillmentInfoResponse,
     FindawayFulfillmentInfoResponse,
 )
+from palace.manager.api.boundless.models.response import KdrmFulfillmentResponse
 from palace.manager.api.boundless.models.xml import Title
 from palace.manager.api.boundless.parser import BibliographicParser
 from palace.manager.api.boundless.requests import BoundlessRequests
@@ -55,6 +56,7 @@ from palace.manager.data_layer.circulation import CirculationData
 from palace.manager.data_layer.format import FormatData
 from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.data_layer.policy.replacement import ReplacementPolicy
+from palace.manager.opds.types.link import BaseLink
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
@@ -64,6 +66,7 @@ from palace.manager.sqlalchemy.model.licensing import (
     LicensePoolDeliveryMechanism,
 )
 from palace.manager.sqlalchemy.model.patron import Patron
+from palace.manager.sqlalchemy.model.resource import Representation
 from palace.manager.util.datetime_helpers import utc_now
 
 
@@ -288,8 +291,20 @@ class BoundlessApi(
             client_ip=params["client_ip"],
         )
 
+        response_document = KdrmFulfillmentResponse(
+            license_document=license_response,
+            links=[
+                BaseLink(
+                    rel="publication",
+                    href=self.api_requests.encrypted_content_url(fulfillment_info.isbn),
+                    type=Representation.EPUB_MEDIA_TYPE,
+                )
+            ],
+        )
+
         return DirectFulfillment(
-            license_response, DeliveryMechanism.BAKER_TAYLOR_KDRM_DRM
+            response_document.model_dump_json(by_alias=True, exclude_defaults=True),
+            DeliveryMechanism.BAKER_TAYLOR_KDRM_DRM,
         )
 
     def fulfill(
