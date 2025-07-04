@@ -529,7 +529,16 @@ class TestBoundlessApi:
 
         assert isinstance(fulfillment, DirectFulfillment)
         assert fulfillment.content_type == DeliveryMechanism.BAKER_TAYLOR_KDRM_DRM
-        assert fulfillment.content == license_data
+        assert json.loads(fulfillment.content) == {
+            "licenseDocument": json.loads(license_data),
+            "links": [
+                {
+                    "href": "https://frontdoor.axisnow.com/content/download/9780547351551",
+                    "rel": "publication",
+                    "type": "application/epub+zip",
+                }
+            ],
+        }
 
     def test_fulfill_findaway(self, boundless: BoundlessFixture):
         # Test our ability to fulfill a Boundless audio title.

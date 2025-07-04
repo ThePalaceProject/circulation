@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Callable, Generator
 from functools import partial
 from unittest.mock import MagicMock
@@ -438,7 +439,7 @@ class TestBoundlessRequests:
         boundless_requests.client.queue_response(200, content=data)
         response = license_request()
 
-        assert response == data
+        assert response == json.loads(data)
         assert boundless_requests.client.requests_methods[0] == "GET"
         assert (
             "license/book_vault_uuid/device_id/client_id/isbn/modulus/exponent"
