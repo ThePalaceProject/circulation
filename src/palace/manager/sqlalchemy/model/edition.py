@@ -32,7 +32,6 @@ from palace.manager.sqlalchemy.constants import (
 )
 from palace.manager.sqlalchemy.model.base import Base
 from palace.manager.sqlalchemy.model.contributor import Contribution, Contributor
-from palace.manager.sqlalchemy.model.coverage import CoverageRecord
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism, LicensePool
@@ -369,37 +368,6 @@ class Edition(Base, EditionConstants):
         )
 
     @classmethod
-    def missing_coverage_from(
-        cls, _db, edition_data_sources, coverage_data_source, operation=None
-    ):
-        """Find Editions from `edition_data_source` whose primary
-        identifiers have no CoverageRecord from
-        `coverage_data_source`.
-        e.g.::
-        gutenberg = DataSource.lookup(_db, DataSource.GUTENBERG)
-        oclc_classify = DataSource.lookup(_db, DataSource.OCLC)
-        missing_coverage_from(_db, gutenberg, oclc_classify)
-
-        will find Editions that came from Project Gutenberg and
-        have never been used as input to the OCLC Classify web
-        service.
-        """
-        if isinstance(edition_data_sources, DataSource):
-            edition_data_sources = [edition_data_sources]
-        edition_data_source_ids = [x.id for x in edition_data_sources]
-        join_clause = (
-            (Edition.primary_identifier_id == CoverageRecord.identifier_id)
-            & (CoverageRecord.data_source_id == coverage_data_source.id)
-            & (CoverageRecord.operation == operation)
-        )
-
-        q = _db.query(Edition).outerjoin(CoverageRecord, join_clause)
-        if edition_data_source_ids:
-            q = q.filter(Edition.data_source_id.in_(edition_data_source_ids))
-        q2 = q.filter(CoverageRecord.id == None)
-        return q2
-
-    @classmethod
     def sort_by_priority(cls, editions, license_source=None):
         """Return all Editions that describe the Identifier associated with
         this LicensePool, in the order they should be used to create a
@@ -694,11 +662,6 @@ class Edition(Base, EditionConstants):
             self.author, self.sort_author = self.calculate_author()
             self.sort_title = TitleProcessor.sort_title_for(self.title)
             self.calculate_permanent_work_id()
-            CoverageRecord.add_for(
-                self,
-                data_source=self.data_source,
-                operation=CoverageRecord.SET_EDITION_METADATA_OPERATION,
-            )
 
         if policy.choose_cover:
             self.choose_cover(policy=policy)
@@ -846,14 +809,6 @@ class Edition(Base, EditionConstants):
                 # it needs to be removed.
                 if self.cover_thumbnail_url:
                     self.cover_thumbnail_url = None
-
-        # Whether or not we succeeded in setting the cover,
-        # record the fact that we tried.
-        CoverageRecord.add_for(
-            self,
-            data_source=self.data_source,
-            operation=CoverageRecord.CHOOSE_COVER_OPERATION,
-        )
 
 
 Index(
