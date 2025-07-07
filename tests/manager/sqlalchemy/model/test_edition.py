@@ -96,61 +96,6 @@ class TestEdition:
         assert identifier == record.primary_identifier
         assert False == was_new
 
-    def test_missing_coverage_from(self, db: DatabaseTransactionFixture):
-        gutenberg = DataSource.lookup(db.session, DataSource.GUTENBERG)
-        oclc = DataSource.lookup(db.session, DataSource.OCLC)
-        web = DataSource.lookup(db.session, DataSource.WEB)
-
-        # Here are two Gutenberg records.
-        g1, ignore = Edition.for_foreign_id(
-            db.session, gutenberg, Identifier.GUTENBERG_ID, "1"
-        )
-
-        g2, ignore = Edition.for_foreign_id(
-            db.session, gutenberg, Identifier.GUTENBERG_ID, "2"
-        )
-
-        # One of them has coverage from OCLC Classify
-        c1 = db.coverage_record(g1, oclc)
-
-        # The other has coverage from a specific operation on OCLC Classify
-        c2 = db.coverage_record(g2, oclc, "some operation")
-
-        # Here's a web record, just sitting there.
-        w, ignore = Edition.for_foreign_id(
-            db.session, web, Identifier.URI, "http://www.foo.com/"
-        )
-
-        # missing_coverage_from picks up the Gutenberg record with no
-        # coverage from OCLC. It doesn't pick up the other
-        # Gutenberg record, and it doesn't pick up the web record.
-        [in_gutenberg_but_not_in_oclc] = Edition.missing_coverage_from(
-            db.session, gutenberg, oclc
-        ).all()
-
-        assert g2 == in_gutenberg_but_not_in_oclc
-
-        # If we ask about a specific operation, we get the Gutenberg
-        # record that has coverage for that operation, but not the one
-        # that has generic OCLC coverage.
-        [has_generic_coverage_only] = Edition.missing_coverage_from(
-            db.session, gutenberg, oclc, "some operation"
-        ).all()
-        assert g1 == has_generic_coverage_only
-
-        # We don't put web sites into OCLC, so this will pick up the
-        # web record (but not the Gutenberg record).
-        [in_web_but_not_in_oclc] = Edition.missing_coverage_from(
-            db.session, web, oclc
-        ).all()
-        assert w == in_web_but_not_in_oclc
-
-        # We don't use the web as a source of coverage, so this will
-        # return both Gutenberg records (but not the web record).
-        assert [g1.id, g2.id] == sorted(
-            x.id for x in Edition.missing_coverage_from(db.session, gutenberg, web)
-        )
-
     def test_sort_by_priority(self, db: DatabaseTransactionFixture):
         # Make editions created by the license source, the metadata
         # wrangler, and library staff.

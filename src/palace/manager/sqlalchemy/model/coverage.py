@@ -320,7 +320,6 @@ class CoverageRecord(Base, BaseCoverageRecord):
 
     __tablename__ = "coveragerecords"
 
-    CHOOSE_COVER_OPERATION = "choose-cover"
     REAP_OPERATION = "reap"
     IMPORT_OPERATION = "import"
     RESOLVE_IDENTIFIER_OPERATION = "resolve-identifier"
