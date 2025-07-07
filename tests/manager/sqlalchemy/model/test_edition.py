@@ -601,7 +601,6 @@ class TestEdition:
         # One for setting the Edition metadata and one for choosing
         # the Edition's cover.
         expect = {
-            CoverageRecord.SET_EDITION_METADATA_OPERATION,
             CoverageRecord.CHOOSE_COVER_OPERATION,
         }
         assert expect == {x.operation for x in records}

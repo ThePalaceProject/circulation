@@ -694,11 +694,6 @@ class Edition(Base, EditionConstants):
             self.author, self.sort_author = self.calculate_author()
             self.sort_title = TitleProcessor.sort_title_for(self.title)
             self.calculate_permanent_work_id()
-            CoverageRecord.add_for(
-                self,
-                data_source=self.data_source,
-                operation=CoverageRecord.SET_EDITION_METADATA_OPERATION,
-            )
 
         if policy.choose_cover:
             self.choose_cover(policy=policy)
@@ -846,14 +841,6 @@ class Edition(Base, EditionConstants):
                 # it needs to be removed.
                 if self.cover_thumbnail_url:
                     self.cover_thumbnail_url = None
-
-        # Whether or not we succeeded in setting the cover,
-        # record the fact that we tried.
-        CoverageRecord.add_for(
-            self,
-            data_source=self.data_source,
-            operation=CoverageRecord.CHOOSE_COVER_OPERATION,
-        )
 
 
 Index(
