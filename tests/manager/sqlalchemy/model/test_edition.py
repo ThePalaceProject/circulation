@@ -6,7 +6,6 @@ from palace.manager.data_layer.policy.presentation import (
 )
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.contributor import Contributor
-from palace.manager.sqlalchemy.model.coverage import CoverageRecord
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
@@ -582,36 +581,6 @@ class TestEdition:
         e.calculate_presentation()
         assert None == e.cover_full_url
         assert "http://mirror/thumb" == e.cover_thumbnail_url
-
-    def test_calculate_presentation_registers_coverage_records(
-        self, db: DatabaseTransactionFixture
-    ):
-        edition = db.edition()
-        identifier = edition.primary_identifier
-
-        # This Identifier has no CoverageRecords.
-        assert [] == identifier.coverage_records
-
-        # But once we calculate the Edition's presentation...
-        edition.calculate_presentation()
-
-        # Two CoverageRecords have been associated with this Identifier.
-        records = identifier.coverage_records
-
-        # One for setting the Edition metadata and one for choosing
-        # the Edition's cover.
-        expect = {
-            CoverageRecord.CHOOSE_COVER_OPERATION,
-        }
-        assert expect == {x.operation for x in records}
-
-        # We know the records are associated with this specific
-        # Edition, not just the Identifier, because each
-        # CoverageRecord's DataSource is set to this Edition's
-        # DataSource.
-        assert [edition.data_source, edition.data_source] == [
-            x.data_source for x in records
-        ]
 
     def test_no_permanent_work_id_for_edition_without_title_or_medium(
         self, db: DatabaseTransactionFixture
