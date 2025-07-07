@@ -320,8 +320,6 @@ class CoverageRecord(Base, BaseCoverageRecord):
 
     __tablename__ = "coveragerecords"
 
-    SET_EDITION_METADATA_OPERATION = "set-edition-metadata"
-    CHOOSE_COVER_OPERATION = "choose-cover"
     REAP_OPERATION = "reap"
     IMPORT_OPERATION = "import"
     RESOLVE_IDENTIFIER_OPERATION = "resolve-identifier"

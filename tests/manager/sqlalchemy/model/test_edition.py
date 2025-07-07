@@ -6,7 +6,6 @@ from palace.manager.data_layer.policy.presentation import (
 )
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.contributor import Contributor
-from palace.manager.sqlalchemy.model.coverage import CoverageRecord
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
@@ -96,61 +95,6 @@ class TestEdition:
         assert data_source == record.data_source
         assert identifier == record.primary_identifier
         assert False == was_new
-
-    def test_missing_coverage_from(self, db: DatabaseTransactionFixture):
-        gutenberg = DataSource.lookup(db.session, DataSource.GUTENBERG)
-        oclc = DataSource.lookup(db.session, DataSource.OCLC)
-        web = DataSource.lookup(db.session, DataSource.WEB)
-
-        # Here are two Gutenberg records.
-        g1, ignore = Edition.for_foreign_id(
-            db.session, gutenberg, Identifier.GUTENBERG_ID, "1"
-        )
-
-        g2, ignore = Edition.for_foreign_id(
-            db.session, gutenberg, Identifier.GUTENBERG_ID, "2"
-        )
-
-        # One of them has coverage from OCLC Classify
-        c1 = db.coverage_record(g1, oclc)
-
-        # The other has coverage from a specific operation on OCLC Classify
-        c2 = db.coverage_record(g2, oclc, "some operation")
-
-        # Here's a web record, just sitting there.
-        w, ignore = Edition.for_foreign_id(
-            db.session, web, Identifier.URI, "http://www.foo.com/"
-        )
-
-        # missing_coverage_from picks up the Gutenberg record with no
-        # coverage from OCLC. It doesn't pick up the other
-        # Gutenberg record, and it doesn't pick up the web record.
-        [in_gutenberg_but_not_in_oclc] = Edition.missing_coverage_from(
-            db.session, gutenberg, oclc
-        ).all()
-
-        assert g2 == in_gutenberg_but_not_in_oclc
-
-        # If we ask about a specific operation, we get the Gutenberg
-        # record that has coverage for that operation, but not the one
-        # that has generic OCLC coverage.
-        [has_generic_coverage_only] = Edition.missing_coverage_from(
-            db.session, gutenberg, oclc, "some operation"
-        ).all()
-        assert g1 == has_generic_coverage_only
-
-        # We don't put web sites into OCLC, so this will pick up the
-        # web record (but not the Gutenberg record).
-        [in_web_but_not_in_oclc] = Edition.missing_coverage_from(
-            db.session, web, oclc
-        ).all()
-        assert w == in_web_but_not_in_oclc
-
-        # We don't use the web as a source of coverage, so this will
-        # return both Gutenberg records (but not the web record).
-        assert [g1.id, g2.id] == sorted(
-            x.id for x in Edition.missing_coverage_from(db.session, gutenberg, web)
-        )
 
     def test_sort_by_priority(self, db: DatabaseTransactionFixture):
         # Make editions created by the license source, the metadata
@@ -582,37 +526,6 @@ class TestEdition:
         e.calculate_presentation()
         assert None == e.cover_full_url
         assert "http://mirror/thumb" == e.cover_thumbnail_url
-
-    def test_calculate_presentation_registers_coverage_records(
-        self, db: DatabaseTransactionFixture
-    ):
-        edition = db.edition()
-        identifier = edition.primary_identifier
-
-        # This Identifier has no CoverageRecords.
-        assert [] == identifier.coverage_records
-
-        # But once we calculate the Edition's presentation...
-        edition.calculate_presentation()
-
-        # Two CoverageRecords have been associated with this Identifier.
-        records = identifier.coverage_records
-
-        # One for setting the Edition metadata and one for choosing
-        # the Edition's cover.
-        expect = {
-            CoverageRecord.SET_EDITION_METADATA_OPERATION,
-            CoverageRecord.CHOOSE_COVER_OPERATION,
-        }
-        assert expect == {x.operation for x in records}
-
-        # We know the records are associated with this specific
-        # Edition, not just the Identifier, because each
-        # CoverageRecord's DataSource is set to this Edition's
-        # DataSource.
-        assert [edition.data_source, edition.data_source] == [
-            x.data_source for x in records
-        ]
 
     def test_no_permanent_work_id_for_edition_without_title_or_medium(
         self, db: DatabaseTransactionFixture
