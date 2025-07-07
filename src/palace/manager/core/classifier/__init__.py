@@ -11,6 +11,8 @@
 # select count(identifiers.id) as c, subjects.type, substr(subjects.identifier, 0, 20) as i, substr(subjects.name, 0, 20) as n from workidentifiers join classifications on workidentifiers.id=classifications.work_identifier_id join subjects on classifications.subject_id=subjects.id where subjects.genre_id is null and subjects.fiction is null group by subjects.type, i, n order by c desc;
 from __future__ import annotations
 
+from frozendict import frozendict
+
 from palace.manager.util.resources import resources_dir
 
 
@@ -20,6 +22,67 @@ def classifier_resources_dir():
 
 NO_VALUE = "NONE"
 NO_NUMBER = -1
+
+
+_classifiers: frozendict[str, type[Classifier]] | None = None
+
+
+def lookup_classifier(scheme: str) -> type[Classifier] | None:
+    """
+    Look up a classifier for the given classification scheme.
+    """
+
+    global _classifiers
+    if _classifiers is None:
+        # Make sure that all the classifiers are imported and set up
+        # the lookup dictionary.
+        from palace.manager.core.classifier.age import (
+            AgeClassifier,
+            AgeOrGradeClassifier,
+            FreeformAudienceClassifier,
+            GradeLevelClassifier,
+            InterestLevelClassifier,
+        )
+        from palace.manager.core.classifier.bic import BICClassifier
+        from palace.manager.core.classifier.bisac import BISACClassifier
+        from palace.manager.core.classifier.ddc import DeweyDecimalClassifier
+        from palace.manager.core.classifier.gutenberg import (
+            GutenbergBookshelfClassifier,
+        )
+        from palace.manager.core.classifier.keyword import (
+            FASTClassifier,
+            LCSHClassifier,
+            TAGClassifier,
+        )
+        from palace.manager.core.classifier.lcc import LCCClassifier
+        from palace.manager.core.classifier.overdrive import OverdriveClassifier
+        from palace.manager.core.classifier.simplified import (
+            SimplifiedFictionClassifier,
+            SimplifiedGenreClassifier,
+        )
+
+        _classifiers = frozendict(
+            {
+                Classifier.AGE_RANGE: AgeClassifier,
+                Classifier.AXIS_360_AUDIENCE: AgeOrGradeClassifier,
+                Classifier.BIC: BICClassifier,
+                Classifier.BISAC: BISACClassifier,
+                Classifier.DDC: DeweyDecimalClassifier,
+                Classifier.FAST: FASTClassifier,
+                Classifier.FREEFORM_AUDIENCE: FreeformAudienceClassifier,
+                Classifier.GRADE_LEVEL: GradeLevelClassifier,
+                Classifier.GUTENBERG_BOOKSHELF: GutenbergBookshelfClassifier,
+                Classifier.INTEREST_LEVEL: InterestLevelClassifier,
+                Classifier.LCC: LCCClassifier,
+                Classifier.LCSH: LCSHClassifier,
+                Classifier.OVERDRIVE: OverdriveClassifier,
+                Classifier.SIMPLIFIED_FICTION_STATUS: SimplifiedFictionClassifier,
+                Classifier.SIMPLIFIED_GENRE: SimplifiedGenreClassifier,
+                Classifier.TAG: TAGClassifier,
+            }
+        )
+
+    return _classifiers.get(scheme, None)
 
 
 class ClassifierConstants:
@@ -109,11 +172,6 @@ class Classifier(ClassifierConstants):
         if lower and upper and lower > upper:
             lower, upper = upper, lower
         return (lower, upper)
-
-    @classmethod
-    def lookup(cls, scheme):
-        """Look up a classifier for a classification scheme."""
-        return cls.classifiers.get(scheme, None)
 
     @classmethod
     def name_for(cls, identifier):

@@ -20,7 +20,12 @@ from sqlalchemy.orm import Mapped, relationship
 from sqlalchemy.orm.session import Session
 
 from palace.manager.core import classifier
-from palace.manager.core.classifier import Classifier, Erotica, GenreData
+from palace.manager.core.classifier import (
+    Classifier,
+    Erotica,
+    GenreData,
+    lookup_classifier,
+)
 from palace.manager.sqlalchemy.constants import DataSourceConstants
 from palace.manager.sqlalchemy.hassessioncache import HasSessionCache
 from palace.manager.sqlalchemy.model.base import Base
@@ -272,7 +277,7 @@ class Subject(Base):
 
     def assign_to_genre(self) -> None:
         """Assign this subject to a genre."""
-        classifier = Classifier.classifiers.get(self.type, None)
+        classifier = lookup_classifier(self.type)
         if not classifier:
             return
         self.checked = True
