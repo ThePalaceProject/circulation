@@ -3,7 +3,7 @@ from __future__ import annotations
 from flask_babel import lazy_gettext as _
 
 from palace.manager.api.boundless.constants import ServerNickname
-from palace.manager.api.circulation import (
+from palace.manager.circulation.settings import (
     BaseCirculationApiSettings,
     BaseCirculationLoanSettings,
 )

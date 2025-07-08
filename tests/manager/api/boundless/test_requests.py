@@ -20,7 +20,7 @@ from palace.manager.api.boundless.models.json import AudiobookMetadataResponse
 from palace.manager.api.boundless.models.xml import AddHoldResponse, RemoveHoldResponse
 from palace.manager.api.boundless.requests import BoundlessRequests
 from palace.manager.api.boundless.settings import BoundlessSettings
-from palace.manager.api.circulation_exceptions import (
+from palace.manager.circulation.exceptions import (
     AlreadyCheckedOut,
     AlreadyOnHold,
     NotFoundOnRemote,

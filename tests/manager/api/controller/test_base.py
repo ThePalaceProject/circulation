@@ -7,7 +7,6 @@ from bidict import frozenbidict
 from flask import Response
 from werkzeug.datastructures import Authorization
 
-from palace.manager.api.circulation_exceptions import RemoteInitiatedServerError
 from palace.manager.api.problem_details import (
     BAD_DELIVERY_MECHANISM,
     FORBIDDEN_BY_POLICY,
@@ -17,6 +16,7 @@ from palace.manager.api.problem_details import (
     NOT_AGE_APPROPRIATE,
     REMOTE_INTEGRATION_FAILED,
 )
+from palace.manager.circulation.exceptions import RemoteInitiatedServerError
 from palace.manager.core.classifier import Classifier
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.identifier import Identifier

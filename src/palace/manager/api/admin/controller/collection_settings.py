@@ -18,12 +18,12 @@ from palace.manager.api.admin.problem_details import (
     PROTOCOL_DOES_NOT_SUPPORT_PARENTS,
 )
 from palace.manager.api.admin.util.flask import get_request_admin
-from palace.manager.api.circulation import CirculationApiType
 from palace.manager.celery.tasks.collection_delete import collection_delete
 from palace.manager.celery.tasks.reaper import (
     reap_unassociated_holds,
     reap_unassociated_loans,
 )
+from palace.manager.circulation.base import CirculationApiType
 from palace.manager.core.selftest import HasSelfTests
 from palace.manager.integration.base import HasChildIntegrationConfiguration
 from palace.manager.sqlalchemy.listeners import site_configuration_has_changed

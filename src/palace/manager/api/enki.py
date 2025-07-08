@@ -11,24 +11,25 @@ from requests import Response as RequestsResponse
 from sqlalchemy.orm import Session
 from typing_extensions import Unpack
 
-from palace.manager.api.circulation import (
+from palace.manager.api.selftest import HasCollectionSelfTests, SelfTestResult
+from palace.manager.circulation.base import (
     BaseCirculationAPI,
-    BaseCirculationApiSettings,
-    FetchFulfillment,
-    HoldInfo,
-    LoanInfo,
     PatronActivityCirculationAPI,
-    RedirectFulfillment,
-    UrlFulfillment,
 )
-from palace.manager.api.circulation_exceptions import (
+from palace.manager.circulation.data import HoldInfo, LoanInfo
+from palace.manager.circulation.exceptions import (
     CannotFulfill,
     CannotLoan,
     NoAvailableCopies,
     PatronAuthorizationFailedException,
     RemoteInitiatedServerError,
 )
-from palace.manager.api.selftest import HasCollectionSelfTests, SelfTestResult
+from palace.manager.circulation.fulfillment import (
+    FetchFulfillment,
+    RedirectFulfillment,
+    UrlFulfillment,
+)
+from palace.manager.circulation.settings import BaseCirculationApiSettings
 from palace.manager.core.config import ConfigurationAttributeValue
 from palace.manager.core.monitor import (
     CollectionMonitor,

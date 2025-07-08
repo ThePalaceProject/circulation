@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from flask_babel import lazy_gettext as _
 
-from palace.manager.api.circulation import (
+from palace.manager.api.overdrive.constants import OverdriveConstants
+from palace.manager.circulation.settings import (
     BaseCirculationApiSettings,
     BaseCirculationEbookLoanSettings,
 )
-from palace.manager.api.overdrive.constants import OverdriveConstants
 from palace.manager.integration.configuration.connection import ConnectionSetting
 from palace.manager.integration.settings import (
     BaseSettings,

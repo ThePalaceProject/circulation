@@ -25,13 +25,10 @@ from palace.manager.api.bibliotheca import (
     ItemListParser,
     PatronCirculationParser,
 )
-from palace.manager.api.circulation import (
-    CirculationAPI,
-    Fulfillment,
-    HoldInfo,
-    LoanInfo,
-)
-from palace.manager.api.circulation_exceptions import (
+from palace.manager.api.web_publication_manifest import FindawayManifest
+from palace.manager.circulation.data import HoldInfo, LoanInfo
+from palace.manager.circulation.dispatcher import CirculationApiDispatcher
+from palace.manager.circulation.exceptions import (
     AlreadyCheckedOut,
     AlreadyOnHold,
     CannotHold,
@@ -45,7 +42,7 @@ from palace.manager.api.circulation_exceptions import (
     PatronLoanLimitReached,
     RemoteInitiatedServerError,
 )
-from palace.manager.api.web_publication_manifest import FindawayManifest
+from palace.manager.circulation.fulfillment import Fulfillment
 from palace.manager.core.monitor import TimestampData
 from palace.manager.data_layer.policy.presentation import PresentationCalculationPolicy
 from palace.manager.scripts.coverage_provider import RunCollectionCoverageProviderScript
@@ -430,7 +427,7 @@ class TestBibliothecaAPI:
     def test_sync_patron_activity(self, bibliotheca_fixture: BibliothecaAPITestFixture):
         db = bibliotheca_fixture.db
         patron = db.patron()
-        circulation = CirculationAPI(
+        circulation = CirculationApiDispatcher(
             db.session,
             db.default_library(),
             {bibliotheca_fixture.collection.id: bibliotheca_fixture.api},

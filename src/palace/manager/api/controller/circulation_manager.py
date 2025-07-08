@@ -6,7 +6,6 @@ from flask_babel import lazy_gettext as _
 from sqlalchemy import select
 from sqlalchemy.orm import Session, eagerload
 
-from palace.manager.api.circulation import CirculationAPI
 from palace.manager.api.controller.base import BaseCirculationManagerController
 from palace.manager.api.problem_details import (
     BAD_DELIVERY_MECHANISM,
@@ -18,6 +17,7 @@ from palace.manager.api.problem_details import (
     REMOTE_INTEGRATION_FAILED,
 )
 from palace.manager.api.util.flask import get_request_library
+from palace.manager.circulation.dispatcher import CirculationApiDispatcher
 from palace.manager.core.problem_details import INVALID_INPUT
 from palace.manager.search.external_search import ExternalSearchIndex
 from palace.manager.service.redis.redis import Redis
@@ -82,7 +82,7 @@ class CirculationManagerController(BaseCirculationManagerController):
         return None, None
 
     @property
-    def circulation(self) -> CirculationAPI:
+    def circulation(self) -> CirculationApiDispatcher:
         """Return the appropriate CirculationAPI for the request Library."""
         library_id = get_request_library().id
         return self.manager.circulation_apis[library_id]  # type: ignore[no-any-return]

@@ -11,13 +11,11 @@ from uritemplate import URITemplate
 
 from palace.manager.api.adobe_vendor_id import AuthdataUtility
 from palace.manager.api.boundless.constants import BAKER_TAYLOR_KDRM_PARAMS
-from palace.manager.api.circulation import (
-    BaseCirculationAPI,
-    CirculationAPI,
-    RedirectFulfillment,
-)
 from palace.manager.api.lanes import ContributorLane
 from palace.manager.api.metadata.novelist import NoveListAPI, NoveListApiSettings
+from palace.manager.circulation.base import BaseCirculationAPI
+from palace.manager.circulation.dispatcher import CirculationApiDispatcher
+from palace.manager.circulation.fulfillment import RedirectFulfillment
 from palace.manager.core.classifier import Classifier, Fantasy, Urban_Fantasy
 from palace.manager.core.entrypoint import (
     AudiobooksEntryPoint,
@@ -1250,7 +1248,7 @@ class TestLibraryAnnotator:
     def test_incomplete_catalog_entry_contains_an_alternate_link_to_the_complete_entry(
         self, annotator_fixture: LibraryAnnotatorFixture
     ):
-        circulation = create_autospec(spec=CirculationAPI)
+        circulation = create_autospec(spec=CirculationApiDispatcher)
         circulation.library = annotator_fixture.db.default_library()
         work = annotator_fixture.db.work(
             with_license_pool=True, with_open_access_download=False
@@ -1282,7 +1280,7 @@ class TestLibraryAnnotator:
         self, annotator_fixture: LibraryAnnotatorFixture
     ):
         patron = annotator_fixture.db.patron()
-        circulation = create_autospec(spec=CirculationAPI)
+        circulation = create_autospec(spec=CirculationApiDispatcher)
         circulation.library = annotator_fixture.db.default_library()
         work = annotator_fixture.db.work(
             with_license_pool=True, with_open_access_download=False
@@ -1325,7 +1323,7 @@ class TestLibraryAnnotator:
         self, annotator_fixture: LibraryAnnotatorFixture
     ):
         patron = annotator_fixture.db.patron()
-        circulation = create_autospec(spec=CirculationAPI)
+        circulation = create_autospec(spec=CirculationApiDispatcher)
         circulation.library = annotator_fixture.db.default_library()
         work = annotator_fixture.db.work(
             with_license_pool=True, with_open_access_download=False

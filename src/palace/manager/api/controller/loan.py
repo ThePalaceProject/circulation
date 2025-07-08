@@ -7,11 +7,6 @@ from pydantic import TypeAdapter
 from werkzeug import Response as wkResponse
 
 from palace.manager.api.boundless.constants import BAKER_TAYLOR_KDRM_PARAMS
-from palace.manager.api.circulation import UrlFulfillment
-from palace.manager.api.circulation_exceptions import (
-    CirculationException,
-    RemoteInitiatedServerError,
-)
 from palace.manager.api.controller.circulation_manager import (
     CirculationManagerController,
 )
@@ -26,6 +21,11 @@ from palace.manager.api.problem_details import (
 )
 from palace.manager.api.util.flask import get_request_library, get_request_patron
 from palace.manager.celery.tasks.patron_activity import sync_patron_activity
+from palace.manager.circulation.exceptions import (
+    CirculationException,
+    RemoteInitiatedServerError,
+)
+from palace.manager.circulation.fulfillment import UrlFulfillment
 from palace.manager.feed.acquisition import OPDSAcquisitionFeed
 from palace.manager.service.redis.models.patron_activity import PatronActivity
 from palace.manager.sqlalchemy.model.library import Library

@@ -11,9 +11,9 @@ import pytest
 from jinja2 import Template
 from requests import Response
 
-from palace.manager.api.circulation import HoldInfo, LoanInfo
 from palace.manager.api.odl.api import OPDS2WithODLApi
 from palace.manager.api.odl.importer import OPDS2WithODLImporter
+from palace.manager.circulation.data import HoldInfo, LoanInfo
 from palace.manager.core.coverage import CoverageFailure
 from palace.manager.opds.lcp.license import LicenseDocument
 from palace.manager.opds.lcp.status import LoanStatus

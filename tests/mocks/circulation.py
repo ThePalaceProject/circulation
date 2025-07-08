@@ -7,16 +7,15 @@ from typing import Any
 from sqlalchemy.orm import Session
 from typing_extensions import Unpack
 
-from palace.manager.api.circulation import (
+from palace.manager.api.circulation_manager import CirculationManager
+from palace.manager.circulation.base import (
     BaseCirculationAPI,
-    CirculationAPI,
     CirculationApiType,
-    Fulfillment,
-    HoldInfo,
-    LoanInfo,
     PatronActivityCirculationAPI,
 )
-from palace.manager.api.circulation_manager import CirculationManager
+from palace.manager.circulation.data import HoldInfo, LoanInfo
+from palace.manager.circulation.dispatcher import CirculationApiDispatcher
+from palace.manager.circulation.fulfillment import Fulfillment
 from palace.manager.integration.settings import BaseSettings
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.service.container import Services
@@ -132,7 +131,7 @@ class MockBaseCirculationAPI(BaseCirculationAPI):
         return response
 
 
-class MockCirculationAPI(CirculationAPI):
+class MockCirculationApiDispatcher(CirculationApiDispatcher):
     def __init__(
         self,
         db: Session,
@@ -227,18 +226,18 @@ class MockPatronActivityCirculationAPI(
 
 
 class MockCirculationManager(CirculationManager):
-    d_circulation: MockCirculationAPI
+    d_circulation: MockCirculationApiDispatcher
 
     def __init__(self, db: Session, services: Services):
         super().__init__(db, services=services)
 
-    def setup_circulation_api(
+    def setup_circulation_api_dispatcher(
         self,
         db: Session,
         library: Library,
         library_collection_apis: Mapping[int | None, CirculationApiType],
         analytics: Analytics | None = None,
-    ) -> MockCirculationAPI:
-        return MockCirculationAPI(
+    ) -> MockCirculationApiDispatcher:
+        return MockCirculationApiDispatcher(
             db, library, library_collection_apis, analytics=analytics
         )

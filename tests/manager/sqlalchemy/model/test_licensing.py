@@ -10,7 +10,7 @@ import pytest
 from bidict import frozenbidict
 from sqlalchemy.exc import IntegrityError
 
-from palace.manager.api.circulation_exceptions import CannotHold, CannotLoan
+from palace.manager.circulation.exceptions import CannotHold, CannotLoan
 from palace.manager.integration.configuration.formats import FormatPriorities
 from palace.manager.opds.odl.info import LicenseStatus
 from palace.manager.sqlalchemy.constants import MediaTypes

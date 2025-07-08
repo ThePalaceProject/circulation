@@ -15,8 +15,8 @@ from palace.manager.api.boundless.exception import BoundlessValidationError
 from palace.manager.api.boundless.fulfillment import (
     BoundlessAcsFulfillment,
 )
-from palace.manager.api.circulation import DirectFulfillment, HoldInfo, LoanInfo
-from palace.manager.api.circulation_exceptions import (
+from palace.manager.circulation.data import HoldInfo, LoanInfo
+from palace.manager.circulation.exceptions import (
     CannotFulfill,
     DeliveryMechanismError,
     FormatNotAvailable,
@@ -25,6 +25,7 @@ from palace.manager.api.circulation_exceptions import (
     NotFoundOnRemote,
     RemoteInitiatedServerError,
 )
+from palace.manager.circulation.fulfillment import DirectFulfillment
 from palace.manager.data_layer.bibliographic import BibliographicData
 from palace.manager.data_layer.circulation import CirculationData
 from palace.manager.data_layer.format import FormatData

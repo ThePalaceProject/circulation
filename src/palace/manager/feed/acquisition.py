@@ -45,7 +45,8 @@ from palace.manager.util.opds_writer import OPDSMessage
 from palace.manager.util.problem_detail import ProblemDetail
 
 if TYPE_CHECKING:
-    from palace.manager.api.circulation import CirculationAPI, UrlFulfillment
+    from palace.manager.circulation.dispatcher import CirculationApiDispatcher
+    from palace.manager.circulation.fulfillment import UrlFulfillment
     from palace.manager.sqlalchemy.model.lane import WorkList
 
 
@@ -487,7 +488,7 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
     @classmethod
     def active_loans_for(
         cls,
-        circulation: CirculationAPI | None,
+        circulation: CirculationApiDispatcher | None,
         patron: Patron,
         annotator: LibraryAnnotator | None = None,
         **response_kwargs: Any,

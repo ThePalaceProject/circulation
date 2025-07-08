@@ -5,12 +5,12 @@ import dateutil
 import pytest
 
 from palace.manager.api.authentication.base import PatronData
-from palace.manager.api.circulation_exceptions import (
+from palace.manager.api.util.patron import Patron, PatronUtility
+from palace.manager.circulation.exceptions import (
     AuthorizationBlocked,
     AuthorizationExpired,
     OutstandingFines,
 )
-from palace.manager.api.util.patron import Patron, PatronUtility
 from palace.manager.util import MoneyUtility
 from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture

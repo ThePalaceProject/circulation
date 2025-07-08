@@ -5,10 +5,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 from freezegun import freeze_time
 
-from palace.manager.api.circulation_exceptions import (
-    CannotFulfill,
-    LibraryAuthorizationFailedException,
-)
 from palace.manager.api.opds_for_distributors import (
     OPDSForDistributorsAPI,
     OPDSForDistributorsImporter,
@@ -17,6 +13,10 @@ from palace.manager.api.opds_for_distributors import (
     OPDSForDistributorsSettings,
 )
 from palace.manager.api.overdrive.api import OverdriveAPI
+from palace.manager.circulation.exceptions import (
+    CannotFulfill,
+    LibraryAuthorizationFailedException,
+)
 from palace.manager.data_layer.circulation import CirculationData
 from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.data_layer.link import LinkData

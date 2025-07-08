@@ -6,7 +6,7 @@ from urllib.parse import urlparse
 
 import certifi
 
-from palace.manager.api.circulation import UrlFulfillment
+from palace.manager.circulation.fulfillment import UrlFulfillment
 from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism
 from palace.manager.util.flask_util import Response
 from palace.manager.util.http import RemoteIntegrationException

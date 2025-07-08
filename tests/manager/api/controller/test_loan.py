@@ -11,26 +11,6 @@ from flask import Response as FlaskResponse, url_for
 from werkzeug import Response as wkResponse
 
 from palace.manager.api.bibliotheca import BibliothecaAPI
-from palace.manager.api.circulation import (
-    BaseCirculationAPI,
-    CirculationAPI,
-    DirectFulfillment,
-    FetchFulfillment,
-    Fulfillment,
-    HoldInfo,
-    LoanInfo,
-    RedirectFulfillment,
-)
-from palace.manager.api.circulation_exceptions import (
-    AlreadyOnHold,
-    CannotReleaseHold,
-    CannotReturn,
-    HoldsNotPermitted,
-    NoAvailableCopies,
-    NoLicenses,
-    NotFoundOnRemote,
-    PatronHoldLimitReached,
-)
 from palace.manager.api.problem_details import (
     BAD_DELIVERY_MECHANISM,
     CANNOT_RELEASE_HOLD,
@@ -41,6 +21,25 @@ from palace.manager.api.problem_details import (
     NO_LICENSES,
     NOT_FOUND_ON_REMOTE,
     OUTSTANDING_FINES,
+)
+from palace.manager.circulation.base import BaseCirculationAPI
+from palace.manager.circulation.data import HoldInfo, LoanInfo
+from palace.manager.circulation.dispatcher import CirculationApiDispatcher
+from palace.manager.circulation.exceptions import (
+    AlreadyOnHold,
+    CannotReleaseHold,
+    CannotReturn,
+    HoldsNotPermitted,
+    NoAvailableCopies,
+    NoLicenses,
+    NotFoundOnRemote,
+    PatronHoldLimitReached,
+)
+from palace.manager.circulation.fulfillment import (
+    DirectFulfillment,
+    FetchFulfillment,
+    Fulfillment,
+    RedirectFulfillment,
 )
 from palace.manager.core.opds_import import OPDSAPI
 from palace.manager.core.problem_details import INTEGRATION_ERROR, INVALID_INPUT
@@ -821,7 +820,7 @@ class TestLoanController:
         # correctly to the CirculationAPI.
 
         controller = loan_fixture.manager.loans
-        mock = MagicMock(spec=CirculationAPI)
+        mock = MagicMock(spec=CirculationApiDispatcher)
         controller.manager.circulation_apis[loan_fixture.db.default_library().id] = mock
 
         with loan_fixture.request_context_with_library(

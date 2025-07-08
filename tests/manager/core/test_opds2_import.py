@@ -8,12 +8,9 @@ import pytest
 from pydantic import ValidationError
 from requests import Response
 
-from palace.manager.api.circulation import (
-    CirculationAPI,
-    Fulfillment,
-    RedirectFulfillment,
-)
-from palace.manager.api.circulation_exceptions import CannotFulfill
+from palace.manager.circulation.dispatcher import CirculationApiDispatcher
+from palace.manager.circulation.exceptions import CannotFulfill
+from palace.manager.circulation.fulfillment import Fulfillment, RedirectFulfillment
 from palace.manager.core.opds2_import import OPDS2API, OPDS2Importer, OPDS2ImportMonitor
 from palace.manager.sqlalchemy.constants import (
     EditionConstants,
@@ -798,7 +795,7 @@ class TestOpds2Api:
 
         work = works[0]
 
-        api = CirculationAPI(
+        api = CirculationApiDispatcher(
             db.session,
             opds2_importer_fixture.library,
             {

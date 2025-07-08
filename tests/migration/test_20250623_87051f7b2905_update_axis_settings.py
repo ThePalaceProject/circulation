@@ -2,7 +2,7 @@ import pytest
 from pytest_alembic import MigrationContext
 
 from palace.manager.api.boundless.constants import API_BASE_URLS, ServerNickname
-from palace.manager.api.circulation import BaseCirculationApiSettings
+from palace.manager.circulation.settings import BaseCirculationApiSettings
 from tests.migration.conftest import AlembicDatabaseFixture
 
 

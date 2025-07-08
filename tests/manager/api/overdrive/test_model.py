@@ -6,14 +6,6 @@ from uuid import uuid4
 
 import pytest
 
-from palace.manager.api.circulation_exceptions import (
-    AlreadyCheckedOut,
-    AlreadyOnHold,
-    CannotRenew,
-    NoAvailableCopies,
-    PatronHoldLimitReached,
-    PatronLoanLimitReached,
-)
 from palace.manager.api.overdrive.exception import (
     ExtraFieldsError,
     InvalidFieldOptionError,
@@ -33,6 +25,14 @@ from palace.manager.api.overdrive.model import (
     Holds,
     LinkTemplate,
     PatronInformation,
+)
+from palace.manager.circulation.exceptions import (
+    AlreadyCheckedOut,
+    AlreadyOnHold,
+    CannotRenew,
+    NoAvailableCopies,
+    PatronHoldLimitReached,
+    PatronLoanLimitReached,
 )
 from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.files import OverdriveFilesFixture

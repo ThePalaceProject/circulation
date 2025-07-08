@@ -5,8 +5,8 @@ from enum import Enum
 from flask_babel import lazy_gettext as _
 from pydantic import NonNegativeInt, PositiveInt
 
-from palace.manager.api.circulation import BaseCirculationEbookLoanSettings
 from palace.manager.api.lcp.hash import HashingAlgorithm
+from palace.manager.circulation.settings import BaseCirculationEbookLoanSettings
 from palace.manager.core.opds2_import import OPDS2ImporterSettings
 from palace.manager.integration.settings import (
     ConfigurationFormItem,

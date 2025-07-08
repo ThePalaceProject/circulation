@@ -17,16 +17,6 @@ from pydantic.alias_generators import to_camel
 from requests import Response
 from typing_extensions import Self
 
-from palace.manager.api.circulation_exceptions import (
-    AlreadyCheckedOut,
-    AlreadyOnHold,
-    CannotRenew,
-    FormatNotAvailable,
-    NoActiveLoan,
-    NoAvailableCopies,
-    PatronHoldLimitReached,
-    PatronLoanLimitReached,
-)
 from palace.manager.api.overdrive.constants import OVERDRIVE_PALACE_MANIFEST_FORMATS
 from palace.manager.api.overdrive.exception import (
     ExtraFieldsError,
@@ -35,6 +25,16 @@ from palace.manager.api.overdrive.exception import (
     MissingSubstitutionsError,
     NotFoundError,
     OverdriveResponseException,
+)
+from palace.manager.circulation.exceptions import (
+    AlreadyCheckedOut,
+    AlreadyOnHold,
+    CannotRenew,
+    FormatNotAvailable,
+    NoActiveLoan,
+    NoAvailableCopies,
+    PatronHoldLimitReached,
+    PatronLoanLimitReached,
 )
 from palace.manager.util.log import LoggerMixin
 

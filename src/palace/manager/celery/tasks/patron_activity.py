@@ -1,9 +1,9 @@
 from celery import shared_task
 from sqlalchemy.orm.exc import StaleDataError
 
-from palace.manager.api.circulation import PatronActivityCirculationAPI
-from palace.manager.api.circulation_exceptions import PatronAuthorizationFailedException
 from palace.manager.celery.task import Task
+from palace.manager.circulation.base import PatronActivityCirculationAPI
+from palace.manager.circulation.exceptions import PatronAuthorizationFailedException
 from palace.manager.service.celery.celery import QueueNames
 from palace.manager.service.integration_registry.license_providers import (
     LicenseProvidersRegistry,

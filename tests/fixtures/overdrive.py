@@ -6,7 +6,6 @@ from typing import Any
 
 import pytest
 
-from palace.manager.api.circulation import CirculationAPI
 from palace.manager.api.config import Configuration
 from palace.manager.api.overdrive.api import OverdriveAPI
 from palace.manager.api.overdrive.constants import OverdriveConstants
@@ -14,6 +13,7 @@ from palace.manager.api.overdrive.settings import (
     OverdriveLibrarySettings,
     OverdriveSettings,
 )
+from palace.manager.circulation.dispatcher import CirculationApiDispatcher
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.patron import Patron
@@ -49,7 +49,7 @@ class OverdriveAPIFixture:
         )
         self.mock_http = http_client
         self.api = MockOverdriveAPI(db.session, self.collection)
-        self.circulation = CirculationAPI(
+        self.circulation = CirculationApiDispatcher(
             db.session,
             self.library,
             {self.collection.id: self.api},
