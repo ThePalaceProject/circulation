@@ -344,8 +344,15 @@ class BibliographicData(BaseMutableData):
         edition: Edition,
         collection: Collection | None,
         replace: ReplacementPolicy | None = None,
+        disable_async_calculation: bool = False,
     ) -> tuple[Edition, bool]:
         """Apply this BibliographicData to the given edition.
+        NOTE: disable_async_calculation is a stop-gap measure to prevent the code from falling into an infinite loop now
+        that we are moving away from the use of coverage records.  The value must be set to True when this method
+        is invoked within the context of work.calculate_work_presentation celery task. Otherwise some works will
+        queue and requeue calculation tasks indefinitely. This solution is a little ugly but it works.
+        I'm not sure how best to refactor the code to accomplish this end more elegantly.  So in the meantime,
+        endure the code-stench so that we get asynchronous presentation calculations going again.
 
         :return: (edition, made_core_changes), where edition is the newly-updated object, and made_core_changes
             answers the question: were any edition core fields harmed in the making of this update?
@@ -387,15 +394,6 @@ class BibliographicData(BaseMutableData):
 
         # Check whether we should do any work at all.
         data_source = self.load_data_source(db)
-
-        if self.data_source_last_updated and not replace.even_if_not_apparently_updated:
-            coverage_record = CoverageRecord.lookup(edition, data_source)
-            if coverage_record:
-                check_time = coverage_record.timestamp
-                last_time = self.data_source_last_updated
-                if check_time >= last_time:
-                    # The BibliographicData has not changed since last time. Do nothing.
-                    return edition, False
 
         identifier = edition.primary_identifier
 
@@ -645,7 +643,7 @@ class BibliographicData(BaseMutableData):
                 identifier=edition.primary_identifier,
                 on_multiple="interchangeable",
             )
-            if pool and pool.work:
+            if pool and pool.work and not disable_async_calculation:
                 work = pool.work
                 if work_requires_full_recalculation:
                     Work.queue_presentation_recalculation(

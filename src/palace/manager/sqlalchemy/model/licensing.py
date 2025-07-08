@@ -597,7 +597,9 @@ class LicensePool(Base):
         else:
             self.open_access = False
 
-    def set_presentation_edition(self, equivalent_editions=None):
+    def set_presentation_edition(
+        self, equivalent_editions=None, disable_async_calculation: bool = False
+    ):
         """Create or update the presentation Edition for this LicensePool.
         The presentation Edition is made of metadata from all Editions
         associated with the LicensePool's identifier.
@@ -645,7 +647,11 @@ class LicensePool(Base):
 
             policy = ReplacementPolicy.from_metadata_source()
             self.presentation_edition, edition_core_changed = bibliographic.apply(
-                _db, edition, collection=self.collection, replace=policy
+                _db,
+                edition,
+                collection=self.collection,
+                replace=policy,
+                disable_async_calculation=disable_async_calculation,
             )
             changed = changed or edition_core_changed
 

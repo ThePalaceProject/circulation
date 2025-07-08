@@ -40,7 +40,9 @@ def calculate_work_presentation(
                 if not work:
                     task.log.warning(f"No work with id={work_id}. Skipping...")
                     return
-                work.calculate_presentation(policy=policy)
+                work.calculate_presentation(
+                    policy=policy, disable_async_calculation=True
+                )
         except SQLAlchemyError as e:
             wait_time = exponential_backoff(task.request.retries)
             task.log.error(f"{e}. Retrying in {wait_time} seconds.")
@@ -76,7 +78,9 @@ def calculate_work_presentations(
                                     f"No work with id={wp.work_id}. Skipping..."
                                 )
                                 continue
-                            work.calculate_presentation(policy=wp.policy)
+                            work.calculate_presentation(
+                                policy=wp.policy, disable_async_calculation=True
+                            )
                             remaining_work_policies.remove(wp)
             except Exception as e:
                 # if a failure occurs requeue the items so that can be recalculated in the next round
