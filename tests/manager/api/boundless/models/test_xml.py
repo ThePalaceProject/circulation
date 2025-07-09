@@ -13,7 +13,7 @@ from palace.manager.api.boundless.models.xml import (
     Hold,
     RemoveHoldResponse,
 )
-from palace.manager.circulation.exceptions import (
+from palace.manager.api.circulation.exceptions import (
     AlreadyCheckedOut,
     AlreadyOnHold,
     NotFoundOnRemote,

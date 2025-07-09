@@ -45,8 +45,8 @@ from palace.manager.util.opds_writer import OPDSMessage
 from palace.manager.util.problem_detail import ProblemDetail
 
 if TYPE_CHECKING:
-    from palace.manager.circulation.dispatcher import CirculationApiDispatcher
-    from palace.manager.circulation.fulfillment import UrlFulfillment
+    from palace.manager.api.circulation.dispatcher import CirculationApiDispatcher
+    from palace.manager.api.circulation.fulfillment import UrlFulfillment
     from palace.manager.sqlalchemy.model.lane import WorkList
 
 

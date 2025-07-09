@@ -25,10 +25,9 @@ from palace.manager.api.bibliotheca import (
     ItemListParser,
     PatronCirculationParser,
 )
-from palace.manager.api.web_publication_manifest import FindawayManifest
-from palace.manager.circulation.data import HoldInfo, LoanInfo
-from palace.manager.circulation.dispatcher import CirculationApiDispatcher
-from palace.manager.circulation.exceptions import (
+from palace.manager.api.circulation.data import HoldInfo, LoanInfo
+from palace.manager.api.circulation.dispatcher import CirculationApiDispatcher
+from palace.manager.api.circulation.exceptions import (
     AlreadyCheckedOut,
     AlreadyOnHold,
     CannotHold,
@@ -42,7 +41,8 @@ from palace.manager.circulation.exceptions import (
     PatronLoanLimitReached,
     RemoteInitiatedServerError,
 )
-from palace.manager.circulation.fulfillment import Fulfillment
+from palace.manager.api.circulation.fulfillment import Fulfillment
+from palace.manager.api.web_publication_manifest import FindawayManifest
 from palace.manager.core.monitor import TimestampData
 from palace.manager.data_layer.policy.presentation import PresentationCalculationPolicy
 from palace.manager.scripts.coverage_provider import RunCollectionCoverageProviderScript

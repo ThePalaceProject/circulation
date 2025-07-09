@@ -9,6 +9,8 @@ import feedparser
 import pytest
 from flask import url_for
 
+from palace.manager.api.circulation.data import LoanInfo
+from palace.manager.api.circulation.fulfillment import Fulfillment
 from palace.manager.api.lanes import (
     ContributorFacets,
     ContributorLane,
@@ -19,8 +21,6 @@ from palace.manager.api.lanes import (
 )
 from palace.manager.api.metadata.novelist import NoveListAPI
 from palace.manager.api.problem_details import NO_SUCH_LANE, NOT_FOUND_ON_REMOTE
-from palace.manager.circulation.data import LoanInfo
-from palace.manager.circulation.fulfillment import Fulfillment
 from palace.manager.core.classifier import Classifier
 from palace.manager.core.entrypoint import AudiobooksEntryPoint
 from palace.manager.core.problem_details import INVALID_INPUT

@@ -11,6 +11,25 @@ from flask import Response as FlaskResponse, url_for
 from werkzeug import Response as wkResponse
 
 from palace.manager.api.bibliotheca import BibliothecaAPI
+from palace.manager.api.circulation.base import BaseCirculationAPI
+from palace.manager.api.circulation.data import HoldInfo, LoanInfo
+from palace.manager.api.circulation.dispatcher import CirculationApiDispatcher
+from palace.manager.api.circulation.exceptions import (
+    AlreadyOnHold,
+    CannotReleaseHold,
+    CannotReturn,
+    HoldsNotPermitted,
+    NoAvailableCopies,
+    NoLicenses,
+    NotFoundOnRemote,
+    PatronHoldLimitReached,
+)
+from palace.manager.api.circulation.fulfillment import (
+    DirectFulfillment,
+    FetchFulfillment,
+    Fulfillment,
+    RedirectFulfillment,
+)
 from palace.manager.api.problem_details import (
     BAD_DELIVERY_MECHANISM,
     CANNOT_RELEASE_HOLD,
@@ -21,25 +40,6 @@ from palace.manager.api.problem_details import (
     NO_LICENSES,
     NOT_FOUND_ON_REMOTE,
     OUTSTANDING_FINES,
-)
-from palace.manager.circulation.base import BaseCirculationAPI
-from palace.manager.circulation.data import HoldInfo, LoanInfo
-from palace.manager.circulation.dispatcher import CirculationApiDispatcher
-from palace.manager.circulation.exceptions import (
-    AlreadyOnHold,
-    CannotReleaseHold,
-    CannotReturn,
-    HoldsNotPermitted,
-    NoAvailableCopies,
-    NoLicenses,
-    NotFoundOnRemote,
-    PatronHoldLimitReached,
-)
-from palace.manager.circulation.fulfillment import (
-    DirectFulfillment,
-    FetchFulfillment,
-    Fulfillment,
-    RedirectFulfillment,
 )
 from palace.manager.core.opds_import import OPDSAPI
 from palace.manager.core.problem_details import INTEGRATION_ERROR, INVALID_INPUT

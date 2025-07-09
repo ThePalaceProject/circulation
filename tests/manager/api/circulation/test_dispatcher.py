@@ -9,10 +9,10 @@ import pytest
 from flask import Flask
 from freezegun import freeze_time
 
-from palace.manager.circulation.base import BaseCirculationAPI
-from palace.manager.circulation.data import HoldInfo, LoanInfo
-from palace.manager.circulation.dispatcher import CirculationApiDispatcher
-from palace.manager.circulation.exceptions import (
+from palace.manager.api.circulation.base import BaseCirculationAPI
+from palace.manager.api.circulation.data import HoldInfo, LoanInfo
+from palace.manager.api.circulation.dispatcher import CirculationApiDispatcher
+from palace.manager.api.circulation.exceptions import (
     AlreadyCheckedOut,
     AlreadyOnHold,
     AuthorizationBlocked,

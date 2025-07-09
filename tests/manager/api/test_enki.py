@@ -7,6 +7,16 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from palace.manager.api.circulation.data import LoanInfo
+from palace.manager.api.circulation.exceptions import (
+    NoAvailableCopies,
+    PatronAuthorizationFailedException,
+    RemoteInitiatedServerError,
+)
+from palace.manager.api.circulation.fulfillment import (
+    FetchFulfillment,
+    RedirectFulfillment,
+)
 from palace.manager.api.enki import (
     BibliographicParser,
     EnkiAPI,
@@ -16,13 +26,6 @@ from palace.manager.api.enki import (
     EnkiSettings,
 )
 from palace.manager.api.overdrive.api import OverdriveAPI
-from palace.manager.circulation.data import LoanInfo
-from palace.manager.circulation.exceptions import (
-    NoAvailableCopies,
-    PatronAuthorizationFailedException,
-    RemoteInitiatedServerError,
-)
-from palace.manager.circulation.fulfillment import FetchFulfillment, RedirectFulfillment
 from palace.manager.core.monitor import TimestampData
 from palace.manager.data_layer.bibliographic import BibliographicData
 from palace.manager.data_layer.circulation import CirculationData

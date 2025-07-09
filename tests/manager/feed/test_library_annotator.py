@@ -11,11 +11,11 @@ from uritemplate import URITemplate
 
 from palace.manager.api.adobe_vendor_id import AuthdataUtility
 from palace.manager.api.boundless.constants import BAKER_TAYLOR_KDRM_PARAMS
+from palace.manager.api.circulation.base import BaseCirculationAPI
+from palace.manager.api.circulation.dispatcher import CirculationApiDispatcher
+from palace.manager.api.circulation.fulfillment import RedirectFulfillment
 from palace.manager.api.lanes import ContributorLane
 from palace.manager.api.metadata.novelist import NoveListAPI, NoveListApiSettings
-from palace.manager.circulation.base import BaseCirculationAPI
-from palace.manager.circulation.dispatcher import CirculationApiDispatcher
-from palace.manager.circulation.fulfillment import RedirectFulfillment
 from palace.manager.core.classifier import Classifier, Fantasy, Urban_Fantasy
 from palace.manager.core.entrypoint import (
     AudiobooksEntryPoint,

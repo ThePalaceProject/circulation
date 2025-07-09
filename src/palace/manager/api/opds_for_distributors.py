@@ -10,15 +10,15 @@ from flask_babel import lazy_gettext as _
 from sqlalchemy.orm import Session
 from typing_extensions import Unpack
 
-from palace.manager.api.selftest import HasCollectionSelfTests
-from palace.manager.circulation.base import BaseCirculationAPI
-from palace.manager.circulation.data import HoldInfo, LoanInfo
-from palace.manager.circulation.exceptions import (
+from palace.manager.api.circulation.base import BaseCirculationAPI
+from palace.manager.api.circulation.data import HoldInfo, LoanInfo
+from palace.manager.api.circulation.exceptions import (
     CannotFulfill,
     DeliveryMechanismError,
     LibraryAuthorizationFailedException,
 )
-from palace.manager.circulation.fulfillment import DirectFulfillment
+from palace.manager.api.circulation.fulfillment import DirectFulfillment
+from palace.manager.api.selftest import HasCollectionSelfTests
 from palace.manager.core.monitor import TimestampData
 from palace.manager.core.opds_import import (
     OPDSImporter,

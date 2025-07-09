@@ -15,6 +15,33 @@ from requests.structures import CaseInsensitiveDict
 from sqlalchemy.orm import Session
 from typing_extensions import Unpack
 
+from palace.manager.api.circulation.base import (
+    BaseCirculationAPI,
+    CirculationInternalFormatsMixin,
+    PatronActivityCirculationAPI,
+)
+from palace.manager.api.circulation.data import HoldInfo, LoanInfo
+from palace.manager.api.circulation.exceptions import (
+    AlreadyCheckedOut,
+    CannotFulfill,
+    CannotHold,
+    CannotLoan,
+    CannotReleaseHold,
+    CannotReturn,
+    DeliveryMechanismError,
+    FormatNotAvailable,
+    FulfilledOnIncompatiblePlatform,
+    NoAcceptableFormat,
+    NoActiveLoan,
+    NoAvailableCopies,
+    NotCheckedOut,
+    PatronAuthorizationFailedException,
+)
+from palace.manager.api.circulation.fulfillment import (
+    FetchFulfillment,
+    Fulfillment,
+    RedirectFulfillment,
+)
 from palace.manager.api.overdrive.advantage import OverdriveAdvantageAccount
 from palace.manager.api.overdrive.constants import (
     OVERDRIVE_FORMATS,
@@ -55,33 +82,6 @@ from palace.manager.api.overdrive.settings import (
 )
 from palace.manager.api.overdrive.util import _make_link_safe
 from palace.manager.api.selftest import HasCollectionSelfTests, SelfTestResult
-from palace.manager.circulation.base import (
-    BaseCirculationAPI,
-    CirculationInternalFormatsMixin,
-    PatronActivityCirculationAPI,
-)
-from palace.manager.circulation.data import HoldInfo, LoanInfo
-from palace.manager.circulation.exceptions import (
-    AlreadyCheckedOut,
-    CannotFulfill,
-    CannotHold,
-    CannotLoan,
-    CannotReleaseHold,
-    CannotReturn,
-    DeliveryMechanismError,
-    FormatNotAvailable,
-    FulfilledOnIncompatiblePlatform,
-    NoAcceptableFormat,
-    NoActiveLoan,
-    NoAvailableCopies,
-    NotCheckedOut,
-    PatronAuthorizationFailedException,
-)
-from palace.manager.circulation.fulfillment import (
-    FetchFulfillment,
-    Fulfillment,
-    RedirectFulfillment,
-)
 from palace.manager.core.config import CannotLoadConfiguration, Configuration
 from palace.manager.core.exceptions import BasePalaceException, IntegrationException
 from palace.manager.data_layer.format import FormatData

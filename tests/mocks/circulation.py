@@ -7,15 +7,15 @@ from typing import Any
 from sqlalchemy.orm import Session
 from typing_extensions import Unpack
 
-from palace.manager.api.circulation_manager import CirculationManager
-from palace.manager.circulation.base import (
+from palace.manager.api.circulation.base import (
     BaseCirculationAPI,
     CirculationApiType,
     PatronActivityCirculationAPI,
 )
-from palace.manager.circulation.data import HoldInfo, LoanInfo
-from palace.manager.circulation.dispatcher import CirculationApiDispatcher
-from palace.manager.circulation.fulfillment import Fulfillment
+from palace.manager.api.circulation.data import HoldInfo, LoanInfo
+from palace.manager.api.circulation.dispatcher import CirculationApiDispatcher
+from palace.manager.api.circulation.fulfillment import Fulfillment
+from palace.manager.api.circulation_manager import CirculationManager
 from palace.manager.integration.settings import BaseSettings
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.service.container import Services

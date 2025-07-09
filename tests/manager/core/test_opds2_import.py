@@ -8,9 +8,9 @@ import pytest
 from pydantic import ValidationError
 from requests import Response
 
-from palace.manager.circulation.dispatcher import CirculationApiDispatcher
-from palace.manager.circulation.exceptions import CannotFulfill
-from palace.manager.circulation.fulfillment import Fulfillment, RedirectFulfillment
+from palace.manager.api.circulation.dispatcher import CirculationApiDispatcher
+from palace.manager.api.circulation.exceptions import CannotFulfill
+from palace.manager.api.circulation.fulfillment import Fulfillment, RedirectFulfillment
 from palace.manager.core.opds2_import import OPDS2API, OPDS2Importer, OPDS2ImportMonitor
 from palace.manager.sqlalchemy.constants import (
     EditionConstants,

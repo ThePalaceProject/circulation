@@ -13,17 +13,9 @@ from sqlalchemy.orm import Session
 from typing_extensions import Unpack
 from uritemplate import URITemplate
 
-from palace.manager.api.lcp.hash import Hasher, HasherFactory
-from palace.manager.api.odl.auth import OdlAuthenticatedRequest, OpdsWithOdlException
-from palace.manager.api.odl.constants import FEEDBOOKS_AUDIO
-from palace.manager.api.odl.settings import (
-    OPDS2AuthType,
-    OPDS2WithODLLibrarySettings,
-    OPDS2WithODLSettings,
-)
-from palace.manager.circulation.base import BaseCirculationAPI
-from palace.manager.circulation.data import HoldInfo, LoanInfo
-from palace.manager.circulation.exceptions import (
+from palace.manager.api.circulation.base import BaseCirculationAPI
+from palace.manager.api.circulation.data import HoldInfo, LoanInfo
+from palace.manager.api.circulation.exceptions import (
     AlreadyCheckedOut,
     AlreadyOnHold,
     CannotFulfill,
@@ -40,12 +32,20 @@ from palace.manager.circulation.exceptions import (
     PatronHoldLimitReached,
     PatronLoanLimitReached,
 )
-from palace.manager.circulation.fulfillment import (
+from palace.manager.api.circulation.fulfillment import (
     DirectFulfillment,
     FetchFulfillment,
     Fulfillment,
     RedirectFulfillment,
     UrlFulfillment,
+)
+from palace.manager.api.lcp.hash import Hasher, HasherFactory
+from palace.manager.api.odl.auth import OdlAuthenticatedRequest, OpdsWithOdlException
+from palace.manager.api.odl.constants import FEEDBOOKS_AUDIO
+from palace.manager.api.odl.settings import (
+    OPDS2AuthType,
+    OPDS2WithODLLibrarySettings,
+    OPDS2WithODLSettings,
 )
 from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.core.lcp.credential import LCPCredentialFactory

@@ -6,6 +6,7 @@ from typing import Any
 
 import pytest
 
+from palace.manager.api.circulation.dispatcher import CirculationApiDispatcher
 from palace.manager.api.config import Configuration
 from palace.manager.api.overdrive.api import OverdriveAPI
 from palace.manager.api.overdrive.constants import OverdriveConstants
@@ -13,7 +14,6 @@ from palace.manager.api.overdrive.settings import (
     OverdriveLibrarySettings,
     OverdriveSettings,
 )
-from palace.manager.circulation.dispatcher import CirculationApiDispatcher
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.patron import Patron

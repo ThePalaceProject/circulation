@@ -6,15 +6,8 @@ from unittest.mock import MagicMock, create_autospec, patch
 
 import pytest
 
-from palace.manager.api.config import Configuration
-from palace.manager.api.overdrive.api import OverdriveAPI
-from palace.manager.api.overdrive.constants import OverdriveConstants
-from palace.manager.api.overdrive.exception import OverdriveValidationError
-from palace.manager.api.overdrive.fulfillment import OverdriveManifestFulfillment
-from palace.manager.api.overdrive.model import Checkout, Format, Link
-from palace.manager.api.overdrive.representation import OverdriveRepresentationExtractor
-from palace.manager.circulation.data import HoldInfo, LoanInfo
-from palace.manager.circulation.exceptions import (
+from palace.manager.api.circulation.data import HoldInfo, LoanInfo
+from palace.manager.api.circulation.exceptions import (
     CannotFulfill,
     CannotLoan,
     CannotReturn,
@@ -26,7 +19,17 @@ from palace.manager.circulation.exceptions import (
     PatronAuthorizationFailedException,
     PatronHoldLimitReached,
 )
-from palace.manager.circulation.fulfillment import FetchFulfillment, RedirectFulfillment
+from palace.manager.api.circulation.fulfillment import (
+    FetchFulfillment,
+    RedirectFulfillment,
+)
+from palace.manager.api.config import Configuration
+from palace.manager.api.overdrive.api import OverdriveAPI
+from palace.manager.api.overdrive.constants import OverdriveConstants
+from palace.manager.api.overdrive.exception import OverdriveValidationError
+from palace.manager.api.overdrive.fulfillment import OverdriveManifestFulfillment
+from palace.manager.api.overdrive.model import Checkout, Format, Link
+from palace.manager.api.overdrive.representation import OverdriveRepresentationExtractor
 from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.core.exceptions import BasePalaceException, IntegrationException
 from palace.manager.data_layer.policy.presentation import PresentationCalculationPolicy

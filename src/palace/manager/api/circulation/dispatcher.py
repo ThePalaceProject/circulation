@@ -10,15 +10,13 @@ from flask_babel import lazy_gettext as _
 from sqlalchemy.orm import Session
 from typing_extensions import Unpack
 
-from palace.manager.api.util.flask import get_request_library
-from palace.manager.api.util.patron import PatronUtility
-from palace.manager.circulation.base import (
+from palace.manager.api.circulation.base import (
     BaseCirculationAPI,
     CirculationApiType,
     PatronActivityCirculationAPI,
 )
-from palace.manager.circulation.data import HoldInfo, LoanInfo
-from palace.manager.circulation.exceptions import (
+from palace.manager.api.circulation.data import HoldInfo, LoanInfo
+from palace.manager.api.circulation.exceptions import (
     AlreadyCheckedOut,
     AlreadyOnHold,
     CannotFulfill,
@@ -36,7 +34,9 @@ from palace.manager.circulation.exceptions import (
     PatronHoldLimitReached,
     PatronLoanLimitReached,
 )
-from palace.manager.circulation.fulfillment import Fulfillment
+from palace.manager.api.circulation.fulfillment import Fulfillment
+from palace.manager.api.util.flask import get_request_library
+from palace.manager.api.util.patron import PatronUtility
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.library import Library

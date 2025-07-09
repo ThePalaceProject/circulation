@@ -22,16 +22,16 @@ from requests import Response
 from sqlalchemy.orm.session import Session
 from typing_extensions import Unpack
 
-from palace.manager.api.saml.credential import SAMLCredentialManager
-from palace.manager.circulation.base import BaseCirculationAPI
-from palace.manager.circulation.data import HoldInfo, LoanInfo
-from palace.manager.circulation.exceptions import (
+from palace.manager.api.circulation.base import BaseCirculationAPI
+from palace.manager.api.circulation.data import HoldInfo, LoanInfo
+from palace.manager.api.circulation.exceptions import (
     CurrentlyAvailable,
     FormatNotAvailable,
     NotOnHold,
 )
-from palace.manager.circulation.fulfillment import RedirectFulfillment
-from palace.manager.circulation.settings import BaseCirculationApiSettings
+from palace.manager.api.circulation.fulfillment import RedirectFulfillment
+from palace.manager.api.circulation.settings import BaseCirculationApiSettings
+from palace.manager.api.saml.credential import SAMLCredentialManager
 from palace.manager.core.classifier import Classifier
 from palace.manager.core.coverage import CoverageFailure
 from palace.manager.core.monitor import CollectionMonitor, TimestampData

@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any
 
-from palace.manager.circulation.dispatcher import CirculationApiDispatcher
+from palace.manager.api.circulation.dispatcher import CirculationApiDispatcher
 from palace.manager.feed.annotator.circulation import LibraryAnnotator
 from palace.manager.feed.annotator.verbose import VerboseAnnotator
 from palace.manager.feed.types import FeedData, Link, WorkEntry

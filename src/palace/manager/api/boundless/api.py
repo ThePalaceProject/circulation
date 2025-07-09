@@ -32,14 +32,12 @@ from palace.manager.api.boundless.settings import (
     BoundlessLibrarySettings,
     BoundlessSettings,
 )
-from palace.manager.api.selftest import HasCollectionSelfTests
-from palace.manager.api.web_publication_manifest import FindawayManifest, SpineItem
-from palace.manager.circulation.base import (
+from palace.manager.api.circulation.base import (
     BaseCirculationAPI,
     PatronActivityCirculationAPI,
 )
-from palace.manager.circulation.data import HoldInfo, LoanInfo
-from palace.manager.circulation.exceptions import (
+from palace.manager.api.circulation.data import HoldInfo, LoanInfo
+from palace.manager.api.circulation.exceptions import (
     CannotFulfill,
     DeliveryMechanismError,
     FormatNotAvailable,
@@ -47,7 +45,9 @@ from palace.manager.circulation.exceptions import (
     NoActiveLoan,
     RemoteInitiatedServerError,
 )
-from palace.manager.circulation.fulfillment import DirectFulfillment, Fulfillment
+from palace.manager.api.circulation.fulfillment import DirectFulfillment, Fulfillment
+from palace.manager.api.selftest import HasCollectionSelfTests
+from palace.manager.api.web_publication_manifest import FindawayManifest, SpineItem
 from palace.manager.core.selftest import SelfTestResult
 from palace.manager.data_layer.bibliographic import BibliographicData
 from palace.manager.data_layer.circulation import CirculationData

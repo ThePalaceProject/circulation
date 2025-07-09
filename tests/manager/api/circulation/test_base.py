@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from palace.manager.api.bibliotheca import BibliothecaAPI
-from palace.manager.circulation.data import HoldInfo, LoanInfo
+from palace.manager.api.circulation.data import HoldInfo, LoanInfo
 from palace.manager.data_layer.format import FormatData
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.identifier import Identifier

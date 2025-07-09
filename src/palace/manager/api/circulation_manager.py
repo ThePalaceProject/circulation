@@ -10,6 +10,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from palace.manager.api.authenticator import Authenticator
+from palace.manager.api.circulation.base import CirculationApiType
+from palace.manager.api.circulation.dispatcher import CirculationApiDispatcher
 from palace.manager.api.config import Configuration
 from palace.manager.api.controller.analytics import AnalyticsController
 from palace.manager.api.controller.annotation import AnnotationController
@@ -31,8 +33,6 @@ from palace.manager.api.lanes import load_lanes
 from palace.manager.api.problem_details import NO_SUCH_LANE
 from palace.manager.api.saml.controller import SAMLController
 from palace.manager.api.util.flask import get_request_library
-from palace.manager.circulation.base import CirculationApiType
-from palace.manager.circulation.dispatcher import CirculationApiDispatcher
 from palace.manager.core.app_server import (
     ApplicationVersionController,
     load_facets_from_request,

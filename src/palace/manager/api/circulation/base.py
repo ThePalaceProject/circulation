@@ -11,10 +11,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from typing_extensions import Unpack
 
-from palace.manager.circulation.data import HoldInfo, LoanInfo
-from palace.manager.circulation.exceptions import DeliveryMechanismError
-from palace.manager.circulation.fulfillment import Fulfillment
-from palace.manager.circulation.settings import BaseCirculationApiSettings
+from palace.manager.api.circulation.data import HoldInfo, LoanInfo
+from palace.manager.api.circulation.exceptions import DeliveryMechanismError
+from palace.manager.api.circulation.fulfillment import Fulfillment
+from palace.manager.api.circulation.settings import BaseCirculationApiSettings
 from palace.manager.integration.base import HasLibraryIntegrationConfiguration
 from palace.manager.integration.settings import BaseSettings
 from palace.manager.sqlalchemy.model.collection import Collection

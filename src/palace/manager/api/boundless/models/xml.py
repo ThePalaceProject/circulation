@@ -15,7 +15,7 @@ from palace.manager.api.boundless.models.validators import (
     BoundlessXmlDate,
     BoundlessXmlDateTime,
 )
-from palace.manager.circulation.exceptions import AlreadyOnHold
+from palace.manager.api.circulation.exceptions import AlreadyOnHold
 
 
 class BaseBoundlessXmlModel(

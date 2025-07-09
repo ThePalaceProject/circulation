@@ -1,7 +1,7 @@
 import pytest
 from flask import Response
 
-from palace.manager.circulation.fulfillment import (
+from palace.manager.api.circulation.fulfillment import (
     DirectFulfillment,
     FetchFulfillment,
     RedirectFulfillment,

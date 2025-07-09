@@ -31,6 +31,11 @@ from palace.manager.api.authentication.base import (
 )
 from palace.manager.api.boundless.api import BoundlessApi
 from palace.manager.api.boundless.settings import BoundlessSettings
+from palace.manager.api.circulation.base import (
+    BaseCirculationAPI,
+    SettingsType as TCirculationSettings,
+)
+from palace.manager.api.circulation.settings import BaseCirculationApiSettings
 from palace.manager.api.discovery.opds_registration import (
     OpdsRegistrationService,
     OpdsRegistrationServiceSettings,
@@ -43,11 +48,6 @@ from palace.manager.api.simple_authentication import (
     SimpleAuthenticationProvider,
     SimpleAuthSettings,
 )
-from palace.manager.circulation.base import (
-    BaseCirculationAPI,
-    SettingsType as TCirculationSettings,
-)
-from palace.manager.circulation.settings import BaseCirculationApiSettings
 from palace.manager.core.classifier import Classifier
 from palace.manager.core.config import Configuration
 from palace.manager.core.exceptions import BasePalaceException, PalaceValueError

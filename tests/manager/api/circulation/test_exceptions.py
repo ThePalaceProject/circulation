@@ -1,12 +1,7 @@
 import pytest
 from flask_babel import lazy_gettext as _
 
-from palace.manager.api.problem_details import (
-    HOLD_LIMIT_REACHED,
-    LOAN_LIMIT_REACHED,
-    OUTSTANDING_FINES,
-)
-from palace.manager.circulation.exceptions import (
+from palace.manager.api.circulation.exceptions import (
     AlreadyCheckedOut,
     AlreadyOnHold,
     AuthorizationBlocked,
@@ -41,6 +36,11 @@ from palace.manager.circulation.exceptions import (
     PatronHoldLimitReached,
     PatronLoanLimitReached,
     RemoteInitiatedServerError,
+)
+from palace.manager.api.problem_details import (
+    HOLD_LIMIT_REACHED,
+    LOAN_LIMIT_REACHED,
+    OUTSTANDING_FINES,
 )
 from palace.manager.core.problem_details import INTEGRATION_ERROR, INTERNAL_SERVER_ERROR
 from palace.manager.util.problem_detail import ProblemDetail

@@ -13,9 +13,9 @@ from sqlalchemy.orm import Session
 from typing_extensions import Unpack
 from uritemplate import URITemplate
 
-from palace.manager.circulation.base import BaseCirculationAPI
-from palace.manager.circulation.exceptions import CannotFulfill
-from palace.manager.circulation.fulfillment import RedirectFulfillment
+from palace.manager.api.circulation.base import BaseCirculationAPI
+from palace.manager.api.circulation.exceptions import CannotFulfill
+from palace.manager.api.circulation.fulfillment import RedirectFulfillment
 from palace.manager.core.coverage import CoverageFailure
 from palace.manager.core.opds_import import (
     BaseOPDSAPI,
