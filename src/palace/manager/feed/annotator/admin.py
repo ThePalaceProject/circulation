@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any
 
-from palace.manager.api.circulation import CirculationAPI
+from palace.manager.api.circulation.dispatcher import CirculationApiDispatcher
 from palace.manager.feed.annotator.circulation import LibraryAnnotator
 from palace.manager.feed.annotator.verbose import VerboseAnnotator
 from palace.manager.feed.types import FeedData, Link, WorkEntry
@@ -21,7 +21,9 @@ class AdminAnnotator(LibraryAnnotator):
     # REL_SUPPRESS_FOR_COLLECTION = "http://librarysimplified.org/terms/rel/hide"
     # REL_UNSUPPRESS_FOR_COLLECTION = "http://librarysimplified.org/terms/rel/restore"
 
-    def __init__(self, circulation: CirculationAPI | None, library: Library) -> None:
+    def __init__(
+        self, circulation: CirculationApiDispatcher | None, library: Library
+    ) -> None:
         super().__init__(circulation, None, library)
 
     def annotate_work_entry(

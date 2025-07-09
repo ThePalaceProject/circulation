@@ -19,11 +19,9 @@ from sqlalchemy.orm import Session
 from palace.manager.api.adobe_vendor_id import AuthdataUtility
 from palace.manager.api.annotations import AnnotationWriter
 from palace.manager.api.boundless.constants import BAKER_TAYLOR_KDRM_PARAMS
-from palace.manager.api.circulation import (
-    BaseCirculationAPI,
-    CirculationAPI,
-    UrlFulfillment,
-)
+from palace.manager.api.circulation.base import BaseCirculationAPI
+from palace.manager.api.circulation.dispatcher import CirculationApiDispatcher
+from palace.manager.api.circulation.fulfillment import UrlFulfillment
 from palace.manager.api.config import Configuration
 from palace.manager.api.lanes import DynamicLane
 from palace.manager.api.metadata.novelist import NoveListAPI
@@ -717,7 +715,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
 
     def __init__(
         self,
-        circulation: CirculationAPI | None,
+        circulation: CirculationApiDispatcher | None,
         lane: WorkList | None,
         library: Library,
         patron: Patron | None = None,

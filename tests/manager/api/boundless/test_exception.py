@@ -7,7 +7,7 @@ from palace.manager.api.boundless.exception import (
     StatusResponseParser,
 )
 from palace.manager.api.boundless.models.json import LicenseServerStatus
-from palace.manager.api.circulation_exceptions import (
+from palace.manager.api.circulation.exceptions import (
     NotFoundOnRemote,
     RemoteInitiatedServerError,
 )

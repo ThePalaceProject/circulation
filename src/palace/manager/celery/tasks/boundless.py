@@ -10,7 +10,7 @@ from sqlalchemy.orm.exc import ObjectDeletedError, StaleDataError
 
 from palace.manager.api.boundless.api import BoundlessApi
 from palace.manager.api.boundless.requests import BoundlessRequests
-from palace.manager.api.circulation import (
+from palace.manager.api.circulation.base import (
     BaseCirculationAPI,
     LibrarySettingsType,
     SettingsType,

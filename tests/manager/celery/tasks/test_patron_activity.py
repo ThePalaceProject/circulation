@@ -3,8 +3,8 @@ from unittest.mock import MagicMock, create_autospec, patch
 import pytest
 from sqlalchemy.orm.exc import StaleDataError
 
-from palace.manager.api.circulation import HoldInfo, LoanInfo
-from palace.manager.api.circulation_exceptions import PatronAuthorizationFailedException
+from palace.manager.api.circulation.data import HoldInfo, LoanInfo
+from palace.manager.api.circulation.exceptions import PatronAuthorizationFailedException
 from palace.manager.celery.task import Task
 from palace.manager.celery.tasks.patron_activity import sync_patron_activity
 from palace.manager.service.integration_registry.license_providers import (

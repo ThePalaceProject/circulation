@@ -7,7 +7,7 @@ from bidict import frozenbidict
 from flask import Response
 from werkzeug.datastructures import Authorization
 
-from palace.manager.api.circulation_exceptions import RemoteInitiatedServerError
+from palace.manager.api.circulation.exceptions import RemoteInitiatedServerError
 from palace.manager.api.problem_details import (
     BAD_DELIVERY_MECHANISM,
     FORBIDDEN_BY_POLICY,

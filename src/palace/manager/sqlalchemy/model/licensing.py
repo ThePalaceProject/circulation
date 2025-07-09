@@ -26,7 +26,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, lazyload, relationship
 from sqlalchemy.orm.session import Session
 
-from palace.manager.api.circulation_exceptions import CannotHold, CannotLoan
+from palace.manager.api.circulation.exceptions import CannotHold, CannotLoan
 from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.opds.odl.info import LicenseStatus
 from palace.manager.sqlalchemy.constants import (

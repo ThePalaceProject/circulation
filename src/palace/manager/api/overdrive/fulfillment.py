@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import flask
 
-from palace.manager.api.circulation import RedirectFulfillment
+from palace.manager.api.circulation.fulfillment import RedirectFulfillment
 
 
 class OverdriveManifestFulfillment(RedirectFulfillment):

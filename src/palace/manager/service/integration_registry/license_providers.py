@@ -8,7 +8,7 @@ from palace.manager.integration.goals import Goals
 from palace.manager.service.integration_registry.base import IntegrationRegistry
 
 if TYPE_CHECKING:
-    from palace.manager.api.circulation import CirculationApiType
+    from palace.manager.api.circulation.base import CirculationApiType
     from palace.manager.sqlalchemy.model.collection import Collection
 
 

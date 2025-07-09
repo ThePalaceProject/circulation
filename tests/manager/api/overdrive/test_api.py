@@ -6,13 +6,8 @@ from unittest.mock import MagicMock, create_autospec, patch
 
 import pytest
 
-from palace.manager.api.circulation import (
-    FetchFulfillment,
-    HoldInfo,
-    LoanInfo,
-    RedirectFulfillment,
-)
-from palace.manager.api.circulation_exceptions import (
+from palace.manager.api.circulation.data import HoldInfo, LoanInfo
+from palace.manager.api.circulation.exceptions import (
     CannotFulfill,
     CannotLoan,
     CannotReturn,
@@ -23,6 +18,10 @@ from palace.manager.api.circulation_exceptions import (
     NotCheckedOut,
     PatronAuthorizationFailedException,
     PatronHoldLimitReached,
+)
+from palace.manager.api.circulation.fulfillment import (
+    FetchFulfillment,
+    RedirectFulfillment,
 )
 from palace.manager.api.config import Configuration
 from palace.manager.api.overdrive.api import OverdriveAPI

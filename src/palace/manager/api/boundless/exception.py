@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, NamedTuple
 
 from lxml import etree
 
-from palace.manager.api.circulation_exceptions import (
+from palace.manager.api.circulation.exceptions import (
     AlreadyCheckedOut,
     CannotFulfill,
     CannotLoan,

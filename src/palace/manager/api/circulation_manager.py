@@ -10,7 +10,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from palace.manager.api.authenticator import Authenticator
-from palace.manager.api.circulation import CirculationAPI, CirculationApiType
+from palace.manager.api.circulation.base import CirculationApiType
+from palace.manager.api.circulation.dispatcher import CirculationApiDispatcher
 from palace.manager.api.config import Configuration
 from palace.manager.api.controller.analytics import AnalyticsController
 from palace.manager.api.controller.annotation import AnnotationController
@@ -307,8 +308,10 @@ class CirculationManager(LoggerMixin):
                     collection.id: collection_apis[collection.id]
                     for collection in libraries_collections[library.id]
                 }
-                new_circulation_apis[library.id] = self.setup_circulation_api(
-                    self._db, library, library_collection_apis, self.analytics
+                new_circulation_apis[library.id] = (
+                    self.setup_circulation_api_dispatcher(
+                        self._db, library, library_collection_apis, self.analytics
+                    )
                 )
 
         self.top_level_lanes = new_top_level_lanes
@@ -325,15 +328,17 @@ class CirculationManager(LoggerMixin):
             if lane.sublanes:
                 self.log_lanes(lane.sublanes, level + 1)
 
-    def setup_circulation_api(
+    def setup_circulation_api_dispatcher(
         self,
         db: Session,
         library: Library,
         library_collection_apis: Mapping[int | None, CirculationApiType],
         analytics: Analytics | None = None,
-    ) -> CirculationAPI:
+    ) -> CirculationApiDispatcher:
         """Set up the Circulation API object."""
-        return CirculationAPI(db, library, library_collection_apis, analytics=analytics)
+        return CirculationApiDispatcher(
+            db, library, library_collection_apis, analytics=analytics
+        )
 
     def setup_one_time_controllers(self):
         """Set up all the controllers that will be used by the web app.

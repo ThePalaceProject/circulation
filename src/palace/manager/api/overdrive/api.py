@@ -15,17 +15,13 @@ from requests.structures import CaseInsensitiveDict
 from sqlalchemy.orm import Session
 from typing_extensions import Unpack
 
-from palace.manager.api.circulation import (
+from palace.manager.api.circulation.base import (
     BaseCirculationAPI,
     CirculationInternalFormatsMixin,
-    FetchFulfillment,
-    Fulfillment,
-    HoldInfo,
-    LoanInfo,
     PatronActivityCirculationAPI,
-    RedirectFulfillment,
 )
-from palace.manager.api.circulation_exceptions import (
+from palace.manager.api.circulation.data import HoldInfo, LoanInfo
+from palace.manager.api.circulation.exceptions import (
     AlreadyCheckedOut,
     CannotFulfill,
     CannotHold,
@@ -40,6 +36,11 @@ from palace.manager.api.circulation_exceptions import (
     NoAvailableCopies,
     NotCheckedOut,
     PatronAuthorizationFailedException,
+)
+from palace.manager.api.circulation.fulfillment import (
+    FetchFulfillment,
+    Fulfillment,
+    RedirectFulfillment,
 )
 from palace.manager.api.overdrive.advantage import OverdriveAdvantageAccount
 from palace.manager.api.overdrive.constants import (

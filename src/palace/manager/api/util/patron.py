@@ -2,7 +2,7 @@ import datetime
 
 import dateutil
 
-from palace.manager.api.circulation_exceptions import (
+from palace.manager.api.circulation.exceptions import (
     AuthorizationBlocked,
     AuthorizationExpired,
     CannotLoan,

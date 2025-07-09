@@ -7,11 +7,11 @@ from pydantic import TypeAdapter
 from werkzeug import Response as wkResponse
 
 from palace.manager.api.boundless.constants import BAKER_TAYLOR_KDRM_PARAMS
-from palace.manager.api.circulation import UrlFulfillment
-from palace.manager.api.circulation_exceptions import (
+from palace.manager.api.circulation.exceptions import (
     CirculationException,
     RemoteInitiatedServerError,
 )
+from palace.manager.api.circulation.fulfillment import UrlFulfillment
 from palace.manager.api.controller.circulation_manager import (
     CirculationManagerController,
 )

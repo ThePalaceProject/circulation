@@ -12,12 +12,7 @@ import pytest
 from freezegun import freeze_time
 from sqlalchemy import delete
 
-from palace.manager.api.circulation import (
-    DirectFulfillment,
-    FetchFulfillment,
-    RedirectFulfillment,
-)
-from palace.manager.api.circulation_exceptions import (
+from palace.manager.api.circulation.exceptions import (
     AlreadyCheckedOut,
     AlreadyOnHold,
     CannotFulfill,
@@ -32,6 +27,11 @@ from palace.manager.api.circulation_exceptions import (
     NotOnHold,
     PatronHoldLimitReached,
     PatronLoanLimitReached,
+)
+from palace.manager.api.circulation.fulfillment import (
+    DirectFulfillment,
+    FetchFulfillment,
+    RedirectFulfillment,
 )
 from palace.manager.api.odl.api import OPDS2WithODLApi
 from palace.manager.api.odl.constants import FEEDBOOKS_AUDIO

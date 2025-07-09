@@ -5,7 +5,7 @@ import dateutil
 import pytest
 
 from palace.manager.api.authentication.base import PatronData
-from palace.manager.api.circulation_exceptions import (
+from palace.manager.api.circulation.exceptions import (
     AuthorizationBlocked,
     AuthorizationExpired,
     OutstandingFines,

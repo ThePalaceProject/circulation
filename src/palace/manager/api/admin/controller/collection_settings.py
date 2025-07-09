@@ -18,7 +18,7 @@ from palace.manager.api.admin.problem_details import (
     PROTOCOL_DOES_NOT_SUPPORT_PARENTS,
 )
 from palace.manager.api.admin.util.flask import get_request_admin
-from palace.manager.api.circulation import CirculationApiType
+from palace.manager.api.circulation.base import CirculationApiType
 from palace.manager.celery.tasks.collection_delete import collection_delete
 from palace.manager.celery.tasks.reaper import (
     reap_unassociated_holds,

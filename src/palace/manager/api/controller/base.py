@@ -3,7 +3,7 @@ from flask import Response
 from flask_babel import lazy_gettext as _
 from werkzeug.datastructures import Authorization
 
-from palace.manager.api.circulation_exceptions import RemoteInitiatedServerError
+from palace.manager.api.circulation.exceptions import RemoteInitiatedServerError
 from palace.manager.api.problem_details import INVALID_CREDENTIALS, LIBRARY_NOT_FOUND
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.patron import Patron

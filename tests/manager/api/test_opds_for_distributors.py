@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from freezegun import freeze_time
 
-from palace.manager.api.circulation_exceptions import (
+from palace.manager.api.circulation.exceptions import (
     CannotFulfill,
     LibraryAuthorizationFailedException,
 )

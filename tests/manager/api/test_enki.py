@@ -7,15 +7,15 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from palace.manager.api.circulation import (
-    FetchFulfillment,
-    LoanInfo,
-    RedirectFulfillment,
-)
-from palace.manager.api.circulation_exceptions import (
+from palace.manager.api.circulation.data import LoanInfo
+from palace.manager.api.circulation.exceptions import (
     NoAvailableCopies,
     PatronAuthorizationFailedException,
     RemoteInitiatedServerError,
+)
+from palace.manager.api.circulation.fulfillment import (
+    FetchFulfillment,
+    RedirectFulfillment,
 )
 from palace.manager.api.enki import (
     BibliographicParser,

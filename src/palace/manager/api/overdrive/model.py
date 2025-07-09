@@ -17,7 +17,7 @@ from pydantic.alias_generators import to_camel
 from requests import Response
 from typing_extensions import Self
 
-from palace.manager.api.circulation_exceptions import (
+from palace.manager.api.circulation.exceptions import (
     AlreadyCheckedOut,
     AlreadyOnHold,
     CannotRenew,

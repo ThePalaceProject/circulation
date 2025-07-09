@@ -13,7 +13,7 @@ from palace.manager.api.admin.model.inventory_report import (
     InventoryReportInfo,
 )
 from palace.manager.api.admin.problem_details import ADMIN_NOT_AUTHORIZED
-from palace.manager.api.circulation import BaseCirculationAPI
+from palace.manager.api.circulation.base import BaseCirculationAPI
 from palace.manager.api.overdrive.api import OverdriveAPI
 from palace.manager.api.problem_details import LIBRARY_NOT_FOUND
 from palace.manager.core.opds_import import OPDSAPI

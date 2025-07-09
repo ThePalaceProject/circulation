@@ -13,17 +13,9 @@ from sqlalchemy.orm import Session
 from typing_extensions import Unpack
 from uritemplate import URITemplate
 
-from palace.manager.api.circulation import (
-    BaseCirculationAPI,
-    DirectFulfillment,
-    FetchFulfillment,
-    Fulfillment,
-    HoldInfo,
-    LoanInfo,
-    RedirectFulfillment,
-    UrlFulfillment,
-)
-from palace.manager.api.circulation_exceptions import (
+from palace.manager.api.circulation.base import BaseCirculationAPI
+from palace.manager.api.circulation.data import HoldInfo, LoanInfo
+from palace.manager.api.circulation.exceptions import (
     AlreadyCheckedOut,
     AlreadyOnHold,
     CannotFulfill,
@@ -39,6 +31,13 @@ from palace.manager.api.circulation_exceptions import (
     NotOnHold,
     PatronHoldLimitReached,
     PatronLoanLimitReached,
+)
+from palace.manager.api.circulation.fulfillment import (
+    DirectFulfillment,
+    FetchFulfillment,
+    Fulfillment,
+    RedirectFulfillment,
+    UrlFulfillment,
 )
 from palace.manager.api.lcp.hash import Hasher, HasherFactory
 from palace.manager.api.odl.auth import OdlAuthenticatedRequest, OpdsWithOdlException

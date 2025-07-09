@@ -10,16 +10,14 @@ from flask_babel import lazy_gettext as _
 from sqlalchemy.orm import Session
 from typing_extensions import Unpack
 
-from palace.manager.api.circulation import (
-    BaseCirculationAPI,
-    DirectFulfillment,
-    LoanInfo,
-)
-from palace.manager.api.circulation_exceptions import (
+from palace.manager.api.circulation.base import BaseCirculationAPI
+from palace.manager.api.circulation.data import HoldInfo, LoanInfo
+from palace.manager.api.circulation.exceptions import (
     CannotFulfill,
     DeliveryMechanismError,
     LibraryAuthorizationFailedException,
 )
+from palace.manager.api.circulation.fulfillment import DirectFulfillment
 from palace.manager.api.selftest import HasCollectionSelfTests
 from palace.manager.core.monitor import TimestampData
 from palace.manager.core.opds_import import (
@@ -52,7 +50,6 @@ from palace.manager.util.http import HTTP
 if TYPE_CHECKING:
     from requests import Response
 
-    from palace.manager.api.circulation import HoldInfo
     from palace.manager.core.coverage import CoverageFailure
     from palace.manager.core.selftest import SelfTestResult
     from palace.manager.data_layer.circulation import CirculationData

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from flask_babel import lazy_gettext as _
 
-from palace.manager.api.circulation import (
+from palace.manager.api.circulation.settings import (
     BaseCirculationApiSettings,
     BaseCirculationEbookLoanSettings,
 )

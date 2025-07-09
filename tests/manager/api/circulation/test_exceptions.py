@@ -1,7 +1,7 @@
 import pytest
 from flask_babel import lazy_gettext as _
 
-from palace.manager.api.circulation_exceptions import (
+from palace.manager.api.circulation.exceptions import (
     AlreadyCheckedOut,
     AlreadyOnHold,
     AuthorizationBlocked,

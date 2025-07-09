@@ -6,7 +6,7 @@ from uuid import uuid4
 
 import pytest
 
-from palace.manager.api.circulation_exceptions import (
+from palace.manager.api.circulation.exceptions import (
     AlreadyCheckedOut,
     AlreadyOnHold,
     CannotRenew,

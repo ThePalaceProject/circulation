@@ -9,7 +9,8 @@ import feedparser
 import pytest
 from flask import url_for
 
-from palace.manager.api.circulation import Fulfillment, LoanInfo
+from palace.manager.api.circulation.data import LoanInfo
+from palace.manager.api.circulation.fulfillment import Fulfillment
 from palace.manager.api.lanes import (
     ContributorFacets,
     ContributorLane,

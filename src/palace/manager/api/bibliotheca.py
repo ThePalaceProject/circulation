@@ -22,16 +22,12 @@ from pymarc import parse_xml_to_array
 from sqlalchemy.orm import Session
 from typing_extensions import Unpack
 
-from palace.manager.api.circulation import (
+from palace.manager.api.circulation.base import (
     BaseCirculationAPI,
-    BaseCirculationApiSettings,
-    BaseCirculationLoanSettings,
-    DirectFulfillment,
-    HoldInfo,
-    LoanInfo,
     PatronActivityCirculationAPI,
 )
-from palace.manager.api.circulation_exceptions import (
+from palace.manager.api.circulation.data import HoldInfo, LoanInfo
+from palace.manager.api.circulation.exceptions import (
     AlreadyCheckedOut,
     AlreadyOnHold,
     CannotHold,
@@ -45,6 +41,11 @@ from palace.manager.api.circulation_exceptions import (
     PatronHoldLimitReached,
     PatronLoanLimitReached,
     RemoteInitiatedServerError,
+)
+from palace.manager.api.circulation.fulfillment import DirectFulfillment
+from palace.manager.api.circulation.settings import (
+    BaseCirculationApiSettings,
+    BaseCirculationLoanSettings,
 )
 from palace.manager.api.selftest import HasCollectionSelfTests, SelfTestResult
 from palace.manager.api.web_publication_manifest import FindawayManifest, SpineItem

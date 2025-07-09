@@ -31,11 +31,11 @@ from palace.manager.api.authentication.base import (
 )
 from palace.manager.api.boundless.api import BoundlessApi
 from palace.manager.api.boundless.settings import BoundlessSettings
-from palace.manager.api.circulation import (
+from palace.manager.api.circulation.base import (
     BaseCirculationAPI,
-    BaseCirculationApiSettings,
     SettingsType as TCirculationSettings,
 )
+from palace.manager.api.circulation.settings import BaseCirculationApiSettings
 from palace.manager.api.discovery.opds_registration import (
     OpdsRegistrationService,
     OpdsRegistrationServiceSettings,

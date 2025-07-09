@@ -10,12 +10,14 @@ import requests_mock
 from lxml import etree
 from psycopg2.extras import NumericRange
 
-from palace.manager.api.circulation import CirculationAPI, LoanInfo, RedirectFulfillment
-from palace.manager.api.circulation_exceptions import (
+from palace.manager.api.circulation.data import LoanInfo
+from palace.manager.api.circulation.dispatcher import CirculationApiDispatcher
+from palace.manager.api.circulation.exceptions import (
     CurrentlyAvailable,
     FormatNotAvailable,
     NotOnHold,
 )
+from palace.manager.api.circulation.fulfillment import RedirectFulfillment
 from palace.manager.api.overdrive.api import OverdriveAPI
 from palace.manager.api.saml.credential import SAMLCredentialManager
 from palace.manager.api.saml.metadata.model import (
@@ -1468,7 +1470,7 @@ class TestOPDSImporter:
             pool.loan_to(patron)
 
             return (
-                CirculationAPI(
+                CirculationApiDispatcher(
                     session, library, {collection.id: OPDSAPI(session, collection)}
                 ),
                 patron,
