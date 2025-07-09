@@ -26,7 +26,7 @@ from palace.manager.sqlalchemy.model.licensing import RightsStatus
 from palace.manager.sqlalchemy.model.measurement import Measurement
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
 from palace.manager.sqlalchemy.model.work import Work
-from palace.manager.util.datetime_helpers import datetime_utc, utc_now
+from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.mocks.mock import LogCaptureHandler
 
@@ -326,48 +326,37 @@ class TestBibliographicData:
 
         assert bibliographic.published == published.date()
 
-    def test_coverage_record(self, db: DatabaseTransactionFixture):
-        edition, pool = db.edition(with_license_pool=True)
+    def test_disable_async_calculation_flag(self, db: DatabaseTransactionFixture):
+        edition, pool = db.edition(
+            with_license_pool=True,
+        )
+        work = db.work()
+        edition.work = work
+        pool.work = work
+
         data_source = edition.data_source
-
-        # No preexisting coverage record
-        coverage = CoverageRecord.lookup(edition, data_source)
-        assert coverage == None
-
-        last_update = datetime_utc(2015, 1, 1)
 
         m = BibliographicData(
             data_source_name=data_source.name,
             title="New title",
-            data_source_last_updated=last_update,
+            data_source_last_updated=datetime.datetime.now(),
         )
-        m.apply(db.session, edition, None)
 
-        coverage = CoverageRecord.lookup(edition, data_source)
-        assert last_update == coverage.timestamp
-        assert "New title" == edition.title
+        with patch.object(Work, "queue_presentation_recalculation") as queue:
+            m.apply(db.session, edition, None, disable_async_calculation=True)
+            assert "New title" == edition.title
+            # verify that the queue_presentation_recalculation was not called
+            assert queue.call_count == 0
 
-        older_last_update = datetime_utc(2014, 1, 1)
-        m = BibliographicData(
-            data_source_name=data_source.name,
-            title="Another new title",
-            data_source_last_updated=older_last_update,
-        )
-        m.apply(db.session, edition, None)
-        assert "New title" == edition.title
-
-        coverage = CoverageRecord.lookup(edition, data_source)
-        assert last_update == coverage.timestamp
-
-        m.apply(
-            db.session,
-            edition,
-            None,
-            replace=ReplacementPolicy(even_if_not_apparently_updated=True),
-        )
-        assert "Another new title" == edition.title
-        coverage = CoverageRecord.lookup(edition, data_source)
-        assert older_last_update == coverage.timestamp
+            m = BibliographicData(
+                data_source_name=data_source.name,
+                title="Another new title",
+                data_source_last_updated=datetime.datetime.now(),
+            )
+            m.apply(db.session, edition, None)
+            assert "Another new title" == edition.title
+            # verify that the queue_presentation_recalculation was called
+            assert queue.call_count == 1
 
     def test_defaults(self) -> None:
         # Verify that a BibliographicData object doesn't make any assumptions
