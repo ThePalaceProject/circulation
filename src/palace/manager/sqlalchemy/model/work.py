@@ -826,7 +826,9 @@ class Work(Base, LoggerMixin):
         if trigger_customlists_update:
             add_work_to_customlists_for_collection(self)
 
-    def calculate_presentation_edition(self, policy=None):
+    def calculate_presentation_edition(
+        self, policy=None, disable_async_calculation: bool = False
+    ):
         """Which of this Work's Editions should be used as the default?
         First, every LicensePool associated with this work must have
         its presentation edition set.
@@ -852,7 +854,9 @@ class Work(Base, LoggerMixin):
 
             # make sure the pool has most up-to-date idea of its presentation edition,
             # and then ask what it is.
-            pool_edition_changed = pool.set_presentation_edition()
+            pool_edition_changed = pool.set_presentation_edition(
+                disable_async_calculation=disable_async_calculation
+            )
             edition_metadata_changed = edition_metadata_changed or pool_edition_changed
             potential_presentation_edition = pool.presentation_edition
 
@@ -903,6 +907,7 @@ class Work(Base, LoggerMixin):
         exclude_search=False,
         default_fiction=None,
         default_audience=None,
+        disable_async_calculation=False,
     ):
         """Make a Work ready to show to patrons.
         Call calculate_presentation_edition() to find the best-quality presentation edition
@@ -925,7 +930,9 @@ class Work(Base, LoggerMixin):
 
         policy = policy or PresentationCalculationPolicy()
 
-        edition_changed = self.calculate_presentation_edition(policy)
+        edition_changed = self.calculate_presentation_edition(
+            policy, disable_async_calculation=disable_async_calculation
+        )
 
         if not self.presentation_edition:
             # Without a presentation edition, we can't calculate presentation
@@ -1188,7 +1195,6 @@ class Work(Base, LoggerMixin):
             waiting.add(work_id)
 
     @staticmethod
-    @inject
     def queue_presentation_recalculation(
         work_id: int | None,
         policy: PresentationCalculationPolicy,
