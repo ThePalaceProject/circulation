@@ -27,7 +27,6 @@ from palace.manager.api.boundless.models.json import (
     FulfillmentInfoResponse,
     FulfillmentInfoResponseT,
     LicenseServerStatus,
-    Token,
 )
 from palace.manager.api.boundless.models.xml import (
     AddHoldResponse,
@@ -36,6 +35,7 @@ from palace.manager.api.boundless.models.xml import (
     EarlyCheckinResponse,
     RemoveHoldResponse,
 )
+from palace.manager.api.model.token import Token
 from palace.manager.util.http import HTTP, BadResponseException, RequestKwargs
 from palace.manager.util.log import LoggerMixin
 from palace.manager.util.sentinel import SentinelType

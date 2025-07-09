@@ -1,15 +1,13 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
 from functools import cached_property
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any
 
 from pydantic import (
     BaseModel,
     ConfigDict,
     Discriminator,
     Field,
-    PositiveInt,
     Tag,
     TypeAdapter,
     field_validator,
@@ -19,7 +17,6 @@ from pydantic.alias_generators import to_pascal
 from palace.manager.api.boundless.exception import ErrorLookupType, StatusResponseParser
 from palace.manager.api.boundless.models.base import BaseBoundlessResponse
 from palace.manager.api.boundless.models.validators import BoundlessJsonDateTime
-from palace.manager.util.datetime_helpers import utc_now
 
 
 class BaseBoundlessJsonModel(BaseModel):
@@ -147,38 +144,6 @@ class AudiobookMetadataResponse(BaseBoundlessJsonResponse):
     reading_order: list[AudiobookMetadataReadingOrder] = Field(
         ..., alias="readingOrder"
     )
-
-
-class Token(BaseBoundlessJsonModel):
-    """
-    Represents a bearer token response from the API.
-
-    This model provides some helper methods to check if the token is expired.
-    """
-
-    model_config = ConfigDict(
-        alias_generator=None,
-        frozen=True,
-    )
-
-    access_token: str
-    expires_in: PositiveInt
-    token_type: Literal["Bearer"]
-
-    _expires_at: datetime
-
-    def model_post_init(self, context: Any, /) -> None:
-        # We set the expiration time to 95% of the expires_in value
-        # to account for any potential delays in processing, so we
-        # will get a new token before the current one expires.
-        self._expires_at = utc_now() + timedelta(seconds=self.expires_in * 0.95)
-
-    @property
-    def expired(self) -> bool:
-        """
-        Returns True if the token is expired.
-        """
-        return utc_now() >= self._expires_at
 
 
 class LicenseServerStatus(BaseBoundlessJsonModel):

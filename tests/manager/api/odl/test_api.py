@@ -4,7 +4,7 @@ import datetime
 import json
 import urllib
 import uuid
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, create_autospec
 from urllib.parse import parse_qs, urlparse
 
 import dateutil
@@ -33,9 +33,10 @@ from palace.manager.api.circulation.fulfillment import (
     FetchFulfillment,
     RedirectFulfillment,
 )
+from palace.manager.api.model.token import Token
 from palace.manager.api.odl.api import OPDS2WithODLApi
 from palace.manager.api.odl.constants import FEEDBOOKS_AUDIO
-from palace.manager.api.odl.settings import OPDS2AuthType
+from palace.manager.api.opds.requests import OAuthOpdsRequest
 from palace.manager.opds.lcp.status import LoanStatus
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.licensing import (
@@ -1083,7 +1084,6 @@ class TestOPDS2WithODLApi:
         opds2_with_odl_api_fixture: OPDS2WithODLApiFixture,
         db: DatabaseTransactionFixture,
     ) -> None:
-        opds2_with_odl_api_fixture.api.mock_auth_type = OPDS2AuthType.OAUTH
         work = db.work()
         pool = db.licensepool(
             work.presentation_edition,
@@ -1107,6 +1107,27 @@ class TestOPDS2WithODLApi:
         )
 
         pool.loan_to(opds2_with_odl_api_fixture.patron)
+
+        # If the collection isn't configured to use OAuth, we can't fulfill the loan.
+        with pytest.raises(CannotFulfill):
+            opds2_with_odl_api_fixture.api.fulfill(
+                opds2_with_odl_api_fixture.patron, "pin", pool, lpdm
+            )
+
+        # Configure API to use OAuth
+        token = Token(
+            access_token="token",
+            expires_in=3600,
+            token_type="Bearer",
+        )
+        request = OAuthOpdsRequest("http://feed.com/url", "username", "password")
+        request._token_url = "mock token url"
+        mock_refresh = create_autospec(
+            request._oauth_session_token_refresh, return_value=token
+        )
+        request._oauth_session_token_refresh = mock_refresh
+        opds2_with_odl_api_fixture.api._request = request
+
         fulfillment = opds2_with_odl_api_fixture.api.fulfill(
             opds2_with_odl_api_fixture.patron, "pin", pool, lpdm
         )
@@ -1115,19 +1136,13 @@ class TestOPDS2WithODLApi:
         assert fulfillment.content_type == DeliveryMechanism.BEARER_TOKEN
         assert fulfillment.content is not None
         token_doc = json.loads(fulfillment.content)
-        assert opds2_with_odl_api_fixture.api._session_token is not None
-        assert (
-            token_doc.get("access_token")
-            == opds2_with_odl_api_fixture.api._session_token.token
-        )
+        assert token_doc.get("access_token") == token.access_token
         assert token_doc.get("expires_in") == int(
-            (
-                opds2_with_odl_api_fixture.api._session_token.expires - utc_now()
-            ).total_seconds()
+            (token.expires - utc_now()).total_seconds()
         )
         assert token_doc.get("token_type") == "Bearer"
         assert token_doc.get("location") == url
-        assert opds2_with_odl_api_fixture.api.refresh_token_calls == 1
+        assert mock_refresh.call_count == 1
 
         # A second call to fulfill should not refresh the token
         fulfillment_2 = opds2_with_odl_api_fixture.api.fulfill(
@@ -1135,7 +1150,7 @@ class TestOPDS2WithODLApi:
         )
         assert isinstance(fulfillment_2, DirectFulfillment)
         assert fulfillment_2.content == fulfillment.content
-        assert opds2_with_odl_api_fixture.api.refresh_token_calls == 1
+        assert mock_refresh.call_count == 1
 
     @pytest.mark.parametrize(
         "status_document",
@@ -1255,17 +1270,6 @@ class TestOPDS2WithODLApi:
             "pin",
             opds2_with_odl_api_fixture.pool,
         )
-
-    def test_settings_properties(
-        self, opds2_with_odl_api_fixture: OPDS2WithODLApiFixture
-    ):
-        real_api = OPDS2WithODLApi(
-            opds2_with_odl_api_fixture.db.session, opds2_with_odl_api_fixture.collection
-        )
-        assert real_api._auth_type == OPDS2AuthType.BASIC
-        assert real_api._username == "a"
-        assert real_api._password == "b"
-        assert real_api._feed_url == "http://odl"
 
     def test_can_fulfill_without_loan(
         self, opds2_with_odl_api_fixture: OPDS2WithODLApiFixture

@@ -5,7 +5,7 @@ import datetime
 import json
 import uuid
 from collections.abc import Callable
-from functools import cached_property, partial
+from functools import partial
 
 from flask import url_for
 from pydantic import ValidationError
@@ -40,13 +40,13 @@ from palace.manager.api.circulation.fulfillment import (
     UrlFulfillment,
 )
 from palace.manager.api.lcp.hash import Hasher, HasherFactory
-from palace.manager.api.odl.auth import OdlAuthenticatedRequest, OpdsWithOdlException
 from palace.manager.api.odl.constants import FEEDBOOKS_AUDIO
 from palace.manager.api.odl.settings import (
-    OPDS2AuthType,
     OPDS2WithODLLibrarySettings,
     OPDS2WithODLSettings,
 )
+from palace.manager.api.opds.exception import OpdsResponseException
+from palace.manager.api.opds.requests import OAuthOpdsRequest, get_opds_requests
 from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.core.lcp.credential import LCPCredentialFactory
 from palace.manager.opds.lcp.license import LicenseDocument
@@ -69,7 +69,6 @@ from palace.manager.util.http import BadResponseException, RemoteIntegrationExce
 
 
 class OPDS2WithODLApi(
-    OdlAuthenticatedRequest,
     BaseCirculationAPI[OPDS2WithODLSettings, OPDS2WithODLLibrarySettings],
 ):
     """ODL (Open Distribution to Libraries) is a specification that allows
@@ -121,22 +120,12 @@ class OPDS2WithODLApi(
 
         self.loan_limit = settings.loan_limit
         self.hold_limit = settings.hold_limit
-
-    @cached_property
-    def _username(self) -> str:
-        return self.settings.username if self.settings.username else ""
-
-    @cached_property
-    def _password(self) -> str:
-        return self.settings.password if self.settings.password else ""
-
-    @cached_property
-    def _auth_type(self) -> OPDS2AuthType:
-        return self.settings.auth_type
-
-    @cached_property
-    def _feed_url(self) -> str:
-        return self.settings.external_account_id
+        self._request = get_opds_requests(
+            self.settings.auth_type,
+            self.settings.username,
+            self.settings.password,
+            self.settings.external_account_id,
+        )
 
     def _get_hasher(self) -> Hasher:
         """Returns a Hasher instance
@@ -172,8 +161,12 @@ class OPDS2WithODLApi(
         self, method: str, url: str, ignored_problem_types: list[str] | None = None
     ) -> LoanStatus:
         try:
-            response = self._request(method, url, allowed_response_codes=["2xx"])
-            status_doc = LoanStatus.model_validate_json(response.content)
+            status_doc = self._request(
+                method,
+                url,
+                parser=LoanStatus.model_validate_json,
+                allowed_response_codes=["2xx"],
+            )
         except ValidationError as e:
             self.log.exception(
                 f"Error validating Loan Status Document. '{url}' returned and invalid document. {e}"
@@ -184,7 +177,7 @@ class OPDS2WithODLApi(
         except BadResponseException as e:
             response = e.response
             error_message = f"Error requesting Loan Status Document. '{url}' returned status code {response.status_code}."
-            if isinstance(e, OpdsWithOdlException):
+            if isinstance(e, OpdsResponseException):
                 # It this problem type is explicitly ignored, we just raise the exception instead of proceeding with
                 # logging the information about it. The caller will handle the exception.
                 if ignored_problem_types and e.type in ignored_problem_types:
@@ -400,10 +393,12 @@ class OPDS2WithODLApi(
                 rel="license", type=LicenseDocument.content_type()
             )
             if license_document_link:
-                response = self._request(
-                    "GET", license_document_link.href, allowed_response_codes=["2xx"]
+                license_doc = self._request(
+                    "GET",
+                    license_document_link.href,
+                    parser=LicenseDocument.model_validate_json,
+                    allowed_response_codes=["2xx"],
                 )
-                license_doc = LicenseDocument.model_validate_json(response.content)
                 loan_status_document_link = license_doc.links.get(
                     rel="status", type=LoanStatus.content_type()
                 )
@@ -469,7 +464,7 @@ class OPDS2WithODLApi(
                     "http://opds-spec.org/odl/error/checkout/unavailable"
                 ],
             )
-        except OpdsWithOdlException as e:
+        except OpdsResponseException as e:
             if e.type == "http://opds-spec.org/odl/error/checkout/unavailable":
                 # TODO: This would be a good place to do an async availability update, since we know
                 #   the book is unavailable, when we thought it was available. For now, we know that
@@ -575,6 +570,12 @@ class OPDS2WithODLApi(
     def _bearer_token_fulfill(
         self, loan: Loan, delivery_mechanism: LicensePoolDeliveryMechanism
     ) -> Fulfillment:
+        make_request = self._request
+        if not isinstance(make_request, OAuthOpdsRequest):
+            raise CannotFulfill(
+                debug_info="Bearer token fulfillment is not configured for this integration."
+            )
+
         licensepool = loan.license_pool
         resource = self._get_resource_for_delivery_mechanism(
             delivery_mechanism.delivery_mechanism, licensepool
@@ -582,21 +583,16 @@ class OPDS2WithODLApi(
 
         # Make sure we have a session token to pass to the app. If the token expires in the
         # next 10 minutes, we'll refresh it to make sure the app has enough time to download the book.
-        if (
-            self._session_token is None
-            or self._session_token.expires - datetime.timedelta(minutes=10) < utc_now()
-        ):
-            self._refresh_token()
-
-        # At this point the token should never be None, but for mypy to be happy we'll assert it.
-        assert self._session_token is not None
+        token = make_request.session_token
+        if token is None or token.expires - datetime.timedelta(minutes=10) < utc_now():
+            token = make_request.refresh_token()
 
         # Build an application/vnd.librarysimplified.bearer-token
         # document using information from the credential.
         token_document = dict(
             token_type="Bearer",
-            access_token=self._session_token.token,
-            expires_in=(int((self._session_token.expires - utc_now()).total_seconds())),
+            access_token=token.access_token,
+            expires_in=(int((token.expires - utc_now()).total_seconds())),
             location=resource.url,
         )
 
@@ -614,7 +610,6 @@ class OPDS2WithODLApi(
             if (
                 delivery_mechanism.delivery_mechanism.drm_scheme
                 == DeliveryMechanism.BEARER_TOKEN
-                and self._auth_type == OPDS2AuthType.OAUTH
             ):
                 return self._bearer_token_fulfill(loan, delivery_mechanism)
             else:
