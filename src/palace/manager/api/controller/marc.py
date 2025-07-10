@@ -62,7 +62,7 @@ class MARCRecordController:
         return get_request_library()
 
     def has_integration(self, session: Session, library: Library) -> bool:
-        base_query = self.registry.select_integrations(MarcExporter)
+        base_query = self.registry.configurations_query(MarcExporter)
 
         integration_query = (
             select(IntegrationLibraryConfiguration)

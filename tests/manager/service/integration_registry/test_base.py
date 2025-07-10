@@ -236,7 +236,7 @@ def test_registry_add_errors():
         registry + object
 
 
-def test_registry_select_integrations() -> None:
+def test_registry_configurations_query() -> None:
     class MockIntegration: ...
 
     registry: IntegrationRegistry[MockIntegration] = IntegrationRegistry(
@@ -245,7 +245,7 @@ def test_registry_select_integrations() -> None:
     registry.register(MockIntegration)
 
     # Produces a select query, that looks for the integration by goal and protocol
-    selected = registry.select_integrations(MockIntegration)
+    selected = registry.configurations_query(MockIntegration)
     assert len(selected.froms) == 1
     assert selected.froms[0] == IntegrationConfiguration.__table__
     assert len(selected.whereclause.clauses) == 2
@@ -261,7 +261,7 @@ def test_registry_select_integrations() -> None:
     # the type or the name of the protocol (or its aliases) to select_integrations.
     registry.register(MockIntegration, aliases=["test", "test2"])
     for protocol in (MockIntegration, "test"):
-        selected = registry.select_integrations(protocol)
+        selected = registry.configurations_query(protocol)
         assert len(selected.froms) == 1
         assert selected.froms[0] == IntegrationConfiguration.__table__
         assert len(selected.whereclause.clauses) == 2

@@ -155,13 +155,23 @@ class IntegrationRegistry(Generic[T]):
 
         return self[protocol1] is self[protocol2]
 
-    def select_integrations(self, protocol_or_integration: str | type[T]) -> Select:
+    def configurations_query(self, protocol_or_integration: str | type[T]) -> Select:
+        """
+        Create a SQLAlchemy query to select IntegrationConfiguration records.
+
+        This function builds a query to find all integration configurations matching
+        a specific protocol or integration class, filtering by the registry's goal.
+
+        It takes care to make sure that protocol aliases are looked up correctly,
+        so that the query can be used if the integration is saved in the database
+        using an alias or the canonical name.
+        """
         if isinstance(protocol_or_integration, str):
             integration = self[protocol_or_integration]
         else:
             integration = protocol_or_integration
         protocols = self.get_protocols(integration, default=False)
-        integration_query = select(IntegrationConfiguration).where(
+        configurations_query = select(IntegrationConfiguration).where(
             IntegrationConfiguration.goal == self.goal,
         )
         # This should never happen, because get_protocols raises an exception
@@ -170,14 +180,14 @@ class IntegrationRegistry(Generic[T]):
         assert len(protocols) > 0
 
         if len(protocols) == 1:
-            integration_query = integration_query.where(
+            configurations_query = configurations_query.where(
                 IntegrationConfiguration.protocol == protocols[0]
             )
         else:
-            integration_query = integration_query.where(
+            configurations_query = configurations_query.where(
                 IntegrationConfiguration.protocol.in_(protocols)
             )
-        return integration_query
+        return configurations_query
 
     def __iter__(self) -> Iterator[tuple[str, type[T]]]:
         for integration, names in self._reverse_lookup.items():

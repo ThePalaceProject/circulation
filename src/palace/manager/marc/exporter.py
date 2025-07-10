@@ -124,7 +124,7 @@ class MarcExporter(
             name="library_integration_library_configuration",
         )
 
-        library_integration_configuration_query = registry.select_integrations(cls)
+        library_integration_configuration_query = registry.configurations_query(cls)
 
         collection_query = (
             select(Collection, library_integration_library_configuration)

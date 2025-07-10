@@ -306,7 +306,7 @@ class Collection(Base, HasSessionCache, RedisKeyMixin):
         :param protocol: Protocol to use. Either the protocol name as a string, or
           the protocol class itself (e.g. OverdriveAPI).
         """
-        integration_query = registry.select_integrations(protocol)
+        integration_query = registry.configurations_query(protocol)
         return (
             select(Collection)
             .join(integration_query.subquery())
