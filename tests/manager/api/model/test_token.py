@@ -6,7 +6,7 @@ from palace.manager.api.model.token import OAuthTokenResponse
 from tests.fixtures.files import BoundlessFilesFixture
 
 
-class TestToken:
+class TestOAuthTokenResponse:
     def test_token_response(self, boundless_files_fixture: BoundlessFilesFixture):
         data = boundless_files_fixture.sample_data("token.json")
         parsed = OAuthTokenResponse.model_validate_json(data)
