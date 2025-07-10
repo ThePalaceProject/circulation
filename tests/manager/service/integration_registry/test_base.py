@@ -236,12 +236,16 @@ def test_registry_add_errors():
         registry + object
 
 
-def test_registry_select_integrations(registry: IntegrationRegistry):
-    registry = IntegrationRegistry(Goals.PATRON_AUTH_GOAL)
-    registry.register(object)
+def test_registry_select_integrations() -> None:
+    class MockIntegration: ...
+
+    registry: IntegrationRegistry[MockIntegration] = IntegrationRegistry(
+        Goals.PATRON_AUTH_GOAL
+    )
+    registry.register(MockIntegration)
 
     # Produces a select query, that looks for the integration by goal and protocol
-    selected = registry.select_integrations(object)
+    selected = registry.select_integrations(MockIntegration)
     assert len(selected.froms) == 1
     assert selected.froms[0] == IntegrationConfiguration.__table__
     assert len(selected.whereclause.clauses) == 2
@@ -251,12 +255,12 @@ def test_registry_select_integrations(registry: IntegrationRegistry):
     assert goal_clause.right.value == Goals.PATRON_AUTH_GOAL
     assert protocol_clause.left.name == "protocol"
     assert protocol_clause.operator == eq
-    assert protocol_clause.right.value == "object"
+    assert protocol_clause.right.value == "MockIntegration"
 
     # If the protocol has aliases, it will include those in the query. You can pass either
     # the type or the name of the protocol (or its aliases) to select_integrations.
-    registry.register(object, aliases=["test", "test2"])
-    for protocol in [object, "test"]:
+    registry.register(MockIntegration, aliases=["test", "test2"])
+    for protocol in (MockIntegration, "test"):
         selected = registry.select_integrations(protocol)
         assert len(selected.froms) == 1
         assert selected.froms[0] == IntegrationConfiguration.__table__
@@ -267,4 +271,4 @@ def test_registry_select_integrations(registry: IntegrationRegistry):
         assert goal_clause.right.value == Goals.PATRON_AUTH_GOAL
         assert protocol_clause.left.name == "protocol"
         assert protocol_clause.operator == in_op
-        assert protocol_clause.right.value == ["object", "test", "test2"]
+        assert protocol_clause.right.value == ["MockIntegration", "test", "test2"]

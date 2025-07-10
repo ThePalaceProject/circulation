@@ -49,7 +49,7 @@ from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.sqlalchemy.util import create
 
 if TYPE_CHECKING:
-    from palace.manager.api.circulation import CirculationApiType
+    from palace.manager.api.circulation.base import CirculationApiType
     from palace.manager.search.external_search import ExternalSearchIndex
     from palace.manager.sqlalchemy.model.credential import Credential
     from palace.manager.sqlalchemy.model.customlist import CustomList
