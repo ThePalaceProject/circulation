@@ -167,12 +167,12 @@ def remove_expired_holds(task: Task) -> None:
     Issue remove expired hold tasks for eligible collections
     """
     registry = task.services.integration_registry.license_providers()
-    protocols = registry.get_protocols(OPDS2WithODLApi, default=False)
     with task.session() as session:
         collections = [
             (collection.id, collection.name)
-            for collection in Collection.by_protocol(session, protocols)
-            if collection.id is not None
+            for collection in session.execute(
+                Collection.select_by_protocol(OPDS2WithODLApi, registry=registry)
+            ).scalars()
         ]
     for collection_id, collection_name in collections:
         remove_expired_holds_for_collection_task.delay(collection_id)
@@ -184,9 +184,10 @@ def recalculate_hold_queue(task: Task) -> None:
     Queue a task for each OPDS2WithODLApi integration to recalculate the hold queue.
     """
     registry = task.services.integration_registry.license_providers()
-    protocols = registry.get_protocols(OPDS2WithODLApi, default=False)
     with task.session() as session:
-        for collection in Collection.by_protocol(session, protocols):
+        for collection in session.execute(
+            Collection.select_by_protocol(OPDS2WithODLApi, registry=registry)
+        ).scalars():
             recalculate_hold_queue_collection.delay(collection.id)
 
 

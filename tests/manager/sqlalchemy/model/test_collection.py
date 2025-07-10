@@ -127,6 +127,35 @@ class TestCollection:
         c1.marked_for_deletion = True
         assert [test_collection] == Collection.by_protocol(db.session, overdrive).all()
 
+    def test_select_by_protocol(
+        self,
+        example_collection_fixture: ExampleCollectionFixture,
+        services_fixture_wired: ServicesFixture,
+    ):
+        """Verify the ability to find all collections that implement
+        a certain protocol.
+        """
+        db = example_collection_fixture.database_fixture
+        test_collection = example_collection_fixture.collection
+
+        c1 = db.collection(db.fresh_str(), protocol=OverdriveAPI)
+        c1.parent = test_collection
+        c2 = db.collection(db.fresh_str(), protocol=BibliothecaAPI)
+        assert {test_collection, c1} == set(
+            db.session.execute(Collection.select_by_protocol(OverdriveAPI))
+            .scalars()
+            .all()
+        )
+        assert ([c2]) == db.session.execute(
+            Collection.select_by_protocol(BibliothecaAPI)
+        ).scalars().all()
+
+        # A collection marked for deletion is filtered out.
+        c1.marked_for_deletion = True
+        assert [test_collection] == db.session.execute(
+            Collection.select_by_protocol(OverdriveAPI)
+        ).scalars().all()
+
     def test_get_protocol(self, db: DatabaseTransactionFixture):
         test_collection = db.collection()
         integration = test_collection.integration_configuration

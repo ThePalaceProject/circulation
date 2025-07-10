@@ -25,6 +25,9 @@ from sqlalchemy.sql.functions import count
 
 from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.integration.goals import Goals
+from palace.manager.service.integration_registry.license_providers import (
+    LicenseProvidersRegistry,
+)
 from palace.manager.service.redis.key import RedisKeyMixin
 from palace.manager.sqlalchemy.constants import DataSourceConstants, EditionConstants
 from palace.manager.sqlalchemy.hassessioncache import HasSessionCache
@@ -46,6 +49,7 @@ from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.sqlalchemy.util import create
 
 if TYPE_CHECKING:
+    from palace.manager.api.circulation import CirculationApiType
     from palace.manager.search.external_search import ExternalSearchIndex
     from palace.manager.sqlalchemy.model.credential import Credential
     from palace.manager.sqlalchemy.model.customlist import CustomList
@@ -256,6 +260,9 @@ class Collection(Base, HasSessionCache, RedisKeyMixin):
 
         Collections marked for deletion are not included.
 
+        NOTE: THIS FUNCTION IS DEPRECATED. ANY NEW CODE SHOULD USE
+        `select_by_protocol` INSTEAD.
+
         :param protocol: Protocol to use. If this is None, all
             Collections will be returned except those marked for deletion.
         """
@@ -276,6 +283,36 @@ class Collection(Base, HasSessionCache, RedisKeyMixin):
                 qu = qu.filter(IntegrationConfiguration.protocol.in_(protocol))
 
         return qu
+
+    @classmethod
+    @inject
+    def select_by_protocol(
+        cls,
+        protocol: str | type[CirculationApiType],
+        *,
+        registry: LicenseProvidersRegistry = Provide[
+            "integration_registry.license_providers"
+        ],
+    ) -> Select:
+        """Return a sqlalchemy select that queries for collections that get their licenses
+        through the given protocol.
+
+        Care is taken to make sure that the query looks for equivalent protocol names, so
+        that collections using the same protocol but with different (or deprecated)
+        protocol names are included.
+
+        Collections marked for deletion are not included.
+
+        :param protocol: Protocol to use. Either the protocol name as a string, or
+          the protocol class itself (e.g. OverdriveAPI).
+        """
+        integration_query = registry.select_integrations(protocol)
+        return (
+            select(Collection)
+            .join(integration_query.subquery())
+            .where(Collection.marked_for_deletion == False)
+            .order_by(Collection.id)
+        )
 
     @property
     def is_active(self) -> bool:

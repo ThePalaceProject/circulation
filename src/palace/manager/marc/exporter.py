@@ -8,7 +8,6 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, aliased, raiseload, selectinload
 
 from palace.manager.integration.base import HasLibraryIntegrationConfiguration
-from palace.manager.integration.goals import Goals
 from palace.manager.marc.annotator import Annotator
 from palace.manager.marc.settings import (
     MarcExporterLibrarySettings,
@@ -124,9 +123,8 @@ class MarcExporter(
             IntegrationLibraryConfiguration,
             name="library_integration_library_configuration",
         )
-        library_integration_configuration = aliased(IntegrationConfiguration)
 
-        protocols = registry.get_protocols(cls)
+        library_integration_configuration_query = registry.select_integrations(cls)
 
         collection_query = (
             select(Collection, library_integration_library_configuration)
@@ -135,11 +133,13 @@ class MarcExporter(
             .join(collection_integration_library_configuration)
             .join(Library)
             .join(library_integration_library_configuration)
-            .join(library_integration_configuration)
+            .join(
+                library_integration_configuration_query.subquery(
+                    name="library_integration_configuration"
+                )
+            )
             .where(
                 Collection.export_marc_records == True,
-                library_integration_configuration.goal == Goals.CATALOG_GOAL,
-                library_integration_configuration.protocol.in_(protocols),
             )
         )
         if collection_id is not None:

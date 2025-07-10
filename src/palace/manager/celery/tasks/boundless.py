@@ -381,13 +381,13 @@ def get_collections_by_protocol(
     protocol_class: type[BaseCirculationAPI[SettingsType, LibrarySettingsType]],
 ) -> list[Collection]:
     registry = task.services.integration_registry.license_providers()
-    protocols = registry.get_protocols(protocol_class, default=False)
-    collections = [
-        collection
-        for collection in Collection.by_protocol(session, protocols)
-        if collection.id is not None
-    ]
-    return collections
+    return (
+        session.execute(
+            Collection.select_by_protocol(protocol_class, registry=registry)
+        )
+        .scalars()
+        .all()
+    )
 
 
 @shared_task(queue=QueueNames.default, bind=True)

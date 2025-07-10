@@ -5,8 +5,12 @@ from collections.abc import Iterable, Iterator
 from itertools import chain
 from typing import Generic, Literal, TypeVar, cast, overload
 
+from sqlalchemy import select
+from sqlalchemy.sql import Select
+
 from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.integration.goals import Goals
+from palace.manager.sqlalchemy.model.integration import IntegrationConfiguration
 
 T = TypeVar("T", covariant=True)
 V = TypeVar("V")
@@ -58,7 +62,7 @@ class IntegrationRegistry(Generic[T]):
                     f"Integration {protocol} already registered"
                 )
             self._lookup[protocol] = integration
-            self._reverse_lookup[integration].append(protocol)
+        self._reverse_lookup[integration] = list(names.keys())
 
         return integration
 
@@ -150,6 +154,30 @@ class IntegrationRegistry(Generic[T]):
             return False
 
         return self[protocol1] is self[protocol2]
+
+    def select_integrations(self, protocol_or_integration: str | type[T]) -> Select:
+        if isinstance(protocol_or_integration, str):
+            integration = self[protocol_or_integration]
+        else:
+            integration = protocol_or_integration
+        protocols = self.get_protocols(integration, default=False)
+        integration_query = select(IntegrationConfiguration).where(
+            IntegrationConfiguration.goal == self.goal,
+        )
+        # This should never happen, because get_protocols raises an exception
+        # if the integration is not found, but we check so that we fail fast
+        # if for some reason this doesn't hold true.
+        assert len(protocols) > 0
+
+        if len(protocols) == 1:
+            integration_query = integration_query.where(
+                IntegrationConfiguration.protocol == protocols[0]
+            )
+        else:
+            integration_query = integration_query.where(
+                IntegrationConfiguration.protocol.in_(protocols)
+            )
+        return integration_query
 
     def __iter__(self) -> Iterator[tuple[str, type[T]]]:
         for integration, names in self._reverse_lookup.items():

@@ -9,7 +9,6 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from palace.manager.api.util.flask import get_request_library
-from palace.manager.integration.goals import Goals
 from palace.manager.marc.exporter import MarcExporter
 from palace.manager.service.integration_registry.catalog_services import (
     CatalogServicesRegistry,
@@ -63,16 +62,16 @@ class MARCRecordController:
         return get_request_library()
 
     def has_integration(self, session: Session, library: Library) -> bool:
-        protocols = self.registry.get_protocols(MarcExporter)
+        base_query = self.registry.select_integrations(MarcExporter)
+
         integration_query = (
             select(IntegrationLibraryConfiguration)
-            .join(IntegrationConfiguration)
+            .join(base_query.subquery())
             .where(
-                IntegrationConfiguration.goal == Goals.CATALOG_GOAL,
-                IntegrationConfiguration.protocol.in_(protocols),
                 IntegrationLibraryConfiguration.library == library,
             )
         )
+
         integration = session.execute(integration_query).one_or_none()
         return integration is not None
 
