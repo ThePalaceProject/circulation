@@ -1,6 +1,7 @@
 from unittest.mock import MagicMock
 
 import pytest
+from sqlalchemy.sql.operators import eq, in_op
 
 from palace.manager.integration.goals import Goals
 from palace.manager.service.integration_registry.base import (
@@ -8,6 +9,7 @@ from palace.manager.service.integration_registry.base import (
     LookupException,
     RegistrationException,
 )
+from palace.manager.sqlalchemy.model.integration import IntegrationConfiguration
 
 
 @pytest.fixture
@@ -232,3 +234,41 @@ def test_registry_add_errors():
 
     with pytest.raises(TypeError):
         registry + object
+
+
+def test_registry_configurations_query() -> None:
+    class MockIntegration: ...
+
+    registry: IntegrationRegistry[MockIntegration] = IntegrationRegistry(
+        Goals.PATRON_AUTH_GOAL
+    )
+    registry.register(MockIntegration)
+
+    # Produces a select query, that looks for the integration by goal and protocol
+    selected = registry.configurations_query(MockIntegration)
+    assert len(selected.froms) == 1
+    assert selected.froms[0] == IntegrationConfiguration.__table__
+    assert len(selected.whereclause.clauses) == 2
+    goal_clause, protocol_clause = selected.whereclause.clauses
+    assert goal_clause.left.name == "goal"
+    assert goal_clause.operator == eq
+    assert goal_clause.right.value == Goals.PATRON_AUTH_GOAL
+    assert protocol_clause.left.name == "protocol"
+    assert protocol_clause.operator == eq
+    assert protocol_clause.right.value == "MockIntegration"
+
+    # If the protocol has aliases, it will include those in the query. You can pass either
+    # the type or the name of the protocol (or its aliases) to select_integrations.
+    registry.register(MockIntegration, aliases=["test", "test2"])
+    for protocol in (MockIntegration, "test"):
+        selected = registry.configurations_query(protocol)
+        assert len(selected.froms) == 1
+        assert selected.froms[0] == IntegrationConfiguration.__table__
+        assert len(selected.whereclause.clauses) == 2
+        goal_clause, protocol_clause = selected.whereclause.clauses
+        assert goal_clause.left.name == "goal"
+        assert goal_clause.operator == eq
+        assert goal_clause.right.value == Goals.PATRON_AUTH_GOAL
+        assert protocol_clause.left.name == "protocol"
+        assert protocol_clause.operator == in_op
+        assert protocol_clause.right.value == ["MockIntegration", "test", "test2"]
