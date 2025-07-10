@@ -33,7 +33,7 @@ from palace.manager.api.circulation.fulfillment import (
     FetchFulfillment,
     RedirectFulfillment,
 )
-from palace.manager.api.model.token import Token
+from palace.manager.api.model.token import OAuthTokenResponse
 from palace.manager.api.odl.api import OPDS2WithODLApi
 from palace.manager.api.odl.constants import FEEDBOOKS_AUDIO
 from palace.manager.api.opds.requests import OAuthOpdsRequest
@@ -1115,7 +1115,7 @@ class TestOPDS2WithODLApi:
             )
 
         # Configure API to use OAuth
-        token = Token(
+        token = OAuthTokenResponse(
             access_token="token",
             expires_in=3600,
             token_type="Bearer",

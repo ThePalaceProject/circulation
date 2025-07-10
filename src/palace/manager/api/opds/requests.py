@@ -10,7 +10,7 @@ from pydantic import ValidationError
 from requests import Response
 from typing_extensions import Unpack
 
-from palace.manager.api.model.token import Token
+from palace.manager.api.model.token import OAuthTokenResponse
 from palace.manager.api.opds.exception import OpdsResponseException
 from palace.manager.core.exceptions import IntegrationException, PalaceValueError
 from palace.manager.opds.authentication import AuthenticationDocument
@@ -116,7 +116,7 @@ class OAuthOpdsRequest(BaseOpdsHttpRequest):
         self._username = username
         self._password = password
 
-        self.session_token: Token | None = None
+        self.session_token: OAuthTokenResponse | None = None
         self._token_url: str | None = None
 
     def _request(
@@ -183,7 +183,7 @@ class OAuthOpdsRequest(BaseOpdsHttpRequest):
     @classmethod
     def _oauth_session_token_refresh(
         cls, auth_url: str, username: str, password: str
-    ) -> Token:
+    ) -> OAuthTokenResponse:
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
         body = dict(grant_type="client_credentials")
         resp = cls._make_request(
@@ -195,7 +195,7 @@ class OAuthOpdsRequest(BaseOpdsHttpRequest):
             allowed_response_codes=["2xx"],
         )
         try:
-            token = Token.model_validate_json(resp.content)
+            token = OAuthTokenResponse.model_validate_json(resp.content)
         except ValidationError as e:
             raise IntegrationException(
                 "Invalid oauth authentication response",
@@ -217,7 +217,7 @@ class OAuthOpdsRequest(BaseOpdsHttpRequest):
             )
         return resp.text
 
-    def refresh_token(self) -> Token:
+    def refresh_token(self) -> OAuthTokenResponse:
         if self._token_url is None:
             auth_document = self._fetch_auth_document()
             token_url = self._token_url = self._get_oauth_url_from_auth_document(

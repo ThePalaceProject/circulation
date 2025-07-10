@@ -2,14 +2,14 @@ import datetime
 
 from freezegun import freeze_time
 
-from palace.manager.api.model.token import Token
+from palace.manager.api.model.token import OAuthTokenResponse
 from tests.fixtures.files import BoundlessFilesFixture
 
 
 class TestToken:
     def test_token_response(self, boundless_files_fixture: BoundlessFilesFixture):
         data = boundless_files_fixture.sample_data("token.json")
-        parsed = Token.model_validate_json(data)
+        parsed = OAuthTokenResponse.model_validate_json(data)
 
         assert parsed.access_token == (
             "gAAAACHFFENqnHA709FcDPNQCaaTRE3bJoI-gODKxUm9_LvZd837GmqzgMA4WnLQGI"
@@ -28,7 +28,9 @@ class TestToken:
 
     def test_token_expired(self) -> None:
         with freeze_time() as frozen_time:
-            token = Token(access_token="token", token_type="Bearer", expires_in=400)
+            token = OAuthTokenResponse(
+                access_token="token", token_type="Bearer", expires_in=400
+            )
             assert not token.expired
 
             frozen_time.tick(delta=datetime.timedelta(seconds=400))

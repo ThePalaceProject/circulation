@@ -8,11 +8,14 @@ from pydantic import BaseModel, ConfigDict, PositiveInt
 from palace.manager.util.datetime_helpers import utc_now
 
 
-class Token(BaseModel):
+class OAuthTokenResponse(BaseModel):
     """
-    Represents a bearer token response from the API.
+    A RFC8693 OAuth 2.0 Token Response model.
 
-    This model provides some helper methods to check if the token is expired.
+    This model represents the response from an OAuth 2.0 token endpoint.
+
+    It includes some common helper methods to easily check the token's
+    expiration status and retrieve the expiration time.
     """
 
     model_config = ConfigDict(

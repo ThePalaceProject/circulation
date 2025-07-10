@@ -11,7 +11,7 @@ from unittest.mock import MagicMock
 import pytest
 from freezegun import freeze_time
 
-from palace.manager.api.model.token import Token
+from palace.manager.api.model.token import OAuthTokenResponse
 from palace.manager.api.opds.requests import (
     BaseOpdsHttpRequest,
     BasicAuthOpdsRequest,
@@ -67,13 +67,13 @@ class OpdsRequestFixture:
             "data": MockRequestsResponse(200, {}, "Data"),
         }
 
-        self.valid_token = Token(
+        self.valid_token = OAuthTokenResponse(
             access_token=self.token,
             expires_in=3600,
             token_type="Bearer",
         )
         with freeze_time(timedelta(seconds=-3600)):
-            self.expired_token = Token(
+            self.expired_token = OAuthTokenResponse(
                 access_token="expired_token",
                 expires_in=50,
                 token_type="Bearer",
@@ -347,7 +347,7 @@ class TestOAuthOpdsRequest:
             ('{"access_token":"token","token_type":"Bearer"}', IntegrationException),
             (
                 '{"access_token":"token","token_type":"Bearer","expires_in":3600}',
-                Token(
+                OAuthTokenResponse(
                     access_token="token",
                     expires_in=3600,
                     token_type="Bearer",
@@ -360,11 +360,13 @@ class TestOAuthOpdsRequest:
         self,
         opds_request_fixture: OpdsRequestFixture,
         data: str,
-        expected: Token | type[Exception],
+        expected: OAuthTokenResponse | type[Exception],
     ) -> None:
         opds_request_fixture.client.queue_response(200, content=data)
         context = (
-            nullcontext() if isinstance(expected, Token) else pytest.raises(expected)
+            nullcontext()
+            if isinstance(expected, OAuthTokenResponse)
+            else pytest.raises(expected)
         )
 
         with context:
