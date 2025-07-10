@@ -10,4 +10,4 @@ mkdir -p /var/log/celery
 chown 1000:adm /var/log/celery
 
 # Start the celery worker
-exec env/bin/celery -A "palace.manager.celery.app" worker --uid 1000 --gid 1000 --autoscale 4,1 --hostname default@%h -Q high,default --logfile /var/log/celery/default.log
+exec env/bin/celery -A "palace.manager.celery.app" worker --uid 1000 --gid 1000 --autoscale 8,1 --hostname default@%h -Q high,default --logfile /var/log/celery/default.log
