@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from enum import Enum
-
 from flask_babel import lazy_gettext as _
 from pydantic import NonNegativeInt, PositiveInt
 
 from palace.manager.api.circulation.settings import BaseCirculationEbookLoanSettings
 from palace.manager.api.lcp.hash import HashingAlgorithm
+from palace.manager.api.opds.requests import OPDS2AuthType
 from palace.manager.core.opds2_import import OPDS2ImporterSettings
 from palace.manager.integration.settings import (
     ConfigurationFormItem,
@@ -15,12 +14,6 @@ from palace.manager.integration.settings import (
 )
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.util.pydantic import HttpUrl
-
-
-class OPDS2AuthType(Enum):
-    BASIC = "Basic Auth"
-    OAUTH = "OAuth (via OPDS authentication document)"
-    NONE = "None"
 
 
 class OPDS2WithODLSettings(OPDS2ImporterSettings):

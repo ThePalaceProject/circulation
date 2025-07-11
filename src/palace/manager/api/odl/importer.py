@@ -11,9 +11,9 @@ from requests import Response
 from sqlalchemy.orm import Session
 
 from palace.manager.api.odl.api import OPDS2WithODLApi
-from palace.manager.api.odl.auth import OdlAuthenticatedRequest
 from palace.manager.api.odl.constants import FEEDBOOKS_AUDIO
-from palace.manager.api.odl.settings import OPDS2AuthType, OPDS2WithODLSettings
+from palace.manager.api.odl.settings import OPDS2WithODLSettings
+from palace.manager.api.opds.requests import OPDS2AuthType, get_opds_requests
 from palace.manager.core.opds2_import import OPDS2Importer, OPDS2ImportMonitor
 from palace.manager.data_layer.bibliographic import BibliographicData
 from palace.manager.data_layer.format import FormatData
@@ -381,7 +381,7 @@ class OPDS2WithODLImporter(OPDS2Importer):
         return self._publication_type_adapter.validate_python(publication)
 
 
-class OPDS2WithODLImportMonitor(OdlAuthenticatedRequest, OPDS2ImportMonitor):
+class OPDS2WithODLImportMonitor(OPDS2ImportMonitor):
     """Import information from an ODL feed."""
 
     PROTOCOL = OPDS2WithODLApi.label()
@@ -399,30 +399,22 @@ class OPDS2WithODLImportMonitor(OdlAuthenticatedRequest, OPDS2ImportMonitor):
             _db, collection, import_class, force_reimport=True, **import_class_kwargs
         )
         self.settings = cast(OPDS2WithODLSettings, self.importer.settings)
+        self._request = get_opds_requests(
+            self.settings.auth_type,
+            self.settings.username,
+            self.settings.password,
+            self.settings.external_account_id,
+        )
 
-    @property
-    def _username(self) -> str:
-        return self.settings.username if self.settings.username else ""
-
-    @property
-    def _password(self) -> str:
-        return self.settings.password if self.settings.password else ""
-
-    @property
-    def _auth_type(self) -> OPDS2AuthType:
-        return self.settings.auth_type
-
-    @property
-    def _feed_url(self) -> str:
-        return self.settings.external_account_id
-
-    def _get(
-        self, url: str, headers: Mapping[str, str] | None = None, **kwargs: Any
-    ) -> Response:
+    def _get(self, url: str, headers: Mapping[str, str] | None = None) -> Response:
         headers = self._update_headers(headers)
-        kwargs["timeout"] = 120
-        kwargs["max_retry_count"] = self._max_retry_count
-        kwargs["allowed_response_codes"] = ["2xx", "3xx"]
         if not url.startswith("http"):
             url = urljoin(self._feed_base_url, url)
-        return super()._request("GET", url, headers, **kwargs)
+        return self._request(
+            "GET",
+            url,
+            headers=headers,
+            timeout=120,
+            max_retry_count=self._max_retry_count,
+            allowed_response_codes=["2xx", "3xx"],
+        )
