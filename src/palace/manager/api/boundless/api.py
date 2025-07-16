@@ -536,6 +536,22 @@ class BoundlessApi(
         for removed_identifier in remainder:
             self._reap(removed_identifier)
 
+    def reap_identifiers_if_no_longer_available(
+        self, identifiers: list[Identifier]
+    ) -> None:
+        """Reap identifiers if no longer available."""
+        remainder = set(identifiers)
+        for bibliographic, availability in self._fetch_remote_availability(identifiers):
+            identifier = bibliographic.circulation.load_primary_identifier(self._db)
+            if identifier in remainder:
+                remainder.remove(identifier)
+
+        # We asked Boundless about n books. It sent us n-k responses. Those
+        # k books are the identifiers in `remainder`. These books have
+        # been removed from the collection without us being notified.
+        for removed_identifier in remainder:
+            self._reap(removed_identifier)
+
     def update_book(
         self,
         bibliographic: BibliographicData,
