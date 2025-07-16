@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import time
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Collection, Iterable, Mapping
 from io import BytesIO, StringIO
 from json import JSONDecodeError
 from typing import Any, Literal, Protocol, TypedDict
@@ -145,7 +145,7 @@ class RequestTimedOut(RequestNetworkException, requests.exceptions.Timeout):
 
 
 _ResponseCodesLiteral = Literal["2xx", "3xx", "4xx", "5xx"]
-ResponseCodesT = Iterable[_ResponseCodesLiteral | int] | None
+ResponseCodesT = Collection[_ResponseCodesLiteral | int] | None
 
 
 class GetRequestKwargs(TypedDict, total=False):

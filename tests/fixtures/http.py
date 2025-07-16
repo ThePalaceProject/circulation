@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import pytest
 from requests import Response
-from typing_extensions import Self, Unpack
+from typing_extensions import Self, Unpack, overload
 
 from palace.manager.util.http import HTTP, GetRequestKwargs, RequestKwargs
 from tests.mocks.mock import MockRequestsResponse
@@ -32,19 +32,41 @@ class MockHttpClientFixture:
             raise RuntimeError("MockHTTPClientFixture is not currently patched.")
         self._unpatch()
 
+    @overload
     def queue_response(
         self,
-        response_code: int,
+        response: MockRequestsResponse,
+        /,
+    ) -> None: ...
+
+    @overload
+    def queue_response(
+        self,
+        code: int,
+        /,
+        media_type: str | None = ...,
+        other_headers: dict[str, str] | None = ...,
+        content: str | bytes | dict[str, Any] = ...,
+    ) -> None: ...
+
+    def queue_response(
+        self,
+        response_or_code: int | MockRequestsResponse,
+        /,
         media_type: str | None = None,
         other_headers: dict[str, str] | None = None,
         content: str | bytes | dict[str, Any] = "",
-    ):
+    ) -> None:
         """Queue a response of the type produced by HTTP.get_with_timeout."""
-        headers = dict(other_headers or {})
-        if media_type:
-            headers["Content-Type"] = media_type
+        if not isinstance(response_or_code, MockRequestsResponse):
+            headers = dict(other_headers) if other_headers else {}
+            if media_type:
+                headers["Content-Type"] = media_type
+            response = MockRequestsResponse(response_or_code, headers, content)
+        else:
+            response = response_or_code
 
-        self.responses.append(MockRequestsResponse(response_code, headers, content))
+        self.responses.append(response)
 
     def _request(self, *args: Any, **kwargs: Any) -> Response:
         return self.responses.pop(0)

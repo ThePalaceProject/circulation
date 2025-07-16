@@ -27,7 +27,6 @@ from palace.manager.api.boundless.models.json import (
     FulfillmentInfoResponse,
     FulfillmentInfoResponseT,
     LicenseServerStatus,
-    Token,
 )
 from palace.manager.api.boundless.models.xml import (
     AddHoldResponse,
@@ -36,6 +35,7 @@ from palace.manager.api.boundless.models.xml import (
     EarlyCheckinResponse,
     RemoveHoldResponse,
 )
+from palace.manager.api.model.token import OAuthTokenResponse
 from palace.manager.util.http import HTTP, BadResponseException, RequestKwargs
 from palace.manager.util.log import LoggerMixin
 from palace.manager.util.sentinel import SentinelType
@@ -63,7 +63,7 @@ class BoundlessRequests(LoggerMixin):
         self._base_url = API_BASE_URLS[settings.server_nickname]
         self._license_server_url = LICENSE_SERVER_BASE_URLS[settings.server_nickname]
 
-        self._cached_bearer_token: Token | None = None
+        self._cached_bearer_token: OAuthTokenResponse | None = None
         self._verify_certificate = settings.verify_certificate
 
     @classmethod
@@ -80,13 +80,13 @@ class BoundlessRequests(LoggerMixin):
         authorization_b64 = base64.standard_b64encode(authorization_encoded).decode()
         return dict(Authorization="Basic " + authorization_b64)
 
-    def refresh_bearer_token(self) -> Token:
+    def refresh_bearer_token(self) -> OAuthTokenResponse:
         url = self._base_url + "accesstoken"
         headers = self._refresh_bearer_token_auth_headers
         response = self._make_request(
             "post", url, headers=headers, allowed_response_codes=["2xx"]
         )
-        token = Token.model_validate_json(response.content)
+        token = OAuthTokenResponse.model_validate_json(response.content)
         self._cached_bearer_token = token
         return token
 
