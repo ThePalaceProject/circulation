@@ -207,7 +207,7 @@ class StatusResponseParser:
             )
 
             return BoundlessStatusTuple(status_code, message)
-        except (etree.XMLSyntaxError, AssertionError, ValueError):
+        except (etree.XMLSyntaxError, ValueError, TypeError):
             return None
 
     @classmethod
