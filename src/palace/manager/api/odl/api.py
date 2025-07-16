@@ -47,7 +47,6 @@ from palace.manager.api.odl.settings import (
 )
 from palace.manager.api.opds.exception import OpdsResponseException
 from palace.manager.api.opds.requests import OAuthOpdsRequest, get_opds_requests
-from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.core.lcp.credential import LCPCredentialFactory
 from palace.manager.opds.lcp.license import LicenseDocument
 from palace.manager.opds.lcp.status import LoanStatus
@@ -328,8 +327,6 @@ class OPDS2WithODLApi(
         ) and licensepool.licenses_available < 1:
             raise NoAvailableCopies()
 
-        if self.collection is None:
-            raise PalaceValueError(f"Collection not found: {self.collection_id}")
         default_loan_period = self.collection.default_loan_period(patron.library)
         requested_expiry = utc_now() + datetime.timedelta(days=default_loan_period)
         patron_id = patron.identifier_to_remote_service(licensepool.data_source)

@@ -65,11 +65,11 @@ class TestOverdriveAPI:
         api = OverdriveAPI(db.session, overdrive_api_fixture.collection)
         db.session.delete(overdrive_api_fixture.collection)
         patron = db.patron()
-        with pytest.raises(BasePalaceException) as excinfo:
+        with pytest.raises(
+            BasePalaceException,
+            match=r"Collection with id \d* not found for OverdriveAPI",
+        ):
             api.sync_patron_activity(patron, "pin")
-        assert "No collection available for Overdrive patron activity." in str(
-            excinfo.value
-        )
 
     def test_errors_not_retried(
         self,

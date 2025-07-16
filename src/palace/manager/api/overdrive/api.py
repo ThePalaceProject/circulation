@@ -83,7 +83,7 @@ from palace.manager.api.overdrive.settings import (
 from palace.manager.api.overdrive.util import _make_link_safe
 from palace.manager.api.selftest import HasCollectionSelfTests, SelfTestResult
 from palace.manager.core.config import CannotLoadConfiguration, Configuration
-from palace.manager.core.exceptions import BasePalaceException, IntegrationException
+from palace.manager.core.exceptions import IntegrationException
 from palace.manager.data_layer.format import FormatData
 from palace.manager.data_layer.policy.replacement import ReplacementPolicy
 from palace.manager.integration.base import HasChildIntegrationConfiguration
@@ -682,19 +682,16 @@ class OverdriveAPI(
         yield self.run_test("Counting size of collection", _count_books)
 
         collection = self.collection
-        if collection is not None:
-            for default_patrons_result in self.default_patrons(collection):
-                if isinstance(default_patrons_result, SelfTestResult):
-                    yield default_patrons_result
-                    continue
-                library, patron, pin = default_patrons_result
-                task = (
-                    "Checking Patron Authentication privileges, using test patron for library %s"
-                    % library.name
-                )
-                yield self.run_test(
-                    task, self._get_patron_oauth_credential, patron, pin
-                )
+        for default_patrons_result in self.default_patrons(collection):
+            if isinstance(default_patrons_result, SelfTestResult):
+                yield default_patrons_result
+                continue
+            library, patron, pin = default_patrons_result
+            task = (
+                "Checking Patron Authentication privileges, using test patron for library %s"
+                % library.name
+            )
+            yield self.run_test(task, self._get_patron_oauth_credential, patron, pin)
 
     TOverdriveModel = TypeVar("TOverdriveModel", bound=BaseOverdriveModel)
 
@@ -1223,10 +1220,6 @@ class OverdriveAPI(
         self, patron: Patron, pin: str | None
     ) -> Iterable[LoanInfo | HoldInfo]:
         collection = self.collection
-        if collection is None or collection.id is None:
-            raise BasePalaceException(
-                "No collection available for Overdrive patron activity."
-            )
 
         try:
             checkouts = self.get_patron_checkouts(patron, pin).checkouts

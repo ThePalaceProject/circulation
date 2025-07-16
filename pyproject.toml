@@ -86,6 +86,7 @@ module = [
     "palace.manager.api.admin.form_data",
     "palace.manager.api.admin.model.dashboard_statistics",
     "palace.manager.api.adobe_vendor_id",
+    "palace.manager.api.bibliotheca",
     "palace.manager.api.boundless.*",
     "palace.manager.api.circulation.*",
     "palace.manager.api.controller.circulation_manager",

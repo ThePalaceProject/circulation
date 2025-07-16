@@ -143,9 +143,6 @@ class BoundlessApi(
             "Asking for circulation events for the last five minutes", _count_events
         )
 
-        if self.collection is None:
-            raise ValueError("Collection is None")
-
         for library_result in self.default_patrons(self.collection):
             if isinstance(library_result, SelfTestResult):
                 yield library_result
