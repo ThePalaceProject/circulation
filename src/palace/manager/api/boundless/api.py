@@ -542,7 +542,8 @@ class BoundlessApi(
         """Reap identifiers if no longer available."""
         remainder = set(identifiers)
         for bibliographic, availability in self._fetch_remote_availability(identifiers):
-            identifier = bibliographic.circulation.load_primary_identifier(self._db)
+            assert availability
+            identifier = availability.load_primary_identifier(self._db)
             if identifier in remainder:
                 remainder.remove(identifier)
 
