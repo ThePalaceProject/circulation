@@ -476,12 +476,6 @@ class TestAdminDashboard:
             url, fixture.controller.bulk_circulation_events, file_response=True
         )
 
-    def test_circulation_events(self, fixture: AdminRouteFixture):
-        url = "/admin/circulation_events"
-        fixture.assert_authenticated_request_calls(
-            url, fixture.controller.circulation_events
-        )
-
 
 class TestAdminLibrarySettings:
     CONTROLLER_NAME = "admin_library_settings_controller"

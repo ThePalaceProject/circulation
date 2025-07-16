@@ -5,12 +5,10 @@ from unittest import mock
 
 import pytest
 
-from palace.manager.feed.annotator.admin import AdminAnnotator
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.classification import Genre
 from palace.manager.sqlalchemy.model.work import WorkGenre
 from palace.manager.sqlalchemy.util import get_one_or_create
-from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.api_admin import AdminControllerFixture
 from tests.fixtures.api_controller import ControllerFixture
 
@@ -38,55 +36,6 @@ def dashboard_fixture(controller_fixture: ControllerFixture) -> DashboardFixture
 
 
 class TestDashboardController:
-    def test_circulation_events(self, dashboard_fixture: DashboardFixture):
-        [lp] = dashboard_fixture.english_1.license_pools
-        types = [
-            CirculationEvent.DISTRIBUTOR_CHECKIN,
-            CirculationEvent.DISTRIBUTOR_CHECKOUT,
-            CirculationEvent.DISTRIBUTOR_HOLD_PLACE,
-            CirculationEvent.DISTRIBUTOR_HOLD_RELEASE,
-            CirculationEvent.DISTRIBUTOR_TITLE_ADD,
-        ]
-        time = utc_now() - timedelta(minutes=len(types))
-        for type in types:
-            get_one_or_create(
-                dashboard_fixture.ctrl.db.session,
-                CirculationEvent,
-                license_pool=lp,
-                type=type,
-                start=time,
-                end=time,
-            )
-            time += timedelta(minutes=1)
-
-        with dashboard_fixture.request_context_with_library_and_admin("/"):
-            response = (
-                dashboard_fixture.manager.admin_dashboard_controller.circulation_events()
-            )
-            url = AdminAnnotator(
-                dashboard_fixture.manager.d_circulation,  # type: ignore
-                dashboard_fixture.ctrl.db.default_library(),
-            ).permalink_for(lp.identifier)
-
-        events = response["circulation_events"]
-        assert types[::-1] == [event["type"] for event in events]
-        assert [dashboard_fixture.english_1.title] * len(types) == [
-            event["book"]["title"] for event in events
-        ]
-        assert [url] * len(types) == [event["book"]["url"] for event in events]
-
-        # request fewer events
-        with dashboard_fixture.request_context_with_library_and_admin("/?num=2"):
-            response = (
-                dashboard_fixture.manager.admin_dashboard_controller.circulation_events()
-            )
-            url = AdminAnnotator(
-                dashboard_fixture.manager.d_circulation,  # type: ignore
-                dashboard_fixture.ctrl.db.default_library(),
-            ).permalink_for(lp.identifier)
-
-        assert 2 == len(response["circulation_events"])
-
     def test_bulk_circulation_events(self, dashboard_fixture: DashboardFixture):
         [lp] = dashboard_fixture.english_1.license_pools
         edition = dashboard_fixture.english_1.presentation_edition

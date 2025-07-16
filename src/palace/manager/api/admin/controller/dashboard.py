@@ -4,7 +4,6 @@ from collections.abc import Callable
 from datetime import date, datetime, timedelta
 
 import flask
-from sqlalchemy import desc, nullslast
 from sqlalchemy.orm import Session
 
 from palace.manager.api.admin.model.dashboard_statistics import StatisticsResponse
@@ -14,13 +13,7 @@ from palace.manager.api.controller.circulation_manager import (
 )
 from palace.manager.api.local_analytics_exporter import LocalAnalyticsExporter
 from palace.manager.api.util.flask import get_request_library
-from palace.manager.feed.annotator.admin import AdminAnnotator
 from palace.manager.sqlalchemy.model.admin import Admin
-from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
-from palace.manager.sqlalchemy.model.datasource import DataSource
-from palace.manager.sqlalchemy.model.identifier import Identifier
-from palace.manager.sqlalchemy.model.licensing import LicensePool
-from palace.manager.sqlalchemy.model.work import Work
 
 
 class DashboardController(CirculationManagerController):
@@ -29,38 +22,6 @@ class DashboardController(CirculationManagerController):
     ) -> StatisticsResponse:
         admin = get_request_admin()
         return stats_function(admin, self._db)
-
-    def circulation_events(self):
-        annotator = AdminAnnotator(self.circulation, get_request_library())
-        num = min(int(flask.request.args.get("num", "100")), 500)
-
-        results = (
-            self._db.query(CirculationEvent)
-            .join(LicensePool)
-            .join(Work)
-            .join(DataSource)
-            .join(Identifier)
-            .order_by(nullslast(desc(CirculationEvent.start)))
-            .limit(num)
-            .all()
-        )
-
-        events = [
-            {
-                "id": result.id,
-                "type": result.type,
-                "time": result.start,
-                "book": {
-                    "title": result.license_pool.work.title,
-                    "url": annotator.permalink_for(
-                        result.license_pool.identifier,
-                    ),
-                },
-            }
-            for result in results
-        ]
-
-        return dict({"circulation_events": events})
 
     def bulk_circulation_events(self, analytics_exporter=None):
         date_format = "%Y-%m-%d"
