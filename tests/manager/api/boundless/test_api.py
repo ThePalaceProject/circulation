@@ -719,11 +719,11 @@ class TestBoundlessApi:
                 # available.
                 identifier_data = IdentifierData.from_identifier(identifier)
                 bibliographic = BibliographicData(
-                    data_source_name=DataSource.AXIS_360,
+                    data_source_name=DataSource.BOUNDLESS,
                     primary_identifier_data=identifier_data,
                 )
                 availability = CirculationData(
-                    data_source_name=DataSource.AXIS_360,
+                    data_source_name=DataSource.BOUNDLESS,
                     primary_identifier_data=identifier_data,
                     licenses_owned=7,
                     licenses_available=6,
