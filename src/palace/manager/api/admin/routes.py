@@ -318,15 +318,6 @@ def bulk_circulation_events():
     return response
 
 
-@library_route("/admin/circulation_events")
-@has_library
-@returns_json_or_response_or_problem_detail
-@requires_admin
-def circulation_events():
-    """Returns a JSON representation of the most recent circulation events."""
-    return app.manager.admin_dashboard_controller.circulation_events()
-
-
 @app.route("/admin/stats")
 @returns_json_or_response_or_problem_detail
 @requires_admin
