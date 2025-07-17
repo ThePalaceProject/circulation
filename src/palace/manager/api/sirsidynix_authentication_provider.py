@@ -65,8 +65,8 @@ class SirsiDynixHorizonAuthSettings(BasicAuthProviderSettings):
             ),
             type=ConfigurationFormItemType.SELECT,
             options={
-                "true": "Patron blocks enforced",
-                "false": "Patron blocks NOT enforced.",
+                True: "Patron blocks enforced",
+                False: "Patron blocks NOT enforced.",
             },
         ),
     )

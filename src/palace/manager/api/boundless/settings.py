@@ -51,8 +51,8 @@ class BoundlessSettings(BaseCirculationApiSettings, FormatPrioritiesSettings):
             ),
             type=ConfigurationFormItemType.SELECT,
             options={
-                "True": _("True"),
-                "False": _("False"),
+                True: _("True"),
+                False: _("False"),
             },
         ),
     )

@@ -46,8 +46,8 @@ class MilleniumPatronSettings(BasicAuthProviderSettings):
             label="Certificate Verification",
             type=ConfigurationFormItemType.SELECT,
             options={
-                "true": "Verify Certificate Normally (Required for production)",
-                "false": "Ignore Certificate Problems (For temporary testing only)",
+                True: "Verify Certificate Normally (Required for production)",
+                False: "Ignore Certificate Problems (For temporary testing only)",
             },
         ),
     )
@@ -109,8 +109,8 @@ class MilleniumPatronSettings(BasicAuthProviderSettings):
             "setting. Otherwise, do not use POST, as it is NOT compatible with other Millenium integrations.",
             type=ConfigurationFormItemType.SELECT,
             options={
-                "true": "True",
-                "false": "False",
+                True: "True",
+                False: "False",
             },
         ),
     )

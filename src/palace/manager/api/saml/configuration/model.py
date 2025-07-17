@@ -152,8 +152,8 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
             ),
             type=ConfigurationFormItemType.SELECT,
             options={
-                "true": "Use SAML NameID",
-                "false": "Do NOT use SAML NameID",
+                True: "Use SAML NameID",
+                False: "Do NOT use SAML NameID",
             },
         ),
     )
