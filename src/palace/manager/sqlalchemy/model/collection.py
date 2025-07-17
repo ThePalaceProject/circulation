@@ -314,6 +314,33 @@ class Collection(Base, HasSessionCache, RedisKeyMixin):
             .order_by(Collection.id)
         )
 
+    _CIRCULATION_API_CACHE_KEY = "_palace_collection_circulation_api_cache"
+
+    def circulation_api(
+        self,
+        *,
+        registry: LicenseProvidersRegistry = Provide[
+            "integration_registry.license_providers"
+        ],
+    ) -> CirculationApiType:
+        """
+        Return the API object for this collection.
+
+        The returned api object is cached for the session, as this function may be
+        called repeatedly.
+
+        We tie this cache to the session because the API objects that are created
+        save references to the session, so they are only valid for the lifetime of
+        the session.
+        """
+        session = Session.object_session(self)
+        if self._CIRCULATION_API_CACHE_KEY not in session.info:
+            session.info[self._CIRCULATION_API_CACHE_KEY] = {}
+        cache = session.info[self._CIRCULATION_API_CACHE_KEY]
+        if self.id not in cache:
+            cache[self.id] = registry.from_collection(session, self)
+        return cache[self.id]  # type: ignore[no-any-return]
+
     @property
     def is_active(self) -> bool:
         """Return True if the collection is active, False otherwise."""

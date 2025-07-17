@@ -35,6 +35,10 @@ from palace.manager.api.saml.credential import SAMLCredentialManager
 from palace.manager.core.classifier import Classifier
 from palace.manager.core.coverage import CoverageFailure
 from palace.manager.core.monitor import CollectionMonitor, TimestampData
+from palace.manager.core.opds_format_priority import (
+    FormatPriorities,
+    FormatPrioritiesSettings,
+)
 from palace.manager.data_layer.bibliographic import BibliographicData
 from palace.manager.data_layer.circulation import CirculationData
 from palace.manager.data_layer.contributor import ContributorData
@@ -45,7 +49,6 @@ from palace.manager.data_layer.policy.replacement import ReplacementPolicy
 from palace.manager.data_layer.subject import SubjectData
 from palace.manager.integration.base import integration_settings_load
 from palace.manager.integration.configuration.connection import ConnectionSetting
-from palace.manager.integration.configuration.formats import FormatPrioritiesSettings
 from palace.manager.integration.configuration.wayfless import (
     SAMLWAYFlessConstants,
     SAMLWAYFlessFulfillmentError,
@@ -216,6 +219,11 @@ class BaseOPDSAPI(
         super().__init__(_db, collection)
         self.saml_wayfless_url_template = self.settings.saml_wayfless_url_template
         self.saml_credential_manager = SAMLCredentialManager()
+        self._format_priorities = FormatPriorities(
+            self.settings.prioritized_drm_schemes,
+            self.settings.prioritized_content_types,
+            self.settings.deprioritize_lcp_non_epubs,
+        )
 
     def checkin(self, patron: Patron, pin: str, licensepool: LicensePool) -> None:
         # All the CM side accounting for this loan is handled by CirculationAPI
@@ -348,6 +356,11 @@ class BaseOPDSAPI(
         lpdm: LicensePoolDeliveryMechanism,
     ) -> bool:
         return True
+
+    def sort_delivery_mechanisms(
+        self, lpdms: list[LicensePoolDeliveryMechanism]
+    ) -> list[LicensePoolDeliveryMechanism]:
+        return self._format_priorities.prioritize_mechanisms(lpdms)
 
 
 SettingsType = TypeVar("SettingsType", bound=OPDSImporterSettings, covariant=True)
