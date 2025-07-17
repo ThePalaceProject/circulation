@@ -30,6 +30,8 @@ from palace.manager.data_layer.bibliographic import BibliographicData
 from palace.manager.data_layer.circulation import CirculationData
 from palace.manager.data_layer.format import FormatData
 from palace.manager.data_layer.identifier import IdentifierData
+from palace.manager.feed.annotator.circulation import CirculationManagerAnnotator
+from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import (
@@ -40,6 +42,7 @@ from palace.manager.sqlalchemy.model.resource import Representation
 from palace.manager.util.datetime_helpers import datetime_utc, utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.library import LibraryFixture
+from tests.fixtures.services import ServicesFixture
 from tests.manager.api.boundless.conftest import BoundlessFixture
 
 
@@ -990,3 +993,49 @@ class TestBoundlessApi:
             BoundlessApi._delivery_mechanism_to_internal_format(lpdm)
             == BoundlessFormat.epub
         )
+
+    def test_sort_delivery_mechanisms(
+        self, db: DatabaseTransactionFixture, services_fixture_wired: ServicesFixture
+    ) -> None:
+        def get_mechanisms(
+            items: list[LicensePoolDeliveryMechanism],
+        ) -> list[tuple[str, str]]:
+            return [
+                (dm.delivery_mechanism.content_type, dm.delivery_mechanism.drm_scheme)
+                for dm in items
+            ]
+
+        edition = db.edition()
+        pool = db.licensepool(edition)
+        pool.set_delivery_mechanism(
+            MediaTypes.EPUB_MEDIA_TYPE,
+            DeliveryMechanism.BAKER_TAYLOR_KDRM_DRM,
+            None,
+        )
+        annotator = CirculationManagerAnnotator(None)
+
+        # Without the prioritize_boundless_drm setting, Adobe DRM is first.
+        collection = db.collection(
+            protocol=BoundlessApi,
+            settings=db.boundless_settings(
+                prioritize_boundless_drm=False,
+            ),
+        )
+        pool.collection = collection
+        assert get_mechanisms(annotator.visible_delivery_mechanisms(pool)) == [
+            (MediaTypes.EPUB_MEDIA_TYPE, DeliveryMechanism.ADOBE_DRM),
+            (MediaTypes.EPUB_MEDIA_TYPE, DeliveryMechanism.BAKER_TAYLOR_KDRM_DRM),
+        ]
+
+        # With the prioritize_boundless_drm setting, Boundless DRM is first.
+        collection = db.collection(
+            protocol=BoundlessApi,
+            settings=db.boundless_settings(
+                prioritize_boundless_drm=True,
+            ),
+        )
+        pool.collection = collection
+        assert get_mechanisms(annotator.visible_delivery_mechanisms(pool)) == [
+            (MediaTypes.EPUB_MEDIA_TYPE, DeliveryMechanism.BAKER_TAYLOR_KDRM_DRM),
+            (MediaTypes.EPUB_MEDIA_TYPE, DeliveryMechanism.ADOBE_DRM),
+        ]
