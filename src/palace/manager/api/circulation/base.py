@@ -4,6 +4,7 @@ import dataclasses
 import datetime
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Mapping
+from functools import cached_property
 from typing import TypedDict, TypeVar
 
 from flask_babel import lazy_gettext as _
@@ -128,7 +129,7 @@ class BaseCirculationAPI(
             )
         return config
 
-    @property
+    @cached_property
     def settings(self) -> SettingsType:
         return self.settings_load(self.integration_configuration())
 

@@ -108,8 +108,7 @@ class OPDS2WithODLApi(
                 % (collection.protocol, self.__class__.__name__)
             )
         self.collection_id = collection.id
-        settings = self.settings
-        self.data_source_name = settings.data_source
+        self.data_source_name = self.settings.data_source
         # Create the data source if it doesn't exist yet.
         DataSource.lookup(_db, self.data_source_name, autocreate=True)
 
@@ -117,8 +116,8 @@ class OPDS2WithODLApi(
         self._credential_factory = LCPCredentialFactory()
         self._hasher_instance: Hasher | None = None
 
-        self.loan_limit = settings.loan_limit
-        self.hold_limit = settings.hold_limit
+        self.loan_limit = self.settings.loan_limit
+        self.hold_limit = self.settings.hold_limit
         self._request = get_opds_requests(
             self.settings.auth_type,
             self.settings.username,
@@ -131,10 +130,9 @@ class OPDS2WithODLApi(
 
         :return: Hasher instance
         """
-        settings = self.settings
         if self._hasher_instance is None:
             self._hasher_instance = self._hasher_factory.create(
-                settings.encryption_algorithm
+                self.settings.encryption_algorithm
             )
 
         return self._hasher_instance
