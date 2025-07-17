@@ -999,7 +999,7 @@ class TestBoundlessApi:
     ) -> None:
         def get_mechanisms(
             items: list[LicensePoolDeliveryMechanism],
-        ) -> list[tuple[str, str]]:
+        ) -> list[tuple[str | None, str | None]]:
             return [
                 (dm.delivery_mechanism.content_type, dm.delivery_mechanism.drm_scheme)
                 for dm in items
