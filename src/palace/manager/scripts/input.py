@@ -382,7 +382,7 @@ class CollectionInputScript(Script):
 
 class CollectionArgumentsScript(CollectionInputScript):
     @classmethod
-    def arg_parser(cls):
+    def arg_parser(cls) -> argparse.ArgumentParser:
         parser = argparse.ArgumentParser()
         parser.add_argument(
             "collection_names",

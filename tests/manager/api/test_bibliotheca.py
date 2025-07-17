@@ -4,7 +4,7 @@ import json
 import random
 from datetime import date, datetime, timedelta
 from io import BytesIO, StringIO
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 from unittest import mock
 from unittest.mock import MagicMock, create_autospec
 
@@ -257,7 +257,7 @@ class TestBibliothecaAPI:
             (identifier, identifier.identifier),
         ):
             for identifier_list in ([identifier], identifier):
-                api.item_list_parser.parse_called_with = None
+                api.item_list_parser.parse_called_with = None  # type: ignore[attr-defined]
 
                 results = list(api.bibliographic_lookup(identifier_list))
 
@@ -268,7 +268,7 @@ class TestBibliothecaAPI:
                 ] == api.bibliographic_lookup_request_called_with
 
                 # The response content is passed into parse()
-                assert "parse me" == api.item_list_parser.parse_called_with
+                assert "parse me" == api.item_list_parser.parse_called_with  # type: ignore[attr-defined]
 
                 # The results of parse() are yielded.
                 assert ["item1", "item2"] == results
@@ -1283,7 +1283,7 @@ class TestBibliothecaPurchaseMonitor:
         default_monitor: BibliothecaPurchaseMonitor,
     ):
         with pytest.raises(ValueError) as excinfo:
-            default_monitor._optional_iso_date(input)
+            default_monitor._optional_iso_date(input)  # type: ignore[arg-type]
 
     def test_catch_up_from(self, default_monitor: BibliothecaPurchaseMonitor):
         # catch_up_from() slices up its given timespan, calls
@@ -1489,7 +1489,7 @@ class TestBibliothecaPurchaseMonitor:
         # endpoint, which will tell us about the purchase of a single
         # book, and one to the metadata endpoint for information about
         # that book.
-        api = default_monitor.api
+        api = cast(MockBibliothecaAPI, default_monitor.api)
         api.queue_response(
             200, content=bibliotheca_fixture.files.sample_data("marc_records_one.xml")
         )
@@ -1520,6 +1520,7 @@ class TestBibliothecaPurchaseMonitor:
         default_monitor.override_timestamp = False
         timestamp = default_monitor.timestamp()
         assert timestamp.achievements == "MARC records processed: 1"
+        assert timestamp.finish is not None
         assert timestamp.finish > start_time
 
 
@@ -1904,11 +1905,12 @@ class TestBibliographicCoverageProvider(TestBibliothecaAPI):
         provider = BibliothecaBibliographicCoverageProvider(
             bibliotheca_fixture.collection, api_class=MockBibliothecaAPI
         )
+        api = cast(MockBibliothecaAPI, provider.api)
         data = bibliotheca_fixture.files.sample_data("item_metadata_single.xml")
 
         # We can't use bibliotheca_fixture.api because that's not the same object
         # as the one created by the coverage provider.
-        provider.api.queue_response(200, content=data)
+        api.queue_response(200, content=data)
         [result] = provider.process_batch([identifier])
         assert identifier == result
         bibliotheca_fixture.work_policy_recalc_fixture.is_queued(

@@ -15,6 +15,7 @@ from palace.manager.api.circulation.data import HoldInfo, LoanInfo
 from palace.manager.api.circulation.exceptions import DeliveryMechanismError
 from palace.manager.api.circulation.fulfillment import Fulfillment
 from palace.manager.api.circulation.settings import BaseCirculationApiSettings
+from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.integration.base import HasLibraryIntegrationConfiguration
 from palace.manager.integration.settings import BaseSettings
 from palace.manager.sqlalchemy.model.collection import Collection
@@ -98,8 +99,13 @@ class BaseCirculationAPI(
             )
 
     @property
-    def collection(self) -> Collection | None:
-        return Collection.by_id(self._db, id=self.collection_id)
+    def collection(self) -> Collection:
+        collection = Collection.by_id(self._db, id=self.collection_id)
+        if collection is None:
+            raise PalaceValueError(
+                f"Collection with id {self.collection_id} not found for {self.__class__.__name__}"
+            )
+        return collection
 
     def default_notification_email_address(
         self, patron: Patron, pin: str | None

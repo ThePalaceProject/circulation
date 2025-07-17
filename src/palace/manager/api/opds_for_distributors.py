@@ -130,7 +130,7 @@ class OPDSForDistributorsAPI(
     ) -> Response:
         """Wrapper around HTTP.request_with_timeout to be overridden for tests."""
         if url is None:
-            name = self.collection.name if self.collection else "unknown"
+            name = self.collection.name
             raise LibraryAuthorizationFailedException(
                 f"No URL provided to request_with_timeout for collection: {name}/{self.collection_id}."
             )

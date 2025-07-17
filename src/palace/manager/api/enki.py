@@ -194,9 +194,6 @@ class EnkiAPI(
             count_title_changes,
         )
 
-        if self.collection is None:
-            raise ValueError("Collection is None")
-
         for result in self.default_patrons(self.collection):
             if isinstance(result, SelfTestResult):
                 yield result
