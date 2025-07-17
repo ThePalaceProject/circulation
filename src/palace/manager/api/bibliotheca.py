@@ -189,11 +189,10 @@ class BibliothecaAPI(
         super().__init__(_db, collection)
 
         self._db = _db
-        settings = self.settings
         self.version = self.DEFAULT_VERSION
-        self.account_id = settings.username
-        self.account_key = settings.password
-        self.library_id = settings.external_account_id
+        self.account_id = self.settings.username
+        self.account_key = self.settings.password
+        self.library_id = self.settings.external_account_id
         self.base_url = self.DEFAULT_BASE_URL
 
         if not self.account_id or not self.account_key or not self.library_id:
