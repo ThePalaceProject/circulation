@@ -40,6 +40,7 @@ from palace.manager.util.problem_detail import (
     ProblemDetail,
     ProblemDetailException,
 )
+from palace.manager.util.sentinel import SentinelType
 
 
 class FormFieldInfo(FieldInfo):
@@ -228,7 +229,7 @@ class ConfigurationFormItem(LoggerMixin):
     # Required is usually determined by the Pydantic model, but can be overridden
     # here, in the case where a field would not be required in the model, but is
     # required in the admin interface.
-    required: bool = False
+    required: bool | typing.Literal[SentinelType.NotGiven] = SentinelType.NotGiven
 
     # The weight determines the order of the form items in the admin interface.
     # Form items with a lower weight will be displayed first. Items with the same
@@ -261,16 +262,17 @@ class ConfigurationFormItem(LoggerMixin):
         form_entry: dict[str, Any] = {
             "label": self.label,
             "key": key,
-            "required": required or self.required,
+            "required": required
+            or (self.required if self.required is not SentinelType.NotGiven else False),
             "hidden": self.hidden,
         }
 
-        if required and not self.required:
+        if required is True and self.required is False:
             self.log.warning(
                 f'Configuration form item (label="{self.label}", key={key}) does not have a default value or '
                 f"factory and yet its required property is set to False.  This condition may indicate a "
                 f"programming error. To make this warning go away, either set the configuration form item's default "
-                f"value or set the form item's required property to True."
+                f"value or remove the form item's required property."
             )
 
         if default is not None and default is not PydanticUndefined:

@@ -14,6 +14,7 @@ from palace.manager.integration.settings import (
     FormField,
     SettingsValidationError,
 )
+from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
 from tests.fixtures.problem_detail import raises_problem_detail
 
@@ -366,3 +367,66 @@ class TestBaseSettings:
                 "hidden": False,
             }
         ]
+
+    class TestConfigurationFormItem:
+        def test_required(self, caplog: pytest.LogCaptureFixture) -> None:
+            caplog.set_level(LogLevel.warning)
+
+            # If required isn't specified, we never get a warning and we use the default
+            item = ConfigurationFormItem(
+                label="Test", type=ConfigurationFormItemType.TEXT
+            )
+            assert item.to_dict(MagicMock(), "test", True) == (
+                0,
+                {
+                    "key": "test",
+                    "label": "Test",
+                    "required": True,
+                    "hidden": False,
+                },
+            )
+            assert len(caplog.records) == 0
+            assert item.to_dict(MagicMock(), "test", False) == (
+                0,
+                {
+                    "key": "test",
+                    "label": "Test",
+                    "required": False,
+                    "hidden": False,
+                },
+            )
+            assert len(caplog.records) == 0
+
+            # If we set required to true, it overrides the default.
+            item = ConfigurationFormItem(
+                label="Test", type=ConfigurationFormItemType.TEXT, required=True
+            )
+            assert item.to_dict(MagicMock(), "test", False) == (
+                0,
+                {
+                    "key": "test",
+                    "label": "Test",
+                    "required": True,
+                    "hidden": False,
+                },
+            )
+            assert len(caplog.records) == 0
+
+            # If we set required to false, and the default is True. It doesn't override and we get a warning.
+            item = ConfigurationFormItem(
+                label="Test", type=ConfigurationFormItemType.TEXT, required=False
+            )
+            assert item.to_dict(MagicMock(), "test", True) == (
+                0,
+                {
+                    "key": "test",
+                    "label": "Test",
+                    "required": True,
+                    "hidden": False,
+                },
+            )
+            assert len(caplog.records) == 1
+            assert (
+                'Configuration form item (label="Test", key=test) does not have '
+                "a default value or factory and yet its required property is set to False"
+            ) in caplog.text
