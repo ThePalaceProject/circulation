@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import datetime
 import logging
+from collections.abc import Sequence
 from enum import IntEnum, auto
 from typing import TYPE_CHECKING, Literal, overload
 
+from frozendict import frozendict
 from sqlalchemy import (
     Boolean,
     Column,
@@ -1535,6 +1537,16 @@ class LicensePool(Base):
             db,
         )
 
+    @property
+    def sorted_available_delivery_mechanisms(
+        self,
+    ) -> list[LicensePoolDeliveryMechanism]:
+        """
+        Sort available_delivery_mechanisms based on the sorting algorithm defined in
+        DeliveryMechanism.sort().
+        """
+        return DeliveryMechanism.sort(self.available_delivery_mechanisms)
+
 
 Index(
     "ix_licensepools_data_source_id_identifier_id_collection_id",
@@ -1844,6 +1856,36 @@ class DeliveryMechanism(Base, HasSessionCache):
         STREAMING_AUDIO_CONTENT_TYPE: MediaTypes.TEXT_HTML_MEDIA_TYPE,
     }
 
+    _DEFAULT_DELIVERY_MECHANISM_SORT_LOOKUP = frozendict(
+        {
+            key: index
+            for index, key in enumerate(
+                (
+                    # Common content types with no DRM are the first priority.
+                    (MediaTypes.EPUB_MEDIA_TYPE, NO_DRM),
+                    (MediaTypes.PDF_MEDIA_TYPE, NO_DRM),
+                    (MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE, NO_DRM),
+                    # After that we prioritize common content types with bearer token DRM.
+                    (MediaTypes.EPUB_MEDIA_TYPE, BEARER_TOKEN),
+                    (MediaTypes.PDF_MEDIA_TYPE, BEARER_TOKEN),
+                    (MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE, BEARER_TOKEN),
+                    # EPubs with DRM
+                    (MediaTypes.EPUB_MEDIA_TYPE, LCP_DRM),
+                    (MediaTypes.EPUB_MEDIA_TYPE, ADOBE_DRM),
+                    # Audiobook formats
+                    # Until the apps support streaming LCP audiobooks, we prioritize the feedbooks
+                    # DRM type ahead of the LCP audiobook manifest, since the user experience is
+                    # worse with LCP, as the client has to download the entire book before it can be played.
+                    (MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE, FEEDBOOKS_AUDIOBOOK_DRM),
+                    (MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE, LCP_DRM),
+                    (MediaTypes.AUDIOBOOK_PACKAGE_LCP_MEDIA_TYPE, LCP_DRM),
+                    (MediaTypes.OVERDRIVE_AUDIOBOOK_MANIFEST_MEDIA_TYPE, LIBBY_DRM),
+                    (None, FINDAWAY_DRM),
+                )
+            )
+        }
+    )
+
     __tablename__ = "deliverymechanisms"
     id: Mapped[int] = Column(Integer, primary_key=True)
     content_type = Column(String)
@@ -2016,6 +2058,35 @@ class DeliveryMechanism(Base, HasSessionCache):
         # non-streaming delivery mechanism prohibits the use of any
         # other non-streaming delivery mechanism.
         return False
+
+    @classmethod
+    def sort(
+        cls,
+        mechanisms: Sequence[LicensePoolDeliveryMechanism],
+    ) -> list[LicensePoolDeliveryMechanism]:
+        """
+        Sort a list of LicensePoolDeliveryMechanism objects by the priorities defined in
+        cls._DEFAULT_DELIVERY_MECHANISM_SORT.
+
+        The sort is stable, so that any mechanisms whose sort order is the same will remain in the
+        same order they were provided.
+        """
+        priorities = cls._DEFAULT_DELIVERY_MECHANISM_SORT_LOOKUP
+        default = len(cls._DEFAULT_DELIVERY_MECHANISM_SORT_LOOKUP)
+
+        def key_func(
+            lpdm: LicensePoolDeliveryMechanism,
+        ) -> int:
+            """Sort by the DeliveryMechanism's default_delivery_mechanism_sort."""
+            content_type = lpdm.delivery_mechanism.content_type
+            drm_scheme = lpdm.delivery_mechanism.drm_scheme
+            return priorities.get((content_type, drm_scheme), default)
+
+        result = sorted(
+            mechanisms,
+            key=key_func,
+        )
+        return result
 
 
 # The uniqueness constraint doesn't enforce uniqueness when one of the

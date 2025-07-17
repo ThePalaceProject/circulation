@@ -308,7 +308,7 @@ class CirculationManagerAnnotator(Annotator):
         # that is hidden from the OPDS feed.
         delivery_mechanisms = [
             dm
-            for dm in licensepool.available_delivery_mechanisms
+            for dm in licensepool.sorted_available_delivery_mechanisms
             if dm.delivery_mechanism.content_type not in self.hidden_content_types
         ]
 
