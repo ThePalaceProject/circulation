@@ -102,6 +102,7 @@ class BoundlessApi(
         self.api_requests = (
             BoundlessRequests(self.settings) if requests is None else requests
         )
+        self._prioritize_boundless_drm = self.settings.prioritize_boundless_drm
 
     @staticmethod
     def _delivery_mechanism_to_internal_format(
@@ -715,3 +716,25 @@ class BoundlessApi(
             identifier_strings.append(value)
 
         return identifier_strings
+
+    def sort_delivery_mechanisms(
+        self, lpdms: list[LicensePoolDeliveryMechanism]
+    ) -> list[LicensePoolDeliveryMechanism]:
+        """
+        Do any custom sorting of delivery mechanisms configured for this API.
+        """
+        if self._prioritize_boundless_drm:
+            # If we prioritize Boundless DRM, we want to put the Boundless DRM
+            # delivery mechanism first in the list.
+            lpdms.sort(
+                key=lambda x: (
+                    1
+                    if (
+                        x.delivery_mechanism.drm_scheme
+                        != DeliveryMechanism.BAKER_TAYLOR_KDRM_DRM
+                    )
+                    else 0
+                )
+            )
+
+        return lpdms
