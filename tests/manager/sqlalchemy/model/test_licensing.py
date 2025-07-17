@@ -240,6 +240,47 @@ class TestDeliveryMechanism:
         pytest.raises(IntegrityError, create, session, dm, **without_drm_args)
         session.rollback()
 
+    def test_sort(self) -> None:
+        def create_lpdm(
+            content_type: str | None, drm_scheme: str | None
+        ) -> LicensePoolDeliveryMechanism:
+            return LicensePoolDeliveryMechanism(
+                delivery_mechanism=DeliveryMechanism(
+                    content_type=content_type, drm_scheme=drm_scheme
+                )
+            )
+
+        no_drm = create_lpdm(Representation.EPUB_MEDIA_TYPE, DeliveryMechanism.NO_DRM)
+        adobe_drm = create_lpdm(
+            Representation.EPUB_MEDIA_TYPE, DeliveryMechanism.ADOBE_DRM
+        )
+        bearer_token = create_lpdm(
+            Representation.EPUB_MEDIA_TYPE, DeliveryMechanism.BEARER_TOKEN
+        )
+        unknown_drm_1 = create_lpdm(Representation.EPUB_MEDIA_TYPE, "unknown_drm_1")
+        unknown_drm_2 = create_lpdm(Representation.EPUB_MEDIA_TYPE, "unknown_drm_2")
+
+        # Even if Adobe DRM comes first, we sort it after no DRM.
+        assert DeliveryMechanism.sort([adobe_drm, no_drm]) == [no_drm, adobe_drm]
+
+        # Bearer token is also sorted before Adobe DRM.
+        assert DeliveryMechanism.sort([adobe_drm, bearer_token]) == [
+            bearer_token,
+            adobe_drm,
+        ]
+
+        # If all three are present, no DRM comes first, then bearer token, then Adobe DRM.
+        assert DeliveryMechanism.sort([no_drm, adobe_drm, bearer_token]) == [
+            no_drm,
+            bearer_token,
+            adobe_drm,
+        ]
+
+        # If we have unknown DRM schemes, they are sorted last, but maintain their relative order.
+        assert DeliveryMechanism.sort(
+            [adobe_drm, unknown_drm_1, unknown_drm_2, no_drm]
+        ) == [no_drm, adobe_drm, unknown_drm_1, unknown_drm_2]
+
 
 class TestRightsStatus:
     def test_lookup(self, db: DatabaseTransactionFixture):
