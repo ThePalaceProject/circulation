@@ -68,7 +68,6 @@ def work_fixture(
 class TestWorkController:
     def test_contributor(self, work_fixture: WorkFixture):
         m = work_fixture.manager.work_controller.contributor
-        work_fixture.collection.data_source = None
 
         # Find a real Contributor put in the system through the setup
         # process.
@@ -133,7 +132,7 @@ class TestWorkController:
         facet_links = [
             link for link in links if link["rel"] == "http://opds-spec.org/facet"
         ]
-        assert 8 == len(facet_links)
+        assert 10 == len(facet_links)
 
         # At this point we don't want to generate real feeds anymore.
         # We can't do a real end-to-end test without setting up a real
@@ -812,7 +811,6 @@ class TestWorkController:
         assert result == NOT_FOUND_ON_REMOTE
 
     def test_series(self, work_fixture: WorkFixture):
-        work_fixture.collection.data_source = None
         # Test the ability of the series() method to generate an OPDS
         # feed representing all the books in a given series, subject
         # to an optional language and audience restriction.
@@ -868,7 +866,7 @@ class TestWorkController:
         facet_links = [
             link for link in links if link["rel"] == "http://opds-spec.org/facet"
         ]
-        assert 9 == len(facet_links)
+        assert 11 == len(facet_links)
 
         # The facet link we care most about is the default sort order,
         # put into place by SeriesFacets.

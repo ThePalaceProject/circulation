@@ -7,7 +7,6 @@ from palace.manager.api.circulation.settings import (
     BaseCirculationApiSettings,
     BaseCirculationLoanSettings,
 )
-from palace.manager.integration.configuration.formats import FormatPrioritiesSettings
 from palace.manager.integration.settings import (
     ConfigurationFormItem,
     ConfigurationFormItemType,
@@ -15,7 +14,7 @@ from palace.manager.integration.settings import (
 )
 
 
-class BoundlessSettings(BaseCirculationApiSettings, FormatPrioritiesSettings):
+class BoundlessSettings(BaseCirculationApiSettings):
     username: str = FormField(
         form=ConfigurationFormItem(label=_("Username"), required=True)
     )

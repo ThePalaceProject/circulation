@@ -42,15 +42,12 @@ from palace.manager.feed.types import (
     WorkEntry,
 )
 from palace.manager.feed.util import strftime
-from palace.manager.integration.configuration.formats import FormatPriorities
 from palace.manager.search.external_search import WorkSearchResult
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.service.container import Services
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
-from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
-from palace.manager.sqlalchemy.model.integration import IntegrationConfiguration
 from palace.manager.sqlalchemy.model.lane import (
     Facets,
     FacetsWithEntryPoint,
@@ -192,8 +189,6 @@ class AcquisitionHelper:
 
 
 class CirculationManagerAnnotator(Annotator):
-    hidden_content_types: list[str]
-
     @inject
     def __init__(
         self,
@@ -303,64 +298,24 @@ class CirculationManagerAnnotator(Annotator):
             # determining the active license pool.
             return super().active_licensepool_for(work, library=library)
 
-    @staticmethod
-    def _prioritized_formats_for_pool(
-        licensepool: LicensePool,
-    ) -> tuple[list[str], list[str]]:
-        collection: Collection = licensepool.collection
-        config: IntegrationConfiguration = collection.integration_configuration
-
-        # Consult the configuration information for the integration configuration
-        # that underlies the license pool's collection. The configuration
-        # information _might_ contain a set of prioritized DRM schemes and
-        # content types.
-        prioritized_drm_schemes: list[str] = (
-            config.settings_dict.get(FormatPriorities.PRIORITIZED_DRM_SCHEMES_KEY) or []
-        )
-
-        content_setting: list[str] = (
-            config.settings_dict.get(FormatPriorities.PRIORITIZED_CONTENT_TYPES_KEY)
-            or []
-        )
-        return prioritized_drm_schemes, content_setting
-
-    @staticmethod
-    def _deprioritized_lcp_content(
-        licensepool: LicensePool,
-    ) -> bool:
-        collection: Collection = licensepool.collection
-        config: IntegrationConfiguration = collection.integration_configuration
-
-        # Consult the configuration information for the integration configuration
-        # that underlies the license pool's collection. The configuration
-        # information _might_ contain a flag that indicates whether to deprioritize
-        # LCP content. By default, if no configuration value is specified, then
-        # the priority of LCP content will be left completely unchanged.
-
-        _prioritize: bool = config.settings_dict.get(
-            FormatPriorities.DEPRIORITIZE_LCP_NON_EPUBS_KEY, False
-        )
-        return _prioritize
-
     def visible_delivery_mechanisms(
         self, licensepool: LicensePool | None
     ) -> list[LicensePoolDeliveryMechanism]:
         if not licensepool:
             return []
 
-        (
-            prioritized_drm_schemes,
-            prioritized_content_types,
-        ) = CirculationManagerAnnotator._prioritized_formats_for_pool(licensepool)
+        # Filter out any delivery mechanisms that have a content type
+        # that is hidden from the OPDS feed.
+        delivery_mechanisms = [
+            dm
+            for dm in licensepool.available_delivery_mechanisms
+            if dm.delivery_mechanism.content_type not in self.hidden_content_types
+        ]
 
-        return FormatPriorities(
-            prioritized_drm_schemes=prioritized_drm_schemes,
-            prioritized_content_types=prioritized_content_types,
-            hidden_content_types=self.hidden_content_types,
-            deprioritize_lcp_non_epubs=CirculationManagerAnnotator._deprioritized_lcp_content(
-                licensepool
-            ),
-        ).prioritize_for_pool(licensepool)
+        # Allow a collections circulation_api to modify the sorting of delivery mechanisms.
+        return licensepool.collection.circulation_api().sort_delivery_mechanisms(
+            delivery_mechanisms
+        )
 
     def annotate_work_entry(
         self,

@@ -20,6 +20,7 @@ from palace.manager.api.circulation.exceptions import (
 from palace.manager.api.circulation.fulfillment import DirectFulfillment
 from palace.manager.api.selftest import HasCollectionSelfTests
 from palace.manager.core.monitor import TimestampData
+from palace.manager.core.opds_format_priority import FormatPriorities
 from palace.manager.core.opds_import import (
     OPDSImporter,
     OPDSImporterSettings,
@@ -120,6 +121,11 @@ class OPDSForDistributorsAPI(
         self.password = settings.password
         self.feed_url = settings.external_account_id
         self.auth_url: str | None = None
+        self._format_priorities = FormatPriorities(
+            settings.prioritized_drm_schemes,
+            settings.prioritized_content_types,
+            settings.deprioritize_lcp_non_epubs,
+        )
 
     def _run_self_tests(self, _db: Session) -> Generator[SelfTestResult]:
         """Try to get a token."""
@@ -364,6 +370,11 @@ class OPDSForDistributorsAPI(
 
     def update_availability(self, licensepool: LicensePool) -> None:
         pass
+
+    def sort_delivery_mechanisms(
+        self, lpdms: list[LicensePoolDeliveryMechanism]
+    ) -> list[LicensePoolDeliveryMechanism]:
+        return self._format_priorities.prioritize_mechanisms(lpdms)
 
 
 class OPDSForDistributorsImporter(OPDSImporter):

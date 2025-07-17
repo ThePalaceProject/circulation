@@ -29,6 +29,7 @@ from palace.manager.api.authentication.base import (
     AuthenticationProvider,
     SettingsType as TAuthProviderSettings,
 )
+from palace.manager.api.bibliotheca import BibliothecaAPI, BibliothecaSettings
 from palace.manager.api.boundless.api import BoundlessApi
 from palace.manager.api.boundless.settings import BoundlessSettings
 from palace.manager.api.circulation.base import (
@@ -42,6 +43,10 @@ from palace.manager.api.discovery.opds_registration import (
 )
 from palace.manager.api.odl.api import OPDS2WithODLApi
 from palace.manager.api.odl.settings import OPDS2WithODLSettings
+from palace.manager.api.opds_for_distributors import (
+    OPDSForDistributorsAPI,
+    OPDSForDistributorsSettings,
+)
 from palace.manager.api.overdrive.api import OverdriveAPI
 from palace.manager.api.overdrive.settings import OverdriveSettings
 from palace.manager.api.simple_authentication import (
@@ -609,11 +614,30 @@ class DatabaseTransactionFixture:
         external_account_id="c",
     )
 
+    opds_for_distributors_settings = functools.partial(
+        OPDSForDistributorsSettings,
+        username="username",
+        password="password",
+        external_account_id="http://example.com/feed",
+        data_source=DataSource.FEEDBOOKS,
+    )
+
+    bibliotheca_settings = functools.partial(
+        BibliothecaSettings,
+        username="username",
+        password="password",
+        external_account_id="account_id",
+    )
+
     def collection_settings(
         self, protocol: type[BaseCirculationAPI[TCirculationSettings, Any]]
     ) -> TCirculationSettings | None:
         if protocol in [OPDSAPI, OPDS2API]:
             return self.opds_settings()  # type: ignore[return-value]
+        elif protocol == OPDSForDistributorsAPI:
+            return self.opds_for_distributors_settings()  # type: ignore[return-value]
+        elif protocol == BibliothecaAPI:
+            return self.bibliotheca_settings()  # type: ignore[return-value]
         elif protocol == OverdriveAPI:
             return self.overdrive_settings()  # type: ignore[return-value]
         elif protocol == OPDS2WithODLApi:
