@@ -90,8 +90,8 @@ class SIP2Settings(BasicAuthProviderSettings):
             label="Connect over SSL?",
             type=ConfigurationFormItemType.SELECT,
             options={
-                "true": "Connect to the SIP2 server over SSL",
-                "false": "Connect to the SIP2 server over an ordinary socket connection",
+                True: "Connect to the SIP2 server over SSL",
+                False: "Connect to the SIP2 server over an ordinary socket connection",
             },
             required=True,
         ),
@@ -102,8 +102,8 @@ class SIP2Settings(BasicAuthProviderSettings):
             label="Perform SSL certificate verification.",
             type=ConfigurationFormItemType.SELECT,
             options={
-                "true": "Perform SSL certificate verification.",
-                "false": "Do not perform SSL certificate verification.",
+                True: "Perform SSL certificate verification.",
+                False: "Do not perform SSL certificate verification.",
             },
             description=(
                 "Strict certificate verification may be optionally turned off for "
@@ -169,8 +169,8 @@ class SIP2Settings(BasicAuthProviderSettings):
             ),
             type=ConfigurationFormItemType.SELECT,
             options={
-                "true": "Block based on patron status field",
-                "false": "No blocks based on patron status field",
+                True: "Block based on patron status field",
+                False: "No blocks based on patron status field",
             },
         ),
     )

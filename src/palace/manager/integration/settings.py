@@ -189,7 +189,7 @@ class ConfigurationFormItemType(Enum):
     IMAGE = "image"
 
 
-ConfigurationFormOptionsType = Mapping[Enum | str | None, str | LazyString]
+ConfigurationFormOptionsType = Mapping[Enum | str | bool | None, str | LazyString]
 
 
 @dataclass(frozen=True)

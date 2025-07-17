@@ -52,7 +52,7 @@ class MarcExporterLibrarySettings(BaseSettings):
         form=ConfigurationFormItem(
             label="Include summaries in MARC records (520 field)",
             type=ConfigurationFormItemType.SELECT,
-            options={"false": "Do not include summaries", "true": "Include summaries"},
+            options={False: "Do not include summaries", True: "Include summaries"},
         ),
     )
 
@@ -62,8 +62,8 @@ class MarcExporterLibrarySettings(BaseSettings):
             label="Include Palace Collection Manager genres in MARC records (650 fields)",
             type=ConfigurationFormItemType.SELECT,
             options={
-                "false": "Do not include Palace Collection Manager genres",
-                "true": "Include Palace Collection Manager genres",
+                False: "Do not include Palace Collection Manager genres",
+                True: "Include Palace Collection Manager genres",
             },
         ),
     )

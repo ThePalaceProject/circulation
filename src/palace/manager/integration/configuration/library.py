@@ -132,8 +132,8 @@ class LibrarySettings(BaseSettings):
             label="Allow books to be put on hold",
             type=ConfigurationFormItemType.SELECT,
             options={
-                "true": "Allow holds",
-                "false": "Disable holds",
+                True: "Allow holds",
+                False: "Disable holds",
             },
             category="Loans, Holds, & Fines",
             level=Level.SYS_ADMIN_ONLY,

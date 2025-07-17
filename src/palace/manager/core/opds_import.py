@@ -126,8 +126,8 @@ class OPDSImporterSettings(
             label=_("Include in inventory report?"),
             type=ConfigurationFormItemType.SELECT,
             options={
-                "true": "(Default) Yes",
-                "false": "No",
+                True: "(Default) Yes",
+                False: "No",
             },
         ),
     )
