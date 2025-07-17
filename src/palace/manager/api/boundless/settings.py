@@ -55,6 +55,18 @@ class BoundlessSettings(BaseCirculationApiSettings):
             },
         ),
     )
+    prioritize_boundless_drm: bool = FormField(
+        default=False,
+        form=ConfigurationFormItem(
+            label=_("Prioritize Boundless DRM"),
+            description=_("Always use Boundless DRM if it is available."),
+            type=ConfigurationFormItemType.SELECT,
+            options={
+                True: _("Yes, prioritize Boundless DRM"),
+                False: _("No, do not prioritize Boundless DRM"),
+            },
+        ),
+    )
 
 
 class BoundlessLibrarySettings(BaseCirculationLoanSettings):
