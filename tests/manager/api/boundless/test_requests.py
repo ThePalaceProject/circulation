@@ -17,7 +17,11 @@ from palace.manager.api.boundless.exception import (
     BoundlessValidationError,
 )
 from palace.manager.api.boundless.models.json import AudiobookMetadataResponse
-from palace.manager.api.boundless.models.xml import AddHoldResponse, RemoveHoldResponse
+from palace.manager.api.boundless.models.xml import (
+    AddHoldResponse,
+    EarlyCheckinResponse,
+    RemoveHoldResponse,
+)
 from palace.manager.api.boundless.requests import BoundlessRequests
 from palace.manager.api.boundless.settings import BoundlessSettings
 from palace.manager.api.circulation.exceptions import (
@@ -61,6 +65,17 @@ def boundless_requests(
 
 
 class TestBoundlessRequests:
+    def test___init__(self, boundless_requests: BoundlessRequestsFixture) -> None:
+        # Test that if timeout is set to 0 in settings, it becomes None in requests.
+        settings = boundless_requests.create_settings(timeout=0)
+        requests = BoundlessRequests(settings)
+        assert requests._timeout is None
+
+        # If its set to a positive value, it remains the same.
+        settings = boundless_requests.create_settings(timeout=5)
+        requests = BoundlessRequests(settings)
+        assert requests._timeout == 5
+
     @pytest.mark.parametrize(
         "content",
         [
@@ -119,6 +134,37 @@ class TestBoundlessRequests:
         boundless_requests.client.queue_response(400, content=data)
         with pytest.raises(BoundlessValidationError):
             boundless_requests.request(AudiobookMetadataResponse.model_validate_json)
+
+    def test__request_timeout(
+        self,
+        boundless_files_fixture: BoundlessFilesFixture,
+        boundless_requests: BoundlessRequestsFixture,
+    ):
+        # When no timeout is set, the request goes out with the timeout configured in the settings.
+        boundless_requests.client.queue_response(
+            200, content=(boundless_files_fixture.sample_data("checkin_success.xml"))
+        )
+        boundless_requests.request(EarlyCheckinResponse.from_xml)
+        assert (
+            boundless_requests.client.requests_args[1]["timeout"]
+            == boundless_requests.requests._timeout
+        )
+
+        # When a timeout is set, the request goes out with that timeout instead
+        boundless_requests.client.reset_mock()
+        boundless_requests.client.queue_response(
+            200, content=(boundless_files_fixture.sample_data("checkin_success.xml"))
+        )
+        boundless_requests.request(EarlyCheckinResponse.from_xml, timeout=2)
+        assert boundless_requests.client.requests_args[0]["timeout"] == 2
+
+        # Even if that timeout is None
+        boundless_requests.client.reset_mock()
+        boundless_requests.client.queue_response(
+            200, content=(boundless_files_fixture.sample_data("checkin_success.xml"))
+        )
+        boundless_requests.request(EarlyCheckinResponse.from_xml, timeout=None)
+        assert boundless_requests.client.requests_args[0]["timeout"] is None
 
     @pytest.mark.parametrize(
         "filename",
@@ -187,9 +233,6 @@ class TestBoundlessRequests:
         boundless_requests.client.queue_response(200, content=data)
         response = boundless_requests.requests.add_hold("title_id", "patron_id", None)
         assert response.holds_queue_position == 1
-
-        # Make sure the checkout request doesn't set a timeout
-        assert "timeout" not in boundless_requests.client.requests_args[1]
 
     def test_add_hold_fail(
         self,
