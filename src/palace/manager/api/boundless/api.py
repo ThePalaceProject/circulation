@@ -256,7 +256,7 @@ class BoundlessApi(
         return DirectFulfillment(str(fnd_manifest), fnd_manifest.MEDIA_TYPE)
 
     _baker_taylor_base64_regex = re.compile(r"^[0-9a-zA-Z_-]+$")
-    _baker_taylor_kdrm_modulus_validator = TypeAdapter(
+    _baker_taylor_kdrm_modulus_validator: Callable[[str], None] = TypeAdapter(
         Annotated[
             str,
             StringConstraints(
@@ -264,7 +264,7 @@ class BoundlessApi(
             ),
         ]
     ).validate_python
-    _baker_taylor_kdrm_exponent_validator = TypeAdapter(
+    _baker_taylor_kdrm_exponent_validator: Callable[[str], None] = TypeAdapter(
         Annotated[
             str,
             StringConstraints(
