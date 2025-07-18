@@ -1368,7 +1368,7 @@ class MockSessionMaker:
 
 
 @pytest.fixture
-def mock_session_maker(db: DatabaseTransactionFixture) -> sessionmaker[Session]:
+def mock_session_maker(db: DatabaseTransactionFixture) -> sessionmaker[Any]:
     return MockSessionMaker(db.session)  # type: ignore[return-value]
 
 
