@@ -5,7 +5,7 @@ from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, Generic, Protocol, TypeVar
 
 from sqlalchemy.orm import Session
-from sqlalchemy.orm.attributes import Mapped, flag_modified
+from sqlalchemy.orm.attributes import flag_modified
 
 from palace.manager.integration.settings import BaseSettings
 
@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 
 
 class IntegrationConfigurationProtocol(Protocol):
-    settings_dict: Mapped[dict[str, Any]]
+    settings_dict: dict[str, Any]
 
 
 T = TypeVar("T", bound=BaseSettings)
@@ -75,7 +75,7 @@ def integration_settings_update(
         else new_settings
     )
     settings_dict.update(new_settings_dict)
-    integration.settings_dict = settings_cls.model_validate(settings_dict).model_dump()  # type: ignore[assignment]
+    integration.settings_dict = settings_cls.model_validate(settings_dict).model_dump()
     flag_modified(integration, "settings_dict")
 
 

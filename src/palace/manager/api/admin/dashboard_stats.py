@@ -32,12 +32,12 @@ def generate_statistics(admin: Admin, db: Session) -> StatisticsResponse:
 
 
 class Statistics:
-    METERED_LICENSE_FILTER = and_(
+    METERED_LICENSE_FILTER = and_(  # type: ignore[type-var]
         LicensePool.licenses_owned > 0,
         LicensePool.unlimited_access == false(),
         LicensePool.open_access == false(),
     )
-    UNLIMITED_LICENSE_FILTER = and_(
+    UNLIMITED_LICENSE_FILTER = and_(  # type: ignore[type-var]
         LicensePool.unlimited_access == true(),
         LicensePool.open_access == false(),
     )
