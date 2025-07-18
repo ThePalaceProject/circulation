@@ -58,6 +58,7 @@ class BoundlessRequests(LoggerMixin):
         self._library_id = settings.external_account_id
         self._username = settings.username
         self._password = settings.password
+        self._timeout = settings.timeout if settings.timeout > 0 else None
 
         # Convert the nickname for a server into an actual URL.
         self._base_url = API_BASE_URLS[settings.server_nickname]
@@ -123,9 +124,11 @@ class BoundlessRequests(LoggerMixin):
             headers=headers,
             params=params,
             verify=self._verify_certificate,
+            # TODO: Hopefully B&T will fix the performance of their endpoints and we can remove
+            #  this custom timeout eventually. We should be able to query our logs to see how long
+            #  the requests are taking.
+            timeout=self._timeout if timeout is SentinelType.NotGiven else timeout,
         )
-        if timeout is not SentinelType.NotGiven:
-            _make_request = partial(_make_request, timeout=timeout)
 
         response = _make_request()
         if response.status_code == 401:
@@ -187,18 +190,11 @@ class BoundlessRequests(LoggerMixin):
         """Make a call to the getFulfillmentInfoAPI."""
         url = self._base_url + "getfullfillmentInfo/v2"
         params = {"TransactionID": transaction_id}
-        # We set an explicit timeout because this request can take a long time and
-        # the default was too short. Ideally B&T would fix this on their end, but
-        # in the meantime we need to work around it.
-        # TODO: Revisit this timeout. Hopefully B&T will fix the performance
-        #   of this endpoint and we can remove this. We should be able to query
-        #   our logs to see how long these requests are taking.
         response = self._request(
             "POST",
             url,
             FulfillmentInfoResponse.validate_json,
             params=params,
-            timeout=15,
         )
         return response
 
@@ -206,18 +202,11 @@ class BoundlessRequests(LoggerMixin):
         """Make a call to the getaudiobookmetadata endpoint."""
         url = self._base_url + "getaudiobookmetadata/v2"
         params = {"fndcontentid": findaway_content_id}
-        # We set an explicit timeout because this request can take a long time and
-        # the default was too short. Ideally B&T would fix this on their end, but
-        # in the meantime we need to work around it.
-        # TODO: Revisit this timeout. Hopefully B&T will fix the performance
-        #   of this endpoint and we can remove this. We should be able to query
-        #   our logs to see how long these requests are taking.
         response = self._request(
             "POST",
             url,
             AudiobookMetadataResponse.model_validate_json,
             params=params,
-            timeout=15,
         )
         return response
 
