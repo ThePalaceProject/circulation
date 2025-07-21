@@ -729,6 +729,38 @@ class TestOPDS2Importer(OPDS2Test):
         feed_dict["publications"].insert(0, {})
         assert extract_last_update_dates(json.dumps(feed_dict)) == expected_dates
 
+    @pytest.mark.parametrize(
+        "published,expected",
+        [
+            pytest.param(
+                datetime.datetime(2015, 9, 29, 17, 0, tzinfo=datetime.timezone.utc),
+                datetime.date(2015, 9, 29),
+                id="datetime with time info",
+            ),
+            pytest.param(
+                datetime.datetime(2015, 9, 29, 0, 0),
+                datetime.date(2015, 9, 29),
+                id="datetime with no time info",
+            ),
+            pytest.param(
+                datetime.date(2015, 9, 29),
+                datetime.date(2015, 9, 29),
+                id="date",
+            ),
+            pytest.param(
+                None,
+                None,
+                id="none",
+            ),
+        ],
+    )
+    def test__extract_published_date(
+        self,
+        published: datetime.datetime | datetime.date | None,
+        expected: datetime.date | None,
+    ):
+        assert OPDS2Importer._extract_published_date(published) == expected
+
 
 class Opds2ApiFixture:
     def __init__(self, db: DatabaseTransactionFixture, mock_http: MagicMock):

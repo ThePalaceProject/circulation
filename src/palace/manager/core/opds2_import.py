@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from datetime import datetime
+from datetime import date, datetime
 from functools import cached_property
 from typing import Any
 from urllib.parse import urljoin, urlparse
@@ -617,6 +617,12 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
         """
         return self.parse_identifier(publication.metadata.identifier)
 
+    @classmethod
+    def _extract_published_date(cls, published: datetime | date | None) -> date | None:
+        if isinstance(published, datetime):
+            return published.date()
+        return published
+
     def _extract_publication_bibliographic_data(
         self,
         publication: opds2.BasePublication,
@@ -651,7 +657,7 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
         first_imprint = first_or_default(publication.metadata.imprints)
         imprint = str(first_imprint.name) if first_imprint else None
 
-        published = publication.metadata.published
+        published = self._extract_published_date(publication.metadata.published)
 
         subjects = self._extract_subjects(publication.metadata.subjects)
         contributors = (
