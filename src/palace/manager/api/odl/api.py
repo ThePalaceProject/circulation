@@ -120,15 +120,15 @@ class OPDS2WithODLApi(
         self.loan_limit = self.settings.loan_limit
         self.hold_limit = self.settings.hold_limit
         self._request = get_opds_requests(
-            settings.auth_type,
-            settings.username,
-            settings.password,
-            settings.external_account_id,
+            self.settings.auth_type,
+            self.settings.username,
+            self.settings.password,
+            self.settings.external_account_id,
         )
         self._format_priorities = FormatPriorities(
-            settings.prioritized_drm_schemes,
-            settings.prioritized_content_types,
-            settings.deprioritize_lcp_non_epubs,
+            self.settings.prioritized_drm_schemes,
+            self.settings.prioritized_content_types,
+            self.settings.deprioritize_lcp_non_epubs,
         )
 
     def _get_hasher(self) -> Hasher:
