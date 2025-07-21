@@ -255,6 +255,8 @@ class BoundlessApi(
         )
         return DirectFulfillment(str(fnd_manifest), fnd_manifest.MEDIA_TYPE)
 
+    # See RFC7515 for base64 encoding specification. Its normal base64 with no trailing
+    # = padding, and using URL-safe characters (i.e., '-' instead of '+', and '_' instead of '/').
     _baker_taylor_base64_regex = re.compile(r"^[0-9a-zA-Z_-]+$")
     # RSA 2048 bit modulus is 256 bytes, which is ceil(256 * 4 / 3) = 342 characters when
     # base64 encoded without padding.
@@ -266,6 +268,8 @@ class BoundlessApi(
             ),
         ]
     ).validate_python
+    # The exponent is typically 65537, which is 4 characters when base64 encoded without padding,
+    # but this isn't guaranteed, so we just validate the proper base64 encoding.
     _baker_taylor_kdrm_exponent_validator: Callable[[str], None] = TypeAdapter(
         Annotated[
             str,
