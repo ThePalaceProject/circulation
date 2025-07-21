@@ -256,6 +256,8 @@ class BoundlessApi(
         return DirectFulfillment(str(fnd_manifest), fnd_manifest.MEDIA_TYPE)
 
     _baker_taylor_base64_regex = re.compile(r"^[0-9a-zA-Z_-]+$")
+    # RSA 2048 bit modulus is 256 bytes, which is ceil(256 * 4 / 3) = 342 characters when
+    # base64 encoded without padding.
     _baker_taylor_kdrm_modulus_validator: Callable[[str], None] = TypeAdapter(
         Annotated[
             str,
@@ -267,9 +269,7 @@ class BoundlessApi(
     _baker_taylor_kdrm_exponent_validator: Callable[[str], None] = TypeAdapter(
         Annotated[
             str,
-            StringConstraints(
-                min_length=4, max_length=4, pattern=_baker_taylor_base64_regex
-            ),
+            StringConstraints(pattern=_baker_taylor_base64_regex),
         ]
     ).validate_python
 

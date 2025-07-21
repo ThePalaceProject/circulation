@@ -641,20 +641,6 @@ class TestBoundlessApi:
 
         # Test error cases - exponent
         with pytest.raises(InvalidInputException) as excinfo:
-            BoundlessApi._validate_baker_taylor_kdrm_params(correct_modulus, "a")
-        assert "exponent" in str(excinfo.value.problem_detail)
-        assert "String should have at least 4 characters" in str(
-            excinfo.value.problem_detail
-        )
-
-        with pytest.raises(InvalidInputException) as excinfo:
-            BoundlessApi._validate_baker_taylor_kdrm_params(correct_modulus, "abcde")
-        assert "exponent" in str(excinfo.value.problem_detail)
-        assert "String should have at most 4 characters" in str(
-            excinfo.value.problem_detail
-        )
-
-        with pytest.raises(InvalidInputException) as excinfo:
             BoundlessApi._validate_baker_taylor_kdrm_params(correct_modulus, "ab*c")
         assert "exponent" in str(excinfo.value.problem_detail)
         assert "String should be a url safe base64 encoded string" in str(
