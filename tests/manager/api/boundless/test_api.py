@@ -524,8 +524,8 @@ class TestBoundlessApi:
         fulfillment = fulfill(
             client_ip="2.2.2.2",
             device_id="device-id",
-            modulus="modulus",
-            exponent="exponent",
+            modulus="a" * 342,
+            exponent="abcd",
         )
 
         assert isinstance(fulfillment, DirectFulfillment)
@@ -600,6 +600,52 @@ class TestBoundlessApi:
         }
         assert metadata_args["params"] is not None
         assert metadata_args["params"] == {"fndcontentid": "04960"}
+
+    def test___validate_baker_taylor_kdrm_params(self) -> None:
+        correct_modulus = (
+            "vOa694N296HWud_b3CCIvIBOuGqwE_mAPcf2MXqGmC1VIolhDIkMsdX38bUBRT-Ui6Q_KacF4MPrD-"
+            "vywhEmS1qVYDRV-Ee4wYENCFtgk92j9dPW9TIg1SC3g4oLw7dkvkIrWCzX_r42haAss5NnkKC8FJ7d"
+            "14h-f3b-aNPjfowYupZtmmHdq9FEm-g6IjQBYBd569PeC_kXcGBreDspClUQZZMYGW3fYbvg-1vOG0"
+            "Pyu0zExgJ9T6omF9gSbW0fojm2SFHhgOcyK271SwOiHUM2KTc7tZEndzoBiaR8t66N84Th7bZxYLWW"
+            "hvGS3_YeTYo6OdQj_QBc_vFau5exVw"
+        )
+
+        correct_exponent = "ABCD"
+
+        # Test that the validation method works correctly with valid parameters.
+        BoundlessApi._validate_baker_taylor_kdrm_params(
+            correct_modulus, correct_exponent
+        )
+
+        # Test error cases - modulus
+        with pytest.raises(InvalidInputException) as excinfo:
+            BoundlessApi._validate_baker_taylor_kdrm_params("", correct_exponent)
+        assert "modulus" in str(excinfo.value.problem_detail)
+        assert "String should have at least 342 characters" in str(
+            excinfo.value.problem_detail
+        )
+
+        with pytest.raises(InvalidInputException) as excinfo:
+            BoundlessApi._validate_baker_taylor_kdrm_params("a" * 343, correct_exponent)
+        assert "modulus" in str(excinfo.value.problem_detail)
+        assert "String should have at most 342 characters" in str(
+            excinfo.value.problem_detail
+        )
+
+        with pytest.raises(InvalidInputException) as excinfo:
+            BoundlessApi._validate_baker_taylor_kdrm_params("%" * 342, correct_exponent)
+        assert "modulus" in str(excinfo.value.problem_detail)
+        assert "String should be a url safe base64 encoded string" in str(
+            excinfo.value.problem_detail
+        )
+
+        # Test error cases - exponent
+        with pytest.raises(InvalidInputException) as excinfo:
+            BoundlessApi._validate_baker_taylor_kdrm_params(correct_modulus, "ab*c")
+        assert "exponent" in str(excinfo.value.problem_detail)
+        assert "String should be a url safe base64 encoded string" in str(
+            excinfo.value.problem_detail
+        )
 
     def test_patron_activity(self, boundless: BoundlessFixture):
         """Test the method that locates all current activity

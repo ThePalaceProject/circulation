@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import datetime
 import html
-from collections.abc import Generator, Sequence
+import re
+from collections.abc import Callable, Generator, Sequence
 from datetime import timedelta
-from typing import cast
+from typing import Annotated, cast
 
 from flask_babel import lazy_gettext as _
+from pydantic import StringConstraints, TypeAdapter, ValidationError
 from sqlalchemy.orm import Session
 from typing_extensions import Unpack
 
@@ -253,6 +255,58 @@ class BoundlessApi(
         )
         return DirectFulfillment(str(fnd_manifest), fnd_manifest.MEDIA_TYPE)
 
+    # See RFC7515 for base64 encoding specification. Its normal base64 with no trailing
+    # = padding, and using URL-safe characters (i.e., '-' instead of '+', and '_' instead of '/').
+    _baker_taylor_base64_regex = re.compile(r"^[0-9a-zA-Z_-]+$")
+    # RSA 2048 bit modulus is 256 bytes, which is ceil(256 * 4 / 3) = 342 characters when
+    # base64 encoded without padding.
+    _baker_taylor_kdrm_modulus_validator: Callable[[str], None] = TypeAdapter(
+        Annotated[
+            str,
+            StringConstraints(
+                min_length=342, max_length=342, pattern=_baker_taylor_base64_regex
+            ),
+        ]
+    ).validate_python
+    # The exponent is typically 65537, which is 4 characters when base64 encoded without padding,
+    # but this isn't guaranteed, so we just validate the proper base64 encoding.
+    _baker_taylor_kdrm_exponent_validator: Callable[[str], None] = TypeAdapter(
+        Annotated[
+            str,
+            StringConstraints(pattern=_baker_taylor_base64_regex),
+        ]
+    ).validate_python
+
+    @classmethod
+    def _validate_baker_taylor_kdrm_param(
+        cls, validation_func: Callable[[str], None], param_name: str, param: str
+    ) -> None:
+        """Validate the Baker & Taylor KDRM modulus parameter."""
+        try:
+            validation_func(param)
+        except ValidationError as e:
+            error = e.errors()[0]
+            error_msg = error["msg"]
+            error_type = error["type"]
+
+            # In the case of a pattern mismatch, we can provide a more specific error message.
+            if error_type == "string_pattern_mismatch":
+                error_msg = "String should be a url safe base64 encoded string with no padding, see RFC 7515"
+
+            raise InvalidInputException(
+                "Invalid parameters, unable to fulfill loan",
+                f"Error validating {param_name} '{param}': {error_msg}",
+            )
+
+    @classmethod
+    def _validate_baker_taylor_kdrm_params(cls, modulus: str, exponent: str) -> None:
+        cls._validate_baker_taylor_kdrm_param(
+            cls._baker_taylor_kdrm_modulus_validator, "modulus", modulus
+        )
+        cls._validate_baker_taylor_kdrm_param(
+            cls._baker_taylor_kdrm_exponent_validator, "exponent", exponent
+        )
+
     def _fulfill_baker_taylor_kdrm(
         self,
         title: Title,
@@ -276,6 +330,13 @@ class BoundlessApi(
                 "Missing required URL parameters for fulfillment",
                 debug_message,
             )
+
+        # It appears that Baker & Taylor does basically no validation on the parameters we send
+        # so we do a little validation here, so we can give more friendly error messages.
+        self._validate_baker_taylor_kdrm_params(
+            modulus=params["modulus"],
+            exponent=params["exponent"],
+        )
 
         license_response = self.api_requests.license(
             book_vault_uuid=fulfillment_info.book_vault_uuid,
