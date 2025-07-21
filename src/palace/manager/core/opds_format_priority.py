@@ -55,6 +55,7 @@ class FormatPriorities:
         """
         # If there are any prioritized DRM schemes or content types, then
         # sort the list of mechanisms accordingly.
+        mechanisms = mechanisms.copy()
         if (
             len(self._prioritized_drm_schemes) != 0
             or len(self._prioritized_content_types) != 0
