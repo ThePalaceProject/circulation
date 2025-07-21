@@ -656,9 +656,7 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
 
         first_imprint = first_or_default(publication.metadata.imprints)
         imprint = str(first_imprint.name) if first_imprint else None
-
         published = self._extract_published_date(publication.metadata.published)
-
         subjects = self._extract_subjects(publication.metadata.subjects)
         contributors = (
             self._extract_contributors(
