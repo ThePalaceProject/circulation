@@ -281,6 +281,10 @@ class TestDeliveryMechanism:
             [adobe_drm, unknown_drm_1, unknown_drm_2, no_drm]
         ) == [no_drm, adobe_drm, unknown_drm_1, unknown_drm_2]
 
+        assert DeliveryMechanism.sort(
+            [unknown_drm_2, adobe_drm, unknown_drm_1, no_drm]
+        ) == [no_drm, adobe_drm, unknown_drm_2, unknown_drm_1]
+
 
 class TestRightsStatus:
     def test_lookup(self, db: DatabaseTransactionFixture):
