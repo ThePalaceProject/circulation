@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import sys
 from collections.abc import Mapping
 
@@ -12,7 +14,6 @@ from palace.manager.integration.settings import (
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.licensing import (
     DeliveryMechanism,
-    LicensePool,
     LicensePoolDeliveryMechanism,
 )
 
@@ -20,82 +21,52 @@ from palace.manager.sqlalchemy.model.licensing import (
 class FormatPriorities:
     """Functions for prioritizing delivery mechanisms based on content type and DRM scheme."""
 
-    PRIORITIZED_DRM_SCHEMES_KEY: str = "prioritized_drm_schemes"
-    PRIORITIZED_CONTENT_TYPES_KEY: str = "prioritized_content_types"
-    DEPRIORITIZE_LCP_NON_EPUBS_KEY: str = "deprioritize_lcp_non_epubs"
-
-    _prioritized_drm_schemes: Mapping[str, int]
-    _prioritized_content_types: Mapping[str, int]
-    _hidden_content_types: list[str]
-    _deprioritize_lcp_non_epubs: bool
-
     def __init__(
         self,
         prioritized_drm_schemes: list[str],
         prioritized_content_types: list[str],
-        hidden_content_types: list[str],
         deprioritize_lcp_non_epubs: bool,
     ):
         """
         :param prioritized_drm_schemes: The set of DRM schemes to prioritize; items earlier in the list are higher priority.
         :param prioritized_content_types: The set of content types to prioritize; items earlier in the list are higher priority.
-        :param hidden_content_types: The set of content types to remove entirely
         :param deprioritize_lcp_non_epubs: Should LCP audiobooks/PDFs be deprioritized in an ad-hoc manner?
         """
 
         # Assign priorities to each content type and DRM scheme based on their position
         # in the given lists. Higher priorities are assigned to items that appear earlier.
-        self._prioritized_content_types = {}
+        self._prioritized_content_types: Mapping[str, int] = {}
         for index, content_type in enumerate(reversed(prioritized_content_types)):
             self._prioritized_content_types[content_type] = index + 1
 
-        self._prioritized_drm_schemes = {}
+        self._prioritized_drm_schemes: Mapping[str, int] = {}
         for index, drm_scheme in enumerate(reversed(prioritized_drm_schemes)):
             self._prioritized_drm_schemes[drm_scheme] = index + 1
 
-        self._hidden_content_types = hidden_content_types
         self._deprioritize_lcp_non_epubs = deprioritize_lcp_non_epubs
-
-    def prioritize_for_pool(
-        self, pool: LicensePool
-    ) -> list[LicensePoolDeliveryMechanism]:
-        """
-        Filter and prioritize the delivery mechanisms in the given pool.
-        :param pool: The license pool
-        :return: A list of suitable delivery mechanisms in priority order, highest priority first
-        """
-        return self.prioritize_mechanisms(pool.available_delivery_mechanisms)
 
     def prioritize_mechanisms(
         self, mechanisms: list[LicensePoolDeliveryMechanism]
     ) -> list[LicensePoolDeliveryMechanism]:
         """
-        Filter and prioritize the delivery mechanisms in the given pool.
+        Prioritize the delivery mechanisms given.
         :param mechanisms: The list of delivery mechanisms
         :return: A list of suitable delivery mechanisms in priority order, highest priority first
         """
-
-        # First, filter out all hidden content types.
-        mechanisms_filtered: list[LicensePoolDeliveryMechanism] = []
-        for delivery in mechanisms:
-            delivery_mechanism = delivery.delivery_mechanism
-            if delivery_mechanism:
-                if delivery_mechanism.content_type not in self._hidden_content_types:
-                    mechanisms_filtered.append(delivery)
-
         # If there are any prioritized DRM schemes or content types, then
         # sort the list of mechanisms accordingly.
+        mechanisms = mechanisms.copy()
         if (
             len(self._prioritized_drm_schemes) != 0
             or len(self._prioritized_content_types) != 0
         ):
-            mechanisms_filtered.sort(
+            mechanisms.sort(
                 key=lambda mechanism: self._content_type_priority(
                     mechanism.delivery_mechanism.content_type or ""
                 ),
                 reverse=True,
             )
-            mechanisms_filtered.sort(
+            mechanisms.sort(
                 key=lambda mechanism: self._drm_scheme_priority(
                     mechanism.delivery_mechanism.drm_scheme
                 ),
@@ -103,15 +74,15 @@ class FormatPriorities:
             )
 
         if self._deprioritize_lcp_non_epubs:
-            mechanisms_filtered.sort(
-                key=lambda mechanism: FormatPriorities._artificial_lcp_content_priority(
+            mechanisms.sort(
+                key=lambda mechanism: self._artificial_lcp_content_priority(
                     drm_scheme=mechanism.delivery_mechanism.drm_scheme,
                     content_type=mechanism.delivery_mechanism.content_type,
                 ),
                 reverse=True,
             )
 
-        return mechanisms_filtered
+        return mechanisms
 
     @staticmethod
     def _artificial_lcp_content_priority(
@@ -143,7 +114,7 @@ class FormatPriorities:
 
 
 class FormatPrioritiesSettings(BaseSettings):
-    prioritized_drm_schemes: list[str] | None = FormField(
+    prioritized_drm_schemes: list[str] = FormField(
         default=[],
         form=ConfigurationFormItem(
             label=_("Prioritized DRM schemes"),
@@ -165,7 +136,7 @@ class FormatPrioritiesSettings(BaseSettings):
         ),
     )
 
-    prioritized_content_types: list[str] | None = FormField(
+    prioritized_content_types: list[str] = FormField(
         default=[],
         form=ConfigurationFormItem(
             label=_("Prioritized content types"),
@@ -187,8 +158,8 @@ class FormatPrioritiesSettings(BaseSettings):
         ),
     )
 
-    deprioritize_lcp_non_epubs: str | None = FormField(
-        default="false",
+    deprioritize_lcp_non_epubs: bool = FormField(
+        default=False,
         form=ConfigurationFormItem(
             label=_("De-prioritize LCP non-EPUBs"),
             description=_(
@@ -202,8 +173,8 @@ class FormatPrioritiesSettings(BaseSettings):
             type=ConfigurationFormItemType.SELECT,
             required=False,
             options={
-                "true": _("De-prioritize"),
-                "false": _("Do not de-prioritize"),
+                True: _("De-prioritize"),
+                False: _("Do not de-prioritize"),
             },
         ),
     )

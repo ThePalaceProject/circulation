@@ -1,12 +1,17 @@
 from datetime import timedelta
 from functools import cmp_to_key
-from unittest.mock import patch
+from unittest.mock import create_autospec, patch
 
 import feedparser
 import pytest
 from bidict import frozenbidict
 
+from palace.manager.api.circulation.base import CirculationApiType
+from palace.manager.api.odl.api import OPDS2WithODLApi
+from palace.manager.api.opds_for_distributors import OPDSForDistributorsAPI
 from palace.manager.core.classifier import Classifier
+from palace.manager.core.opds2_import import OPDS2API
+from palace.manager.core.opds_import import OPDSAPI
 from palace.manager.feed.acquisition import OPDSAcquisitionFeed
 from palace.manager.feed.annotator.base import Annotator
 from palace.manager.feed.annotator.circulation import CirculationManagerAnnotator
@@ -31,6 +36,7 @@ from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.sqlalchemy.util import get_one_or_create, tuple_to_numericrange
 from palace.manager.util.datetime_helpers import datetime_utc, utc_now
 from tests.fixtures.database import DatabaseTransactionFixture, DBStatementCounter
+from tests.fixtures.services import ServicesFixture
 from tests.manager.feed.conftest import PatchedUrlFor
 
 
@@ -285,9 +291,9 @@ class TestAnnotators:
         ]
         assert set(expected) == set(ratings)
 
-    def test_subtitle(self, db: DatabaseTransactionFixture):
-        session = db.session
-
+    def test_subtitle(
+        self, db: DatabaseTransactionFixture, services_fixture_wired: ServicesFixture
+    ):
         work = db.work(with_license_pool=True, with_open_access_download=True)
         work.presentation_edition.subtitle = "Return of the Jedi"
 
@@ -316,9 +322,9 @@ class TestAnnotators:
         assert computed is not None
         assert computed.subtitle == None
 
-    def test_series(self, db: DatabaseTransactionFixture):
-        session = db.session
-
+    def test_series(
+        self, db: DatabaseTransactionFixture, services_fixture_wired: ServicesFixture
+    ):
         work = db.work(with_license_pool=True, with_open_access_download=True)
         work.presentation_edition.series = "Harry Otter and the Lifetime of Despair"
         work.presentation_edition.series_position = 4
@@ -522,7 +528,9 @@ class CirculationManagerAnnotatorFixture:
 
 @pytest.fixture(scope="function")
 def circulation_fixture(
-    db: DatabaseTransactionFixture, patch_url_for: PatchedUrlFor
+    db: DatabaseTransactionFixture,
+    patch_url_for: PatchedUrlFor,
+    services_fixture_wired: ServicesFixture,
 ) -> CirculationManagerAnnotatorFixture:
     return CirculationManagerAnnotatorFixture(db)
 
@@ -589,8 +597,14 @@ class TestCirculationManagerAnnotator:
     def test_visible_delivery_mechanisms(
         self, circulation_fixture: CirculationManagerAnnotatorFixture
     ):
-        # By default, all delivery mechanisms are visible
         [pool] = circulation_fixture.work.license_pools
+
+        # Create a PDF delivery mechanism, that is not available.
+        pool.set_delivery_mechanism(
+            MediaTypes.PDF_MEDIA_TYPE, None, None, available=False
+        )
+
+        # Only the available delivery mechanisms are returned.
         [epub] = list(circulation_fixture.annotator.visible_delivery_mechanisms(pool))
         assert "application/epub+zip" == epub.delivery_mechanism.content_type
 
@@ -614,20 +628,41 @@ class TestCirculationManagerAnnotator:
         # mechanisms.
         assert [] == list(no_epub.visible_delivery_mechanisms(pool))
 
-    def test_visible_delivery_mechanisms_configured_0(
+    @pytest.mark.parametrize(
+        "protocol, settings_type",
+        [
+            pytest.param(OPDSAPI, "opds_settings", id="OPDS"),
+            pytest.param(OPDS2API, "opds_settings", id="OPDS2"),
+            pytest.param(OPDS2WithODLApi, "opds2_odl_settings", id="OPDS2+ODL"),
+            pytest.param(
+                OPDSForDistributorsAPI,
+                "opds_for_distributors_settings",
+                id="OPDS for Distributors",
+            ),
+        ],
+    )
+    def test_visible_delivery_mechanisms_modified_by_circulation_api(
         self,
         circulation_fixture: CirculationManagerAnnotatorFixture,
         db: DatabaseTransactionFixture,
+        protocol: type[CirculationApiType],
+        settings_type: str,
     ):
-        """Test that configuration options do affect OPDS feeds.
+        """
+        Test that configuration options for a collection can change the
+        order of delivery mechanisms returned by visible_delivery_mechanisms.
+
         Exhaustive testing of different configuration values isn't necessary
         here: See the tests for FormatProperties to see the actual semantics
-        of the configuration values."""
+        of the configuration values.
+        """
+        settings_callable = getattr(db, settings_type)
         collection = db.collection(
-            settings=db.opds_settings(
+            protocol=protocol,
+            settings=settings_callable(
                 prioritized_drm_schemes=[DeliveryMechanism.LCP_DRM],
                 prioritized_content_types=[MediaTypes.PDF_MEDIA_TYPE],
-            )
+            ),
         )
         edition = db.edition(collection=collection)
         pool: LicensePool = db.licensepool(edition, collection=collection)
@@ -670,6 +705,34 @@ class TestCirculationManagerAnnotator:
         assert results[3].delivery_mechanism.content_type == MediaTypes.EPUB_MEDIA_TYPE
         assert results[3].delivery_mechanism.drm_scheme == DeliveryMechanism.ADOBE_DRM
         assert len(results) == 4
+
+    def test_visible_delivery_mechanisms_calls_sort_delivery_mechanisms(
+        self,
+        db: DatabaseTransactionFixture,
+    ) -> None:
+        edition = db.edition()
+        pool = db.licensepool(edition)
+
+        mock_circulation_api = create_autospec(pool.collection.circulation_api)
+        pool.collection.circulation_api = mock_circulation_api
+
+        annotator = CirculationManagerAnnotator(
+            None,
+            hidden_content_types=[],
+        )
+        result = annotator.visible_delivery_mechanisms(pool)
+
+        # Assert we made the expected calls
+        mock_circulation_api.assert_called_once_with()
+        mock_circulation_api.return_value.sort_delivery_mechanisms.assert_called_once_with(
+            pool.delivery_mechanisms,
+        )
+
+        # Assert we returned the expected value
+        assert (
+            result
+            == mock_circulation_api.return_value.sort_delivery_mechanisms.return_value
+        )
 
     def test_rights_attributes(
         self, circulation_fixture: CirculationManagerAnnotatorFixture

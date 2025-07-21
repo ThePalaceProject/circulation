@@ -12,7 +12,10 @@ class TestURNLookupController:
         work = controller_fixture.db.work(with_open_access_download=True)
         [pool] = work.license_pools
         urn = pool.identifier.urn
-        with controller_fixture.request_context_with_library("/?urn=%s" % urn):
+        with (
+            controller_fixture.request_context_with_library("/?urn=%s" % urn),
+            controller_fixture.wired_container(),
+        ):
             route_name = "work"
 
             # Look up a work.

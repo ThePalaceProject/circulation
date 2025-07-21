@@ -1,5 +1,5 @@
 import datetime
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, create_autospec
 
 import pytest
 from sqlalchemy import select
@@ -12,6 +12,9 @@ from palace.manager.data_layer.policy.presentation import PresentationCalculatio
 from palace.manager.integration.base import integration_settings_update
 from palace.manager.integration.goals import Goals
 from palace.manager.search.external_search import ExternalSearchIndex
+from palace.manager.service.integration_registry.license_providers import (
+    LicenseProvidersRegistry,
+)
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.coverage import CoverageRecord
@@ -737,3 +740,41 @@ class TestCollection:
         assert "Collection must have an id to generate a redis key." in str(
             excinfo.value
         )
+
+    def test_circulation_api(
+        self, example_collection_fixture: ExampleCollectionFixture
+    ) -> None:
+        collection = example_collection_fixture.collection
+
+        # The circulation API call looks up the circulation API in the registry,
+        # based on the collection's protocol.
+        registry = create_autospec(LicenseProvidersRegistry)
+        result = collection.circulation_api(registry=registry)
+
+        # We call the registry with the expected parameters.
+        registry.from_collection.assert_called_once_with(
+            example_collection_fixture.database_fixture.session, collection
+        )
+
+        # The result is the circulation API returned by the registry.
+        assert result == registry.from_collection.return_value
+
+        # Making a second call returns the same result without
+        # calling the registry again.
+        assert registry.from_collection.call_count == 1
+        result2 = collection.circulation_api(registry=registry)
+
+        # We didn't make another call to the registry.
+        assert registry.from_collection.call_count == 1
+
+        # The result is the same as before.
+        assert result2 == result
+
+    def test_circulation_api_with_registry_from_container(
+        self,
+        example_collection_fixture: ExampleCollectionFixture,
+        services_fixture_wired: ServicesFixture,
+    ) -> None:
+        collection = example_collection_fixture.collection
+        api = collection.circulation_api()
+        assert isinstance(api, OverdriveAPI)

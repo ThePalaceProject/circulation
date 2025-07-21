@@ -48,6 +48,7 @@ from palace.manager.api.odl.settings import (
 from palace.manager.api.opds.exception import OpdsResponseException
 from palace.manager.api.opds.requests import OAuthOpdsRequest, get_opds_requests
 from palace.manager.core.lcp.credential import LCPCredentialFactory
+from palace.manager.core.opds_format_priority import FormatPriorities
 from palace.manager.opds.lcp.license import LicenseDocument
 from palace.manager.opds.lcp.status import LoanStatus
 from palace.manager.opds.types.link import BaseLink
@@ -119,10 +120,15 @@ class OPDS2WithODLApi(
         self.loan_limit = self.settings.loan_limit
         self.hold_limit = self.settings.hold_limit
         self._request = get_opds_requests(
-            self.settings.auth_type,
-            self.settings.username,
-            self.settings.password,
-            self.settings.external_account_id,
+            settings.auth_type,
+            settings.username,
+            settings.password,
+            settings.external_account_id,
+        )
+        self._format_priorities = FormatPriorities(
+            settings.prioritized_drm_schemes,
+            settings.prioritized_content_types,
+            settings.deprioritize_lcp_non_epubs,
         )
 
     def _get_hasher(self) -> Hasher:
@@ -705,3 +711,8 @@ class OPDS2WithODLApi(
         lpdm: LicensePoolDeliveryMechanism,
     ) -> bool:
         return False
+
+    def sort_delivery_mechanisms(
+        self, lpdms: list[LicensePoolDeliveryMechanism]
+    ) -> list[LicensePoolDeliveryMechanism]:
+        return self._format_priorities.prioritize_mechanisms(lpdms)

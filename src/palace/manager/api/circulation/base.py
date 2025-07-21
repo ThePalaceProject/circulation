@@ -140,6 +140,19 @@ class BaseCirculationAPI(
         config = self.library_settings_load(libconfig)
         return config
 
+    def sort_delivery_mechanisms(
+        self, lpdms: list[LicensePoolDeliveryMechanism]
+    ) -> list[LicensePoolDeliveryMechanism]:
+        """
+        Sort delivery mechanisms.
+
+        Overriding this method allows subclasses to implement custom sorting logic
+        for delivery mechanisms based on their specific requirements.
+
+        The default implementation simply returns the list as is.
+        """
+        return lpdms
+
     @abstractmethod
     def checkin(self, patron: Patron, pin: str, licensepool: LicensePool) -> None:
         """Return a book early.
