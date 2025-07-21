@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from flask_babel import lazy_gettext as _
+from pydantic import NonNegativeInt
 
 from palace.manager.api.boundless.constants import ServerNickname
 from palace.manager.api.circulation.settings import (
@@ -65,6 +66,18 @@ class BoundlessSettings(BaseCirculationApiSettings):
                 True: _("Yes, prioritize Boundless DRM"),
                 False: _("No, do not prioritize Boundless DRM"),
             },
+        ),
+    )
+    timeout: NonNegativeInt = FormField(
+        default=15,
+        form=ConfigurationFormItem(
+            label=_("Timeout (seconds)"),
+            description=_(
+                "The number of seconds to wait for a response from Boundless. Set to 0 for no timeout. "
+                "Care should be taken when increasing this value as it can lead to long waits and "
+                "server side performance issues."
+            ),
+            type=ConfigurationFormItemType.NUMBER,
         ),
     )
 
