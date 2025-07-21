@@ -726,7 +726,8 @@ class BoundlessApi(
         if self._prioritize_boundless_drm:
             # If we prioritize Boundless DRM, we want to put the Boundless DRM
             # delivery mechanism first in the list.
-            lpdms.sort(
+            lpdms = sorted(
+                lpdms,
                 key=lambda x: (
                     1
                     if (
@@ -734,7 +735,7 @@ class BoundlessApi(
                         != DeliveryMechanism.BAKER_TAYLOR_KDRM_DRM
                     )
                     else 0
-                )
+                ),
             )
 
         return lpdms
