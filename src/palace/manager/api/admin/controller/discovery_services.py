@@ -8,7 +8,9 @@ from palace.manager.api.admin.controller.integration_settings import (
 )
 from palace.manager.api.admin.form_data import ProcessFormData
 from palace.manager.api.admin.problem_details import INTEGRATION_URL_ALREADY_IN_USE
-from palace.manager.api.discovery.opds_registration import OpdsRegistrationService
+from palace.manager.integration.discovery.opds_registration import (
+    OpdsRegistrationService,
+)
 from palace.manager.sqlalchemy.listeners import site_configuration_has_changed
 from palace.manager.sqlalchemy.model.integration import IntegrationConfiguration
 from palace.manager.sqlalchemy.session import json_serializer

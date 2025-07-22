@@ -11,8 +11,10 @@ from sqlalchemy.orm import Session
 
 from palace.manager.api.admin.controller.base import AdminPermissionsControllerMixin
 from palace.manager.api.admin.problem_details import MISSING_SERVICE, NO_SUCH_LIBRARY
-from palace.manager.api.discovery.opds_registration import OpdsRegistrationService
 from palace.manager.core.problem_details import INVALID_INPUT
+from palace.manager.integration.discovery.opds_registration import (
+    OpdsRegistrationService,
+)
 from palace.manager.integration.goals import Goals
 from palace.manager.service.integration_registry.discovery import DiscoveryRegistry
 from palace.manager.sqlalchemy.model.discovery_service_registration import (

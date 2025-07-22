@@ -1,4 +1,6 @@
-from palace.manager.api.discovery.opds_registration import OpdsRegistrationService
+from palace.manager.integration.discovery.opds_registration import (
+    OpdsRegistrationService,
+)
 from palace.manager.integration.goals import Goals
 from palace.manager.service.integration_registry.base import IntegrationRegistry
 

@@ -8,9 +8,11 @@ from flask import url_for
 from sqlalchemy.orm import Session
 
 from palace.manager.api.circulation_manager import CirculationManager
-from palace.manager.api.discovery.opds_registration import OpdsRegistrationService
 from palace.manager.api.util.flask import PalaceFlask
 from palace.manager.core.config import CannotLoadConfiguration
+from palace.manager.integration.discovery.opds_registration import (
+    OpdsRegistrationService,
+)
 from palace.manager.integration.goals import Goals
 from palace.manager.scripts.input import LibraryInputScript
 from palace.manager.service.container import Services
