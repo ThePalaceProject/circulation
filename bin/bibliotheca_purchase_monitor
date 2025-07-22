@@ -3,7 +3,7 @@
 that happened many years in the past."""
 
 
-from palace.manager.api.bibliotheca import (
+from palace.manager.integration.license.bibliotheca import (
     BibliothecaPurchaseMonitor,
     RunBibliothecaPurchaseMonitorScript,
 )

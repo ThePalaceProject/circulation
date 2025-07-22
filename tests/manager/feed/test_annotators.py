@@ -7,17 +7,19 @@ import pytest
 from bidict import frozenbidict
 
 from palace.manager.api.circulation.base import CirculationApiType
-from palace.manager.api.odl.api import OPDS2WithODLApi
-from palace.manager.api.opds_for_distributors import OPDSForDistributorsAPI
 from palace.manager.core.classifier import Classifier
-from palace.manager.core.opds2_import import OPDS2API
-from palace.manager.core.opds_import import OPDSAPI
 from palace.manager.feed.acquisition import OPDSAcquisitionFeed
 from palace.manager.feed.annotator.base import Annotator
 from palace.manager.feed.annotator.circulation import CirculationManagerAnnotator
 from palace.manager.feed.annotator.verbose import VerboseAnnotator
 from palace.manager.feed.types import FeedEntryType, Link, WorkEntry
 from palace.manager.feed.util import strftime
+from palace.manager.integration.license.opds.odl.api import OPDS2WithODLApi
+from palace.manager.integration.license.opds.opds1 import OPDSAPI
+from palace.manager.integration.license.opds.opds2 import OPDS2API
+from palace.manager.integration.license.opds.opds_for_distributors import (
+    OPDSForDistributorsAPI,
+)
 from palace.manager.search.external_search import WorkSearchResult
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.classification import Subject

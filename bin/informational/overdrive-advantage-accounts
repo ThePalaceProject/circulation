@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 
 
-from palace.manager.api.overdrive.script import GenerateOverdriveAdvantageAccountList
+from palace.manager.integration.license.overdrive.script import (
+    GenerateOverdriveAdvantageAccountList,
+)
 
 GenerateOverdriveAdvantageAccountList().run()

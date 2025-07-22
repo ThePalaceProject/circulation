@@ -2,7 +2,7 @@
 """Sweep through our Bibliotheca collections verifying circulation stats."""
 
 
-from palace.manager.api.bibliotheca import BibliothecaCirculationSweep
+from palace.manager.integration.license.bibliotheca import BibliothecaCirculationSweep
 from palace.manager.scripts.monitor import RunCollectionMonitorScript
 
 RunCollectionMonitorScript(BibliothecaCirculationSweep).run()

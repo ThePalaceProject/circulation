@@ -7,8 +7,6 @@ from psycopg2.errors import DeadlockDetected
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm.exc import ObjectDeletedError, StaleDataError
 
-from palace.manager.api.boundless.api import BoundlessApi
-from palace.manager.api.boundless.requests import BoundlessRequests
 from palace.manager.celery.task import Task
 from palace.manager.celery.tasks import boundless
 from palace.manager.celery.tasks.boundless import (
@@ -27,6 +25,8 @@ from palace.manager.data_layer.bibliographic import BibliographicData
 from palace.manager.data_layer.circulation import CirculationData
 from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.data_layer.policy.presentation import PresentationCalculationPolicy
+from palace.manager.integration.license.boundless.api import BoundlessApi
+from palace.manager.integration.license.boundless.requests import BoundlessRequests
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.work import Work

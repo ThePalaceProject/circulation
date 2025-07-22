@@ -2,8 +2,8 @@ from unittest.mock import patch
 
 import pytest
 
-from palace.manager.api.boundless.api import BoundlessApi
 from palace.manager.celery.tasks.boundless import import_identifiers
+from palace.manager.integration.license.boundless.api import BoundlessApi
 from palace.manager.scripts import boundless_import
 from palace.manager.scripts.boundless_import import ImportCollection
 from tests.fixtures.database import DatabaseTransactionFixture

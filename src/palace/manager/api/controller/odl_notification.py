@@ -8,12 +8,12 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import StaleDataError
 
-from palace.manager.api.odl.api import OPDS2WithODLApi
 from palace.manager.api.problem_details import (
     INVALID_LOAN_FOR_ODL_NOTIFICATION,
     NO_ACTIVE_LOAN,
 )
 from palace.manager.core.problem_details import INVALID_INPUT
+from palace.manager.integration.license.opds.odl.api import OPDS2WithODLApi
 from palace.manager.opds.lcp.status import LoanStatus
 from palace.manager.service.integration_registry.license_providers import (
     LicenseProvidersRegistry,

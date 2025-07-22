@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from palace.manager.core.opds_import import OPDSImportMonitor
+from palace.manager.integration.license.opds.opds1 import OPDSImportMonitor
 from palace.manager.scripts.opds_import import OPDSImportScript
 from tests.fixtures.database import DatabaseTransactionFixture
 

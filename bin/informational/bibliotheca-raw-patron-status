@@ -2,7 +2,7 @@
 import sys
 from xml.dom import minidom
 
-from palace.manager.api.bibliotheca import BibliothecaAPI
+from palace.manager.integration.license.bibliotheca import BibliothecaAPI
 from palace.manager.scripts.base import Script
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.patron import Patron

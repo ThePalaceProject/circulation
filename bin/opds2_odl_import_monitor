@@ -3,7 +3,7 @@
 OPDS 2.x + ODL collections."""
 
 
-from palace.manager.api.odl.importer import (
+from palace.manager.integration.license.opds.odl.importer import (
     OPDS2WithODLImporter,
     OPDS2WithODLImportMonitor,
 )

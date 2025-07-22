@@ -14,8 +14,8 @@ from sqlalchemy import not_, select, text
 from sqlalchemy.orm import Session
 
 from palace.manager.celery.task import Task
-from palace.manager.core.opds_import import OPDSImporterSettings
 from palace.manager.integration.goals import Goals
+from palace.manager.integration.license.opds.opds1 import OPDSImporterSettings
 from palace.manager.service.celery.celery import QueueNames
 from palace.manager.service.email.email import SendEmailCallable
 from palace.manager.service.integration_registry.license_providers import (

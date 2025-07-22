@@ -11,8 +11,6 @@ import pytz
 from sqlalchemy.sql.expression import and_, null
 
 from palace.manager.api.model.time_tracking import PlaytimeTimeEntry
-from palace.manager.api.odl.api import OPDS2WithODLApi
-from palace.manager.api.opds_for_distributors import OPDSForDistributorsAPI
 from palace.manager.celery.tasks.playtime_entries import (
     REPORT_DATE_FORMAT,
     generate_playtime_report,
@@ -21,6 +19,10 @@ from palace.manager.celery.tasks.playtime_entries import (
 from palace.manager.core.config import Configuration
 from palace.manager.core.equivalents_coverage import (
     EquivalentIdentifiersCoverageProvider,
+)
+from palace.manager.integration.license.opds.odl.api import OPDS2WithODLApi
+from palace.manager.integration.license.opds.opds_for_distributors import (
+    OPDSForDistributorsAPI,
 )
 from palace.manager.service.google_drive.google_drive import GoogleDriveService
 from palace.manager.sqlalchemy.model.collection import Collection

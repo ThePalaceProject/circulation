@@ -2,7 +2,10 @@ from datetime import timedelta
 
 from sqlalchemy.orm import Session
 
-from palace.manager.api.overdrive.api import OverdriveAPI, OverdriveToken
+from palace.manager.integration.license.overdrive.api import (
+    OverdriveAPI,
+    OverdriveToken,
+)
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.util.datetime_helpers import utc_now
 

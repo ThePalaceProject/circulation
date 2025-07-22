@@ -18,7 +18,6 @@ from sqlalchemy.orm import Session
 
 from palace.manager.api.adobe_vendor_id import AuthdataUtility
 from palace.manager.api.annotations import AnnotationWriter
-from palace.manager.api.boundless.constants import BAKER_TAYLOR_KDRM_PARAMS
 from palace.manager.api.circulation.base import BaseCirculationAPI
 from palace.manager.api.circulation.dispatcher import CirculationApiDispatcher
 from palace.manager.api.circulation.fulfillment import UrlFulfillment
@@ -42,6 +41,9 @@ from palace.manager.feed.types import (
     WorkEntry,
 )
 from palace.manager.feed.util import strftime
+from palace.manager.integration.license.boundless.constants import (
+    BAKER_TAYLOR_KDRM_PARAMS,
+)
 from palace.manager.search.external_search import WorkSearchResult
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.service.container import Services

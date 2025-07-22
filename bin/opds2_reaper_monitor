@@ -9,7 +9,11 @@ from sqlalchemy.orm import raiseload
 
 from palace.manager.core.coverage import CoverageFailure
 from palace.manager.core.monitor import TimestampData
-from palace.manager.core.opds2_import import OPDS2API, OPDS2Importer, OPDS2ImportMonitor
+from palace.manager.integration.license.opds.opds2 import (
+    OPDS2API,
+    OPDS2Importer,
+    OPDS2ImportMonitor,
+)
 from palace.manager.scripts.input import CollectionInputScript
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.edition import Edition

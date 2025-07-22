@@ -5,8 +5,8 @@ from sqlalchemy import delete, select
 from sqlalchemy.exc import NoResultFound
 from sqlalchemy.orm import Session
 
-from palace.manager.api.odl.api import OPDS2WithODLApi
 from palace.manager.celery.task import Task
+from palace.manager.integration.license.opds.odl.api import OPDS2WithODLApi
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.service.analytics.eventdata import AnalyticsEventData
 from palace.manager.service.celery.celery import QueueNames

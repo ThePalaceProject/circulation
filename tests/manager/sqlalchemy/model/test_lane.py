@@ -10,8 +10,6 @@ from bidict import frozenbidict
 from opensearchpy.exceptions import OpenSearchException
 from sqlalchemy import and_, text
 
-from palace.manager.api.bibliotheca import BibliothecaAPI
-from palace.manager.api.odl.api import OPDS2WithODLApi
 from palace.manager.core.classifier import Classifier
 from palace.manager.core.config import Configuration, ConfigurationAttributeValue
 from palace.manager.core.entrypoint import (
@@ -21,6 +19,8 @@ from palace.manager.core.entrypoint import (
     EverythingEntryPoint,
 )
 from palace.manager.core.problem_details import INVALID_INPUT
+from palace.manager.integration.license.bibliotheca import BibliothecaAPI
+from palace.manager.integration.license.opds.odl.api import OPDS2WithODLApi
 from palace.manager.search.external_search import (
     ExternalSearchIndex,
     Filter,

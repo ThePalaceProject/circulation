@@ -2,7 +2,7 @@
 """Monitor the Bibliotheca collections by asking about recently changed events."""
 
 
-from palace.manager.api.bibliotheca import BibliothecaEventMonitor
+from palace.manager.integration.license.bibliotheca import BibliothecaEventMonitor
 from palace.manager.scripts.monitor import RunCollectionMonitorScript
 
 RunCollectionMonitorScript(BibliothecaEventMonitor).run()

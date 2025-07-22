@@ -17,7 +17,7 @@ from palace.manager.celery.tasks.reaper import (
     reap_unassociated_loans,
     work_reaper,
 )
-from palace.manager.core.opds2_import import OPDS2API
+from palace.manager.integration.license.opds.opds2 import OPDS2API
 from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.classification import Genre

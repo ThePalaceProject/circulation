@@ -1,4 +1,4 @@
-from palace.manager.core.opds_import import OPDSAPI
+from palace.manager.integration.license.opds.opds1 import OPDSAPI
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.patron import Patron
 from tests.fixtures.api_controller import (

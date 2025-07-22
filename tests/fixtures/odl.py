@@ -12,9 +12,9 @@ from jinja2 import Template
 from requests import Response
 
 from palace.manager.api.circulation.data import HoldInfo, LoanInfo
-from palace.manager.api.odl.api import OPDS2WithODLApi
-from palace.manager.api.odl.importer import OPDS2WithODLImporter
 from palace.manager.core.coverage import CoverageFailure
+from palace.manager.integration.license.opds.odl.api import OPDS2WithODLApi
+from palace.manager.integration.license.opds.odl.importer import OPDS2WithODLImporter
 from palace.manager.opds.lcp.license import LicenseDocument
 from palace.manager.opds.lcp.status import LoanStatus
 from palace.manager.sqlalchemy.model.collection import Collection
