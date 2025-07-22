@@ -8,6 +8,7 @@ from freezegun import freeze_time
 from werkzeug.datastructures import Authorization
 
 from palace.manager.api.authentication.base import PatronData
+from palace.manager.integration.patron_auth.saml import provider as saml_provider
 from palace.manager.integration.patron_auth.saml.auth import (
     SAMLAuthenticationManager,
     SAMLAuthenticationManagerFactory,
@@ -293,8 +294,8 @@ class TestSAMLWebSSOAuthenticationProvider:
             return_value=authentication_manager
         )
 
-        with patch(
-            "palace.manager.api.saml.provider.SAMLAuthenticationManagerFactory"
+        with patch.object(
+            saml_provider, "SAMLAuthenticationManagerFactory"
         ) as authentication_manager_factory_constructor_mock:
             authentication_manager_factory_constructor_mock.return_value = (
                 authentication_manager_factory

@@ -11,6 +11,7 @@ from unittest.mock import MagicMock, Mock, patch
 import pytest
 from pytest import MonkeyPatch
 
+from palace.manager.integration.patron_auth.sip2 import client
 from palace.manager.integration.patron_auth.sip2.client import SIPClient
 from palace.manager.integration.patron_auth.sip2.dialect import Dialect
 from tests.fixtures.tls_server import TLSServerFixture
@@ -357,7 +358,7 @@ class TestSIPClient:
 
             # IOError if we exceed the timeout, even if we're in the
             # middle of reading a message.
-            with patch("palace.manager.api.sip.client.time") as mock_time:
+            with patch.object(client, "time") as mock_time:
                 mock_time.time.side_effect = [0, 10]
                 with pytest.raises(IOError, match="Timeout reading from socket."):
                     sip.read_message()
