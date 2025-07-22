@@ -299,33 +299,6 @@ class TestBibliographicData:
         assert Measurement.POPULARITY == m.quantity_measured
         assert 100 == m.value
 
-    def test_published(self, db: DatabaseTransactionFixture):
-        published = datetime.datetime.now()
-
-        bibliographic = BibliographicData(
-            published=published,
-            data_source_last_updated=datetime.datetime.now(),
-            data_source_name="test",
-        )
-
-        assert isinstance(bibliographic.published, datetime.date)
-
-        bibliographic = BibliographicData(
-            published=None,
-            data_source_last_updated=datetime.datetime.now(),
-            data_source_name="test",
-        )
-
-        assert bibliographic.published is None
-
-        bibliographic = BibliographicData(
-            published=published.date(),
-            data_source_last_updated=datetime.datetime.now(),
-            data_source_name="test",
-        )
-
-        assert bibliographic.published == published.date()
-
     def test_disable_async_calculation_flag(self, db: DatabaseTransactionFixture):
         edition, pool = db.edition(
             with_license_pool=True,
@@ -820,3 +793,22 @@ class TestBibliographicData:
         # with the identifier of the audiobook
         equivalent_identifiers = [x.output for x in identifier.equivalencies]
         assert [book.primary_identifier] == equivalent_identifiers
+
+    def test_roundtrip(self) -> None:
+        bibliographic = BibliographicData(
+            data_source_name=DataSource.OCLC,
+            title="Test Title",
+            subtitle="Test Subtitle",
+            sort_title="Test Sort Title",
+            language="eng",
+            medium=Edition.BOOK_MEDIUM,
+            publisher="Test Publisher",
+            imprint="Test Imprint",
+            published=datetime.date(2023, 1, 1),
+            issued=datetime.date(2023, 1, 2),
+        )
+        deserialized = BibliographicData.model_validate_json(
+            bibliographic.model_dump_json()
+        )
+
+        assert bibliographic == deserialized
