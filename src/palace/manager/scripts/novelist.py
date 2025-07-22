@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import sys
 
-from palace.manager.api.metadata.novelist import NoveListAPI
 from palace.manager.celery.tasks.novelist import update_novelists_by_library
+from palace.manager.integration.metadata.novelist import NoveListAPI
 from palace.manager.scripts.input import LibraryInputScript
 from palace.manager.scripts.timestamp import TimestampScript
 

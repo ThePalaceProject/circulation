@@ -1,8 +1,8 @@
 from celery import shared_task
 
-from palace.manager.api.metadata.nyt import NYTBestSellerAPI
 from palace.manager.celery.task import Task
 from palace.manager.core.config import CannotLoadConfiguration
+from palace.manager.integration.metadata.nyt import NYTBestSellerAPI
 from palace.manager.service.celery.celery import QueueNames
 
 

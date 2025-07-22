@@ -23,7 +23,6 @@ from palace.manager.api.circulation.dispatcher import CirculationApiDispatcher
 from palace.manager.api.circulation.fulfillment import UrlFulfillment
 from palace.manager.api.config import Configuration
 from palace.manager.api.lanes import DynamicLane
-from palace.manager.api.metadata.novelist import NoveListAPI
 from palace.manager.core.classifier import Classifier
 from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.core.entrypoint import EverythingEntryPoint
@@ -44,6 +43,7 @@ from palace.manager.feed.util import strftime
 from palace.manager.integration.license.boundless.constants import (
     BAKER_TAYLOR_KDRM_PARAMS,
 )
+from palace.manager.integration.metadata.novelist import NoveListAPI
 from palace.manager.search.external_search import WorkSearchResult
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.service.container import Services

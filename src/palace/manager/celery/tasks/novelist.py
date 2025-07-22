@@ -1,8 +1,8 @@
 from celery import shared_task
 from sqlalchemy import select
 
-from palace.manager.api.metadata.novelist import NoveListAPI
 from palace.manager.celery.task import Task
+from palace.manager.integration.metadata.novelist import NoveListAPI
 from palace.manager.service.celery.celery import QueueNames
 from palace.manager.sqlalchemy.model.integration import (
     IntegrationConfiguration,

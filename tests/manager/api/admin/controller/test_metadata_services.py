@@ -24,9 +24,15 @@ from palace.manager.api.admin.problem_details import (
     NO_SUCH_LIBRARY,
     UNKNOWN_PROTOCOL,
 )
-from palace.manager.api.metadata.novelist import NoveListAPI, NoveListApiSettings
-from palace.manager.api.metadata.nyt import NYTBestSellerAPI, NytBestSellerApiSettings
 from palace.manager.integration.goals import Goals
+from palace.manager.integration.metadata.novelist import (
+    NoveListAPI,
+    NoveListApiSettings,
+)
+from palace.manager.integration.metadata.nyt import (
+    NYTBestSellerAPI,
+    NytBestSellerApiSettings,
+)
 from palace.manager.sqlalchemy.model.integration import IntegrationConfiguration
 from palace.manager.sqlalchemy.util import get_one
 from palace.manager.util.problem_detail import ProblemDetail
