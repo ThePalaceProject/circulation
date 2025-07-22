@@ -4,8 +4,6 @@ import datetime
 import json
 from typing import TYPE_CHECKING
 
-from sqlalchemy import func, select
-
 from palace.manager.api.admin.problem_details import (
     CUSTOMLIST_ENTRY_NOT_VALID_FOR_LIBRARY,
     CUSTOMLIST_SOURCE_COLLECTION_MISSING,
@@ -160,9 +158,7 @@ class CustomListQueries(LoggerMixin):
 
         # update this lists last updated time
         custom_list.auto_update_last_update = datetime.datetime.now()
-        # update the list size
-        custom_list.size = _db.execute(
-            select(func.count()).where(CustomListEntry.list_id == custom_list.id)
-        ).scalar_one()
+        # Update the cached list size.
+        custom_list.size = custom_list.get_entry_count(_db)
 
         return total_works_updated
