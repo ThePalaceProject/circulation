@@ -19,9 +19,9 @@ from palace.manager.api.admin.problem_details import (
     NO_PROTOCOL_FOR_NEW_SERVICE,
     UNKNOWN_PROTOCOL,
 )
+from palace.manager.integration.catalog.marc.exporter import MarcExporter
+from palace.manager.integration.catalog.marc.settings import MarcExporterLibrarySettings
 from palace.manager.integration.goals import Goals
-from palace.manager.marc.exporter import MarcExporter
-from palace.manager.marc.settings import MarcExporterLibrarySettings
 from palace.manager.sqlalchemy.model.integration import IntegrationConfiguration
 from palace.manager.sqlalchemy.util import get_one
 from palace.manager.util.problem_detail import ProblemDetail

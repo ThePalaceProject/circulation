@@ -5,8 +5,11 @@ from tempfile import TemporaryFile
 from celery import shared_task
 
 from palace.manager.celery.task import Task
-from palace.manager.marc.exporter import LibraryInfo, MarcExporter
-from palace.manager.marc.uploader import MarcUploadManager, UploadContext
+from palace.manager.integration.catalog.marc.exporter import LibraryInfo, MarcExporter
+from palace.manager.integration.catalog.marc.uploader import (
+    MarcUploadManager,
+    UploadContext,
+)
 from palace.manager.service.celery.celery import QueueNames
 from palace.manager.service.redis.models.lock import RedisLock
 from palace.manager.service.redis.redis import Redis

@@ -4,9 +4,9 @@ from typing import Literal
 
 import pytest
 
+from palace.manager.integration.catalog.marc.exporter import LibraryInfo, MarcExporter
+from palace.manager.integration.catalog.marc.settings import MarcExporterLibrarySettings
 from palace.manager.integration.goals import Goals
-from palace.manager.marc.exporter import LibraryInfo, MarcExporter
-from palace.manager.marc.settings import MarcExporterLibrarySettings
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.integration import IntegrationConfiguration
 from palace.manager.sqlalchemy.model.library import Library
