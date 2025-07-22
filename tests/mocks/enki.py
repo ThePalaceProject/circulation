@@ -2,7 +2,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from palace.manager.api.enki import EnkiAPI
+from palace.manager.integration.license.enki import EnkiAPI
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.util.http import HTTP
 from tests.mocks.mock import MockRequestsResponse

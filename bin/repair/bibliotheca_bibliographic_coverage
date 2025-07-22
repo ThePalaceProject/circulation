@@ -2,7 +2,9 @@
 """Make sure all Bibliotheca books have bibliographic coverage."""
 
 
-from palace.manager.api.bibliotheca import BibliothecaBibliographicCoverageProvider
+from palace.manager.integration.license.bibliotheca import (
+    BibliothecaBibliographicCoverageProvider,
+)
 from palace.manager.scripts.coverage_provider import RunCollectionCoverageProviderScript
 
 RunCollectionCoverageProviderScript(BibliothecaBibliographicCoverageProvider).run()

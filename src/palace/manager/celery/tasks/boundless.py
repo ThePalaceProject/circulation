@@ -8,8 +8,6 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import ObjectDeletedError, StaleDataError
 
-from palace.manager.api.boundless.api import BoundlessApi
-from palace.manager.api.boundless.requests import BoundlessRequests
 from palace.manager.api.circulation.base import (
     BaseCirculationAPI,
     LibrarySettingsType,
@@ -19,6 +17,8 @@ from palace.manager.celery.task import Task
 from palace.manager.celery.utils import load_from_id
 from palace.manager.core.exceptions import IntegrationException
 from palace.manager.data_layer.bibliographic import BibliographicData
+from palace.manager.integration.license.boundless.api import BoundlessApi
+from palace.manager.integration.license.boundless.requests import BoundlessRequests
 from palace.manager.service.celery.celery import QueueNames
 from palace.manager.service.redis.models.lock import RedisLock
 from palace.manager.service.redis.redis import Redis

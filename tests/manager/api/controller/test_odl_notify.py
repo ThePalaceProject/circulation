@@ -6,13 +6,13 @@ from freezegun import freeze_time
 from sqlalchemy.orm.exc import StaleDataError
 
 from palace.manager.api.controller.odl_notification import ODLNotificationController
-from palace.manager.api.odl.api import OPDS2WithODLApi
 from palace.manager.api.problem_details import (
     INVALID_LOAN_FOR_ODL_NOTIFICATION,
     NO_ACTIVE_LOAN,
 )
 from palace.manager.core.problem_details import INVALID_INPUT
 from palace.manager.integration.goals import Goals
+from palace.manager.integration.license.opds.odl.api import OPDS2WithODLApi
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.licensing import License
 from palace.manager.sqlalchemy.model.patron import Loan, Patron

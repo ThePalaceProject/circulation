@@ -8,13 +8,13 @@ from unittest.mock import MagicMock, create_autospec
 
 from pytest import LogCaptureFixture
 
-from palace.manager.api.overdrive.api import OverdriveAPI
 from palace.manager.celery.tasks.generate_inventory_and_hold_reports import (
     generate_inventory_and_hold_reports,
     generate_report,
     library_report_integrations,
 )
-from palace.manager.core.opds_import import OPDSImporterSettings
+from palace.manager.integration.license.opds.opds1 import OPDSImporterSettings
+from palace.manager.integration.license.overdrive.api import OverdriveAPI
 from palace.manager.opds.odl.info import LicenseStatus
 from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.sqlalchemy.model.classification import Genre

@@ -1,4 +1,6 @@
-from palace.manager.api.opds_for_distributors import OPDSForDistributorsAPI
+from palace.manager.integration.license.opds.opds_for_distributors import (
+    OPDSForDistributorsAPI,
+)
 from palace.manager.util.http import HTTP
 from tests.mocks.mock import MockRequestsResponse
 

@@ -5,8 +5,6 @@ import pytest
 from freezegun import freeze_time
 from sqlalchemy import func, select
 
-from palace.manager.api.odl.api import OPDS2WithODLApi
-from palace.manager.api.overdrive.api import OverdriveAPI
 from palace.manager.celery.tasks import opds_odl
 from palace.manager.celery.tasks.opds_odl import (
     _licensepool_ids_with_holds,
@@ -18,6 +16,8 @@ from palace.manager.celery.tasks.opds_odl import (
     remove_expired_holds,
     remove_expired_holds_for_collection_task,
 )
+from palace.manager.integration.license.opds.odl.api import OPDS2WithODLApi
+from palace.manager.integration.license.overdrive.api import OverdriveAPI
 from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.service.redis.models.lock import LockNotAcquired
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent

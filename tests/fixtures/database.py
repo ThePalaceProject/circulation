@@ -29,9 +29,6 @@ from palace.manager.api.authentication.base import (
     AuthenticationProvider,
     SettingsType as TAuthProviderSettings,
 )
-from palace.manager.api.bibliotheca import BibliothecaAPI, BibliothecaSettings
-from palace.manager.api.boundless.api import BoundlessApi
-from palace.manager.api.boundless.settings import BoundlessSettings
 from palace.manager.api.circulation.base import (
     BaseCirculationAPI,
     SettingsType as TCirculationSettings,
@@ -41,14 +38,6 @@ from palace.manager.api.discovery.opds_registration import (
     OpdsRegistrationService,
     OpdsRegistrationServiceSettings,
 )
-from palace.manager.api.odl.api import OPDS2WithODLApi
-from palace.manager.api.odl.settings import OPDS2WithODLSettings
-from palace.manager.api.opds_for_distributors import (
-    OPDSForDistributorsAPI,
-    OPDSForDistributorsSettings,
-)
-from palace.manager.api.overdrive.api import OverdriveAPI
-from palace.manager.api.overdrive.settings import OverdriveSettings
 from palace.manager.api.simple_authentication import (
     SimpleAuthenticationProvider,
     SimpleAuthSettings,
@@ -56,8 +45,6 @@ from palace.manager.api.simple_authentication import (
 from palace.manager.core.classifier import Classifier
 from palace.manager.core.config import Configuration
 from palace.manager.core.exceptions import BasePalaceException, PalaceValueError
-from palace.manager.core.opds2_import import OPDS2API
-from palace.manager.core.opds_import import OPDSAPI, OPDSImporterSettings
 from palace.manager.integration.base import (
     HasIntegrationConfiguration,
     HasLibraryIntegrationConfiguration,
@@ -65,6 +52,22 @@ from palace.manager.integration.base import (
 )
 from palace.manager.integration.configuration.library import LibrarySettings
 from palace.manager.integration.goals import Goals
+from palace.manager.integration.license.bibliotheca import (
+    BibliothecaAPI,
+    BibliothecaSettings,
+)
+from palace.manager.integration.license.boundless.api import BoundlessApi
+from palace.manager.integration.license.boundless.settings import BoundlessSettings
+from palace.manager.integration.license.opds.odl.api import OPDS2WithODLApi
+from palace.manager.integration.license.opds.odl.settings import OPDS2WithODLSettings
+from palace.manager.integration.license.opds.opds1 import OPDSAPI, OPDSImporterSettings
+from palace.manager.integration.license.opds.opds2 import OPDS2API
+from palace.manager.integration.license.opds.opds_for_distributors import (
+    OPDSForDistributorsAPI,
+    OPDSForDistributorsSettings,
+)
+from palace.manager.integration.license.overdrive.api import OverdriveAPI
+from palace.manager.integration.license.overdrive.settings import OverdriveSettings
 from palace.manager.integration.settings import BaseSettings
 from palace.manager.opds.odl.info import LicenseStatus
 from palace.manager.service.integration_registry.base import IntegrationRegistry

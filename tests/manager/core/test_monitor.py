@@ -6,8 +6,6 @@ from freezegun import freeze_time
 from sqlalchemy.exc import InvalidRequestError
 from sqlalchemy.orm.exc import ObjectDeletedError, StaleDataError
 
-from palace.manager.api.bibliotheca import BibliothecaAPI
-from palace.manager.api.overdrive.api import OverdriveAPI
 from palace.manager.core.monitor import (
     CollectionMonitor,
     CoverageProvidersFailed,
@@ -26,7 +24,9 @@ from palace.manager.core.monitor import (
     TimestampData,
     WorkSweepMonitor,
 )
-from palace.manager.core.opds_import import OPDSAPI
+from palace.manager.integration.license.bibliotheca import BibliothecaAPI
+from palace.manager.integration.license.opds.opds1 import OPDSAPI
+from palace.manager.integration.license.overdrive.api import OverdriveAPI
 from palace.manager.service import container
 from palace.manager.sqlalchemy.model.classification import Subject
 from palace.manager.sqlalchemy.model.collection import CollectionMissing

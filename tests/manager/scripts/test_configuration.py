@@ -4,8 +4,8 @@ from io import StringIO
 
 import pytest
 
-from palace.manager.api.bibliotheca import BibliothecaAPI
-from palace.manager.api.overdrive.api import OverdriveAPI
+from palace.manager.integration.license.bibliotheca import BibliothecaAPI
+from palace.manager.integration.license.overdrive.api import OverdriveAPI
 from palace.manager.scripts.configuration import (
     ConfigureCollectionScript,
     ConfigureLaneScript,

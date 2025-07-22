@@ -10,7 +10,6 @@ from lxml import etree
 from uritemplate import URITemplate
 
 from palace.manager.api.adobe_vendor_id import AuthdataUtility
-from palace.manager.api.boundless.constants import BAKER_TAYLOR_KDRM_PARAMS
 from palace.manager.api.circulation.base import BaseCirculationAPI
 from palace.manager.api.circulation.dispatcher import CirculationApiDispatcher
 from palace.manager.api.circulation.fulfillment import RedirectFulfillment
@@ -24,7 +23,6 @@ from palace.manager.core.entrypoint import (
 )
 from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.core.lcp.credential import LCPCredentialFactory, LCPHashedPassphrase
-from palace.manager.core.opds_import import OPDSXMLParser
 from palace.manager.data_layer.policy.presentation import (
     PresentationCalculationPolicy,
 )
@@ -35,6 +33,10 @@ from palace.manager.feed.opds import UnfulfillableWork
 from palace.manager.feed.types import FeedData, WorkEntry
 from palace.manager.feed.util import strftime
 from palace.manager.integration.goals import Goals
+from palace.manager.integration.license.boundless.constants import (
+    BAKER_TAYLOR_KDRM_PARAMS,
+)
+from palace.manager.integration.license.opds.opds1 import OPDSXMLParser
 from palace.manager.service.container import container_instance
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.contributor import Contributor

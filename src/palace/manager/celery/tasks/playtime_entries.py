@@ -17,9 +17,11 @@ from sqlalchemy.orm import Query, Session, joinedload
 from sqlalchemy.sql.functions import coalesce, count, max as sql_max, sum
 
 from palace.manager.api.config import Configuration
-from palace.manager.api.odl.api import OPDS2WithODLApi
-from palace.manager.api.opds_for_distributors import OPDSForDistributorsAPI
 from palace.manager.celery.task import Task
+from palace.manager.integration.license.opds.odl.api import OPDS2WithODLApi
+from palace.manager.integration.license.opds.opds_for_distributors import (
+    OPDSForDistributorsAPI,
+)
 from palace.manager.service.celery.celery import QueueNames
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.identifier import Identifier

@@ -26,13 +26,15 @@ from palace.manager.api.admin.problem_details import (
     PROTOCOL_DOES_NOT_SUPPORT_PARENTS,
     UNKNOWN_PROTOCOL,
 )
-from palace.manager.api.boundless.api import BoundlessApi
-from palace.manager.api.odl.api import OPDS2WithODLApi
-from palace.manager.api.overdrive.api import OverdriveAPI
-from palace.manager.api.overdrive.settings import OverdriveLibrarySettings
 from palace.manager.api.selftest import HasCollectionSelfTests
 from palace.manager.core.selftest import HasSelfTests
 from palace.manager.integration.goals import Goals
+from palace.manager.integration.license.boundless.api import BoundlessApi
+from palace.manager.integration.license.opds.odl.api import OPDS2WithODLApi
+from palace.manager.integration.license.overdrive.api import OverdriveAPI
+from palace.manager.integration.license.overdrive.settings import (
+    OverdriveLibrarySettings,
+)
 from palace.manager.service.integration_registry.license_providers import (
     LicenseProvidersRegistry,
 )

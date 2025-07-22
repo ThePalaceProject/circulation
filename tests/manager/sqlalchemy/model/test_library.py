@@ -5,10 +5,10 @@ import pytest
 from bidict import frozenbidict
 from Crypto.PublicKey.RSA import RsaKey, import_key
 
-from palace.manager.api.overdrive.api import OverdriveAPI
 from palace.manager.core.facets import FacetConstants
-from palace.manager.core.opds_import import OPDSAPI, OPDSImporterSettings
 from palace.manager.integration.base import integration_settings_update
+from palace.manager.integration.license.opds.opds1 import OPDSAPI, OPDSImporterSettings
+from palace.manager.integration.license.overdrive.api import OverdriveAPI
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.library import Library
 from tests.fixtures.database import DatabaseTransactionFixture

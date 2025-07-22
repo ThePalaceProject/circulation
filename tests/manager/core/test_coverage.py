@@ -3,15 +3,12 @@ from typing import cast
 
 import pytest
 
-from palace.manager.api.boundless.api import BoundlessApi
-from palace.manager.api.overdrive.api import OverdriveAPI
 from palace.manager.core.coverage import (
     BaseCoverageProvider,
     CoverageFailure,
     CoverageProviderProgress,
     IdentifierCoverageProvider,
 )
-from palace.manager.core.opds_import import OPDSAPI
 from palace.manager.data_layer.bibliographic import BibliographicData
 from palace.manager.data_layer.circulation import CirculationData
 from palace.manager.data_layer.contributor import ContributorData
@@ -23,6 +20,9 @@ from palace.manager.data_layer.policy.presentation import (
 )
 from palace.manager.data_layer.policy.replacement import ReplacementPolicy
 from palace.manager.data_layer.subject import SubjectData
+from palace.manager.integration.license.boundless.api import BoundlessApi
+from palace.manager.integration.license.opds.opds1 import OPDSAPI
+from palace.manager.integration.license.overdrive.api import OverdriveAPI
 from palace.manager.sqlalchemy.model.classification import Subject
 from palace.manager.sqlalchemy.model.collection import CollectionMissing
 from palace.manager.sqlalchemy.model.contributor import Contributor

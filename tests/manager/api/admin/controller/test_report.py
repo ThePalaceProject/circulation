@@ -14,9 +14,9 @@ from palace.manager.api.admin.model.inventory_report import (
 )
 from palace.manager.api.admin.problem_details import ADMIN_NOT_AUTHORIZED
 from palace.manager.api.circulation.base import BaseCirculationAPI
-from palace.manager.api.overdrive.api import OverdriveAPI
 from palace.manager.api.problem_details import LIBRARY_NOT_FOUND
-from palace.manager.core.opds_import import OPDSAPI
+from palace.manager.integration.license.opds.opds1 import OPDSAPI
+from palace.manager.integration.license.overdrive.api import OverdriveAPI
 from palace.manager.sqlalchemy.model.admin import Admin, AdminRole
 from palace.manager.sqlalchemy.util import create
 from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException

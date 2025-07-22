@@ -65,7 +65,7 @@ class TestEquivalentCoverage:
         assert session.query(EquivalencyCoverageRecord).count() == 3
 
         records = session.query(EquivalencyCoverageRecord).all()
-        assert [r.equivalency_id for r in records] == [r.id for r in data.equivalencies]
+        assert {r.equivalency_id for r in records} == {r.id for r in data.equivalencies}
         assert (
             len(
                 list(

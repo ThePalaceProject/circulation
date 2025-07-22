@@ -10,7 +10,6 @@ import pytest
 from flask import Response as FlaskResponse, url_for
 from werkzeug import Response as wkResponse
 
-from palace.manager.api.bibliotheca import BibliothecaAPI
 from palace.manager.api.circulation.base import BaseCirculationAPI
 from palace.manager.api.circulation.data import HoldInfo, LoanInfo
 from palace.manager.api.circulation.dispatcher import CirculationApiDispatcher
@@ -41,9 +40,10 @@ from palace.manager.api.problem_details import (
     NOT_FOUND_ON_REMOTE,
     OUTSTANDING_FINES,
 )
-from palace.manager.core.opds_import import OPDSAPI
 from palace.manager.core.problem_details import INTEGRATION_ERROR, INVALID_INPUT
 from palace.manager.feed.serializer.opds2 import OPDS2Serializer
+from palace.manager.integration.license.bibliotheca import BibliothecaAPI
+from palace.manager.integration.license.opds.opds1 import OPDSAPI
 from palace.manager.service.redis.models.patron_activity import PatronActivity
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.collection import Collection

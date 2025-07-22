@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import pytest
 
-from palace.manager.api.bibliotheca import BibliothecaAPI
 from palace.manager.core.monitor import CollectionMonitor, Monitor
-from palace.manager.core.opds_import import OPDSAPI
+from palace.manager.integration.license.bibliotheca import BibliothecaAPI
+from palace.manager.integration.license.opds.opds1 import OPDSAPI
 from palace.manager.scripts.monitor import (
     RunCollectionMonitorScript,
     RunMonitorScript,

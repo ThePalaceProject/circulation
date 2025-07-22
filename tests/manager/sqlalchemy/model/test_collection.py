@@ -4,13 +4,15 @@ from unittest.mock import MagicMock, create_autospec
 import pytest
 from sqlalchemy import select
 
-from palace.manager.api.bibliotheca import BibliothecaAPI
-from palace.manager.api.overdrive.api import OverdriveAPI
-from palace.manager.api.overdrive.settings import OverdriveLibrarySettings
-from palace.manager.core.opds_import import OPDSImporterSettings
 from palace.manager.data_layer.policy.presentation import PresentationCalculationPolicy
 from palace.manager.integration.base import integration_settings_update
 from palace.manager.integration.goals import Goals
+from palace.manager.integration.license.bibliotheca import BibliothecaAPI
+from palace.manager.integration.license.opds.opds1 import OPDSImporterSettings
+from palace.manager.integration.license.overdrive.api import OverdriveAPI
+from palace.manager.integration.license.overdrive.settings import (
+    OverdriveLibrarySettings,
+)
 from palace.manager.search.external_search import ExternalSearchIndex
 from palace.manager.service.integration_registry.license_providers import (
     LicenseProvidersRegistry,

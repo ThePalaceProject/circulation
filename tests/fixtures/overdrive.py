@@ -8,9 +8,9 @@ import pytest
 
 from palace.manager.api.circulation.dispatcher import CirculationApiDispatcher
 from palace.manager.api.config import Configuration
-from palace.manager.api.overdrive.api import OverdriveAPI
-from palace.manager.api.overdrive.constants import OverdriveConstants
-from palace.manager.api.overdrive.settings import (
+from palace.manager.integration.license.overdrive.api import OverdriveAPI
+from palace.manager.integration.license.overdrive.constants import OverdriveConstants
+from palace.manager.integration.license.overdrive.settings import (
     OverdriveLibrarySettings,
     OverdriveSettings,
 )
