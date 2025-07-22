@@ -1,5 +1,4 @@
-from palace.manager.api.sip import SIPClient
-from palace.manager.api.sip.client import Constants
+from palace.manager.integration.patron_auth.sip2.client import Constants, SIPClient
 
 
 class MockSIPClient(SIPClient):

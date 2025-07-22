@@ -31,7 +31,6 @@ from palace.manager.api.circulation.exceptions import (
 )
 from palace.manager.api.circulation.fulfillment import RedirectFulfillment
 from palace.manager.api.circulation.settings import BaseCirculationApiSettings
-from palace.manager.api.saml.credential import SAMLCredentialManager
 from palace.manager.core.classifier import Classifier
 from palace.manager.core.coverage import CoverageFailure
 from palace.manager.core.monitor import CollectionMonitor, TimestampData
@@ -54,6 +53,7 @@ from palace.manager.integration.license.opds.settings.wayfless import (
     SAMLWAYFlessSetttings,
 )
 from palace.manager.integration.license.settings.connection import ConnectionSetting
+from palace.manager.integration.patron_auth.saml.credential import SAMLCredentialManager
 from palace.manager.integration.settings import (
     BaseSettings,
     ConfigurationFormItem,

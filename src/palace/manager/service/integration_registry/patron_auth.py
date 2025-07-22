@@ -14,14 +14,22 @@ if TYPE_CHECKING:
 class PatronAuthRegistry(IntegrationRegistry["AuthenticationProviderType"]):
     def __init__(self) -> None:
         super().__init__(Goals.PATRON_AUTH_GOAL)
-        from palace.manager.api.kansas_patron import KansasAuthenticationAPI
-        from palace.manager.api.millenium_patron import MilleniumPatronAPI
-        from palace.manager.api.saml.provider import SAMLWebSSOAuthenticationProvider
-        from palace.manager.api.simple_authentication import (
+        from palace.manager.integration.patron_auth.kansas_patron import (
+            KansasAuthenticationAPI,
+        )
+        from palace.manager.integration.patron_auth.millenium_patron import (
+            MilleniumPatronAPI,
+        )
+        from palace.manager.integration.patron_auth.saml.provider import (
+            SAMLWebSSOAuthenticationProvider,
+        )
+        from palace.manager.integration.patron_auth.simple_authentication import (
             SimpleAuthenticationProvider,
         )
-        from palace.manager.api.sip import SIP2AuthenticationProvider
-        from palace.manager.api.sirsidynix_authentication_provider import (
+        from palace.manager.integration.patron_auth.sip2.provider import (
+            SIP2AuthenticationProvider,
+        )
+        from palace.manager.integration.patron_auth.sirsidynix_authentication_provider import (
             SirsiDynixHorizonAuthenticationProvider,
         )
 

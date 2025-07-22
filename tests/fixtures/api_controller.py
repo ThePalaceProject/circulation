@@ -17,11 +17,13 @@ from palace.manager.api.controller.circulation_manager import (
     CirculationManagerController,
 )
 from palace.manager.api.lanes import create_default_lanes
-from palace.manager.api.simple_authentication import SimpleAuthenticationProvider
 from palace.manager.api.util.flask import PalaceFlask
 from palace.manager.core.entrypoint import AudiobooksEntryPoint, EbooksEntryPoint
 from palace.manager.integration.configuration.library import LibrarySettings
 from palace.manager.integration.goals import Goals
+from palace.manager.integration.patron_auth.simple_authentication import (
+    SimpleAuthenticationProvider,
+)
 from palace.manager.service.integration_registry.patron_auth import PatronAuthRegistry
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.integration import (

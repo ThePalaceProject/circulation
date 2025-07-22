@@ -18,13 +18,6 @@ from palace.manager.api.circulation.exceptions import (
     NotOnHold,
 )
 from palace.manager.api.circulation.fulfillment import RedirectFulfillment
-from palace.manager.api.saml.credential import SAMLCredentialManager
-from palace.manager.api.saml.metadata.model import (
-    SAMLAttributeStatement,
-    SAMLNameID,
-    SAMLNameIDFormat,
-    SAMLSubject,
-)
 from palace.manager.core.classifier import Classifier
 from palace.manager.core.coverage import CoverageFailure
 from palace.manager.data_layer.link import LinkData
@@ -39,6 +32,13 @@ from palace.manager.integration.license.opds.settings.wayfless import (
     SAMLWAYFlessFulfillmentError,
 )
 from palace.manager.integration.license.overdrive.api import OverdriveAPI
+from palace.manager.integration.patron_auth.saml.credential import SAMLCredentialManager
+from palace.manager.integration.patron_auth.saml.metadata.model import (
+    SAMLAttributeStatement,
+    SAMLNameID,
+    SAMLNameIDFormat,
+    SAMLSubject,
+)
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.classification import Subject
 from palace.manager.sqlalchemy.model.collection import Collection

@@ -3,17 +3,19 @@ from logging import Logger
 from celery import shared_task
 from sqlalchemy.orm import Session
 
-from palace.manager.api.saml.metadata.federations.loader import (
+from palace.manager.celery.task import Task
+from palace.manager.integration.patron_auth.saml.metadata.federations.loader import (
     SAMLFederatedIdentityProviderLoader,
     SAMLMetadataLoader,
 )
-from palace.manager.api.saml.metadata.federations.validator import (
+from palace.manager.integration.patron_auth.saml.metadata.federations.validator import (
     SAMLFederatedMetadataExpirationValidator,
     SAMLFederatedMetadataValidatorChain,
     SAMLMetadataSignatureValidator,
 )
-from palace.manager.api.saml.metadata.parser import SAMLMetadataParser
-from palace.manager.celery.task import Task
+from palace.manager.integration.patron_auth.saml.metadata.parser import (
+    SAMLMetadataParser,
+)
 from palace.manager.service.celery.celery import QueueNames
 from palace.manager.sqlalchemy.model.saml import SAMLFederation
 from palace.manager.util.datetime_helpers import utc_now
