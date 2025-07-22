@@ -5,8 +5,8 @@ import pytest
 from freezegun import freeze_time
 from sqlalchemy.exc import InvalidRequestError
 
-from palace.manager.marc.exporter import LibraryInfo, MarcExporter
-from palace.manager.marc.settings import MarcExporterLibrarySettings
+from palace.manager.integration.catalog.marc.exporter import LibraryInfo, MarcExporter
+from palace.manager.integration.catalog.marc.settings import MarcExporterLibrarySettings
 from palace.manager.sqlalchemy.model.discovery_service_registration import (
     DiscoveryServiceRegistration,
 )

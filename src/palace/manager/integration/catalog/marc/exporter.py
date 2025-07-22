@@ -8,8 +8,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, aliased, raiseload, selectinload
 
 from palace.manager.integration.base import HasLibraryIntegrationConfiguration
-from palace.manager.marc.annotator import Annotator
-from palace.manager.marc.settings import (
+from palace.manager.integration.catalog.marc.annotator import Annotator
+from palace.manager.integration.catalog.marc.settings import (
     MarcExporterLibrarySettings,
     MarcExporterSettings,
 )

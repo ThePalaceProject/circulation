@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from palace.manager.api.util.flask import get_request_library
-from palace.manager.marc.exporter import MarcExporter
+from palace.manager.integration.catalog.marc.exporter import MarcExporter
 from palace.manager.service.integration_registry.catalog_services import (
     CatalogServicesRegistry,
 )

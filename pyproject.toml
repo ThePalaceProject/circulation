@@ -110,7 +110,6 @@ module = [
     "palace.manager.data_layer.*",
     "palace.manager.feed.*",
     "palace.manager.integration.*",
-    "palace.manager.marc.*",
     "palace.manager.opds.*",
     "palace.manager.scripts.initialization",
     "palace.manager.scripts.rotate_jwe_key",

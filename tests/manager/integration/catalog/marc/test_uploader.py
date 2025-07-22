@@ -6,7 +6,7 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from palace.manager.marc.uploader import (
+from palace.manager.integration.catalog.marc.uploader import (
     MarcUploadException,
     MarcUploadManager,
     UploadContext,

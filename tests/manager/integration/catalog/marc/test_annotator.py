@@ -8,7 +8,7 @@ import pytest
 from freezegun import freeze_time
 from pymarc import Indicators, MARCReader, Record
 
-from palace.manager.marc.annotator import Annotator
+from palace.manager.integration.catalog.marc.annotator import Annotator
 from palace.manager.sqlalchemy.model.classification import Genre
 from palace.manager.sqlalchemy.model.contributor import Contributor
 from palace.manager.sqlalchemy.model.edition import Edition

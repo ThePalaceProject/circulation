@@ -7,8 +7,8 @@ from sqlalchemy import select
 
 from palace.manager.celery.tasks import marc
 from palace.manager.celery.tasks.marc import marc_export_collection_lock
-from palace.manager.marc.exporter import MarcExporter
-from palace.manager.marc.uploader import MarcUploadManager
+from palace.manager.integration.catalog.marc.exporter import MarcExporter
+from palace.manager.integration.catalog.marc.uploader import MarcUploadManager
 from palace.manager.service.redis.models.lock import LockNotAcquired, RedisLock
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.marcfile import MarcFile
