@@ -56,9 +56,9 @@ from palace.manager.sqlalchemy.model.licensing import (
 from palace.manager.sqlalchemy.model.measurement import Measurement
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation, Resource
 from palace.manager.sqlalchemy.model.work import Work
-from palace.manager.util import first_or_default
+from palace.manager.util import first_or_default, http
 from palace.manager.util.datetime_helpers import datetime_utc
-from palace.manager.util.http import BadResponseException
+from palace.manager.util.http import HTTP, BadResponseException
 from palace.manager.util.opds_writer import AtomFeed, OPDSFeed, OPDSMessage
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import OPDSFilesFixture
@@ -1705,7 +1705,7 @@ class TestOPDSImportMonitor:
         )
         monitor = OPDSImportMonitor(session, collection, OPDSImporter)
 
-        with patch("palace.manager.core.opds_import.HTTP.get_with_timeout") as mock_get:
+        with patch.object(HTTP, "get_with_timeout") as mock_get:
             monitor._get("/absolute/path", {})
             assert mock_get.call_args[0] == (
                 "https://opds.import.com:9999/absolute/path",
@@ -2103,7 +2103,7 @@ class TestOPDSImportMonitor:
         )
 
         # We mock Retry class to ensure that the correct retry count had been passed.
-        with patch("palace.manager.util.http.Retry") as retry_constructor_mock:
+        with patch.object(http, "Retry") as retry_constructor_mock:
             with requests_mock.Mocker() as request_mock:
                 request_mock.get(
                     feed_url,

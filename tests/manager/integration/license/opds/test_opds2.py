@@ -11,6 +11,7 @@ from requests import Response
 from palace.manager.api.circulation.dispatcher import CirculationApiDispatcher
 from palace.manager.api.circulation.exceptions import CannotFulfill
 from palace.manager.api.circulation.fulfillment import Fulfillment, RedirectFulfillment
+from palace.manager.integration.license.opds import opds2
 from palace.manager.integration.license.opds.opds2 import (
     OPDS2API,
     OPDS2Importer,
@@ -807,7 +808,7 @@ class Opds2ApiFixture:
 def opds2_api_fixture(
     db: DatabaseTransactionFixture,
 ) -> Generator[Opds2ApiFixture, None, None]:
-    with patch("palace.manager.core.opds2_import.HTTP") as mock_http:
+    with patch.object(opds2, "HTTP") as mock_http:
         fixture = Opds2ApiFixture(db, mock_http)
         yield fixture
 

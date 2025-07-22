@@ -12,6 +12,7 @@ from palace.manager.api.circulation.exceptions import (
 from palace.manager.data_layer.circulation import CirculationData
 from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.data_layer.link import LinkData
+from palace.manager.integration.license.opds import opds1
 from palace.manager.integration.license.opds.opds_for_distributors import (
     OPDSForDistributorsAPI,
     OPDSForDistributorsImporter,
@@ -710,9 +711,7 @@ class TestOPDSForDistributorsImporter:
             collection=collection2,
         )
 
-        with patch(
-            "palace.manager.core.opds_import.get_one", wraps=get_one
-        ) as get_one_mock:
+        with patch.object(opds1, "get_one", wraps=get_one) as get_one_mock:
             importer1_lp, _ = importer1.update_work_for_edition(edition)
             importer2_lp, _ = importer2.update_work_for_edition(edition)
 
