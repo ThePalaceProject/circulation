@@ -16,10 +16,11 @@ from sqlalchemy import (
     Table,
     Unicode,
     UniqueConstraint,
+    func,
 )
 from sqlalchemy.orm import Mapped, relationship
 from sqlalchemy.orm.session import Session
-from sqlalchemy.sql.expression import or_
+from sqlalchemy.sql.expression import or_, select
 
 from palace.manager.sqlalchemy.model.base import Base
 from palace.manager.sqlalchemy.model.datasource import DataSource
@@ -346,6 +347,20 @@ class CustomList(Base):
     def update_size(self, db: Session):
         if self.id is not None:
             self.size = CustomList.entries_having_works(db, self.id).count()
+
+    def get_entry_count(self, db: Session) -> int:
+        """Get the number of entries for this CustomList from the database.
+
+        TODO: This query is similar to the one used in `update_size` (from
+         `CustomListQueries.populate_query_pages`), but does not factor in
+         the presence of Works or Editions. This query reproduces the
+         behavior of `CustomListQueries.populate_query_pages`'s updated size
+         calculation, but in a more efficient manner.
+         I'm not sure which is the correct behavior, so this is left as is for now.
+        """
+        return db.execute(
+            select(func.count()).where(CustomListEntry.list_id == self.id)
+        ).scalar_one()
 
 
 customlist_sharedlibrary: Table = Table(
