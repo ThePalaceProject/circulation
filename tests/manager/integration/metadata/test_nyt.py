@@ -4,16 +4,16 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from palace.manager.api.metadata.nyt import (
+from palace.manager.core.config import CannotLoadConfiguration
+from palace.manager.core.exceptions import IntegrationException
+from palace.manager.integration.goals import Goals
+from palace.manager.integration.metadata.nyt import (
     NYTAPI,
     NYTBestSellerAPI,
     NytBestSellerApiSettings,
     NYTBestSellerList,
     NYTBestSellerListTitle,
 )
-from palace.manager.core.config import CannotLoadConfiguration
-from palace.manager.core.exceptions import IntegrationException
-from palace.manager.integration.goals import Goals
 from palace.manager.sqlalchemy.model.contributor import Contributor
 from palace.manager.sqlalchemy.model.customlist import CustomListEntry
 from palace.manager.sqlalchemy.model.edition import Edition

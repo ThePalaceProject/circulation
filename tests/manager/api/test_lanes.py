@@ -25,8 +25,6 @@ from palace.manager.api.lanes import (
     create_lanes_for_large_collection,
     create_world_languages_lane,
 )
-from palace.manager.api.metadata.novelist import NoveListAPI
-from palace.manager.api.metadata.nyt import NYTBestSellerAPI, NytBestSellerApiSettings
 from palace.manager.core.classifier import Classifier
 from palace.manager.core.entrypoint import AudiobooksEntryPoint
 from palace.manager.data_layer.contributor import ContributorData
@@ -34,6 +32,11 @@ from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.integration.goals import Goals
 from palace.manager.integration.license.bibliotheca import BibliothecaAPI
 from palace.manager.integration.license.overdrive.api import OverdriveAPI
+from palace.manager.integration.metadata.novelist import NoveListAPI
+from palace.manager.integration.metadata.nyt import (
+    NYTBestSellerAPI,
+    NytBestSellerApiSettings,
+)
 from palace.manager.search.external_search import Filter
 from palace.manager.sqlalchemy.model.contributor import Contributor
 from palace.manager.sqlalchemy.model.datasource import DataSource

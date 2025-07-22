@@ -9,9 +9,9 @@ from palace.manager.api.admin.controller.integration_settings import (
 )
 from palace.manager.api.admin.form_data import ProcessFormData
 from palace.manager.api.admin.problem_details import DUPLICATE_INTEGRATION
-from palace.manager.api.metadata.base import MetadataServiceType
 from palace.manager.core.selftest import HasSelfTests
 from palace.manager.integration.base import HasLibraryIntegrationConfiguration
+from palace.manager.integration.metadata.base import MetadataServiceType
 from palace.manager.sqlalchemy.listeners import site_configuration_has_changed
 from palace.manager.sqlalchemy.model.integration import IntegrationConfiguration
 from palace.manager.sqlalchemy.session import json_serializer

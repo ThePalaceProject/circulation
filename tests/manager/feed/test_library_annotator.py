@@ -14,7 +14,6 @@ from palace.manager.api.circulation.base import BaseCirculationAPI
 from palace.manager.api.circulation.dispatcher import CirculationApiDispatcher
 from palace.manager.api.circulation.fulfillment import RedirectFulfillment
 from palace.manager.api.lanes import ContributorLane
-from palace.manager.api.metadata.novelist import NoveListAPI, NoveListApiSettings
 from palace.manager.core.classifier import Classifier, Fantasy, Urban_Fantasy
 from palace.manager.core.entrypoint import (
     AudiobooksEntryPoint,
@@ -37,6 +36,10 @@ from palace.manager.integration.license.boundless.constants import (
     BAKER_TAYLOR_KDRM_PARAMS,
 )
 from palace.manager.integration.license.opds.opds1 import OPDSXMLParser
+from palace.manager.integration.metadata.novelist import (
+    NoveListAPI,
+    NoveListApiSettings,
+)
 from palace.manager.service.container import container_instance
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.contributor import Contributor

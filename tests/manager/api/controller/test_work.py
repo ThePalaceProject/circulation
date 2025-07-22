@@ -19,7 +19,6 @@ from palace.manager.api.lanes import (
     SeriesFacets,
     SeriesLane,
 )
-from palace.manager.api.metadata.novelist import NoveListAPI
 from palace.manager.api.problem_details import NO_SUCH_LANE, NOT_FOUND_ON_REMOTE
 from palace.manager.core.classifier import Classifier
 from palace.manager.core.entrypoint import AudiobooksEntryPoint
@@ -29,6 +28,7 @@ from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.feed.acquisition import OPDSAcquisitionFeed
 from palace.manager.feed.annotator.circulation import LibraryAnnotator
 from palace.manager.feed.types import WorkEntry
+from palace.manager.integration.metadata.novelist import NoveListAPI
 from palace.manager.search.external_search import SortKeyPagination
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.lane import Facets, FeaturedFacets
