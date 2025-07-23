@@ -589,6 +589,7 @@ class TestErrorHandler:
     def test_handle_operational_error(
         self, error_handler_fixture, caplog: LogCaptureFixture
     ):
+        caplog.set_level(LogLevel.warning)
         handler = error_handler_fixture.handler()
         with error_handler_fixture.app.test_request_context("/"):
             try:

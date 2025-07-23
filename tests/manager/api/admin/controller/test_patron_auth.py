@@ -35,18 +35,27 @@ from palace.manager.api.authentication.basic import (
     Keyboards,
     LibraryIdentifierRestriction,
 )
-from palace.manager.api.millenium_patron import (
+from palace.manager.core.problem_details import INVALID_INPUT
+from palace.manager.core.selftest import HasSelfTests
+from palace.manager.integration.goals import Goals
+from palace.manager.integration.patron_auth.millenium_patron import (
     AuthenticationMode,
     MilleniumPatronAPI,
     MilleniumPatronSettings,
 )
-from palace.manager.api.saml.configuration.model import SAMLWebSSOAuthSettings
-from palace.manager.api.saml.provider import SAMLWebSSOAuthenticationProvider
-from palace.manager.api.simple_authentication import SimpleAuthenticationProvider
-from palace.manager.api.sip import SIP2AuthenticationProvider, SIP2Settings
-from palace.manager.core.problem_details import INVALID_INPUT
-from palace.manager.core.selftest import HasSelfTests
-from palace.manager.integration.goals import Goals
+from palace.manager.integration.patron_auth.saml.configuration.model import (
+    SAMLWebSSOAuthSettings,
+)
+from palace.manager.integration.patron_auth.saml.provider import (
+    SAMLWebSSOAuthenticationProvider,
+)
+from palace.manager.integration.patron_auth.simple_authentication import (
+    SimpleAuthenticationProvider,
+)
+from palace.manager.integration.patron_auth.sip2.provider import (
+    SIP2AuthenticationProvider,
+    SIP2Settings,
+)
 from palace.manager.sqlalchemy.model.integration import IntegrationConfiguration
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.util import get_one

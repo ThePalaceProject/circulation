@@ -3,7 +3,7 @@
 
 from contextlib import closing
 
-from palace.manager.api.saml.metadata.federations import incommon
+from palace.manager.integration.patron_auth.saml.metadata.federations import incommon
 from palace.manager.sqlalchemy.model.saml import SAMLFederation
 from palace.manager.sqlalchemy.session import production_session
 

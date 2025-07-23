@@ -31,7 +31,6 @@ from palace.manager.api.controller.urn_lookup import URNLookupController
 from palace.manager.api.controller.work import WorkController
 from palace.manager.api.lanes import load_lanes
 from palace.manager.api.problem_details import NO_SUCH_LANE
-from palace.manager.api.saml.controller import SAMLController
 from palace.manager.api.util.flask import get_request_library
 from palace.manager.core.app_server import (
     ApplicationVersionController,
@@ -42,6 +41,7 @@ from palace.manager.feed.annotator.circulation import (
     CirculationManagerAnnotator,
     LibraryAnnotator,
 )
+from palace.manager.integration.patron_auth.saml.controller import SAMLController
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.service.container import Services
 from palace.manager.service.integration_registry.license_providers import (

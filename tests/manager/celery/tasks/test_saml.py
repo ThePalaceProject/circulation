@@ -1,11 +1,11 @@
 from unittest.mock import MagicMock, create_autospec, patch
 
-from palace.manager.api.saml.metadata.federations.loader import (
-    SAMLFederatedIdentityProviderLoader,
-)
 from palace.manager.celery.tasks.saml import (
     _create_saml_federated_identity_provider_loader,
     update_saml_federation_idps_metadata,
+)
+from palace.manager.integration.patron_auth.saml.metadata.federations.loader import (
+    SAMLFederatedIdentityProviderLoader,
 )
 from palace.manager.sqlalchemy.model.saml import (
     SAMLFederatedIdentityProvider,

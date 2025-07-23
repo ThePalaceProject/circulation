@@ -34,10 +34,6 @@ from palace.manager.api.circulation.base import (
     SettingsType as TCirculationSettings,
 )
 from palace.manager.api.circulation.settings import BaseCirculationApiSettings
-from palace.manager.api.simple_authentication import (
-    SimpleAuthenticationProvider,
-    SimpleAuthSettings,
-)
 from palace.manager.core.classifier import Classifier
 from palace.manager.core.config import Configuration
 from palace.manager.core.exceptions import BasePalaceException, PalaceValueError
@@ -68,6 +64,10 @@ from palace.manager.integration.license.opds.opds_for_distributors import (
 )
 from palace.manager.integration.license.overdrive.api import OverdriveAPI
 from palace.manager.integration.license.overdrive.settings import OverdriveSettings
+from palace.manager.integration.patron_auth.simple_authentication import (
+    SimpleAuthenticationProvider,
+    SimpleAuthSettings,
+)
 from palace.manager.integration.settings import BaseSettings
 from palace.manager.opds.odl.info import LicenseStatus
 from palace.manager.service.integration_registry.base import IntegrationRegistry
