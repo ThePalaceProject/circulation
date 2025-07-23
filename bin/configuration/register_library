@@ -2,6 +2,8 @@
 """Push the configurations of one or more libraries to a library registry."""
 
 
-from palace.manager.api.discovery.registration_script import LibraryRegistrationScript
+from palace.manager.integration.discovery.registration_script import (
+    LibraryRegistrationScript,
+)
 
 LibraryRegistrationScript().run()

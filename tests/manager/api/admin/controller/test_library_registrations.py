@@ -11,9 +11,11 @@ from palace.manager.api.admin.controller.discovery_service_library_registrations
 )
 from palace.manager.api.admin.exceptions import AdminNotAuthorized
 from palace.manager.api.admin.problem_details import MISSING_SERVICE, NO_SUCH_LIBRARY
-from palace.manager.api.discovery.opds_registration import OpdsRegistrationService
 from palace.manager.api.problem_details import REMOTE_INTEGRATION_FAILED
 from palace.manager.core.problem_details import INVALID_INPUT
+from palace.manager.integration.discovery.opds_registration import (
+    OpdsRegistrationService,
+)
 from palace.manager.sqlalchemy.model.discovery_service_registration import (
     DiscoveryServiceRegistration,
     RegistrationStage,

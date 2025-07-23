@@ -13,8 +13,6 @@ from Crypto.PublicKey import RSA
 from pytest import MonkeyPatch
 from requests_mock import Mocker
 
-from palace.manager.api.discovery.opds_registration import OpdsRegistrationService
-from palace.manager.api.discovery.registration_script import LibraryRegistrationScript
 from palace.manager.api.problem_details import (
     INVALID_REGISTRATION,
     REMOTE_INTEGRATION_FAILED,
@@ -22,6 +20,12 @@ from palace.manager.api.problem_details import (
 )
 from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.core.problem_details import INTEGRATION_ERROR, INVALID_INPUT
+from palace.manager.integration.discovery.opds_registration import (
+    OpdsRegistrationService,
+)
+from palace.manager.integration.discovery.registration_script import (
+    LibraryRegistrationScript,
+)
 from palace.manager.sqlalchemy.model.discovery_service_registration import (
     DiscoveryServiceRegistration,
     RegistrationStage,

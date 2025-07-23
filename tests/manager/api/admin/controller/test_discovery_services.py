@@ -19,7 +19,9 @@ from palace.manager.api.admin.problem_details import (
     NO_PROTOCOL_FOR_NEW_SERVICE,
     UNKNOWN_PROTOCOL,
 )
-from palace.manager.api.discovery.opds_registration import OpdsRegistrationService
+from palace.manager.integration.discovery.opds_registration import (
+    OpdsRegistrationService,
+)
 from palace.manager.integration.goals import Goals
 from palace.manager.sqlalchemy.model.integration import IntegrationConfiguration
 from palace.manager.sqlalchemy.util import get_one

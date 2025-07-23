@@ -34,10 +34,6 @@ from palace.manager.api.circulation.base import (
     SettingsType as TCirculationSettings,
 )
 from palace.manager.api.circulation.settings import BaseCirculationApiSettings
-from palace.manager.api.discovery.opds_registration import (
-    OpdsRegistrationService,
-    OpdsRegistrationServiceSettings,
-)
 from palace.manager.api.simple_authentication import (
     SimpleAuthenticationProvider,
     SimpleAuthSettings,
@@ -51,6 +47,10 @@ from palace.manager.integration.base import (
     SettingsType as TIntegrationSettings,
 )
 from palace.manager.integration.configuration.library import LibrarySettings
+from palace.manager.integration.discovery.opds_registration import (
+    OpdsRegistrationService,
+    OpdsRegistrationServiceSettings,
+)
 from palace.manager.integration.goals import Goals
 from palace.manager.integration.license.bibliotheca import (
     BibliothecaAPI,
