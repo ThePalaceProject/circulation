@@ -763,48 +763,6 @@ class TestBoundlessApi:
         # The second was reaped.
         mock_reap.assert_called_once_with(no_longer_in_collection)
 
-    def test_reap_identifiers_if_no_longer_available(self, boundless: BoundlessFixture):
-        def _fetch_remote_availability(identifiers):
-            for i, identifier in enumerate(identifiers):
-                # The first identifer in the list is still
-                # available.
-                identifier_data = IdentifierData.from_identifier(identifier)
-                bibliographic = BibliographicData(
-                    data_source_name=DataSource.BOUNDLESS,
-                    primary_identifier_data=identifier_data,
-                )
-                availability = CirculationData(
-                    data_source_name=DataSource.BOUNDLESS,
-                    primary_identifier_data=identifier_data,
-                    licenses_owned=7,
-                    licenses_available=6,
-                )
-
-                bibliographic.circulation = availability
-                yield bibliographic, availability
-
-                # The rest are no longer known to Boundless.
-                break
-
-        api = boundless.api
-        api._fetch_remote_availability = MagicMock(
-            side_effect=_fetch_remote_availability
-        )
-        mock_reap = create_autospec(api._reap)
-        api._reap = mock_reap
-        still_in_collection = boundless.db.identifier(
-            identifier_type=Identifier.AXIS_360_ID
-        )
-        no_longer_in_collection = boundless.db.identifier(
-            identifier_type=Identifier.AXIS_360_ID
-        )
-        api.reap_identifiers_if_no_longer_available(
-            [still_in_collection, no_longer_in_collection]
-        )
-
-        # The second was reaped.
-        mock_reap.assert_called_once_with(no_longer_in_collection)
-
     def test_fetch_remote_availability(self, boundless: BoundlessFixture):
         # Test the _fetch_remote_availability method, as
         # used by update_licensepools_for_identifiers.

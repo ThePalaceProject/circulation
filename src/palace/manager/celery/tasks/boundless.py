@@ -484,13 +484,12 @@ def reap_collection(
 
             _check_api_credentials(task, collection, api.api_requests)
 
-            api.reap_identifiers_if_no_longer_available(identifiers=identifiers)
-
+            api.update_licensepools_for_identifiers(identifiers=identifiers)
         except (IntegrationException, OperationalError) as e:
             _check_if_deadlock(e)
             wait_time = exponential_backoff(task.request.retries)
             task.log.exception(
-                f"An error was encountered while attempting to reap {len(identifiers)} "
+                f"An error was encountered while attempting to update license pools for {len(identifiers)} "
                 f'in collection("{collection_name}") task(id={task.request.id} due to {e}. '
                 f"Retrying in {wait_time} seconds."
             )
