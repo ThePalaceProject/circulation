@@ -1,22 +1,22 @@
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from datetime import date, datetime
-from functools import cached_property
-from typing import Any
+from typing import Any, cast
 from urllib.parse import urljoin, urlparse
 
+from celery.canvas import Signature
 from flask_babel import lazy_gettext as _
+from frozendict import frozendict
 from pydantic import ValidationError
-from requests import Response
 from sqlalchemy.orm import Session
-from typing_extensions import Unpack
+from typing_extensions import Self, Unpack
 from uritemplate import URITemplate
 
 from palace.manager.api.circulation.base import BaseCirculationAPI
 from palace.manager.api.circulation.exceptions import CannotFulfill
 from palace.manager.api.circulation.fulfillment import RedirectFulfillment
-from palace.manager.core.coverage import CoverageFailure
+from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.data_layer.bibliographic import BibliographicData
 from palace.manager.data_layer.circulation import CirculationData
 from palace.manager.data_layer.contributor import ContributorData
@@ -24,12 +24,15 @@ from palace.manager.data_layer.format import FormatData
 from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.data_layer.link import LinkData
 from palace.manager.data_layer.subject import SubjectData
+from palace.manager.integration.base import integration_settings_load
 from palace.manager.integration.license.opds.opds1 import (
     BaseOPDSAPI,
-    BaseOPDSImporter,
     OPDSImporterLibrarySettings,
     OPDSImporterSettings,
-    OPDSImportMonitor,
+)
+from palace.manager.integration.license.opds.requests import (
+    OPDS2AuthType,
+    get_opds_requests,
 )
 from palace.manager.integration.settings import (
     ConfigurationFormItem,
@@ -37,8 +40,11 @@ from palace.manager.integration.settings import (
     FormField,
 )
 from palace.manager.opds import opds2, rwpm
-from palace.manager.opds.opds2 import AcquisitionObject
+from palace.manager.opds.opds2 import AcquisitionObject, PublicationFeedNoValidation
 from palace.manager.opds.types.link import CompactCollection
+from palace.manager.service.integration_registry.license_providers import (
+    LicenseProvidersRegistry,
+)
 from palace.manager.sqlalchemy.constants import (
     IdentifierType,
     LinkRelations,
@@ -49,7 +55,6 @@ from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.contributor import Contributor
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
-from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import (
     DeliveryMechanism,
     LicensePool,
@@ -59,7 +64,8 @@ from palace.manager.sqlalchemy.model.licensing import (
 from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
 from palace.manager.util import first_or_default
-from palace.manager.util.http import HTTP, BadResponseException
+from palace.manager.util.http import HTTP
+from palace.manager.util.log import LoggerMixin
 
 
 class OPDS2ImporterSettings(OPDSImporterSettings):
@@ -191,60 +197,222 @@ class OPDS2API(BaseOPDSAPI):
             fulfillment = self.fulfill_token_auth(patron, licensepool, fulfillment)
         return fulfillment
 
-
-class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
-    """Imports editions and license pools from an OPDS 2.0 feed."""
-
-    NAME: str = OPDS2API.label()
-    DESCRIPTION: str = _("Import books from a publicly-accessible OPDS 2.0 feed.")
-    NEXT_LINK_RELATION: str = "next"
-
     @classmethod
-    def settings_class(cls) -> type[OPDS2ImporterSettings]:
-        return OPDS2ImporterSettings
+    def import_task(cls, collection_id: int, force: bool = False) -> Signature:
+        from palace.manager.celery.tasks.opds2 import import_collection
+
+        return import_collection.s(collection_id, force=force)
+
+
+class OPDS2Importer(LoggerMixin):
 
     def __init__(
         self,
-        db: Session,
-        collection: Collection,
-        data_source_name: str | None = None,
-    ):
-        """Initialize a new instance of OPDS2Importer class.
-
-        :param db: Database session
-
-        :param collection: Circulation Manager's collection.
-            LicensePools created by this OPDS2Import class will be associated with the given Collection.
-            If this is None, no LicensePools will be created -- only Editions.
-        :param data_source_name: Name of the source of this OPDS feed.
-            All Editions created by this import will be associated with this DataSource.
-            If there is no DataSource with this name, one will be created.
-            NOTE: If `collection` is provided, its .data_source will take precedence over any value provided here.
-            This is only for use when you are importing OPDS metadata without any particular Collection in mind.
+        *,
+        username: str | None,
+        password: str | None,
+        feed_base_url: str,
+        data_source: str,
+        ignored_identifier_types: list[str],
+        max_retry_count: int,
+        accept_header: str,
+    ) -> None:
         """
-        super().__init__(db, collection, data_source_name)
-        self.ignored_identifier_types = self.settings.ignored_identifier_types
+        Constructor.
+        """
+        self._request = get_opds_requests(
+            (OPDS2AuthType.BASIC if username and password else OPDS2AuthType.NONE),
+            username,
+            password,
+            feed_base_url,
+        )
 
-    def _is_identifier_allowed(self, identifier: Identifier) -> bool:
+        self._data_source_name = data_source
+        self._ignored_identifier_types = ignored_identifier_types
+        self._feed_base_url = feed_base_url
+        self._max_retry_count = max_retry_count
+        self._accept_header = accept_header
+
+    @classmethod
+    def from_collection(
+        cls, collection: Collection, registry: LicenseProvidersRegistry
+    ) -> Self:
+        """Create an instance from a Collection."""
+        if not registry.equivalent(collection.protocol, OPDS2API):
+            raise PalaceValueError(
+                f"Collection {collection.name} [id={collection.id} protocol={collection.protocol}] is not a OPDS2 collection."
+            )
+        settings = integration_settings_load(
+            OPDS2API.settings_class(), collection.integration_configuration
+        )
+        return cls(
+            username=settings.username,
+            password=settings.password,
+            feed_base_url=settings.external_account_id,
+            data_source=settings.data_source,
+            ignored_identifier_types=settings.ignored_identifier_types,
+            max_retry_count=settings.max_retry_count,
+            accept_header=settings.custom_accept_header,
+        )
+
+    def get_feed(self, url: str | None) -> PublicationFeedNoValidation:
+        joined_url = urljoin(self._feed_base_url, url)
+        self.log.info(f"Fetching OPDS2 feed page: {joined_url}")
+        return self._request(
+            "GET",
+            joined_url,
+            parser=PublicationFeedNoValidation.model_validate_json,
+            allowed_response_codes=["2xx"],
+            headers={"Accept": self._accept_header},
+            max_retry_count=self._max_retry_count,
+        )
+
+    @classmethod
+    def next_page(cls, feed: PublicationFeedNoValidation) -> str | None:
+        """Get the next page URL from the feed."""
+        next_link = feed.links.get(
+            rel="next", type=PublicationFeedNoValidation.content_type()
+        )
+        if not next_link:
+            return None
+        return next_link.href
+
+    def _is_identifier_allowed(self, identifier: IdentifierData) -> bool:
         """Check the identifier and return a boolean value indicating whether CM can import it.
 
         :param identifier: Identifier object
         :return: Boolean value indicating whether CM can import the identifier
         """
-        return identifier.type not in self.ignored_identifier_types
+        return identifier.type not in self._ignored_identifier_types
 
-    def _extract_subjects(self, subjects: Sequence[rwpm.Subject]) -> list[SubjectData]:
+    @classmethod
+    def _get_publication(
+        cls,
+        publication: dict[str, Any],
+    ) -> opds2.BasePublication:
+        try:
+            return opds2.Publication.model_validate(publication)
+        except ValidationError as e:
+            raw_identifier = publication.get("metadata", {}).get("identifier")
+            cls.logger().exception(
+                f"Error validating publication (identifier: {raw_identifier}): {e}"
+            )
+            raise
+
+    @classmethod
+    def update_integration_context(
+        cls, feed: PublicationFeedNoValidation, collection: Collection
+    ) -> bool:
+        """Parse the global feed links. Currently only parses the token endpoint link"""
+        links = feed.links
+        token_auth_link = links.get(rel=Hyperlink.TOKEN_AUTH)
+        if token_auth_link is None:
+            return False
+
+        integration = collection.integration_configuration
+        if (
+            integration.context.get(OPDS2API.TOKEN_AUTH_CONFIG_KEY)
+            == token_auth_link.href
+        ):
+            # No change, so we don't need to update the context.
+            return False
+
+        integration.context_update(
+            {OPDS2API.TOKEN_AUTH_CONFIG_KEY: token_auth_link.href}
+        )
+        return True
+
+    def extract_feed_data(
+        self, feed: PublicationFeedNoValidation
+    ) -> list[BibliographicData]:
+        """
+        Turn an OPDS 2.0 feed into lists of BibliographicData and CirculationData objects.
+        """
+        results = []
+        for publication_dict in feed.publications:
+            try:
+                publication = self._get_publication(publication_dict)
+            except ValidationError as e:
+                raw_identifier = publication_dict.get("metadata", {}).get("identifier")
+                raw_title = publication_dict.get("metadata", {}).get("title")
+                self.log.error(
+                    f"Error validating publication (identifier: {raw_identifier}, title: {raw_title}): {e}"
+                )
+                continue
+
+            feed_self_url = feed.links.get(
+                rel=rwpm.LinkRelations.self, raising=True
+            ).href
+            try:
+                publication_bibliographic = Opds2Extractor.extract_publication_data(
+                    publication, self._data_source_name, feed_self_url
+                )
+            except PalaceValueError:
+                self.log.exception(
+                    "Error extracting publication data. Most likely the publications identifier could not be parsed. Skipping publication."
+                )
+                continue
+
+            # We cast here because we know that Opds2Extractor.extract_publication_data always sets
+            # the primary_identifier_data field to an IdentifierData object.
+            # TODO: Maybe we can tighten up the type hint for BibliographicData to reflect this?
+            identifier = cast(
+                IdentifierData, publication_bibliographic.primary_identifier_data
+            )
+            if identifier is None or not self._is_identifier_allowed(identifier):
+                self.log.warning(
+                    f"Publication {identifier} not imported because its identifier type is not allowed: {identifier.type}"
+                )
+                continue
+
+            results.append(publication_bibliographic)
+
+        return results
+
+    @classmethod
+    def is_changed(cls, session: Session, bibliographic: BibliographicData) -> bool:
+        edition = bibliographic.load_edition(session)
+        if not edition:
+            return True
+
+        # If we don't have any information about the last update time, assume we need to update.
+        if edition.updated_at is None or bibliographic.data_source_last_updated is None:
+            return True
+
+        if bibliographic.data_source_last_updated > edition.updated_at:
+            return True
+
+        cls.logger().info(
+            f"Publication {bibliographic.primary_identifier_data} is unchanged. Last updated at "
+            f"{edition.updated_at}, data source last updated at {bibliographic.data_source_last_updated}"
+        )
+        return False
+
+
+class Opds2Extractor(LoggerMixin):
+    _CONTRIBUTOR_ROLE_MAPPING: frozendict[str, str] = frozendict(
+        {
+            # We reverse the mapping because there are some roles that have the same code, and we
+            # want to prioritize the first time the code appears in the list.
+            code.lower(): role
+            for role, code in reversed(Contributor.MARC_ROLE_CODES.items())
+        }
+        | {role.lower(): role for role in Contributor.Role}
+    )
+
+    @classmethod
+    def _extract_subjects(cls, subjects: Sequence[rwpm.Subject]) -> list[SubjectData]:
         """Extract a list of SubjectData objects from the rwpm.Subject.
 
         :param subjects: Parsed subject object
         :return: List of subjects metadata
         """
-        self.log.debug("Started extracting subjects metadata")
+        cls.logger().debug("Started extracting subjects metadata")
 
         subject_metadata_list = []
 
         for subject in subjects:
-            self.log.debug(
+            cls.logger().debug(
                 f"Started extracting subject metadata from {subject.model_dump_json()}"
             )
 
@@ -264,51 +432,41 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
 
             subject_metadata_list.append(subject_metadata)
 
-            self.log.debug(
+            cls.logger().debug(
                 "Finished extracting subject metadata from {}: {}".format(
                     subject.model_dump_json(), subject_metadata
                 )
             )
 
-        self.log.debug(
+        cls.logger().debug(
             f"Finished extracting subjects metadata: {subject_metadata_list}"
         )
 
         return subject_metadata_list
 
-    @cached_property
-    def _contributor_roles(self) -> Mapping[str, str]:
-        """
-        Return a mapping of OPDS2 contributor roles to our internal contributor role representation.
-        This mapping accepts MARC role codes and our internal contributor roles.
-        """
-        # We reverse the mapping because there are some roles that have the same code, and we
-        # want to prioritize the first time the code appears in the list.
-        marc_code_mapping = {
-            code.lower(): role
-            for role, code in reversed(Contributor.MARC_ROLE_CODES.items())
-        }
-        return marc_code_mapping | {role.lower(): role for role in Contributor.Role}
-
+    @classmethod
     def _extract_contributor_roles(
-        self, roles: Sequence[str], default: str
+        cls, roles: Sequence[str], default: str
     ) -> list[str]:
         """
         Normalize the contributor roles from the OPDS2 feed to our internal representation.
         """
         mapped_roles = set()
         for role in roles:
-            if (lowercased_role := role.lower()) not in self._contributor_roles:
-                self.log.warning(f"Unknown contributor role: {role}")
-            mapped_roles.add(self._contributor_roles.get(lowercased_role, default))
+            if (lowercased_role := role.lower()) not in cls._CONTRIBUTOR_ROLE_MAPPING:
+                cls.logger().warning(f"Unknown contributor role: {role}")
+            mapped_roles.add(
+                cls._CONTRIBUTOR_ROLE_MAPPING.get(lowercased_role, default)
+            )
 
         if not mapped_roles:
             return [default]
 
         return list(mapped_roles)
 
+    @classmethod
     def _extract_contributors(
-        self,
+        cls,
         contributors: Sequence[rwpm.Contributor],
         default_role: str,
     ) -> list[ContributorData]:
@@ -318,17 +476,17 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
         :param default_role: Default role
         :return: List of contributors metadata
         """
-        self.log.debug("Started extracting contributors metadata")
+        cls.logger().debug("Started extracting contributors metadata")
 
         contributor_metadata_list = []
 
         for contributor in contributors:
-            self.log.debug(
+            cls.logger().debug(
                 f"Started extracting contributor metadata from {contributor.model_dump_json()}"
             )
 
             if isinstance(contributor, rwpm.ContributorWithRole):
-                roles = self._extract_contributor_roles(contributor.roles, default_role)
+                roles = cls._extract_contributor_roles(contributor.roles, default_role)
             else:
                 roles = [default_role]
 
@@ -340,20 +498,21 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
                 roles=roles,
             )
 
-            self.log.debug(
+            cls.logger().debug(
                 f"Finished extracting contributor metadata from {contributor.model_dump_json()}: {contributor_metadata}"
             )
 
             contributor_metadata_list.append(contributor_metadata)
 
-        self.log.debug(
+        cls.logger().debug(
             f"Finished extracting contributors metadata: {contributor_metadata_list}"
         )
 
         return contributor_metadata_list
 
+    @classmethod
     def _extract_link(
-        self, link: opds2.Link, feed_self_url: str, default_link_rel: str | None = None
+        cls, link: opds2.Link, feed_self_url: str, default_link_rel: str | None = None
     ) -> LinkData:
         """Extract a LinkData object from opds2.Link.
 
@@ -363,7 +522,7 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
 
         :return: Link metadata
         """
-        self.log.debug(
+        cls.logger().debug(
             f"Started extracting link metadata from {link.model_dump_json()}"
         )
 
@@ -385,21 +544,22 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
             content=None,
         )
 
-        self.log.debug(
+        cls.logger().debug(
             f"Finished extracting link metadata from {link.model_dump_json()}: {link_metadata}"
         )
 
         return link_metadata
 
+    @classmethod
     def _extract_description_link(
-        self, publication: opds2.BasePublication
+        cls, publication: opds2.BasePublication
     ) -> LinkData | None:
         """Extract description from the publication object and create a Hyperlink.DESCRIPTION link containing it.
 
         :param publication: Publication object
         :return: LinkData object containing publication's description
         """
-        self.log.debug(
+        cls.logger().debug(
             "Started extracting a description link from {}".format(
                 publication.metadata.description
             )
@@ -414,7 +574,7 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
                 content=publication.metadata.description,
             )
 
-        self.log.debug(
+        cls.logger().debug(
             "Finished extracting a description link from {}: {}".format(
                 publication.metadata.description, description_link
             )
@@ -422,8 +582,9 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
 
         return description_link
 
+    @classmethod
     def _extract_image_links(
-        self, publication: opds2.BasePublication, feed_self_url: str
+        cls, publication: opds2.BasePublication, feed_self_url: str
     ) -> list[LinkData]:
         """Extracts a list of LinkData objects containing information about artwork.
 
@@ -431,7 +592,7 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
         :param feed_self_url: Feed's self URL
         :return: List of links metadata
         """
-        self.log.debug(f"Started extracting image links from {publication.images}")
+        cls.logger().debug(f"Started extracting image links from {publication.images}")
 
         # FIXME: This code most likely will not work in general.
         # There's no guarantee that these images have the same media type,
@@ -454,7 +615,7 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
         image_links = []
 
         if len(sorted_raw_image_links) > 0:
-            cover_link = self._extract_link(
+            cover_link = cls._extract_link(
                 sorted_raw_image_links[0],
                 feed_self_url,
                 default_link_rel=Hyperlink.IMAGE,
@@ -462,21 +623,22 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
             image_links.append(cover_link)
 
         if len(sorted_raw_image_links) > 1:
-            cover_link = self._extract_link(
+            cover_link = cls._extract_link(
                 sorted_raw_image_links[1],
                 feed_self_url,
                 default_link_rel=Hyperlink.THUMBNAIL_IMAGE,
             )
             image_links.append(cover_link)
 
-        self.log.debug(
+        cls.logger().debug(
             f"Finished extracting image links from {publication.images}: {image_links}"
         )
 
         return image_links
 
+    @classmethod
     def _extract_links(
-        self, publication: opds2.BasePublication, feed_self_url: str
+        cls, publication: opds2.BasePublication, feed_self_url: str
     ) -> list[LinkData]:
         """Extract a list of LinkData objects from opds2.Publication.
 
@@ -484,41 +646,44 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
         :param feed_self_url: Feed's self URL
         :return: List of links metadata
         """
-        self.log.debug(f"Started extracting links from {publication.links}")
+        cls.logger().debug(f"Started extracting links from {publication.links}")
 
         links = []
 
         for link in publication.links:
-            link_metadata = self._extract_link(link, feed_self_url)
+            link_metadata = cls._extract_link(link, feed_self_url)
             links.append(link_metadata)
 
-        description_link = self._extract_description_link(publication)
+        description_link = cls._extract_description_link(publication)
         if description_link:
             links.append(description_link)
 
-        image_links = self._extract_image_links(publication, feed_self_url)
+        image_links = cls._extract_image_links(publication, feed_self_url)
         links.extend(image_links)
 
-        self.log.debug(f"Finished extracting links from {publication.links}: {links}")
+        cls.logger().debug(
+            f"Finished extracting links from {publication.links}: {links}"
+        )
 
         return links
 
+    @classmethod
     def _extract_media_types_and_drm_scheme_from_link(
-        self, link: opds2.Link
+        cls, link: opds2.Link
     ) -> list[tuple[str, str | None]]:
         """Extract information about content's media type and used DRM schema from the link.
 
         :param link: Link object
         :return: 2-tuple containing information about the content's media type and its DRM schema
         """
-        self.log.debug(
+        cls.logger().debug(
             f"Started extracting media types and a DRM scheme from {link.model_dump_json()}"
         )
 
         media_types_and_drm_scheme: list[tuple[str, str | None]] = []
 
         if not link.properties.availability.available:
-            self.log.info(f"Link unavailable. Skipping. {link.model_dump_json()}")
+            cls.logger().info(f"Link unavailable. Skipping. {link.model_dump_json()}")
             return []
 
         # We need to take into account indirect acquisition links
@@ -557,7 +722,7 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
             ):
                 media_types_and_drm_scheme.append((link.type, DeliveryMechanism.NO_DRM))
 
-        self.log.debug(
+        cls.logger().debug(
             "Finished extracting media types and a DRM scheme from {}: {}".format(
                 link, media_types_and_drm_scheme
             )
@@ -565,8 +730,9 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
 
         return media_types_and_drm_scheme
 
+    @classmethod
     def _extract_medium_from_links(
-        self, links: CompactCollection[opds2.Link]
+        cls, links: CompactCollection[opds2.Link]
     ) -> str | None:
         """Extract the publication's medium from its links.
 
@@ -576,11 +742,11 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
         derived = None
 
         for link in links:
-            if not link.rels or not link.type or not self._is_acquisition_link(link):
+            if not link.rels or not link.type or not cls._is_acquisition_link(link):
                 continue
 
             link_media_type, _ = first_or_default(
-                self._extract_media_types_and_drm_scheme_from_link(link),
+                cls._extract_media_types_and_drm_scheme_from_link(link),
                 default=(None, None),
             )
             derived = Edition.medium_from_media_type(link_media_type)
@@ -590,192 +756,34 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
 
         return derived
 
-    @staticmethod
+    @classmethod
     def _extract_medium(
+        cls,
         publication: opds2.BasePublication,
-        default_medium: str | None = Edition.BOOK_MEDIUM,
     ) -> str | None:
         """Extract the publication's medium from its metadata.
 
         :param publication: Publication object
         :return: Publication's medium
         """
-        medium = default_medium
-
-        if publication.metadata.type:
-            medium = Edition.additional_type_to_medium.get(
-                publication.metadata.type, default_medium
-            )
+        medium = Edition.additional_type_to_medium.get(
+            publication.metadata.type, cls._extract_medium_from_links(publication.links)
+        )
 
         return medium
 
-    def _extract_identifier(self, publication: opds2.BasePublication) -> Identifier:
-        """Extract the publication's identifier from its metadata.
-
-        :param publication: Publication object
-        :return: Identifier object
+    @classmethod
+    def _extract_identifier(cls, identifier: str) -> IdentifierData:
         """
-        return self.parse_identifier(publication.metadata.identifier)
+        Extract the publication's identifier from its metadata.
+
+        Raises PalaceValueError if the identifier cannot be parsed.
+        """
+        return IdentifierData.parse_urn(identifier)
 
     @classmethod
-    def _extract_published_date(cls, published: datetime | date | None) -> date | None:
-        if isinstance(published, datetime):
-            return published.date()
-        return published
-
-    def _extract_publication_bibliographic_data(
-        self,
-        publication: opds2.BasePublication,
-        data_source_name: str,
-        feed_self_url: str,
-    ) -> BibliographicData:
-        """Extract a BibliographicData object from opds2.Publication.
-
-        :param publication: Feed object
-        :param publication: Publication object
-        :param data_source_name: Data source's name
-        :return: Publication's BibliographicData
-        """
-        self.log.debug(
-            f"Started extracting bibliographic data from publication {publication}"
-        )
-
-        title = str(publication.metadata.title)
-        subtitle = (
-            str(publication.metadata.subtitle)
-            if publication.metadata.subtitle
-            else None
-        )
-
-        languages = first_or_default(publication.metadata.languages)
-        derived_medium = self._extract_medium_from_links(publication.links)
-        medium = self._extract_medium(publication, derived_medium)
-
-        first_publisher = first_or_default(publication.metadata.publishers)
-        publisher = str(first_publisher.name) if first_publisher else None
-
-        first_imprint = first_or_default(publication.metadata.imprints)
-        imprint = str(first_imprint.name) if first_imprint else None
-        published = self._extract_published_date(publication.metadata.published)
-        subjects = self._extract_subjects(publication.metadata.subjects)
-        contributors = (
-            self._extract_contributors(
-                publication.metadata.authors, Contributor.Role.AUTHOR
-            )
-            + self._extract_contributors(
-                publication.metadata.translators, Contributor.Role.TRANSLATOR
-            )
-            + self._extract_contributors(
-                publication.metadata.editors, Contributor.Role.EDITOR
-            )
-            + self._extract_contributors(
-                publication.metadata.artists, Contributor.Role.ARTIST
-            )
-            + self._extract_contributors(
-                publication.metadata.illustrators, Contributor.Role.ILLUSTRATOR
-            )
-            + self._extract_contributors(
-                publication.metadata.letterers, Contributor.Role.LETTERER
-            )
-            + self._extract_contributors(
-                publication.metadata.pencilers, Contributor.Role.PENCILER
-            )
-            + self._extract_contributors(
-                publication.metadata.colorists, Contributor.Role.COLORIST
-            )
-            + self._extract_contributors(
-                publication.metadata.inkers, Contributor.Role.INKER
-            )
-            + self._extract_contributors(
-                publication.metadata.narrators, Contributor.Role.NARRATOR
-            )
-            + self._extract_contributors(
-                publication.metadata.contributors, Contributor.Role.CONTRIBUTOR
-            )
-        )
-        # Audiobook duration
-        duration = publication.metadata.duration
-        # Not all parsers support time_tracking
-        time_tracking = getattr(publication.metadata, "time_tracking", False)
-        if medium != Edition.AUDIO_MEDIUM and time_tracking is True:
-            time_tracking = False
-            self.log.warning(
-                f"Ignoring the time tracking flag for entry {publication.metadata.identifier}"
-            )
-
-        links = self._extract_links(publication, feed_self_url)
-
-        last_opds_update = publication.metadata.modified
-
-        identifier = self._extract_identifier(publication)
-        identifier_data = IdentifierData.from_identifier(identifier)
-
-        # FIXME: There are no measurements in OPDS 2.0
-        measurements: list[Any] = []
-
-        # FIXME: There is no series information in OPDS 2.0
-        series = None
-        series_position = None
-
-        # FIXME: It seems that OPDS 2.0 spec doesn't contain information about rights so we use the default one
-        rights_uri = RightsStatus.rights_uri_from_string("")
-
-        if publication.metadata.availability.available:
-            licenses_owned = LicensePool.UNLIMITED_ACCESS
-            licenses_available = LicensePool.UNLIMITED_ACCESS
-        else:
-            licenses_owned = 0
-            licenses_available = 0
-
-        circulation_data = CirculationData(
-            default_rights_uri=rights_uri,
-            data_source_name=data_source_name,
-            primary_identifier_data=identifier_data,
-            links=links,
-            licenses_owned=licenses_owned,
-            licenses_available=licenses_available,
-            licenses_reserved=0,
-            patrons_in_hold_queue=0,
-            formats=[],
-            should_track_playtime=time_tracking,
-        )
-
-        formats = self._find_formats_in_non_open_access_acquisition_links(
-            publication.links, links, rights_uri, circulation_data
-        )
-        circulation_data.formats.extend(formats)
-
-        bibliographic = BibliographicData(
-            data_source_name=data_source_name,
-            title=title,
-            subtitle=subtitle,
-            language=languages,
-            medium=medium,
-            publisher=publisher,
-            published=published,
-            imprint=imprint,
-            primary_identifier_data=identifier_data,
-            subjects=subjects,
-            contributors=contributors,
-            measurements=measurements,
-            series=series,
-            series_position=series_position,
-            links=links,
-            data_source_last_updated=last_opds_update,
-            duration=duration,
-            circulation=circulation_data,
-        )
-
-        self.log.debug(
-            "Finished extracting bibliographic data from publication {}: {}".format(
-                publication, bibliographic
-            )
-        )
-
-        return bibliographic
-
     def _find_formats_in_non_open_access_acquisition_links(
-        self,
+        cls,
         ast_link_list: Sequence[opds2.StrictLink],
         link_data_list: list[LinkData],
         rights_uri: str,
@@ -792,15 +800,15 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
         formats = []
 
         for ast_link, parsed_link in zip(ast_link_list, link_data_list):
-            if not self._is_acquisition_link(ast_link):
+            if not cls._is_acquisition_link(ast_link):
                 continue
-            if self._is_open_access_link_(parsed_link, circulation_data):
+            if cls._is_open_access_link_(parsed_link, circulation_data):
                 continue
 
             for (
                 content_type,
                 drm_scheme,
-            ) in self._extract_media_types_and_drm_scheme_from_link(ast_link):
+            ) in cls._extract_media_types_and_drm_scheme_from_link(ast_link):
                 formats.append(
                     FormatData(
                         content_type=content_type,
@@ -811,19 +819,6 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
                 )
 
         return formats
-
-    def _get_publication(
-        self,
-        publication: dict[str, Any],
-    ) -> opds2.BasePublication:
-        try:
-            return opds2.Publication.model_validate(publication)
-        except ValidationError as e:
-            raw_identifier = publication.get("metadata", {}).get("identifier")
-            self.log.exception(
-                f"Error validating publication (identifier: {raw_identifier}): {e}"
-            )
-            raise
 
     @staticmethod
     def _is_acquisition_link(link: opds2.Link) -> bool:
@@ -862,195 +857,183 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
 
         return open_access_rights_link
 
-    def _record_coverage_failure(
-        self,
-        failures: dict[str, list[CoverageFailure]],
-        identifier: Identifier,
-        error_message: str,
-        transient: bool = True,
-    ) -> CoverageFailure:
-        """Record a new coverage failure.
+    @classmethod
+    def _extract_published_date(cls, published: datetime | date | None) -> date | None:
+        if isinstance(published, datetime):
+            return published.date()
+        return published
 
-        :param failures: Dictionary mapping publication identifiers to corresponding CoverageFailure objects
-        :param identifier: Publication's identifier
-        :param error_message: Message describing the failure
-        :param transient: Boolean value indicating whether the failure is final or it can go away in the future
-        :return: CoverageFailure object describing the error
-        """
-        if identifier.identifier is None:
-            raise ValueError
+    @classmethod
+    def _extract_circulation_data(
+        cls,
+        publication: opds2.BasePublication,
+        identifier: IdentifierData,
+        data_source_name: str,
+        links: list[LinkData],
+    ) -> CirculationData:
+        # FIXME: It seems that OPDS 2.0 spec doesn't contain information about rights so we use the default one
+        rights_uri = RightsStatus.rights_uri_from_string("")
 
-        if identifier not in failures:
-            failures[identifier.identifier] = []
-
-        failure = CoverageFailure(
-            identifier,
-            error_message,
-            data_source=self.data_source,
-            transient=transient,
-            collection=self.collection,
-        )
-        failures[identifier.identifier].append(failure)
-
-        return failure
-
-    def _record_publication_unrecognizable_identifier(
-        self, identifier: str | None, title: str | None
-    ) -> None:
-        """Record a publication's unrecognizable identifier, i.e. identifier that has an unknown format
-            and could not be parsed by CM.
-
-        :param publication: OPDS 2.x publication object
-        """
-        if identifier is None:
-            self.log.warning(f"Publication '{title}' does not have an identifier.")
+        if publication.metadata.availability.available:
+            licenses_owned = LicensePool.UNLIMITED_ACCESS
+            licenses_available = LicensePool.UNLIMITED_ACCESS
         else:
-            self.log.warning(
-                f"Publication # {identifier} ('{title}') has an unrecognizable identifier."
-            )
+            licenses_owned = 0
+            licenses_available = 0
 
-    def _parse_feed(self, feed: str | bytes) -> opds2.PublicationFeedNoValidation:
-        try:
-            return opds2.PublicationFeedNoValidation.model_validate_json(feed)
-        except ValidationError as e:
-            self.log.exception(f"Error parsing feed: {e}")
-            raise
-
-    def extract_next_links(self, feed: str | bytes) -> list[str]:
-        """Extracts "next" links from the feed.
-
-        :param feed: OPDS 2.0 feed
-        :return: List of "next" links
-        """
-        try:
-            parsed_feed = self._parse_feed(feed)
-        except ValidationError:
-            return []
-
-        next_links = [
-            next_link.href
-            for next_link in parsed_feed.links.get_collection(
-                rel=self.NEXT_LINK_RELATION
-            )
-        ]
-
-        return next_links
-
-    def extract_last_update_dates(
-        self, feed: str | bytes
-    ) -> list[tuple[str | None, datetime | None]]:
-        """Extract last update date of the feed.
-
-        :param feed: OPDS 2.0 feed
-        :return: A list of 2-tuples containing publication's identifiers and their last modified dates
-        """
-        last_update_dates: list[tuple[str | None, datetime | None]] = []
-        try:
-            parsed_feed = self._parse_feed(feed)
-        except ValidationError:
-            return last_update_dates
-
-        for publication_dict in parsed_feed.publications:
-            try:
-                publication = self._get_publication(publication_dict)
-            except ValidationError:
-                continue
-            last_update_dates.append(
-                (publication.metadata.identifier, publication.metadata.modified)
-            )
-        return last_update_dates
-
-    def _parse_feed_links(self, links: CompactCollection[opds2.StrictLink]) -> None:
-        """Parse the global feed links. Currently only parses the token endpoint link"""
-        token_auth_link = links.get(rel=Hyperlink.TOKEN_AUTH)
-        if token_auth_link is not None:
-            self.collection.integration_configuration.context_update(
-                {OPDS2API.TOKEN_AUTH_CONFIG_KEY: token_auth_link.href}
-            )
-
-    def _get_allowed_identifier(
-        self, identifier: str | None, title: str | None
-    ) -> Identifier | None:
-        recognized_identifier = self.parse_identifier(identifier)
-        if not recognized_identifier or not self._is_identifier_allowed(
-            recognized_identifier
-        ):
-            self._record_publication_unrecognizable_identifier(identifier, title)
-            return None
-        return recognized_identifier
-
-    def extract_feed_data(
-        self, feed: str | bytes, feed_url: str | None = None
-    ) -> tuple[dict[str, BibliographicData], dict[str, list[CoverageFailure]]]:
-        """Turn an OPDS 2.0 feed into lists of BibliographicData and CirculationData objects.
-        :param feed: OPDS 2.0 feed
-        :param feed_url: Feed URL used to resolve relative links
-        """
-        try:
-            parsed_feed = self._parse_feed(feed)
-        except ValidationError:
-            return {}, {}
-
-        publication_bibliographic_dictionary = {}
-        failures: dict[str, list[CoverageFailure]] = {}
-
-        if parsed_feed.links:
-            self._parse_feed_links(parsed_feed.links)
-
-        for publication_dict in parsed_feed.publications:
-            try:
-                publication = self._get_publication(publication_dict)
-            except ValidationError as e:
-                raw_identifier = publication_dict.get("metadata", {}).get("identifier")
-                raw_title = publication_dict.get("metadata", {}).get("title")
-                recognized_identifier = self._get_allowed_identifier(
-                    raw_identifier, raw_title
-                )
-                if recognized_identifier:
-                    self._record_coverage_failure(
-                        failures, recognized_identifier, str(e)
-                    )
-
-                continue
-            recognized_identifier = self._get_allowed_identifier(
-                publication.metadata.identifier, str(publication.metadata.title)
-            )
-
-            if not recognized_identifier:
-                continue
-
-            feed_self_url = parsed_feed.links.get(
-                rel=rwpm.LinkRelations.self, raising=True
-            ).href
-            publication_bibliographic = self._extract_publication_bibliographic_data(
-                publication, self.data_source_name, feed_self_url
-            )
-
-            # Make sure we have a primary identifier before trying to use it
-            if publication_bibliographic.primary_identifier_data is not None:
-                publication_bibliographic_dictionary[
-                    publication_bibliographic.primary_identifier_data.identifier
-                ] = publication_bibliographic
-
-        return publication_bibliographic_dictionary, failures
-
-
-class OPDS2ImportMonitor(OPDSImportMonitor):
-    PROTOCOL = OPDS2API.label()
-    MEDIA_TYPE = opds2.PublicationFeed.content_type(), "application/json"
-
-    def _verify_media_type(self, url: str, resp: Response) -> None:
-        # Make sure we got an OPDS feed, and not an error page that was
-        # sent with a 200 status code.
-        media_type = resp.headers.get("content-type")
-        if not media_type or not any(x in media_type for x in self.MEDIA_TYPE):
-            message = "Expected {} OPDS 2.0 feed, got {}".format(
-                self.MEDIA_TYPE, media_type
-            )
-
-            raise BadResponseException(url, message=message, response=resp)
-
-    def _get_accept_header(self) -> str:
-        return "{}, {};q=0.9, */*;q=0.1".format(
-            opds2.PublicationFeed.content_type(), "application/json"
+        time_tracking = publication.metadata.time_tracking
+        circulation_data = CirculationData(
+            default_rights_uri=rights_uri,
+            data_source_name=data_source_name,
+            primary_identifier_data=identifier,
+            links=links,
+            licenses_owned=licenses_owned,
+            licenses_available=licenses_available,
+            licenses_reserved=0,
+            patrons_in_hold_queue=0,
+            formats=[],
+            should_track_playtime=time_tracking,
         )
+        formats = cls._find_formats_in_non_open_access_acquisition_links(
+            publication.links, links, rights_uri, circulation_data
+        )
+        circulation_data.formats.extend(formats)
+        return circulation_data
+
+    @classmethod
+    def _extract_bibliographic_data(
+        cls,
+        publication: opds2.BasePublication,
+        identifier: IdentifierData,
+        data_source_name: str,
+        links: list[LinkData],
+    ) -> BibliographicData:
+        title = str(publication.metadata.title)
+        subtitle = (
+            str(publication.metadata.subtitle)
+            if publication.metadata.subtitle
+            else None
+        )
+        languages = first_or_default(publication.metadata.languages)
+        medium = cls._extract_medium(publication)
+
+        first_publisher = first_or_default(publication.metadata.publishers)
+        publisher = str(first_publisher.name) if first_publisher else None
+
+        first_imprint = first_or_default(publication.metadata.imprints)
+        imprint = str(first_imprint.name) if first_imprint else None
+        published = cls._extract_published_date(publication.metadata.published)
+        subjects = cls._extract_subjects(publication.metadata.subjects)
+
+        contributors = (
+            cls._extract_contributors(
+                publication.metadata.authors, Contributor.Role.AUTHOR
+            )
+            + cls._extract_contributors(
+                publication.metadata.translators, Contributor.Role.TRANSLATOR
+            )
+            + cls._extract_contributors(
+                publication.metadata.editors, Contributor.Role.EDITOR
+            )
+            + cls._extract_contributors(
+                publication.metadata.artists, Contributor.Role.ARTIST
+            )
+            + cls._extract_contributors(
+                publication.metadata.illustrators, Contributor.Role.ILLUSTRATOR
+            )
+            + cls._extract_contributors(
+                publication.metadata.letterers, Contributor.Role.LETTERER
+            )
+            + cls._extract_contributors(
+                publication.metadata.pencilers, Contributor.Role.PENCILER
+            )
+            + cls._extract_contributors(
+                publication.metadata.colorists, Contributor.Role.COLORIST
+            )
+            + cls._extract_contributors(
+                publication.metadata.inkers, Contributor.Role.INKER
+            )
+            + cls._extract_contributors(
+                publication.metadata.narrators, Contributor.Role.NARRATOR
+            )
+            + cls._extract_contributors(
+                publication.metadata.contributors, Contributor.Role.CONTRIBUTOR
+            )
+        )
+
+        # FIXME: There are no measurements in OPDS 2.0
+        measurements: list[Any] = []
+
+        # FIXME: There is no series information in OPDS 2.0
+        series = None
+        series_position = None
+
+        last_opds_update = publication.metadata.modified
+
+        # Audiobook duration
+        duration = publication.metadata.duration
+
+        return BibliographicData(
+            data_source_name=data_source_name,
+            title=title,
+            subtitle=subtitle,
+            language=languages,
+            medium=medium,
+            publisher=publisher,
+            published=published,
+            imprint=imprint,
+            primary_identifier_data=identifier,
+            subjects=subjects,
+            contributors=contributors,
+            measurements=measurements,
+            series=series,
+            series_position=series_position,
+            links=links,
+            data_source_last_updated=last_opds_update,
+            duration=duration,
+        )
+
+    @classmethod
+    def extract_publication_data(
+        cls,
+        publication: opds2.BasePublication,
+        data_source_name: str,
+        feed_self_url: str,
+    ) -> BibliographicData:
+        """Extract a BibliographicData object from OPDS2 Publication.
+
+        :param publication: Publication object
+        :param data_source_name: Data source's name
+        :param feed_self_url: Feed's self URL
+
+        :return: Publication's BibliographicData
+        """
+        cls.logger().debug(f"Started extracting data from publication {publication}")
+
+        identifier = cls._extract_identifier(publication.metadata.identifier)
+        links = cls._extract_links(publication, feed_self_url)
+        circulation = cls._extract_circulation_data(
+            publication, identifier, data_source_name, links
+        )
+        bibliographic = cls._extract_bibliographic_data(
+            publication, identifier, data_source_name, links
+        )
+
+        bibliographic.circulation = circulation
+
+        if (
+            bibliographic.medium != Edition.AUDIO_MEDIUM
+            and circulation.should_track_playtime is True
+        ):
+            circulation.should_track_playtime = False
+            cls.logger().warning(
+                f"Ignoring the time tracking flag for entry {identifier}"
+            )
+
+        cls.logger().debug(
+            "Finished extracting bibliographic data from publication {}: {}".format(
+                publication, bibliographic
+            )
+        )
+
+        return bibliographic
