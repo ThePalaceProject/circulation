@@ -400,15 +400,13 @@ def test_reap_collection_with_requeue(
 
         reap_collection.delay(collection_id=collection.id, batch_size=2).wait()
 
-        reap_identifiers_if_no_longer_available = (
-            mock_api.reap_identifiers_if_no_longer_available
-        )
-        assert reap_identifiers_if_no_longer_available.call_count == 2
+        update_license_pools = mock_api.update_licensepools_for_identifiers
+        assert update_license_pools.call_count == 2
 
-        assert reap_identifiers_if_no_longer_available.call_args_list[0].kwargs == {
+        assert update_license_pools.call_args_list[0].kwargs == {
             "identifiers": identifiers[0:2]
         }
-        assert reap_identifiers_if_no_longer_available.call_args_list[1].kwargs == {
+        assert update_license_pools.call_args_list[1].kwargs == {
             "identifiers": identifiers[2:]
         }
         assert f"Re-queuing reap_collection task at offset=2" in caplog.text
@@ -547,7 +545,7 @@ def test_retry_reap_collection(
     )
 
     mock_api = MagicMock()
-    mock_api.reap_identifiers_if_no_longer_available.side_effect = [
+    mock_api.update_licensepools_for_identifiers.side_effect = [
         error,  # first time throw error
         None,  # second call is successful
     ]
@@ -561,10 +559,8 @@ def test_retry_reap_collection(
         else:
             reap_collection.delay(collection_id=collection.id, batch_size=1).wait()
 
-        reap_identifiers_if_no_longer_available = (
-            mock_api.reap_identifiers_if_no_longer_available
-        )
-        assert reap_identifiers_if_no_longer_available.call_count == update_count
+        update_license_pools = mock_api.update_licensepools_for_identifiers
+        assert update_license_pools.call_count == update_count
 
 
 def test_process_item_creates_presentation_ready_work(
