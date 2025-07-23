@@ -422,9 +422,10 @@ class Edition(Base, EditionConstants):
     def set_cover(self, resource):
         old_cover = self.cover
         old_cover_full_url = self.cover_full_url
-        self.cover = resource
-        self.cover_full_url = resource.representation.public_url
-
+        old_cover_thumbnail_url = self.cover_thumbnail_url
+        new_cover = resource
+        new_cover_full_url = resource.representation.public_url
+        new_cover_thumbnail_url = old_cover_thumbnail_url
         # TODO: In theory there could be multiple scaled-down
         # versions of this representation and we need some way of
         # choosing between them. Right now we just pick the first one
@@ -434,12 +435,12 @@ class Edition(Base, EditionConstants):
             and resource.representation.image_height <= self.MAX_THUMBNAIL_HEIGHT
         ):
             # This image doesn't need a thumbnail.
-            self.cover_thumbnail_url = resource.representation.public_url
+            new_cover_thumbnail_url = resource.representation.public_url
         else:
             # Use the best available thumbnail for this image.
             best_thumbnail = resource.representation.best_thumbnail
             if best_thumbnail:
-                self.cover_thumbnail_url = best_thumbnail.public_url
+                new_cover_thumbnail_url = best_thumbnail.public_url
         if (
             not self.cover_thumbnail_url
             and resource.representation.image_height
@@ -448,8 +449,16 @@ class Edition(Base, EditionConstants):
         ):
             # The full-sized image is too large to be a thumbnail, but it's
             # not huge, and there is no other thumbnail, so use it.
-            self.cover_thumbnail_url = resource.representation.public_url
-        if old_cover != self.cover or old_cover_full_url != self.cover_full_url:
+            new_cover_thumbnail_url = resource.representation.public_url
+        if (
+            old_cover != new_cover
+            or old_cover_full_url != new_cover_full_url
+            or old_cover_thumbnail_url != new_cover_thumbnail_url
+        ):
+            self.cover = new_cover
+            self.cover_full_url = new_cover_full_url
+            self.cover_thumbnail_url = new_cover_thumbnail_url
+
             logging.debug(
                 "Setting cover for %s/%s: full=%s thumb=%s",
                 self.primary_identifier.type,
@@ -612,9 +621,13 @@ class Edition(Base, EditionConstants):
         norm_author = w.normalize_author(author)
 
         old_id = self.permanent_work_id
-        self.permanent_work_id = self.calculate_permanent_work_id_for_title_and_author(
+        new_permanent_work_id = self.calculate_permanent_work_id_for_title_and_author(
             title, author, medium
         )
+
+        if old_id != new_permanent_work_id:
+            self.permanent_work_id = new_permanent_work_id
+
         args = (
             "Permanent work ID for %d: %s/%s -> %s/%s/%s -> %s (was %s)",
             self.id,
@@ -623,7 +636,7 @@ class Edition(Base, EditionConstants):
             norm_title,
             norm_author,
             medium,
-            self.permanent_work_id,
+            new_permanent_work_id,
             old_id,
         )
         if debug:
@@ -659,8 +672,16 @@ class Edition(Base, EditionConstants):
         old_cover_thumbnail_url = self.cover_thumbnail_url
 
         if policy.set_edition_metadata:
-            self.author, self.sort_author = self.calculate_author()
-            self.sort_title = TitleProcessor.sort_title_for(self.title)
+            new_author, new_sort_author = self.calculate_author()
+            new_sort_title = TitleProcessor.sort_title_for(self.title)
+
+            if old_author != new_author:
+                self.author = new_author
+            if old_sort_author != new_sort_author:
+                self.sort_author = new_sort_author
+            if old_sort_title != new_sort_title:
+                self.sort_title = new_sort_title
+
             self.calculate_permanent_work_id()
 
         if policy.choose_cover:
@@ -743,8 +764,7 @@ class Edition(Base, EditionConstants):
 
     def choose_cover(self, policy=None):
         """Try to find a cover that can be used for this Edition."""
-        self.cover_full_url = None
-        self.cover_thumbnail_url = None
+
         for distance in (0, 5):
             # If there's a cover directly associated with the
             # Edition's primary ID, use it. Otherwise, find the
@@ -773,10 +793,11 @@ class Edition(Base, EditionConstants):
             # No cover has been found. If the Edition currently references
             # a cover, it has since been rejected or otherwise removed.
             # Cover details need to be removed.
-            cover_info = [self.cover, self.cover_full_url]
+            cover_info = [self.cover, self.cover_full_url, self.cover_thumbnail_url]
             if any(cover_info):
                 self.cover = None
                 self.cover_full_url = None
+                self.cover_thumbnail_url = None
 
         if not self.cover_thumbnail_url:
             # The process we went through above did not result in the
