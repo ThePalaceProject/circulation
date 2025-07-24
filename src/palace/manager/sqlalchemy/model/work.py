@@ -1294,7 +1294,10 @@ class Work(Base, LoggerMixin):
         (genre_weights, self.fiction, self.audience, target_age) = classifier.classify(
             default_fiction=default_fiction, default_audience=default_audience
         )
-        self.target_age = tuple_to_numericrange(target_age)
+
+        new_target_age = tuple_to_numericrange(target_age)
+        if self.target_age != new_target_age:
+            self.target_age = new_target_age
 
         workgenres, workgenres_changed = self.assign_genres_from_weights(genre_weights)
 

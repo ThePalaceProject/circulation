@@ -330,7 +330,10 @@ class Subject(Base):
                 self.target_age,
                 tuple_to_numericrange(target_age),
             )
-        self.target_age = tuple_to_numericrange(target_age)
+
+        new_target_age = tuple_to_numericrange(target_age)
+        if self.target_age != new_target_age:
+            self.target_age = new_target_age
 
 
 class Classification(Base):
