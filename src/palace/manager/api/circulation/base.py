@@ -7,6 +7,7 @@ from collections.abc import Iterable, Mapping
 from functools import cached_property
 from typing import TypedDict, TypeVar
 
+from celery.canvas import Signature
 from flask_babel import lazy_gettext as _
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -208,6 +209,16 @@ class BaseCirculationAPI(
         """The modulus part of the RSA public key used for DRM."""
         exponent: str | None
         """The exponent part of the RSA public key used for DRM."""
+
+    @classmethod
+    def import_task(cls, collection_id: int, force: bool = False) -> Signature:
+        """
+        Return the signature for a Celery task that will import the collection.
+
+        :param collection_id: The ID of the collection to import.
+        :param force: If True, the import will be forced even if it has already been done.
+        """
+        raise NotImplementedError()
 
     @abstractmethod
     def fulfill(
