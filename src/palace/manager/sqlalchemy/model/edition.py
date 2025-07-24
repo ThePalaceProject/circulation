@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import (
     Column,
     Date,
+    DateTime,
     Enum,
     Float,
     ForeignKey,
@@ -37,6 +38,7 @@ from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism, LicensePool
 from palace.manager.sqlalchemy.util import get_one_or_create
 from palace.manager.util import MetadataSimilarity, TitleProcessor
+from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.languages import LanguageCodes
 from palace.manager.util.permanent_work_id import WorkIDCalculator
 
@@ -166,6 +168,10 @@ class Edition(Base, EditionConstants):
     extra: Mapped[dict[str, str]] = Column(
         MutableDict.as_mutable(JSON), default={}, nullable=False
     )
+
+    # Timestamps to let us know when this item was created in our database, and when it was last updated.
+    created_at = Column(DateTime(timezone=True), default=utc_now)
+    updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
 
     def __repr__(self):
         id_repr = repr(self.primary_identifier)

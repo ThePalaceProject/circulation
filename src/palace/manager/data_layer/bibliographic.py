@@ -4,7 +4,7 @@ import datetime
 from collections import defaultdict
 from typing import Any
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import AwareDatetime, Field, field_validator, model_validator
 from sqlalchemy import and_
 from sqlalchemy.orm import Query, Session
 from typing_extensions import Self
@@ -76,7 +76,7 @@ class BibliographicData(BaseMutableData):
     contributors: list[ContributorData] = Field(default_factory=list)
     measurements: list[MeasurementData] = Field(default_factory=list)
     links: list[LinkData] = Field(default_factory=list)
-    data_source_last_updated: datetime.datetime | None = None
+    data_source_last_updated: AwareDatetime | None = None
     duration: float | None = None
     permanent_work_id: str | None = None
     # Note: brought back to keep callers of bibliographic extraction process_one() methods simple.
@@ -381,6 +381,9 @@ class BibliographicData(BaseMutableData):
             New: If contributors changed, this is now considered a core change,
             so work.simple_opds_feed refresh can be triggered.
         """
+        # Record the time the edition was last updated, before all our changes.
+        edition_updated_at = edition.updated_at
+
         # If summary, subjects, or measurements change, then any Work
         # associated with this edition will need a full presentation
         # recalculation.
@@ -678,6 +681,17 @@ class BibliographicData(BaseMutableData):
                         work_id=work.id,
                         policy=PresentationCalculationPolicy.recalculate_presentation_edition(),
                     )
+
+        # If the edition was last updated before the data source was last updated,
+        # we set the edition's updated_at to the data source's last updated time.
+        # We compare to edition_updated_at instead of edition.updated_at, because
+        # it is likely in the course of this function that the editions updated_at
+        # timestamp is defaulted to the current time.
+        if self.data_source_last_updated is not None and (
+            edition_updated_at is None
+            or edition_updated_at < self.data_source_last_updated
+        ):
+            edition.updated_at = self.data_source_last_updated
 
         return edition, work_requires_new_presentation_edition
 
