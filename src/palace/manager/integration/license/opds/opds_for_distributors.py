@@ -298,10 +298,10 @@ class OPDSForDistributorsAPI(
 
         :return: a DirectFulfillment object.
         """
-        if (
-            delivery_mechanism.delivery_mechanism.drm_scheme
-            != DeliveryMechanism.BEARER_TOKEN
-        ):
+        if delivery_mechanism.delivery_mechanism.drm_scheme not in [
+            DeliveryMechanism.NO_DRM,
+            DeliveryMechanism.BEARER_TOKEN,
+        ]:
             raise DeliveryMechanismError(
                 "Cannot fulfill a loan through OPDS For Distributors using a delivery mechanism with DRM scheme %s"
                 % delivery_mechanism.delivery_mechanism.drm_scheme
@@ -317,8 +317,8 @@ class OPDSForDistributorsAPI(
             media_type = link.resource.representation.media_type
             if (
                 link.rel == Hyperlink.GENERIC_OPDS_ACQUISITION
-                and media_type == delivery_mechanism.delivery_mechanism.content_type
-            ):
+                or link.rel == Hyperlink.OPEN_ACCESS_DOWNLOAD
+            ) and media_type == delivery_mechanism.delivery_mechanism.content_type:
                 url = link.resource.representation.url
                 break
 

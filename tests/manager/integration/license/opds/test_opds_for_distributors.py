@@ -446,7 +446,27 @@ class TestOPDSForDistributorsAPI:
         # The loan is of indefinite duration.
         assert None == loan_info.end_date
 
-    def test_fulfill(self, opds_dist_api_fixture: OPDSForDistributorsAPIFixture):
+    @pytest.mark.parametrize(
+        "drm_scheme,acquisition_rel_type",
+        [
+            pytest.param(
+                DeliveryMechanism.BEARER_TOKEN,
+                Hyperlink.GENERIC_OPDS_ACQUISITION,
+                id="bearer token with generic acquisition",
+            ),
+            pytest.param(
+                DeliveryMechanism.NO_DRM,
+                Hyperlink.OPEN_ACCESS_DOWNLOAD,
+                id="no drm and open access download",
+            ),
+        ],
+    )
+    def test_fulfill(
+        self,
+        opds_dist_api_fixture: OPDSForDistributorsAPIFixture,
+        drm_scheme,
+        acquisition_rel_type,
+    ):
         patron = opds_dist_api_fixture.db.patron()
 
         data_source = DataSource.lookup(
@@ -460,7 +480,7 @@ class TestOPDSForDistributorsAPI:
         )
         pool.set_delivery_mechanism(
             Representation.EPUB_MEDIA_TYPE,
-            DeliveryMechanism.BEARER_TOKEN,
+            drm_scheme,
             RightsStatus.IN_COPYRIGHT,
             None,
         )
@@ -468,10 +488,7 @@ class TestOPDSForDistributorsAPI:
         # Find the correct delivery mechanism
         delivery_mechanism = None
         for mechanism in pool.delivery_mechanisms:
-            if (
-                mechanism.delivery_mechanism.drm_scheme
-                == DeliveryMechanism.BEARER_TOKEN
-            ):
+            if mechanism.delivery_mechanism.drm_scheme == drm_scheme:
                 delivery_mechanism = mechanism
         assert delivery_mechanism is not None
 
@@ -489,7 +506,7 @@ class TestOPDSForDistributorsAPI:
         # Set up an epub acquisition link for the pool.
         url = opds_dist_api_fixture.db.fresh_url()
         link, ignore = pool.identifier.add_link(
-            Hyperlink.GENERIC_OPDS_ACQUISITION,
+            acquisition_rel_type,
             url,
             data_source,
             Representation.EPUB_MEDIA_TYPE,
@@ -508,7 +525,7 @@ class TestOPDSForDistributorsAPI:
             patron, "1234", pool, delivery_mechanism
         )
 
-        assert DeliveryMechanism.BEARER_TOKEN == fulfillment.content_type
+        assert drm_scheme == fulfillment.content_type
         assert fulfillment.content is not None
         bearer_token_document = json.loads(fulfillment.content)
         expires_in = bearer_token_document["expires_in"]
