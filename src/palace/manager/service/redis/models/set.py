@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Generator
+from collections.abc import Generator, Sequence
 from datetime import timedelta
 from functools import partial
 from typing import Any, Generic, TypedDict, TypeVar, cast
@@ -18,7 +18,7 @@ from palace.manager.util.log import LoggerMixin
 
 
 class RedisSetKwargs(TypedDict):
-    key: list[RedisKeyType]
+    key: Sequence[RedisKeyType]
     expire_time: int
 
 
@@ -37,7 +37,7 @@ class RedisSet(Generic[T], LoggerMixin):
         self,
         redis_client: Redis,
         model_cls: type[T],
-        key: str | list[RedisKeyType] | None = None,
+        key: str | Sequence[RedisKeyType] | None = None,
         expire_time: timedelta | int = timedelta(hours=12),
     ):
         self._model_cls = model_cls
@@ -238,7 +238,7 @@ class IdentifierSet(TypeConversionRedisSet[IdentifierData, Identifier]):
     def __init__(
         self,
         redis_client: Redis,
-        key: str | list[RedisKeyType] | None = None,
+        key: str | Sequence[RedisKeyType] | None = None,
         expire_time: timedelta | int = timedelta(hours=12),
     ):
         super().__init__(redis_client, IdentifierData, key, expire_time)
