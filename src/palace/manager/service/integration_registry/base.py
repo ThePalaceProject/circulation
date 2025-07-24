@@ -143,17 +143,20 @@ class IntegrationRegistry(Generic[T]):
         """Return the canonical protocol name for a given protocol."""
         return self.get_protocol(self[protocol], default=False)
 
-    def equivalent(self, protocol1: str | None, protocol2: str | None) -> bool:
+    def equivalent(
+        self, protocol1: str | type[T] | None, protocol2: str | type[T] | None
+    ) -> bool:
         """Return whether two protocols are equivalent."""
-        if (
-            protocol1 is None
-            or protocol1 not in self
-            or protocol2 is None
-            or protocol2 not in self
-        ):
+        if isinstance(protocol1, str):
+            protocol1 = self.get(protocol1)
+
+        if isinstance(protocol2, str):
+            protocol2 = self.get(protocol2)
+
+        if protocol1 is None or protocol2 is None:
             return False
 
-        return self[protocol1] is self[protocol2]
+        return protocol1 is protocol2
 
     def configurations_query(self, protocol_or_integration: str | type[T]) -> Select:
         """
