@@ -7,6 +7,7 @@ from freezegun import freeze_time
 
 from palace.manager.api.circulation.exceptions import (
     CannotFulfill,
+    DeliveryMechanismError,
     LibraryAuthorizationFailedException,
 )
 from palace.manager.data_layer.circulation import CirculationData
@@ -520,12 +521,11 @@ class TestOPDSForDistributorsAPI:
         token_response = json.dumps({"access_token": "token", "expires_in": 60})
         opds_dist_api_fixture.api.queue_response(200, content=token_response)
 
-        fulfillment_time = utc_now()
         fulfillment = opds_dist_api_fixture.api.fulfill(
             patron, "1234", pool, delivery_mechanism
         )
 
-        assert drm_scheme == fulfillment.content_type
+        assert DeliveryMechanism.BEARER_TOKEN == fulfillment.content_type
         assert fulfillment.content is not None
         bearer_token_document = json.loads(fulfillment.content)
         expires_in = bearer_token_document["expires_in"]
@@ -533,6 +533,51 @@ class TestOPDSForDistributorsAPI:
         assert "Bearer" == bearer_token_document["token_type"]
         assert "token" == bearer_token_document["access_token"]
         assert url == bearer_token_document["location"]
+
+    def test_fulfill_delivery_mechanism_error(
+        self,
+        opds_dist_api_fixture: OPDSForDistributorsAPIFixture,
+    ):
+        patron = opds_dist_api_fixture.db.patron()
+
+        data_source = DataSource.lookup(
+            opds_dist_api_fixture.db.session, "My Datasource", autocreate=True
+        )
+
+        # a drm_scheme that is neither NO_DRM nor BEARER_TOKEN
+        # should fail.
+        drm_scheme = DeliveryMechanism.LCP_DRM
+
+        edition, pool = opds_dist_api_fixture.db.edition(
+            identifier_type=Identifier.URI,
+            data_source_name=data_source.name,
+            with_license_pool=True,
+            collection=opds_dist_api_fixture.collection,
+        )
+        pool.set_delivery_mechanism(
+            Representation.EPUB_MEDIA_TYPE,
+            drm_scheme,
+            RightsStatus.IN_COPYRIGHT,
+            None,
+        )
+
+        # Find the correct delivery mechanism
+        delivery_mechanism = None
+        for mechanism in pool.delivery_mechanisms:
+            if mechanism.delivery_mechanism.drm_scheme == drm_scheme:
+                delivery_mechanism = mechanism
+        assert delivery_mechanism is not None
+
+        # this call should fail because it is not a valid DeliveryMechanism
+        # for an OPDS for Distributors feed.
+        pytest.raises(
+            DeliveryMechanismError,
+            opds_dist_api_fixture.api.fulfill,
+            patron,
+            "1234",
+            pool,
+            delivery_mechanism,
+        )
 
 
 class TestOPDSForDistributorsImporter:
