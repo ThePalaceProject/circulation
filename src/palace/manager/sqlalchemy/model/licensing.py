@@ -6,7 +6,7 @@ import datetime
 import logging
 from collections.abc import Sequence
 from enum import IntEnum, auto
-from typing import TYPE_CHECKING, Literal, overload
+from typing import TYPE_CHECKING, Literal, NamedTuple, overload
 
 from frozendict import frozendict
 from sqlalchemy import (
@@ -1799,6 +1799,14 @@ Index(
 )
 
 
+class DeliveryMechanismTuple(NamedTuple):
+    content_type: str | None
+    drm_scheme: str | None
+
+    def __str__(self):
+        return f"{self.content_type} (drm_scheme={self.drm_scheme})"
+
+
 class DeliveryMechanism(Base, HasSessionCache):
     """A technique for delivering a book to a patron.
     There are two parts to this: a DRM scheme and a content
@@ -1862,25 +1870,38 @@ class DeliveryMechanism(Base, HasSessionCache):
             for index, key in enumerate(
                 (
                     # Common content types with no DRM are the first priority.
-                    (MediaTypes.EPUB_MEDIA_TYPE, NO_DRM),
-                    (MediaTypes.PDF_MEDIA_TYPE, NO_DRM),
-                    (MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE, NO_DRM),
+                    DeliveryMechanismTuple(MediaTypes.EPUB_MEDIA_TYPE, NO_DRM),
+                    DeliveryMechanismTuple(MediaTypes.PDF_MEDIA_TYPE, NO_DRM),
+                    DeliveryMechanismTuple(
+                        MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE, NO_DRM
+                    ),
                     # After that we prioritize common content types with bearer token DRM.
-                    (MediaTypes.EPUB_MEDIA_TYPE, BEARER_TOKEN),
-                    (MediaTypes.PDF_MEDIA_TYPE, BEARER_TOKEN),
-                    (MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE, BEARER_TOKEN),
+                    DeliveryMechanismTuple(MediaTypes.EPUB_MEDIA_TYPE, BEARER_TOKEN),
+                    DeliveryMechanismTuple(MediaTypes.PDF_MEDIA_TYPE, BEARER_TOKEN),
+                    DeliveryMechanismTuple(
+                        MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE, BEARER_TOKEN
+                    ),
                     # EPubs with DRM
-                    (MediaTypes.EPUB_MEDIA_TYPE, LCP_DRM),
-                    (MediaTypes.EPUB_MEDIA_TYPE, ADOBE_DRM),
+                    DeliveryMechanismTuple(MediaTypes.EPUB_MEDIA_TYPE, LCP_DRM),
+                    DeliveryMechanismTuple(MediaTypes.EPUB_MEDIA_TYPE, ADOBE_DRM),
                     # Audiobook formats
                     # Until the apps support streaming LCP audiobooks, we prioritize the feedbooks
                     # DRM type ahead of the LCP audiobook manifest, since the user experience is
                     # worse with LCP, as the client has to download the entire book before it can be played.
-                    (MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE, FEEDBOOKS_AUDIOBOOK_DRM),
-                    (MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE, LCP_DRM),
-                    (MediaTypes.AUDIOBOOK_PACKAGE_LCP_MEDIA_TYPE, LCP_DRM),
-                    (MediaTypes.OVERDRIVE_AUDIOBOOK_MANIFEST_MEDIA_TYPE, LIBBY_DRM),
-                    (None, FINDAWAY_DRM),
+                    DeliveryMechanismTuple(
+                        MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE,
+                        FEEDBOOKS_AUDIOBOOK_DRM,
+                    ),
+                    DeliveryMechanismTuple(
+                        MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE, LCP_DRM
+                    ),
+                    DeliveryMechanismTuple(
+                        MediaTypes.AUDIOBOOK_PACKAGE_LCP_MEDIA_TYPE, LCP_DRM
+                    ),
+                    DeliveryMechanismTuple(
+                        MediaTypes.OVERDRIVE_AUDIOBOOK_MANIFEST_MEDIA_TYPE, LIBBY_DRM
+                    ),
+                    DeliveryMechanismTuple(None, FINDAWAY_DRM),
                 )
             )
         }
@@ -1904,16 +1925,18 @@ class DeliveryMechanism(Base, HasSessionCache):
     # from an OPDS For Distributors collection.
     default_client_can_fulfill_lookup = {
         # EPUB books
-        (MediaTypes.EPUB_MEDIA_TYPE, NO_DRM),
-        (MediaTypes.EPUB_MEDIA_TYPE, ADOBE_DRM),
-        (MediaTypes.EPUB_MEDIA_TYPE, LCP_DRM),
+        DeliveryMechanismTuple(MediaTypes.EPUB_MEDIA_TYPE, NO_DRM),
+        DeliveryMechanismTuple(MediaTypes.EPUB_MEDIA_TYPE, ADOBE_DRM),
+        DeliveryMechanismTuple(MediaTypes.EPUB_MEDIA_TYPE, LCP_DRM),
         # PDF books
-        (MediaTypes.PDF_MEDIA_TYPE, NO_DRM),
+        DeliveryMechanismTuple(MediaTypes.PDF_MEDIA_TYPE, NO_DRM),
         # Various audiobook formats
-        (None, FINDAWAY_DRM),
-        (MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE, NO_DRM),
-        (MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE, LCP_DRM),
-        (MediaTypes.OVERDRIVE_AUDIOBOOK_MANIFEST_MEDIA_TYPE, LIBBY_DRM),
+        DeliveryMechanismTuple(None, FINDAWAY_DRM),
+        DeliveryMechanismTuple(MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE, NO_DRM),
+        DeliveryMechanismTuple(MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE, LCP_DRM),
+        DeliveryMechanismTuple(
+            MediaTypes.OVERDRIVE_AUDIOBOOK_MANIFEST_MEDIA_TYPE, LIBBY_DRM
+        ),
     }
 
     # If the default client supports a given media type with no DRM,
@@ -1921,7 +1944,9 @@ class DeliveryMechanism(Base, HasSessionCache):
     # bearer token exchange.
     for _media_type, _drm in list(default_client_can_fulfill_lookup):
         if _media_type is not None and _drm == NO_DRM:
-            default_client_can_fulfill_lookup.add((_media_type, BEARER_TOKEN))
+            default_client_can_fulfill_lookup.add(
+                DeliveryMechanismTuple(_media_type, BEARER_TOKEN)
+            )
 
     license_pool_delivery_mechanisms: Mapped[list[LicensePoolDeliveryMechanism]] = (
         relationship(
@@ -1941,8 +1966,13 @@ class DeliveryMechanism(Base, HasSessionCache):
             drm_scheme = self.drm_scheme
         return f"{self.content_type} ({drm_scheme})"
 
-    def cache_key(self):
-        return (self.content_type, self.drm_scheme)
+    @property
+    def as_tuple(self) -> DeliveryMechanismTuple:
+        """Return a tuple representation of this DeliveryMechanism."""
+        return DeliveryMechanismTuple(self.content_type, self.drm_scheme)
+
+    def cache_key(self) -> DeliveryMechanismTuple:
+        return self.as_tuple
 
     def __repr__(self):
         if self.default_client_can_fulfill:
@@ -1961,7 +1991,9 @@ class DeliveryMechanism(Base, HasSessionCache):
                 _db, DeliveryMechanism, content_type=content_type, drm_scheme=drm_scheme
             )
 
-        return cls.by_cache_key(_db, (content_type, drm_scheme), lookup_hook)
+        return cls.by_cache_key(
+            _db, DeliveryMechanismTuple(content_type, drm_scheme), lookup_hook
+        )
 
     @property
     def implicit_medium(self):
@@ -2078,9 +2110,7 @@ class DeliveryMechanism(Base, HasSessionCache):
             lpdm: LicensePoolDeliveryMechanism,
         ) -> int:
             """Sort by the DeliveryMechanism's default_delivery_mechanism_sort."""
-            content_type = lpdm.delivery_mechanism.content_type
-            drm_scheme = lpdm.delivery_mechanism.drm_scheme
-            return priorities.get((content_type, drm_scheme), default)
+            return priorities.get(lpdm.delivery_mechanism.as_tuple, default)
 
         result = sorted(
             mechanisms,
