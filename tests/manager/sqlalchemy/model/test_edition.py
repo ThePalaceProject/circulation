@@ -1,5 +1,8 @@
 import random
 import string
+from datetime import timedelta
+
+from freezegun import freeze_time
 
 from palace.manager.data_layer.policy.presentation import (
     PresentationCalculationPolicy,
@@ -95,6 +98,44 @@ class TestEdition:
         assert data_source == record.data_source
         assert identifier == record.primary_identifier
         assert False == was_new
+
+    def test_created_and_updated_timestamps(self, db: DatabaseTransactionFixture):
+        data_source = DataSource.lookup(db.session, DataSource.GUTENBERG)
+        id_ = db.fresh_str()
+        type_ = db.fresh_str()
+
+        creation_time = utc_now() - timedelta(days=365)
+        with freeze_time(creation_time):
+            record, _ = Edition.for_foreign_id(db.session, data_source, type_, id_)
+
+        # The edition automatically gets timestamps set on it
+        assert record.created_at == creation_time
+        assert record.updated_at == creation_time
+
+        # Retrieving the same edition again does not change the timestamps.
+        record, was_new = Edition.for_foreign_id(
+            db.session, DataSource.GUTENBERG, type_, id_
+        )
+        assert record.created_at == creation_time
+        assert record.updated_at == creation_time
+
+        # If I update the edition, the updated_at timestamp changes automatically
+        update_time = utc_now()
+        with freeze_time(update_time):
+            record.title = "New Title"
+            db.session.flush()
+        assert record.created_at == creation_time
+        assert record.updated_at == update_time
+
+        # If I manually set the updated_at timestamp, it does not change automatically
+        manual_update_time = utc_now() + timedelta(days=1)
+        with freeze_time(manual_update_time):
+            record.title = "Another New Title"
+            record.updated_at = manual_update_time
+            record.series = "New Series"
+            db.session.flush()
+        assert record.created_at == creation_time
+        assert record.updated_at == manual_update_time
 
     def test_sort_by_priority(self, db: DatabaseTransactionFixture):
         # Make editions created by the license source, the metadata

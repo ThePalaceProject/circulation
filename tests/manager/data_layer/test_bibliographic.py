@@ -4,6 +4,7 @@ from copy import deepcopy
 from unittest.mock import patch
 
 import pytest
+from freezegun import freeze_time
 from sqlalchemy import select
 
 from palace.manager.core.classifier import NO_NUMBER, NO_VALUE
@@ -316,7 +317,7 @@ class TestBibliographicData:
         m = BibliographicData(
             data_source_name=data_source.name,
             title="New title",
-            data_source_last_updated=datetime.datetime.now(),
+            data_source_last_updated=utc_now(),
         )
 
         with patch.object(Work, "queue_presentation_recalculation") as queue:
@@ -328,7 +329,7 @@ class TestBibliographicData:
             m = BibliographicData(
                 data_source_name=data_source.name,
                 title="Another new title",
-                data_source_last_updated=datetime.datetime.now(),
+                data_source_last_updated=utc_now(),
             )
             m.apply(db.session, edition, None)
             assert "Another new title" == edition.title
@@ -867,3 +868,50 @@ class TestBibliographicData:
         )
 
         assert bibliographic == deserialized
+
+    def test_data_source_last_updated_updates_timestamp(
+        self, db: DatabaseTransactionFixture
+    ):
+        # Test that data_source_last_updated updates the timestamp
+        # when a BibliographicData object is applied.
+        last_updated = datetime.datetime(
+            2023, 1, 1, 12, 0, 0, tzinfo=datetime.timezone.utc
+        )
+        past = last_updated - datetime.timedelta(days=5)
+
+        # Create an edition with a created and updated timestamp in the past.
+        edition = db.edition()
+        edition.created_at = past
+        edition.updated_at = past
+        db.session.flush()
+
+        # When we apply the bibliographic data, the updated_at timestamp gets
+        # set to the data_source_last_updated value.
+        bibliographic = BibliographicData(
+            data_source_name=DataSource.OVERDRIVE,
+            data_source_last_updated=last_updated,
+        )
+        bibliographic.apply(db.session, edition, None)
+        assert edition.updated_at == last_updated
+
+        # If we apply the bibliographic data again with a past timestamp,
+        # the updated_at timestamp should not change.
+        bibliographic.data_source_last_updated = past
+        bibliographic.apply(db.session, edition, None)
+        assert edition.updated_at == last_updated
+        assert edition.updated_at != past
+
+        # If data_source_last_updated is None, updated_at will stay the same
+        # if there are no other changes.
+        bibliographic.data_source_last_updated = None
+        bibliographic.apply(db.session, edition, None)
+        assert edition.updated_at == last_updated
+
+        # But if there are other changes, updated_at will be updated to the
+        # current time.
+        now = utc_now()
+        with freeze_time(now):
+            bibliographic.data_source_last_updated = None
+            bibliographic.title = "New Title"
+            bibliographic.apply(db.session, edition, None)
+            assert edition.updated_at == now
