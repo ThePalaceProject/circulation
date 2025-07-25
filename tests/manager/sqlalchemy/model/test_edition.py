@@ -104,7 +104,7 @@ class TestEdition:
         id_ = db.fresh_str()
         type_ = db.fresh_str()
 
-        creation_time = utc_now() - timedelta(days=-365)
+        creation_time = utc_now() - timedelta(days=365)
         with freeze_time(creation_time):
             record, _ = Edition.for_foreign_id(db.session, data_source, type_, id_)
 
