@@ -19,6 +19,7 @@ from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import (
     DeliveryMechanism,
+    DeliveryMechanismTuple,
     Hold,
     LicensePool,
     LicensePoolDeliveryMechanism,
@@ -284,6 +285,14 @@ class TestDeliveryMechanism:
         assert DeliveryMechanism.sort(
             [unknown_drm_2, adobe_drm, unknown_drm_1, no_drm]
         ) == [no_drm, adobe_drm, unknown_drm_2, unknown_drm_1]
+
+    def test_as_tuple(self) -> None:
+        content_type = Representation.EPUB_MEDIA_TYPE
+        drm_scheme = DeliveryMechanism.NO_DRM
+        dm = DeliveryMechanism(content_type=content_type, drm_scheme=drm_scheme)
+
+        assert dm.as_tuple == (content_type, drm_scheme)
+        assert dm.as_tuple == DeliveryMechanismTuple(content_type, drm_scheme)
 
 
 class TestRightsStatus:

@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import sys
-from typing import NamedTuple
 
 from bidict import frozenbidict
 from frozendict import frozendict
 
-from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism
+from palace.manager.sqlalchemy.model.licensing import (
+    DeliveryMechanism,
+    DeliveryMechanismTuple,
+)
 from palace.manager.sqlalchemy.model.resource import Representation
 
 # TODO: Remove this when we drop support for Python 3.10
@@ -43,11 +45,6 @@ LICENSE_SERVER_BASE_URLS = frozendict(
         ServerNickname.qa: "https://qa-frontdoor.axisnow.com/",
     }
 )
-
-
-class DeliveryMechanismTuple(NamedTuple):
-    content_type: str | None
-    drm_scheme: str | None
 
 
 DELIVERY_MECHANISM_TO_INTERNAL_FORMAT: frozenbidict[DeliveryMechanismTuple, str] = (

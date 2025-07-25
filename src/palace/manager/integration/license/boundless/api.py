@@ -39,7 +39,6 @@ from palace.manager.integration.license.boundless.constants import (
     DELIVERY_MECHANISM_TO_INTERNAL_FORMAT,
     INTERNAL_FORMAT_TO_DELIVERY_MECHANISM,
     BoundlessFormat,
-    DeliveryMechanismTuple,
 )
 from palace.manager.integration.license.boundless.fulfillment import (
     BoundlessAcsFulfillment,
@@ -64,6 +63,7 @@ from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import (
     DeliveryMechanism,
+    DeliveryMechanismTuple,
     LicensePool,
     LicensePoolDeliveryMechanism,
 )
