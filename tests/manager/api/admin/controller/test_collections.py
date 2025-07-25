@@ -392,7 +392,12 @@ class TestCollectionSettings:
             short_name="L3",
         )
 
-        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
+        with (
+            flask_app_fixture.test_request_context_system_admin("/", method="POST"),
+            patch.object(
+                OverdriveAPI, "import_task", autospec=True
+            ) as mock_import_task,
+        ):
             flask.request.form = ImmutableMultiDict(
                 [
                     ("name", "New Collection"),
@@ -437,6 +442,10 @@ class TestCollectionSettings:
                 "overdrive_client_secret"
             ]
         )
+
+        # We queued up an import task for the new collection.
+        mock_import_task.assert_called_once_with(collection.id)
+        mock_import_task.return_value.apply_async.assert_called_once()
 
         # Two libraries now have access to the collection.
         assert [collection] == l1.associated_collections
@@ -513,7 +522,15 @@ class TestCollectionSettings:
             short_name="L1",
         )
 
-        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
+        with (
+            flask_app_fixture.test_request_context_system_admin("/", method="POST"),
+            patch.object(
+                OverdriveAPI,
+                "import_task",
+                autospec=True,
+                side_effect=NotImplementedError,
+            ) as mock_import_task,
+        ):
             flask.request.form = ImmutableMultiDict(
                 [
                     ("id", str(collection.integration_configuration.id)),
@@ -535,6 +552,10 @@ class TestCollectionSettings:
             assert isinstance(response, Response)
 
         assert collection.integration_configuration.id == int(response.get_data())
+
+        # We tried to queue up an import task for the collection, but it failed
+        # with a NotImplementedError. This is expected and silently handled.
+        mock_import_task.assert_called_once_with(collection.id)
 
         # The collection has been changed.
         assert "user2" == collection.integration_configuration.settings_dict.get(

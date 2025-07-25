@@ -142,6 +142,18 @@ class CollectionSettingsController(
             # Trigger a site configuration change
             site_configuration_has_changed(self._db)
 
+            # If we have an importer task for this protocol, we start it
+            # in the background, so that the collection is ready to go
+            # as quickly as possible.
+            try:
+                impl_cls.import_task(integration.collection.id).apply_async(
+                    # Delay the task to ensure the collection has been created by the time the task starts
+                    countdown=10
+                )
+            except NotImplementedError:
+                # If the protocol does not support import tasks, we just skip it.
+                ...
+
         except ProblemDetailException as e:
             self._db.rollback()
             return e.problem_detail
