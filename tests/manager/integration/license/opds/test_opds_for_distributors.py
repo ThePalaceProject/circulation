@@ -7,7 +7,12 @@ from freezegun import freeze_time
 
 from palace.manager.api.circulation.exceptions import (
     CannotFulfill,
+    DeliveryMechanismError,
     LibraryAuthorizationFailedException,
+)
+from palace.manager.api.circulation.fulfillment import (
+    DirectFulfillment,
+    RedirectFulfillment,
 )
 from palace.manager.data_layer.circulation import CirculationData
 from palace.manager.data_layer.identifier import IdentifierData
@@ -446,7 +451,27 @@ class TestOPDSForDistributorsAPI:
         # The loan is of indefinite duration.
         assert None == loan_info.end_date
 
-    def test_fulfill(self, opds_dist_api_fixture: OPDSForDistributorsAPIFixture):
+    @pytest.mark.parametrize(
+        "drm_scheme,acquisition_rel_type",
+        [
+            pytest.param(
+                DeliveryMechanism.BEARER_TOKEN,
+                Hyperlink.GENERIC_OPDS_ACQUISITION,
+                id="bearer token with generic acquisition",
+            ),
+            pytest.param(
+                DeliveryMechanism.NO_DRM,
+                Hyperlink.OPEN_ACCESS_DOWNLOAD,
+                id="no drm and open access download",
+            ),
+        ],
+    )
+    def test_fulfill(
+        self,
+        opds_dist_api_fixture: OPDSForDistributorsAPIFixture,
+        drm_scheme,
+        acquisition_rel_type,
+    ):
         patron = opds_dist_api_fixture.db.patron()
 
         data_source = DataSource.lookup(
@@ -460,7 +485,7 @@ class TestOPDSForDistributorsAPI:
         )
         pool.set_delivery_mechanism(
             Representation.EPUB_MEDIA_TYPE,
-            DeliveryMechanism.BEARER_TOKEN,
+            drm_scheme,
             RightsStatus.IN_COPYRIGHT,
             None,
         )
@@ -468,10 +493,7 @@ class TestOPDSForDistributorsAPI:
         # Find the correct delivery mechanism
         delivery_mechanism = None
         for mechanism in pool.delivery_mechanisms:
-            if (
-                mechanism.delivery_mechanism.drm_scheme
-                == DeliveryMechanism.BEARER_TOKEN
-            ):
+            if mechanism.delivery_mechanism.drm_scheme == drm_scheme:
                 delivery_mechanism = mechanism
         assert delivery_mechanism is not None
 
@@ -489,7 +511,7 @@ class TestOPDSForDistributorsAPI:
         # Set up an epub acquisition link for the pool.
         url = opds_dist_api_fixture.db.fresh_url()
         link, ignore = pool.identifier.add_link(
-            Hyperlink.GENERIC_OPDS_ACQUISITION,
+            acquisition_rel_type,
             url,
             data_source,
             Representation.EPUB_MEDIA_TYPE,
@@ -503,19 +525,73 @@ class TestOPDSForDistributorsAPI:
         token_response = json.dumps({"access_token": "token", "expires_in": 60})
         opds_dist_api_fixture.api.queue_response(200, content=token_response)
 
-        fulfillment_time = utc_now()
         fulfillment = opds_dist_api_fixture.api.fulfill(
             patron, "1234", pool, delivery_mechanism
         )
 
-        assert DeliveryMechanism.BEARER_TOKEN == fulfillment.content_type
-        assert fulfillment.content is not None
-        bearer_token_document = json.loads(fulfillment.content)
-        expires_in = bearer_token_document["expires_in"]
-        assert expires_in < 60
-        assert "Bearer" == bearer_token_document["token_type"]
-        assert "token" == bearer_token_document["access_token"]
-        assert url == bearer_token_document["location"]
+        if drm_scheme == DeliveryMechanism.BEARER_TOKEN:
+            assert delivery_mechanism
+            assert acquisition_rel_type == Hyperlink.GENERIC_OPDS_ACQUISITION
+            assert isinstance(fulfillment, DirectFulfillment)
+            assert DeliveryMechanism.BEARER_TOKEN == fulfillment.content_type
+            assert fulfillment.content is not None
+            bearer_token_document = json.loads(fulfillment.content)
+            expires_in = bearer_token_document["expires_in"]
+            assert expires_in < 60
+            assert "Bearer" == bearer_token_document["token_type"]
+            assert "token" == bearer_token_document["access_token"]
+            assert url == bearer_token_document["location"]
+        else:
+            assert drm_scheme == DeliveryMechanism.NO_DRM
+            assert acquisition_rel_type == Hyperlink.OPEN_ACCESS_DOWNLOAD
+            assert isinstance(fulfillment, RedirectFulfillment)
+            assert fulfillment.content_link == url
+            assert fulfillment.content_type == Representation.EPUB_MEDIA_TYPE
+
+    def test_fulfill_delivery_mechanism_error(
+        self,
+        opds_dist_api_fixture: OPDSForDistributorsAPIFixture,
+    ):
+        patron = opds_dist_api_fixture.db.patron()
+
+        data_source = DataSource.lookup(
+            opds_dist_api_fixture.db.session, "My Datasource", autocreate=True
+        )
+
+        # a drm_scheme that is neither NO_DRM nor BEARER_TOKEN
+        # should fail.
+        drm_scheme = DeliveryMechanism.LCP_DRM
+
+        edition, pool = opds_dist_api_fixture.db.edition(
+            identifier_type=Identifier.URI,
+            data_source_name=data_source.name,
+            with_license_pool=True,
+            collection=opds_dist_api_fixture.collection,
+        )
+        pool.set_delivery_mechanism(
+            Representation.EPUB_MEDIA_TYPE,
+            drm_scheme,
+            RightsStatus.IN_COPYRIGHT,
+            None,
+        )
+
+        # Find the correct delivery mechanism
+        delivery_mechanism = None
+        for mechanism in pool.delivery_mechanisms:
+            if mechanism.delivery_mechanism.drm_scheme == drm_scheme:
+                delivery_mechanism = mechanism
+        assert delivery_mechanism is not None
+
+        # this call should fail because it is not a valid DeliveryMechanism
+        # for an OPDS for Distributors feed.
+        pytest.raises(
+            DeliveryMechanismError,
+            opds_dist_api_fixture.api.fulfill,
+            patron,
+            "1234",
+            pool,
+            delivery_mechanism,
+        )
 
 
 class TestOPDSForDistributorsImporter:
