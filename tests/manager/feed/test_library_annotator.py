@@ -1,5 +1,6 @@
 import datetime
 from collections import defaultdict
+from functools import partial
 from unittest.mock import MagicMock, create_autospec, patch
 
 import dateutil
@@ -1735,10 +1736,10 @@ class TestLibraryAnnotator:
         self,
         annotator_fixture: LibraryAnnotatorFixture,
         library_fixture: LibraryFixture,
+        patch_url_for: PatchedUrlFor,
     ):
-        annotator = LibraryLoanAndHoldAnnotator(
-            None, None, annotator_fixture.db.default_library()
-        )
+        library = annotator_fixture.db.default_library()
+        annotator = LibraryLoanAndHoldAnnotator(None, None, library)
 
         # This book has two delivery mechanisms
         work = annotator_fixture.db.work(with_license_pool=True)
@@ -1756,23 +1757,40 @@ class TestLibraryAnnotator:
         class MockAPI:
             SET_DELIVERY_MECHANISM_AT = BaseCirculationAPI.BORROW_STEP
 
+        identifier = pool.identifier
+
         # This means that two different acquisition links will be
         # generated -- one for each delivery mechanism.
         links = annotator.acquisition_links(
-            pool, None, None, None, pool.identifier, mock_api=MockAPI()
+            pool, None, None, None, identifier, mock_api=MockAPI()
         )
         assert 2 == len(links)
 
-        mech1_param = "mechanism_id=%s" % mech1.delivery_mechanism.id
-        mech2_param = "mechanism_id=%s" % mech2.delivery_mechanism.id
+        create_mechanism_url = partial(
+            patch_url_for.patched_url_for,
+            "borrow",
+            _external=True,
+            identifier=identifier.identifier,
+            identifier_type=identifier.type,
+            library_short_name=library.short_name,
+        )
 
-        # Instead of sorting, which may be wrong if the id is greater than 10
-        # due to how double digits are sorted, extract the links associated
-        # with the expected delivery mechanism.
-        if links[0].href and mech1_param in links[0].href:
-            [mech1_link, mech2_link] = links
-        else:
-            [mech2_link, mech1_link] = links
+        link1_expected_href = create_mechanism_url(
+            mechanism_id=mech1.delivery_mechanism.id
+        )
+        link2_expected_href = create_mechanism_url(
+            mechanism_id=mech2.delivery_mechanism.id
+        )
+
+        assert {link.href for link in links} == {
+            link1_expected_href,
+            link2_expected_href,
+        }
+
+        [mech1_link] = [l for l in links if l.href == link1_expected_href]
+        [mech2_link] = [l for l in links if l.href == link2_expected_href]
+
+        assert mech1_link.href != mech2_link.href
 
         indirects = []
         for link in [mech1_link, mech2_link]:
@@ -1782,10 +1800,6 @@ class TestLibraryAnnotator:
             assert link.holds_total is not None
             assert len(link.indirect_acquisitions) > 0
             indirects.append(link.indirect_acquisitions[0])
-
-        # The target of the top-level link is different.
-        assert mech1_link.href and mech1_param in mech1_link.href
-        assert mech2_link.href and mech2_param in mech2_link.href
 
         # So is the media type seen in the indirectAcquisition subtag.
         [mech1_indirect, mech2_indirect] = indirects
@@ -1802,7 +1816,6 @@ class TestLibraryAnnotator:
         # If we configure the library to hide one of the content types,
         # we end up with only one link -- the one for the delivery
         # mechanism that's not hidden.
-        library = annotator_fixture.db.default_library()
         settings = library_fixture.settings(library)
         settings.hidden_content_types = [mech1.delivery_mechanism.content_type]
         annotator = LibraryLoanAndHoldAnnotator(
