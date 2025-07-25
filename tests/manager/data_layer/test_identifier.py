@@ -24,3 +24,15 @@ class TestIdentifierData:
         # Calling from_identifier() on an IdentifierData object is a no-op
         # and returns the same object.
         assert IdentifierData.from_identifier(data) is data
+
+    def test_parse_urn(self, db: DatabaseTransactionFixture) -> None:
+        urn = "urn:isbn:9781449358068"
+        data = IdentifierData.parse_urn(urn)
+        assert data.type == Identifier.ISBN
+        assert data.identifier == "9781449358068"
+
+        # Test with a different type
+        urn = db.fresh_url()
+        data = IdentifierData.parse_urn(urn)
+        assert data.type == "URI"
+        assert data.identifier == urn

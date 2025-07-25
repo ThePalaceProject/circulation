@@ -3,7 +3,11 @@ import logging
 from copy import deepcopy
 from unittest.mock import patch
 
+import pytest
+from sqlalchemy import select
+
 from palace.manager.core.classifier import NO_NUMBER, NO_VALUE
+from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.data_layer.bibliographic import (
     _BASIC_EDITION_FIELDS,
     BibliographicData,
@@ -645,6 +649,23 @@ class TestBibliographicData:
         for record in records.all():
             assert CoverageRecord.SUCCESS == record.status
 
+    def test_apply_does_not_create_coverage_records(
+        self, db: DatabaseTransactionFixture
+    ):
+        edition, pool = db.edition(with_license_pool=True)
+
+        bibliographic = BibliographicData(
+            data_source_name=DataSource.OVERDRIVE, title=db.fresh_str()
+        )
+
+        bibliographic.apply(
+            db.session, edition, pool.collection, create_coverage_record=False
+        )
+
+        # No coverage records were created.
+        records = db.session.scalars(select(CoverageRecord)).all()
+        assert len(records) == 0
+
     def test_update_contributions(self, db: DatabaseTransactionFixture):
         edition = db.edition()
 
@@ -793,6 +814,40 @@ class TestBibliographicData:
         # with the identifier of the audiobook
         equivalent_identifiers = [x.output for x in identifier.equivalencies]
         assert [book.primary_identifier] == equivalent_identifiers
+
+    def test_load_edition(self, db: DatabaseTransactionFixture) -> None:
+        identifier = IdentifierData(
+            type=db.fresh_str(),
+            identifier=db.fresh_str(),
+        )
+        data = BibliographicData(
+            data_source_name=db.fresh_str(),
+        )
+
+        # Need to have a primary identifier to load an edition.
+        with pytest.raises(
+            PalaceValueError, match="BibliographicData has no primary identifier"
+        ):
+            data.load_edition(db.session)
+
+        data.primary_identifier_data = identifier
+
+        # No datasource, no edition.
+        assert data.load_edition(db.session) is None
+
+        # Datasource exists, but no identifier.
+        DataSource.lookup(db.session, data.data_source_name, autocreate=True)
+        assert data.load_edition(db.session) is None
+
+        # Identifier exists, but no edition.
+        identifier.load(db.session)
+        assert data.load_edition(db.session) is None
+
+        # Edition exists!
+        edition, _ = Edition.for_foreign_id(
+            db.session, data.data_source_name, identifier.type, identifier.identifier
+        )
+        assert data.load_edition(db.session) is edition
 
     def test_roundtrip(self) -> None:
         bibliographic = BibliographicData(

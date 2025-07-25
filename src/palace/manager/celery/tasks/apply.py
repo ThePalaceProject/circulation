@@ -75,8 +75,8 @@ def circulation_apply(
 def bibliographic_apply(
     task: Task,
     bibliographic: BibliographicData,
-    edition_id: int,
-    collection_id: int | None,
+    edition_id: int | None = None,
+    collection_id: int | None = None,
     replace: ReplacementPolicy | None = None,
 ) -> None:
     """
@@ -92,9 +92,15 @@ def bibliographic_apply(
         _lock(redis_client, primary_identifier).lock(),
         task.transaction() as session,
     ):
-        edition = load_from_id(session, Edition, edition_id)
+        if edition_id is None:
+            edition, _ = bibliographic.edition(session)
+        else:
+            edition = load_from_id(session, Edition, edition_id)
+
         collection = (
             load_from_id(session, Collection, collection_id) if collection_id else None
         )
 
-        bibliographic.apply(session, edition, collection, replace)
+        bibliographic.apply(
+            session, edition, collection, replace, create_coverage_record=False
+        )
