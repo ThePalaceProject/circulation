@@ -10,6 +10,10 @@ from palace.manager.api.circulation.exceptions import (
     DeliveryMechanismError,
     LibraryAuthorizationFailedException,
 )
+from palace.manager.api.circulation.fulfillment import (
+    DirectFulfillment,
+    RedirectFulfillment,
+)
 from palace.manager.data_layer.circulation import CirculationData
 from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.data_layer.link import LinkData
@@ -525,14 +529,24 @@ class TestOPDSForDistributorsAPI:
             patron, "1234", pool, delivery_mechanism
         )
 
-        assert DeliveryMechanism.BEARER_TOKEN == fulfillment.content_type
-        assert fulfillment.content is not None
-        bearer_token_document = json.loads(fulfillment.content)
-        expires_in = bearer_token_document["expires_in"]
-        assert expires_in < 60
-        assert "Bearer" == bearer_token_document["token_type"]
-        assert "token" == bearer_token_document["access_token"]
-        assert url == bearer_token_document["location"]
+        if drm_scheme == DeliveryMechanism.BEARER_TOKEN:
+            assert delivery_mechanism
+            assert acquisition_rel_type == Hyperlink.GENERIC_OPDS_ACQUISITION
+            assert isinstance(fulfillment, DirectFulfillment)
+            assert DeliveryMechanism.BEARER_TOKEN == fulfillment.content_type
+            assert fulfillment.content is not None
+            bearer_token_document = json.loads(fulfillment.content)
+            expires_in = bearer_token_document["expires_in"]
+            assert expires_in < 60
+            assert "Bearer" == bearer_token_document["token_type"]
+            assert "token" == bearer_token_document["access_token"]
+            assert url == bearer_token_document["location"]
+        else:
+            assert drm_scheme == DeliveryMechanism.NO_DRM
+            assert acquisition_rel_type == Hyperlink.OPEN_ACCESS_DOWNLOAD
+            assert isinstance(fulfillment, RedirectFulfillment)
+            assert fulfillment.content_link == url
+            assert fulfillment.content_type == Representation.EPUB_MEDIA_TYPE
 
     def test_fulfill_delivery_mechanism_error(
         self,
