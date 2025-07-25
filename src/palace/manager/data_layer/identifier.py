@@ -27,6 +27,24 @@ class IdentifierData(BaseFrozenData):
 
         return cls(type=identifier.type, identifier=identifier.identifier)
 
+    @classmethod
+    def parse_urn(
+        cls,
+        urn: str,
+    ) -> Self:
+        """
+        Parse identifier string.
+
+        Raises PalaceValueError if the URN cannot be parsed.
+        """
+
+        type_, identifier = Identifier.type_and_identifier_for_urn(urn)
+
+        return cls(
+            type=type_,
+            identifier=identifier,
+        )
+
     def redis_key(self) -> str:
         """
         String representation of the IdentifierData object suitable for use

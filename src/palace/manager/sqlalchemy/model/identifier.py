@@ -31,7 +31,7 @@ from sqlalchemy.sql import Select, select
 from sqlalchemy.sql.elements import ClauseElement
 from sqlalchemy.sql.expression import and_, or_
 
-from palace.manager.core.exceptions import BasePalaceException
+from palace.manager.core.exceptions import BasePalaceException, PalaceValueError
 from palace.manager.data_layer.policy.presentation import (
     PresentationCalculationPolicy,
 )
@@ -486,7 +486,7 @@ class Identifier(Base, IdentifierConstants, LoggerMixin):
                 identifier_type, identifier = result
                 return identifier_type, identifier
 
-        raise ValueError(
+        raise PalaceValueError(
             "Could not turn %s into a recognized identifier." % identifier_string
         )
 

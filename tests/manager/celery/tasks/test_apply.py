@@ -54,6 +54,32 @@ class TestBibliographicApply:
         apply.bibliographic_apply.delay(data, edition.id, None).wait()
         assert edition.title == title
 
+    def test_apply_no_edition(
+        self,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        redis_fixture: RedisFixture,
+    ) -> None:
+        identifier = IdentifierData(
+            type="secret_identifier",
+            identifier="1234567890",
+        )
+        title = db.fresh_str()
+        data = BibliographicData(
+            data_source_name="Test Data Source",
+            primary_identifier_data=identifier,
+            title=title,
+        )
+
+        # Calling apply, creates a new edition, and sets the title as you would expect
+        apply.bibliographic_apply.delay(data).wait()
+
+        edition = data.load_edition(db.session)
+        assert edition is not None
+        assert edition.title == title
+        assert edition.primary_identifier.type == identifier.type
+        assert edition.primary_identifier.identifier == identifier.identifier
+
     def test_apply_no_primary_identifier(
         self,
         db: DatabaseTransactionFixture,

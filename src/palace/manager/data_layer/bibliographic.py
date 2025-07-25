@@ -242,6 +242,37 @@ class BibliographicData(BaseMutableData):
                     self.load_data_source(_db), same_work_id, 0.85
                 )
 
+    def load_edition(self, db: Session) -> Edition | None:
+        """
+        Find the Edition associated with this BibliographicData.
+
+        Returns None if no Edition can be found.
+        """
+        if not self.primary_identifier_data:
+            raise PalaceValueError(
+                f"Cannot find edition: {self.__class__.__name__} has no primary identifier."
+            )
+
+        data_source = DataSource.lookup(db, self.data_source_name, autocreate=False)
+        if data_source is None:
+            return None
+
+        identifier, _ = Identifier.for_foreign_id(
+            db,
+            self.primary_identifier_data.type,
+            self.primary_identifier_data.identifier,
+            autocreate=False,
+        )
+        if identifier is None:
+            return None
+
+        return get_one(
+            db,
+            Edition,
+            data_source=data_source,
+            primary_identifier=identifier,
+        )
+
     def edition(self, _db: Session) -> tuple[Edition, bool]:
         """Find or create the edition described by this BibliographicData object."""
         if not self.primary_identifier_data:
@@ -332,7 +363,9 @@ class BibliographicData(BaseMutableData):
         edition: Edition,
         collection: Collection | None,
         replace: ReplacementPolicy | None = None,
+        *,
         disable_async_calculation: bool = False,
+        create_coverage_record: bool = True,
     ) -> tuple[Edition, bool]:
         """Apply this BibliographicData to the given edition.
         NOTE: disable_async_calculation is a stop-gap measure to prevent the code from falling into an infinite loop now
@@ -612,12 +645,14 @@ class BibliographicData(BaseMutableData):
         # Update the coverage record for this edition and data
         # source. We omit the collection information, even if we know
         # which collection this is, because we only changed bibliographic data.
-        CoverageRecord.add_for(
-            edition,
-            data_source,
-            timestamp=self.data_source_last_updated,
-            collection=None,
-        )
+        # TODO: Remove this once we have done away with coverage records
+        if create_coverage_record:
+            CoverageRecord.add_for(
+                edition,
+                data_source,
+                timestamp=self.data_source_last_updated,
+                collection=None,
+            )
 
         if work_requires_full_recalculation or work_requires_new_presentation_edition:
             # If there is a Work associated with the Edition's primary
