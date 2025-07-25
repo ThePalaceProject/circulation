@@ -147,7 +147,8 @@ class CollectionSettingsController(
             # as quickly as possible.
             try:
                 impl_cls.import_task(integration.collection.id).apply_async(
-                    countdown=10  # Delay the task to ensure the collection is created the task starts
+                    # Delay the task to ensure the collection has been created by the time the task starts
+                    countdown=10
                 )
             except NotImplementedError:
                 # If the protocol does not support import tasks, we just skip it.
