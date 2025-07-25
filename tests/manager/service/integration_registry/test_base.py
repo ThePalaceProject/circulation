@@ -1,3 +1,4 @@
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -154,15 +155,21 @@ def test_registry_canonicalize(registry: IntegrationRegistry):
     [
         ("test", "test", True),
         ("object", "test", True),
+        (object, "test", True),
         ("list", "list", True),
+        ("list", list, True),
         ("object", "list", False),
+        (object, list, False),
         ("object", "not_registered", False),
         ("not_registered", "not_registered", False),
         ("not_registered1", "not_registered2", False),
     ],
 )
 def test_registry_equivalent(
-    protocol1: str, protocol2: str, expected: bool, registry: IntegrationRegistry
+    protocol1: str | type[Any],
+    protocol2: str | type[Any],
+    expected: bool,
+    registry: IntegrationRegistry,
 ):
     """Test that equivalent() works."""
     registry.register(object, canonical="test")
