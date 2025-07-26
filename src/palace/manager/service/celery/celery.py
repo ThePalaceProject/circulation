@@ -234,6 +234,10 @@ def beat_schedule() -> dict[str, Any]:
             "task": "work.classify_unchecked_subjects",
             "schedule": crontab(minute="30", hour="22"),  # Every night at 10:30pm
         },
+        "opds2_import_all": {
+            "task": "opds2.import_all",
+            "schedule": crontab(minute="30", hour="5"),  # Every day at 5:30 AM
+        },
     }
 
 

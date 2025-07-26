@@ -5,25 +5,30 @@ import datetime
 import functools
 import json
 import uuid
+from functools import partial
 from typing import Any
 from unittest.mock import patch
 
 import dateutil
 import pytest
 from freezegun import freeze_time
-from requests import Response
 
 from palace.manager.core.coverage import CoverageFailure
-from palace.manager.data_layer.license import LicenseData
 from palace.manager.data_layer.policy.presentation import PresentationCalculationPolicy
 from palace.manager.integration.license.opds.odl.api import OPDS2WithODLApi
 from palace.manager.integration.license.opds.odl.importer import (
+    OPDS2WithODLExtractor,
     OPDS2WithODLImporter,
     OPDS2WithODLImportMonitor,
 )
 from palace.manager.integration.license.opds.odl.settings import OPDS2WithODLSettings
 from palace.manager.integration.license.opds.requests import OPDS2AuthType
-from palace.manager.opds.odl.info import LicenseStatus
+from palace.manager.opds import opds2, rwpm
+from palace.manager.opds.lcp.status import LoanStatus
+from palace.manager.opds.odl.info import Checkouts, LicenseInfo, LicenseStatus
+from palace.manager.opds.odl.odl import License, LicenseMetadata
+from palace.manager.opds.odl.terms import Terms
+from palace.manager.opds.opds2 import StrictLink
 from palace.manager.sqlalchemy.constants import (
     EditionConstants,
     IdentifierConstants,
@@ -38,6 +43,7 @@ from palace.manager.util import datetime_helpers
 from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.http import HTTP
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.files import OPDS2FilesFixture
 from tests.fixtures.http import MockHttpClientFixture
 from tests.fixtures.odl import (
     LicenseHelper,
@@ -899,227 +905,234 @@ class TestOPDS2WithODLImporter:
             # Two licenses expired
             assert sum(l.is_inactive for l in imported_pool.licenses) == 2
 
-    def test_parse_license_info(self) -> None:
-        """Ensure that OPDS2WithODLImporter correctly parses license information."""
+    def test_fetch_license_info(self, http_client: MockHttpClientFixture):
+        """Ensure that OPDS2WithODLImporter correctly retrieves license data from an OPDS2 feed."""
 
         def license_info_dict() -> dict[str, Any]:
             return LicenseInfoHelper(available=10, license=LicenseHelper()).dict
 
-        info_link = "http://example.org/info"
-        checkout_link = "http://example.org/checkout"
+        fetch = partial(
+            OPDS2WithODLImporter.fetch_license_info,
+            "http://example.org/feed",
+            http_client.do_get,
+        )
 
-        # All fields present
+        # Bad status code
+        http_client.queue_response(400, content=b"Bad Request")
+        assert fetch() is None
+        assert len(http_client.requests) == 1
+        assert http_client.requests.pop() == "http://example.org/feed"
+
+        # 200 status - parses response body
         expiry = utc_now() + datetime.timedelta(days=1)
         license_helper = LicenseInfoHelper(
             available=10, left=4, license=LicenseHelper(concurrency=11, expires=expiry)
         )
-        license_dict = license_helper.dict
-        parsed = OPDS2WithODLImporter.parse_license_info(
-            json.dumps(license_dict), info_link, checkout_link
-        )
-        assert parsed.checkouts_available == 10
-        assert parsed.checkouts_left == 4
-        assert parsed.terms_concurrency == 11
-        assert parsed.expires == expiry
+        http_client.queue_response(200, content=license_helper.json)
+        parsed = fetch()
+        assert parsed.checkouts.available == 10
+        assert parsed.checkouts.left == 4
+        assert parsed.terms.concurrency == 11
+        assert parsed.terms.expires == expiry
         assert parsed.status == LicenseStatus.available
         assert parsed.identifier == license_helper.license.identifier
+
+        # 201 status - parses response body
+        http_client.queue_response(201, content=license_helper.json)
+        parsed = fetch()
+        assert parsed.checkouts.available == 10
+        assert parsed.checkouts.left == 4
+        assert parsed.terms.concurrency == 11
+        assert parsed.terms.expires == expiry
+        assert parsed.status == LicenseStatus.available
+        assert parsed.identifier == license_helper.license.identifier
+
+        # Bad data
+        http_client.queue_response(201, content="{}")
+        assert fetch() is None
 
         # No identifier
         license_dict = license_info_dict()
         license_dict.pop("identifier")
-        assert (
-            OPDS2WithODLImporter.parse_license_info(
-                json.dumps(license_dict), info_link, checkout_link
-            )
-            is None
-        )
+        http_client.queue_response(201, content=json.dumps(license_dict))
+        assert fetch() is None
 
         # No status
         license_dict = license_info_dict()
         license_dict.pop("status")
-        assert (
-            OPDS2WithODLImporter.parse_license_info(
-                json.dumps(license_dict), info_link, checkout_link
-            )
-            is None
-        )
+        http_client.queue_response(201, content=json.dumps(license_dict))
+        assert fetch() is None
 
         # Bad status
         license_dict = license_info_dict()
         license_dict["status"] = "bad"
-        assert (
-            OPDS2WithODLImporter.parse_license_info(
-                json.dumps(license_dict), info_link, checkout_link
-            )
-            is None
-        )
+        http_client.queue_response(201, content=json.dumps(license_dict))
+        assert fetch() is None
 
         # No available
         license_dict = license_info_dict()
         license_dict["checkouts"].pop("available")
-        assert (
-            OPDS2WithODLImporter.parse_license_info(
-                json.dumps(license_dict), info_link, checkout_link
-            )
-            is None
-        )
-
-        # No concurrency
-        license_dict = license_info_dict()
-        license_dict["terms"].pop("concurrency")
-        parsed = OPDS2WithODLImporter.parse_license_info(
-            json.dumps(license_dict), info_link, checkout_link
-        )
-        assert parsed.terms_concurrency is None
+        http_client.queue_response(201, content=json.dumps(license_dict))
+        assert fetch() is None
 
         # Format str
         license_dict = license_info_dict()
         license_dict["format"] = "single format"
-        parsed = OPDS2WithODLImporter.parse_license_info(
-            json.dumps(license_dict), info_link, checkout_link
-        )
-        assert parsed.content_types == ("single format",)
+        http_client.queue_response(201, content=json.dumps(license_dict))
+        parsed = fetch()
+        assert parsed is not None
+        assert parsed.formats == ("single format",)
 
         # Format list
         license_dict = license_info_dict()
         license_dict["format"] = ["format1", "format2"]
-        parsed = OPDS2WithODLImporter.parse_license_info(
-            json.dumps(license_dict), info_link, checkout_link
+        http_client.queue_response(201, content=json.dumps(license_dict))
+        parsed = fetch()
+        assert parsed is not None
+        assert parsed.formats == ("format1", "format2")
+
+    def test_extract_next_links(
+        self,
+        opds2_with_odl_importer_fixture: OPDS2WithODLImporterFixture,
+        opds2_files_fixture: OPDS2FilesFixture,
+    ):
+        extract_next_links = opds2_with_odl_importer_fixture.importer.extract_next_links
+
+        # Bad feed
+        assert extract_next_links(b"garbage") == []
+
+        # No next links
+        assert extract_next_links(opds2_files_fixture.sample_data("feed.json")) == []
+
+        # One next link
+        assert extract_next_links(opds2_files_fixture.sample_data("feed2.json")) == [
+            "http://bookshelf-feed-demo.us-east-1.elasticbeanstalk.com/v1/publications?page=2&limit=100"
+        ]
+
+    def test_extract_last_update_dates(
+        self,
+        opds2_with_odl_importer_fixture: OPDS2WithODLImporterFixture,
+        opds2_files_fixture: OPDS2FilesFixture,
+    ):
+        extract_last_update_dates = (
+            opds2_with_odl_importer_fixture.importer.extract_last_update_dates
         )
-        assert parsed.content_types == ("format1", "format2")
 
-    def test_fetch_license_info(self, http_client: MockHttpClientFixture):
-        """Ensure that OPDS2WithODLImporter correctly retrieves license data from an OPDS2 feed."""
+        # Bad feed
+        assert extract_last_update_dates(b"garbage") == []
 
-        # Bad status code
-        http_client.queue_response(400, content=b"Bad Request")
+        # Feed with last update dates
+        expected_dates = [
+            (
+                "urn:isbn:978-3-16-148410-0",
+                datetime.datetime(2015, 9, 29, 17, 0, tzinfo=datetime.timezone.utc),
+            ),
+            (
+                "http://example.org/huckleberry-finn",
+                datetime.datetime(2015, 9, 29, 17, 0, tzinfo=datetime.timezone.utc),
+            ),
+            (
+                "urn:proquest.com/document-id/181639",
+                datetime.datetime(2022, 9, 12, 21, 4, tzinfo=datetime.timezone.utc),
+            ),
+        ]
 
         assert (
-            OPDS2WithODLImporter.fetch_license_info(
-                "http://example.org/feed", http_client.do_get
-            )
-            is None
+            extract_last_update_dates(opds2_files_fixture.sample_data("feed.json"))
+            == expected_dates
         )
-        assert len(http_client.requests) == 1
-        assert http_client.requests.pop() == "http://example.org/feed"
 
-        # 200 status - directly returns response body
-        content = b"data"
-        http_client.queue_response(200, content=content)
-        assert (
-            OPDS2WithODLImporter.fetch_license_info(
-                "http://example.org/feed", http_client.do_get
-            )
-            == content
+        # Feed with bad publication - we still get dates from valid items in feed
+        feed_dict = json.loads(opds2_files_fixture.sample_data("feed.json"))
+        feed_dict["publications"].insert(0, {})
+        assert extract_last_update_dates(json.dumps(feed_dict)) == expected_dates
+
+
+class TestOPDS2WithODLExtractor:
+    def test__extract_license_data(self) -> None:
+        create_metadata = partial(
+            LicenseMetadata,
+            identifier="identifier",
+            created=utc_now(),
         )
-        assert len(http_client.requests) == 1
-        assert http_client.requests.pop() == "http://example.org/feed"
 
-        # 201 status - directly returns response body
-        http_client.queue_response(201, content=content)
-        assert (
-            OPDS2WithODLImporter.fetch_license_info(
-                "http://example.org/feed", http_client.do_get
-            )
-            == content
+        links = [
+            StrictLink(
+                rel=rwpm.LinkRelations.self,
+                type=LicenseInfo.content_type(),
+                href="self link",
+            ),
+            StrictLink(
+                rel=opds2.AcquisitionLinkRelations.borrow,
+                type=LoanStatus.content_type(),
+                href="checkout link",
+            ),
+        ]
+
+        create_license = partial(
+            License,
+            metadata=create_metadata(),
+            links=links,
         )
-        assert len(http_client.requests) == 1
-        assert http_client.requests.pop() == "http://example.org/feed"
 
-    def test_get_license_data(self, monkeypatch: pytest.MonkeyPatch):
-        expires = utc_now() + datetime.timedelta(days=1)
-
-        responses: list[tuple[int, str]] = []
-
-        def get(url: str, *args: Any, **kwargs: Any) -> Response:
-            status_code, body = responses.pop(0)
-            resp = Response()
-            resp.status_code = status_code
-            resp._content = body.encode("utf-8")
-            return resp
-
-        def get_license_data() -> LicenseData | None:
-            return OPDS2WithODLImporter.get_license_data(
-                "license_info_link",
-                "checkout_link",
-                "identifier",
-                expires,
-                12,
-                get,
-            )
-
-        # Bad status code returns None
-        responses.append((400, "Bad Request"))
-        assert get_license_data() is None
-
-        # Bad data returns None
-        responses.append((200, "{}"))
-        assert get_license_data() is None
+        create_license_info = partial(
+            LicenseInfo,
+            identifier="identifier",
+            status=LicenseStatus.available,
+            checkouts=Checkouts(
+                available=10,
+            ),
+        )
 
         # Identifier mismatch returns None
-        responses.append(
-            (
-                200,
-                LicenseInfoHelper(
-                    available=10, license=LicenseHelper(identifier="other")
-                ).json,
-            )
+        license_info = create_license_info(
+            identifier="two identifier",
         )
-        assert get_license_data() is None
+        license = create_license(
+            metadata=create_metadata(identifier="one identifier"),
+        )
+        assert (
+            OPDS2WithODLExtractor._extract_license_data(license_info, license) is None
+        )
 
         # Expiry mismatch makes license unavailable
-        responses.append(
-            (
-                200,
-                LicenseInfoHelper(
-                    available=10,
-                    license=LicenseHelper(
-                        identifier="identifier",
-                        concurrency=12,
-                        expires=expires + datetime.timedelta(minutes=1),
-                    ),
-                ).json,
+        license_info = create_license_info(
+            terms=Terms(
+                expires=utc_now() + datetime.timedelta(days=1),
             )
         )
-        license_data = get_license_data()
+        license = create_license(
+            metadata=create_metadata(
+                terms=Terms(
+                    expires=utc_now() + datetime.timedelta(days=2),
+                )
+            ),
+        )
+        license_data = OPDS2WithODLExtractor._extract_license_data(
+            license_info, license
+        )
         assert license_data is not None
         assert license_data.status == LicenseStatus.unavailable
 
         # Concurrency mismatch makes license unavailable
-        responses.append(
-            (
-                200,
-                LicenseInfoHelper(
-                    available=10,
-                    license=LicenseHelper(
-                        identifier="identifier", concurrency=11, expires=expires
-                    ),
-                ).json,
-            )
+        license_info = create_license_info(terms=Terms(concurrency=12))
+        license = create_license(
+            metadata=create_metadata(terms=Terms(concurrency=11)),
         )
-        license_data = get_license_data()
+        license_data = OPDS2WithODLExtractor._extract_license_data(
+            license_info, license
+        )
         assert license_data is not None
         assert license_data.status == LicenseStatus.unavailable
 
         # Good data returns LicenseData
-        responses.append(
-            (
-                200,
-                LicenseInfoHelper(
-                    available=10,
-                    license=LicenseHelper(
-                        identifier="identifier", concurrency=12, expires=expires
-                    ),
-                ).json,
-            )
+        license_info = create_license_info()
+        license = create_license()
+        license_data = OPDS2WithODLExtractor._extract_license_data(
+            license_info, license
         )
-        license_data = get_license_data()
         assert license_data is not None
         assert license_data.status == LicenseStatus.available
-        assert license_data.checkouts_available == 10
-        assert license_data.expires == expires
-        assert license_data.identifier == "identifier"
-        assert license_data.terms_concurrency == 12
 
 
 class OPDS2WithODLImportMonitorFixture:
