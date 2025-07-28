@@ -1,6 +1,6 @@
 import datetime
 import json
-from collections.abc import Generator, Mapping
+from collections.abc import Generator
 from contextlib import nullcontext
 from unittest.mock import MagicMock, patch
 
@@ -18,7 +18,6 @@ from palace.manager.integration.license.opds.opds2 import (
     OPDS2ImportMonitor,
 )
 from palace.manager.opds import rwpm
-from palace.manager.opds.types.language import LanguageMap
 from palace.manager.sqlalchemy.constants import (
     EditionConstants,
     IdentifierType,
@@ -741,27 +740,19 @@ class TestOPDS2Importer(OPDS2Test):
         opds2_importer_fixture: OPDS2ImporterFixture,
     ):
         importer = opds2_importer_fixture.importer
-        test_name = ""
-        contributor = rwpm.Contributor(name=LanguageMap(Mapping("null", test_name)))
+        contributor = rwpm.Contributor(name="")
 
         # verify the contributor is ignored when the name is an empty string.
-        contributors = [contributor]
         extracted_contributors = importer._extract_contributors(
-            contributors, default_role=Contributor.Role.TRANSLATOR
-        )
-        assert len(extracted_contributors) == 0
-
-        # and when it is None
-        contributor.name = LanguageMap(Mapping("null", None))
-        extracted_contributors = importer._extract_contributors(
-            contributors, default_role=Contributor.Role.TRANSLATOR
+            [contributor], default_role=Contributor.Role.TRANSLATOR
         )
         assert len(extracted_contributors) == 0
 
         # but not when the contributor is not blank
-        contributor.name = LanguageMap(Mapping("null", "test"))
+        contributor = rwpm.Contributor(name="test")
+
         extracted_contributors = importer._extract_contributors(
-            contributors, default_role=Contributor.Role.TRANSLATOR
+            [contributor], default_role=Contributor.Role.TRANSLATOR
         )
         assert len(extracted_contributors) == 1
 
