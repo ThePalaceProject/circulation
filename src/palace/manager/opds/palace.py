@@ -18,6 +18,7 @@ class PublicationTypes(StrEnum):
     """
 
     book = "http://schema.org/Book"
+    ebook = "http://schema.org/EBook"
     audiobook = "http://schema.org/Audiobook"
 
 
