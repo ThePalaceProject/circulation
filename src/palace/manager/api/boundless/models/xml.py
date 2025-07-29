@@ -1,4 +1,5 @@
 from abc import ABC
+from functools import cached_property
 from typing import Any, Literal
 
 from lxml import etree
@@ -7,6 +8,7 @@ from pydantic.alias_generators import to_camel, to_pascal
 from pydantic_xml import BaseXmlModel, ParsingError, element, wrapped
 from typing_extensions import Self
 
+from palace.manager.api.boundless.constants import BoundlessFormat
 from palace.manager.api.boundless.exception import ErrorLookupType, StatusResponseParser
 from palace.manager.api.boundless.models.base import BaseBoundlessResponse
 from palace.manager.api.boundless.models.validators import (
@@ -139,6 +141,34 @@ class Availability(BaseBoundlessXmlModel):
         "Checkouts", element(tag="checkout", default=[])
     )
     holds: list[Hold] = wrapped("Holds", element(tag="Hold", default=[]))
+
+    @cached_property
+    def available_formats_normalized(self) -> list[str]:
+        """
+        Normalize the available formats to remove the deprecated "Blio" format.
+        """
+        # We use a dict here as an ordered set, so we can remove duplicates,
+        # while also preserving the order of the formats.
+        available_formats = dict.fromkeys(self.available_formats)
+        if BoundlessFormat.blio in available_formats:
+            del available_formats[BoundlessFormat.blio]
+            available_formats[BoundlessFormat.axis_now] = None
+
+        return list(available_formats.keys())
+
+    @cached_property
+    def checkout_format_normalized(self) -> str | None:
+        """
+        Normalize the checkout format to remove the deprecated "Blio" format.
+        """
+        if self.checkout_format is None:
+            return None
+
+        # The "Blio" format is deprecated and handled the same way as "AxisNow"
+        if self.checkout_format == BoundlessFormat.blio:
+            return BoundlessFormat.axis_now
+
+        return self.checkout_format
 
 
 class Title(

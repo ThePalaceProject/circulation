@@ -355,11 +355,7 @@ class BoundlessApi(
                 titles,
             )
 
-        checkout_format = title.availability.checkout_format
-
-        # We treat the Blio format as equivalent to AxisNow for the purposes of fulfillment.
-        if checkout_format == BoundlessFormat.blio:
-            checkout_format = BoundlessFormat.axis_now
+        checkout_format = title.availability.checkout_format_normalized
 
         if checkout_format != internal_format:
             # The book is checked out in a format that does not match the requested internal format.
@@ -457,11 +453,12 @@ class BoundlessApi(
             if availability.is_checked_out:
                 # When the item is checked out, it can be locked to a particular DRM format. So even though
                 # the item supports other formats, it can only be fulfilled in the format that was checked out.
-                # This format is stored in availability.checkout_format.
-                if availability.checkout_format is not None:
+                # This format is stored in availability.checkout_format_normalized.
+                internal_format = availability.checkout_format_normalized
+                if internal_format is not None:
                     if (
-                        checkout_format := INTERNAL_FORMAT_TO_DELIVERY_MECHANISM.get(
-                            availability.checkout_format
+                        delivery_mechanism := INTERNAL_FORMAT_TO_DELIVERY_MECHANISM.get(
+                            internal_format
                         )
                     ) is None:
                         self.log.error(
@@ -473,8 +470,8 @@ class BoundlessApi(
                         continue
 
                     locked_to = FormatData(
-                        content_type=checkout_format.content_type,
-                        drm_scheme=checkout_format.drm_scheme,
+                        content_type=delivery_mechanism.content_type,
+                        drm_scheme=delivery_mechanism.drm_scheme,
                     )
                 else:
                     locked_to = None
