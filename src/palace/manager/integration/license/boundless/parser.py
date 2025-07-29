@@ -185,12 +185,7 @@ class BibliographicParser(LoggerMixin):
     @classmethod
     def _extract_formats(cls, title: Title, medium: str) -> list[FormatData]:
         format_data = []
-        available_formats = title.availability.available_formats.copy()
-        if BoundlessFormat.blio in available_formats:
-            # Blio is a legacy format that should be treated as an alias for AxisNow.
-            available_formats.remove(BoundlessFormat.blio)
-            if BoundlessFormat.axis_now not in available_formats:
-                available_formats.append(BoundlessFormat.axis_now)
+        available_formats = title.availability.available_formats_normalized
 
         for internal_format in available_formats:
             if internal_format == BoundlessFormat.axis_now:
