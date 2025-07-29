@@ -4,6 +4,7 @@ import datetime
 from typing import TYPE_CHECKING, Any, TypeVar
 
 from dependency_injector.wiring import Provide, inject
+from frozendict import frozendict
 from sqlalchemy import (
     Boolean,
     Column,
@@ -23,6 +24,7 @@ from sqlalchemy.sql import Select
 from sqlalchemy.sql.expression import and_, or_
 from sqlalchemy.sql.functions import count
 
+from palace.manager.api.boundless.constants import AXIS_360_PROTOCOL
 from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.integration.goals import Goals
 from palace.manager.service.integration_registry.license_providers import (
@@ -63,13 +65,15 @@ class Collection(Base, HasSessionCache, RedisKeyMixin):
     __tablename__ = "collections"
     id: Mapped[int] = Column(Integer, primary_key=True, nullable=False)
     DATA_SOURCE_NAME_SETTING = "data_source"
-    DATA_SOURCE_FOR_LICENSE_PROTOCOL = [
-        DataSourceConstants.OVERDRIVE,
-        DataSourceConstants.BIBLIOTHECA,
-        DataSourceConstants.BOUNDLESS,
-        DataSourceConstants.ENKI,
-        DataSourceConstants.FEEDBOOKS,
-    ]
+    DATA_SOURCE_FOR_LICENSE_PROTOCOL = frozendict(
+        {
+            DataSourceConstants.OVERDRIVE: DataSourceConstants.OVERDRIVE,
+            DataSourceConstants.BIBLIOTHECA: DataSourceConstants.BIBLIOTHECA,
+            AXIS_360_PROTOCOL: DataSourceConstants.BOUNDLESS,
+            DataSourceConstants.ENKI: DataSourceConstants.ENKI,
+            DataSourceConstants.FEEDBOOKS: DataSourceConstants.FEEDBOOKS,
+        }
+    )
 
     # How do we connect to the provider of this collection? Any url,
     # authentication information, or additional configuration goes
@@ -553,9 +557,7 @@ class Collection(Base, HasSessionCache, RedisKeyMixin):
         the data source is a Collection-specific setting.
         """
         data_source = None
-        name = None
-        if self.protocol in self.DATA_SOURCE_FOR_LICENSE_PROTOCOL:
-            name = self.protocol
+        name = self.DATA_SOURCE_FOR_LICENSE_PROTOCOL.get(self.protocol)
         if not name:
             name = self.integration_configuration.settings_dict.get(
                 Collection.DATA_SOURCE_NAME_SETTING
@@ -571,17 +573,14 @@ class Collection(Base, HasSessionCache, RedisKeyMixin):
             new_value.name if isinstance(new_value, DataSource) else new_value
         )
 
-        if self.protocol == new_datasource_name:
-            return
-
         # Only set a DataSource for Collections that don't have an
         # implied source.
-        if self.protocol not in self.DATA_SOURCE_FOR_LICENSE_PROTOCOL:
-            if new_datasource_name is not None:
-                new_datasource_name = str(new_datasource_name)
-            self._set_settings(
-                **{Collection.DATA_SOURCE_NAME_SETTING: new_datasource_name}
-            )
+        if self.protocol in self.DATA_SOURCE_FOR_LICENSE_PROTOCOL:
+            return
+
+        if new_datasource_name is not None:
+            new_datasource_name = str(new_datasource_name)
+        self._set_settings(**{Collection.DATA_SOURCE_NAME_SETTING: new_datasource_name})
 
     @property
     def pools_with_no_delivery_mechanisms(self) -> Query[LicensePool]:

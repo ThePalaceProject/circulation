@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from typing_extensions import Unpack
 
 from palace.manager.api.boundless.constants import (
+    AXIS_360_PROTOCOL,
     BAKER_TAYLOR_KDRM_PARAMS,
     DELIVERY_MECHANISM_TO_INTERNAL_FORMAT,
     INTERNAL_FORMAT_TO_DELIVERY_MECHANISM,
@@ -84,7 +85,7 @@ class BoundlessApi(
 
     @classmethod
     def label(cls) -> str:
-        return "Axis 360"
+        return AXIS_360_PROTOCOL
 
     @classmethod
     def description(cls) -> str:

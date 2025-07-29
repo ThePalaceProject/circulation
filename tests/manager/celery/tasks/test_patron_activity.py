@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, create_autospec, patch
 import pytest
 from sqlalchemy.orm.exc import StaleDataError
 
+from palace.manager.api.circulation.base import PatronActivityCirculationAPI
 from palace.manager.api.circulation.data import HoldInfo, LoanInfo
 from palace.manager.api.circulation.exceptions import PatronAuthorizationFailedException
 from palace.manager.celery.task import Task
@@ -191,7 +192,9 @@ class TestSyncPatronActivity:
     def test_other_exception(
         self, sync_task_fixture: SyncTaskFixture, caplog: pytest.LogCaptureFixture
     ):
-        sync_task_fixture.mock_registry.from_collection.side_effect = Exception("Boom!")
+        mock_api = create_autospec(PatronActivityCirculationAPI)
+        mock_api.sync_patron_activity.side_effect = Exception("Boom!")
+        sync_task_fixture.mock_registry.from_collection.return_value = mock_api
 
         with pytest.raises(Exception, match="Boom!"):
             sync_patron_activity.apply_async(
@@ -202,6 +205,17 @@ class TestSyncPatronActivity:
         assert task_status is not None
         assert task_status.state == PatronActivityStatus.State.FAILED
 
+        mock_api.sync_patron_activity.assert_called_once()
+
+        assert (
+            f"Collection '{sync_task_fixture.collection.name}' "
+            f"(id: '{sync_task_fixture.collection.id}', protocol: '{sync_task_fixture.collection.protocol}')."
+            in caplog.text
+        )
+        assert (
+            f" Patron '{sync_task_fixture.patron.authorization_identifier}' (id: {sync_task_fixture.patron.id})."
+            in caplog.text
+        )
         assert "An exception occurred during the patron activity sync" in caplog.text
         assert "Boom!" in caplog.text
 

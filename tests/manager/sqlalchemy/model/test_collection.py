@@ -5,6 +5,7 @@ import pytest
 from sqlalchemy import select
 
 from palace.manager.api.bibliotheca import BibliothecaAPI
+from palace.manager.api.boundless.api import BoundlessApi
 from palace.manager.api.overdrive.api import OverdriveAPI
 from palace.manager.api.overdrive.settings import OverdriveLibrarySettings
 from palace.manager.core.opds_import import OPDSImporterSettings
@@ -219,10 +220,15 @@ class TestCollection:
 
         opds = db.collection(settings=db.opds_settings(data_source="Foo"))
         bibliotheca = db.collection(protocol=BibliothecaAPI)
+        boundless = db.collection(protocol=BoundlessApi)
 
-        # The rote data_source is returned for the obvious collection.
+        # The bibliotheca collection has a data source derived from its protocol.
         assert bibliotheca.data_source is not None
         assert DataSource.BIBLIOTHECA == bibliotheca.data_source.name
+
+        # The Boundless collection has a data source derived from its protocol.
+        assert boundless.data_source is not None
+        assert DataSource.BOUNDLESS == boundless.data_source.name
 
         # The OPDS collection has a data source derived from its settings.
         assert opds.data_source is not None
