@@ -523,7 +523,7 @@ class BoundlessApi(
                     ) is None:
                         self.log.error(
                             "Unknown checkout format %s for identifier %s. %r",
-                            internal_format,
+                            availability.checkout_format,
                             title_id,
                             title,
                         )
