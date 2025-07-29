@@ -152,6 +152,8 @@ class Availability(BaseBoundlessXmlModel):
         """
         Normalize the available formats to remove the deprecated "Blio" format.
         """
+        # We use a dict here as an ordered set, so we can remove duplicates,
+        # while also preserving the order of the formats.
         available_formats = dict.fromkeys(self.available_formats)
         if BoundlessFormat.blio in available_formats:
             del available_formats[BoundlessFormat.blio]
