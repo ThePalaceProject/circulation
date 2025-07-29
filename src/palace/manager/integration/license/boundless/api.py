@@ -35,6 +35,7 @@ from palace.manager.data_layer.format import FormatData
 from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.data_layer.policy.replacement import ReplacementPolicy
 from palace.manager.integration.license.boundless.constants import (
+    AXIS_360_PROTOCOL,
     BAKER_TAYLOR_KDRM_PARAMS,
     DELIVERY_MECHANISM_TO_INTERNAL_FORMAT,
     INTERNAL_FORMAT_TO_DELIVERY_MECHANISM,
@@ -88,7 +89,7 @@ class BoundlessApi(
 
     @classmethod
     def label(cls) -> str:
-        return "Axis 360"
+        return AXIS_360_PROTOCOL
 
     @classmethod
     def description(cls) -> str:

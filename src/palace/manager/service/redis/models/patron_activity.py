@@ -349,7 +349,7 @@ class PatronActivity(LoggerMixin):
         if self._context_manager_acquired:
             if excinst is not None:
                 self.log.error(
-                    "An exception occurred during the patron activity sync.",
+                    "An exception occurred during the patron activity sync. Marking the task as failed.",
                     exc_info=excinst,
                 )
                 self.fail()

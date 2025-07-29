@@ -100,6 +100,15 @@ def sync_patron_activity(
                     f"Patron activity sync task failed ({e}). Max retries exceeded."
                 )
                 return
+            except Exception:
+                # In the case of an unknown exception, we log some helpful details for troubleshooting and
+                # re-raise the exception to ensure the task is marked as failed.
+                task.log.exception(
+                    f"An exception occurred during the sync_patron_activity task. "
+                    f"Collection '{collection.name}' (id: '{collection_id}', protocol: '{collection.protocol}')."
+                    f" Patron '{patron.authorization_identifier}' (id: {patron_id})."
+                )
+                raise
 
             task.log.info(
                 f"Patron activity sync for patron '{patron.authorization_identifier}' (id: {patron_id}) "

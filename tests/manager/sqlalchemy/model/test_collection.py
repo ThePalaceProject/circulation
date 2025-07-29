@@ -8,6 +8,7 @@ from palace.manager.data_layer.policy.presentation import PresentationCalculatio
 from palace.manager.integration.base import integration_settings_update
 from palace.manager.integration.goals import Goals
 from palace.manager.integration.license.bibliotheca import BibliothecaAPI
+from palace.manager.integration.license.boundless.api import BoundlessApi
 from palace.manager.integration.license.opds.opds1 import OPDSImporterSettings
 from palace.manager.integration.license.overdrive.api import OverdriveAPI
 from palace.manager.integration.license.overdrive.settings import (
@@ -224,10 +225,15 @@ class TestCollection:
 
         opds = db.collection(settings=db.opds_settings(data_source="Foo"))
         bibliotheca = db.collection(protocol=BibliothecaAPI)
+        boundless = db.collection(protocol=BoundlessApi)
 
-        # The rote data_source is returned for the obvious collection.
+        # The bibliotheca collection has a data source derived from its protocol.
         assert bibliotheca.data_source is not None
         assert DataSource.BIBLIOTHECA == bibliotheca.data_source.name
+
+        # The Boundless collection has a data source derived from its protocol.
+        assert boundless.data_source is not None
+        assert DataSource.BOUNDLESS == boundless.data_source.name
 
         # The OPDS collection has a data source derived from its settings.
         assert opds.data_source is not None
