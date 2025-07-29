@@ -42,6 +42,7 @@ class TestAvailabilityResponse:
         assert hold.availability.holds_queue_position == 1
         assert hold.availability.reserved_end_date is None
         assert hold.availability.available_formats == ["ePub", "Blio"]
+        assert hold.availability.available_formats_normalized == {"ePub", "AxisNow"}
 
         assert loan.title_id == "0015176429"
         assert not loan.availability.is_in_hold_queue
@@ -56,6 +57,7 @@ class TestAvailabilityResponse:
             2015, 8, 12, 17, 40, 27
         )
         assert loan.availability.available_formats == ["ePub", "Blio"]
+        assert loan.availability.available_formats_normalized == {"ePub", "AxisNow"}
 
         assert reserved.title_id == "1111111111"
         assert not reserved.availability.is_in_hold_queue
@@ -66,6 +68,7 @@ class TestAvailabilityResponse:
         )
         assert reserved.availability.holds_queue_position == 1
         assert reserved.availability.available_formats == []
+        assert reserved.availability.available_formats_normalized == set()
 
     def test_availability_without_fulfillment(
         self, boundless_files_fixture: BoundlessFilesFixture
@@ -97,6 +100,7 @@ class TestAvailabilityResponse:
             loan.availability.transaction_id == "C3F71F8D-1883-2B34-061F-96570678AEB0"
         )
         assert loan.availability.checkout_format == "Acoustik"
+        assert loan.availability.checkout_format_normalized == "Acoustik"
 
     def test_availability_with_ebook_fulfillment(
         self, boundless_files_fixture: BoundlessFilesFixture
@@ -114,10 +118,27 @@ class TestAvailabilityResponse:
             loan.availability.transaction_id == "6670197A-D264-447A-86C7-E4CB829C0236"
         )
         assert loan.availability.checkout_format == "ePub"
+        assert loan.availability.checkout_format_normalized == "ePub"
         assert (
             loan.availability.download_url
             == "http://adobe.acsm/?src=library&transactionId=2a34598b-12af-41e4-a926-af5e42da7fe5&isbn=9780763654573&format=F2"
         )
+
+    def test_availability_with_axisnow_fulfillment(
+        self, boundless_files_fixture: BoundlessFilesFixture
+    ):
+        data = boundless_files_fixture.sample_data(
+            "availability_with_axisnow_fulfillment.xml"
+        )
+        parsed = AvailabilityResponse.from_xml(data)
+        [title] = parsed.titles
+
+        assert title.title_id == "0016820953"
+        assert (
+            title.availability.transaction_id == "1670D97A-D264-48BA-8D17-E44B822CB93C"
+        )
+        assert title.availability.checkout_format == "Blio"
+        assert title.availability.checkout_format_normalized == "AxisNow"
 
     def test_availability_errors(self, boundless_files_fixture: BoundlessFilesFixture):
         # If the patron is not found, the parser will return an empty list, since
@@ -178,6 +199,7 @@ class TestAvailabilityResponse:
         ]
         assert title1.audience is None
         assert title1.availability.available_formats == ["ePub", "AxisNow"]
+        assert title1.availability.available_formats_normalized == {"ePub", "AxisNow"}
 
         assert title2.product_title == "Slightly Irregular"
         assert title2.language == "ENGLISH"
@@ -198,6 +220,7 @@ class TestAvailabilityResponse:
         ]
         assert title2.audience == "General Adult"
         assert title2.availability.available_formats == ["Blio"]
+        assert title2.availability.available_formats_normalized == {"AxisNow"}
 
     def test_availability_with_checkouts_and_holds(
         self, boundless_files_fixture: BoundlessFilesFixture
@@ -216,6 +239,7 @@ class TestAvailabilityResponse:
         assert title1.publisher == "Pottermore"
         assert title1.runtime == 77760
         assert title1.availability.available_formats == ["Acoustik"]
+        assert title1.availability.available_formats_normalized == {"Acoustik"}
         assert title1.availability.available_copies == 2
         assert title1.availability.total_copies == 9
         assert title1.availability.holds_queue_size == 0
@@ -275,6 +299,7 @@ class TestAvailabilityResponse:
         assert title2.title_id == "0026562458"
         assert title2.product_title == "A Royal Spring"
         assert title2.availability.available_formats == ["Blio", "ePub", "AxisNow"]
+        assert title2.availability.available_formats_normalized == {"ePub", "AxisNow"}
         assert title2.availability.available_copies == 0
         assert title2.availability.total_copies == 3
         assert title2.availability.checkouts == []

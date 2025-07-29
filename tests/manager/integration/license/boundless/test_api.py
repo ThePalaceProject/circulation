@@ -705,10 +705,19 @@ class TestBoundlessApi:
         assert loan.identifier == "0015176429"
         assert loan.end_date == datetime_utc(2015, 8, 12, 17, 40, 27)
 
-        # If the activity includes something with a Blio format, it is not included in the results.
+        # If the activity includes something with a Blio format, it is included in the results, just like axis now.
         data = boundless.files.sample_data("availability_with_axisnow_fulfillment.xml")
         boundless.http_client.queue_response(200, content=data)
-        assert len(list(boundless.api.patron_activity(patron, "pin"))) == 0
+        [loan] = list(boundless.api.patron_activity(patron, "pin"))
+        assert isinstance(loan, LoanInfo)
+        assert loan.collection_id == boundless.api.collection.id
+        assert loan.identifier_type == Identifier.AXIS_360_ID
+        assert loan.identifier == "0016820953"
+        assert loan.end_date == datetime_utc(2020, 7, 15, 14, 34)
+        assert loan.locked_to == FormatData(
+            content_type=Representation.EPUB_MEDIA_TYPE,
+            drm_scheme=DeliveryMechanism.BAKER_TAYLOR_KDRM_DRM,
+        )
 
         # If the patron is not found, the parser will return an empty list, since
         # that patron can't have any loans or holds.
