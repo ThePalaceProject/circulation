@@ -148,16 +148,16 @@ class Availability(BaseBoundlessXmlModel):
     holds: list[Hold] = wrapped("Holds", element(tag="Hold", default=[]))
 
     @cached_property
-    def available_formats_normalized(self) -> set[str]:
+    def available_formats_normalized(self) -> list[str]:
         """
         Normalize the available formats to remove the deprecated "Blio" format.
         """
-        available_formats = set(self.available_formats)
+        available_formats = dict.fromkeys(self.available_formats)
         if BoundlessFormat.blio in available_formats:
-            available_formats.remove(BoundlessFormat.blio)
-            available_formats.add(BoundlessFormat.axis_now)
+            del available_formats[BoundlessFormat.blio]
+            available_formats[BoundlessFormat.axis_now] = None
 
-        return available_formats
+        return list(available_formats.keys())
 
     @cached_property
     def checkout_format_normalized(self) -> str | None:

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import datetime
 
-from palace.manager.data_layer.format import FormatData
 from palace.manager.integration.license.boundless.model.xml import AvailabilityResponse
 from palace.manager.integration.license.boundless.parser import (
     BibliographicParser,
@@ -129,16 +128,12 @@ class TestBibliographicParser:
         assert cover.thumbnail.media_type == MediaTypes.JPEG_MEDIA_TYPE
 
         # The first book is available in two formats -- "ePub" and "AxisNow"
-        assert set(bib1.circulation.formats) == {
-            FormatData(
-                content_type=Representation.EPUB_MEDIA_TYPE,
-                drm_scheme=DeliveryMechanism.ADOBE_DRM,
-            ),
-            FormatData(
-                content_type=Representation.EPUB_MEDIA_TYPE,
-                drm_scheme=DeliveryMechanism.BAKER_TAYLOR_KDRM_DRM,
-            ),
-        }
+        [adobe, axisnow] = bib1.circulation.formats
+        assert adobe.content_type == Representation.EPUB_MEDIA_TYPE
+        assert adobe.drm_scheme == DeliveryMechanism.ADOBE_DRM
+
+        assert axisnow.content_type == Representation.EPUB_MEDIA_TYPE
+        assert axisnow.drm_scheme == DeliveryMechanism.BAKER_TAYLOR_KDRM_DRM
 
         # The second book is available in 'Blio' format, which
         # is treated as an alternate name for 'AxisNow'
@@ -213,16 +208,13 @@ class TestBibliographicParser:
 
         # There is only one FormatData for 'Blio' and 'AxisNow', since they mean the same thing.
         assert bib.medium == Edition.BOOK_MEDIUM
-        assert set(bib.circulation.formats) == {
-            FormatData(
-                content_type=Representation.EPUB_MEDIA_TYPE,
-                drm_scheme=DeliveryMechanism.BAKER_TAYLOR_KDRM_DRM,
-            ),
-            FormatData(
-                content_type=Representation.EPUB_MEDIA_TYPE,
-                drm_scheme=DeliveryMechanism.ADOBE_DRM,
-            ),
-        }
+        [adobe, axisnow] = bib.circulation.formats
+
+        assert adobe.content_type == Representation.EPUB_MEDIA_TYPE
+        assert adobe.drm_scheme == DeliveryMechanism.ADOBE_DRM
+
+        assert axisnow.content_type == Representation.EPUB_MEDIA_TYPE
+        assert axisnow.drm_scheme == DeliveryMechanism.BAKER_TAYLOR_KDRM_DRM
 
     def test_bibliographic_parser_unsupported_format(
         self, boundless_files_fixture: BoundlessFilesFixture
