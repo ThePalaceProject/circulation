@@ -753,6 +753,14 @@ class BibliographicData(BaseMutableData):
             edition.contributions = []
 
         for contributor_data in self.contributors:
+
+            dn = contributor_data.display_name
+            if not dn or not dn.strip():
+                self.log.warning(
+                    f"contributor display name is blank for {contributor_data}: skipping..."
+                )
+                continue
+
             contributor_sort_name = contributor_data.find_sort_name(_db)
             if contributor_sort_name or contributor_data.lc or contributor_data.viaf:
                 contributor = edition.add_contributor(
