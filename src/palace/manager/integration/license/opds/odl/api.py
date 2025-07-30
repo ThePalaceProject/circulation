@@ -114,9 +114,6 @@ class OPDS2WithODLApi(
                 % (collection.protocol, self.__class__.__name__)
             )
         self.collection_id = collection.id
-        self.data_source_name = self.settings.data_source
-        # Create the data source if it doesn't exist yet.
-        DataSource.lookup(_db, self.data_source_name, autocreate=True)
 
         self._hasher_factory = HasherFactory()
         self._credential_factory = LCPCredentialFactory()
@@ -135,6 +132,13 @@ class OPDS2WithODLApi(
             self.settings.prioritized_content_types,
             self.settings.deprioritize_lcp_non_epubs,
         )
+
+        # Create the data source for this collection if it doesn't exist.
+        _ = self.data_source
+
+    @property
+    def data_source(self) -> DataSource:
+        return DataSource.lookup(self._db, self.settings.data_source, autocreate=True)
 
     def _get_hasher(self) -> Hasher:
         """Returns a Hasher instance

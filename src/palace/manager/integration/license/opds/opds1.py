@@ -225,6 +225,10 @@ class BaseOPDSAPI(
             self.settings.deprioritize_lcp_non_epubs,
         )
 
+    @property
+    def data_source(self) -> DataSource:
+        return DataSource.lookup(self._db, self.settings.data_source, autocreate=True)
+
     def checkin(self, patron: Patron, pin: str, licensepool: LicensePool) -> None:
         # All the CM side accounting for this loan is handled by CirculationAPI
         # since we don't have any remote API we need to call this method is
@@ -1672,12 +1676,6 @@ class OPDSImportMonitor(CollectionMonitor):
                 % (collection.name, collection.protocol, self.PROTOCOL)
             )
 
-        data_source = self.data_source(collection)
-        if not data_source:
-            raise ValueError(
-                "Collection %s has no associated data source." % collection.name
-            )
-
         self.force_reimport = force_reimport
 
         self.importer = import_class(_db, collection=collection, **import_class_kwargs)
@@ -1734,7 +1732,7 @@ class OPDSImportMonitor(CollectionMonitor):
 
         return headers
 
-    def data_source(self, collection: Collection) -> DataSource | None:
+    def data_source(self, collection: Collection) -> DataSource:
         """Returns the data source name for the given collection.
 
         By default, this URL is stored as a setting on the collection, but

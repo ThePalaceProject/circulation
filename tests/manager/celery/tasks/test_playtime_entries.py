@@ -26,7 +26,6 @@ from palace.manager.integration.license.opds.opds_for_distributors import (
 )
 from palace.manager.service.google_drive.google_drive import GoogleDriveService
 from palace.manager.sqlalchemy.model.collection import Collection
-from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.identifier import Equivalency, Identifier
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.time_tracking import PlaytimeEntry, PlaytimeSummary
@@ -564,31 +563,33 @@ class TestGeneratePlaytimeReport:
     ):
         identifier = db.identifier()
         collection = db.collection(
-            "collection b", protocol=OPDSForDistributorsAPI.label()
-        )
-        collection.data_source = DataSource.lookup(
-            db.session, name="ds_b", autocreate=True
+            "collection b",
+            protocol=OPDSForDistributorsAPI,
+            settings=db.opds_for_distributors_settings(data_source="ds_b"),
         )
 
         library = db.default_library()
         edition = db.edition(data_source_name=collection.data_source.name)
         identifier2 = edition.primary_identifier
-        collection2 = db.collection("collection a", protocol=OPDS2WithODLApi.label())
-        collection2.data_source = DataSource.lookup(
-            db.session, name="ds_a", autocreate=True
+        collection2 = db.collection(
+            "collection a",
+            protocol=OPDS2WithODLApi,
+            settings=db.opds2_odl_settings(data_source="ds_a"),
         )
 
         # a data source with no playtime data - we expect an empty report for ds_c
-        collection3 = db.collection("collection c", protocol=OPDS2WithODLApi.label())
-        collection3.data_source = DataSource.lookup(
-            db.session, name="ds_c", autocreate=True
+        collection3 = db.collection(
+            "collection c",
+            protocol=OPDS2WithODLApi,
+            settings=db.opds2_odl_settings(data_source="ds_c"),
         )
 
         # A collection and datasource that will be removed after the playtime is recorded, but before the report
         # is generated.
-        collection4 = db.collection("collection d", protocol=OPDS2WithODLApi.label())
-        collection4.data_source = DataSource.lookup(
-            db.session, name="ds_d", autocreate=True
+        collection4 = db.collection(
+            "collection d",
+            protocol=OPDS2WithODLApi,
+            settings=db.opds2_odl_settings(data_source="ds_d"),
         )
 
         library2 = db.library()

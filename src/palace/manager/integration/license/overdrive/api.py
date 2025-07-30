@@ -375,7 +375,7 @@ class OverdriveAPI(
         return collection_token
 
     @property
-    def source(self) -> DataSource:
+    def data_source(self) -> DataSource:
         return DataSource.lookup(self._db, DataSource.OVERDRIVE, autocreate=True)
 
     def ils_name(self, library: Library) -> str:
@@ -1573,7 +1573,7 @@ class OverdriveAPI(
         """
         return Edition.for_foreign_id(
             self._db,
-            self.source,
+            self.data_source,
             licensepool.identifier.type,
             licensepool.identifier.identifier,
         )

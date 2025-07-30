@@ -4,7 +4,6 @@ import datetime
 from typing import TYPE_CHECKING, Any, TypeVar
 
 from dependency_injector.wiring import Provide, inject
-from frozendict import frozendict
 from sqlalchemy import (
     Boolean,
     Column,
@@ -26,12 +25,11 @@ from sqlalchemy.sql.functions import count
 
 from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.integration.goals import Goals
-from palace.manager.integration.license.boundless.constants import AXIS_360_PROTOCOL
 from palace.manager.service.integration_registry.license_providers import (
     LicenseProvidersRegistry,
 )
 from palace.manager.service.redis.key import RedisKeyMixin
-from palace.manager.sqlalchemy.constants import DataSourceConstants, EditionConstants
+from palace.manager.sqlalchemy.constants import EditionConstants
 from palace.manager.sqlalchemy.hassessioncache import HasSessionCache
 from palace.manager.sqlalchemy.hybrid import hybrid_property
 from palace.manager.sqlalchemy.model.base import Base
@@ -64,16 +62,6 @@ class Collection(Base, HasSessionCache, RedisKeyMixin):
 
     __tablename__ = "collections"
     id: Mapped[int] = Column(Integer, primary_key=True, nullable=False)
-    DATA_SOURCE_NAME_SETTING = "data_source"
-    DATA_SOURCE_FOR_LICENSE_PROTOCOL = frozendict(
-        {
-            DataSourceConstants.OVERDRIVE: DataSourceConstants.OVERDRIVE,
-            DataSourceConstants.BIBLIOTHECA: DataSourceConstants.BIBLIOTHECA,
-            AXIS_360_PROTOCOL: DataSourceConstants.BOUNDLESS,
-            DataSourceConstants.ENKI: DataSourceConstants.ENKI,
-            DataSourceConstants.FEEDBOOKS: DataSourceConstants.FEEDBOOKS,
-        }
-    )
 
     # How do we connect to the provider of this collection? Any url,
     # authentication information, or additional configuration goes
@@ -570,44 +558,11 @@ class Collection(Base, HasSessionCache, RedisKeyMixin):
         self._set_settings(**{self.DEFAULT_AUDIENCE_KEY: str(new_value)})
 
     @property
-    def data_source(self) -> DataSource | None:
-        """Find the data source associated with this Collection.
-
-        Bibliographic metadata obtained through the collection
-        protocol is recorded as coming from this data source. A
-        LicensePool inserted into this collection will be associated
-        with this data source, unless its bibliographic metadata
-        indicates some other data source.
-
-        For most Collections, the integration protocol sets the data
-        source.  For collections that use the OPDS import protocol,
-        the data source is a Collection-specific setting.
+    def data_source(self) -> DataSource:
         """
-        data_source = None
-        name = self.DATA_SOURCE_FOR_LICENSE_PROTOCOL.get(self.protocol)
-        if not name:
-            name = self.integration_configuration.settings_dict.get(
-                Collection.DATA_SOURCE_NAME_SETTING
-            )
-        _db = Session.object_session(self)
-        if name:
-            data_source = DataSource.lookup(_db, name, autocreate=True)
-        return data_source
-
-    @data_source.setter
-    def data_source(self, new_value: DataSource | str | None) -> None:
-        new_datasource_name = (
-            new_value.name if isinstance(new_value, DataSource) else new_value
-        )
-
-        # Only set a DataSource for Collections that don't have an
-        # implied source.
-        if self.protocol in self.DATA_SOURCE_FOR_LICENSE_PROTOCOL:
-            return
-
-        if new_datasource_name is not None:
-            new_datasource_name = str(new_datasource_name)
-        self._set_settings(**{Collection.DATA_SOURCE_NAME_SETTING: new_datasource_name})
+        Find the data source associated with this Collection.
+        """
+        return self.circulation_api().data_source
 
     @property
     def pools_with_no_delivery_mechanisms(self) -> Query[LicensePool]:

@@ -242,7 +242,6 @@ class TestSyncPatronActivity:
         self, sync_task_fixture: SyncTaskFixture, db: DatabaseTransactionFixture
     ):
         collection = sync_task_fixture.collection
-        assert collection.data_source is not None
         data_source_name = collection.data_source.name
         loan_pool = db.licensepool(
             None, collection=collection, data_source_name=data_source_name
@@ -267,6 +266,7 @@ class TestSyncPatronActivity:
         assert sync_task_fixture.patron.loans == []
         assert sync_task_fixture.patron.holds == []
 
+        sync_task_fixture.mock_registry.reset_mock()
         sync_patron_activity.apply_async(
             (sync_task_fixture.collection.id, sync_task_fixture.patron.id, "pin")
         ).wait()

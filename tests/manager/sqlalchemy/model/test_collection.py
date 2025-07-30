@@ -228,35 +228,13 @@ class TestCollection:
         boundless = db.collection(protocol=BoundlessApi)
 
         # The bibliotheca collection has a data source derived from its protocol.
-        assert bibliotheca.data_source is not None
         assert DataSource.BIBLIOTHECA == bibliotheca.data_source.name
 
         # The Boundless collection has a data source derived from its protocol.
-        assert boundless.data_source is not None
         assert DataSource.BOUNDLESS == boundless.data_source.name
 
         # The OPDS collection has a data source derived from its settings.
-        assert opds.data_source is not None
         assert "Foo" == opds.data_source.name
-
-        # Trying to change the Bibliotheca collection's data_source does nothing.
-        bibliotheca.data_source = DataSource.BOUNDLESS
-        assert isinstance(bibliotheca.data_source, DataSource)
-        assert DataSource.BIBLIOTHECA == bibliotheca.data_source.name
-
-        # Trying to change the opds collection's data_source is fine.
-        opds.data_source = DataSource.PLYMPTON
-        assert isinstance(opds.data_source, DataSource)
-        assert DataSource.PLYMPTON == opds.data_source.name
-
-        # Resetting it to something else is fine.
-        opds.data_source = DataSource.OA_CONTENT_SERVER
-        assert isinstance(opds.data_source, DataSource)
-        assert DataSource.OA_CONTENT_SERVER == opds.data_source.name
-
-        # Resetting it to None is fine.
-        opds.data_source = None
-        assert None == opds.data_source
 
     def test_default_loan_period(
         self,

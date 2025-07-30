@@ -43,7 +43,6 @@ class ODLFixture:
 
     def create_license(self, collection: Collection | None = None) -> License:
         collection = collection or self.collection
-        assert collection.data_source is not None
         pool = self.db.licensepool(
             None, collection=collection, data_source_name=collection.data_source.name
         )
@@ -59,7 +58,6 @@ class ODLFixture:
     def create_patron(self) -> tuple[Patron, str]:
         patron = self.db.patron()
         data_source = self.collection.data_source
-        assert data_source is not None
         patron_identifier = patron.identifier_to_remote_service(data_source)
         return patron, patron_identifier
 

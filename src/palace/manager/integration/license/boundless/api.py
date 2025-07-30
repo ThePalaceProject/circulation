@@ -60,6 +60,7 @@ from palace.manager.integration.license.boundless.settings import (
 )
 from palace.manager.opds.types.link import BaseLink
 from palace.manager.sqlalchemy.model.collection import Collection
+from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import (
@@ -127,6 +128,10 @@ class BoundlessApi(
                 )
             )
         return internal_format
+
+    @property
+    def data_source(self) -> DataSource:
+        return DataSource.lookup(self._db, DataSource.BOUNDLESS, autocreate=True)
 
     def _run_self_tests(self, _db: Session) -> Generator[SelfTestResult]:
         def _refresh() -> str:
