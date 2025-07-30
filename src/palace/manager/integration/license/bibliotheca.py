@@ -202,7 +202,7 @@ class BibliothecaAPI(
         self.collection_id = collection.id
 
     @property
-    def source(self) -> DataSource:
+    def data_source(self) -> DataSource:
         return DataSource.lookup(self._db, DataSource.BIBLIOTHECA, autocreate=True)
 
     def now(self) -> str:
@@ -1572,7 +1572,7 @@ class BibliothecaPurchaseMonitor(BibliothecaTimelineMonitor):
         # Find or lookup a LicensePool from the control number.
         license_pool, is_new = LicensePool.for_foreign_id(
             self._db,
-            self.api.source,
+            self.api.data_source,
             Identifier.BIBLIOTHECA_ID,
             bibliotheca_id,
             collection=self.collection,
@@ -1661,7 +1661,7 @@ class BibliothecaEventMonitor(BibliothecaTimelineMonitor):
         # Find or lookup the LicensePool for this event.
         license_pool, is_new = LicensePool.for_foreign_id(
             self._db,
-            self.api.source,
+            self.api.data_source,
             Identifier.BIBLIOTHECA_ID,
             bibliotheca_id,
             collection=self.collection,
@@ -1687,12 +1687,12 @@ class BibliothecaEventMonitor(BibliothecaTimelineMonitor):
         )
 
         edition, ignore = Edition.for_foreign_id(
-            self._db, self.api.source, Identifier.BIBLIOTHECA_ID, bibliotheca_id
+            self._db, self.api.data_source, Identifier.BIBLIOTHECA_ID, bibliotheca_id
         )
 
         # The ISBN and the Bibliotheca identifier are exactly equivalent.
         bibliotheca_identifier.equivalent_to(
-            self.api.source, isbn_identifier, strength=1
+            self.api.data_source, isbn_identifier, strength=1
         )
 
         # Log the event.

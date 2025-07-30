@@ -71,7 +71,6 @@ class OPDS2ImportFixture:
         self.data_source = DataSource.lookup(
             db.session, "OPDS 2.0 Data Source", autocreate=True
         )
-        self.collection.data_source = self.data_source
         self.client = http_client
         self.bibliographic_apply_queue: list[BibliographicData] = []
 

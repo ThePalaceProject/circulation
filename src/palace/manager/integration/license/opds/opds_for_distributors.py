@@ -39,6 +39,7 @@ from palace.manager.integration.settings import (
 )
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.credential import Credential
+from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import (
     DeliveryMechanism,
@@ -130,6 +131,10 @@ class OPDSForDistributorsAPI(
             self.settings.prioritized_content_types,
             self.settings.deprioritize_lcp_non_epubs,
         )
+
+    @property
+    def data_source(self) -> DataSource:
+        return DataSource.lookup(self._db, self.settings.data_source, autocreate=True)
 
     def _run_self_tests(self, _db: Session) -> Generator[SelfTestResult]:
         """Try to get a token."""

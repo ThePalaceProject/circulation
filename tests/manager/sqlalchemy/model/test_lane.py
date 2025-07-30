@@ -307,7 +307,6 @@ class TestFacets:
         library._settings = None
 
     def test_facet_groups(self, db: DatabaseTransactionFixture):
-        db.default_collection().data_source = DataSource.AMAZON
         facets = Facets(
             db.default_library(),
             Facets.AVAILABLE_ALL,
@@ -354,7 +353,7 @@ class TestFacets:
             ["collectionName", "All", True],
             ["collectionName", db.default_collection().name, False],
             ["distributor", "All", True],
-            ["distributor", DataSource.AMAZON, False],
+            ["distributor", "OPDS", False],
             ["order", "title", True],
             ["order", "work_id", False],
         ]

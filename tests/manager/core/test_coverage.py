@@ -1497,7 +1497,6 @@ class TestCollectionCoverageProvider:
         # No db.
         failure = provider._set_circulationdata(identifier, None)
         assert "Did not receive circulationdata from input source" == failure.exception
-        assert provider.data_source is not None
         data_source_name = provider.data_source.name
 
         # No identifier in CirculationData.

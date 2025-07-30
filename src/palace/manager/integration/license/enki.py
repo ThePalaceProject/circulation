@@ -157,6 +157,10 @@ class EnkiAPI(
         self.collection_id = collection.id
         self.base_url = self.settings.url
 
+    @property
+    def data_source(self) -> DataSource:
+        return DataSource.lookup(self._db, DataSource.ENKI, autocreate=True)
+
     def _url(self, endpoint: str) -> str:
         return f"{self.base_url}/{endpoint}"
 

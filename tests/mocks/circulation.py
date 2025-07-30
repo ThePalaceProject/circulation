@@ -36,6 +36,7 @@ class MockBaseCirculationAPI(BaseCirculationAPI):
         collection: Collection,
         set_delivery_mechanism_at: str | None = BaseCirculationAPI.FULFILL_STEP,
         can_revoke_hold_when_reserved: bool = True,
+        data_source_name: str = "Test Data Source",
     ):
         old_protocol = collection.integration_configuration.protocol
         collection.integration_configuration.protocol = self.label()
@@ -45,6 +46,7 @@ class MockBaseCirculationAPI(BaseCirculationAPI):
         self.CAN_REVOKE_HOLD_WHEN_RESERVED = can_revoke_hold_when_reserved
         self.responses: dict[str, list[Any]] = defaultdict(list)
         self.availability_updated_for: list[LicensePool] = []
+        self.data_source_name = data_source_name
 
     @classmethod
     def label(cls) -> str:
@@ -61,6 +63,10 @@ class MockBaseCirculationAPI(BaseCirculationAPI):
     @classmethod
     def library_settings_class(cls) -> type[BaseSettings]:
         return BaseSettings
+
+    @property
+    def data_source(self) -> DataSource:
+        return DataSource.lookup(self._db, self.data_source_name, autocreate=True)
 
     def checkout(
         self,

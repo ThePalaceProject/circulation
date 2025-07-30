@@ -21,6 +21,7 @@ from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.integration.base import HasLibraryIntegrationConfiguration
 from palace.manager.integration.settings import BaseSettings
 from palace.manager.sqlalchemy.model.collection import Collection
+from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.integration import IntegrationConfiguration
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.licensing import (
@@ -219,6 +220,14 @@ class BaseCirculationAPI(
         :param force: If True, the import will be forced even if it has already been done.
         """
         raise NotImplementedError()
+
+    @property
+    @abstractmethod
+    def data_source(self) -> DataSource:
+        """
+        Return the DataSource for this CirculationAPI.
+        """
+        ...
 
     @abstractmethod
     def fulfill(

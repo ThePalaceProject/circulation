@@ -1674,21 +1674,13 @@ class TestOPDSImportMonitor:
             in str(excinfo.value)
         )
 
-        c2 = db.collection(protocol=OPDSAPI)
-        c2.integration_configuration.settings_dict = {}
-        with pytest.raises(ValueError) as excinfo:
-            OPDSImportMonitor(session, c2, OPDSImporter)
-        assert f"Collection {c2.name} has no associated data source." in str(
-            excinfo.value
-        )
-
-        c3 = db.collection(
+        c2 = db.collection(
             protocol=OPDSAPI,
             settings=db.opds_settings(
                 external_account_id="https://opds.import.com/feed?size=100",
             ),
         )
-        monitor = OPDSImportMonitor(session, c3, OPDSImporter)
+        monitor = OPDSImportMonitor(session, c2, OPDSImporter)
         assert monitor._feed_base_url == "https://opds.import.com/"
 
     def test_get(

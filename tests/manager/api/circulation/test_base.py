@@ -182,7 +182,6 @@ class TestPatronActivityCirculationAPI:
             drm_scheme=DeliveryMechanism.NO_DRM,
         )
         data_source = db.default_collection().data_source
-        assert data_source is not None
         pool = db.licensepool(None, data_source_name=data_source.name)
         patron_activity_circulation_api.api.add_remote_loan(
             LoanInfo.from_license_pool(
