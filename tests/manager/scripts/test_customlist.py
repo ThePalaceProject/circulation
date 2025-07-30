@@ -110,9 +110,9 @@ class TestCustomListUpdateEntriesScript:
         assert custom_list1.auto_update_last_update == frozen_time()
 
     def test_search_facets(
-        self, db: DatabaseTransactionFixture, services_fixture_wired: ServicesFixture
+        self, db: DatabaseTransactionFixture, services_fixture: ServicesFixture
     ):
-        mock_index = services_fixture_wired.mock_services.search_index
+        mock_index = services_fixture.search_index
 
         last_updated = datetime.datetime.now() - datetime.timedelta(hours=1)
         custom_list, _ = db.customlist()

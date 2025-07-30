@@ -874,7 +874,7 @@ class TestOverdriveAPI:
         self,
         overdrive_api_fixture: OverdriveAPIFixture,
         db: DatabaseTransactionFixture,
-        services_fixture_wired: ServicesFixture,
+        services_fixture: ServicesFixture,
         response_file: str,
     ):
         # Verify the process of checking out a book.
@@ -979,7 +979,7 @@ class TestOverdriveAPI:
             match="format of this book is not supported",
         ):
             api.checkout(patron, pin, pool, None)
-        mock_collect = services_fixture_wired.mock_services.analytics.collect_event
+        mock_collect = services_fixture.analytics.collect_event
         mock_collect.assert_called_once_with(
             db.default_library(),
             pool,

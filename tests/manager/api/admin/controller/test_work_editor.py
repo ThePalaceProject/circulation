@@ -1,6 +1,5 @@
 import datetime
 import json
-from collections.abc import Generator
 from typing import Any
 
 import feedparser
@@ -81,10 +80,8 @@ class WorkFixture(AdminControllerFixture):
 def work_fixture(
     controller_fixture: ControllerFixture,
     work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
-) -> Generator[WorkFixture, None, None]:
-    fixture = WorkFixture(controller_fixture, work_policy_recalc_fixture)
-    with fixture.ctrl.wired_container():
-        yield fixture
+) -> WorkFixture:
+    return WorkFixture(controller_fixture, work_policy_recalc_fixture)
 
 
 class TestWorkController:

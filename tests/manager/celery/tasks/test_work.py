@@ -76,27 +76,26 @@ def test_calculate_work_presentations(
     policy1 = PresentationCalculationPolicy.recalculate_everything()
     policy2 = PresentationCalculationPolicy.recalculate_presentation_edition()
 
-    with redis_fixture.services_fixture.wired():
-        waiting = WaitingForPresentationCalculation(redis_fixture.client)
-        wp1 = WorkIdAndPolicy(work_id=work1.id, policy=policy1)
-        wp2 = WorkIdAndPolicy(work_id=work2.id, policy=policy2)
-        waiting.add(wp1)
-        waiting.add(wp2)
+    waiting = WaitingForPresentationCalculation(redis_fixture.client)
+    wp1 = WorkIdAndPolicy(work_id=work1.id, policy=policy1)
+    wp2 = WorkIdAndPolicy(work_id=work2.id, policy=policy2)
+    waiting.add(wp1)
+    waiting.add(wp2)
 
-        assert waiting.len() == 2
+    assert waiting.len() == 2
 
-        with patch(
-            "palace.manager.sqlalchemy.model.work.Work.calculate_presentation"
-        ) as calc_presentations:
+    with patch(
+        "palace.manager.sqlalchemy.model.work.Work.calculate_presentation"
+    ) as calc_presentations:
 
-            calculate_work_presentations.delay(batch_size=batch_size).wait()
-            assert waiting.len() == 0
-            assert calc_presentations.call_count == 2
-            cal = calc_presentations.call_args_list
-            assert {cal[0].kwargs["policy"], cal[1].kwargs["policy"]} == {
-                policy1,
-                policy2,
-            }
+        calculate_work_presentations.delay(batch_size=batch_size).wait()
+        assert waiting.len() == 0
+        assert calc_presentations.call_count == 2
+        cal = calc_presentations.call_args_list
+        assert {cal[0].kwargs["policy"], cal[1].kwargs["policy"]} == {
+            policy1,
+            policy2,
+        }
 
 
 def test_calculate_work_presentations_with_failure_while_processing_batch(
@@ -110,34 +109,33 @@ def test_calculate_work_presentations_with_failure_while_processing_batch(
     policy1 = PresentationCalculationPolicy.recalculate_everything()
     policy2 = PresentationCalculationPolicy.recalculate_presentation_edition()
 
-    with redis_fixture.services_fixture.wired():
-        waiting = WaitingForPresentationCalculation(redis_fixture.client)
-        wp1 = WorkIdAndPolicy(work_id=work1.id, policy=policy1)
-        wp2 = WorkIdAndPolicy(work_id=work2.id, policy=policy2)
-        waiting.add(wp1)
-        waiting.add(wp2)
+    waiting = WaitingForPresentationCalculation(redis_fixture.client)
+    wp1 = WorkIdAndPolicy(work_id=work1.id, policy=policy1)
+    wp2 = WorkIdAndPolicy(work_id=work2.id, policy=policy2)
+    waiting.add(wp1)
+    waiting.add(wp2)
 
-        assert waiting.len() == 2
+    assert waiting.len() == 2
 
-        with patch(
-            "palace.manager.sqlalchemy.model.work.Work.calculate_presentation"
-        ) as calc_presentations:
-            calc_presentations.side_effect = [None, OperationalError("test")]
+    with patch(
+        "palace.manager.sqlalchemy.model.work.Work.calculate_presentation"
+    ) as calc_presentations:
+        calc_presentations.side_effect = [None, OperationalError("test")]
 
-            with pytest.raises(OperationalError):
-                calculate_work_presentations.delay(batch_size=2).wait()
-            assert waiting.len() == 1
-            assert calc_presentations.call_count == 2
-            cal = calc_presentations.call_args_list
-            assert {cal[0].kwargs["policy"], cal[1].kwargs["policy"]} == {
-                policy1,
-                policy2,
-            }
+        with pytest.raises(OperationalError):
+            calculate_work_presentations.delay(batch_size=2).wait()
+        assert waiting.len() == 1
+        assert calc_presentations.call_count == 2
+        cal = calc_presentations.call_args_list
+        assert {cal[0].kwargs["policy"], cal[1].kwargs["policy"]} == {
+            policy1,
+            policy2,
+        }
 
-            assert waiting.pop(size=1) == {
-                WorkIdAndPolicy(work_id=work2.id, policy=policy2)
-            }
-            assert "Re-queuing remaining 1 of 2" in caplog.text
+        assert waiting.pop(size=1) == {
+            WorkIdAndPolicy(work_id=work2.id, policy=policy2)
+        }
+        assert "Re-queuing remaining 1 of 2" in caplog.text
 
 
 def test_calculate_presentations_non_existent_work(
@@ -147,20 +145,19 @@ def test_calculate_presentations_non_existent_work(
 ):
     policy1 = PresentationCalculationPolicy.recalculate_everything()
     non_existent_work_id = 777
-    with redis_fixture.services_fixture.wired():
-        waiting = WaitingForPresentationCalculation(redis_fixture.client)
-        wp1 = WorkIdAndPolicy(work_id=non_existent_work_id, policy=policy1)
-        waiting.add(wp1)
+    waiting = WaitingForPresentationCalculation(redis_fixture.client)
+    wp1 = WorkIdAndPolicy(work_id=non_existent_work_id, policy=policy1)
+    waiting.add(wp1)
 
-        with (
-            patch(
-                "palace.manager.sqlalchemy.model.work.Work.calculate_presentation"
-            ) as calc_pres,
-        ):
-            assert waiting.len() == 1
-            calculate_work_presentations.delay().wait()
-            assert waiting.len() == 0
-            assert calc_pres.call_count == 0
+    with (
+        patch(
+            "palace.manager.sqlalchemy.model.work.Work.calculate_presentation"
+        ) as calc_pres,
+    ):
+        assert waiting.len() == 1
+        calculate_work_presentations.delay().wait()
+        assert waiting.len() == 0
+        assert calc_pres.call_count == 0
 
 
 def test_paginate(db: DatabaseTransactionFixture):

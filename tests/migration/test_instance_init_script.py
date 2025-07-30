@@ -78,7 +78,7 @@ def _run_script(config_path: Path, db_url: str) -> None:
             return SessionManager.engine(db_url)
 
         mock_services = MagicMock()
-        with (mock_services_container(mock_services),):
+        with mock_services_container(mock_services):
             script = InstanceInitializationScript(
                 config_file=config_path, engine_factory=engine_factory
             )

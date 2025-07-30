@@ -47,7 +47,6 @@ from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.flask_util import OPDSEntryResponse, OPDSFeedResponse
 from palace.manager.util.opds_writer import OPDSFeed, OPDSMessage
 from tests.fixtures.database import DatabaseTransactionFixture
-from tests.fixtures.services import ServicesFixture
 from tests.manager.feed.conftest import PatchedUrlFor
 
 
@@ -880,16 +879,13 @@ class TestOPDSAcquisitionFeed:
         self,
         db: DatabaseTransactionFixture,
         patch_url_for: PatchedUrlFor,
-        services_fixture: ServicesFixture,
     ):
         patron = db.patron()
         work = db.work(with_license_pool=True)
         hold, _ = work.active_license_pool().on_hold_to(patron)
-
-        with services_fixture.wired():
-            feed = OPDSAcquisitionFeed.active_loans_for(
-                None, patron, LibraryAnnotator(None, None, db.default_library())
-            )
+        feed = OPDSAcquisitionFeed.active_loans_for(
+            None, patron, LibraryAnnotator(None, None, db.default_library())
+        )
         assert feed.annotator.active_holds_by_work == {work: hold}
 
     def test_single_entry_loans_feed_errors(self, db: DatabaseTransactionFixture):

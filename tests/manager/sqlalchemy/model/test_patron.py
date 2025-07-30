@@ -270,7 +270,7 @@ class TestHold:
         assert_calculated_value_used()
 
     def test_collect_event_and_delete(
-        self, db: DatabaseTransactionFixture, services_fixture_wired: ServicesFixture
+        self, db: DatabaseTransactionFixture, services_fixture: ServicesFixture
     ) -> None:
         patron = db.patron()
         work = db.work(with_license_pool=True)
@@ -292,7 +292,7 @@ class TestHold:
         hold, _ = pool.on_hold_to(patron)
         hold.collect_event_and_delete()
         assert db.session.query(Hold).count() == 0
-        services_fixture_wired.mock_services.analytics.collect_event.assert_called_once()
+        services_fixture.analytics.collect_event.assert_called_once()
 
 
 class TestLoans:

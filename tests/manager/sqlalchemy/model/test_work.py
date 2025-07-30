@@ -45,7 +45,6 @@ from tests.fixtures.search import (
     ExternalSearchFixtureFake,
     WorkQueueIndexingFixture,
 )
-from tests.fixtures.services import ServicesFixture
 from tests.fixtures.work import (
     WorkIdPolicyQueuePresentationRecalculationFixture,
 )
@@ -1784,18 +1783,15 @@ class TestWork:
         assert db.session.query(Work).filter(Work.id == work.id).all() == []
         assert warning_is_present
 
-    def test_queue_indexing(
-        self, redis_fixture: RedisFixture, services_fixture: ServicesFixture
-    ):
+    def test_queue_indexing(self, redis_fixture: RedisFixture):
         # Test the method that adds a work to a redis set to wait for indexing
         waiting = WaitingForIndexing(redis_fixture.client)
 
-        with services_fixture.wired():
-            Work.queue_indexing(555)
-            assert waiting.pop(1) == [555]
+        Work.queue_indexing(555)
+        assert waiting.pop(1) == [555]
 
-            Work.queue_indexing(None)
-            assert waiting.pop(1) == []
+        Work.queue_indexing(None)
+        assert waiting.pop(1) == []
 
     def test_queue_presentation_recalculation(self):
         with patch(

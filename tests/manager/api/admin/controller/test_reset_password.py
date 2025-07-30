@@ -116,12 +116,12 @@ class TestResetPasswordController:
             assert "Email successfully sent" in response.get_data(as_text=True)
 
             # Check the email is sent
-            assert services_fixture.mock_services.emailer.send.call_count == 1
+            assert services_fixture.emailer.send.call_count == 1
 
             # Check that the email is sent to the right admin
-            assert services_fixture.mock_services.emailer.send.call_args.kwargs[
-                "receivers"
-            ] == [admin_email]
+            assert services_fixture.emailer.send.call_args.kwargs["receivers"] == [
+                admin_email
+            ]
 
     def test_reset_password_get(
         self,
@@ -211,9 +211,7 @@ class TestResetPasswordController:
 
             assert forgot_password_response.status_code == 200
 
-            mail_text = services_fixture.mock_services.emailer.send.call_args.kwargs[
-                "text"
-            ]
+            mail_text = services_fixture.emailer.send.call_args.kwargs["text"]
 
             (
                 token,
@@ -260,9 +258,7 @@ class TestResetPasswordController:
             response = reset_password_ctrl.forgot_password()
             assert response.status_code == 200
 
-            mail_text = services_fixture.mock_services.emailer.send.call_args.kwargs[
-                "text"
-            ]
+            mail_text = services_fixture.emailer.send.call_args.kwargs["text"]
 
             (
                 token,

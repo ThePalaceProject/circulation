@@ -13,7 +13,7 @@ from palace.manager.celery.tasks.search import get_work_search_documents
 from palace.manager.search.external_search import ExternalSearchIndex
 from palace.manager.search.revision import SearchSchemaRevision
 from palace.manager.search.service import SearchServiceOpensearch1
-from palace.manager.service.container import Services, wire_container
+from palace.manager.service.container import Services
 from palace.manager.service.search.container import Search
 from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.util.log import LoggerMixin
@@ -44,7 +44,6 @@ class ExternalSearchFixture(LoggerMixin):
         self, db: DatabaseTransactionFixture, services: Services, test_id: TestIdFixture
     ):
         self.search_config = SearchTestConfiguration.from_env()
-        self.services_container = services
         self.index_prefix = test_id.id
 
         # Set up our testing search instance in the services container
@@ -52,26 +51,19 @@ class ExternalSearchFixture(LoggerMixin):
         search_config_dict = self.search_config.model_dump()
         search_config_dict["index_prefix"] = self.index_prefix
         self.search_container.config.from_dict(search_config_dict)
-        self.services_container.search.override(self.search_container)
+        services.search.override(self.search_container)
 
         self.db = db
-        self.client: OpenSearch = services.search.client()
-        self.service: SearchServiceOpensearch1 = services.search.service()
-        self.index: ExternalSearchIndex = services.search.index()
+        self.client: OpenSearch = services.search().client()
+        self.service: SearchServiceOpensearch1 = services.search().service()
+        self.index: ExternalSearchIndex = services.search().index()
         self.revision: SearchSchemaRevision = (
-            services.search.revision_directory().highest()
+            services.search().revision_directory().highest()
         )
-
-        # Make sure the services container is wired up with the newly created search container
-        wire_container(self.services_container)
 
     def close(self):
         # Delete our index prefix
         self.client.indices.delete(f"{self.index_prefix}*")
-
-        # Unwire the services container
-        self.services_container.unwire()
-        self.services_container.search.reset_override()
         return None
 
     def default_work(self, *args, **kwargs):
@@ -266,28 +258,18 @@ def end_to_end_search_fixture(
 class ExternalSearchFixtureFake:
     def __init__(self, db: DatabaseTransactionFixture, services: Services):
         self.db = db
-        self.services = services
         self.search_container = Search()
-        self.services.search.override(self.search_container)
+        services.search.override(self.search_container)
 
         self.service = SearchServiceFake()
         self.search_container.service.override(self.service)
-        self.external_search: ExternalSearchIndex = self.services.search.index()
-
-        wire_container(self.services)
-
-    def close(self):
-        self.services.unwire()
-        self.services.search.reset_override()
+        self.external_search: ExternalSearchIndex = services.search().index()
 
     @classmethod
     @contextmanager
     def fixture(cls, db: DatabaseTransactionFixture, services: Services):
         fixture = cls(db, services)
-        try:
-            yield fixture
-        finally:
-            fixture.close()
+        yield fixture
 
 
 @pytest.fixture(scope="function")

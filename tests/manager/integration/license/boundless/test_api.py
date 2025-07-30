@@ -964,7 +964,7 @@ class TestBoundlessApi:
         )
 
     def test_sort_delivery_mechanisms(
-        self, db: DatabaseTransactionFixture, services_fixture_wired: ServicesFixture
+        self, db: DatabaseTransactionFixture, services_fixture: ServicesFixture
     ) -> None:
         def get_mechanisms(
             items: list[LicensePoolDeliveryMechanism],

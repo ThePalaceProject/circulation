@@ -294,7 +294,7 @@ class TestAnnotators:
         assert set(expected) == set(ratings)
 
     def test_subtitle(
-        self, db: DatabaseTransactionFixture, services_fixture_wired: ServicesFixture
+        self, db: DatabaseTransactionFixture, services_fixture: ServicesFixture
     ):
         work = db.work(with_license_pool=True, with_open_access_download=True)
         work.presentation_edition.subtitle = "Return of the Jedi"
@@ -325,7 +325,7 @@ class TestAnnotators:
         assert computed.subtitle == None
 
     def test_series(
-        self, db: DatabaseTransactionFixture, services_fixture_wired: ServicesFixture
+        self, db: DatabaseTransactionFixture, services_fixture: ServicesFixture
     ):
         work = db.work(with_license_pool=True, with_open_access_download=True)
         work.presentation_edition.series = "Harry Otter and the Lifetime of Despair"
@@ -532,7 +532,7 @@ class CirculationManagerAnnotatorFixture:
 def circulation_fixture(
     db: DatabaseTransactionFixture,
     patch_url_for: PatchedUrlFor,
-    services_fixture_wired: ServicesFixture,
+    services_fixture: ServicesFixture,
 ) -> CirculationManagerAnnotatorFixture:
     return CirculationManagerAnnotatorFixture(db)
 

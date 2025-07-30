@@ -46,8 +46,8 @@ class TestCirculationManager:
         assert mock_setup_controllers.called
 
         assert manager.services is services_fixture.services
-        assert manager.analytics is services_fixture.mock_services.analytics
-        assert manager.external_search is services_fixture.mock_services.search_index
+        assert manager.analytics is services_fixture.analytics
+        assert manager.external_search is services_fixture.search_index
 
     def test_load_settings(
         self,

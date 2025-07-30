@@ -94,11 +94,8 @@ class TestOPDSFeedController:
         settings.about = "d"
 
         # Make a real OPDS feed and poke at it.
-        with (
-            circulation_fixture.request_context_with_library(
-                "/?entrypoint=Book&size=10"
-            ),
-            circulation_fixture.wired_container(),
+        with circulation_fixture.request_context_with_library(
+            "/?entrypoint=Book&size=10"
         ):
             response = circulation_fixture.manager.opds_feeds.feed(
                 circulation_fixture.english_adult_fiction.id
