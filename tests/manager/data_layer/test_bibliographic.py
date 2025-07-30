@@ -702,6 +702,35 @@ class TestBibliographicData:
         assert "123" == contributor.lc
         assert "Robert_Jordan" == contributor.wikipedia_name
 
+    def test_update_contributions_with_blank_display_name(
+        self, db: DatabaseTransactionFixture
+    ):
+        edition = db.edition()
+        contributor = ContributorData(
+            display_name="",
+            roles=[Contributor.Role.PRIMARY_AUTHOR],
+        )
+        bibliographic = BibliographicData(
+            data_source_name=DataSource.OVERDRIVE, contributors=[contributor]
+        )
+
+        # the contributions should change because the contributor with a blank name will be removed from
+        # the bibliographic data's contributors list.
+        assert bibliographic.update_contributions(_db=db.session, edition=edition)
+
+        # now specify a contributor with a display_name
+        contributor = ContributorData(
+            display_name="test",
+            roles=[Contributor.Role.PRIMARY_AUTHOR],
+        )
+
+        bibliographic = BibliographicData(
+            data_source_name=DataSource.OVERDRIVE, contributors=[contributor]
+        )
+
+        # the contributions should change because the contributor will not be removed.
+        assert bibliographic.update_contributions(_db=db.session, edition=edition)
+
     def test_bibliographic_data_can_be_deepcopied(self):
         # Check that we didn't put something in the BibliographicData that
         # will prevent it from being copied. (e.g., self.log)

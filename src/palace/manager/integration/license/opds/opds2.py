@@ -344,15 +344,7 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
                 f"Finished extracting contributor metadata from {contributor.model_dump_json()}: {contributor_metadata}"
             )
 
-            def is_blank(s: str | None) -> bool:
-                return not s or not s.strip()
-
-            if is_blank(contributor_metadata.display_name):
-                self.log.warning(
-                    f"contributor display name is blank for {contributor_metadata}: skipping..."
-                )
-            else:
-                contributor_metadata_list.append(contributor_metadata)
+            contributor_metadata_list.append(contributor_metadata)
 
         self.log.debug(
             f"Finished extracting contributors metadata: {contributor_metadata_list}"

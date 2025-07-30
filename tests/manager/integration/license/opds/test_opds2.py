@@ -17,7 +17,6 @@ from palace.manager.integration.license.opds.opds2 import (
     OPDS2Importer,
     OPDS2ImportMonitor,
 )
-from palace.manager.opds import rwpm
 from palace.manager.sqlalchemy.constants import (
     EditionConstants,
     IdentifierType,
@@ -734,27 +733,6 @@ class TestOPDS2Importer(OPDS2Test):
         feed_dict = json.loads(opds2_files_fixture.sample_data("feed.json"))
         feed_dict["publications"].insert(0, {})
         assert extract_last_update_dates(json.dumps(feed_dict)) == expected_dates
-
-    def test__extract_contributor_with_blank_display_name(
-        self,
-        opds2_importer_fixture: OPDS2ImporterFixture,
-    ):
-        importer = opds2_importer_fixture.importer
-        contributor = rwpm.Contributor(name="")
-
-        # verify the contributor is ignored when the name is an empty string.
-        extracted_contributors = importer._extract_contributors(
-            [contributor], default_role=Contributor.Role.TRANSLATOR
-        )
-        assert len(extracted_contributors) == 0
-
-        # but not when the contributor is not blank
-        contributor = rwpm.Contributor(name="test")
-
-        extracted_contributors = importer._extract_contributors(
-            [contributor], default_role=Contributor.Role.TRANSLATOR
-        )
-        assert len(extracted_contributors) == 1
 
     @pytest.mark.parametrize(
         "published,expected",
