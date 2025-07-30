@@ -1,7 +1,6 @@
 import datetime
 import json
 import urllib.parse
-from collections.abc import Generator
 from typing import Any
 from unittest.mock import MagicMock, create_autospec
 
@@ -59,10 +58,8 @@ class WorkFixture(CirculationControllerFixture):
 @pytest.fixture(scope="function")
 def work_fixture(
     db: DatabaseTransactionFixture, services_fixture: ServicesFixture
-) -> Generator[WorkFixture, None, None]:
-    fixture = WorkFixture(db, services_fixture)
-    with fixture.wired_container():
-        yield fixture
+) -> WorkFixture:
+    return WorkFixture(db, services_fixture)
 
 
 class TestWorkController:

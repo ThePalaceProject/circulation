@@ -1,5 +1,4 @@
 import datetime
-from collections.abc import Generator
 from decimal import Decimal
 from typing import Any
 from unittest.mock import MagicMock, create_autospec, patch
@@ -115,10 +114,8 @@ class LoanFixture(CirculationControllerFixture):
 @pytest.fixture(scope="function")
 def loan_fixture(
     db: DatabaseTransactionFixture, services_fixture: ServicesFixture
-) -> Generator[LoanFixture, None, None]:
-    fixture = LoanFixture(db, services_fixture)
-    with fixture.wired_container():
-        yield fixture
+) -> LoanFixture:
+    return LoanFixture(db, services_fixture)
 
 
 class OPDSSerializationTestHelper:

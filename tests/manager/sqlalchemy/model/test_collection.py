@@ -136,7 +136,7 @@ class TestCollection:
     def test_select_by_protocol(
         self,
         example_collection_fixture: ExampleCollectionFixture,
-        services_fixture_wired: ServicesFixture,
+        services_fixture: ServicesFixture,
     ):
         """Verify the ability to find all collections that implement
         a certain protocol.
@@ -598,7 +598,7 @@ class TestCollection:
     def test_delete(
         self,
         db: DatabaseTransactionFixture,
-        services_fixture_wired: ServicesFixture,
+        services_fixture: ServicesFixture,
         is_inactive: bool,
         active_collection_count: int,
     ):
@@ -724,9 +724,7 @@ class TestCollection:
         collection2.delete()
 
         # The search index was injected and told to remove the second work.
-        services_fixture_wired.mock_services.search_index.remove_work.assert_called_once_with(
-            work2
-        )
+        services_fixture.search_index.remove_work.assert_called_once_with(work2)
 
         # We've now deleted every LicensePool created for this test.
         assert 0 == db.session.query(LicensePool).count()
@@ -781,7 +779,7 @@ class TestCollection:
     def test_circulation_api_with_registry_from_container(
         self,
         example_collection_fixture: ExampleCollectionFixture,
-        services_fixture_wired: ServicesFixture,
+        services_fixture: ServicesFixture,
     ) -> None:
         collection = example_collection_fixture.collection
         api = collection.circulation_api()

@@ -32,7 +32,6 @@ from palace.manager.sqlalchemy.util import create, get_one
 from palace.manager.util.problem_detail import ProblemDetail
 from tests.fixtures.api_admin import AdminLibrarianFixture
 from tests.fixtures.database import DatabaseTransactionFixture
-from tests.fixtures.services import ServicesFixture
 from tests.mocks.flask import add_request_context
 from tests.mocks.search import ExternalSearchIndexFake, SearchServiceFake
 
@@ -462,10 +461,7 @@ class TestCustomListsController:
         list.add_entry(work1)
         list.add_entry(work2)
 
-        with (
-            admin_librarian_fixture.request_context_with_library_and_admin("/"),
-            admin_librarian_fixture.ctrl.wired_container(),
-        ):
+        with admin_librarian_fixture.request_context_with_library_and_admin("/"):
             assert isinstance(list.id, int)
             response = admin_librarian_fixture.manager.admin_custom_lists_controller.custom_list(
                 list.id
@@ -493,7 +489,6 @@ class TestCustomListsController:
     def test_custom_list_get_with_pagination(
         self,
         admin_librarian_fixture: AdminLibrarianFixture,
-        services_fixture: ServicesFixture,
     ):
         data_source = DataSource.lookup(
             admin_librarian_fixture.ctrl.db.session, DataSource.LIBRARY_STAFF
@@ -512,10 +507,7 @@ class TestCustomListsController:
             work = admin_librarian_fixture.ctrl.db.work(with_license_pool=True)
             list.add_entry(work)
 
-        with (
-            admin_librarian_fixture.request_context_with_library_and_admin("/"),
-            services_fixture.wired(),
-        ):
+        with (admin_librarian_fixture.request_context_with_library_and_admin("/"),):
             assert isinstance(list.id, int)
             response = admin_librarian_fixture.manager.admin_custom_lists_controller.custom_list(
                 list.id

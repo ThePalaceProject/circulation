@@ -12,7 +12,7 @@ from tests.fixtures.services import ServicesFixture
 
 
 def test_initialize_application_http(
-    db: DatabaseTransactionFixture, services_fixture_wired: ServicesFixture
+    db: DatabaseTransactionFixture, services_fixture: ServicesFixture
 ):
     # Use the db transaction fixture so that we don't use the production settings by mistake
     with (

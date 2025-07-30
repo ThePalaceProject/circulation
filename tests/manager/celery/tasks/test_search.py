@@ -158,7 +158,7 @@ def test_search_reindex_failures(
     # Make sure our backoff function doesn't delay the test.
     mock_backoff.return_value = 0
 
-    add_documents_mock = services_fixture.mock_services.search_index.add_documents
+    add_documents_mock = services_fixture.search_index.add_documents
 
     # If we fail to add documents, we should retry up to 4 times, then fail.
     add_documents_mock.return_value = [1, 2, 3]
@@ -208,7 +208,7 @@ def test_search_reindex_failures_multiple_batch(
             offset : offset + batch_size
         ]
     )
-    add_documents_mock = services_fixture.mock_services.search_index.add_documents
+    add_documents_mock = services_fixture.search_index.add_documents
     add_documents_mock.side_effect = [
         # First batch
         OpenSearchException(),
@@ -267,9 +267,7 @@ def test_update_read_pointer_failures(
     # Make sure our backoff function doesn't delay the test.
     mock_backoff.return_value = 0
 
-    read_pointer_set_mock = (
-        services_fixture.mock_services.search_service.read_pointer_set
-    )
+    read_pointer_set_mock = services_fixture.search_service.read_pointer_set
     read_pointer_set_mock.side_effect = OpenSearchException()
     with pytest.raises(MaxRetriesExceededError):
         update_read_pointer.delay().wait()
@@ -287,11 +285,12 @@ def test_get_migrate_search_chain(
     search_reindex_task_lock_fixture: SearchReindexTaskLockFixture,
     end_to_end_search_fixture: EndToEndSearchFixture,
 ):
-    client = end_to_end_search_fixture.external_search.client
-    service = end_to_end_search_fixture.external_search.service
-    revision = end_to_end_search_fixture.external_search.revision
-    services = end_to_end_search_fixture.external_search.services_container
-    revision_directory = services.search.revision_directory()
+    container = end_to_end_search_fixture.external_search.search_container
+
+    client = container.client()
+    service = container.service()
+    revision_directory = container.revision_directory()
+    revision = revision_directory.highest()
 
     works = [
         db.work(title=f"Work {x}", with_open_access_download=True) for x in range(10)
@@ -300,7 +299,9 @@ def test_get_migrate_search_chain(
     end_to_end_search_fixture.populate_search_index()
     new_revision = MockSearchSchemaRevisionLatest(1010101)
     new_revision_index_name = new_revision.name_for_index(service.base_revision_name)
-    revision_directory.available[new_revision.version] = new_revision
+    available = dict(revision_directory.available)
+    available[new_revision.version] = new_revision
+    revision_directory._available = available
 
     InstanceInitializationScript.create_search_index(service, new_revision)
 
@@ -456,7 +457,7 @@ def test_index_works_failures(
 
     # If we fail to add documents, we should retry up to 4 times, then fail.
     work = db.work(with_open_access_download=True)
-    add_document_mocks = services_fixture.mock_services.search_index.add_documents
+    add_document_mocks = services_fixture.search_index.add_documents
     add_document_mocks.side_effect = OpenSearchException()
     with pytest.raises(MaxRetriesExceededError):
         index_works.delay([work.id]).wait()

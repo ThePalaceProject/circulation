@@ -19,7 +19,7 @@ class TestRebuildSearchIndexScript:
         RebuildSearchIndexScript(db.session).do_run()
         mock_search_reindex.s.return_value.delay.assert_called_once_with()
         # But we don't delete the index before rebuilding.
-        services_fixture.mock_services.search_index.clear_search_documents.assert_not_called()
+        services_fixture.search_index.clear_search_documents.assert_not_called()
 
     @patch("palace.manager.scripts.search.search_reindex")
     def test_do_run_blocking(
@@ -38,7 +38,7 @@ class TestRebuildSearchIndexScript:
     ):
         # If we are called with the --delete argument, we clear the index before rebuilding.
         RebuildSearchIndexScript(db.session, cmd_args=["--delete"]).do_run()
-        services_fixture.mock_services.search_index.clear_search_documents.assert_called_once_with()
+        services_fixture.search_index.clear_search_documents.assert_called_once_with()
         mock_search_reindex.s.return_value.delay.assert_called_once_with()
 
     @patch("palace.manager.scripts.search.get_migrate_search_chain")

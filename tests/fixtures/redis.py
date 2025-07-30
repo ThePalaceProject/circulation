@@ -5,6 +5,7 @@ import pytest
 from pydantic_settings import SettingsConfigDict
 from typing_extensions import Self
 
+from palace.manager.service.redis.container import RedisContainer
 from palace.manager.service.redis.redis import Redis
 from palace.manager.util.pydantic import RedisDsn
 from tests.fixtures.config import FixtureTestUrlConfiguration
@@ -20,19 +21,18 @@ class RedisTestConfiguration(FixtureTestUrlConfiguration):
 class RedisFixture:
     def __init__(self, test_id: TestIdFixture, services_fixture: ServicesFixture):
         self.test_id = test_id
-        self.services_fixture = services_fixture
         self.config = RedisTestConfiguration.from_env()
-
         self.key_prefix = f"test::{self.test_id.id}"
-        self.services_fixture.services.config.from_dict(
+
+        self.container = RedisContainer()
+        self.container.config.from_dict(
             {
-                "redis": {
-                    "url": self.config.url,
-                    "key_prefix": self.key_prefix,
-                }
+                "url": self.config.url,
+                "key_prefix": self.key_prefix,
             }
         )
-        self.client: Redis = self.services_fixture.services.redis.client()
+        services_fixture.services.redis.override(self.container)
+        self.client: Redis = self.container.client()
 
     def keys(self) -> list[str]:
         """

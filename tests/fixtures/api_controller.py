@@ -109,11 +109,6 @@ class ControllerFixture:
         # TestScopedSession to hang.
         app.manager = self.circulation_manager_setup()
 
-    @contextmanager
-    def wired_container(self):
-        with self.services_fixture.wired():
-            yield
-
     def circulation_manager_setup_with_session(
         self, session: Session, overrides: ControllerFixtureSetupOverrides | None = None
     ) -> CirculationManager:
