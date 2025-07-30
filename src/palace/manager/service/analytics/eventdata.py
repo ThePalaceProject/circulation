@@ -114,8 +114,16 @@ class AnalyticsEventData(BaseModel, LoggerMixin):
                 user_agent = flask.request.user_agent.string
                 if user_agent == "":
                     user_agent = None
+            except RuntimeError:
+                # Flask raises a RuntimeError if there is no request context.
+                # This can happen if the event is created outside of a flask request
+                # context, for example when the event is created in a background task.
+                pass
             except Exception as e:
-                cls.logger().warning(f"Unable to resolve the user_agent: {repr(e)}")
+                # If we get any other exception, we log it but do not raise it.
+                cls.logger().warning(
+                    f"Unable to resolve the user_agent: {repr(e)}", exc_info=e
+                )
 
         if not time:
             time = utc_now()
