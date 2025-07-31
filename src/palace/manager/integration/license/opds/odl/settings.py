@@ -5,7 +5,7 @@ from pydantic import NonNegativeInt, PositiveInt
 
 from palace.manager.api.circulation.settings import BaseCirculationEbookLoanSettings
 from palace.manager.api.lcp.hash import HashingAlgorithm
-from palace.manager.integration.license.opds.opds2 import OPDS2ImporterSettings
+from palace.manager.integration.license.opds.opds2.settings import OPDS2ImporterSettings
 from palace.manager.integration.license.opds.requests import OPDS2AuthType
 from palace.manager.integration.settings import (
     ConfigurationFormItem,
