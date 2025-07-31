@@ -610,8 +610,8 @@ class Work(Base, LoggerMixin):
         else:
             new_summary_text = ""
 
-        if new_summary != self.summary_text:
-            self.summary = new_summary_text
+        if new_summary_text != self.summary_text:
+            self.summary_text = new_summary_text
 
     @classmethod
     def with_genre(cls, _db, genre):
