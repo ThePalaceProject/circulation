@@ -1,5 +1,4 @@
 import logging
-import os
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -10,22 +9,7 @@ from palace.manager.api.admin.config import (
     Configuration as AdminConfig,
     OperationalMode,
 )
-
-
-class MonkeyPatchEnvFixture:
-    def __init__(self, monkeypatch: MonkeyPatch):
-        self.monkeypatch = monkeypatch
-
-    def __call__(self, key: str, value: str | None) -> None:
-        if value:
-            self.monkeypatch.setenv(key, value)
-        elif key in os.environ:
-            self.monkeypatch.delenv(key)
-
-
-@pytest.fixture
-def monkeypatch_env(monkeypatch: MonkeyPatch) -> MonkeyPatchEnvFixture:
-    return MonkeyPatchEnvFixture(monkeypatch)
+from tests.fixtures.test_utils import MonkeyPatchEnvFixture
 
 
 class TestAdminUI:
