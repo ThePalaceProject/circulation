@@ -22,6 +22,7 @@ pytest_plugins = [
     "tests.fixtures.s3",
     "tests.fixtures.search",
     "tests.fixtures.services",
+    "tests.fixtures.test_utils",
     "tests.fixtures.time",
     "tests.fixtures.tls_server",
     "tests.fixtures.vendor_id",
