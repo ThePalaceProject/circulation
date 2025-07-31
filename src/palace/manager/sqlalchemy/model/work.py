@@ -1270,9 +1270,12 @@ class Work(Base, LoggerMixin):
             .all()
         )
 
-        self.quality = Measurement.overall_quality(
+        new_quality = Measurement.overall_quality(
             measurements, default_value=default_quality
         )
+
+        if new_quality != self.quality:
+            self.quality = new_quality
 
     def assign_genres(
         self,
