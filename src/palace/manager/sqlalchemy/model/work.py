@@ -597,14 +597,21 @@ class Work(Base, LoggerMixin):
         )
 
     def set_summary(self, resource: Resource) -> None:
-        self.summary = resource
+        new_summary = resource
+        if self.summary != resource:
+            self.summary = resource
+
         if resource and resource.representation:
             # Make sure that the summary text only contains characters that are XML compatible.
-            self.summary_text = self._xml_text_sanitization_regex().sub(
+
+            new_summary_text = self._xml_text_sanitization_regex().sub(
                 "", resource.representation.unicode_content
             )
         else:
-            self.summary_text = ""
+            new_summary_text = ""
+
+        if new_summary != self.summary_text:
+            self.summary = new_summary_text
 
     @classmethod
     def with_genre(cls, _db, genre):
