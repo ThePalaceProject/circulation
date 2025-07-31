@@ -950,8 +950,8 @@ class Work(Base, LoggerMixin):
             cover_changed = self.presentation_edition.calculate_presentation(policy)
             edition_changed = edition_changed or cover_changed
 
-        summary = self.summary
-        summary_text = self.summary_text
+        old_summary = self.summary
+        old_summary_text = self.summary_text
         quality = self.quality
 
         # If we find a cover or description that comes direct from a
@@ -1019,8 +1019,8 @@ class Work(Base, LoggerMixin):
         changed = (
             edition_changed
             or classification_changed
-            or summary != self.summary
-            or summary_text != new_summary_text
+            or old_summary != self.summary
+            or old_summary_text != new_summary_text
             or (
                 policy.calculate_quality
                 and float(quality or default_quality)
@@ -1222,10 +1222,22 @@ class Work(Base, LoggerMixin):
         In most cases you should call set_presentation_ready_based_on_content
         instead, which runs those checks.
         """
-        as_of = as_of or utc_now()
-        self.presentation_ready = True
-        self.presentation_ready_exception = None
-        self.presentation_ready_attempt = as_of
+        changed = False
+
+        if not self.presentation_ready:
+            self.presentation_ready = True
+            changed = True
+
+        if self.presentation_ready_exception is not None:
+            self.presentation_ready_exception = None
+
+        if as_of is not None:
+            if self.presentation_ready_attempt != as_of:
+                self.presentation_ready_attempt = as_of
+        else:
+            if self.presentation_ready_attempt is None or changed:
+                self.presentation_ready_attempt = utc_now()
+
         if not exclude_search:
             self.external_index_needs_updating()
 
@@ -1248,7 +1260,8 @@ class Work(Base, LoggerMixin):
             or not self.language
             or not self.presentation_edition.medium
         ):
-            self.presentation_ready = False
+            if self.presentation_ready:
+                self.presentation_ready = False
             self.external_index_needs_updating()
             self.log.warning("Work is not presentation ready: %r", self)
         else:
