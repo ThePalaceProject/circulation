@@ -1,8 +1,9 @@
 import os
 from enum import Enum
-from urllib.parse import urljoin
+from typing import Any, ClassVar
+from urllib.parse import urljoin, urlparse
 
-from pydantic import AliasGenerator, Field
+from pydantic import AliasGenerator, Field, model_validator
 from pydantic.alias_generators import to_camel
 from pydantic_settings import SettingsConfigDict
 from requests import RequestException
@@ -46,13 +47,33 @@ class AdminClientFeatureFlags(ServiceConfiguration):
 class AdminClientSettings(ServiceConfiguration):
     """Settings for the admin client."""
 
+    DEFAULT_SUPPORT_CONTACT_TEXT: ClassVar[str] = "Contact support."
+
     model_config = SettingsConfigDict(env_prefix="PALACE_ADMINUI_")
 
     # This flag suppresses visibility of the collection subscription config in the admin UI.
     hide_subscription_config: bool = True
+
     # This is an optional support contact URL. This will be embedded in
     # web pages. http[s] and mailto URLs work best here.
     support_contact_url: str | None = None
+    # Optional support contact label text. This will be used as part of
+    # the label for the support contact link in views and in the admin UI.
+    support_contact_text: str | None = None
+
+    @model_validator(mode="before")
+    def set_support_contact_text_default(cls, values: dict[str, Any]) -> dict[str, Any]:
+        """Set sensible support contact link text, if URL is set but text is not."""
+        support_contact_url = values.get("support_contact_url")
+        support_contact_text = values.get("support_contact_text")
+        if support_contact_text is None and support_contact_url is not None:
+            parsed = urlparse(support_contact_url)
+            values["support_contact_text"] = (
+                f"Email {parsed.path}."
+                if parsed.scheme == "mailto"
+                else cls.DEFAULT_SUPPORT_CONTACT_TEXT
+            )
+        return values
 
 
 class OperationalMode(str, Enum):

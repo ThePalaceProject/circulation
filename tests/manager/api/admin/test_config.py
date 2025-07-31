@@ -6,6 +6,7 @@ from pytest import MonkeyPatch
 from requests import RequestException
 
 from palace.manager.api.admin.config import (
+    AdminClientSettings,
     Configuration as AdminConfig,
     OperationalMode,
 )
@@ -231,10 +232,10 @@ class TestAdminClientSettings:
     )
     def test_hide_subscription_config(
         self,
+        monkeypatch: MonkeyPatch,
         monkeypatch_env: MonkeyPatchEnvFixture,
         should_hide: str | None,
         expected_setting,
-        monkeypatch: MonkeyPatch,
     ):
         monkeypatch_env("PALACE_ADMINUI_HIDE_SUBSCRIPTION_CONFIG", should_hide)
         monkeypatch.setattr(AdminConfig, "_admin_client_settings", None)
@@ -242,3 +243,58 @@ class TestAdminClientSettings:
             AdminConfig.admin_client_settings().hide_subscription_config
             == expected_setting
         )
+
+    @pytest.mark.parametrize(
+        "url, text, expected_text",
+        (
+            pytest.param(
+                "mailto:support@example.com?subject=support request",
+                None,
+                "Email support@example.com.",
+                id="mailto-url-no-text",
+            ),
+            pytest.param(
+                "https://support.example.com/path/to/support",
+                None,
+                AdminClientSettings.DEFAULT_SUPPORT_CONTACT_TEXT,
+                id="non-mailto-url-no-text",
+            ),
+            pytest.param(
+                "mailto:support@example.com?subject=support request",
+                "Reach out to the support team.",
+                "Reach out to the support team.",
+                id="mailto-url-with-text",
+            ),
+            pytest.param(
+                "https://support.example.com/path/to/support",
+                "Get help at our web site.",
+                "Get help at our web site.",
+                id="non-mailto-url-with-text",
+            ),
+            pytest.param(
+                None,
+                None,
+                None,
+                id="no-url-no-text",
+            ),
+            pytest.param(
+                None,
+                "Contact us!",
+                "Contact us!",
+                id="no-url-with-text",
+            ),
+        ),
+    )
+    def test_support_contact_config(
+        self,
+        monkeypatch: MonkeyPatch,
+        monkeypatch_env: MonkeyPatchEnvFixture,
+        url: str | None,
+        text: str | None,
+        expected_text: str | None,
+    ):
+        monkeypatch_env("PALACE_ADMINUI_SUPPORT_CONTACT_URL", url)
+        monkeypatch_env("PALACE_ADMINUI_SUPPORT_CONTACT_TEXT", text)
+        monkeypatch.setattr(AdminConfig, "_admin_client_settings", None)
+        assert AdminConfig.admin_client_settings().support_contact_url == url
+        assert AdminConfig.admin_client_settings().support_contact_text == expected_text
