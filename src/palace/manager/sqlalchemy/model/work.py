@@ -1367,7 +1367,8 @@ class Work(Base, LoggerMixin):
             changed = True
 
         # ensure that work_genres is up to date without having to read from database again
-        self.work_genres = workgenres
+        if self.work_genres != workgenres:
+            self.work_genres = workgenres
 
         return workgenres, changed
 
