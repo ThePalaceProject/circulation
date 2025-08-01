@@ -4,7 +4,8 @@ from celery.canvas import Signature
 from palace.manager.celery.task import Task
 from palace.manager.celery.tasks import apply, identifiers
 from palace.manager.celery.utils import load_from_id
-from palace.manager.integration.license.opds.opds2 import OPDS2API, OPDS2Importer
+from palace.manager.integration.license.opds.opds2.api import OPDS2API
+from palace.manager.integration.license.opds.opds2.importer import OPDS2Importer
 from palace.manager.service.celery.celery import QueueNames
 from palace.manager.service.redis.models.lock import RedisLock
 from palace.manager.service.redis.models.set import IdentifierSet

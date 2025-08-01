@@ -17,18 +17,12 @@ from palace.manager.core.coverage import CoverageFailure
 from palace.manager.data_layer.policy.presentation import PresentationCalculationPolicy
 from palace.manager.integration.license.opds.odl.api import OPDS2WithODLApi
 from palace.manager.integration.license.opds.odl.importer import (
-    OPDS2WithODLExtractor,
     OPDS2WithODLImporter,
     OPDS2WithODLImportMonitor,
 )
 from palace.manager.integration.license.opds.odl.settings import OPDS2WithODLSettings
 from palace.manager.integration.license.opds.requests import OPDS2AuthType
-from palace.manager.opds import opds2, rwpm
-from palace.manager.opds.lcp.status import LoanStatus
-from palace.manager.opds.odl.info import Checkouts, LicenseInfo, LicenseStatus
-from palace.manager.opds.odl.odl import License, LicenseMetadata
-from palace.manager.opds.odl.terms import Terms
-from palace.manager.opds.opds2 import StrictLink
+from palace.manager.opds.odl.info import LicenseStatus
 from palace.manager.sqlalchemy.constants import (
     EditionConstants,
     IdentifierConstants,
@@ -1046,93 +1040,6 @@ class TestOPDS2WithODLImporter:
         feed_dict = json.loads(opds2_files_fixture.sample_data("feed.json"))
         feed_dict["publications"].insert(0, {})
         assert extract_last_update_dates(json.dumps(feed_dict)) == expected_dates
-
-
-class TestOPDS2WithODLExtractor:
-    def test__extract_license_data(self) -> None:
-        create_metadata = partial(
-            LicenseMetadata,
-            identifier="identifier",
-            created=utc_now(),
-        )
-
-        links = [
-            StrictLink(
-                rel=rwpm.LinkRelations.self,
-                type=LicenseInfo.content_type(),
-                href="self link",
-            ),
-            StrictLink(
-                rel=opds2.AcquisitionLinkRelations.borrow,
-                type=LoanStatus.content_type(),
-                href="checkout link",
-            ),
-        ]
-
-        create_license = partial(
-            License,
-            metadata=create_metadata(),
-            links=links,
-        )
-
-        create_license_info = partial(
-            LicenseInfo,
-            identifier="identifier",
-            status=LicenseStatus.available,
-            checkouts=Checkouts(
-                available=10,
-            ),
-        )
-
-        # Identifier mismatch returns None
-        license_info = create_license_info(
-            identifier="two identifier",
-        )
-        license = create_license(
-            metadata=create_metadata(identifier="one identifier"),
-        )
-        assert (
-            OPDS2WithODLExtractor._extract_license_data(license_info, license) is None
-        )
-
-        # Expiry mismatch makes license unavailable
-        license_info = create_license_info(
-            terms=Terms(
-                expires=utc_now() + datetime.timedelta(days=1),
-            )
-        )
-        license = create_license(
-            metadata=create_metadata(
-                terms=Terms(
-                    expires=utc_now() + datetime.timedelta(days=2),
-                )
-            ),
-        )
-        license_data = OPDS2WithODLExtractor._extract_license_data(
-            license_info, license
-        )
-        assert license_data is not None
-        assert license_data.status == LicenseStatus.unavailable
-
-        # Concurrency mismatch makes license unavailable
-        license_info = create_license_info(terms=Terms(concurrency=12))
-        license = create_license(
-            metadata=create_metadata(terms=Terms(concurrency=11)),
-        )
-        license_data = OPDS2WithODLExtractor._extract_license_data(
-            license_info, license
-        )
-        assert license_data is not None
-        assert license_data.status == LicenseStatus.unavailable
-
-        # Good data returns LicenseData
-        license_info = create_license_info()
-        license = create_license()
-        license_data = OPDS2WithODLExtractor._extract_license_data(
-            license_info, license
-        )
-        assert license_data is not None
-        assert license_data.status == LicenseStatus.available
 
 
 class OPDS2WithODLImportMonitorFixture:

@@ -15,10 +15,8 @@ from palace.manager.celery.tasks import apply, identifiers, opds2
 from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.data_layer.bibliographic import BibliographicData
 from palace.manager.data_layer.identifier import IdentifierData
-from palace.manager.integration.license.opds.opds2 import (
-    OPDS2API,
-    OPDS2ImporterSettings,
-)
+from palace.manager.integration.license.opds.opds2.api import OPDS2API
+from palace.manager.integration.license.opds.opds2.settings import OPDS2ImporterSettings
 from palace.manager.integration.license.overdrive.api import OverdriveAPI
 from palace.manager.service.redis.models.set import IdentifierSet
 from palace.manager.sqlalchemy.constants import (
