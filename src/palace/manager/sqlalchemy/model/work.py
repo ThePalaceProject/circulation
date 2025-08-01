@@ -952,7 +952,7 @@ class Work(Base, LoggerMixin):
 
         old_summary = self.summary
         old_summary_text = self.summary_text
-        quality = self.quality
+        old_quality = self.quality
 
         # If we find a cover or description that comes direct from a
         # license source, it may short-circuit the process of finding
@@ -1023,7 +1023,7 @@ class Work(Base, LoggerMixin):
             or old_summary_text != new_summary_text
             or (
                 policy.calculate_quality
-                and float(quality or default_quality)
+                and float(old_quality or default_quality)
                 != float(self.quality or default_quality)
             )
         )
