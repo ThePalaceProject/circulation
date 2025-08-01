@@ -5,7 +5,10 @@ import pytest
 from palace.manager.celery.tasks import opds2
 from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.integration.license.opds.opds2.api import OPDS2API
-from palace.manager.scripts.opds2_import import OPDS2ImportScript, OPDS2ReaperScript
+from palace.manager.integration.license.opds.opds2.scripts import (
+    OPDS2ImportScript,
+    OPDS2ReaperScript,
+)
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

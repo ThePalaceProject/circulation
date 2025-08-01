@@ -97,6 +97,9 @@ def logger_for_cls(cls: type[object]) -> logging.Logger:
     return logging.getLogger(f"{cls.__module__}.{cls.__name__}")
 
 
+LoggerType = logging.Logger | LoggerAdapterType
+
+
 class LoggerMixin:
     """Mixin that adds a logger with a standardized name"""
 
@@ -112,7 +115,7 @@ class LoggerMixin:
         return logger_for_cls(cls)
 
     @property
-    def log(self) -> logging.Logger | LoggerAdapterType:
+    def log(self) -> LoggerType:
         """
         A convenience property that returns the logger for the class,
         so it is easier to access the logger from an instance.

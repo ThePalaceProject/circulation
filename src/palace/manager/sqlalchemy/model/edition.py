@@ -272,7 +272,7 @@ class Edition(Base, EditionConstants):
             return []
 
     @classmethod
-    def medium_from_media_type(cls, media_type):
+    def medium_from_media_type(cls, media_type: str | None) -> str | None:
         """Derive a value for Edition.medium from a media type.
 
         TODO: It's not necessary right now, but we could theoretically

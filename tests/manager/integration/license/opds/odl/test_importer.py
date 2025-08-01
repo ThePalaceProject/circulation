@@ -7,22 +7,25 @@ import json
 import uuid
 from functools import partial
 from typing import Any
-from unittest.mock import patch
 
-import dateutil
 import pytest
 from freezegun import freeze_time
+from jinja2 import Template
+from sqlalchemy import select
 
-from palace.manager.core.coverage import CoverageFailure
+from palace.manager.data_layer.bibliographic import BibliographicData
+from palace.manager.data_layer.circulation import CirculationData
 from palace.manager.data_layer.policy.presentation import PresentationCalculationPolicy
 from palace.manager.integration.license.opds.odl.api import OPDS2WithODLApi
 from palace.manager.integration.license.opds.odl.importer import (
     OPDS2WithODLImporter,
-    OPDS2WithODLImportMonitor,
+    importer_from_collection,
 )
-from palace.manager.integration.license.opds.odl.settings import OPDS2WithODLSettings
 from palace.manager.integration.license.opds.requests import OPDS2AuthType
-from palace.manager.opds.odl.info import LicenseStatus
+from palace.manager.opds.odl.info import Checkouts, LicenseInfo, LicenseStatus
+from palace.manager.opds.odl.terms import Terms
+from palace.manager.opds.opds2 import PublicationFeedNoValidation
+from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.sqlalchemy.constants import (
     EditionConstants,
     IdentifierConstants,
@@ -30,20 +33,151 @@ from palace.manager.sqlalchemy.constants import (
 )
 from palace.manager.sqlalchemy.model.contributor import Contribution, Contributor
 from palace.manager.sqlalchemy.model.edition import Edition
-from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism, LicensePool
+from palace.manager.sqlalchemy.model.identifier import Identifier
+from palace.manager.sqlalchemy.model.licensing import (
+    DeliveryMechanism,
+    LicensePool,
+    LicensePoolDeliveryMechanism,
+)
 from palace.manager.sqlalchemy.model.resource import Hyperlink
 from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.util import datetime_helpers
 from palace.manager.util.datetime_helpers import utc_now
-from palace.manager.util.http import HTTP
 from tests.fixtures.database import DatabaseTransactionFixture
-from tests.fixtures.files import OPDS2FilesFixture
+from tests.fixtures.files import OPDS2FilesFixture, OPDS2WithODLFilesFixture
 from tests.fixtures.http import MockHttpClientFixture
-from tests.fixtures.odl import (
-    LicenseHelper,
-    LicenseInfoHelper,
-    OPDS2WithODLImporterFixture,
-)
+from tests.fixtures.services import ServicesFixture
+from tests.fixtures.work import WorkIdPolicyQueuePresentationRecalculationFixture
+
+
+class OPDS2WithODLImporterFixture:
+    def __init__(
+        self,
+        db: DatabaseTransactionFixture,
+        services: ServicesFixture,
+        http_client: MockHttpClientFixture,
+        files_fixture: OPDS2WithODLFilesFixture,
+        work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
+    ):
+        self.db = db
+        self.collection = db.collection(
+            protocol=OPDS2WithODLApi,
+            settings=db.opds2_odl_settings(data_source="test collection"),
+        )
+        self.importer = importer_from_collection(
+            self.collection,
+            services.services.integration_registry().license_providers(),
+        )
+        self.client = http_client
+        self.files = files_fixture
+        self.work_policy_recalc_fixture = work_policy_recalc_fixture
+
+    def queue_response(self, item: LicenseInfo | str | bytes) -> None:
+        if isinstance(item, LicenseInfo):
+            self.client.queue_response(200, content=item.model_dump_json())
+        else:
+            self.client.queue_response(200, content=item)
+
+    def queue_fixture_file(self, filename: str) -> None:
+        self.client.queue_response(200, content=self.files.sample_data(filename))
+
+    def mock_apply_bibliographic(
+        self, data: BibliographicData, collection_id: int
+    ) -> None:
+        assert collection_id == self.collection.id
+        edition, _ = data.edition(self.db.session)
+        data.apply(self.db.session, edition, self.collection)
+
+    def mock_apply_circulation(self, data: CirculationData, collection_id: int) -> None:
+        assert collection_id == self.collection.id
+        data.apply(self.db.session, self.collection)
+
+    def import_fixture_file(
+        self,
+        filename: str = "feed_template.json.jinja",
+        licenses: list[LicenseInfo] | None = None,
+    ) -> tuple[
+        list[Edition],
+        list[LicensePool],
+        list[Work],
+    ]:
+        feed = self.files.sample_text(filename)
+
+        if licenses is not None:
+            for _license in licenses:
+                self.queue_response(_license)
+            feed = Template(feed).render(licenses=licenses)
+
+        return self.import_feed(feed)
+
+    def import_feed(self, feed: str) -> tuple[
+        list[Edition],
+        list[LicensePool],
+        list[Work],
+    ]:
+        self.client.queue_response(200, content=feed, index=0)
+
+        feed_parsed = self.importer.get_feed("http://example.org/feed.json")
+
+        self.importer.import_feed(
+            self.db.session,
+            feed_parsed,
+            self.collection,
+            apply_bibliographic=self.mock_apply_bibliographic,
+            apply_circulation=self.mock_apply_circulation,
+        )
+
+        editions = self.db.session.scalars(select(Edition).order_by(Edition.id)).all()
+        license_pools = (
+            self.db.session.scalars(select(LicensePool).order_by(LicensePool.id))
+            .unique()
+            .all()
+        )
+        works = self.db.session.scalars(select(Work).order_by(Work.id)).unique().all()
+
+        return editions, license_pools, works
+
+    @staticmethod
+    def get_delivery_mechanism_by_drm_scheme_and_content_type(
+        delivery_mechanisms: list[LicensePoolDeliveryMechanism],
+        content_type: str,
+        drm_scheme: str | None,
+    ) -> DeliveryMechanism | None:
+        """Find a license pool in the list by its identifier.
+
+        :param delivery_mechanisms: List of delivery mechanisms
+        :param content_type: Content type
+        :param drm_scheme: DRM scheme
+
+        :return: Delivery mechanism with the specified DRM scheme and content type (if any)
+        """
+        for delivery_mechanism in delivery_mechanisms:
+            mechanism = delivery_mechanism.delivery_mechanism
+
+            if (
+                mechanism.drm_scheme == drm_scheme
+                and mechanism.content_type == content_type
+            ):
+                return mechanism
+
+        return None
+
+
+@pytest.fixture
+def opds2_with_odl_importer_fixture(
+    db: DatabaseTransactionFixture,
+    services_fixture: ServicesFixture,
+    http_client: MockHttpClientFixture,
+    opds2_with_odl_files_fixture: OPDS2WithODLFilesFixture,
+    work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
+) -> OPDS2WithODLImporterFixture:
+    return OPDS2WithODLImporterFixture(
+        db,
+        services_fixture,
+        http_client,
+        opds2_with_odl_files_fixture,
+        work_policy_recalc_fixture,
+    )
 
 
 class TestOPDS2WithODLImporter:
@@ -51,35 +185,38 @@ class TestOPDS2WithODLImporter:
     def test_import(
         self,
         opds2_with_odl_importer_fixture: OPDS2WithODLImporterFixture,
+        caplog: pytest.LogCaptureFixture,
     ) -> None:
         """Ensure that OPDSWithODLImporter correctly processes and imports the ODL feed encoded using OPDS 2.x.
 
         NOTE: `freeze_time` decorator is required to treat the licenses in the ODL feed as non-expired.
         """
-        # Arrange
-        moby_dick_license = LicenseInfoHelper(
-            license=LicenseHelper(
-                identifier="urn:uuid:f7847120-fc6f-11e3-8158-56847afe9799",
-                concurrency=10,
-                checkouts=30,
-                expires="2016-04-25T12:25:21+02:00",
-            ),
-            left=30,
-            available=10,
-        )
+        caplog.set_level(LogLevel.error)
 
-        opds2_with_odl_importer_fixture.queue_response(moby_dick_license)
-        opds2_with_odl_importer_fixture.importer.ignored_identifier_types = [
+        opds2_with_odl_importer_fixture.importer._ignored_identifier_types = {
             IdentifierConstants.URI
-        ]
+        }
 
         # Act
         (
             imported_editions,
             pools,
             works,
-            failures,
-        ) = opds2_with_odl_importer_fixture.import_fixture_file("feed.json")
+        ) = opds2_with_odl_importer_fixture.import_fixture_file(
+            "feed.json",
+            [
+                LicenseInfo(
+                    identifier="urn:uuid:f7847120-fc6f-11e3-8158-56847afe9799",
+                    status=LicenseStatus.available,
+                    checkouts=Checkouts(left=30, available=10),
+                    terms=Terms(
+                        concurrency=10,
+                        checkouts=30,
+                        expires="2016-04-25T12:25:21+02:00",
+                    ),
+                )
+            ],
+        )
 
         # Assert
 
@@ -114,7 +251,7 @@ class TestOPDS2WithODLImporter:
         assert moby_dick_edition == moby_dick_author_author_contribution.edition
         assert Contributor.Role.AUTHOR == moby_dick_author_author_contribution.role
 
-        assert "Feedbooks" == moby_dick_edition.data_source.name
+        assert "test collection" == moby_dick_edition.data_source.name
 
         assert "Test Publisher" == moby_dick_edition.publisher
         assert datetime.date(2015, 9, 29) == moby_dick_edition.published
@@ -154,22 +291,22 @@ class TestOPDS2WithODLImporter:
         assert moby_dick_epub_lcp_drm_delivery_mechanism is not None
 
         assert 1 == len(moby_dick_license_pool.licenses)
-        [moby_dick_license] = moby_dick_license_pool.licenses  # type: ignore
+        [moby_dick_license] = moby_dick_license_pool.licenses
         assert (
             "urn:uuid:f7847120-fc6f-11e3-8158-56847afe9799"
-            == moby_dick_license.identifier  # type: ignore
+            == moby_dick_license.identifier
         )
         assert (
             "http://www.example.com/get{?id,checkout_id,expires,patron_id,passphrase,hint,hint_url,notification_url}"
-            == moby_dick_license.checkout_url  # type: ignore
+            == moby_dick_license.checkout_url
         )
-        assert "http://www.example.com/status/294024" == moby_dick_license.status_url  # type: ignore
+        assert "http://www.example.com/status/294024" == moby_dick_license.status_url
         assert (
             datetime.datetime(2016, 4, 25, 10, 25, 21, tzinfo=datetime.timezone.utc)
-            == moby_dick_license.expires  # type: ignore
+            == moby_dick_license.expires
         )
-        assert 30 == moby_dick_license.checkouts_left  # type: ignore
-        assert 10 == moby_dick_license.checkouts_available  # type: ignore
+        assert 30 == moby_dick_license.checkouts_left
+        assert 10 == moby_dick_license.checkouts_available
 
         # 3. Make sure that work objects contain all the required metadata
         assert isinstance(works, list)
@@ -182,16 +319,10 @@ class TestOPDS2WithODLImporter:
         assert moby_dick_license_pool == moby_dick_work.license_pools[0]
 
         # 4. Make sure that the failure is covered
-        assert 1 == len(failures)
-        huck_finn_failures = failures["9781234567897"]
-
-        assert isinstance(huck_finn_failures, list)
-        assert 1 == len(huck_finn_failures)
-        [huck_finn_failure] = huck_finn_failures
-        assert isinstance(huck_finn_failure, CoverageFailure)
-        assert "9781234567897" == huck_finn_failure.obj.identifier
-
-        assert "2 validation errors" in huck_finn_failure.exception
+        assert (
+            "Error validating publication (identifier: urn:isbn:9781234567897, title: None): 2 validation errors"
+            in caplog.text
+        )
 
         # 5. Make sure that expected work id are queued for recalculation
         policy = PresentationCalculationPolicy.recalculate_everything()
@@ -209,13 +340,10 @@ class TestOPDS2WithODLImporter:
         """Ensure that OPDSWithODLImporter correctly processes and imports a feed with an audiobook."""
 
         opds2_with_odl_importer_fixture.queue_fixture_file("license-audiobook.json")
-        (
-            imported_editions,
-            pools,
-            works,
-            failures,
-        ) = opds2_with_odl_importer_fixture.import_fixture_file(
-            "feed-audiobook-streaming.json"
+        (imported_editions, pools, works) = (
+            opds2_with_odl_importer_fixture.import_fixture_file(
+                "feed-audiobook-streaming.json"
+            )
         )
 
         # Make sure we imported one edition and it is an audiobook
@@ -268,7 +396,6 @@ class TestOPDS2WithODLImporter:
             imported_editions,
             pools,
             works,
-            failures,
         ) = opds2_with_odl_importer_fixture.import_fixture_file(
             "feed-audiobook-no-streaming.json"
         )
@@ -319,14 +446,11 @@ class TestOPDS2WithODLImporter:
         open access book.
         """
         importer = opds2_with_odl_importer_fixture.importer
-        importer.settings = db.opds2_odl_settings(
-            auth_type=auth_type,
-        )
+        importer._extractor._bearer_token_drm = auth_type == OPDS2AuthType.OAUTH
         (
             imported_editions,
             pools,
             works,
-            failures,
         ) = opds2_with_odl_importer_fixture.import_fixture_file(
             "open-access-title.json"
         )
@@ -378,15 +502,12 @@ class TestOPDS2WithODLImporter:
         unlimited access book.
         """
         importer = opds2_with_odl_importer_fixture.importer
-        importer.settings = db.opds2_odl_settings(
-            auth_type=auth_type,
-        )
+        importer._extractor._bearer_token_drm = auth_type == OPDS2AuthType.OAUTH
 
         (
             imported_editions,
             pools,
             works,
-            failures,
         ) = opds2_with_odl_importer_fixture.import_fixture_file(
             "unlimited-access-title.json"
         )
@@ -465,16 +586,18 @@ class TestOPDS2WithODLImporter:
             concurrency: int = 10,
             checkouts: int | None = 30,
             expires: str | None = "2016-04-25T12:25:21+02:00",
-        ) -> LicenseInfoHelper:
-            return LicenseInfoHelper(
-                license=LicenseHelper(
-                    identifier=license_id,
-                    concurrency=concurrency,
-                    checkouts=checkouts,
-                    expires=expires,
+        ) -> LicenseInfo:
+            return LicenseInfo(
+                identifier=license_id,
+                status=LicenseStatus.available,
+                checkouts=Checkouts(
+                    available=concurrency,
+                    left=checkouts,
                 ),
-                left=checkouts,
-                available=concurrency,
+                terms=Terms(
+                    expires=expires,
+                    concurrency=concurrency,
+                ),
             )
 
         opds2_with_odl_importer_fixture.queue_response(
@@ -488,10 +611,7 @@ class TestOPDS2WithODLImporter:
             imported_editions,
             pools,
             works,
-            failures,
-        ) = opds2_with_odl_importer_fixture.importer.import_from_feed(
-            json.dumps(feed_json)
-        )
+        ) = opds2_with_odl_importer_fixture.import_feed(json.dumps(feed_json))
 
         assert isinstance(pools, list)
         assert 3 == len(pools)
@@ -580,10 +700,7 @@ class TestOPDS2WithODLImporter:
             imported_editions,
             pools,
             works,
-            failures,
-        ) = opds2_with_odl_importer_fixture.importer.import_from_feed(
-            json.dumps(feed_json)
-        )
+        ) = opds2_with_odl_importer_fixture.import_feed(json.dumps(feed_json))
 
         assert isinstance(pools, list)
         assert 3 == len(pools)
@@ -618,32 +735,41 @@ class TestOPDS2WithODLImporter:
         "license",
         [
             pytest.param(
-                LicenseInfoHelper(
-                    license=LicenseHelper(
-                        concurrency=1, expires="2021-01-01T00:01:00+01:00"
+                LicenseInfo(
+                    identifier="urn:uuid:expired-license-1",
+                    status=LicenseStatus.available,
+                    checkouts=Checkouts(
+                        left=52,
+                        available=1,
                     ),
-                    left=52,
-                    available=1,
+                    terms=Terms(
+                        concurrency=1,
+                        expires="2021-01-01T00:01:00+01:00",
+                    ),
                 ),
                 id="expiration_date_in_the_past",
             ),
             pytest.param(
-                LicenseInfoHelper(
-                    license=LicenseHelper(
+                LicenseInfo(
+                    identifier="urn:uuid:left-is-zero",
+                    status=LicenseStatus.available,
+                    checkouts=Checkouts(
+                        left=0,
+                        available=1,
+                    ),
+                    terms=Terms(
                         concurrency=1,
                     ),
-                    left=0,
-                    available=1,
                 ),
                 id="left_is_zero",
             ),
             pytest.param(
-                LicenseInfoHelper(
-                    license=LicenseHelper(
-                        concurrency=1,
+                LicenseInfo(
+                    identifier="urn:uuid:status-unavailable",
+                    status=LicenseStatus.unavailable,
+                    checkouts=Checkouts(
+                        available=1,
                     ),
-                    available=1,
-                    status="unavailable",
                 ),
                 id="status_unavailable",
             ),
@@ -653,7 +779,7 @@ class TestOPDS2WithODLImporter:
     def test_odl_importer_expired_licenses(
         self,
         opds2_with_odl_importer_fixture: OPDS2WithODLImporterFixture,
-        license: LicenseInfoHelper,
+        license: LicenseInfo,
     ):
         """Ensure OPDSWithODLImporter imports expired licenses, but does not count them."""
         # Import the test feed with an expired ODL license.
@@ -661,11 +787,9 @@ class TestOPDS2WithODLImporter:
             imported_editions,
             imported_pools,
             imported_works,
-            failures,
         ) = opds2_with_odl_importer_fixture.import_fixture_file(licenses=[license])
 
-        # The importer created 1 edition and 1 work with no failures.
-        assert failures == {}
+        # The importer created 1 edition and 1 work.
         assert len(imported_editions) == 1
         assert len(imported_works) == 1
 
@@ -685,11 +809,16 @@ class TestOPDS2WithODLImporter:
         self,
         opds2_with_odl_importer_fixture: OPDS2WithODLImporterFixture,
     ):
-        license_expiry = dateutil.parser.parse("2021-01-01T00:01:00+00:00")
+        license_expiry = datetime.datetime.fromisoformat("2021-01-01T00:01:00+00:00")
         licenses = [
-            LicenseInfoHelper(
-                license=LicenseHelper(concurrency=1, expires=license_expiry),
-                available=1,
+            LicenseInfo(
+                identifier="test",
+                status=LicenseStatus.available,
+                checkouts=Checkouts(available=1),
+                terms=Terms(
+                    concurrency=1,
+                    expires=license_expiry,
+                ),
             )
         ]
 
@@ -700,11 +829,9 @@ class TestOPDS2WithODLImporter:
                 imported_editions,
                 imported_pools,
                 imported_works,
-                failures,
             ) = opds2_with_odl_importer_fixture.import_fixture_file(licenses=licenses)
 
             # The importer created 1 edition and 1 work with no failures.
-            assert failures == {}
             assert len(imported_editions) == 1
             assert len(imported_works) == 1
             assert len(imported_pools) == 1
@@ -726,11 +853,9 @@ class TestOPDS2WithODLImporter:
                 imported_editions,
                 imported_pools,
                 imported_works,
-                failures,
             ) = opds2_with_odl_importer_fixture.import_fixture_file(licenses=licenses)
 
             # The importer created 1 edition and 1 work with no failures.
-            assert failures == {}
             assert len(imported_editions) == 1
             assert len(imported_works) == 1
             assert len(imported_pools) == 1
@@ -755,41 +880,60 @@ class TestOPDS2WithODLImporter:
 
         # 1.1. Import the test feed with three inactive ODL licenses and two active licenses.
         inactive = [
-            LicenseInfoHelper(
-                # Expired
-                # (expiry date in the past)
-                license=LicenseHelper(
+            # Expired
+            # (expiry date in the past)
+            LicenseInfo(
+                identifier="urn:uuid:expired-license-1",
+                status=LicenseStatus.available,
+                checkouts=Checkouts(
+                    available=1,
+                ),
+                terms=Terms(
                     concurrency=1,
                     expires=datetime_helpers.utc_now() - datetime.timedelta(days=1),
                 ),
-                available=1,
             ),
-            LicenseInfoHelper(
-                # Expired
-                # (left is 0)
-                license=LicenseHelper(concurrency=1),
-                available=1,
-                left=0,
+            # Expired
+            # (left is 0)
+            LicenseInfo(
+                identifier="urn:uuid:expired-license-2",
+                status=LicenseStatus.available,
+                checkouts=Checkouts(
+                    available=1,
+                    left=0,
+                ),
             ),
-            LicenseInfoHelper(
-                # Expired
-                # (status is unavailable)
-                license=LicenseHelper(concurrency=1),
-                available=1,
-                status="unavailable",
+            # Expired
+            # (status is unavailable)
+            LicenseInfo(
+                identifier="urn:uuid:expired-license-3",
+                status=LicenseStatus.unavailable,
+                checkouts=Checkouts(
+                    available=1,
+                ),
             ),
         ]
         active = [
-            LicenseInfoHelper(
-                # Valid
-                license=LicenseHelper(concurrency=1),
-                available=1,
+            LicenseInfo(
+                identifier="urn:uuid:active-license-1",
+                status=LicenseStatus.available,
+                checkouts=Checkouts(
+                    available=1,
+                ),
+                terms=Terms(
+                    concurrency=1,
+                ),
             ),
-            LicenseInfoHelper(
-                # Valid
-                license=LicenseHelper(concurrency=5),
-                available=5,
-                left=40,
+            LicenseInfo(
+                identifier="urn:uuid:active-license-2",
+                status=LicenseStatus.available,
+                checkouts=Checkouts(
+                    available=5,
+                    left=40,
+                ),
+                terms=Terms(
+                    concurrency=5,
+                ),
             ),
         ]
 
@@ -797,12 +941,9 @@ class TestOPDS2WithODLImporter:
             imported_editions,
             imported_pools,
             imported_works,
-            failures,
         ) = opds2_with_odl_importer_fixture.import_fixture_file(
             licenses=active + inactive
         )
-
-        assert failures == {}
 
         # License pool was successfully created
         assert len(imported_pools) == 1
@@ -826,20 +967,40 @@ class TestOPDS2WithODLImporter:
         """Ensure OPDSWithODLImporter correctly imports licenses that have already been imported."""
 
         # 1.1. Import the test feed with ODL licenses that are not expired.
-        license_expiry = dateutil.parser.parse("2021-01-01T00:01:00+00:00")
+        license_expiry = datetime.datetime.fromisoformat("2021-01-01T00:01:00+00:00")
 
-        date = LicenseInfoHelper(
-            license=LicenseHelper(
+        date = LicenseInfo(
+            identifier="urn:uuid:date-license",
+            status=LicenseStatus.available,
+            checkouts=Checkouts(
+                available=1,
+            ),
+            terms=Terms(
                 concurrency=1,
                 expires=license_expiry,
             ),
-            available=1,
         )
-        left = LicenseInfoHelper(
-            license=LicenseHelper(concurrency=2), available=1, left=1
+        left = LicenseInfo(
+            identifier="urn:uuid:left-license",
+            status=LicenseStatus.available,
+            checkouts=Checkouts(
+                available=1,
+                left=1,
+            ),
+            terms=Terms(
+                concurrency=2,
+            ),
         )
-        perpetual = LicenseInfoHelper(license=LicenseHelper(concurrency=1), available=0)
-        licenses = [date, left, perpetual]
+        perpetual = LicenseInfo(
+            identifier="urn:uuid:perpetual-license",
+            status=LicenseStatus.available,
+            checkouts=Checkouts(
+                available=0,
+            ),
+            terms=Terms(
+                concurrency=1,
+            ),
+        )
 
         # Import with all licenses valid
         with freeze_time(license_expiry - datetime.timedelta(days=1)):
@@ -847,11 +1008,9 @@ class TestOPDS2WithODLImporter:
                 imported_editions,
                 imported_pools,
                 imported_works,
-                failures,
-            ) = opds2_with_odl_importer_fixture.import_fixture_file(licenses=licenses)
-
-            # No failures in the import
-            assert failures == {}
+            ) = opds2_with_odl_importer_fixture.import_fixture_file(
+                licenses=[date, left, perpetual]
+            )
 
             assert len(imported_pools) == 1
 
@@ -861,30 +1020,45 @@ class TestOPDS2WithODLImporter:
             assert imported_pool.licenses_owned == 3
 
             # No licenses are expired
-            assert sum(not l.is_inactive for l in imported_pool.licenses) == len(
-                licenses
-            )
+            assert sum(not l.is_inactive for l in imported_pool.licenses) == 3
 
         # Expire the first two licenses
 
         # The first one is expired by changing the time
         with freeze_time(license_expiry + datetime.timedelta(days=1)):
             # The second one is expired by setting left to 0
-            left.left = 0
+            left = LicenseInfo(
+                identifier="urn:uuid:left-license",
+                status=LicenseStatus.available,
+                checkouts=Checkouts(
+                    available=1,
+                    left=0,
+                ),
+                terms=Terms(
+                    concurrency=2,
+                ),
+            )
 
             # The perpetual license has a copy available
-            perpetual.available = 1
+            perpetual = LicenseInfo(
+                identifier="urn:uuid:perpetual-license",
+                status=LicenseStatus.available,
+                checkouts=Checkouts(
+                    available=1,
+                ),
+                terms=Terms(
+                    concurrency=1,
+                ),
+            )
 
             # Reimport
             (
                 imported_editions,
                 imported_pools,
                 imported_works,
-                failures,
-            ) = opds2_with_odl_importer_fixture.import_fixture_file(licenses=licenses)
-
-            # No failures in the import
-            assert failures == {}
+            ) = opds2_with_odl_importer_fixture.import_fixture_file(
+                licenses=[date, left, perpetual]
+            )
 
             assert len(imported_pools) == 1
 
@@ -899,16 +1073,26 @@ class TestOPDS2WithODLImporter:
             # Two licenses expired
             assert sum(l.is_inactive for l in imported_pool.licenses) == 2
 
-    def test_fetch_license_info(self, http_client: MockHttpClientFixture):
+    def test_fetch_license_info(
+        self, opds2_with_odl_importer_fixture: OPDS2WithODLImporterFixture
+    ):
         """Ensure that OPDS2WithODLImporter correctly retrieves license data from an OPDS2 feed."""
 
         def license_info_dict() -> dict[str, Any]:
-            return LicenseInfoHelper(available=10, license=LicenseHelper()).dict
+            return LicenseInfo(
+                identifier=str(uuid.uuid4()),
+                status=LicenseStatus.available,
+                checkouts=Checkouts(
+                    available=10,
+                ),
+            ).model_dump(mode="json", exclude_none=True)
+
+        importer = opds2_with_odl_importer_fixture.importer
+        http_client = opds2_with_odl_importer_fixture.client
 
         fetch = partial(
-            OPDS2WithODLImporter.fetch_license_info,
+            importer._fetch_license_document,
             "http://example.org/feed",
-            http_client.do_get,
         )
 
         # Bad status code
@@ -919,27 +1103,36 @@ class TestOPDS2WithODLImporter:
 
         # 200 status - parses response body
         expiry = utc_now() + datetime.timedelta(days=1)
-        license_helper = LicenseInfoHelper(
-            available=10, left=4, license=LicenseHelper(concurrency=11, expires=expiry)
+        license_helper = LicenseInfo(
+            identifier=str(uuid.uuid4()),
+            status=LicenseStatus.available,
+            checkouts=Checkouts(
+                available=10,
+                left=4,
+            ),
+            terms=Terms(
+                concurrency=11,
+                expires=expiry,
+            ),
         )
-        http_client.queue_response(200, content=license_helper.json)
+        http_client.queue_response(200, content=license_helper.model_dump_json())
         parsed = fetch()
         assert parsed.checkouts.available == 10
         assert parsed.checkouts.left == 4
         assert parsed.terms.concurrency == 11
         assert parsed.terms.expires == expiry
         assert parsed.status == LicenseStatus.available
-        assert parsed.identifier == license_helper.license.identifier
+        assert parsed.identifier == license_helper.identifier
 
         # 201 status - parses response body
-        http_client.queue_response(201, content=license_helper.json)
+        http_client.queue_response(201, content=license_helper.model_dump_json())
         parsed = fetch()
         assert parsed.checkouts.available == 10
         assert parsed.checkouts.left == 4
         assert parsed.terms.concurrency == 11
         assert parsed.terms.expires == expiry
         assert parsed.status == LicenseStatus.available
-        assert parsed.identifier == license_helper.license.identifier
+        assert parsed.identifier == license_helper.identifier
 
         # Bad data
         http_client.queue_response(201, content="{}")
@@ -985,115 +1178,44 @@ class TestOPDS2WithODLImporter:
         assert parsed is not None
         assert parsed.formats == ("format1", "format2")
 
-    def test_extract_next_links(
-        self,
-        opds2_with_odl_importer_fixture: OPDS2WithODLImporterFixture,
-        opds2_files_fixture: OPDS2FilesFixture,
-    ):
-        extract_next_links = opds2_with_odl_importer_fixture.importer.extract_next_links
-
-        # Bad feed
-        assert extract_next_links(b"garbage") == []
-
+    def test_next_page(self, opds2_files_fixture: OPDS2FilesFixture) -> None:
         # No next links
-        assert extract_next_links(opds2_files_fixture.sample_data("feed.json")) == []
+        feed = PublicationFeedNoValidation.model_validate_json(
+            opds2_files_fixture.sample_data("feed.json")
+        )
+        assert OPDS2WithODLImporter.next_page(feed) is None
 
-        # One next link
-        assert extract_next_links(opds2_files_fixture.sample_data("feed2.json")) == [
-            "http://bookshelf-feed-demo.us-east-1.elasticbeanstalk.com/v1/publications?page=2&limit=100"
-        ]
+        # Feed has next link
+        feed = PublicationFeedNoValidation.model_validate_json(
+            opds2_files_fixture.sample_data("feed2.json")
+        )
+        assert (
+            OPDS2WithODLImporter.next_page(feed)
+            == "http://bookshelf-feed-demo.us-east-1.elasticbeanstalk.com/v1/publications?page=2&limit=100"
+        )
 
-    def test_extract_last_update_dates(
+    def test__filtered_publications(
         self,
         opds2_with_odl_importer_fixture: OPDS2WithODLImporterFixture,
         opds2_files_fixture: OPDS2FilesFixture,
-    ):
-        extract_last_update_dates = (
-            opds2_with_odl_importer_fixture.importer.extract_last_update_dates
-        )
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        importer = opds2_with_odl_importer_fixture.importer
 
-        # Bad feed
-        assert extract_last_update_dates(b"garbage") == []
+        opds2_feed = json.loads(opds2_files_fixture.sample_text("feed.json"))
+        publications = [opds2_feed["publications"][0], {}]
+        filtered = list(importer._filtered_publications(publications))
 
-        # Feed with last update dates
-        expected_dates = [
-            (
-                "urn:isbn:978-3-16-148410-0",
-                datetime.datetime(2015, 9, 29, 17, 0, tzinfo=datetime.timezone.utc),
-            ),
-            (
-                "http://example.org/huckleberry-finn",
-                datetime.datetime(2015, 9, 29, 17, 0, tzinfo=datetime.timezone.utc),
-            ),
-            (
-                "urn:proquest.com/document-id/181639",
-                datetime.datetime(2022, 9, 12, 21, 4, tzinfo=datetime.timezone.utc),
-            ),
-        ]
+        # Only the first publication is valid, so it is the one returned
+        assert len(filtered) == 1
+        identifier, publication = filtered[0]
 
+        assert identifier.type == Identifier.ISBN
+        assert identifier.identifier == "978-3-16-148410-0"
+        assert publication.metadata.identifier == "urn:isbn:978-3-16-148410-0"
+
+        # We also logged a warning about the invalid publication
         assert (
-            extract_last_update_dates(opds2_files_fixture.sample_data("feed.json"))
-            == expected_dates
+            "Error validating publication (identifier: None, title: None)"
+            in caplog.text
         )
-
-        # Feed with bad publication - we still get dates from valid items in feed
-        feed_dict = json.loads(opds2_files_fixture.sample_data("feed.json"))
-        feed_dict["publications"].insert(0, {})
-        assert extract_last_update_dates(json.dumps(feed_dict)) == expected_dates
-
-
-class OPDS2WithODLImportMonitorFixture:
-    def __init__(self, db: DatabaseTransactionFixture):
-        self.feed_url = "https://opds.import.com:9999/feed"
-        self.username = "username"
-        self.password = "password"
-        self.collection = db.collection(
-            protocol=OPDS2WithODLApi,
-            settings=OPDS2WithODLSettings(
-                external_account_id=self.feed_url,
-                username=self.username,
-                password=self.password,
-                data_source="OPDS",
-            ),
-        )
-        self.monitor = OPDS2WithODLImportMonitor(
-            db.session, self.collection, OPDS2WithODLImporter
-        )
-
-
-@pytest.fixture
-def opds2_with_odl_import_monitor_fixture(
-    db: DatabaseTransactionFixture,
-) -> OPDS2WithODLImportMonitorFixture:
-    return OPDS2WithODLImportMonitorFixture(db)
-
-
-class TestOPDS2WithODLImportMonitor:
-    def test_get(
-        self,
-        opds2_with_odl_import_monitor_fixture: OPDS2WithODLImportMonitorFixture,
-    ):
-        monitor = opds2_with_odl_import_monitor_fixture.monitor
-
-        with patch.object(HTTP, "request_with_timeout") as mock_get:
-            monitor._get("/absolute/path", {})
-            assert mock_get.call_args.args == (
-                "GET",
-                "https://opds.import.com:9999/absolute/path",
-            )
-
-        with patch.object(HTTP, "request_with_timeout") as mock_get:
-            monitor._get("relative/path", {})
-            assert mock_get.call_args.args == (
-                "GET",
-                "https://opds.import.com:9999/relative/path",
-            )
-
-        with patch.object(HTTP, "request_with_timeout") as mock_get:
-            monitor._get("http://example.com/full/url")
-            assert mock_get.call_args.args == ("GET", "http://example.com/full/url")
-            # assert that we set the expected extra args to the HTTP request
-            kwargs = mock_get.call_args.kwargs
-            assert kwargs.get("timeout") == 120
-            assert kwargs.get("max_retry_count") == monitor._max_retry_count
-            assert kwargs.get("allowed_response_codes") == ["2xx", "3xx"]

@@ -367,7 +367,7 @@ class CollectionInputScript(Script):
         return parsed
 
     @classmethod
-    def arg_parser(cls):
+    def arg_parser(cls) -> argparse.ArgumentParser:
         parser = argparse.ArgumentParser()
         parser.add_argument(
             "--collection",

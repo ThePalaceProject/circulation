@@ -120,3 +120,21 @@ class OPDS2API(BaseOPDSAPI):
         from palace.manager.celery.tasks.opds2 import import_collection
 
         return import_collection.s(collection_id, force=force)
+
+    @classmethod
+    def update_collection_token_auth_url(cls, collection: Collection, url: str) -> bool:
+        """
+        Update the collection's integration context with the token authentication URL.
+
+        This method checks if the provided URL matches the current token authentication
+        URL in the collection's integration context. If it does not match, it updates
+        the context with the new URL and returns True. If it matches, it returns False
+        without making any changes.
+        """
+        integration = collection.integration_configuration
+        if integration.context.get(cls.TOKEN_AUTH_CONFIG_KEY) == url:
+            # No change, so we don't need to update the context.
+            return False
+
+        integration.context_update({cls.TOKEN_AUTH_CONFIG_KEY: url})
+        return True

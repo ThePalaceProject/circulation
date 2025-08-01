@@ -74,18 +74,7 @@
                   "value": 7.99
                 },
                 "created": "2014-04-25T12:25:21+02:00",
-                "terms": {
-                  {% if license.checkouts is not none %}
-                    "checkouts": {{ license.checkouts }},
-                  {% endif %}
-                  {% if license.concurrency is not none %}
-                      "concurrency": {{ license.concurrency }},
-                  {% endif %}
-                  {% if license.expires is not none %}
-                    "expires": "{{ license.expires }}",
-                  {% endif %}
-                  "length": 5097600
-                },
+                "terms": {{ license.terms.model_dump_json(exclude_defaults=True) }},
                 "protection": {
                   "format": [
                     "application/vnd.adobe.adept+xml",

@@ -7,6 +7,7 @@ import uuid
 from collections.abc import Callable
 from functools import partial
 
+from celery.canvas import Signature
 from flask import url_for
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
@@ -725,3 +726,9 @@ class OPDS2WithODLApi(
         self, lpdms: list[LicensePoolDeliveryMechanism]
     ) -> list[LicensePoolDeliveryMechanism]:
         return self._format_priorities.prioritize_mechanisms(lpdms)
+
+    @classmethod
+    def import_task(cls, collection_id: int, force: bool = False) -> Signature:
+        from palace.manager.celery.tasks.opds_odl import import_collection
+
+        return import_collection.s(collection_id, force=force)

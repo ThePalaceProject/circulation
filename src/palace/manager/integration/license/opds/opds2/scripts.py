@@ -18,7 +18,7 @@ class OPDS2ImportScript(CollectionInputScript):
 
     @classmethod
     def arg_parser(cls) -> argparse.ArgumentParser:
-        parser = CollectionInputScript.arg_parser()
+        parser = super().arg_parser()
         parser.add_argument(
             "--force",
             help="Import the feed from scratch, even if it seems like it was already imported.",
@@ -64,7 +64,7 @@ class OPDS2ReaperScript(CollectionInputScript):
 
     @classmethod
     def arg_parser(cls) -> argparse.ArgumentParser:
-        parser = CollectionInputScript.arg_parser()
+        parser = super().arg_parser()
         parser.add_argument(
             "--force",
             help="Import the feed from scratch, even if it seems like it was already imported.",

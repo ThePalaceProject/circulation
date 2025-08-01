@@ -5,8 +5,15 @@ from sqlalchemy import delete, select
 from sqlalchemy.exc import NoResultFound
 from sqlalchemy.orm import Session
 
+from palace.manager.celery import importer
+from palace.manager.celery.importer import import_lock
 from palace.manager.celery.task import Task
+from palace.manager.celery.tasks import apply
+from palace.manager.celery.utils import load_from_id
 from palace.manager.integration.license.opds.odl.api import OPDS2WithODLApi
+from palace.manager.integration.license.opds.odl.importer import (
+    importer_from_collection,
+)
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.service.analytics.eventdata import AnalyticsEventData
 from palace.manager.service.celery.celery import QueueNames
@@ -285,3 +292,63 @@ def recalculate_hold_queue_collection(
     task.log.info(
         f"Finished recalculating hold queue for collection {collection_name} ({collection_id})."
     )
+
+
+@shared_task(queue=QueueNames.default, bind=True)
+def import_all(task: Task, force: bool = False) -> None:
+    """
+    Run import task for all OPDS2WithODLApi collections.
+    """
+    with task.session() as session:
+        registry = task.services.integration_registry().license_providers()
+        collection_query = Collection.select_by_protocol(
+            OPDS2WithODLApi, registry=registry
+        )
+        importer.import_all(
+            session,
+            collection_query,
+            import_collection.s(
+                force=force,
+            ),
+            task.log,
+        )
+
+
+@shared_task(queue=QueueNames.default, bind=True)
+def import_collection(
+    task: Task,
+    collection_id: int,
+    url: str | None = None,
+    *,
+    force: bool = False,
+) -> None:
+    redis = task.services.redis().client()
+    with import_lock(redis, collection_id).lock(), task.session() as session:
+        collection = load_from_id(session, Collection, collection_id)
+        registry = task.services.integration_registry().license_providers()
+
+        importer = importer_from_collection(collection, registry)
+        feed_page = importer.get_feed(url)
+
+        importer.import_feed(
+            session,
+            feed_page,
+            collection,
+            apply_bibliographic=apply.bibliographic_apply.delay,
+            apply_circulation=apply.circulation_apply.delay,
+            import_even_if_unchanged=force,
+        )
+
+    next_link = importer.next_page(feed_page)
+    if next_link is not None:
+        # This page is complete, but there are more pages to import, so we requeue ourselves with the
+        # next page URL.
+        raise task.replace(
+            import_collection.s(
+                collection_id=collection_id,
+                url=next_link,
+                force=force,
+            )
+        )
+
+    task.log.info("Import complete.")

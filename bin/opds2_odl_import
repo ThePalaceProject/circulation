@@ -1,0 +1,5 @@
+#!/usr/bin/env python
+
+from palace.manager.integration.license.opds.odl.scripts import OPDS2WithODLImportScript
+
+OPDS2WithODLImportScript().run()
