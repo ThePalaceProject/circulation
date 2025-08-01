@@ -57,7 +57,7 @@ from palace.manager.integration.license.boundless.settings import BoundlessSetti
 from palace.manager.integration.license.opds.odl.api import OPDS2WithODLApi
 from palace.manager.integration.license.opds.odl.settings import OPDS2WithODLSettings
 from palace.manager.integration.license.opds.opds1 import OPDSAPI, OPDSImporterSettings
-from palace.manager.integration.license.opds.opds2 import OPDS2API
+from palace.manager.integration.license.opds.opds2.api import OPDS2API
 from palace.manager.integration.license.opds.opds_for_distributors import (
     OPDSForDistributorsAPI,
     OPDSForDistributorsSettings,
