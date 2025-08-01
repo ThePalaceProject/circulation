@@ -37,7 +37,7 @@ class PasswordAdminAuthenticationProvider(AdminAuthenticationProvider, LoggerMix
             password_sign_in_url=password_sign_in_url,
             forgot_password_url=forgot_password_url,
             support_contact_url=AdminClientConfig.admin_client_settings().support_contact_url,
-            support_contact_text=AdminClientConfig.admin_client_settings().support_contact_url,
+            support_contact_text=AdminClientConfig.admin_client_settings().support_contact_text,
             label_style=label_style,
             input_style=input_style,
             button_style=button_style,
