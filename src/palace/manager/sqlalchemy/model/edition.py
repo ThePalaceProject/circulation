@@ -617,7 +617,8 @@ class Edition(Base, EditionConstants):
         medium = self.medium_for_permanent_work_id.get(self.medium, None)
         if not title or not medium:
             # If a book has no title or medium, it has no permanent work ID.
-            self.permanent_work_id = None
+            if self.permanent_work_id != None:
+                self.permanent_work_id = None
             return
 
         author = self.author_for_permanent_work_id
