@@ -15,6 +15,10 @@
         showCircEventsDownload: {{ "true" if show_circ_events_download else "false" }},
 {%- if support_contact_url %}
         support_contact_url: "{{ support_contact_url }}",
+        supportContactUrl: "{{ support_contact_url }}",
+{%- endif %}
+{%- if support_contact_text %}
+        supportContactText: "{{ support_contact_text }}",
 {%- endif %}
         settingUp: {{ "true" if setting_up else "false" }},
         email: "{{ email }}",

@@ -75,6 +75,7 @@ class ViewController(AdminController):
                 sitewide_tos_text=Configuration.DEFAULT_TOS_TEXT,
                 show_circ_events_download=AdminClientConfig.admin_feature_flags().show_circ_events_download,
                 support_contact_url=AdminClientConfig.admin_client_settings().support_contact_url,
+                support_contact_text=AdminClientConfig.admin_client_settings().support_contact_text,
                 setting_up=setting_up,
                 email=email,
                 roles=roles,
