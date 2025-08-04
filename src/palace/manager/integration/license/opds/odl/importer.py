@@ -46,8 +46,19 @@ class ApplyCirculationCallable(Protocol):
     ) -> Any: ...
 
 
+class ImporterSettingsProtocol(Protocol):
+    @property
+    def external_account_id(self) -> str: ...
+    @property
+    def ignored_identifier_types(self) -> list[str]: ...
+    @property
+    def custom_accept_header(self) -> str: ...
+    @property
+    def max_retry_count(self) -> int: ...
+
+
 PublicationType = TypeVar("PublicationType", bound=opds2.BasePublication)
-SettingsType = TypeVar("SettingsType", bound=OPDS2ImporterSettings)
+SettingsType = TypeVar("SettingsType", bound=ImporterSettingsProtocol)
 
 
 class OPDS2WithODLImporter(Generic[PublicationType, SettingsType], LoggerMixin):
