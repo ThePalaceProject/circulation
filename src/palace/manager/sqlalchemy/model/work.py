@@ -1314,13 +1314,18 @@ class Work(Base, LoggerMixin):
         for classification in classifications:
             classifier.add(classification)
 
-        (genre_weights, self.fiction, self.audience, target_age) = classifier.classify(
+        (genre_weights, new_fiction, new_audience, target_age) = classifier.classify(
             default_fiction=default_fiction, default_audience=default_audience
         )
 
         new_target_age = tuple_to_numericrange(target_age)
         if self.target_age != new_target_age:
             self.target_age = new_target_age
+
+        if new_fiction != old_fiction:
+            self.fiction = new_fiction
+        if new_audience != old_audience:
+            self.audience = new_audience
 
         workgenres, workgenres_changed = self.assign_genres_from_weights(genre_weights)
 

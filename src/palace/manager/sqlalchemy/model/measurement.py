@@ -844,7 +844,8 @@ class Measurement(Base):
             return None
         elif self.data_source.name == DataSourceConstants.METADATA_WRANGLER:
             # Data from the metadata wrangler comes in pre-normalized.
-            self._normalized_value = self.value
+            if self._normalized_value != self.value:
+                self._normalized_value = self.value
         elif (
             self.quantity_measured == self.RATING
             and self.data_source.name in self.RATING_SCALES
@@ -854,7 +855,9 @@ class Measurement(Base):
             scale_min, scale_max = self.RATING_SCALES[self.data_source.name]
             width = float(scale_max - scale_min)
             value = self.value - scale_min
-            self._normalized_value = value / width
+            new_normalized_value = value / width
+            if self._normalized_value != new_normalized_value:
+                self._normalized_value = new_normalized_value
         elif self.quantity_measured in self.PERCENTILE_SCALES:
             # Other measured quantities need to be normalized using
             # a percentile scale determined emperically.
@@ -865,6 +868,8 @@ class Measurement(Base):
                 return None
             percentiles = by_data_source[self.data_source.name]
             position = bisect.bisect_left(percentiles, self.value)
-            self._normalized_value = position * 0.01
+            new_normalized_value = position * 0.01
+            if self._normalized_value != new_normalized_value:
+                self._normalized_value = new_normalized_value
 
         return self._normalized_value
