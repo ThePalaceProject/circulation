@@ -263,7 +263,7 @@ class TestOPDS2WithODLApi:
     ) -> None:
         # The response can't be parsed as JSON.
         opds2_with_odl_api_fixture.mock_http.queue_response(
-            status, other_headers=headers, content=content
+            status, headers=headers, content=content
         )
         with pytest.raises(exception):
             opds2_with_odl_api_fixture.api._request_loan_status("GET", "http://loan")
@@ -727,12 +727,12 @@ class TestOPDS2WithODLApi:
         # But the distributor says there are no available copies.
         opds2_with_odl_api_fixture.mock_http.queue_response(
             400,
-            response_type,
+            media_type=response_type,
             content=opds2_with_odl_api_fixture.files.sample_text("unavailable.json"),
         )
         opds2_with_odl_api_fixture.mock_http.queue_response(
             400,
-            response_type,
+            media_type=response_type,
             content=opds2_with_odl_api_fixture.files.sample_text("unavailable.json"),
         )
 
@@ -788,13 +788,13 @@ class TestOPDS2WithODLApi:
         # But the distributor says there are no available copies for license_unavailable_1
         opds2_with_odl_api_fixture.mock_http.queue_response(
             400,
-            "application/api-problem+json",
+            media_type="application/api-problem+json",
             content=opds2_with_odl_api_fixture.files.sample_text("unavailable.json"),
         )
         # And for license_unavailable_2
         opds2_with_odl_api_fixture.mock_http.queue_response(
             400,
-            "application/api-problem+json",
+            media_type="application/api-problem+json",
             content=opds2_with_odl_api_fixture.files.sample_text("unavailable.json"),
         )
         # But license_lent is still available, and we successfully check it out
@@ -838,7 +838,7 @@ class TestOPDS2WithODLApi:
         # But the distributor says there are no available copies.
         opds2_with_odl_api_fixture.mock_http.queue_response(
             400,
-            "application/api-problem+json",
+            media_type="application/api-problem+json",
             content=opds2_with_odl_api_fixture.files.sample_text("unavailable.json"),
         )
 
@@ -868,7 +868,7 @@ class TestOPDS2WithODLApi:
         # Test the case where we get bad JSON back from the distributor.
         opds2_with_odl_api_fixture.mock_http.queue_response(
             400,
-            "application/api-problem+json",
+            media_type="application/api-problem+json",
             content="hot garbage",
         )
 
@@ -877,7 +877,7 @@ class TestOPDS2WithODLApi:
 
         # Test the case where we just get an unknown bad response.
         opds2_with_odl_api_fixture.mock_http.queue_response(
-            500, "text/plain", content="halt and catch fire 🔥"
+            500, media_type="text/plain", content="halt and catch fire 🔥"
         )
         with pytest.raises(BadResponseException):
             opds2_with_odl_api_fixture.api_checkout()

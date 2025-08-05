@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Generator
+from collections import deque
+from collections.abc import Callable, Generator, Mapping
 from contextlib import contextmanager
 from typing import Any
 from unittest.mock import patch
@@ -15,14 +16,14 @@ from tests.mocks.mock import MockRequestsResponse
 
 class MockHttpClientFixture:
     def __init__(self) -> None:
-        self.responses: list[Response] = []
+        self.responses: deque[Response] = deque()
         self.requests: list[str] = []
         self.requests_args: list[RequestKwargs] = []
         self.requests_methods: list[str] = []
         self._unpatch: Callable[[], None] | None = None
 
     def reset_mock(self) -> None:
-        self.responses = []
+        self.responses = deque()
         self.requests = []
         self.requests_args = []
         self.requests_methods = []
@@ -37,6 +38,8 @@ class MockHttpClientFixture:
         self,
         response: MockRequestsResponse,
         /,
+        *,
+        index: int | None = ...,
     ) -> None: ...
 
     @overload
@@ -44,32 +47,39 @@ class MockHttpClientFixture:
         self,
         code: int,
         /,
+        *,
         media_type: str | None = ...,
-        other_headers: dict[str, str] | None = ...,
+        headers: dict[str, str] | None = ...,
         content: str | bytes | dict[str, Any] = ...,
+        index: int | None = ...,
     ) -> None: ...
 
     def queue_response(
         self,
         response_or_code: int | MockRequestsResponse,
         /,
+        *,
         media_type: str | None = None,
-        other_headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         content: str | bytes | dict[str, Any] = "",
+        index: int | None = None,
     ) -> None:
         """Queue a response of the type produced by HTTP.get_with_timeout."""
         if not isinstance(response_or_code, MockRequestsResponse):
-            headers = dict(other_headers) if other_headers else {}
+            headers_dict = dict(headers) if headers else {}
             if media_type:
-                headers["Content-Type"] = media_type
-            response = MockRequestsResponse(response_or_code, headers, content)
+                headers_dict["Content-Type"] = media_type
+            response = MockRequestsResponse(response_or_code, headers_dict, content)
         else:
             response = response_or_code
 
-        self.responses.append(response)
+        if index is None:
+            self.responses.append(response)
+        else:
+            self.responses.insert(index, response)
 
     def _request(self, *args: Any, **kwargs: Any) -> Response:
-        return self.responses.pop(0)
+        return self.responses.popleft()
 
     def do_request(
         self, http_method: str, url: str, **kwargs: Unpack[RequestKwargs]

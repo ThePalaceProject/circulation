@@ -173,7 +173,7 @@ class TestNoveListAPI:
         self, novelist_fixture: NoveListFixture, http_client: MockHttpClientFixture
     ):
         # Test the lookup_recommendations() method.
-        http_client.queue_response(200, "text/html", content="yay")
+        http_client.queue_response(200, media_type="text/html", content="yay")
 
         novelist = novelist_fixture.novelist
 
