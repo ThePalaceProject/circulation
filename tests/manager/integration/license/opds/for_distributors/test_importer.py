@@ -20,7 +20,7 @@ from palace.manager.sqlalchemy.model.licensing import (
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
 from palace.manager.sqlalchemy.util import get_one
 from palace.manager.util.datetime_helpers import utc_now
-from tests.manager.integration.license.opds.for_distributors.test_api import (
+from tests.manager.integration.license.opds.for_distributors.conftest import (
     OPDSForDistributorsAPIFixture,
 )
 

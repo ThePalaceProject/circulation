@@ -16,24 +16,17 @@ from palace.manager.api.circulation.fulfillment import (
 from palace.manager.integration.license.opds.for_distributors.api import (
     OPDSForDistributorsAPI,
 )
-from palace.manager.integration.license.opds.for_distributors.settings import (
-    OPDSForDistributorsSettings,
-)
 from palace.manager.integration.license.overdrive.api import OverdriveAPI
 from palace.manager.sqlalchemy.constants import MediaTypes
-from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.credential import Credential
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.identifier import Identifier
-from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism, RightsStatus
 from palace.manager.sqlalchemy.model.patron import Loan
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
 from palace.manager.util.datetime_helpers import utc_now
-from tests.fixtures.database import DatabaseTransactionFixture
-from tests.fixtures.work import WorkIdPolicyQueuePresentationRecalculationFixture
 from tests.manager.integration.license.opds.for_distributors.conftest import (
-    OPDSForDistributorsFilesFixture,
+    OPDSForDistributorsAPIFixture,
 )
 from tests.mocks.opds_for_distributors import MockOPDSForDistributorsAPI
 
@@ -70,50 +63,6 @@ def authentication_document() -> Callable[[str], str]:
         return json.dumps(doc)
 
     return _auth_doc
-
-
-class OPDSForDistributorsAPIFixture:
-    def __init__(
-        self,
-        db: DatabaseTransactionFixture,
-        files: OPDSForDistributorsFilesFixture,
-        work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
-    ):
-        self.db = db
-        self.collection = self.mock_collection(db.default_library())
-        self.api = MockOPDSForDistributorsAPI(db.session, self.collection)
-        self.files = files
-        self.work_policy_recalc_fixture = work_policy_recalc_fixture
-
-    def mock_collection(
-        self,
-        library: Library | None = None,
-        name: str = "Test OPDS For Distributors Collection",
-    ) -> Collection:
-        """Create a mock OPDS For Distributors collection to use in tests."""
-        library = library or self.db.default_library()
-        return self.db.collection(
-            name,
-            protocol=OPDSForDistributorsAPI,
-            settings=OPDSForDistributorsSettings(
-                username="a",
-                password="b",
-                data_source="data_source",
-                external_account_id="http://opds",
-            ),
-            library=library,
-        )
-
-
-@pytest.fixture(scope="function")
-def opds_dist_api_fixture(
-    db: DatabaseTransactionFixture,
-    opds_dist_files_fixture: OPDSForDistributorsFilesFixture,
-    work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
-) -> OPDSForDistributorsAPIFixture:
-    return OPDSForDistributorsAPIFixture(
-        db, opds_dist_files_fixture, work_policy_recalc_fixture
-    )
 
 
 class TestOPDSForDistributorsAPI:

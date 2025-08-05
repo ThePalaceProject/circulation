@@ -10,7 +10,7 @@ from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import LicensePool
 from palace.manager.sqlalchemy.util import create
 from palace.manager.util.opds_writer import OPDSFeed
-from tests.manager.integration.license.opds.for_distributors.test_api import (
+from tests.manager.integration.license.opds.for_distributors.conftest import (
     OPDSForDistributorsAPIFixture,
 )
 from tests.mocks.mock import MockRequestsResponse
