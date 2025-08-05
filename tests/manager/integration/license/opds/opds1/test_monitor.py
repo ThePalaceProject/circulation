@@ -9,7 +9,6 @@ from palace.manager.integration.license.opds.opds1.api import OPDSAPI
 from palace.manager.integration.license.opds.opds1.importer import OPDSImporter
 from palace.manager.integration.license.opds.opds1.monitor import OPDSImportMonitor
 from palace.manager.integration.license.overdrive.api import OverdriveAPI
-from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.coverage import CoverageRecord
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
@@ -21,28 +20,11 @@ from palace.manager.util.http import HTTP, BadResponseException
 from palace.manager.util.opds_writer import AtomFeed, OPDSFeed
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.http import MockHttpClientFixture
+from tests.manager.integration.license.opds.opds1.conftest import OPDSImporterFixture
 from tests.manager.integration.license.opds.opds1.test_importer import (
     DoomedOPDSImporter,
-    OPDSImporterFixture,
 )
 from tests.mocks.mock import MockRequestsResponse
-
-
-class OPDSImportMonitorFixture:
-    def collection(self, feed_url: str | None = None) -> Collection:
-        feed_url = feed_url or "http://fake.opds/"
-        settings = {"external_account_id": feed_url, "data_source": "OPDS"}
-        return self.db.collection(protocol=OPDSAPI.label(), settings=settings)
-
-    def __init__(self, db: DatabaseTransactionFixture):
-        self.db = db
-
-
-@pytest.fixture()
-def opds_import_monitor_fixture(
-    db: DatabaseTransactionFixture,
-) -> OPDSImportMonitorFixture:
-    return OPDSImportMonitorFixture(db)
 
 
 class TestOPDSImportMonitor:
