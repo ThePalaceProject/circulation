@@ -4,6 +4,7 @@ import pytest
 from pydantic import TypeAdapter, ValidationError
 
 from palace.manager.opds.types.language import LanguageMap, LanguageTag
+from palace.manager.service.logging.configuration import LogLevel
 
 
 class TestLanguageTag:
@@ -17,9 +18,6 @@ class TestLanguageTag:
             ("en_uk", "eng"),
             ("fra", "fra"),
             ("fR", "fra"),
-            ("fre", "fra"),
-            ("ger", "deu"),
-            ("GERMAN", "deu"),
         ],
     )
     def test_validation(self, language_code: str, expected: str) -> None:
@@ -85,12 +83,33 @@ class TestLanguageTag:
         assert language_code.original == "en-Latn-GB-x-private"
         assert language_code.name == "English"
 
-        language_code = LanguageTag("chinese")
-        assert language_code.primary_language == "zho"
-        assert language_code.code == str(language_code) == "zho"
-        assert language_code.subtags == ("zho",)
-        assert language_code.original == "chinese"
-        assert language_code.name == "Chinese"
+    @pytest.mark.parametrize(
+        "language_code, expected, warning",
+        [
+            ("fre", "fra", "use the terminological code 'fra' instead"),
+            ("ger", "deu", "use the terminological code 'deu' instead"),
+            ("GERMAN", "deu", "use the 3-letter code 'deu' instead"),
+            ("chinese", "zho", "use the 3-letter code 'zho' instead"),
+        ],
+    )
+    def test_lenient_parsing(
+        self,
+        language_code: str,
+        expected: str,
+        warning: str,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """
+        Test our lenient parsing of language codes.
+        """
+        caplog.set_level(LogLevel.warning)
+        assert LanguageTag(language_code) == expected
+        assert TypeAdapter(LanguageTag).validate_python(language_code) == expected
+        assert (
+            TypeAdapter(LanguageTag).validate_json(json.dumps(language_code))
+            == expected
+        )
+        assert warning in caplog.text
 
 
 class TestLanguageMap:

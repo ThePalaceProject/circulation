@@ -8,8 +8,10 @@ import pycountry
 from pydantic import GetCoreSchemaHandler
 from pydantic_core import core_schema
 
+from palace.manager.util.log import LoggerMixin
 
-class LanguageTag(str):
+
+class LanguageTag(str, LoggerMixin):
     """
     Parses a subset of IETF BCP 47 language tags.
 
@@ -67,12 +69,21 @@ class LanguageTag(str):
                 # fall back to try the bibliographic code.
                 # See: https://en.wikipedia.org/wiki/ISO_639-2#B_and_T_codes
                 code = pycountry.languages.get(bibliographic=primary_language)
+                if code is not None:
+                    cls.logger().warning(
+                        f"Using bibliographic code '{primary_language}' for language '{code.name}'. "
+                        f"This is not BCP47 compliant, use the terminological code '{code.alpha_3}' instead."
+                    )
         else:
             # Fall back to looking up the language by name.
             # TODO: We may want to add a strict mode, that raises an error in this case.
             code = pycountry.languages.get(name=value)
             if code is not None:
                 subtags = (code.alpha_3,)
+                cls.logger().warning(
+                    f"Using language name '{value}' instead of a BCP47 language tag. "
+                    f"This is not BCP47 compliant, use the 3-letter code '{code.alpha_3}' instead."
+                )
 
         if code is None:
             raise ValueError(f"Invalid language code '{primary_language}'")
