@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from palace.manager.celery.task import Task
 from palace.manager.integration.goals import Goals
-from palace.manager.integration.license.opds.opds1 import OPDSImporterSettings
+from palace.manager.integration.license.opds.opds1.settings import OPDSImporterSettings
 from palace.manager.service.celery.celery import QueueNames
 from palace.manager.service.email.email import SendEmailCallable
 from palace.manager.service.integration_registry.license_providers import (

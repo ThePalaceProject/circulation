@@ -14,12 +14,12 @@ from palace.manager.feed.annotator.circulation import CirculationManagerAnnotato
 from palace.manager.feed.annotator.verbose import VerboseAnnotator
 from palace.manager.feed.types import FeedEntryType, Link, WorkEntry
 from palace.manager.feed.util import strftime
-from palace.manager.integration.license.opds.odl.api import OPDS2WithODLApi
-from palace.manager.integration.license.opds.opds1 import OPDSAPI
-from palace.manager.integration.license.opds.opds2.api import OPDS2API
-from palace.manager.integration.license.opds.opds_for_distributors import (
+from palace.manager.integration.license.opds.for_distributors.api import (
     OPDSForDistributorsAPI,
 )
+from palace.manager.integration.license.opds.odl.api import OPDS2WithODLApi
+from palace.manager.integration.license.opds.opds1.api import OPDSAPI
+from palace.manager.integration.license.opds.opds2.api import OPDS2API
 from palace.manager.search.external_search import WorkSearchResult
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.classification import Subject

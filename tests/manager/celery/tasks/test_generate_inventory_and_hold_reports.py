@@ -13,7 +13,7 @@ from palace.manager.celery.tasks.generate_inventory_and_hold_reports import (
     generate_report,
     library_report_integrations,
 )
-from palace.manager.integration.license.opds.opds1 import OPDSImporterSettings
+from palace.manager.integration.license.opds.opds1.settings import OPDSImporterSettings
 from palace.manager.integration.license.overdrive.api import OverdriveAPI
 from palace.manager.opds.odl.info import LicenseStatus
 from palace.manager.service.logging.configuration import LogLevel

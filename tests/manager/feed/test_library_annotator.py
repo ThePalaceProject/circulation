@@ -36,7 +36,7 @@ from palace.manager.integration.goals import Goals
 from palace.manager.integration.license.boundless.constants import (
     BAKER_TAYLOR_KDRM_PARAMS,
 )
-from palace.manager.integration.license.opds.opds1 import OPDSXMLParser
+from palace.manager.integration.license.opds.opds1.xml_parser import OPDSXMLParser
 from palace.manager.integration.metadata.novelist import (
     NoveListAPI,
     NoveListApiSettings,

@@ -8,7 +8,7 @@ from uritemplate import URITemplate
 from palace.manager.api.circulation.base import BaseCirculationAPI
 from palace.manager.api.circulation.exceptions import CannotFulfill
 from palace.manager.api.circulation.fulfillment import RedirectFulfillment
-from palace.manager.integration.license.opds.opds1 import BaseOPDSAPI
+from palace.manager.integration.license.opds.base.api import BaseOPDSAPI
 from palace.manager.integration.license.opds.opds2.settings import (
     OPDS2ImporterLibrarySettings,
     OPDS2ImporterSettings,

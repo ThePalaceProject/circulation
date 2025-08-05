@@ -4,7 +4,7 @@ import pytest
 
 from palace.manager.core.monitor import CollectionMonitor, Monitor
 from palace.manager.integration.license.bibliotheca import BibliothecaAPI
-from palace.manager.integration.license.opds.opds1 import OPDSAPI
+from palace.manager.integration.license.opds.opds1.api import OPDSAPI
 from palace.manager.scripts.monitor import (
     RunCollectionMonitorScript,
     RunMonitorScript,

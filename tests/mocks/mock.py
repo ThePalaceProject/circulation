@@ -9,7 +9,7 @@ from palace.manager.core.coverage import (
     CollectionCoverageProvider,
     IdentifierCoverageProvider,
 )
-from palace.manager.integration.license.opds.opds1 import OPDSAPI
+from palace.manager.integration.license.opds.opds1.api import OPDSAPI
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.resource import HttpResponseTuple
 

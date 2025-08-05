@@ -25,7 +25,7 @@ from palace.manager.core.monitor import (
     WorkSweepMonitor,
 )
 from palace.manager.integration.license.bibliotheca import BibliothecaAPI
-from palace.manager.integration.license.opds.opds1 import OPDSAPI
+from palace.manager.integration.license.opds.opds1.api import OPDSAPI
 from palace.manager.integration.license.overdrive.api import OverdriveAPI
 from palace.manager.service import container
 from palace.manager.sqlalchemy.model.classification import Subject

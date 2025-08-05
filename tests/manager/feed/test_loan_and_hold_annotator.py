@@ -5,7 +5,7 @@ from palace.manager.api.problem_details import NOT_FOUND_ON_REMOTE
 from palace.manager.feed.acquisition import OPDSAcquisitionFeed
 from palace.manager.feed.annotator.loan_and_hold import LibraryLoanAndHoldAnnotator
 from palace.manager.feed.types import WorkEntry, WorkEntryData
-from palace.manager.integration.license.opds.opds_for_distributors import (
+from palace.manager.integration.license.opds.for_distributors.api import (
     OPDSForDistributorsAPI,
 )
 from palace.manager.sqlalchemy.constants import EditionConstants, LinkRelations

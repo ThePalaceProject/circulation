@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import datetime
 import json
-from collections.abc import Generator, Mapping
-from typing import TYPE_CHECKING, Any
+from collections.abc import Generator
+from typing import Any
 
 import feedparser
-from flask_babel import lazy_gettext as _
+from requests import Response
 from sqlalchemy.orm import Session
 from typing_extensions import Unpack
 
@@ -22,30 +22,21 @@ from palace.manager.api.circulation.fulfillment import (
     RedirectFulfillment,
 )
 from palace.manager.api.selftest import HasCollectionSelfTests
-from palace.manager.core.monitor import TimestampData
-from palace.manager.data_layer.format import FormatData
-from palace.manager.integration.license.opds.opds1 import (
-    OPDSImporter,
-    OPDSImporterSettings,
-    OPDSImportMonitor,
+from palace.manager.core.selftest import SelfTestResult
+from palace.manager.integration.license.opds.for_distributors.settings import (
+    OPDSForDistributorsLibrarySettings,
+    OPDSForDistributorsSettings,
 )
 from palace.manager.integration.license.opds.settings.format_priority import (
     FormatPriorities,
 )
-from palace.manager.integration.settings import (
-    BaseSettings,
-    ConfigurationFormItem,
-    FormField,
-)
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.credential import Credential
 from palace.manager.sqlalchemy.model.datasource import DataSource
-from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import (
     DeliveryMechanism,
     LicensePool,
     LicensePoolDeliveryMechanism,
-    RightsStatus,
 )
 from palace.manager.sqlalchemy.model.patron import Loan, Patron
 from palace.manager.sqlalchemy.model.resource import Hyperlink
@@ -53,35 +44,6 @@ from palace.manager.sqlalchemy.util import get_one
 from palace.manager.util import base64
 from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.http import HTTP
-
-if TYPE_CHECKING:
-    from requests import Response
-
-    from palace.manager.core.coverage import CoverageFailure
-    from palace.manager.core.selftest import SelfTestResult
-    from palace.manager.data_layer.circulation import CirculationData
-    from palace.manager.sqlalchemy.model.edition import Edition
-    from palace.manager.sqlalchemy.model.work import Work
-
-
-class OPDSForDistributorsSettings(OPDSImporterSettings):
-    username: str = FormField(
-        form=ConfigurationFormItem(
-            label=_("Library's username or access key"),
-            required=True,
-        )
-    )
-
-    password: str = FormField(
-        form=ConfigurationFormItem(
-            label=_("Library's password or secret key"),
-            required=True,
-        )
-    )
-
-
-class OPDSForDistributorsLibrarySettings(BaseSettings):
-    pass
 
 
 class OPDSForDistributorsAPI(
@@ -391,143 +353,3 @@ class OPDSForDistributorsAPI(
         self, lpdms: list[LicensePoolDeliveryMechanism]
     ) -> list[LicensePoolDeliveryMechanism]:
         return self._format_priorities.prioritize_mechanisms(lpdms)
-
-
-class OPDSForDistributorsImporter(OPDSImporter):
-    NAME = OPDSForDistributorsAPI.label()
-
-    @classmethod
-    def settings_class(cls) -> type[OPDSForDistributorsSettings]:
-        return OPDSForDistributorsSettings
-
-    def update_work_for_edition(
-        self,
-        edition: Edition,
-        is_open_access: bool = False,
-    ) -> tuple[LicensePool | None, Work | None]:
-        """After importing a LicensePool, set its availability appropriately.
-
-        Books imported through OPDS For Distributors can be designated as
-        either Open Access (handled elsewhere) or licensed (handled here). For
-        licensed content, a library that can perform this import is deemed to
-        have a license for the title and can distribute unlimited copies.
-        """
-        pool, work = super().update_work_for_edition(edition, is_open_access=False)
-        if pool:
-            pool.unlimited_access = True
-
-        return pool, work
-
-    @classmethod
-    def _add_format_data(cls, circulation: CirculationData) -> None:
-        for link in circulation.links:
-            if (
-                link.rel == Hyperlink.GENERIC_OPDS_ACQUISITION
-                and link.media_type in OPDSForDistributorsAPI.SUPPORTED_MEDIA_TYPES
-            ):
-                circulation.formats.append(
-                    FormatData(
-                        content_type=link.media_type,
-                        drm_scheme=DeliveryMechanism.BEARER_TOKEN,
-                        link=link,
-                        rights_uri=RightsStatus.IN_COPYRIGHT,
-                    )
-                )
-
-
-class OPDSForDistributorsImportMonitor(OPDSImportMonitor):
-    """Monitor an OPDS feed that requires or allows authentication,
-    such as Biblioboard or Plympton.
-    """
-
-    PROTOCOL = OPDSForDistributorsImporter.NAME
-    SERVICE_NAME = "OPDS for Distributors Import Monitor"
-
-    def __init__(
-        self,
-        _db: Session,
-        collection: Collection,
-        import_class: type[OPDSImporter],
-        **kwargs: Any,
-    ) -> None:
-        super().__init__(_db, collection, import_class, **kwargs)
-
-        self.api = OPDSForDistributorsAPI(_db, collection)
-
-    def _get(self, url: str, headers: Mapping[str, str]) -> Response:
-        """Make a normal HTTP request for an OPDS feed, but add in an
-        auth header with the credentials for the collection.
-        """
-
-        token = self.api._get_token(self._db).credential
-        headers = dict(headers or {})
-        auth_header = "Bearer %s" % token
-        headers["Authorization"] = auth_header
-
-        return super()._get(url, headers)
-
-
-class OPDSForDistributorsReaperMonitor(OPDSForDistributorsImportMonitor):
-    """This is an unusual import monitor that crawls the entire OPDS feed
-    and keeps track of every identifier it sees, to find out if anything
-    has been removed from the collection.
-    """
-
-    def __init__(
-        self,
-        _db: Session,
-        collection: Collection,
-        import_class: type[OPDSImporter],
-        **kwargs: Any,
-    ) -> None:
-        super().__init__(_db, collection, import_class, **kwargs)
-        self.seen_identifiers: set[str] = set()
-
-    def feed_contains_new_data(self, feed: bytes | str) -> bool:
-        # Always return True so that the importer will crawl the
-        # entire feed.
-        return True
-
-    def import_one_feed(
-        self, feed: bytes | str
-    ) -> tuple[list[Edition], dict[str, list[CoverageFailure]]]:
-        # Collect all the identifiers in the feed.
-        parsed_feed = feedparser.parse(feed)
-        identifiers = [entry.get("id") for entry in parsed_feed.get("entries", [])]
-        self.seen_identifiers.update(identifiers)
-        return [], {}
-
-    def run_once(self, progress: TimestampData) -> TimestampData:
-        """Check to see if any identifiers we know about are no longer
-        present on the remote. If there are any, remove them.
-
-        :param progress: A TimestampData, ignored.
-        """
-        super().run_once(progress)
-
-        # self.seen_identifiers is full of URNs. We need the values
-        # that go in Identifier.identifier.
-        identifiers, failures = Identifier.parse_urns(self._db, self.seen_identifiers)
-        identifier_ids = [x.id for x in list(identifiers.values())]
-
-        # At this point we've gone through the feed and collected all the identifiers.
-        # If there's anything we didn't see, we know it's no longer available.
-        qu = (
-            self._db.query(LicensePool)
-            .join(Identifier)
-            .filter(LicensePool.collection_id == self.collection.id)
-            .filter(~Identifier.id.in_(identifier_ids))
-            .filter(LicensePool.licenses_available == LicensePool.UNLIMITED_ACCESS)
-        )
-        pools_reaped = qu.count()
-        self.log.info(
-            "Reaping %s license pools for collection %s."
-            % (pools_reaped, self.collection.name)
-        )
-
-        for pool in qu:
-            pool.unlimited_access = False
-
-        self._db.commit()
-        achievements = "License pools removed: %d." % pools_reaped
-        return TimestampData(achievements=achievements)

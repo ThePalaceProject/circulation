@@ -20,10 +20,10 @@ from palace.manager.core.config import Configuration
 from palace.manager.core.equivalents_coverage import (
     EquivalentIdentifiersCoverageProvider,
 )
-from palace.manager.integration.license.opds.odl.api import OPDS2WithODLApi
-from palace.manager.integration.license.opds.opds_for_distributors import (
+from palace.manager.integration.license.opds.for_distributors.api import (
     OPDSForDistributorsAPI,
 )
+from palace.manager.integration.license.opds.odl.api import OPDS2WithODLApi
 from palace.manager.service.google_drive.google_drive import GoogleDriveService
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.identifier import Equivalency, Identifier
