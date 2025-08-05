@@ -30,6 +30,7 @@ class LanguageTag(str):
 
     _original: str
     _subtags: tuple[str, ...]
+    _name: str
 
     def __new__(
         cls,
