@@ -25,7 +25,7 @@ def _lock(client: Redis, identifier: IdentifierData) -> RedisLock:
     return RedisLock(
         client,
         ["Apply", identifier],
-        lock_timeout=timedelta(minutes=20),
+        lock_timeout=timedelta(minutes=5),
     )
 
 
@@ -39,8 +39,8 @@ _validate_primary_identifier = partial(
     queue=QueueNames.apply,
     bind=True,
     autoretry_for=(LockNotAcquired,),
-    max_retries=4,
-    retry_backoff=30,
+    max_retries=5,
+    retry_backoff=60,
 )
 def circulation_apply(
     task: Task,
@@ -69,8 +69,8 @@ def circulation_apply(
     queue=QueueNames.apply,
     bind=True,
     autoretry_for=(LockNotAcquired,),
-    max_retries=4,
-    retry_backoff=30,
+    max_retries=5,
+    retry_backoff=60,
 )
 def bibliographic_apply(
     task: Task,
