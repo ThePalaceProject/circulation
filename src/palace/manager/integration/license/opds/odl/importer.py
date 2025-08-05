@@ -35,18 +35,38 @@ from palace.manager.util.log import LoggerMixin
 
 
 class ApplyBibliographicCallable(Protocol):
+    """
+    A callable that applies bibliographic data to the system.
+
+    For example, this could be the signature of a Celery task that processes
+    bibliographic data and updates the database accordingly:
+    apply.bibliographic_apply.delay
+    """
+
     def __call__(
         self, bibliographic: BibliographicData, /, *, collection_id: int
     ) -> Any: ...
 
 
 class ApplyCirculationCallable(Protocol):
+    """
+    A callable that applies circulation data to the system.
+
+    For example, this could be the signature of a Celery task that processes
+    circulation data and updates the database accordingly:
+    apply.circulation_apply.delay
+    """
+
     def __call__(
         self, circulation: CirculationData, /, *, collection_id: int
     ) -> Any: ...
 
 
 class ImporterSettingsProtocol(Protocol):
+    """
+    A protocol that defines the settings required for an OPDS2WithODLImporter.
+    """
+
     @property
     def external_account_id(self) -> str: ...
     @property
@@ -62,6 +82,9 @@ SettingsType = TypeVar("SettingsType", bound=ImporterSettingsProtocol)
 
 
 class OPDS2WithODLImporter(Generic[PublicationType, SettingsType], LoggerMixin):
+    """
+    An importer for OPDS2 or OPDS2+ODL feeds.
+    """
 
     def __init__(
         self,
@@ -72,6 +95,11 @@ class OPDS2WithODLImporter(Generic[PublicationType, SettingsType], LoggerMixin):
     ) -> None:
         """
         Constructor.
+
+        :param request: The HTTP request handler to use for fetching the feed.
+        :param extractor: The extractor to use for extracting bibliographic data.
+        :param parse_publication: A callable that parses a publication from a dictionary.
+        :param settings: The settings for the importer.
         """
         self._request = request
         self._extractor = extractor
@@ -81,6 +109,13 @@ class OPDS2WithODLImporter(Generic[PublicationType, SettingsType], LoggerMixin):
         self._ignored_identifier_types = set(settings.ignored_identifier_types)
 
     def get_feed(self, url: str | None) -> PublicationFeedNoValidation:
+        """
+        Fetch the feed from the given URL and return it as a PublicationFeedNoValidation object.
+
+        :param url: The URL of the feed to fetch. If None, the base URL is used.
+
+        :return: A PublicationFeedNoValidation object containing the feed data.
+        """
         joined_url = urljoin(self._feed_base_url, url)
         self.log.info(f"Fetching feed page: {joined_url}")
         return self._request(
@@ -102,16 +137,17 @@ class OPDS2WithODLImporter(Generic[PublicationType, SettingsType], LoggerMixin):
             return None
         return next_link.href
 
-    def _is_identifier_allowed(self, identifier: IdentifierData) -> bool:
-        """Check the identifier and return a boolean value indicating whether CM can import it.
-
-        :param identifier: Identifier object
-        :return: Boolean value indicating whether CM can import the identifier
+    def _is_identifier_ignored(self, identifier: IdentifierData) -> bool:
+        """
+        Test if the identifier should be ignored by the importer.
         """
         return identifier.type not in self._ignored_identifier_types
 
     @classmethod
     def is_changed(cls, session: Session, bibliographic: BibliographicData) -> bool:
+        """
+        Test is the bibliographic data has changed since the last import.
+        """
         edition = bibliographic.load_edition(session)
         if not edition:
             return True
@@ -132,6 +168,17 @@ class OPDS2WithODLImporter(Generic[PublicationType, SettingsType], LoggerMixin):
     def _filtered_publications(
         self, publications: list[dict[str, Any]]
     ) -> Generator[tuple[IdentifierData, PublicationType]]:
+        """
+        Filter and parse the publications from the feed.
+
+        This method will parse each publication, extract its identifier, and yield
+        the identifier along with the publication object. If a publication cannot be
+        parsed or its identifier is not allowed, it will log an error and skip that publication.
+
+        :param publications: A list of publication dictionaries from the feed.
+        :return: A generator yielding tuples of (IdentifierData, PublicationType).
+        """
+
         for publication_dict in publications:
             try:
                 publication = self._parse_publication(publication_dict)
@@ -151,7 +198,7 @@ class OPDS2WithODLImporter(Generic[PublicationType, SettingsType], LoggerMixin):
                 )
                 continue
 
-            if not self._is_identifier_allowed(identifier):
+            if not self._is_identifier_ignored(identifier):
                 self.log.warning(
                     f"Publication {identifier} not imported because its identifier type is not allowed: {identifier.type}"
                 )
@@ -160,6 +207,9 @@ class OPDS2WithODLImporter(Generic[PublicationType, SettingsType], LoggerMixin):
             yield identifier, publication
 
     def _fetch_license_document(self, document_link: str) -> LicenseInfo | None:
+        """
+        Fetch a license document from the given link and return it as a LicenseInfo object.
+        """
         try:
             return self._request(
                 "GET",
@@ -183,7 +233,12 @@ class OPDS2WithODLImporter(Generic[PublicationType, SettingsType], LoggerMixin):
 
     def _fetch_license_documents(
         self, publication: PublicationType
-    ) -> dict[str, LicenseInfo] | None:
+    ) -> dict[str, LicenseInfo]:
+        """
+        Fetch the license documents for a publication.
+        :param publication: The publication from which to fetch license documents.
+        :return: A dictionary mapping license identifiers to LicenseInfo objects.
+        """
         publication_available = publication.metadata.availability.available
         return (
             {
@@ -203,12 +258,15 @@ class OPDS2WithODLImporter(Generic[PublicationType, SettingsType], LoggerMixin):
                 is not None
             }
             if isinstance(publication, odl.Publication)
-            else None
+            else {}
         )
 
     def extract_feed_data(
         self, feed: PublicationFeedNoValidation
     ) -> dict[IdentifierData, BibliographicData]:
+        """
+        Extract bibliographic data from the feed.
+        """
         results = {}
 
         for identifier, publication in self._filtered_publications(feed.publications):
@@ -230,6 +288,27 @@ class OPDS2WithODLImporter(Generic[PublicationType, SettingsType], LoggerMixin):
         identifier_set: IdentifierSet | None = None,
         import_even_if_unchanged: bool = False,
     ) -> bool:
+        """
+        Import the feed data into the system.
+
+        This method will extract bibliographic data from the feed, check if the
+        bibliographic data has changed, and if so, apply the bibliographic data
+        using the provided `apply_bibliographic` callable. If the bibliographic data
+        has not changed and `apply_circulation` is provided, it will also apply the
+        circulation data.
+
+        :param session: The database session to use for the import.
+        :param feed: The feed to import data from.
+        :param collection: The collection to which the data belongs.
+        :param apply_bibliographic: A callable that applies bibliographic data.
+        :param apply_circulation: A callable that applies circulation data, or None if not applicable.
+        :param identifier_set: An optional IdentifierSet to track imported identifiers.
+        :param import_even_if_unchanged: If True the bibliographic data will be imported even if it has not changed.
+
+        :return: A boolean indicating whether any publication was unchanged.
+          If True, it means that at least one publication was not changed and thus not imported.
+          If False, it means that all publications were either changed or imported.
+        """
         feed_data = self.extract_feed_data(feed)
 
         unchanged_publication = False
@@ -267,6 +346,9 @@ _ODL_PUBLICATION_ADAPTOR: TypeAdapter[Opds2OrOpds2WithOdlPublication] = TypeAdap
 def importer_from_collection(
     collection: Collection, registry: LicenseProvidersRegistry
 ) -> OPDS2WithODLImporter[Opds2OrOpds2WithOdlPublication, OPDS2ImporterSettings]:
+    """
+    Create an OPDS2WithODLImporter from a OPDS2+ODL (OPDS2WithODLApi protocol) Collection.
+    """
     if not registry.equivalent(collection.protocol, OPDS2WithODLApi):
         raise PalaceValueError(
             f"Collection {collection.name} [id={collection.id} protocol={collection.protocol}] is not a OPDS2+ODL collection."
