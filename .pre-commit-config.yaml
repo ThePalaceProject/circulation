@@ -70,5 +70,13 @@ repos:
           - .pymarkdown.config.json
           - scan
 
+  -   repo: local
+      hooks:
+      -   id: check-namespace-package
+          name: Check that palace is a namespace package
+          language: fail
+          entry: Please remove src/palace/__init__.py
+          files: ^src/palace/__init__.py$
+
 # Exclude test files, since they may be intentionally malformed
 exclude: ^tests/files/
