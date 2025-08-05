@@ -120,4 +120,4 @@ class TestBibliographicApply:
             apply.bibliographic_apply.delay(data, edition.id, None).wait()
 
         # Make sure the task was retried
-        assert retry_mock.retry_count == 4
+        assert retry_mock.retry_count == 5

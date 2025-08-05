@@ -41,6 +41,7 @@ _validate_primary_identifier = partial(
     autoretry_for=(LockNotAcquired,),
     max_retries=5,
     retry_backoff=60,
+    retry_backoff_max=15 * 60,
 )
 def circulation_apply(
     task: Task,
@@ -71,6 +72,7 @@ def circulation_apply(
     autoretry_for=(LockNotAcquired,),
     max_retries=5,
     retry_backoff=60,
+    retry_backoff_max=15 * 60,
 )
 def bibliographic_apply(
     task: Task,
