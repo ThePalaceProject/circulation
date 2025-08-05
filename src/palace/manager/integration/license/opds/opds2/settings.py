@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from flask_babel import lazy_gettext as _
 
-from palace.manager.integration.license.opds.opds1 import (
+from palace.manager.integration.license.opds.opds1.settings import (
     OPDSImporterLibrarySettings,
     OPDSImporterSettings,
 )

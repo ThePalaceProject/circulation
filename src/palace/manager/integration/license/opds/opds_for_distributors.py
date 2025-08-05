@@ -24,11 +24,9 @@ from palace.manager.api.circulation.fulfillment import (
 from palace.manager.api.selftest import HasCollectionSelfTests
 from palace.manager.core.monitor import TimestampData
 from palace.manager.data_layer.format import FormatData
-from palace.manager.integration.license.opds.opds1 import (
-    OPDSImporter,
-    OPDSImporterSettings,
-    OPDSImportMonitor,
-)
+from palace.manager.integration.license.opds.opds1.importer import OPDSImporter
+from palace.manager.integration.license.opds.opds1.monitor import OPDSImportMonitor
+from palace.manager.integration.license.opds.opds1.settings import OPDSImporterSettings
 from palace.manager.integration.license.opds.settings.format_priority import (
     FormatPriorities,
 )

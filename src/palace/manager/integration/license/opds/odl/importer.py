@@ -12,13 +12,11 @@ from sqlalchemy.orm import Session
 
 from palace.manager.core.coverage import CoverageFailure
 from palace.manager.data_layer.bibliographic import BibliographicData
+from palace.manager.integration.license.opds.base.importer import BaseOPDSImporter
 from palace.manager.integration.license.opds.odl.api import OPDS2WithODLApi
 from palace.manager.integration.license.opds.odl.extractor import OPDS2WithODLExtractor
 from palace.manager.integration.license.opds.odl.settings import OPDS2WithODLSettings
-from palace.manager.integration.license.opds.opds1 import (
-    BaseOPDSImporter,
-    OPDSImportMonitor,
-)
+from palace.manager.integration.license.opds.opds1.monitor import OPDSImportMonitor
 from palace.manager.integration.license.opds.requests import (
     get_opds_requests,
 )

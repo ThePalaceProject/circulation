@@ -7,7 +7,8 @@ from Crypto.PublicKey.RSA import RsaKey, import_key
 
 from palace.manager.core.facets import FacetConstants
 from palace.manager.integration.base import integration_settings_update
-from palace.manager.integration.license.opds.opds1 import OPDSAPI, OPDSImporterSettings
+from palace.manager.integration.license.opds.opds1.api import OPDSAPI
+from palace.manager.integration.license.opds.opds1.settings import OPDSImporterSettings
 from palace.manager.integration.license.overdrive.api import OverdriveAPI
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.library import Library

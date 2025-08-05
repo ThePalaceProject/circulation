@@ -20,7 +20,7 @@ class LicenseProvidersRegistry(IntegrationRegistry["CirculationApiType"]):
         from palace.manager.integration.license.boundless.api import BoundlessApi
         from palace.manager.integration.license.enki import EnkiAPI
         from palace.manager.integration.license.opds.odl.api import OPDS2WithODLApi
-        from palace.manager.integration.license.opds.opds1 import OPDSAPI
+        from palace.manager.integration.license.opds.opds1.api import OPDSAPI
         from palace.manager.integration.license.opds.opds2.api import OPDS2API
         from palace.manager.integration.license.opds.opds_for_distributors import (
             OPDSForDistributorsAPI,

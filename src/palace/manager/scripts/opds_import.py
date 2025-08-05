@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-from palace.manager.integration.license.opds.opds1 import (
-    OPDSAPI,
-    OPDSImporter,
-    OPDSImportMonitor,
-)
+from palace.manager.integration.license.opds.opds1.api import OPDSAPI
+from palace.manager.integration.license.opds.opds1.importer import OPDSImporter
+from palace.manager.integration.license.opds.opds1.monitor import OPDSImportMonitor
 from palace.manager.integration.license.opds.opds_for_distributors import (
     OPDSForDistributorsImporter,
     OPDSForDistributorsImportMonitor,

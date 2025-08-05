@@ -42,7 +42,7 @@ from palace.manager.api.problem_details import (
 from palace.manager.core.problem_details import INTEGRATION_ERROR, INVALID_INPUT
 from palace.manager.feed.serializer.opds2 import OPDS2Serializer
 from palace.manager.integration.license.bibliotheca import BibliothecaAPI
-from palace.manager.integration.license.opds.opds1 import OPDSAPI
+from palace.manager.integration.license.opds.opds1.api import OPDSAPI
 from palace.manager.service.redis.models.patron_activity import PatronActivity
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.collection import Collection
