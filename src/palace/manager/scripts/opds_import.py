@@ -1,13 +1,15 @@
 from __future__ import annotations
 
-from palace.manager.integration.license.opds.opds1.api import OPDSAPI
-from palace.manager.integration.license.opds.opds1.importer import OPDSImporter
-from palace.manager.integration.license.opds.opds1.monitor import OPDSImportMonitor
-from palace.manager.integration.license.opds.opds_for_distributors import (
+from palace.manager.integration.license.opds.for_distributors.importer import (
     OPDSForDistributorsImporter,
+)
+from palace.manager.integration.license.opds.for_distributors.monitor import (
     OPDSForDistributorsImportMonitor,
     OPDSForDistributorsReaperMonitor,
 )
+from palace.manager.integration.license.opds.opds1.api import OPDSAPI
+from palace.manager.integration.license.opds.opds1.importer import OPDSImporter
+from palace.manager.integration.license.opds.opds1.monitor import OPDSImportMonitor
 from palace.manager.scripts.input import CollectionInputScript
 from palace.manager.sqlalchemy.model.collection import Collection
 

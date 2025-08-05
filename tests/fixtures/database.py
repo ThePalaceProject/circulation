@@ -54,15 +54,17 @@ from palace.manager.integration.license.bibliotheca import (
 )
 from palace.manager.integration.license.boundless.api import BoundlessApi
 from palace.manager.integration.license.boundless.settings import BoundlessSettings
+from palace.manager.integration.license.opds.for_distributors.api import (
+    OPDSForDistributorsAPI,
+)
+from palace.manager.integration.license.opds.for_distributors.settings import (
+    OPDSForDistributorsSettings,
+)
 from palace.manager.integration.license.opds.odl.api import OPDS2WithODLApi
 from palace.manager.integration.license.opds.odl.settings import OPDS2WithODLSettings
 from palace.manager.integration.license.opds.opds1.api import OPDSAPI
 from palace.manager.integration.license.opds.opds1.settings import OPDSImporterSettings
 from palace.manager.integration.license.opds.opds2.api import OPDS2API
-from palace.manager.integration.license.opds.opds_for_distributors import (
-    OPDSForDistributorsAPI,
-    OPDSForDistributorsSettings,
-)
 from palace.manager.integration.license.overdrive.api import OverdriveAPI
 from palace.manager.integration.license.overdrive.settings import OverdriveSettings
 from palace.manager.integration.patron_auth.simple_authentication import (

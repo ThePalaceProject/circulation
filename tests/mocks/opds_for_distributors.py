@@ -1,4 +1,4 @@
-from palace.manager.integration.license.opds.opds_for_distributors import (
+from palace.manager.integration.license.opds.for_distributors.api import (
     OPDSForDistributorsAPI,
 )
 from palace.manager.util.http import HTTP
