@@ -17,6 +17,9 @@ class TestLanguageTag:
             ("en_uk", "eng"),
             ("fra", "fra"),
             ("fR", "fra"),
+            ("fre", "fra"),
+            ("ger", "deu"),
+            ("GERMAN", "deu"),
         ],
     )
     def test_validation(self, language_code: str, expected: str) -> None:
@@ -80,6 +83,14 @@ class TestLanguageTag:
         assert language_code.code == str(language_code) == "eng"
         assert language_code.subtags == ("en", "latn", "gb", "x", "private")
         assert language_code.original == "en-Latn-GB-x-private"
+        assert language_code.name == "English"
+
+        language_code = LanguageTag("chinese")
+        assert language_code.primary_language == "zho"
+        assert language_code.code == str(language_code) == "zho"
+        assert language_code.subtags == ("zho",)
+        assert language_code.original == "chinese"
+        assert language_code.name == "Chinese"
 
 
 class TestLanguageMap:
