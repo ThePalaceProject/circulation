@@ -84,12 +84,36 @@ class TestLanguageTag:
         assert language_code.name == "English"
 
     @pytest.mark.parametrize(
-        "language_code, expected, warning",
+        "language_code, expected, expected_name, warning",
         [
-            ("fre", "fra", "use the terminological code 'fra' instead"),
-            ("ger", "deu", "use the terminological code 'deu' instead"),
-            ("GERMAN", "deu", "use the 3-letter code 'deu' instead"),
-            ("chinese", "zho", "use the 3-letter code 'zho' instead"),
+            pytest.param(
+                "fre",
+                "fra",
+                "French",
+                "use the terminological code 'fra' instead",
+                id="fre",
+            ),
+            pytest.param(
+                "ger",
+                "deu",
+                "German",
+                "use the terminological code 'deu' instead",
+                id="ger",
+            ),
+            pytest.param(
+                "GERMAN",
+                "deu",
+                "German",
+                "use the 3-letter code 'deu' instead",
+                id="GERMAN",
+            ),
+            pytest.param(
+                "chinese",
+                "zho",
+                "Chinese",
+                "use the 3-letter code 'zho' instead",
+                id="chinese",
+            ),
         ],
     )
     def test_lenient_parsing(
@@ -97,13 +121,17 @@ class TestLanguageTag:
         language_code: str,
         expected: str,
         warning: str,
+        expected_name: str,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
         """
         Test our lenient parsing of language codes.
         """
         caplog.set_level(LogLevel.warning)
-        assert LanguageTag(language_code) == expected
+        tag = LanguageTag(language_code)
+        assert tag == expected
+        assert tag.code == expected
+        assert tag.name == expected_name
         assert TypeAdapter(LanguageTag).validate_python(language_code) == expected
         assert (
             TypeAdapter(LanguageTag).validate_json(json.dumps(language_code))
