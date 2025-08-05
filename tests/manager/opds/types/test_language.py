@@ -4,6 +4,7 @@ import pytest
 from pydantic import TypeAdapter, ValidationError
 
 from palace.manager.opds.types.language import LanguageMap, LanguageTag
+from palace.manager.service.logging.configuration import LogLevel
 
 
 class TestLanguageTag:
@@ -80,6 +81,63 @@ class TestLanguageTag:
         assert language_code.code == str(language_code) == "eng"
         assert language_code.subtags == ("en", "latn", "gb", "x", "private")
         assert language_code.original == "en-Latn-GB-x-private"
+        assert language_code.name == "English"
+
+    @pytest.mark.parametrize(
+        "language_code, expected, expected_name, warning",
+        [
+            pytest.param(
+                "fre",
+                "fra",
+                "French",
+                "use the terminological code 'fra' instead",
+                id="fre",
+            ),
+            pytest.param(
+                "ger",
+                "deu",
+                "German",
+                "use the terminological code 'deu' instead",
+                id="ger",
+            ),
+            pytest.param(
+                "GERMAN",
+                "deu",
+                "German",
+                "use the 3-letter code 'deu' instead",
+                id="GERMAN",
+            ),
+            pytest.param(
+                "chinese",
+                "zho",
+                "Chinese",
+                "use the 3-letter code 'zho' instead",
+                id="chinese",
+            ),
+        ],
+    )
+    def test_lenient_parsing(
+        self,
+        language_code: str,
+        expected: str,
+        warning: str,
+        expected_name: str,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """
+        Test our lenient parsing of language codes.
+        """
+        caplog.set_level(LogLevel.warning)
+        tag = LanguageTag(language_code)
+        assert tag == expected
+        assert tag.code == expected
+        assert tag.name == expected_name
+        assert TypeAdapter(LanguageTag).validate_python(language_code) == expected
+        assert (
+            TypeAdapter(LanguageTag).validate_json(json.dumps(language_code))
+            == expected
+        )
+        assert warning in caplog.text
 
 
 class TestLanguageMap:

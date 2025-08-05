@@ -8,8 +8,10 @@ import pycountry
 from pydantic import GetCoreSchemaHandler
 from pydantic_core import core_schema
 
+from palace.manager.util.log import LoggerMixin
 
-class LanguageTag(str):
+
+class LanguageTag(str, LoggerMixin):
     """
     Parses a subset of IETF BCP 47 language tags.
 
@@ -26,10 +28,11 @@ class LanguageTag(str):
       I did some research, but at the time of writing, I wasn't able to find one.
     """
 
-    __slots__ = ("_original", "_subtags")
+    __slots__ = ("_original", "_subtags", "_name")
 
     _original: str
     _subtags: tuple[str, ...]
+    _name: str
 
     def __new__(
         cls,
@@ -50,11 +53,37 @@ class LanguageTag(str):
         subtags = tuple([t.lower() for t in value.replace("_", "-").split("-")])
         primary_language = subtags[0]
 
-        code = None
+        # This parser is intentionally lenient. It accepts both 2-letter and 3-letter
+        # language codes as well as full language names. While RFC 5646 specifies stricter
+        # parsing rules, we've implemented this approach to handle the non-standard codes
+        # frequently encountered in our feeds.
+        # See: https://datatracker.ietf.org/doc/rfc5646/
         if len(primary_language) == 2:
             code = pycountry.languages.get(alpha_2=primary_language)
         elif len(primary_language) == 3:
             code = pycountry.languages.get(alpha_3=primary_language)
+            if code is None:
+                # Some languages have two three-letter codes. A bibliographic
+                # code and a terminological code. We try the terminological code
+                # first, which is stored in alpha_3, and if that fails, we
+                # fall back to try the bibliographic code.
+                # See: https://en.wikipedia.org/wiki/ISO_639-2#B_and_T_codes
+                code = pycountry.languages.get(bibliographic=primary_language)
+                if code is not None:
+                    cls.logger().warning(
+                        f"Using bibliographic code '{primary_language}' for language '{code.name}'. "
+                        f"This is not BCP47 compliant, use the terminological code '{code.alpha_3}' instead."
+                    )
+        else:
+            # Fall back to looking up the language by name.
+            # TODO: We may want to add a strict mode, that raises an error in this case.
+            code = pycountry.languages.get(name=value)
+            if code is not None:
+                subtags = (code.alpha_3,)
+                cls.logger().warning(
+                    f"Using language name '{value}' instead of a BCP47 language tag. "
+                    f"This is not BCP47 compliant, use the 3-letter code '{code.alpha_3}' instead."
+                )
 
         if code is None:
             raise ValueError(f"Invalid language code '{primary_language}'")
@@ -62,6 +91,7 @@ class LanguageTag(str):
         language_code = super().__new__(cls, code.alpha_3)
         language_code._original = value
         language_code._subtags = subtags
+        language_code._name = code.name
         return language_code
 
     @classmethod
@@ -107,6 +137,13 @@ class LanguageTag(str):
         Return the 3-letter ISO 639-2 language code.
         """
         return str(self)
+
+    @property
+    def name(self) -> str:
+        """
+        Return the name of the language.
+        """
+        return self._name
 
     def __repr__(self) -> str:
         return f"<{self.__class__.__name__}: {self._original}>"
