@@ -789,6 +789,37 @@ class TestBibliographicData:
         assert "123" == contributor.lc
         assert "Robert_Jordan" == contributor.wikipedia_name
 
+    def test_update_contributions_in_relace_mode_with_no_changes(
+        self, db: DatabaseTransactionFixture
+    ):
+        edition = db.edition()
+        original_contributions = list(edition.contributions)
+        original_contributors = edition.contributors
+        assert len(edition.contributions) == 1
+        contribution = edition.contributions[0]
+        contributor = contribution.contributor
+
+        # update the contributions with the identical contribution.
+        contributor_data = ContributorData(
+            display_name=contributor.display_name,
+            sort_name=contributor.sort_name,
+            wikipedia_name=contributor.wikipedia_name,
+            viaf=contributor.viaf,
+            lc=contributor.lc,
+            roles=[contribution.role],
+        )
+
+        bibliographic = BibliographicData(
+            data_source_name=DataSource.OVERDRIVE, contributors=[contributor_data]
+        )
+
+        # we expect that no change occurred despite the replace flag.
+        assert not bibliographic.update_contributions(db.session, edition, replace=True)
+
+        # validate that the contributions did not change since no change occurred.
+        assert edition.contributions == original_contributions
+        assert edition.contributors == original_contributors
+
     def test_update_contributions_with_blank_display_name(
         self, db: DatabaseTransactionFixture
     ):
