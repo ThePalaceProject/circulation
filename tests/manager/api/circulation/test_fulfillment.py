@@ -57,7 +57,7 @@ class TestFetchFulfillment:
             204,
             content="This is some content.",
             media_type="application/xyz",
-            other_headers={"X-Test": "test"},
+            headers={"X-Test": "test"},
         )
         fulfillment = FetchFulfillment("http://some.location", "foo/bar")
         response = fulfillment.response()
