@@ -291,7 +291,9 @@ class TestBibliographicData:
         assert "http://largeimage.com/" == edition.cover_full_url
         assert None == edition.cover_thumbnail_url
 
-    def test_links_are_replaced(self, db: DatabaseTransactionFixture):
+    def test_links_are_are_inserted_and_deleted_when_in_replace_mode_when_change_occurs(
+        self, db: DatabaseTransactionFixture
+    ):
         edition = db.edition()
         l1 = LinkData(
             rel=Hyperlink.IMAGE,
@@ -319,7 +321,7 @@ class TestBibliographicData:
         assert len(edition.primary_identifier.links) == 1
         assert edition.primary_identifier.links != [link_to_be_deleted]
 
-    def test_that_links_are_not_replaced_when_no_change(
+    def test_that_links_are_not_deleted_and_reinserted_when_no_change(
         self, db: DatabaseTransactionFixture
     ):
         edition = db.edition()
@@ -345,11 +347,11 @@ class TestBibliographicData:
         replace = ReplacementPolicy(links=True)
         bibliographic.apply(db.session, edition, None, replace=replace)
 
-        # we expect a change because the image link has changed.
+        # we expect a change because we're in replace mode and the existing link disappeared and a new one was added.
         assert len(edition.primary_identifier.links) == 1
         assert existing_link.id == edition.primary_identifier.links[0].id
 
-    def test_that_links_are_not_replaced_with_replacement_policy_is_false(
+    def test_that_new_links_are_inserted_and_existing_links_not_deleted_and_reinserted_when_replacement_policy_is_false(
         self, db: DatabaseTransactionFixture
     ):
         edition = db.edition()
@@ -375,8 +377,9 @@ class TestBibliographicData:
         replace = ReplacementPolicy(links=False)
         bibliographic.apply(db.session, edition, None, replace=replace)
 
-        # we expect a change because the image link has changed.
+        # We expect the new link to be added and the existing link preserved.
         assert len(edition.primary_identifier.links) == 2
+        assert existing_link in edition.primary_identifier.links
 
     def test_measurements(self, db: DatabaseTransactionFixture):
         edition = db.edition()
