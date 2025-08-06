@@ -739,18 +739,9 @@ class BibliographicData(BaseMutableData):
         old_contributors = []
         new_contributors = []
 
-        if not replace and self.contributors:
-            # we've chosen to append new contributors, which exist
-            # this means the edition's contributor list will, indeed, change
-            contributors_changed = True
-
-        if replace and self.contributors:
-            # Remove any old Contributions from this data source --
-            # we're about to add a new set
+        if self.contributors:
             for contribution in edition.contributions:
                 old_contributors.append(contribution.contributor.id)
-                _db.delete(contribution)
-            edition.contributions = []
 
         for contributor_data in self.contributors:
 
@@ -770,17 +761,29 @@ class BibliographicData(BaseMutableData):
                     viaf=contributor_data.viaf,
                 )
                 new_contributors.append(contributor.id)
-                if contributor_data.display_name:
+                if (
+                    contributor_data.display_name
+                    and contributor_data.display_name != contributor.display_name
+                ):
                     contributor.display_name = contributor_data.display_name
-                if contributor_data.biography:
+                if (
+                    contributor_data.biography
+                    and contributor_data.biography != contributor.biography
+                ):
                     contributor.biography = contributor_data.biography
-                if contributor_data.aliases:
+                if (
+                    contributor_data.aliases
+                    and contributor_data.aliases != contributor.aliases
+                ):
                     contributor.aliases = contributor_data.aliases
-                if contributor_data.lc:
+                if contributor_data.lc and contributor_data.lc != contributor.lc:
                     contributor.lc = contributor_data.lc
-                if contributor_data.viaf:
+                if contributor_data.viaf and contributor_data.viaf != contributor.viaf:
                     contributor.viaf = contributor_data.viaf
-                if contributor_data.wikipedia_name:
+                if (
+                    contributor_data.wikipedia_name
+                    and contributor_data.wikipedia_name != contributor.wikipedia_name
+                ):
                     contributor.wikipedia_name = contributor_data.wikipedia_name
             else:
                 self.log.info(
@@ -788,7 +791,18 @@ class BibliographicData(BaseMutableData):
                     contributor_data.display_name,
                 )
 
-        if sorted(old_contributors) != sorted(new_contributors):
-            contributors_changed = True
+        old_contributors_set = set(old_contributors)
+        new_contributors_set = set(new_contributors)
+        contributors_changed = old_contributors_set != new_contributors_set
+        if contributors_changed and replace:
+            deleted_contributors = list(old_contributors_set - new_contributors_set)
+            contributions_to_be_deleted = [
+                c
+                for c in edition.contributions
+                if c.contributor.id in deleted_contributors
+            ]
+            for c in contributions_to_be_deleted:
+                _db.delete(c)
+                edition.contributions.remove(c)
 
         return contributors_changed
