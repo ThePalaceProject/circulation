@@ -291,6 +291,93 @@ class TestBibliographicData:
         assert "http://largeimage.com/" == edition.cover_full_url
         assert None == edition.cover_thumbnail_url
 
+    def test_links_are_replaced(self, db: DatabaseTransactionFixture):
+        edition = db.edition()
+        l1 = LinkData(
+            rel=Hyperlink.IMAGE,
+            href="http://example.com/",
+            media_type=Representation.JPEG_MEDIA_TYPE,
+        )
+
+        link_to_be_deleted, ignore = edition.primary_identifier.add_link(
+            rel=Hyperlink.IMAGE,
+            href="http://example.com/to_be_deleted",
+            data_source=edition.data_source,
+            media_type=Representation.JPEG_MEDIA_TYPE,
+        )
+
+        assert len(edition.primary_identifier.links) == 1
+
+        bibliographic = BibliographicData(
+            links=[l1],
+            data_source_name=edition.data_source.name,
+        )
+        replace = ReplacementPolicy(links=True)
+        bibliographic.apply(db.session, edition, None, replace=replace)
+
+        # we expect a change because the image link has changed.
+        assert len(edition.primary_identifier.links) == 1
+        assert edition.primary_identifier.links != [link_to_be_deleted]
+
+    def test_that_links_are_not_replaced_when_no_change(
+        self, db: DatabaseTransactionFixture
+    ):
+        edition = db.edition()
+        l1 = LinkData(
+            rel=Hyperlink.IMAGE,
+            href="http://example.com/existing_link",
+            media_type=Representation.JPEG_MEDIA_TYPE,
+        )
+
+        existing_link, ignore = edition.primary_identifier.add_link(
+            rel=Hyperlink.IMAGE,
+            href="http://example.com/existing_link",
+            data_source=edition.data_source,
+            media_type=Representation.JPEG_MEDIA_TYPE,
+        )
+
+        assert len(edition.primary_identifier.links) == 1
+
+        bibliographic = BibliographicData(
+            links=[l1],
+            data_source_name=edition.data_source.name,
+        )
+        replace = ReplacementPolicy(links=True)
+        bibliographic.apply(db.session, edition, None, replace=replace)
+
+        # we expect a change because the image link has changed.
+        assert len(edition.primary_identifier.links) == 1
+        assert existing_link.id == edition.primary_identifier.links[0].id
+
+    def test_that_links_are_not_replaced_with_replacement_policy_is_false(
+        self, db: DatabaseTransactionFixture
+    ):
+        edition = db.edition()
+        l1 = LinkData(
+            rel=Hyperlink.IMAGE,
+            href="http://example.com/new_link",
+            media_type=Representation.JPEG_MEDIA_TYPE,
+        )
+
+        existing_link, ignore = edition.primary_identifier.add_link(
+            rel=Hyperlink.IMAGE,
+            href="http://example.com/existing_link",
+            data_source=edition.data_source,
+            media_type=Representation.JPEG_MEDIA_TYPE,
+        )
+
+        assert len(edition.primary_identifier.links) == 1
+
+        bibliographic = BibliographicData(
+            links=[l1],
+            data_source_name=edition.data_source.name,
+        )
+        replace = ReplacementPolicy(links=False)
+        bibliographic.apply(db.session, edition, None, replace=replace)
+
+        # we expect a change because the image link has changed.
+        assert len(edition.primary_identifier.links) == 2
+
     def test_measurements(self, db: DatabaseTransactionFixture):
         edition = db.edition()
         measurement = MeasurementData(
