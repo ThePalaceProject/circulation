@@ -598,9 +598,9 @@ class BibliographicData(BaseMutableData):
 
         if old_links != new_links:
             links_to_delete = old_links - new_links
-            for link in links_to_delete:
-                db.delete(link)
-                identifier.links.remove(link)
+            for link_to_delete in links_to_delete:
+                db.delete(link_to_delete)
+                identifier.links.remove(link_to_delete)
 
         # Apply all measurements to the primary identifier
         for measurement in self.measurements:
