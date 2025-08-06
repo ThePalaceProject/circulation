@@ -515,18 +515,14 @@ class BibliographicData(BaseMutableData):
                     f"Error classifying subject: {subject} for identifier {identifier}: {e}"
                 )
 
+        # update links
+        old_links = set()
+        new_links = set()
         # Associate all links with the primary identifier.
         if replace.links and self.links is not None:
-            surviving_hyperlinks = []
-            dirty = False
             for hyperlink in identifier.links:
                 if hyperlink.data_source == data_source:
-                    db.delete(hyperlink)
-                    dirty = True
-                else:
-                    surviving_hyperlinks.append(hyperlink)
-            if dirty:
-                identifier.links = surviving_hyperlinks
+                    old_links.add(hyperlink)
 
         link_objects = {}
 
@@ -565,31 +561,46 @@ class BibliographicData(BaseMutableData):
                     transformation_settings=link.transformation_settings,
                     db=db,
                 )
+
+                new_links.add(link_obj)
+
                 if link.rel in _REL_REQUIRES_NEW_PRESENTATION_EDITION:
                     work_requires_new_presentation_edition = True
                 elif link.rel in _REL_REQUIRES_FULL_RECALCULATION:
                     work_requires_full_recalculation = True
 
-            link_objects[link] = link_obj
-            if link.thumbnail:
-                thumbnail = link.thumbnail
-                thumbnail_obj, ignore = identifier.add_link(
-                    rel=thumbnail.rel,
-                    href=thumbnail.href,
-                    data_source=data_source,
-                    media_type=thumbnail.guessed_media_type,
-                    content=thumbnail.content,
-                )
-                work_requires_new_presentation_edition = True
-                if thumbnail_obj.resource and thumbnail_obj.resource.representation:
-                    thumbnail_obj.resource.representation.thumbnail_of = (
-                        link_obj.resource.representation
+                link_objects[link] = link_obj
+                if link.thumbnail:
+                    thumbnail = link.thumbnail
+                    thumbnail_obj, ignore = identifier.add_link(
+                        rel=thumbnail.rel,
+                        href=thumbnail.href,
+                        data_source=data_source,
+                        media_type=thumbnail.guessed_media_type,
+                        content=thumbnail.content,
                     )
-                else:
-                    self.log.error(
-                        "Thumbnail link %r cannot be marked as a thumbnail of %r because it has no Representation, probably due to a missing media type."
-                        % (link.thumbnail, link)
-                    )
+                    new_links.add(thumbnail_obj)
+                    work_requires_new_presentation_edition = True
+                    if (
+                        thumbnail_obj.resource
+                        and thumbnail_obj.resource.representation
+                        and thumbnail_obj.resource.representation.thumbnail_of
+                        != (link_obj.resource.representation)
+                    ):
+                        thumbnail_obj.resource.representation.thumbnail_of = (
+                            link_obj.resource.representation
+                        )
+                    else:
+                        self.log.error(
+                            "Thumbnail link %r cannot be marked as a thumbnail of %r because it has no Representation, probably due to a missing media type."
+                            % (link.thumbnail, link)
+                        )
+
+        if old_links != new_links:
+            links_to_delete = old_links - new_links
+            for link in links_to_delete:
+                db.delete(link)
+                identifier.links.remove(link)
 
         # Apply all measurements to the primary identifier
         for measurement in self.measurements:
