@@ -37,7 +37,7 @@ from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.celery import CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
-from tests.fixtures.files import OPDS2FilesFixture
+from tests.fixtures.files import OPDS2FilesFixture, OPDS2WithODLFilesFixture
 from tests.fixtures.http import MockHttpClientFixture
 from tests.fixtures.redis import RedisFixture
 
@@ -204,10 +204,13 @@ class TestImportAll:
             opds2.import_all.delay(force=force).wait()
 
         # We queued up tasks for all OPDS2 collections, but not for Overdrive
-        mock_import_collection.delay.assert_has_calls(
+        mock_import_collection.s.assert_called_once_with(
+            force=force,
+        )
+        mock_import_collection.s.return_value.delay.assert_has_calls(
             [
-                call(collection_id=collection1.id, force=force),
-                call(collection_id=collection2.id, force=force),
+                call(collection_id=collection1.id),
+                call(collection_id=collection2.id),
             ],
             any_order=True,
         )
@@ -828,6 +831,35 @@ class TestImportCollection:
         collection = db.collection(protocol=OverdriveAPI)
         with pytest.raises(PalaceValueError, match="is not a OPDS2 collection"):
             opds2.import_collection.delay(collection.id).wait()
+
+    def test_import_odl_feed(
+        self,
+        db: DatabaseTransactionFixture,
+        opds2_import_fixture: OPDS2ImportFixture,
+        opds2_with_odl_files_fixture: OPDS2WithODLFilesFixture,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        """
+        If we accidentally import an ODL feed, we will ignore any OPDS2+ODL publications
+        in the feed, and log errors when we encounter them.
+        """
+        opds2_import_fixture.client.queue_response(
+            200,
+            content=opds2_with_odl_files_fixture.sample_text(
+                "feed-audiobook-streaming.json"
+            ),
+        )
+        opds2.import_collection.delay(opds2_import_fixture.collection.id).wait()
+
+        # We shouldn't have imported any publications, since the items in the feed are
+        # ODL publications, which are not supported by OPDS2Importer.
+        imported = opds2_import_fixture.process_bibliographic_apply_queue()
+        assert len(imported) == 0
+
+        assert (
+            "Error validating publication (identifier: urn:ISBN:9780792766919, title: Past Imperfect)"
+            in caplog.text
+        )
 
 
 class TestImportAndReapNotFoundChord:

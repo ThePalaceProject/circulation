@@ -1,30 +1,22 @@
 from __future__ import annotations
 
 import datetime
-import json
 import uuid
 from functools import partial
-from typing import Any, Literal
+from typing import Literal
 from unittest.mock import MagicMock
 
 import pytest
-from jinja2 import Template
-from requests import Response
 
 from palace.manager.api.circulation.data import HoldInfo, LoanInfo
-from palace.manager.core.coverage import CoverageFailure
 from palace.manager.integration.license.opds.odl.api import OPDS2WithODLApi
-from palace.manager.integration.license.opds.odl.importer import OPDS2WithODLImporter
 from palace.manager.opds.lcp.license import LicenseDocument
 from palace.manager.opds.lcp.status import LoanStatus
 from palace.manager.sqlalchemy.model.collection import Collection
-from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.licensing import (
-    DeliveryMechanism,
     License,
     LicensePool,
-    LicensePoolDeliveryMechanism,
 )
 from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.sqlalchemy.model.work import Work
@@ -32,10 +24,6 @@ from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import FilesFixture, OPDS2WithODLFilesFixture
 from tests.fixtures.http import MockHttpClientFixture
-from tests.fixtures.work import (
-    WorkIdPolicyQueuePresentationRecalculationFixture,
-)
-from tests.mocks.mock import MockRequestsResponse
 from tests.mocks.odl import MockOPDS2WithODLApi
 
 
@@ -217,167 +205,3 @@ def opds2_with_odl_api_fixture(
     opds2_with_odl_files_fixture: OPDS2WithODLFilesFixture,
 ) -> OPDS2WithODLApiFixture:
     return OPDS2WithODLApiFixture(db, http_client, opds2_with_odl_files_fixture)
-
-
-class LicenseHelper:
-    """Represents an ODL license."""
-
-    def __init__(
-        self,
-        identifier: str | None = "",
-        checkouts: int | None = None,
-        concurrency: int | None = None,
-        expires: datetime.datetime | str | None = None,
-    ) -> None:
-        """Initialize a new instance of LicenseHelper class.
-
-        :param identifier: License's identifier
-        :param checkouts: Total number of checkouts before a license expires
-        :param concurrency: Number of concurrent checkouts allowed
-        :param expires: Date & time when a license expires
-        """
-        self.identifier = identifier if identifier else f"urn:uuid:{uuid.uuid1()}"
-        self.checkouts = checkouts
-        self.concurrency = concurrency
-        self.expires = (
-            expires.isoformat() if isinstance(expires, datetime.datetime) else expires
-        )
-
-
-class LicenseInfoHelper:
-    """Represents information about the current state of a license stored in the License Info Document."""
-
-    def __init__(
-        self,
-        license: LicenseHelper,
-        available: int,
-        status: str = "available",
-        left: int | None = None,
-    ) -> None:
-        """Initialize a new instance of LicenseInfoHelper class."""
-        self.license: LicenseHelper = license
-        self.status: str = status
-        self.left: int | None = left
-        self.available: int = available
-
-    def __str__(self) -> str:
-        """Return a JSON representation of the License Info Document."""
-        return self.json
-
-    @property
-    def json(self) -> str:
-        """Return a JSON representation of the License Info Document."""
-        return json.dumps(self.dict)
-
-    @property
-    def dict(self) -> dict[str, Any]:
-        """Return a dictionary representation of the License Info Document."""
-        output: dict[str, Any] = {
-            "identifier": self.license.identifier,
-            "status": self.status,
-            "terms": {
-                "concurrency": self.license.concurrency,
-            },
-            "checkouts": {
-                "available": self.available,
-            },
-        }
-        if self.license.expires is not None:
-            output["terms"]["expires"] = self.license.expires
-        if self.left is not None:
-            output["checkouts"]["left"] = self.left
-        return output
-
-
-class OPDS2WithODLImporterFixture:
-    def __init__(
-        self,
-        db: DatabaseTransactionFixture,
-        api_fixture: OPDS2WithODLApiFixture,
-        work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
-    ):
-        self.db = db
-        self.api_fixture = api_fixture
-        self.files = api_fixture.files
-
-        self.responses: list[bytes] = []
-
-        self.collection = api_fixture.collection
-
-        self.importer = OPDS2WithODLImporter(
-            db.session,
-            collection=self.collection,
-            http_get=self.get_response,
-        )
-
-        self.work_policy_recalc_fixture = work_policy_recalc_fixture
-
-    def get_response(self, *args: Any, **kwargs: Any) -> Response:
-        return MockRequestsResponse(200, content=self.responses.pop(0))
-
-    def queue_response(self, item: LicenseInfoHelper | str | bytes) -> None:
-        if isinstance(item, LicenseInfoHelper):
-            self.responses.append(str(item).encode("utf-8"))
-        elif isinstance(item, str):
-            self.responses.append(item.encode("utf-8"))
-        elif isinstance(item, bytes):
-            self.responses.append(item)
-
-    def queue_fixture_file(self, filename: str) -> None:
-        self.responses.append(self.files.sample_data(filename))
-
-    def import_fixture_file(
-        self,
-        filename: str = "feed_template.json.jinja",
-        licenses: list[LicenseInfoHelper] | None = None,
-    ) -> tuple[
-        list[Edition],
-        list[LicensePool],
-        list[Work],
-        dict[str, list[CoverageFailure]],
-    ]:
-        feed = self.files.sample_text(filename)
-
-        if licenses is not None:
-            feed_licenses = [l.license for l in licenses]
-            for _license in licenses:
-                self.queue_response(_license)
-            feed = Template(feed).render(licenses=feed_licenses)
-
-        return self.importer.import_from_feed(feed)
-
-    @staticmethod
-    def get_delivery_mechanism_by_drm_scheme_and_content_type(
-        delivery_mechanisms: list[LicensePoolDeliveryMechanism],
-        content_type: str,
-        drm_scheme: str | None,
-    ) -> DeliveryMechanism | None:
-        """Find a license pool in the list by its identifier.
-
-        :param delivery_mechanisms: List of delivery mechanisms
-        :param content_type: Content type
-        :param drm_scheme: DRM scheme
-
-        :return: Delivery mechanism with the specified DRM scheme and content type (if any)
-        """
-        for delivery_mechanism in delivery_mechanisms:
-            mechanism = delivery_mechanism.delivery_mechanism
-
-            if (
-                mechanism.drm_scheme == drm_scheme
-                and mechanism.content_type == content_type
-            ):
-                return mechanism
-
-        return None
-
-
-@pytest.fixture
-def opds2_with_odl_importer_fixture(
-    db: DatabaseTransactionFixture,
-    opds2_with_odl_api_fixture: OPDS2WithODLApiFixture,
-    work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
-) -> OPDS2WithODLImporterFixture:
-    return OPDS2WithODLImporterFixture(
-        db, opds2_with_odl_api_fixture, work_policy_recalc_fixture
-    )

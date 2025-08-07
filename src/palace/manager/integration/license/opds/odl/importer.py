@@ -1,355 +1,373 @@
 from __future__ import annotations
 
-import datetime
-from collections.abc import Callable, Mapping
-from functools import cached_property
-from typing import Any, cast
+from collections.abc import Callable, Generator
+from typing import Any, Generic, Protocol, TypeVar
 from urllib.parse import urljoin
 
 from pydantic import TypeAdapter, ValidationError
-from requests import Response
 from sqlalchemy.orm import Session
 
-from palace.manager.core.coverage import CoverageFailure
+from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.data_layer.bibliographic import BibliographicData
-from palace.manager.integration.license.opds.base.importer import BaseOPDSImporter
+from palace.manager.data_layer.circulation import CirculationData
+from palace.manager.data_layer.identifier import IdentifierData
+from palace.manager.integration.base import integration_settings_load
 from palace.manager.integration.license.opds.odl.api import OPDS2WithODLApi
 from palace.manager.integration.license.opds.odl.extractor import OPDS2WithODLExtractor
-from palace.manager.integration.license.opds.odl.settings import OPDS2WithODLSettings
-from palace.manager.integration.license.opds.opds1.monitor import OPDSImportMonitor
+from palace.manager.integration.license.opds.opds2.settings import OPDS2ImporterSettings
 from palace.manager.integration.license.opds.requests import (
+    BaseOpdsHttpRequest,
+    OPDS2AuthType,
     get_opds_requests,
 )
 from palace.manager.opds import opds2, rwpm
 from palace.manager.opds.odl import odl
 from palace.manager.opds.odl.info import LicenseInfo
 from palace.manager.opds.odl.odl import Opds2OrOpds2WithOdlPublication
+from palace.manager.opds.opds2 import PublicationFeedNoValidation
+from palace.manager.service.integration_registry.license_providers import (
+    LicenseProvidersRegistry,
+)
+from palace.manager.service.redis.models.set import IdentifierSet
 from palace.manager.sqlalchemy.model.collection import Collection
-from palace.manager.sqlalchemy.model.identifier import Identifier
-from palace.manager.util.http import HTTP, BadResponseException, GetRequestCallable
+from palace.manager.util.http import BadResponseException
+from palace.manager.util.log import LoggerMixin
 
 
-class OPDS2WithODLImporter(BaseOPDSImporter[OPDS2WithODLSettings]):
+class ApplyBibliographicCallable(Protocol):
     """
-    Import information and formats from an ODL feed.
+    A callable that applies bibliographic data to the system.
+
+    For example, this could be the signature of a Celery task that processes
+    bibliographic data and updates the database accordingly:
+    apply.bibliographic_apply.delay
     """
 
-    NAME = OPDS2WithODLApi.label()
+    def __call__(
+        self, bibliographic: BibliographicData, /, *, collection_id: int
+    ) -> Any: ...
 
-    @classmethod
-    def settings_class(cls) -> type[OPDS2WithODLSettings]:
-        return OPDS2WithODLSettings
+
+class ApplyCirculationCallable(Protocol):
+    """
+    A callable that applies circulation data to the system.
+
+    For example, this could be the signature of a Celery task that processes
+    circulation data and updates the database accordingly:
+    apply.circulation_apply.delay
+    """
+
+    def __call__(
+        self, circulation: CirculationData, /, *, collection_id: int
+    ) -> Any: ...
+
+
+class ImporterSettingsProtocol(Protocol):
+    """
+    A protocol that defines the settings required for an OPDS2WithODLImporter.
+    """
+
+    @property
+    def external_account_id(self) -> str: ...
+    @property
+    def ignored_identifier_types(self) -> list[str]: ...
+    @property
+    def custom_accept_header(self) -> str: ...
+    @property
+    def max_retry_count(self) -> int: ...
+
+
+PublicationType = TypeVar("PublicationType", bound=opds2.BasePublication)
+SettingsType = TypeVar("SettingsType", bound=ImporterSettingsProtocol)
+
+
+class OPDS2WithODLImporter(Generic[PublicationType, SettingsType], LoggerMixin):
+    """
+    An importer for OPDS2 or OPDS2+ODL feeds.
+    """
 
     def __init__(
         self,
-        db: Session,
-        collection: Collection,
-        data_source_name: str | None = None,
-        http_get: GetRequestCallable | None = None,
-    ):
-        """Initialize a new instance of OPDS2WithODLImporter class.
-
-        :param db: Database session
-        :type db: sqlalchemy.orm.session.Session
-
-        :param collection: Circulation Manager's collection.
-            LicensePools created by this OPDS2Import class will be associated with the given Collection.
-            If this is None, no LicensePools will be created -- only Editions.
-        :type collection: Collection
-
-        :param data_source_name: Name of the source of this OPDS feed.
-            All Editions created by this import will be associated with this DataSource.
-            If there is no DataSource with this name, one will be created.
-            NOTE: If `collection` is provided, its .data_source will take precedence over any value provided here.
-            This is only for use when you are importing OPDS metadata without any particular Collection in mind.
-        :type data_source_name: str
+        request: BaseOpdsHttpRequest,
+        extractor: OPDS2WithODLExtractor,
+        parse_publication: Callable[[dict[str, Any]], PublicationType],
+        settings: SettingsType,
+    ) -> None:
         """
-        super().__init__(
-            db,
-            collection,
-            data_source_name,
+        Constructor.
+
+        :param request: The HTTP request handler to use for fetching the feed.
+        :param extractor: The extractor to use for extracting bibliographic data.
+        :param parse_publication: A callable that parses a publication from a dictionary.
+        :param settings: The settings for the importer.
+        """
+        self._request = request
+        self._extractor = extractor
+        self._settings = settings
+        self._parse_publication = parse_publication
+        self._feed_base_url = settings.external_account_id
+        self._ignored_identifier_types = set(settings.ignored_identifier_types)
+
+    def get_feed(self, url: str | None) -> PublicationFeedNoValidation:
+        """
+        Fetch the feed from the given URL and return it as a PublicationFeedNoValidation object.
+
+        :param url: The URL of the feed to fetch. If None, the base URL is used.
+
+        :return: A PublicationFeedNoValidation object containing the feed data.
+        """
+        joined_url = urljoin(self._feed_base_url, url)
+        self.log.info(f"Fetching feed page: {joined_url}")
+        return self._request(
+            "GET",
+            joined_url,
+            parser=PublicationFeedNoValidation.model_validate_json,
+            allowed_response_codes=["2xx"],
+            headers={"Accept": self._settings.custom_accept_header},
+            max_retry_count=self._settings.max_retry_count,
         )
 
-        self.http_get = http_get or HTTP.get_with_timeout
-        self.ignored_identifier_types = self.settings.ignored_identifier_types
+    @classmethod
+    def next_page(cls, feed: PublicationFeedNoValidation) -> str | None:
+        """Get the next page URL from the feed."""
+        next_link = feed.links.get(
+            rel="next", type=PublicationFeedNoValidation.content_type()
+        )
+        if not next_link:
+            return None
+        return next_link.href
+
+    def _is_identifier_ignored(self, identifier: IdentifierData) -> bool:
+        """
+        Test if the identifier should be ignored by the importer.
+        """
+        return identifier.type not in self._ignored_identifier_types
 
     @classmethod
-    def fetch_license_info(
-        cls, document_link: str, do_get: Callable[..., Response]
-    ) -> LicenseInfo | None:
-        resp = do_get(document_link, headers={})
-        if resp.status_code in (200, 201):
+    def is_changed(cls, session: Session, bibliographic: BibliographicData) -> bool:
+        """
+        Test is the bibliographic data has changed since the last import.
+        """
+        edition = bibliographic.load_edition(session)
+        if not edition:
+            return True
+
+        # If we don't have any information about the last update time, assume we need to update.
+        if edition.updated_at is None or bibliographic.data_source_last_updated is None:
+            return True
+
+        if bibliographic.data_source_last_updated > edition.updated_at:
+            return True
+
+        cls.logger().info(
+            f"Publication {bibliographic.primary_identifier_data} is unchanged. Last updated at "
+            f"{edition.updated_at}, data source last updated at {bibliographic.data_source_last_updated}"
+        )
+        return False
+
+    def _filtered_publications(
+        self, publications: list[dict[str, Any]]
+    ) -> Generator[tuple[IdentifierData, PublicationType]]:
+        """
+        Filter and parse the publications from the feed.
+
+        This method will parse each publication, extract its identifier, and yield
+        the identifier along with the publication object. If a publication cannot be
+        parsed or its identifier is not allowed, it will log an error and skip that publication.
+
+        :param publications: A list of publication dictionaries from the feed.
+        :return: A generator yielding tuples of (IdentifierData, PublicationType).
+        """
+
+        for publication_dict in publications:
             try:
-                return LicenseInfo.model_validate_json(resp.content)
+                publication = self._parse_publication(publication_dict)
             except ValidationError as e:
-                cls.logger().error(
-                    f"License Info Document at {document_link} is not valid. {e}"
+                raw_identifier = publication_dict.get("metadata", {}).get("identifier")
+                raw_title = publication_dict.get("metadata", {}).get("title")
+                self.log.error(
+                    f"Error validating publication (identifier: {raw_identifier}, title: {raw_title}): {e}"
                 )
-                return None
-        else:
-            cls.logger().warning(
+                continue
+
+            try:
+                identifier = self._extractor.extract_identifier(publication)
+            except PalaceValueError:
+                self.log.exception(
+                    "The publications identifier could not be parsed. Skipping publication."
+                )
+                continue
+
+            if not self._is_identifier_ignored(identifier):
+                self.log.warning(
+                    f"Publication {identifier} not imported because its identifier type is not allowed: {identifier.type}"
+                )
+                continue
+
+            yield identifier, publication
+
+    def _fetch_license_document(self, document_link: str) -> LicenseInfo | None:
+        """
+        Fetch a license document from the given link and return it as a LicenseInfo object.
+        """
+        try:
+            return self._request(
+                "GET",
+                document_link,
+                parser=LicenseInfo.model_validate_json,
+                allowed_response_codes=["2xx"],
+                max_retry_count=self._settings.max_retry_count,
+            )
+        except BadResponseException as e:
+            resp = e.response
+            self.log.warning(
                 f"License Info Document is not available. "
                 f"Status link {document_link} failed with {resp.status_code} code."
             )
             return None
-
-    @cached_property
-    def _publication_type_adapter(self) -> TypeAdapter[Opds2OrOpds2WithOdlPublication]:
-        return TypeAdapter(Opds2OrOpds2WithOdlPublication)
-
-    def _get_publication(
-        self,
-        publication: dict[str, Any],
-    ) -> opds2.Publication | odl.Publication:
-        return self._publication_type_adapter.validate_python(publication)
-
-    def _parse_feed(self, feed: str | bytes) -> opds2.PublicationFeedNoValidation:
-        try:
-            return opds2.PublicationFeedNoValidation.model_validate_json(feed)
         except ValidationError as e:
-            self.log.exception(f"Error parsing feed: {e}")
-            raise
-
-    def extract_next_links(self, feed: str | bytes) -> list[str]:
-        """Extracts "next" links from the feed.
-
-        :param feed: OPDS 2.0 feed
-        :return: List of "next" links
-        """
-        try:
-            parsed_feed = self._parse_feed(feed)
-        except ValidationError:
-            return []
-
-        next_links = [
-            next_link.href for next_link in parsed_feed.links.get_collection(rel="next")
-        ]
-
-        return next_links
-
-    def extract_last_update_dates(
-        self, feed: str | bytes
-    ) -> list[tuple[str | None, datetime.datetime | None]]:
-        """Extract last update date of the feed.
-
-        :param feed: OPDS 2.0 feed
-        :return: A list of 2-tuples containing publication's identifiers and their last modified dates
-        """
-        last_update_dates: list[tuple[str | None, datetime.datetime | None]] = []
-        try:
-            parsed_feed = self._parse_feed(feed)
-        except ValidationError:
-            return last_update_dates
-
-        for publication_dict in parsed_feed.publications:
-            try:
-                publication = self._get_publication(publication_dict)
-            except ValidationError:
-                continue
-            last_update_dates.append(
-                (publication.metadata.identifier, publication.metadata.modified)
+            self.log.error(
+                f"License Info Document at {document_link} is not valid. {e}"
             )
-        return last_update_dates
-
-    def _record_coverage_failure(
-        self,
-        failures: dict[str, list[CoverageFailure]],
-        identifier: Identifier,
-        error_message: str,
-        transient: bool = True,
-    ) -> CoverageFailure:
-        """Record a new coverage failure.
-
-        :param failures: Dictionary mapping publication identifiers to corresponding CoverageFailure objects
-        :param identifier: Publication's identifier
-        :param error_message: Message describing the failure
-        :param transient: Boolean value indicating whether the failure is final or it can go away in the future
-        :return: CoverageFailure object describing the error
-        """
-        if identifier.identifier is None:
-            raise ValueError
-
-        if identifier not in failures:
-            failures[identifier.identifier] = []
-
-        failure = CoverageFailure(
-            identifier,
-            error_message,
-            data_source=self.data_source,
-            transient=transient,
-            collection=self.collection,
-        )
-        failures[identifier.identifier].append(failure)
-
-        return failure
-
-    def _record_publication_unrecognizable_identifier(
-        self, identifier: str | None, title: str | None
-    ) -> None:
-        """Record a publication's unrecognizable identifier, i.e. identifier that has an unknown format
-            and could not be parsed by CM.
-
-        :param publication: OPDS 2.x publication object
-        """
-        if identifier is None:
-            self.log.warning(f"Publication '{title}' does not have an identifier.")
-        else:
-            self.log.warning(
-                f"Publication # {identifier} ('{title}') has an unrecognizable identifier."
-            )
-
-    def _is_identifier_allowed(self, identifier: Identifier) -> bool:
-        """Check the identifier and return a boolean value indicating whether CM can import it.
-
-        :param identifier: Identifier object
-        :return: Boolean value indicating whether CM can import the identifier
-        """
-        return identifier.type not in self.ignored_identifier_types
-
-    def _get_allowed_identifier(
-        self, identifier: str | None, title: str | None
-    ) -> Identifier | None:
-        recognized_identifier = self.parse_identifier(identifier)
-        if not recognized_identifier or not self._is_identifier_allowed(
-            recognized_identifier
-        ):
-            self._record_publication_unrecognizable_identifier(identifier, title)
             return None
-        return recognized_identifier
+
+    def _fetch_license_documents(
+        self, publication: PublicationType
+    ) -> dict[str, LicenseInfo]:
+        """
+        Fetch the license documents for a publication.
+        :param publication: The publication from which to fetch license documents.
+        :return: A dictionary mapping license identifiers to LicenseInfo objects.
+        """
+        publication_available = publication.metadata.availability.available
+        return (
+            {
+                license_info.identifier: license_info
+                for odl_license in publication.licenses
+                if odl_license.metadata.availability.available
+                and publication_available
+                and (
+                    license_info := self._fetch_license_document(
+                        odl_license.links.get(
+                            rel=rwpm.LinkRelations.self,
+                            type=LicenseInfo.content_type(),
+                            raising=True,
+                        ).href
+                    )
+                )
+                is not None
+            }
+            if isinstance(publication, odl.Publication)
+            else {}
+        )
 
     def extract_feed_data(
-        self, feed: str | bytes, feed_url: str | None = None
-    ) -> tuple[dict[str, BibliographicData], dict[str, list[CoverageFailure]]]:
-        """Turn an OPDS 2.0 feed into lists of BibliographicData and CirculationData objects.
-        :param feed: OPDS 2.0 feed
-        :param feed_url: Feed URL used to resolve relative links
+        self, feed: PublicationFeedNoValidation
+    ) -> dict[IdentifierData, BibliographicData]:
         """
-        try:
-            parsed_feed = self._parse_feed(feed)
-        except ValidationError:
-            return {}, {}
+        Extract bibliographic data from the feed.
+        """
+        results = {}
 
-        publication_bibliographic_dictionary = {}
-        failures: dict[str, list[CoverageFailure]] = {}
-
-        feed_self_url = parsed_feed.links.get(
-            rel=rwpm.LinkRelations.self, raising=True
-        ).href
-
-        for publication_dict in parsed_feed.publications:
-            try:
-                publication = self._get_publication(publication_dict)
-            except ValidationError as e:
-                raw_identifier = publication_dict.get("metadata", {}).get("identifier")
-                raw_title = publication_dict.get("metadata", {}).get("title")
-                recognized_identifier = self._get_allowed_identifier(
-                    raw_identifier, raw_title
-                )
-                if recognized_identifier:
-                    self._record_coverage_failure(
-                        failures, recognized_identifier, str(e)
-                    )
-
-                continue
-            recognized_identifier = self._get_allowed_identifier(
-                publication.metadata.identifier, str(publication.metadata.title)
+        for identifier, publication in self._filtered_publications(feed.publications):
+            license_info_documents = self._fetch_license_documents(publication)
+            results[identifier] = self._extractor.extract(
+                identifier, publication, license_info_documents
             )
 
-            if not recognized_identifier:
-                continue
+        return results
 
-            publication_available = publication.metadata.availability.available
-
-            license_info_documents = (
-                [
-                    (
-                        self.fetch_license_info(
-                            odl_license.links.get(
-                                rel=rwpm.LinkRelations.self,
-                                type=LicenseInfo.content_type(),
-                                raising=True,
-                            ).href,
-                            self.http_get,
-                        )
-                        if odl_license.metadata.availability.available
-                        and publication_available
-                        else None
-                    )
-                    for odl_license in publication.licenses
-                ]
-                if isinstance(publication, odl.Publication)
-                else []
-            )
-
-            publication_bibliographic = OPDS2WithODLExtractor.extract_publication_data(
-                publication,
-                license_info_documents,
-                self.data_source.name,
-                feed_self_url,
-                self.settings.auth_type,
-                set(self.settings.skipped_license_formats),
-            )
-
-            # Make sure we have a primary identifier before trying to use it
-            if publication_bibliographic.primary_identifier_data is not None:
-                publication_bibliographic_dictionary[
-                    publication_bibliographic.primary_identifier_data.identifier
-                ] = publication_bibliographic
-
-        return publication_bibliographic_dictionary, failures
-
-
-class OPDS2WithODLImportMonitor(OPDSImportMonitor):
-    """Import information from an ODL feed."""
-
-    PROTOCOL = OPDS2WithODLApi.label()
-    SERVICE_NAME = "ODL 2.x Import Monitor"
-    MEDIA_TYPE = opds2.PublicationFeed.content_type(), "application/json"
-
-    def __init__(
+    def import_feed(
         self,
-        _db: Session,
+        session: Session,
+        feed: PublicationFeedNoValidation,
         collection: Collection,
-        import_class: type[OPDS2WithODLImporter],
-        **import_class_kwargs: Any,
-    ) -> None:
-        # Always force reimport ODL collections to get up to date license information
-        super().__init__(
-            _db, collection, import_class, force_reimport=True, **import_class_kwargs
-        )
-        self.settings = cast(OPDS2WithODLSettings, self.importer.settings)
-        self._request = get_opds_requests(
-            self.settings.auth_type,
-            self.settings.username,
-            self.settings.password,
-            self.settings.external_account_id,
-        )
+        *,
+        apply_bibliographic: ApplyBibliographicCallable,
+        apply_circulation: ApplyCirculationCallable | None = None,
+        identifier_set: IdentifierSet | None = None,
+        import_even_if_unchanged: bool = False,
+    ) -> bool:
+        """
+        Import the feed data into the system.
 
-    def _get(self, url: str, headers: Mapping[str, str] | None = None) -> Response:
-        headers = self._update_headers(headers)
-        if not url.startswith("http"):
-            url = urljoin(self._feed_base_url, url)
-        return self._request(
-            "GET",
-            url,
-            headers=headers,
-            timeout=120,
-            max_retry_count=self._max_retry_count,
-            allowed_response_codes=["2xx", "3xx"],
+        This method will extract bibliographic data from the feed, check if the
+        bibliographic data has changed, and if so, apply the bibliographic data
+        using the provided `apply_bibliographic` callable. If the bibliographic data
+        has not changed and `apply_circulation` is provided, it will also apply the
+        circulation data.
+
+        :param session: The database session to use for the import.
+        :param feed: The feed to import data from.
+        :param collection: The collection to which the data belongs.
+        :param apply_bibliographic: A callable that applies bibliographic data.
+        :param apply_circulation: A callable that applies circulation data, or None if not applicable.
+        :param identifier_set: An optional IdentifierSet to track imported identifiers.
+        :param import_even_if_unchanged: If True the bibliographic data will be imported even if it has not changed.
+
+        :return: A boolean indicating whether any publication was unchanged.
+          If True, it means that at least one publication was not changed and thus not imported.
+          If False, it means that all publications were either changed or imported.
+        """
+        feed_data = self.extract_feed_data(feed)
+
+        unchanged_publication = False
+        for bibliographic in feed_data.values():
+            if import_even_if_unchanged or self.is_changed(session, bibliographic):
+                # Queue task to import publication
+                apply_bibliographic(
+                    bibliographic,
+                    collection_id=collection.id,
+                )
+            else:
+                unchanged_publication = True
+                if (
+                    bibliographic.circulation is not None
+                    and apply_circulation is not None
+                ):
+                    circulation_data = bibliographic.circulation
+                    # If the bibliographic data is unchanged, we still want to apply the circulation data
+                    apply_circulation(
+                        circulation_data,
+                        collection_id=collection.id,
+                    )
+
+        if identifier_set is not None:
+            identifier_set.add(*feed_data.keys())
+
+        return unchanged_publication
+
+
+_ODL_PUBLICATION_ADAPTOR: TypeAdapter[Opds2OrOpds2WithOdlPublication] = TypeAdapter(
+    Opds2OrOpds2WithOdlPublication
+)
+
+
+def importer_from_collection(
+    collection: Collection, registry: LicenseProvidersRegistry
+) -> OPDS2WithODLImporter[Opds2OrOpds2WithOdlPublication, OPDS2ImporterSettings]:
+    """
+    Create an OPDS2WithODLImporter from a OPDS2+ODL (OPDS2WithODLApi protocol) Collection.
+    """
+    if not registry.equivalent(collection.protocol, OPDS2WithODLApi):
+        raise PalaceValueError(
+            f"Collection {collection.name} [id={collection.id} protocol={collection.protocol}] is not a OPDS2+ODL collection."
         )
-
-    def _verify_media_type(self, url: str, resp: Response) -> None:
-        # Make sure we got an OPDS feed, and not an error page that was
-        # sent with a 200 status code.
-        media_type = resp.headers.get("content-type")
-        if not media_type or not any(x in media_type for x in self.MEDIA_TYPE):
-            message = "Expected {} OPDS 2.0 feed, got {}".format(
-                self.MEDIA_TYPE, media_type
-            )
-
-            raise BadResponseException(url, message=message, response=resp)
-
-    def _get_accept_header(self) -> str:
-        return "{}, {};q=0.9, */*;q=0.1".format(
-            opds2.PublicationFeed.content_type(), "application/json"
-        )
+    settings = integration_settings_load(
+        OPDS2WithODLApi.settings_class(), collection.integration_configuration
+    )
+    request = get_opds_requests(
+        settings.auth_type,
+        settings.username,
+        settings.password,
+        settings.external_account_id,
+    )
+    extractor = OPDS2WithODLExtractor(
+        settings.external_account_id,
+        settings.data_source,
+        settings.skipped_license_formats,
+        settings.auth_type == OPDS2AuthType.OAUTH,
+    )
+    return OPDS2WithODLImporter(
+        request, extractor, _ODL_PUBLICATION_ADAPTOR.validate_python, settings
+    )

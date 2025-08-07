@@ -27,6 +27,7 @@ from palace.manager.api.admin.problem_details import (
     UNKNOWN_PROTOCOL,
 )
 from palace.manager.api.selftest import HasCollectionSelfTests
+from palace.manager.celery.tasks import opds_odl
 from palace.manager.core.selftest import HasSelfTests
 from palace.manager.integration.goals import Goals
 from palace.manager.integration.license.boundless.api import BoundlessApi
@@ -645,7 +646,10 @@ class TestCollectionSettings:
 
         library = db.default_library()
         collection2 = db.collection(name="Collection 2", protocol=OPDS2WithODLApi)
-        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
+        with (
+            flask_app_fixture.test_request_context_system_admin("/", method="POST"),
+            patch.object(opds_odl, "import_collection") as mock_import,
+        ):
             flask.request.form = ImmutableMultiDict(
                 [
                     ("id", str(collection2.integration_configuration.id)),
@@ -685,6 +689,9 @@ class TestCollectionSettings:
             ].settings_dict.get("ebook_loan_duration")
             == 200
         )
+
+        # We called `import_task` to re-import the collection
+        mock_import.s.assert_called_once_with(collection2.id, force=False)
 
     def test_collections_post_edit_library_specific_configuration(
         self,

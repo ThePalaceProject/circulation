@@ -1,11 +1,11 @@
 from datetime import datetime, timedelta
-from unittest.mock import call, patch
+from unittest.mock import call, create_autospec, patch
 
 import pytest
 from freezegun import freeze_time
 from sqlalchemy import func, select
 
-from palace.manager.celery.tasks import opds_odl
+from palace.manager.celery.tasks import apply, opds_odl
 from palace.manager.celery.tasks.opds_odl import (
     _licensepool_ids_with_holds,
     _recalculate_holds_for_licensepool,
@@ -17,6 +17,8 @@ from palace.manager.celery.tasks.opds_odl import (
     remove_expired_holds_for_collection_task,
 )
 from palace.manager.integration.license.opds.odl.api import OPDS2WithODLApi
+from palace.manager.integration.license.opds.odl.importer import OPDS2WithODLImporter
+from palace.manager.integration.license.opds.opds2.api import OPDS2API
 from palace.manager.integration.license.overdrive.api import OverdriveAPI
 from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.service.redis.models.lock import LockNotAcquired
@@ -444,3 +446,113 @@ class TestRecalculateHoldQueueCollection:
 
         # The other pool was recalculated
         assert pool.licenses_reserved == 1
+
+
+class TestImportAll:
+    @pytest.mark.parametrize(
+        "force",
+        [
+            pytest.param(True, id="Force import"),
+            pytest.param(False, id="Do not force import"),
+        ],
+    )
+    def test_import_all(
+        self, db: DatabaseTransactionFixture, celery_fixture: CeleryFixture, force: bool
+    ) -> None:
+        collection1 = db.collection(protocol=OPDS2WithODLApi)
+        collection2 = db.collection(protocol=OPDS2WithODLApi)
+        decoy_collection = db.collection(protocol=OPDS2API)
+
+        with patch.object(opds_odl, "import_collection") as mock_import_collection:
+            opds_odl.import_all.delay(force=force).wait()
+
+        # We queued up tasks for all OPDS2+ODL collections, but not for OPDS2
+        mock_import_collection.s.assert_called_once_with(
+            force=force,
+        )
+        mock_import_collection.s.return_value.delay.assert_has_calls(
+            [
+                call(collection_id=collection1.id),
+                call(collection_id=collection2.id),
+            ],
+            any_order=True,
+        )
+
+
+class TestImportCollection:
+    @pytest.mark.parametrize(
+        "force",
+        [
+            pytest.param(True, id="Force import"),
+            pytest.param(False, id="Do not force import"),
+        ],
+    )
+    def test_import_collection(
+        self,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        redis_fixture: RedisFixture,
+        force: bool,
+    ) -> None:
+        """
+        We mock out the actual importer calls, those get tested in the
+        importer tests. This just makes sure we are calling the importer
+        correctly.
+        """
+        mock_importer = create_autospec(OPDS2WithODLImporter)
+        mock_importer.next_page.side_effect = [
+            "http://feed.com/1",
+            None,  # No more pages
+        ]
+        collection = db.collection(
+            protocol=OPDS2WithODLApi,
+            settings=db.opds2_odl_settings(external_account_id="http://feed.com"),
+        )
+
+        with patch.object(
+            opds_odl,
+            "importer_from_collection",
+            autospec=True,
+            return_value=mock_importer,
+        ):
+            opds_odl.import_collection.delay(collection.id, force=force).wait()
+
+        mock_importer.get_feed.assert_has_calls(
+            [
+                call(None),
+                call("http://feed.com/1"),
+            ]
+        )
+
+        mock_importer.import_feed.assert_has_calls(
+            [
+                call(
+                    db.session,
+                    mock_importer.get_feed.return_value,
+                    collection,
+                    apply_bibliographic=apply.bibliographic_apply.delay,
+                    apply_circulation=apply.circulation_apply.delay,
+                    import_even_if_unchanged=force,
+                ),
+                call(
+                    db.session,
+                    mock_importer.get_feed.return_value,
+                    collection,
+                    apply_bibliographic=apply.bibliographic_apply.delay,
+                    apply_circulation=apply.circulation_apply.delay,
+                    import_even_if_unchanged=force,
+                ),
+            ]
+        )
+
+    def test_wrong_protocol(
+        self,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        redis_fixture: RedisFixture,
+    ) -> None:
+        collection = db.collection(
+            protocol=OverdriveAPI,
+        )
+        with pytest.raises(ValueError, match=r"is not a OPDS2\+ODL collection"):
+            opds_odl.import_collection.delay(collection.id).wait()
