@@ -32,11 +32,18 @@ class BaseOpdsHttpRequest(ABC):
     Different subclasses can implement different authentication methods.
     """
 
-    @classmethod
+    def __init__(self, max_retry_count: int | None) -> None:
+        self._requests_session = HTTP.session(max_retry_count)
+
     def _make_request(
-        cls, http_method: str, url: str, **kwargs: Unpack[RequestKwargs]
+        self, http_method: str, url: str, **kwargs: Unpack[RequestKwargs]
     ) -> Response:
-        """Actually make an HTTP request."""
+        """
+        Actually make an HTTP request.
+
+        This will use the session created in the constructor to make the request.
+        """
+        kwargs.setdefault("make_request_with", self._requests_session)
         return HTTP.request_with_timeout(http_method, url, **kwargs)
 
     @abstractmethod
@@ -97,7 +104,10 @@ class NoAuthOpdsRequest(BaseOpdsHttpRequest):
 class BasicAuthOpdsRequest(BaseOpdsHttpRequest):
     """An OPDS request that requires basic authentication."""
 
-    def __init__(self, username: str, password: str) -> None:
+    def __init__(
+        self, username: str, password: str, max_retry_count: int | None
+    ) -> None:
+        super().__init__(max_retry_count)
         self._username = username
         self._password = password
 
@@ -111,7 +121,10 @@ class BasicAuthOpdsRequest(BaseOpdsHttpRequest):
 class OAuthOpdsRequest(BaseOpdsHttpRequest):
     """An OPDS request that authenticates via OAuth."""
 
-    def __init__(self, feed_url: str, username: str, password: str) -> None:
+    def __init__(
+        self, feed_url: str, username: str, password: str, max_retry_count: int | None
+    ) -> None:
+        super().__init__(max_retry_count)
         self._feed_url = feed_url
         self._username = username
         self._password = password
@@ -180,18 +193,15 @@ class OAuthOpdsRequest(BaseOpdsHttpRequest):
                 debug_message=f"Auth document: {auth_document_str}",
             )
 
-    @classmethod
-    def _oauth_session_token_refresh(
-        cls, auth_url: str, username: str, password: str
-    ) -> OAuthTokenResponse:
+    def _oauth_session_token_refresh(self, auth_url: str) -> OAuthTokenResponse:
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
         body = dict(grant_type="client_credentials")
-        resp = cls._make_request(
+        resp = self._make_request(
             "POST",
             auth_url,
             headers=headers,
             data=body,
-            auth=(username, password),
+            auth=(self._username, self._password),
             allowed_response_codes=["2xx"],
         )
         try:
@@ -226,9 +236,7 @@ class OAuthOpdsRequest(BaseOpdsHttpRequest):
         else:
             token_url = self._token_url
 
-        self.session_token = self._oauth_session_token_refresh(
-            token_url, self._username, self._password
-        )
+        self.session_token = self._oauth_session_token_refresh(token_url)
         return self.session_token
 
 
@@ -243,20 +251,21 @@ def get_opds_requests(
     username: str | None,
     password: str | None,
     feed_url: str | None,
+    max_retry_count: int | None = None,
 ) -> BaseOpdsHttpRequest:
     """Get the appropriate OPDS request class based on the authentication type."""
     if authentication == OPDS2AuthType.BASIC:
         if not username or not password:
             raise PalaceValueError("Username and password are required for basic auth.")
-        return BasicAuthOpdsRequest(username, password)
+        return BasicAuthOpdsRequest(username, password, max_retry_count)
     elif authentication == OPDS2AuthType.OAUTH:
         if not username or not password or not feed_url:
             raise PalaceValueError(
                 "Username, password and feed_url are required for OAuth."
             )
-        return OAuthOpdsRequest(feed_url, username, password)
+        return OAuthOpdsRequest(feed_url, username, password, max_retry_count)
     elif authentication == OPDS2AuthType.NONE:
-        return NoAuthOpdsRequest()
+        return NoAuthOpdsRequest(max_retry_count)
     else:
         raise PalaceValueError(
             f"Unsupported authentication type: {authentication}. "
