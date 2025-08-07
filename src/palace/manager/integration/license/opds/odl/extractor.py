@@ -281,10 +281,6 @@ class OPDS2WithODLExtractor(LoggerMixin):
 
         media_types_and_drm_scheme: list[tuple[str, str | None]] = []
 
-        if not link.properties.availability.available:
-            cls.logger().info(f"Link unavailable. Skipping. {link.model_dump_json()}")
-            return []
-
         # We need to take into account indirect acquisition links
         if link.properties.indirect_acquisition:
             # We make the assumption that when we have nested indirect acquisition links
@@ -302,24 +298,13 @@ class OPDS2WithODLExtractor(LoggerMixin):
                     nested_types.append(nested_acquisition.type)
                     nested_acquisition = first_or_default(nested_acquisition.children)
                 [drm_type, media_type] = nested_types[-2:]
-
-                # We then check this returned pair of content types to make sure they match known
-                # book or audiobook and DRM types. If they do not match known types, then we skip
-                # this link.
-                if (
-                    media_type in MediaTypes.BOOK_MEDIA_TYPES
-                    or media_type in MediaTypes.AUDIOBOOK_MEDIA_TYPES
-                ) and drm_type in DeliveryMechanism.KNOWN_DRM_TYPES:
+                if media_type is not None:
                     media_types_and_drm_scheme.append((media_type, drm_type))
 
         # There are no indirect links, then the link type points to the media, and
         # there is no DRM for this link.
-        else:
-            if (
-                link.type in MediaTypes.BOOK_MEDIA_TYPES
-                or link.type in MediaTypes.AUDIOBOOK_MEDIA_TYPES
-            ):
-                media_types_and_drm_scheme.append((link.type, DeliveryMechanism.NO_DRM))
+        elif link.type is not None:
+            media_types_and_drm_scheme.append((link.type, DeliveryMechanism.NO_DRM))
 
         cls.logger().debug(
             "Finished extracting media types and a DRM scheme from {}: {}".format(
@@ -328,6 +313,34 @@ class OPDS2WithODLExtractor(LoggerMixin):
         )
 
         return media_types_and_drm_scheme
+
+    @classmethod
+    def _extract_supported_available_formats_from_link(
+        cls, link: opds2.Link
+    ) -> list[tuple[str, str | None]]:
+        """Extract information about content's media type and used DRM schema from the link.
+
+        :param link: Link object
+        :return: 2-tuple containing information about the content's media type and its DRM schema
+        """
+        if not link.properties.availability.available:
+            cls.logger().info(f"Link unavailable. Skipping. {link.model_dump_json()}")
+            return []
+
+        return [
+            (media_type, drm_scheme)
+            for media_type, drm_scheme in cls._extract_media_types_and_drm_scheme_from_link(
+                link
+            )
+            if (
+                media_type in MediaTypes.BOOK_MEDIA_TYPES
+                or media_type in MediaTypes.AUDIOBOOK_MEDIA_TYPES
+            )
+            and (
+                drm_scheme in DeliveryMechanism.KNOWN_DRM_TYPES
+                or drm_scheme is DeliveryMechanism.NO_DRM
+            )
+        ]
 
     @classmethod
     def _extract_medium(
@@ -607,7 +620,7 @@ class OPDS2WithODLExtractor(LoggerMixin):
             for (
                 content_type,
                 drm_scheme,
-            ) in self._extract_media_types_and_drm_scheme_from_link(link):
+            ) in self._extract_supported_available_formats_from_link(link):
                 if (
                     self._bearer_token_drm
                     and content_type in self._SUPPORTED_BEARER_TOKEN_MEDIA_TYPES
