@@ -22,6 +22,7 @@ class Annotator(LoggerMixin):
     a MARC record."""
 
     # From https://www.loc.gov/standards/valuelist/marctarget.html
+    AUDIENCE_SOURCE = "marctarget"
     AUDIENCE_TERMS: Mapping[str, str] = {
         Classifier.AUDIENCE_CHILDREN: "Juvenile",
         Classifier.AUDIENCE_YOUNG_ADULT: "Adolescent",
@@ -63,11 +64,8 @@ class Annotator(LoggerMixin):
             cls.add_publisher(record, edition)
             cls.add_physical_description(record, edition)
             cls.add_series(record, edition)
-        cls.add_audience(record, work)
-        cls.add_system_details(record)
         cls.add_ebooks_subject(record)
         cls.add_distributor(record, license_pool)
-        cls.add_formats(record, license_pool)
         cls.add_summary(record, work)
         cls.add_genres(record, work)
 
@@ -168,8 +166,25 @@ class Annotator(LoggerMixin):
 
         record.add_field(Field(tag="005", data=utc_now().strftime("%Y%m%d%H%M%S.0")))
 
-        # Field 006: m = computer file, d = the file is a document
-        record.add_field(Field(tag="006", data="m        d        "))
+        # Field 006: m = computer file, o = online, d = the file is a document
+        # See https://www.loc.gov/marc/bibliographic/bd006.html
+        # Refer to the corresponding positions (18-34) in field 008 for descriptions
+        # of field 006 character positions 01-17.
+        # See https://www.loc.gov/marc/bibliographic/bd008c.html
+        _006_00_00_form_of_material = "m"
+        _006_06_06_form_of_item = "o"
+        _006_09_09_type_of_computer_file = "d"
+        _006_field = (
+            _006_00_00_form_of_material
+            + " " * 5
+            + _006_06_06_form_of_item
+            + " " * 2
+            + _006_09_09_type_of_computer_file
+            + " " * 8
+        )
+        # If the length is not correct, then this is a programming error.
+        assert len(_006_field) == 18
+        record.add_field(Field(tag="006", data=_006_field))
 
         # Field 007: more details about electronic resource
         # Since this depends on the pool, it might be better not to cache it.
@@ -184,7 +199,9 @@ class Annotator(LoggerMixin):
         )
 
         # Field 008 (fixed-length data elements):
+        # 00-05 Date entered on file
         data = utc_now().strftime("%y%m%d")
+        # 06 Type of date / Publication status, 07-10 Date 1
         publication_date = (edition.issued or edition.published) if edition else None
         if publication_date:
             date_type = "s"  # single known date
@@ -194,16 +211,30 @@ class Annotator(LoggerMixin):
             date_type = "n"  # dates unknown
             date_value = "    "
         data += date_type + date_value
+        # 11-14 Date 2
         data += "    "
+        # 15-17 Place of publication
         # TODO: Start tracking place of publication when available. Since we don't have
         # this yet, assume everything was published in the US.
         data += "xxu"
-        data += "                 "
+        # 18-22 (multiple fields)
+        data += "     "
+        # 23 Form of item
+        data += "o"  # "o" = Online
+        # 24-28 (multiple fields)
+        data += "     "
+        # 29-34 Conference publication, Festschrift, Index, (undefined), Literary Form, Biography
+        # These should all (except the undefined position) be '|' for "No attempt to code".
+        data += "||| ||"
+        # 35-37 Language
         language = "eng"
         if edition and edition.language:
             language = LanguageCodes.string_to_alpha_3(edition.language)
         data += language
-        data += "  "
+        # 38 Modified record
+        data += " "
+        # 39 Cataloging source
+        data += "d"
         record.add_field(Field(tag="008", data=data))
 
     @classmethod
@@ -419,40 +450,6 @@ class Annotator(LoggerMixin):
                 )
             )
 
-        # Form of work
-        form = None
-        if edition.medium == Edition.BOOK_MEDIUM:
-            form = "eBook"
-        elif edition.medium == Edition.AUDIO_MEDIUM:
-            # This field doesn't seem to be used for audio.
-            pass
-        if form:
-            record.add_field(
-                Field(
-                    tag="380",
-                    indicators=Indicators(" ", " "),
-                    subfields=[
-                        Subfield("a", "eBook"),
-                        Subfield("2", "tlcgt"),
-                    ],
-                )
-            )
-
-    @classmethod
-    def add_audience(cls, record: Record, work: Work) -> None:
-        work_audience = work.audience or Classifier.AUDIENCE_ADULT
-        audience = cls.AUDIENCE_TERMS.get(work_audience, "General")
-        record.add_field(
-            Field(
-                tag="385",
-                indicators=Indicators(" ", " "),
-                subfields=[
-                    Subfield("a", audience),
-                    Subfield("2", "tlctarget"),
-                ],
-            )
-        )
-
     @classmethod
     def add_series(cls, record: Record, edition: Edition) -> None:
         if edition.series:
@@ -466,32 +463,6 @@ class Annotator(LoggerMixin):
                     subfields=subfields,
                 )
             )
-
-    @classmethod
-    def add_system_details(cls, record: Record) -> None:
-        record.add_field(
-            Field(
-                tag="538",
-                indicators=Indicators(" ", " "),
-                subfields=[Subfield("a", "Mode of access: World Wide Web.")],
-            )
-        )
-
-    @classmethod
-    def add_formats(cls, record: Record, pool: LicensePool) -> None:
-        for lpdm in pool.available_delivery_mechanisms:
-            dm = lpdm.delivery_mechanism
-            format = cls.FORMAT_TERMS.get((dm.content_type, dm.drm_scheme))
-            if format:
-                record.add_field(
-                    Field(
-                        tag="538",
-                        indicators=Indicators(" ", " "),
-                        subfields=[
-                            Subfield("a", format),
-                        ],
-                    )
-                )
 
     @classmethod
     def add_summary(cls, record: Record, work: Work) -> None:

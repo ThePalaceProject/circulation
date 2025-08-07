@@ -120,16 +120,13 @@ class TestAnnotator:
             264,
             300,
             336,
-            385,
             490,
-            538,
             655,
             520,
             650,
             337,
             338,
             347,
-            380,
         }
 
     def test__copy_record(self, annotator_fixture: AnnotatorFixture):
@@ -234,10 +231,10 @@ class TestAnnotator:
         )
         annotator_fixture.assert_control_field(record, "001", identifier.urn)
         assert now.strftime("%Y%m%d") in record.get_fields("005")[0].value()
-        annotator_fixture.assert_control_field(record, "006", "m        d        ")
+        annotator_fixture.assert_control_field(record, "006", "m     o  d        ")
         annotator_fixture.assert_control_field(record, "007", "cr cn ---anuuu")
         annotator_fixture.assert_control_field(
-            record, "008", now.strftime("%y%m%d") + "s0956    xxu                 eng  "
+            record, "008", now.strftime("%y%m%d") + "s0956    xxu     o     ||| ||eng d"
         )
 
         # This French edition has two formats and was published in 2018.
@@ -259,10 +256,10 @@ class TestAnnotator:
         )
         annotator_fixture.assert_control_field(record, "001", identifier2.urn)
         assert now.strftime("%Y%m%d") in record.get_fields("005")[0].value()
-        annotator_fixture.assert_control_field(record, "006", "m        d        ")
+        annotator_fixture.assert_control_field(record, "006", "m     o  d        ")
         annotator_fixture.assert_control_field(record, "007", "cr cn ---mnuuu")
         annotator_fixture.assert_control_field(
-            record, "008", now.strftime("%y%m%d") + "s2018    xxu                 fre  "
+            record, "008", now.strftime("%y%m%d") + "s2018    xxu     o     ||| ||fre d"
         )
 
     def test_add_marc_organization_code(self, annotator_fixture: AnnotatorFixture):
@@ -455,14 +452,6 @@ class TestAnnotator:
                 "2": "rda",
             },
         )
-        annotator_fixture.assert_field(
-            record,
-            "380",
-            {
-                "a": "eBook",
-                "2": "tlcgt",
-            },
-        )
 
         record = annotator_fixture.record()
         annotator_fixture.annotator.add_physical_description(record, audio)
@@ -511,24 +500,6 @@ class TestAnnotator:
         )
         assert [] == record.get_fields("380")
 
-    def test_add_audience(
-        self,
-        db: DatabaseTransactionFixture,
-        annotator_fixture: AnnotatorFixture,
-    ):
-        for audience, term in list(annotator_fixture.annotator.AUDIENCE_TERMS.items()):
-            work = db.work(audience=audience)
-            record = annotator_fixture.record()
-            annotator_fixture.annotator.add_audience(record, work)
-            annotator_fixture.assert_field(
-                record,
-                "385",
-                {
-                    "a": term,
-                    "2": "tlctarget",
-                },
-            )
-
     def test_add_series(
         self,
         db: DatabaseTransactionFixture,
@@ -570,41 +541,6 @@ class TestAnnotator:
         record = annotator_fixture.record()
         annotator_fixture.annotator.add_series(record, edition)
         assert [] == record.get_fields("490")
-
-    def test_add_system_details(self, annotator_fixture: AnnotatorFixture):
-        record = annotator_fixture.record()
-        annotator_fixture.annotator.add_system_details(record)
-        annotator_fixture.assert_field(
-            record, "538", {"a": "Mode of access: World Wide Web."}
-        )
-
-    def test_add_formats(
-        self,
-        db: DatabaseTransactionFixture,
-        annotator_fixture: AnnotatorFixture,
-    ):
-        edition, pool = db.edition(with_license_pool=True)
-        epub_no_drm, ignore = DeliveryMechanism.lookup(
-            db.session, Representation.EPUB_MEDIA_TYPE, DeliveryMechanism.NO_DRM
-        )
-        pool.delivery_mechanisms[0].delivery_mechanism = epub_no_drm
-        LicensePoolDeliveryMechanism.set(
-            pool.data_source,
-            pool.identifier,
-            Representation.PDF_MEDIA_TYPE,
-            DeliveryMechanism.ADOBE_DRM,
-            RightsStatus.IN_COPYRIGHT,
-        )
-
-        record = annotator_fixture.record()
-        annotator_fixture.annotator.add_formats(record, pool)
-        fields = record.get_fields("538")
-        assert 2 == len(fields)
-        [pdf, epub] = sorted(fields, key=lambda x: x.get_subfields("a")[0])
-        assert "Adobe PDF eBook" == pdf.get_subfields("a")[0]
-        assert Indicators(" ", " ") == pdf.indicators
-        assert "EPUB eBook" == epub.get_subfields("a")[0]
-        assert Indicators(" ", " ") == epub.indicators
 
     def test_add_summary(
         self,
