@@ -120,7 +120,6 @@ class TestAnnotator:
             264,
             300,
             336,
-            385,
             490,
             655,
             520,
@@ -128,7 +127,6 @@ class TestAnnotator:
             337,
             338,
             347,
-            380,
         }
 
     def test__copy_record(self, annotator_fixture: AnnotatorFixture):
@@ -454,14 +452,6 @@ class TestAnnotator:
                 "2": "rda",
             },
         )
-        annotator_fixture.assert_field(
-            record,
-            "380",
-            {
-                "a": "eBook",
-                "2": "tlcgt",
-            },
-        )
 
         record = annotator_fixture.record()
         annotator_fixture.annotator.add_physical_description(record, audio)
@@ -509,24 +499,6 @@ class TestAnnotator:
             },
         )
         assert [] == record.get_fields("380")
-
-    def test_add_audience(
-        self,
-        db: DatabaseTransactionFixture,
-        annotator_fixture: AnnotatorFixture,
-    ):
-        for audience, term in list(annotator_fixture.annotator.AUDIENCE_TERMS.items()):
-            work = db.work(audience=audience)
-            record = annotator_fixture.record()
-            annotator_fixture.annotator.add_audience(record, work)
-            annotator_fixture.assert_field(
-                record,
-                "385",
-                {
-                    "a": term,
-                    "2": "marctarget",
-                },
-            )
 
     def test_add_series(
         self,

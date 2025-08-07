@@ -64,7 +64,6 @@ class Annotator(LoggerMixin):
             cls.add_publisher(record, edition)
             cls.add_physical_description(record, edition)
             cls.add_series(record, edition)
-        cls.add_audience(record, work)
         cls.add_ebooks_subject(record)
         cls.add_distributor(record, license_pool)
         cls.add_summary(record, work)
@@ -183,9 +182,9 @@ class Annotator(LoggerMixin):
             + _006_09_09_type_of_computer_file
             + " " * 8
         )
-        # If the lenght is not correct, then this is a programming error.
+        # If the length is not correct, then this is a programming error.
         assert len(_006_field) == 18
-        record.add_field(Field(tag="006", data="m     o  d        "))
+        record.add_field(Field(tag="006", data=_006_field))
 
         # Field 007: more details about electronic resource
         # Since this depends on the pool, it might be better not to cache it.
@@ -450,40 +449,6 @@ class Annotator(LoggerMixin):
                     ],
                 )
             )
-
-        # Form of work
-        form = None
-        if edition.medium == Edition.BOOK_MEDIUM:
-            form = "eBook"
-        elif edition.medium == Edition.AUDIO_MEDIUM:
-            # This field doesn't seem to be used for audio.
-            pass
-        if form:
-            record.add_field(
-                Field(
-                    tag="380",
-                    indicators=Indicators(" ", " "),
-                    subfields=[
-                        Subfield("a", "eBook"),
-                        Subfield("2", "tlcgt"),
-                    ],
-                )
-            )
-
-    @classmethod
-    def add_audience(cls, record: Record, work: Work) -> None:
-        work_audience = work.audience or Classifier.AUDIENCE_ADULT
-        audience = cls.AUDIENCE_TERMS.get(work_audience, "General")
-        record.add_field(
-            Field(
-                tag="385",
-                indicators=Indicators(" ", " "),
-                subfields=[
-                    Subfield("a", audience),
-                    Subfield("2", cls.AUDIENCE_SOURCE),
-                ],
-            )
-        )
 
     @classmethod
     def add_series(cls, record: Record, edition: Edition) -> None:
