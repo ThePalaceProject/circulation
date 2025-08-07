@@ -1,6 +1,4 @@
 from celery.canvas import Signature
-from sqlalchemy.orm import Session
-from sqlalchemy.sql import Select
 
 from palace.manager.service.redis.models.lock import RedisLock
 from palace.manager.service.redis.redis import Redis
@@ -9,15 +7,13 @@ from palace.manager.util.log import LoggerType, pluralize
 
 
 def import_all(
-    session: Session,
-    collection_query: Select,
+    collections: list[Collection],
     import_collection: Signature,
     logger: LoggerType,
 ) -> None:
     """
     Create celery tasks to import all the Collections returned by the given query.
     """
-    collections = session.scalars(collection_query).all()
     for collection in collections:
         task = import_collection.delay(
             collection_id=collection.id,

@@ -22,8 +22,7 @@ def import_all(task: Task, force: bool = False) -> None:
         registry = task.services.integration_registry().license_providers()
         collection_query = Collection.select_by_protocol(OPDS2API, registry=registry)
         importer.import_all(
-            session,
-            collection_query,
+            session.scalars(collection_query).all(),
             import_collection.s(
                 force=force,
             ),

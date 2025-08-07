@@ -305,8 +305,7 @@ def import_all(task: Task, force: bool = False) -> None:
             OPDS2WithODLApi, registry=registry
         )
         importer.import_all(
-            session,
-            collection_query,
+            session.scalars(collection_query).all(),
             import_collection.s(
                 force=force,
             ),

@@ -466,7 +466,7 @@ class TestImportAll:
         with patch.object(opds_odl, "import_collection") as mock_import_collection:
             opds_odl.import_all.delay(force=force).wait()
 
-        # We queued up tasks for all OPDS2 collections, but not for Overdrive
+        # We queued up tasks for all OPDS2+ODL collections, but not for OPDS2
         mock_import_collection.s.assert_called_once_with(
             force=force,
         )
