@@ -73,8 +73,6 @@ class ImporterSettingsProtocol(Protocol):
     def ignored_identifier_types(self) -> list[str]: ...
     @property
     def custom_accept_header(self) -> str: ...
-    @property
-    def max_retry_count(self) -> int: ...
 
 
 PublicationType = TypeVar("PublicationType", bound=opds2.BasePublication)
@@ -124,7 +122,6 @@ class OPDS2WithODLImporter(Generic[PublicationType, SettingsType], LoggerMixin):
             parser=PublicationFeedNoValidation.model_validate_json,
             allowed_response_codes=["2xx"],
             headers={"Accept": self._settings.custom_accept_header},
-            max_retry_count=self._settings.max_retry_count,
         )
 
     @classmethod
@@ -216,7 +213,6 @@ class OPDS2WithODLImporter(Generic[PublicationType, SettingsType], LoggerMixin):
                 document_link,
                 parser=LicenseInfo.model_validate_json,
                 allowed_response_codes=["2xx"],
-                max_retry_count=self._settings.max_retry_count,
             )
         except BadResponseException as e:
             resp = e.response
@@ -361,6 +357,7 @@ def importer_from_collection(
         settings.username,
         settings.password,
         settings.external_account_id,
+        settings.max_retry_count,
     )
     extractor = OPDS2WithODLExtractor(
         settings.external_account_id,

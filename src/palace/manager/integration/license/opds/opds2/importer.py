@@ -37,6 +37,7 @@ def importer_from_collection(
         settings.username,
         settings.password,
         settings.external_account_id,
+        settings.max_retry_count,
     )
     extractor = OPDS2WithODLExtractor(
         settings.external_account_id, settings.data_source
