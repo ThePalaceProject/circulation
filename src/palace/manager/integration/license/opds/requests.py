@@ -32,7 +32,7 @@ class BaseOpdsHttpRequest(ABC):
     Different subclasses can implement different authentication methods.
     """
 
-    def __init__(self, max_retry_count: int | None) -> None:
+    def __init__(self, max_retry_count: int | None = None) -> None:
         self._requests_session = HTTP.session(max_retry_count)
 
     def _make_request(
@@ -105,7 +105,7 @@ class BasicAuthOpdsRequest(BaseOpdsHttpRequest):
     """An OPDS request that requires basic authentication."""
 
     def __init__(
-        self, username: str, password: str, max_retry_count: int | None
+        self, username: str, password: str, max_retry_count: int | None = None
     ) -> None:
         super().__init__(max_retry_count)
         self._username = username
@@ -122,7 +122,11 @@ class OAuthOpdsRequest(BaseOpdsHttpRequest):
     """An OPDS request that authenticates via OAuth."""
 
     def __init__(
-        self, feed_url: str, username: str, password: str, max_retry_count: int | None
+        self,
+        feed_url: str,
+        username: str,
+        password: str,
+        max_retry_count: int | None = None,
     ) -> None:
         super().__init__(max_retry_count)
         self._feed_url = feed_url
