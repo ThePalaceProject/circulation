@@ -2,22 +2,27 @@ from __future__ import annotations
 
 from collections.abc import Generator
 from contextlib import contextmanager
+from dataclasses import dataclass
 from typing import Any
 from unittest.mock import patch
 
 import pytest
 
 from palace.manager.data_layer.policy.presentation import PresentationCalculationPolicy
-from palace.manager.service.redis.models.work import WorkIdAndPolicy
 from palace.manager.sqlalchemy.model.work import Work
+
+
+@dataclass(frozen=True)
+class WorkIdAndPolicy:
+    work_id: int
+    policy: PresentationCalculationPolicy
 
 
 class WorkIdPolicyQueuePresentationRecalculationFixture:
     """
     In normal operation, when calculate_presentation is called on Work, it
-    adds the Work's ID and PresentationCalculationPolicy to a set in Redis.
-    This set is then used to determine which
-    Works need aspects of their presentations recalculated.
+    queues the Work's ID and PresentationCalculationPolicy in a Celery task to
+    be processed later.
 
     For testing, we mock this out to just use a Python set. This allows us to
     check whether a Work is queued for indexing without actually needing to
