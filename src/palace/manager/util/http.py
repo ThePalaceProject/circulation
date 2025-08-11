@@ -147,7 +147,9 @@ class RequestTimedOut(RequestNetworkException, requests.exceptions.Timeout):
 
 _ResponseCodesLiteral = Literal["2xx", "3xx", "4xx", "5xx"]
 ResponseCodesT = Collection[_ResponseCodesLiteral | int] | None
-MakeRequestT = RequestsSession | Callable[..., Response]
+MakeRequestT = (
+    RequestsSession | Callable[..., Response] | Literal[SentinelType.NotGiven]
+)
 
 
 class GetRequestKwargs(TypedDict, total=False):
@@ -224,6 +226,16 @@ class HTTP(LoggerMixin):
         max_retry_count: int | None = None,
         backoff_factor: float | None = None,
     ) -> RequestsSession:
+        """
+        Create a requests session with the given retry settings.
+
+        Using the session allows future requests to reuse the same connection
+        and settings, which can improve performance and reduce overhead when
+        making multiple requests to the same host.
+
+        Note: RequestsSession is not thread-safe, so this should be used
+        in a context where the session is not shared across threads.
+        """
         max_retry_count = (
             max_retry_count
             if max_retry_count is not None
@@ -318,7 +330,7 @@ class HTTP(LoggerMixin):
         cls._validate_kwargs(kwargs)
 
         process_response_with = process_response_with or cls._process_response
-        make_request_with: MakeRequestT | Literal[SentinelType.NotGiven] = kwargs.pop(
+        make_request_with: MakeRequestT = kwargs.pop(
             "make_request_with", SentinelType.NotGiven
         )
 

@@ -30,7 +30,7 @@ from palace.manager.service.integration_registry.license_providers import (
 )
 from palace.manager.service.redis.models.set import IdentifierSet
 from palace.manager.sqlalchemy.model.collection import Collection
-from palace.manager.util.http import BadResponseException
+from palace.manager.util.http import HTTP, BadResponseException
 from palace.manager.util.log import LoggerMixin
 
 
@@ -352,12 +352,13 @@ def importer_from_collection(
     settings = integration_settings_load(
         OPDS2WithODLApi.settings_class(), collection.integration_configuration
     )
+    requests_session = HTTP.session(settings.max_retry_count)
     request = get_opds_requests(
         settings.auth_type,
         settings.username,
         settings.password,
         settings.external_account_id,
-        settings.max_retry_count,
+        requests_session,
     )
     extractor = OPDS2WithODLExtractor(
         settings.external_account_id,

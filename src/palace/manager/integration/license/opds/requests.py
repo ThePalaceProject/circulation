@@ -18,9 +18,11 @@ from palace.manager.util.http import (
     HTTP,
     BadResponseException,
     BearerAuth,
+    MakeRequestT,
     RequestKwargs,
     ResponseCodesT,
 )
+from palace.manager.util.sentinel import SentinelType
 
 T = TypeVar("T")
 
@@ -32,8 +34,8 @@ class BaseOpdsHttpRequest(ABC):
     Different subclasses can implement different authentication methods.
     """
 
-    def __init__(self, max_retry_count: int | None = None) -> None:
-        self._requests_session = HTTP.session(max_retry_count)
+    def __init__(self, requests_session: MakeRequestT = SentinelType.NotGiven) -> None:
+        self._requests_session = requests_session
 
     def _make_request(
         self, http_method: str, url: str, **kwargs: Unpack[RequestKwargs]
@@ -105,9 +107,12 @@ class BasicAuthOpdsRequest(BaseOpdsHttpRequest):
     """An OPDS request that requires basic authentication."""
 
     def __init__(
-        self, username: str, password: str, max_retry_count: int | None = None
+        self,
+        username: str,
+        password: str,
+        requests_session: MakeRequestT = SentinelType.NotGiven,
     ) -> None:
-        super().__init__(max_retry_count)
+        super().__init__(requests_session)
         self._username = username
         self._password = password
 
@@ -126,9 +131,9 @@ class OAuthOpdsRequest(BaseOpdsHttpRequest):
         feed_url: str,
         username: str,
         password: str,
-        max_retry_count: int | None = None,
+        requests_session: MakeRequestT = SentinelType.NotGiven,
     ) -> None:
-        super().__init__(max_retry_count)
+        super().__init__(requests_session)
         self._feed_url = feed_url
         self._username = username
         self._password = password
@@ -255,21 +260,21 @@ def get_opds_requests(
     username: str | None,
     password: str | None,
     feed_url: str | None,
-    max_retry_count: int | None = None,
+    requests_session: MakeRequestT = SentinelType.NotGiven,
 ) -> BaseOpdsHttpRequest:
     """Get the appropriate OPDS request class based on the authentication type."""
     if authentication == OPDS2AuthType.BASIC:
         if not username or not password:
             raise PalaceValueError("Username and password are required for basic auth.")
-        return BasicAuthOpdsRequest(username, password, max_retry_count)
+        return BasicAuthOpdsRequest(username, password, requests_session)
     elif authentication == OPDS2AuthType.OAUTH:
         if not username or not password or not feed_url:
             raise PalaceValueError(
                 "Username, password and feed_url are required for OAuth."
             )
-        return OAuthOpdsRequest(feed_url, username, password, max_retry_count)
+        return OAuthOpdsRequest(feed_url, username, password, requests_session)
     elif authentication == OPDS2AuthType.NONE:
-        return NoAuthOpdsRequest(max_retry_count)
+        return NoAuthOpdsRequest(requests_session)
     else:
         raise PalaceValueError(
             f"Unsupported authentication type: {authentication}. "

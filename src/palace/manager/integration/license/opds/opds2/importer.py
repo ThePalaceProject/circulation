@@ -15,6 +15,7 @@ from palace.manager.service.integration_registry.license_providers import (
     LicenseProvidersRegistry,
 )
 from palace.manager.sqlalchemy.model.collection import Collection
+from palace.manager.util.http import HTTP
 
 
 def importer_from_collection(
@@ -28,6 +29,7 @@ def importer_from_collection(
     settings = integration_settings_load(
         OPDS2API.settings_class(), collection.integration_configuration
     )
+    requests_session = HTTP.session(settings.max_retry_count)
     request = get_opds_requests(
         (
             OPDS2AuthType.BASIC
@@ -37,7 +39,7 @@ def importer_from_collection(
         settings.username,
         settings.password,
         settings.external_account_id,
-        settings.max_retry_count,
+        requests_session,
     )
     extractor = OPDS2WithODLExtractor(
         settings.external_account_id, settings.data_source
