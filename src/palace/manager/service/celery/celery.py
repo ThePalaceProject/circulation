@@ -44,71 +44,87 @@ def beat_schedule() -> dict[str, Any]:
     be a timedelta object or a crontab string. The `task` key is required and should be the name
     of the task to run.
     """
+    from palace.manager.celery.tasks import (
+        boundless,
+        marc,
+        notifications,
+        novelist,
+        nyt,
+        opds2,
+        opds_odl,
+        playtime_entries,
+        reaper,
+        rotate_jwe_key,
+        saml,
+        search,
+        work,
+    )
+
     return {
         "full_search_reindex": {
-            "task": "search.search_reindex",
+            "task": search.search_reindex.name,
             "schedule": crontab(hour="0", minute="10"),  # Run every day at 12:10 AM
         },
         "search_indexing": {
-            "task": "search.search_indexing",
+            "task": search.search_indexing.name,
             "schedule": crontab(minute="*"),  # Run every minute
         },
         "marc_export": {
-            "task": "marc.marc_export",
+            "task": marc.marc_export.name,
             "schedule": crontab(
                 hour="3,11", minute="0"
             ),  # Run twice a day at 3:00 AM and 11:00 AM
         },
         "marc_export_cleanup": {
-            "task": "marc.marc_export_cleanup",
+            "task": marc.marc_export_cleanup.name,
             "schedule": crontab(
                 hour="1",
                 minute="0",
             ),  # Run every day at 1:00 AM
         },
         "opds2_odl_remove_expired_holds": {
-            "task": "opds_odl.remove_expired_holds",
+            "task": opds_odl.remove_expired_holds.name,
             "schedule": crontab(
                 minute="16",
             ),  # Run every hour at 16 minutes past the hour
         },
         "opds2_odl_recalculate_hold_queue": {
-            "task": "opds_odl.recalculate_hold_queue",
+            "task": opds_odl.recalculate_hold_queue.name,
             "schedule": crontab(
                 minute="31",
             ),  # Run every hour at 31 minutes past the hour
         },
         "opds2_odl_import_all": {
-            "task": "opds_odl.import_all",
+            "task": opds_odl.import_all.name,
             "schedule": crontab(
                 minute="45",
             ),  # Run every hour at 45 minutes past the hour
         },
         "rotate_jwe_key": {
-            "task": "rotate_jwe_key.rotate_jwe_key",
+            "task": rotate_jwe_key.rotate_jwe_key.name,
             "schedule": crontab(
                 minute="0",
                 hour="3",
             ),  # Run every day at 3:00 AM
         },
         "loan_expiration_notifications": {
-            "task": "notifications.loan_expiration",
+            "task": notifications.loan_expiration.name,
             "schedule": crontab(
                 minute="*/20",
             ),  # Run every 20 minutes
         },
         "hold_available_notifications": {
-            "task": "notifications.hold_available",
+            "task": notifications.hold_available.name,
             "schedule": crontab(
                 minute="*/20",
             ),  # Run every 20 minutes
         },
         "boundless_import_all_collections": {
-            "task": "boundless.import_all_collections",
+            "task": boundless.import_all_collections.name,
             "schedule": crontab(minute="*/15"),  # Run every 15 minutes
         },
         "boundless_reap_all_collections": {
-            "task": "boundless.reap_all_collections",
+            "task": boundless.reap_all_collections.name,
             "schedule": crontab(
                 day_of_week="6",
                 minute="0",
@@ -116,132 +132,125 @@ def beat_schedule() -> dict[str, Any]:
             ),  # Every Saturday at 4:00 AM
         },
         "credential_reaper": {
-            "task": "reaper.credential_reaper",
+            "task": reaper.credential_reaper.name,
             "schedule": crontab(
                 minute="5",
                 hour="2",
             ),  # Once a day at 2:05 AM
         },
         "patron_reaper": {
-            "task": "reaper.patron_reaper",
+            "task": reaper.patron_reaper.name,
             "schedule": crontab(
                 minute="10",
                 hour="2",
             ),  # Once a day at 2:10 AM
         },
         "collection_reaper": {
-            "task": "reaper.collection_reaper",
+            "task": reaper.collection_reaper.name,
             "schedule": crontab(
                 minute="15",
                 hour="2",
             ),  # Once a day at 2:15 AM
         },
         "work_reaper": {
-            "task": "reaper.work_reaper",
+            "task": reaper.work_reaper.name,
             "schedule": crontab(
                 minute="20",
                 hour="2",
             ),  # Once a day at 2:20 AM
         },
         "measurement_reaper": {
-            "task": "reaper.measurement_reaper",
+            "task": reaper.measurement_reaper.name,
             "schedule": crontab(
                 minute="25",
                 hour="2",
             ),  # Once a day at 2:25 AM
         },
         "annotation_reaper": {
-            "task": "reaper.annotation_reaper",
+            "task": reaper.annotation_reaper.name,
             "schedule": crontab(
                 minute="30",
                 hour="2",
             ),  # Once a day at 2:30 AM
         },
         "hold_reaper": {
-            "task": "reaper.hold_reaper",
+            "task": reaper.hold_reaper.name,
             "schedule": crontab(
                 minute="35",
                 hour="2",
             ),  # Once a day at 2:35 AM
         },
         "loan_reaper": {
-            "task": "reaper.loan_reaper",
+            "task": reaper.loan_reaper.name,
             "schedule": crontab(
                 minute="40",
                 hour="2",
             ),  # Once a day at 2:40 AM
         },
         "reap_unassociated_loans": {
-            "task": "reaper.reap_unassociated_loans",
+            "task": reaper.reap_unassociated_loans.name,
             "schedule": crontab(
                 minute="45",
                 hour="2",
             ),  # Once a day at 2:45 AM
         },
         "reap_unassociated_holds": {
-            "task": "reaper.reap_unassociated_holds",
+            "task": reaper.reap_unassociated_holds.name,
             "schedule": crontab(
                 minute="50",
                 hour="2",
             ),  # Once a day at 2:50 AM
         },
         "reap_loans_in_inactive_collections": {
-            "task": "reaper.reap_loans_in_inactive_collections",
+            "task": reaper.reap_loans_in_inactive_collections.name,
             "schedule": crontab(
                 minute="55",
                 hour="2",
             ),  # Once a day at 2:55 AM
         },
-        "reap_loans_with_unavailable_license_pools": {
-            "task": "reaper.reap_loans_with_unavailable_license_pools",
-            "schedule": crontab(
-                minute="00",
-                hour="3",
-            ),  # Once a day at 3:00 AM
-        },
         "generate_playtime_report": {
-            "task": "playtime_entries.generate_playtime_report",
+            "task": playtime_entries.generate_playtime_report.name,
             "schedule": crontab(
                 minute="0", hour="4", day_of_month="2"
             ),  # On the second day of the month at 4:00 AM
         },
         "sum_playtime_entries": {
-            "task": "playtime_entries.sum_playtime_entries",
+            "task": playtime_entries.sum_playtime_entries.name,
             "schedule": crontab(
                 minute="0",
                 hour="8,20",
             ),  # Every 12 hours, but spaced after hour 8 to reduce job cluttering
         },
         "update_nyt_best_sellers_lists": {
-            "task": "nyt.update_nyt_best_sellers_lists",
+            "task": nyt.update_nyt_best_sellers_lists.name,
             "schedule": crontab(
                 minute="30",
                 hour="3",
             ),  # Every morning at 3:30 am.
         },
         "update_novelists_for_all_libraries": {
-            "task": "novelist.update_novelists_for_all_libraries",
+            "task": novelist.update_novelists_for_all_libraries.name,
             "schedule": crontab(
                 minute="0", hour="0", day_of_week="0"
             ),  # Every Sunday at midnight
         },
         "calculate_work_presentations": {
-            "task": "work.calculate_work_presentations",
+            "task": work.calculate_work_presentations.name,
             "schedule": crontab(minute="*/10"),  # Every 10 minutes
         },
         "update_saml_federation_idps_metadata": {
-            "task": "saml.update_saml_federation_idps_metadata",
+            "task": saml.update_saml_federation_idps_metadata.name,
             "schedule": crontab(
                 minute="0",
                 hour="5",
             ),  # Every day at 5 am
         },
         "classify_unchecked_subjects": {
-            "task": "work.classify_unchecked_subjects",
+            "task": work.classify_unchecked_subjects.name,
             "schedule": crontab(minute="30", hour="22"),  # Every night at 10:30pm
         },
         "opds2_import_all": {
-            "task": "opds2.import_all",
+            "task": opds2.import_all.name,
             "schedule": crontab(minute="30", hour="5"),  # Every day at 5:30 AM
         },
     }
