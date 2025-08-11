@@ -186,7 +186,9 @@ class OPDS2WithODLImporter(Generic[PublicationType, SettingsType], LoggerMixin):
                 raw_identifier = publication_dict.get("metadata", {}).get("identifier")
                 raw_title = publication_dict.get("metadata", {}).get("title")
                 self.log.error(
-                    f"Error validating publication (identifier: {raw_identifier}, title: {raw_title}): {e}"
+                    f"Error validating publication "
+                    f"(identifier: {raw_identifier}, title: {raw_title}, feed: {self._feed_base_url}): "
+                    f"{e}"
                 )
                 continue
 
@@ -194,7 +196,8 @@ class OPDS2WithODLImporter(Generic[PublicationType, SettingsType], LoggerMixin):
                 identifier = self._extractor.extract_identifier(publication)
             except PalaceValueError:
                 self.log.exception(
-                    "The publications identifier could not be parsed. Skipping publication."
+                    f"The publications identifier '{publication.metadata.identifier}' could not be parsed. "
+                    f"Skipping publication. Feed: {self._feed_base_url}. Metadata: {publication.metadata!r}"
                 )
                 continue
 
@@ -222,12 +225,14 @@ class OPDS2WithODLImporter(Generic[PublicationType, SettingsType], LoggerMixin):
             resp = e.response
             self.log.warning(
                 f"License Info Document is not available. "
-                f"Status link {document_link} failed with {resp.status_code} code."
+                f"Feed: {self._feed_base_url}. "
+                f"Status link '{document_link}' failed with '{resp.status_code}' code. "
+                f"Response: {resp.text if resp.text else 'No response body'}"
             )
             return None
         except ValidationError as e:
             self.log.error(
-                f"License Info Document at {document_link} is not valid. {e}"
+                f"License Info Document '{document_link}' is not valid. Feed: {self._feed_base_url}. {e}"
             )
             return None
 
