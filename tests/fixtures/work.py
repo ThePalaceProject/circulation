@@ -3,7 +3,6 @@ from __future__ import annotations
 from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -14,7 +13,7 @@ from palace.manager.sqlalchemy.model.work import Work
 
 @dataclass(frozen=True)
 class WorkIdAndPolicy:
-    work_id: int
+    work_id: int | None
     policy: PresentationCalculationPolicy
 
 
@@ -36,9 +35,7 @@ class WorkIdPolicyQueuePresentationRecalculationFixture:
     def queue(
         self,
         work_id: int | None,
-        policy: PresentationCalculationPolicy | None,
-        *,
-        redis_client: Any = None,
+        policy: PresentationCalculationPolicy,
     ) -> None:
         return self.queued_work_id_and_policy_combinations.add(
             WorkIdAndPolicy(work_id=work_id, policy=policy)
