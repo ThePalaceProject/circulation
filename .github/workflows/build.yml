@@ -270,7 +270,7 @@ jobs:
       - name: Download digests
         uses: actions/download-artifact@v5
         with:
-          path: ${{ runner.temp }}
+          path: ${{ runner.temp }}/digests
           pattern: digests-${{ matrix.arch.name }}
 
 
@@ -278,7 +278,7 @@ jobs:
       # for the image to use for the scripts container to the digest of the image
       # that was built in the build job.
       - name: Set scripts image
-        working-directory: ${{ runner.temp }}/digests-${{ matrix.arch.name }}/scripts
+        working-directory: ${{ runner.temp }}/digests/scripts
         run: |
           IMAGE="${{needs.build.outputs.scripts-repo}}$(printf '@sha256:%s' *)"
           echo "$IMAGE"
@@ -288,7 +288,7 @@ jobs:
       # for the image to use for the webapp container to the digest of the image
       # that was built in the build job.
       - name: Set webapp image
-        working-directory: ${{ runner.temp }}/digests-${{ matrix.arch.name }}/webapp
+        working-directory: ${{ runner.temp }}/digests/webapp
         run: |
           IMAGE="${{needs.build.outputs.webapp-repo}}$(printf '@sha256:%s' *)"
           echo "$IMAGE"
@@ -341,14 +341,14 @@ jobs:
       - name: Download digests
         uses: actions/download-artifact@v5
         with:
-          path: ${{ runner.temp }}
+          path: ${{ runner.temp }}/digests
           pattern: digests-${{ matrix.arch.name }}
 
       # This sets the environment variable referenced in the docker-compose file
       # for the image to use for the webapp container to the digest of the image
       # that was built in the build job.
       - name: Set webapp image
-        working-directory: ${{ runner.temp }}/digests-${{ matrix.arch.name }}/webapp
+        working-directory: ${{ runner.temp }}/digests/webapp
         run: |
           IMAGE="${{needs.build.outputs.webapp-repo}}$(printf '@sha256:%s' *)"
           echo "$IMAGE"
@@ -391,14 +391,14 @@ jobs:
       - name: Download digests
         uses: actions/download-artifact@v5
         with:
-          path: ${{ runner.temp }}
+          path: ${{ runner.temp }}/digests
           pattern: digests-amd64
 
       # This sets the environment variable referenced in the docker-compose file
       # for the image to use for the scripts container to the digest of the image
       # that was built in the build job.
       - name: Set scripts image
-        working-directory: ${{ runner.temp }}/digests-amd64/scripts
+        working-directory: ${{ runner.temp }}/digests/scripts
         run: |
           IMAGE="${{needs.build.outputs.scripts-repo}}$(printf '@sha256:%s' *)"
           echo "$IMAGE"
@@ -408,7 +408,7 @@ jobs:
       # for the image to use for the webapp container to the digest of the image
       # that was built in the build job.
       - name: Set webapp image
-        working-directory: ${{ runner.temp }}/digests-amd64/webapp
+        working-directory: ${{ runner.temp }}/digests/webapp
         run: |
           IMAGE="${{needs.build.outputs.webapp-repo}}$(printf '@sha256:%s' *)"
           echo "$IMAGE"
