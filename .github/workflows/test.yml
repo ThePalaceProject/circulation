@@ -22,7 +22,7 @@ jobs:
         python-version: ["3.10", "3.11", "3.12"]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # See comment here: https://github.com/actions/runner-images/issues/1187#issuecomment-686735760
       - name: Disable network offload
