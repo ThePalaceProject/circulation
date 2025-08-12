@@ -1,7 +1,0 @@
-#!/usr/bin/env python
-"""Update the circulation manager server with new books from
-OPDS import collections."""
-
-from palace.manager.scripts.opds_import import OPDSImportScript
-
-OPDSImportScript().run()

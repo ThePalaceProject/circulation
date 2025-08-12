@@ -9,22 +9,9 @@ from palace.manager.integration.license.opds.for_distributors.settings import (
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.library import Library
 from tests.fixtures.database import DatabaseTransactionFixture
-from tests.fixtures.files import FilesFixture
+from tests.fixtures.files import OPDSForDistributorsFilesFixture
 from tests.fixtures.http import MockHttpClientFixture
 from tests.fixtures.work import WorkIdPolicyQueuePresentationRecalculationFixture
-
-
-class OPDSForDistributorsFilesFixture(FilesFixture):
-    """A fixture providing access to OPDSForDistributors files."""
-
-    def __init__(self):
-        super().__init__("opds_for_distributors")
-
-
-@pytest.fixture()
-def opds_dist_files_fixture() -> OPDSForDistributorsFilesFixture:
-    """A fixture providing access to OPDSForDistributors files."""
-    return OPDSForDistributorsFilesFixture()
 
 
 class OPDSForDistributorsAPIFixture:

@@ -50,7 +50,9 @@ def beat_schedule() -> dict[str, Any]:
         notifications,
         novelist,
         nyt,
+        opds1,
         opds2,
+        opds_for_distributors,
         opds_odl,
         playtime_entries,
         reaper,
@@ -248,6 +250,22 @@ def beat_schedule() -> dict[str, Any]:
         "opds2_import_all": {
             "task": opds2.import_all.name,
             "schedule": crontab(minute="30", hour="5"),  # Every day at 5:30 AM
+        },
+        "opds1_import_all": {
+            "task": opds1.import_all.name,
+            "schedule": crontab(minute="0", hour="5"),  # Every day at 5:00 AM
+        },
+        "opds_for_distributors_import_all": {
+            "task": opds_for_distributors.import_all.name,
+            "schedule": crontab(minute="0", hour="4"),  # Every day at 4:00 AM
+        },
+        "opds_for_distributors_reap_all": {
+            "task": opds_for_distributors.reap_all.name,
+            "schedule": crontab(
+                minute="0",
+                hour="0",
+                day_of_week="2",
+            ),  # Every Tuesday at midnight
         },
     }
 

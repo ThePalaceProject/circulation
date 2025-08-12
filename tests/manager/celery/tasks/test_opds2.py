@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import datetime
 import json
-from collections.abc import Generator
 from functools import partial
 from unittest.mock import MagicMock, call, patch
 
@@ -11,9 +10,8 @@ from sqlalchemy import select
 
 from palace.manager.api.circulation.dispatcher import CirculationApiDispatcher
 from palace.manager.api.circulation.fulfillment import RedirectFulfillment
-from palace.manager.celery.tasks import apply, identifiers, opds2
+from palace.manager.celery.tasks import identifiers, opds2
 from palace.manager.core.exceptions import PalaceValueError
-from palace.manager.data_layer.bibliographic import BibliographicData
 from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.integration.license.opds.opds2.api import OPDS2API
 from palace.manager.integration.license.opds.opds2.settings import OPDS2ImporterSettings
@@ -29,12 +27,12 @@ from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.licensing import (
     DeliveryMechanism,
-    DeliveryMechanismTuple,
     LicensePool,
 )
 from palace.manager.sqlalchemy.model.patron import Loan
 from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.util.datetime_helpers import utc_now
+from tests.fixtures.apply import ApplyTaskFixture
 from tests.fixtures.celery import CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import OPDS2FilesFixture, OPDS2WithODLFilesFixture
@@ -53,6 +51,7 @@ class OPDS2ImportFixture:
         self,
         db: DatabaseTransactionFixture,
         http_client: MockHttpClientFixture,
+        apply_fixture: ApplyTaskFixture,
     ) -> None:
         self.db = db
         self.create_settings = partial(
@@ -70,106 +69,12 @@ class OPDS2ImportFixture:
             db.session, "OPDS 2.0 Data Source", autocreate=True
         )
         self.client = http_client
-        self.bibliographic_apply_queue: list[BibliographicData] = []
-
-    def mock_bibliographic_apply(
-        self,
-        bibliographic: BibliographicData,
-        collection_id: int | None = None,
-    ) -> None:
-        """
-        Mock bibliographic apply
-
-        This function mocks the apply.bibliographic_apply task, to avoid this
-        task being executed asynchronously. We want to be able to test the full
-        workflow, assuming that the task we are testing, and all the apply tasks
-        run to completion.
-        """
-        assert (
-            collection_id == self.collection.id
-        ), "Collection ID mismatch in mocked apply"
-        self.bibliographic_apply_queue.append(bibliographic)
-
-    def process_bibliographic_apply_queue(self) -> list[Edition]:
-        """
-        Process the mocked bibliographic apply queue.
-
-        This function does the same basic logic as the apply.bibliographic_apply task.
-        Since we test that task separately, we can assume that it works correctly.
-        """
-        editions = []
-        for bibliographic in self.bibliographic_apply_queue:
-            edition, _ = bibliographic.edition(self.db.session)
-            bibliographic.apply(
-                self.db.session,
-                edition,
-                self.collection,
-                disable_async_calculation=True,
-                create_coverage_record=False,
-            )
-            editions.append(edition)
-        self.bibliographic_apply_queue.clear()
-        return editions
+        self.apply = apply_fixture
 
     def do_import(self) -> list[Edition]:
         opds2.import_collection.delay(self.collection.id).wait()
-        return self.process_bibliographic_apply_queue()
-
-    def get_pools(self) -> list[LicensePool]:
-        """Get all license pools from the database."""
-        return self.db.session.scalars(select(LicensePool)).unique().all()
-
-    def get_works(self) -> list[Work]:
-        """Get all works from the database."""
-        return self.db.session.scalars(select(Work)).unique().all()
-
-    @staticmethod
-    def get_delivery_mechanisms_from_license_pool(
-        license_pool: LicensePool,
-    ) -> set[DeliveryMechanismTuple]:
-        """
-        Get a set of DeliveryMechanismTuples from a LicensePool.
-
-        Makes it a little easier to compare delivery mechanisms
-        """
-        return {
-            dm.delivery_mechanism.as_tuple for dm in license_pool.delivery_mechanisms
-        }
-
-    @staticmethod
-    def get_edition_by_identifier(
-        editions: list[Edition], identifier: str
-    ) -> Edition | None:
-        """
-        Find an edition in the list by its identifier.
-        """
-        for edition in editions:
-            if edition.primary_identifier.urn == identifier:
-                return edition
-
-        return None
-
-    @staticmethod
-    def get_license_pool_by_identifier(
-        pools: list[LicensePool], identifier: str
-    ) -> LicensePool | None:
-        """
-        Find a license pool in the list by its identifier.
-        """
-        for pool in pools:
-            if pool.identifier.urn == identifier:
-                return pool
-
-        return None
-
-    @staticmethod
-    def get_work_by_identifier(works: list[Work], identifier: str) -> Work | None:
-        """Find a license pool in the list by its identifier."""
-        for work in works:
-            if work.presentation_edition.primary_identifier.urn == identifier:
-                return work
-
-        return None
+        self.apply.process_apply_queue()
+        return self.apply.get_editions()
 
 
 @pytest.fixture
@@ -178,11 +83,9 @@ def opds2_import_fixture(
     celery_fixture: CeleryFixture,
     redis_fixture: RedisFixture,
     http_client: MockHttpClientFixture,
-) -> Generator[OPDS2ImportFixture]:
-    fixture = OPDS2ImportFixture(db, http_client)
-    with patch.object(apply, "bibliographic_apply", autospec=True) as mock_apply:
-        mock_apply.delay.side_effect = fixture.mock_bibliographic_apply
-        yield fixture
+    apply_task_fixture: ApplyTaskFixture,
+) -> OPDS2ImportFixture:
+    return OPDS2ImportFixture(db, http_client, apply_task_fixture)
 
 
 class TestImportAll:
@@ -220,6 +123,7 @@ class TestImportCollection:
     def test_correctly_imports_valid_opds2_feed(
         self,
         db: DatabaseTransactionFixture,
+        apply_task_fixture: ApplyTaskFixture,
         opds2_import_fixture: OPDS2ImportFixture,
         opds2_files_fixture: OPDS2FilesFixture,
     ):
@@ -231,8 +135,7 @@ class TestImportCollection:
         )
 
         # Act
-        opds2.import_collection.delay(opds2_import_fixture.collection.id).wait()
-        imported_editions = opds2_import_fixture.process_bibliographic_apply_queue()
+        imported_editions = opds2_import_fixture.do_import()
 
         # Assert
         # 1. Make sure that editions contain all required metadata
@@ -240,7 +143,7 @@ class TestImportCollection:
         assert len(imported_editions) == 3
 
         # 1.1. Edition with open-access links (Moby-Dick)
-        moby_dick_edition = opds2_import_fixture.get_edition_by_identifier(
+        moby_dick_edition = apply_task_fixture.get_edition_by_identifier(
             imported_editions, opds2_import_fixture.MOBY_DICK_ISBN_IDENTIFIER
         )
         assert isinstance(moby_dick_edition, Edition)
@@ -274,7 +177,7 @@ class TestImportCollection:
         )
 
         # 1.2. Edition with non open-access acquisition links (Adventures of Huckleberry Finn)
-        huckleberry_finn_edition = opds2_import_fixture.get_edition_by_identifier(
+        huckleberry_finn_edition = apply_task_fixture.get_edition_by_identifier(
             imported_editions, opds2_import_fixture.HUCKLEBERRY_FINN_URI_IDENTIFIER
         )
         assert isinstance(huckleberry_finn_edition, Edition)
@@ -317,12 +220,12 @@ class TestImportCollection:
         assert moby_dick_edition.cover_full_url == "http://example.org/cover.jpg"
 
         # 2. Make sure that license pools have correct configuration
-        pools = opds2_import_fixture.get_pools()
+        pools = apply_task_fixture.get_pools()
         assert isinstance(pools, list)
         assert len(pools) == 3
 
         # 2.1. Edition with open-access links (Moby-Dick)
-        moby_dick_license_pool = opds2_import_fixture.get_license_pool_by_identifier(
+        moby_dick_license_pool = apply_task_fixture.get_license_pool_by_identifier(
             pools, opds2_import_fixture.MOBY_DICK_ISBN_IDENTIFIER
         )
         assert isinstance(moby_dick_license_pool, LicensePool)
@@ -331,13 +234,13 @@ class TestImportCollection:
         assert moby_dick_license_pool.licenses_available == LicensePool.UNLIMITED_ACCESS
         assert moby_dick_license_pool.should_track_playtime == True
 
-        assert opds2_import_fixture.get_delivery_mechanisms_from_license_pool(
+        assert apply_task_fixture.get_delivery_mechanisms_from_license_pool(
             moby_dick_license_pool
         ) == {(MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE, DeliveryMechanism.NO_DRM)}
 
         # 2.2. Edition with non open-access acquisition links (Adventures of Huckleberry Finn)
         huckleberry_finn_license_pool = (
-            opds2_import_fixture.get_license_pool_by_identifier(
+            apply_task_fixture.get_license_pool_by_identifier(
                 pools, opds2_import_fixture.HUCKLEBERRY_FINN_URI_IDENTIFIER
             )
         )
@@ -352,7 +255,7 @@ class TestImportCollection:
         )
         assert huckleberry_finn_license_pool.should_track_playtime is False
 
-        assert opds2_import_fixture.get_delivery_mechanisms_from_license_pool(
+        assert apply_task_fixture.get_delivery_mechanisms_from_license_pool(
             huckleberry_finn_license_pool
         ) == {
             (MediaTypes.EPUB_MEDIA_TYPE, DeliveryMechanism.ADOBE_DRM),
@@ -360,10 +263,8 @@ class TestImportCollection:
         }
 
         # 2.3 Edition with non open-access acquisition links (The Politics of Postmodernism)
-        postmodernism_license_pool = (
-            opds2_import_fixture.get_license_pool_by_identifier(
-                pools, opds2_import_fixture.POSTMODERNISM_PROQUEST_IDENTIFIER
-            )
+        postmodernism_license_pool = apply_task_fixture.get_license_pool_by_identifier(
+            pools, opds2_import_fixture.POSTMODERNISM_PROQUEST_IDENTIFIER
         )
         assert isinstance(postmodernism_license_pool, LicensePool)
         assert postmodernism_license_pool.open_access is False
@@ -373,7 +274,7 @@ class TestImportCollection:
             == LicensePool.UNLIMITED_ACCESS
         )
 
-        assert opds2_import_fixture.get_delivery_mechanisms_from_license_pool(
+        assert apply_task_fixture.get_delivery_mechanisms_from_license_pool(
             postmodernism_license_pool
         ) == {
             (MediaTypes.EPUB_MEDIA_TYPE, DeliveryMechanism.ADOBE_DRM),
@@ -381,12 +282,12 @@ class TestImportCollection:
         }
 
         # 3. Make sure that work objects contain all the required metadata
-        works = opds2_import_fixture.get_works()
+        works = apply_task_fixture.get_works()
         assert isinstance(works, list)
         assert len(works) == 3
 
         # 3.1. Work (Moby-Dick)
-        moby_dick_work = opds2_import_fixture.get_work_by_identifier(
+        moby_dick_work = apply_task_fixture.get_work_by_identifier(
             works, opds2_import_fixture.MOBY_DICK_ISBN_IDENTIFIER
         )
         assert isinstance(moby_dick_work, Work)
@@ -395,7 +296,7 @@ class TestImportCollection:
         assert moby_dick_work.license_pools[0] == moby_dick_license_pool
 
         # 3.2. Work (Adventures of Huckleberry Finn)
-        huckleberry_finn_work = opds2_import_fixture.get_work_by_identifier(
+        huckleberry_finn_work = apply_task_fixture.get_work_by_identifier(
             works, opds2_import_fixture.HUCKLEBERRY_FINN_URI_IDENTIFIER
         )
         assert isinstance(huckleberry_finn_work, Work)
@@ -434,6 +335,7 @@ class TestImportCollection:
     def test_skips_publications_with_unsupported_identifier_types(
         self,
         db: DatabaseTransactionFixture,
+        apply_task_fixture: ApplyTaskFixture,
         opds2_import_fixture: OPDS2ImportFixture,
         opds2_files_fixture: OPDS2FilesFixture,
         this_identifier_type: IdentifierType,
@@ -474,7 +376,7 @@ class TestImportCollection:
         )
 
         # Ensure that it was parsed correctly and available by its identifier.
-        edition = opds2_import_fixture.get_edition_by_identifier(
+        edition = apply_task_fixture.get_edition_by_identifier(
             imported_editions, identifier
         )
         assert edition is not None
@@ -505,6 +407,7 @@ class TestImportCollection:
 
     def test_imports_feeds_with_availability_info(
         self,
+        apply_task_fixture: ApplyTaskFixture,
         opds2_import_fixture: OPDS2ImportFixture,
         opds2_files_fixture: OPDS2FilesFixture,
     ):
@@ -529,7 +432,7 @@ class TestImportCollection:
 
         opds2_import_fixture.client.queue_response(200, content=feed_json)
         imported_editions = opds2_import_fixture.do_import()
-        pools = opds2_import_fixture.get_pools()
+        pools = apply_task_fixture.get_pools()
 
         # Make we have the correct number of editions
         assert isinstance(imported_editions, list)
@@ -540,13 +443,13 @@ class TestImportCollection:
         assert len(pools) == 3
 
         # Moby dick should be imported but is unavailable
-        moby_dick_edition = opds2_import_fixture.get_edition_by_identifier(
+        moby_dick_edition = apply_task_fixture.get_edition_by_identifier(
             imported_editions, opds2_import_fixture.MOBY_DICK_ISBN_IDENTIFIER
         )
         assert isinstance(moby_dick_edition, Edition)
         assert moby_dick_edition.title == "Moby-Dick"
 
-        moby_dick_license_pool = opds2_import_fixture.get_license_pool_by_identifier(
+        moby_dick_license_pool = apply_task_fixture.get_license_pool_by_identifier(
             pools, opds2_import_fixture.MOBY_DICK_ISBN_IDENTIFIER
         )
         assert isinstance(moby_dick_license_pool, LicensePool)
@@ -555,14 +458,14 @@ class TestImportCollection:
         assert moby_dick_license_pool.licenses_available == 0
 
         # Adventures of Huckleberry Finn is imported and is available
-        huckleberry_finn_edition = opds2_import_fixture.get_edition_by_identifier(
+        huckleberry_finn_edition = apply_task_fixture.get_edition_by_identifier(
             imported_editions, opds2_import_fixture.HUCKLEBERRY_FINN_URI_IDENTIFIER
         )
         assert isinstance(huckleberry_finn_edition, Edition)
         assert huckleberry_finn_edition.title == "Adventures of Huckleberry Finn"
 
         huckleberry_finn_license_pool = (
-            opds2_import_fixture.get_license_pool_by_identifier(
+            apply_task_fixture.get_license_pool_by_identifier(
                 pools, opds2_import_fixture.HUCKLEBERRY_FINN_URI_IDENTIFIER
             )
         )
@@ -578,16 +481,14 @@ class TestImportCollection:
 
         # Politics of postmodernism is unavailable, but it is past the until date, so it
         # should be available
-        postmodernism_edition = opds2_import_fixture.get_edition_by_identifier(
+        postmodernism_edition = apply_task_fixture.get_edition_by_identifier(
             imported_editions, opds2_import_fixture.POSTMODERNISM_PROQUEST_IDENTIFIER
         )
         assert isinstance(postmodernism_edition, Edition)
         assert postmodernism_edition.title == "The Politics of Postmodernism"
 
-        postmodernism_license_pool = (
-            opds2_import_fixture.get_license_pool_by_identifier(
-                pools, opds2_import_fixture.POSTMODERNISM_PROQUEST_IDENTIFIER
-            )
+        postmodernism_license_pool = apply_task_fixture.get_license_pool_by_identifier(
+            pools, opds2_import_fixture.POSTMODERNISM_PROQUEST_IDENTIFIER
         )
         assert isinstance(postmodernism_license_pool, LicensePool)
         assert postmodernism_license_pool.open_access is False
@@ -609,7 +510,7 @@ class TestImportCollection:
 
         opds2_import_fixture.client.queue_response(200, content=feed_json)
         imported_editions = opds2_import_fixture.do_import()
-        pools = opds2_import_fixture.get_pools()
+        pools = apply_task_fixture.get_pools()
 
         # Make we have the correct number of editions
         assert isinstance(imported_editions, list)
@@ -620,13 +521,13 @@ class TestImportCollection:
         assert len(pools) == 3
 
         # Moby dick should be imported and is now available
-        moby_dick_edition = opds2_import_fixture.get_edition_by_identifier(
+        moby_dick_edition = apply_task_fixture.get_edition_by_identifier(
             imported_editions, opds2_import_fixture.MOBY_DICK_ISBN_IDENTIFIER
         )
         assert isinstance(moby_dick_edition, Edition)
         assert moby_dick_edition.title == "Moby-Dick"
 
-        moby_dick_license_pool = opds2_import_fixture.get_license_pool_by_identifier(
+        moby_dick_license_pool = apply_task_fixture.get_license_pool_by_identifier(
             pools, opds2_import_fixture.MOBY_DICK_ISBN_IDENTIFIER
         )
         assert isinstance(moby_dick_license_pool, LicensePool)
@@ -635,14 +536,14 @@ class TestImportCollection:
         assert moby_dick_license_pool.licenses_available == LicensePool.UNLIMITED_ACCESS
 
         # Adventures of Huckleberry Finn is imported and is now unavailable
-        huckleberry_finn_edition = opds2_import_fixture.get_edition_by_identifier(
+        huckleberry_finn_edition = apply_task_fixture.get_edition_by_identifier(
             imported_editions, opds2_import_fixture.HUCKLEBERRY_FINN_URI_IDENTIFIER
         )
         assert isinstance(huckleberry_finn_edition, Edition)
         assert huckleberry_finn_edition.title == "Adventures of Huckleberry Finn"
 
         huckleberry_finn_license_pool = (
-            opds2_import_fixture.get_license_pool_by_identifier(
+            apply_task_fixture.get_license_pool_by_identifier(
                 pools, opds2_import_fixture.HUCKLEBERRY_FINN_URI_IDENTIFIER
             )
         )
@@ -652,16 +553,14 @@ class TestImportCollection:
         assert huckleberry_finn_license_pool.licenses_available == 0
 
         # Politics of postmodernism is still available
-        postmodernism_edition = opds2_import_fixture.get_edition_by_identifier(
+        postmodernism_edition = apply_task_fixture.get_edition_by_identifier(
             imported_editions, opds2_import_fixture.POSTMODERNISM_PROQUEST_IDENTIFIER
         )
         assert isinstance(postmodernism_edition, Edition)
         assert postmodernism_edition.title == "The Politics of Postmodernism"
 
-        postmodernism_license_pool = (
-            opds2_import_fixture.get_license_pool_by_identifier(
-                pools, opds2_import_fixture.POSTMODERNISM_PROQUEST_IDENTIFIER
-            )
+        postmodernism_license_pool = apply_task_fixture.get_license_pool_by_identifier(
+            pools, opds2_import_fixture.POSTMODERNISM_PROQUEST_IDENTIFIER
         )
         assert isinstance(postmodernism_license_pool, LicensePool) is True
         assert postmodernism_license_pool.open_access is False
@@ -674,6 +573,7 @@ class TestImportCollection:
     def test_auth_token_import_to_fulfillment(
         self,
         db: DatabaseTransactionFixture,
+        apply_task_fixture: ApplyTaskFixture,
         opds2_import_fixture: OPDS2ImportFixture,
         opds2_files_fixture: OPDS2FilesFixture,
     ):
@@ -683,8 +583,8 @@ class TestImportCollection:
         opds2_import_fixture.client.queue_response(200, content=content)
         opds2_import_fixture.do_import()
 
-        work = opds2_import_fixture.get_work_by_identifier(
-            opds2_import_fixture.get_works(),
+        work = apply_task_fixture.get_work_by_identifier(
+            apply_task_fixture.get_works(),
             "urn:librarysimplified.org/terms/id/ProQuest%20Doc%20ID/1543720",
         )
 
@@ -764,6 +664,7 @@ class TestImportCollection:
     def test_dont_import_already_imported_identifiers(
         self,
         db: DatabaseTransactionFixture,
+        apply_task_fixture: ApplyTaskFixture,
         opds2_import_fixture: OPDS2ImportFixture,
         opds2_files_fixture: OPDS2FilesFixture,
     ):
@@ -775,11 +676,10 @@ class TestImportCollection:
         opds2.import_collection.delay(opds2_import_fixture.collection.id).wait()
 
         # There are tasks queued up for each identifier
-        assert len(opds2_import_fixture.bibliographic_apply_queue) == 3
-        opds2_import_fixture.process_bibliographic_apply_queue()
+        assert len(apply_task_fixture.apply_queue) == 3
+        apply_task_fixture.process_apply_queue()
 
         # Import feed again
-        content_server_feed_text = opds2_files_fixture.sample_text("feed.json")
         opds2_import_fixture.client.queue_response(
             200, content=content_server_feed_text
         )
@@ -787,7 +687,7 @@ class TestImportCollection:
 
         # This time there should be no tasks queued up for identifiers because
         # they were already imported
-        assert len(opds2_import_fixture.bibliographic_apply_queue) == 0
+        assert len(apply_task_fixture.apply_queue) == 0
 
         # Unless we force the import, then we should have tasks queued up
         content_server_feed_text = opds2_files_fixture.sample_text("feed.json")
@@ -797,11 +697,12 @@ class TestImportCollection:
         opds2.import_collection.delay(
             opds2_import_fixture.collection.id, force=True
         ).wait()
-        assert len(opds2_import_fixture.bibliographic_apply_queue) == 3
+        assert len(apply_task_fixture.apply_queue) == 3
 
     def test_import_multiple_pages(
         self,
         db: DatabaseTransactionFixture,
+        apply_task_fixture: ApplyTaskFixture,
         opds2_import_fixture: OPDS2ImportFixture,
         opds2_files_fixture: OPDS2FilesFixture,
     ):
@@ -819,8 +720,8 @@ class TestImportCollection:
 
         # There are tasks queued up for each identifier, 3 from each feed.
         # So we should have 6 tasks in total.
-        assert len(opds2_import_fixture.bibliographic_apply_queue) == 6
-        opds2_import_fixture.process_bibliographic_apply_queue()
+        assert len(apply_task_fixture.apply_queue) == 6
+        apply_task_fixture.process_apply_queue()
 
     def test_import_wrong_collection(
         self,
@@ -835,6 +736,7 @@ class TestImportCollection:
     def test_import_odl_feed(
         self,
         db: DatabaseTransactionFixture,
+        apply_task_fixture: ApplyTaskFixture,
         opds2_import_fixture: OPDS2ImportFixture,
         opds2_with_odl_files_fixture: OPDS2WithODLFilesFixture,
         caplog: pytest.LogCaptureFixture,
@@ -853,11 +755,11 @@ class TestImportCollection:
 
         # We shouldn't have imported any publications, since the items in the feed are
         # ODL publications, which are not supported by OPDS2Importer.
-        imported = opds2_import_fixture.process_bibliographic_apply_queue()
-        assert len(imported) == 0
+        apply_task_fixture.process_apply_queue()
+        assert len(apply_task_fixture.get_editions()) == 0
 
         assert (
-            "Error validating publication (identifier: urn:ISBN:9780792766919, title: Past Imperfect)"
+            "Failed to import publication: urn:ISBN:9780792766919 (Past Imperfect)"
             in caplog.text
         )
 

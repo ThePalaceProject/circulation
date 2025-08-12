@@ -8,6 +8,7 @@ pytest_plugins = [
     "tests.fixtures.api_admin",
     "tests.fixtures.api_controller",
     "tests.fixtures.api_routes",
+    "tests.fixtures.apply",
     "tests.fixtures.celery",
     "tests.fixtures.database",
     "tests.fixtures.files",

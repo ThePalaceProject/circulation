@@ -13,7 +13,6 @@ from palace.manager.api.circulation.fulfillment import (
 )
 from palace.manager.integration.license.opds.requests import OAuthOpdsRequest
 from palace.manager.integration.license.overdrive.api import OverdriveAPI
-from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism, RightsStatus
@@ -40,22 +39,6 @@ class TestOPDSForDistributorsAPI:
         assert result.name == "Negotiate a fulfillment token"
         assert result.success is True
         assert result.result == mock_make_request.refresh_token.return_value
-
-    def test_supported_media_types(
-        self, opds_dist_api_fixture: OPDSForDistributorsAPIFixture
-    ):
-        # If the default client supports media type X with the
-        # BEARER_TOKEN access control scheme, then X is a supported
-        # media type for an OPDS For Distributors collection.
-        supported = opds_dist_api_fixture.api.SUPPORTED_MEDIA_TYPES
-        for format, drm in DeliveryMechanism.default_client_can_fulfill_lookup:
-            if drm == (DeliveryMechanism.BEARER_TOKEN) and format is not None:
-                assert format in supported
-
-        # Here's a media type that sometimes shows up in OPDS For
-        # Distributors collections but is _not_ supported. Incoming
-        # items with this media type will _not_ be imported.
-        assert MediaTypes.JPEG_MEDIA_TYPE not in supported
 
     def test_can_fulfill_without_loan(
         self, opds_dist_api_fixture: OPDSForDistributorsAPIFixture
