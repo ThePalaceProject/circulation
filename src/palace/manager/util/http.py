@@ -10,14 +10,14 @@ from urllib.parse import urlparse
 
 import requests
 from flask_babel import lazy_gettext as _
-from requests import PreparedRequest, sessions
+from requests import PreparedRequest, Session as RequestsSession
 from requests.adapters import HTTPAdapter, Response
 from requests.auth import AuthBase
 from typing_extensions import Self, Unpack
 from urllib3 import Retry
 
 from palace import manager
-from palace.manager.core.exceptions import IntegrationException
+from palace.manager.core.exceptions import IntegrationException, PalaceValueError
 from palace.manager.core.problem_details import INTEGRATION_ERROR
 from palace.manager.util.log import LoggerMixin
 from palace.manager.util.problem_detail import (
@@ -26,6 +26,7 @@ from palace.manager.util.problem_detail import (
     ProblemDetail,
     ProblemDetailException,
 )
+from palace.manager.util.sentinel import SentinelType
 
 
 class RemoteIntegrationException(IntegrationException, BaseProblemDetailException):
@@ -146,6 +147,9 @@ class RequestTimedOut(RequestNetworkException, requests.exceptions.Timeout):
 
 _ResponseCodesLiteral = Literal["2xx", "3xx", "4xx", "5xx"]
 ResponseCodesT = Collection[_ResponseCodesLiteral | int] | None
+MakeRequestT = (
+    RequestsSession | Callable[..., Response] | Literal[SentinelType.NotGiven]
+)
 
 
 class GetRequestKwargs(TypedDict, total=False):
@@ -162,6 +166,8 @@ class GetRequestKwargs(TypedDict, total=False):
     verbose: bool
     max_retry_count: int
     backoff_factor: float
+
+    make_request_with: MakeRequestT
 
 
 class RequestKwargs(GetRequestKwargs, total=False):
@@ -206,12 +212,50 @@ class HTTP(LoggerMixin):
 
     DEFAULT_REQUEST_RETRIES = 5
     DEFAULT_REQUEST_TIMEOUT = 20
+    DEFAULT_BACKOFF_FACTOR = 1.0
 
     @classmethod
     def set_quick_failure_settings(cls) -> None:
         """Ensure any outgoing requests aren't long-running"""
         cls.DEFAULT_REQUEST_RETRIES = 0
         cls.DEFAULT_REQUEST_TIMEOUT = 5
+
+    @classmethod
+    def session(
+        cls,
+        max_retry_count: int | None = None,
+        backoff_factor: float | None = None,
+    ) -> RequestsSession:
+        """
+        Create a requests session with the given retry settings.
+
+        Using the session allows future requests to reuse the same connection
+        and settings, which can improve performance and reduce overhead when
+        making multiple requests to the same host.
+
+        Note: RequestsSession is not thread-safe, so this should be used
+        in a context where the session is not shared across threads.
+        """
+        max_retry_count = (
+            max_retry_count
+            if max_retry_count is not None
+            else cls.DEFAULT_REQUEST_RETRIES
+        )
+        backoff_factor = (
+            backoff_factor if backoff_factor is not None else cls.DEFAULT_BACKOFF_FACTOR
+        )
+
+        session = RequestsSession()
+        retry_strategy = Retry(
+            total=max_retry_count,
+            status_forcelist=cls.RETRY_STATUS_CODES,
+            backoff_factor=backoff_factor,
+        )
+        adapter = HTTPAdapter(max_retries=retry_strategy)
+
+        session.mount("http://", adapter)
+        session.mount("https://", adapter)
+        return session
 
     @classmethod
     def get_with_timeout(cls, url: str, **kwargs: Unpack[GetRequestKwargs]) -> Response:
@@ -243,19 +287,35 @@ class HTTP(LoggerMixin):
         """Call requests.request and turn a timeout into a RequestTimedOut
         exception.
         """
-        return cls._request_with_timeout(
-            http_method, url, sessions.Session.request, **kwargs
-        )
+        return cls._request_with_timeout(http_method, url, **kwargs)
 
     # The set of status codes on which a retry will be attempted (if the number of retries requested is non-zero).
     RETRY_STATUS_CODES = [429, 500, 502, 503, 504]
+
+    @classmethod
+    def _validate_kwargs(cls, kwargs: RequestKwargs) -> None:
+        """Validate the kwargs passed to the request methods."""
+        make_request_with = kwargs.get("make_request_with", SentinelType.NotGiven)
+        if isinstance(make_request_with, RequestsSession):
+            # If make_request_with is a Session, we raise an error if retry settings were provided,
+            # as the Session already has its own retry settings.
+            settings_present = []
+            if "max_retry_count" in kwargs:
+                settings_present.append("'max_retry_count'")
+            if "backoff_factor" in kwargs:
+                settings_present.append("'backoff_factor'")
+
+            if settings_present:
+                raise PalaceValueError(
+                    f"Cannot set {', '.join(settings_present)} when 'make_request_with' is a Session."
+                )
 
     @classmethod
     def _request_with_timeout(
         cls,
         http_method: str,
         url: str,
-        make_request_with: Callable[..., Response],
+        *,
         process_response_with: _ProcessResponseCallable | None = None,
         **kwargs: Unpack[RequestKwargs],
     ) -> Response:
@@ -265,12 +325,14 @@ class HTTP(LoggerMixin):
         The core of `request_with_timeout` made easy to test.
 
         :param url: Make the request to this URL.
-        :param make_request_with: A function that actually makes the
-            HTTP request.
-        :param args: Positional arguments for the request function.
         :param kwargs: Keyword arguments for the request function.
         """
+        cls._validate_kwargs(kwargs)
+
         process_response_with = process_response_with or cls._process_response
+        make_request_with: MakeRequestT = kwargs.pop(
+            "make_request_with", SentinelType.NotGiven
+        )
 
         allowed_response_codes = kwargs.pop("allowed_response_codes", [])
         disallowed_response_codes = kwargs.pop("disallowed_response_codes", [])
@@ -279,10 +341,8 @@ class HTTP(LoggerMixin):
         if not "timeout" in kwargs:
             kwargs["timeout"] = cls.DEFAULT_REQUEST_TIMEOUT
 
-        max_retry_count: int = int(
-            kwargs.pop("max_retry_count", cls.DEFAULT_REQUEST_RETRIES)
-        )
-        backoff_factor: float = float(kwargs.pop("backoff_factor", 1.0))
+        max_retry_count: int | None = kwargs.pop("max_retry_count", None)
+        backoff_factor: float | None = kwargs.pop("backoff_factor", None)
 
         # Set a user-agent if not already present
         version = (
@@ -302,19 +362,13 @@ class HTTP(LoggerMixin):
                 )
 
             request_start_time = time.time()
-            if make_request_with == sessions.Session.request:
-                with sessions.Session() as session:
-                    retry_strategy = Retry(
-                        total=max_retry_count,
-                        status_forcelist=cls.RETRY_STATUS_CODES,
-                        backoff_factor=backoff_factor,
-                    )
-                    adapter = HTTPAdapter(max_retries=retry_strategy)
-
-                    session.mount("http://", adapter)
-                    session.mount("https://", adapter)
-
+            if make_request_with is SentinelType.NotGiven:
+                with cls.session(
+                    max_retry_count=max_retry_count, backoff_factor=backoff_factor
+                ) as session:
                     response = session.request(http_method, url, **kwargs)  # type: ignore[misc]
+            elif isinstance(make_request_with, RequestsSession):
+                response = make_request_with.request(http_method, url, **kwargs)  # type: ignore[misc]
             else:
                 response = make_request_with(http_method, url, **kwargs)
             cls.logger().info(
@@ -440,7 +494,6 @@ class HTTP(LoggerMixin):
         cls,
         http_method: str,
         url: str,
-        make_request_with: Callable[..., Response] | None = None,
         **kwargs: Unpack[RequestKwargs],
     ) -> Response:
         """Make a request that raises a ProblemError with a detailed problem detail
@@ -449,19 +502,15 @@ class HTTP(LoggerMixin):
 
         :param http_method: HTTP method to use when making the request.
         :param url: Make the request to this URL.
-        :param make_request_with: A function that actually makes the
-            HTTP request.
         :param kwargs: Keyword arguments for the make_request_with
             function.
         """
         logging.info(
             "Making debuggable %s request to %s: kwargs %r", http_method, url, kwargs
         )
-        make_request_with = make_request_with or requests.request
         return cls._request_with_timeout(
             http_method,
             url,
-            make_request_with=make_request_with,
             process_response_with=cls.process_debuggable_response,
             **kwargs,
         )

@@ -30,7 +30,7 @@ from palace.manager.service.integration_registry.license_providers import (
 )
 from palace.manager.service.redis.models.set import IdentifierSet
 from palace.manager.sqlalchemy.model.collection import Collection
-from palace.manager.util.http import BadResponseException
+from palace.manager.util.http import HTTP, BadResponseException
 from palace.manager.util.log import LoggerMixin
 
 
@@ -73,8 +73,6 @@ class ImporterSettingsProtocol(Protocol):
     def ignored_identifier_types(self) -> list[str]: ...
     @property
     def custom_accept_header(self) -> str: ...
-    @property
-    def max_retry_count(self) -> int: ...
 
 
 PublicationType = TypeVar("PublicationType", bound=opds2.BasePublication)
@@ -124,7 +122,6 @@ class OPDS2WithODLImporter(Generic[PublicationType, SettingsType], LoggerMixin):
             parser=PublicationFeedNoValidation.model_validate_json,
             allowed_response_codes=["2xx"],
             headers={"Accept": self._settings.custom_accept_header},
-            max_retry_count=self._settings.max_retry_count,
         )
 
     @classmethod
@@ -216,7 +213,6 @@ class OPDS2WithODLImporter(Generic[PublicationType, SettingsType], LoggerMixin):
                 document_link,
                 parser=LicenseInfo.model_validate_json,
                 allowed_response_codes=["2xx"],
-                max_retry_count=self._settings.max_retry_count,
             )
         except BadResponseException as e:
             resp = e.response
@@ -356,11 +352,13 @@ def importer_from_collection(
     settings = integration_settings_load(
         OPDS2WithODLApi.settings_class(), collection.integration_configuration
     )
+    requests_session = HTTP.session(settings.max_retry_count)
     request = get_opds_requests(
         settings.auth_type,
         settings.username,
         settings.password,
         settings.external_account_id,
+        requests_session,
     )
     extractor = OPDS2WithODLExtractor(
         settings.external_account_id,

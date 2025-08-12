@@ -6,9 +6,11 @@ from unittest.mock import MagicMock, create_autospec
 
 import pytest
 import requests
-from requests import Response
+from requests import Response, Session
+from requests.adapters import HTTPAdapter
 from requests_mock import Mocker
 
+from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.core.problem_details import INTEGRATION_ERROR, INVALID_INPUT
 from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.util.http import (
@@ -44,26 +46,50 @@ class TestHTTP:
         assert m(399) == "3xx"
         assert m(500) == "5xx"
 
-    @mock.patch("palace.manager.util.http.sessions.Session")
-    def test_request_with_timeout_defaults(self, mock_session: MagicMock) -> None:
+    def test_session(self) -> None:
+        # If supplied with a max_retry_count and backoff_factor, they are used to
+        # create and mount a requests HTTPAdapter.
+        result = HTTP.session(max_retry_count=3, backoff_factor=2.0)
+        https_adapter = result.get_adapter("https://fake.url")
+        http_adapter = result.get_adapter("http://fake.url")
+        # Both protocols use the same adapter.
+        assert https_adapter is http_adapter
+        assert isinstance(http_adapter, HTTPAdapter)
+        assert http_adapter.max_retries.total == 3
+        assert http_adapter.max_retries.backoff_factor == 2.0
+
+        # If not supplied, the default values from the class are used.
+        result = HTTP.session()
+        adapter = result.get_adapter("https://fake.url")
+        assert isinstance(adapter, HTTPAdapter)
+        assert adapter.max_retries.total == HTTP.DEFAULT_REQUEST_RETRIES
+        assert adapter.max_retries.backoff_factor == HTTP.DEFAULT_BACKOFF_FACTOR
+
+    def test_request_with_timeout_defaults(self) -> None:
         with (
             mock.patch.object(HTTP, "DEFAULT_REQUEST_TIMEOUT", 10),
-            mock.patch.object(HTTP, "DEFAULT_REQUEST_RETRIES", 2),
+            mock.patch.object(HTTP, "session", autospec=True) as mock_session,
         ):
-            mock_ctx = mock_session().__enter__()
+            mock_ctx = mock_session.return_value.__enter__.return_value
             mock_request = mock_ctx.request
             HTTP.request_with_timeout("GET", "url")
-            # The session adapter has a retry attached
-            assert mock_ctx.mount.call_args[0][1].max_retries.total == 2
-            mock_request.assert_called_once()
+
+            # We create a session with none for parameters, which we know
+            # from test_session above, uses the default values.
+            mock_session.assert_called_once_with(
+                max_retry_count=None, backoff_factor=None
+            )
+
             # The request has a timeout
-            assert mock_request.call_args[1]["timeout"] == 10
+            mock_request.assert_called_once_with(
+                "GET", "url", headers=mock.ANY, timeout=10
+            )
 
     @mock.patch("palace.manager.util.http.manager.__version__", "<VERSION>")
     def test_request_with_timeout_success(self) -> None:
         request = FakeRequest(MockRequestsResponse(200, content="Success!"))
         response = HTTP._request_with_timeout(
-            "GET", "http://url/", request.fake_request, kwarg="value"  # type: ignore[call-arg]
+            "GET", "http://url/", make_request_with=request.fake_request, kwarg="value"  # type: ignore[call-arg]
         )
         assert response.status_code == 200
         assert response.content == b"Success!"
@@ -89,18 +115,81 @@ class TestHTTP:
             HTTP._request_with_timeout(
                 "GET",
                 "http://url",
-                request.fake_request,
+                make_request_with=request.fake_request,
                 headers={"User-Agent": "Fake Agent"},
             ).status_code
             == 201
         )
         assert request.agent == "Fake Agent"
 
+    def test_request_with_timeout_session_and_retries(self) -> None:
+        """
+        If a session is provided, and we set the max_retry_count and backoff_factor on
+        the request, we get a PalaceValueError.
+        """
+        session = HTTP.session()
+        with pytest.raises(
+            PalaceValueError,
+            match="Cannot set 'max_retry_count', 'backoff_factor' when 'make_request_with' is a Session.",
+        ):
+            HTTP.request_with_timeout(
+                "GET",
+                "http://url",
+                make_request_with=session,
+                max_retry_count=3,
+                backoff_factor=2.0,
+            )
+
+        with pytest.raises(
+            PalaceValueError,
+            match="Cannot set 'max_retry_count' when 'make_request_with' is a Session.",
+        ):
+            HTTP.request_with_timeout(
+                "GET",
+                "http://url",
+                make_request_with=session,
+                max_retry_count=3,
+            )
+
+        with pytest.raises(
+            PalaceValueError,
+            match="Cannot set 'backoff_factor' when 'make_request_with' is a Session.",
+        ):
+            HTTP.request_with_timeout(
+                "GET",
+                "http://url",
+                make_request_with=session,
+                backoff_factor=2.0,
+            )
+
+    def test_request_with_timeout_session(self) -> None:
+        """
+        If a session is provided, we use it to make the request.
+        """
+        result = MockRequestsResponse(201, content="Success!")
+        mock_session = create_autospec(Session)
+        mock_session.request.return_value = result
+
+        response = HTTP.request_with_timeout(
+            "GET", "http://url", make_request_with=mock_session
+        )
+        assert response is result
+
+        # The session's request method was called with the correct parameters.
+        mock_session.request.assert_called_once_with(
+            "GET",
+            "http://url",
+            headers=mock.ANY,
+            timeout=20,
+        )
+
     @mock.patch("palace.manager.util.http.manager.__version__", None)
     def test_default_user_agent(self) -> None:
         request = FakeRequest()
         assert (
-            HTTP._request_with_timeout("DELETE", "/", request.fake_request).status_code
+            HTTP._request_with_timeout(
+                "DELETE", "/", make_request_with=request.fake_request
+            ).status_code
             == 201
         )
         assert request.agent == "Palace Manager/1.x.x"
@@ -108,7 +197,7 @@ class TestHTTP:
         # User agent is still set if headers are None
         assert (
             HTTP._request_with_timeout(
-                "GET", "/", request.fake_request, headers=None
+                "GET", "/", make_request_with=request.fake_request, headers=None
             ).status_code
             == 201
         )
@@ -118,7 +207,10 @@ class TestHTTP:
         original_headers = {"header": "value"}
         assert (
             HTTP._request_with_timeout(
-                "GET", "/", request.fake_request, headers=original_headers
+                "GET",
+                "/",
+                make_request_with=request.fake_request,
+                headers=original_headers,
             ).status_code
             == 201
         )
@@ -132,7 +224,9 @@ class TestHTTP:
         with pytest.raises(
             RequestTimedOut, match="Timeout accessing http://url/: I give up"
         ):
-            HTTP._request_with_timeout("PUT", "http://url/", immediately_timeout)
+            HTTP._request_with_timeout(
+                "PUT", "http://url/", make_request_with=immediately_timeout
+            )
 
     @mock.patch("palace.manager.util.http.manager.__version__", None)
     def test_request_with_timeout_verbose(self, caplog: pytest.LogCaptureFixture):
@@ -150,7 +244,7 @@ class TestHTTP:
         response = HTTP._request_with_timeout(
             "POST",
             "http://url/",
-            make_request,
+            make_request_with=make_request,
             process_response_with=mock_process_response,
             verbose=True,
             headers={"header": "value"},
@@ -179,7 +273,9 @@ class TestHTTP:
             RequestNetworkException,
             match="Network error contacting http://url/: a disaster",
         ):
-            HTTP._request_with_timeout("POST", "http://url/", immediately_fail)
+            HTTP._request_with_timeout(
+                "POST", "http://url/", make_request_with=immediately_fail
+            )
 
     def test_request_with_response_indicative_of_failure(self) -> None:
         def fake_500_response(*args, **kwargs) -> Response:
@@ -189,7 +285,9 @@ class TestHTTP:
             BadResponseException,
             match="Bad response from http://url/: Got status code 500 from external server",
         ):
-            HTTP._request_with_timeout("GET", "http://url/", fake_500_response)
+            HTTP._request_with_timeout(
+                "GET", "http://url/", make_request_with=fake_500_response
+            )
 
     def test_allowed_response_codes(self) -> None:
         """Test our ability to raise BadResponseException when
@@ -206,7 +304,7 @@ class TestHTTP:
         request = partial(HTTP._request_with_timeout, "GET", url)
 
         # By default, every code except for 5xx codes is allowed.
-        response = request(fake_401_response)
+        response = request(make_request_with=fake_401_response)
         assert response.status_code == 401
 
         # You can say that certain codes are specifically allowed, and
@@ -215,17 +313,23 @@ class TestHTTP:
             BadResponseException,
             match="Bad response from http://url/: Got status code 401 from external server, but can only continue on: 200, 201.",
         ):
-            request(fake_401_response, allowed_response_codes=[201, 200])
+            request(
+                make_request_with=fake_401_response, allowed_response_codes=[201, 200]
+            )
 
-        response = request(fake_401_response, allowed_response_codes=[401])
-        response = request(fake_401_response, allowed_response_codes=["4xx"])
+        response = request(
+            make_request_with=fake_401_response, allowed_response_codes=[401]
+        )
+        response = request(
+            make_request_with=fake_401_response, allowed_response_codes=["4xx"]
+        )
 
         # In this way you can even raise an exception on a 200 response code.
         with pytest.raises(
             BadResponseException,
             match="Bad response from http://url/: Got status code 200 from external server, but can only continue on: 401.",
         ):
-            request(fake_200_response, allowed_response_codes=[401])
+            request(make_request_with=fake_200_response, allowed_response_codes=[401])
 
         # You can say that certain codes are explicitly forbidden, and
         # all others are allowed.
@@ -233,20 +337,29 @@ class TestHTTP:
             BadResponseException,
             match="Bad response from http://url/: Got status code 401 from external server, cannot continue.",
         ) as excinfo:
-            request(fake_401_response, disallowed_response_codes=[401])
+            request(
+                make_request_with=fake_401_response, disallowed_response_codes=[401]
+            )
 
         with pytest.raises(
             BadResponseException,
             match="Bad response from http://url/: Got status code 200 from external server, cannot continue.",
         ):
-            request(fake_200_response, disallowed_response_codes=["2xx", 301])
+            request(
+                make_request_with=fake_200_response,
+                disallowed_response_codes=["2xx", 301],
+            )
 
-        response = request(fake_401_response, disallowed_response_codes=["2xx"])
+        response = request(
+            make_request_with=fake_401_response, disallowed_response_codes=["2xx"]
+        )
         assert response.status_code == 401
 
         # The exception can be turned into a useful problem detail document.
         with pytest.raises(BadResponseException) as exc_info:
-            request(fake_200_response, disallowed_response_codes=["2xx"])
+            request(
+                make_request_with=fake_200_response, disallowed_response_codes=["2xx"]
+            )
 
         problem_detail = exc_info.value.problem_detail
 

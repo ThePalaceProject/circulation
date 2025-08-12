@@ -143,6 +143,7 @@ class TestNoAuthOpdsRequest:
         assert opds_request_fixture.client.requests_args == [
             {
                 "headers": opds_request_fixture.headers,
+                "make_request_with": make_request._requests_session,
             }
         ]
 
@@ -169,6 +170,7 @@ class TestNoAuthOpdsRequest:
         assert opds_request_fixture.client.requests_args == [
             {
                 "headers": opds_request_fixture.headers,
+                "make_request_with": make_request._requests_session,
             }
         ]
 
@@ -197,6 +199,7 @@ class TestBasicAuthOpdsRequest:
                     opds_request_fixture.username,
                     opds_request_fixture.password,
                 ),
+                "make_request_with": make_request._requests_session,
             }
         ]
 
@@ -369,11 +372,10 @@ class TestOAuthOpdsRequest:
             else pytest.raises(expected)
         )
 
+        request = opds_request_fixture.oauth_make_request
         with context:
-            token = OAuthOpdsRequest._oauth_session_token_refresh(
+            token = request._oauth_session_token_refresh(
                 opds_request_fixture.auth_url,
-                opds_request_fixture.username,
-                opds_request_fixture.password,
             )
             assert token.access_token == expected.access_token
             assert token.token_type == expected.token_type
@@ -389,6 +391,7 @@ class TestOAuthOpdsRequest:
                     opds_request_fixture.password,
                 ),
                 "allowed_response_codes": ["2xx"],
+                "make_request_with": request._requests_session,
             }
         ]
 
@@ -398,11 +401,7 @@ class TestOAuthOpdsRequest:
         """
         If the auth document request fails, an exception is raised.
         """
-        make_request = OAuthOpdsRequest(
-            opds_request_fixture.feed_url,
-            opds_request_fixture.username,
-            opds_request_fixture.password,
-        )
+        make_request = opds_request_fixture.oauth_make_request
         opds_request_fixture.client.queue_response(
             401,
             content="Unauthorized",

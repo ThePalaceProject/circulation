@@ -86,8 +86,14 @@ class MockHttpClientFixture:
     ) -> Response:
         self.requests.append(url)
         self.requests_methods.append(http_method)
-        self.requests_args.append(kwargs)
-        return HTTP._request_with_timeout(http_method, url, self._request, **kwargs)
+        self.requests_args.append(kwargs.copy())
+
+        # Before we switch the "make_request_with" to our mock request, we call the original validation
+        # function to make sure that the kwargs pass validation as originally given.
+        HTTP._validate_kwargs(kwargs)
+
+        kwargs["make_request_with"] = self._request
+        return HTTP._request_with_timeout(http_method, url, **kwargs)
 
     def do_get(self, url: str, **kwargs: Unpack[GetRequestKwargs]) -> Response:
         return self.do_request("GET", url, **kwargs)
