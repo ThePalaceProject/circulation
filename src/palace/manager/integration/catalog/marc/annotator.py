@@ -69,7 +69,28 @@ class Annotator(LoggerMixin):
         cls.add_summary(record, work)
         cls.add_genres(record, work)
 
+        # Normalize record should always be called after all additions to the
+        # record have been completed.
+        cls._normalize_record(record)
         return record
+
+    @classmethod
+    def _normalize_record(cls, record: Record) -> None:
+        """Make any necessary adjustments to the record.
+
+        This method is the place to add record updates that depend on
+        information from the MARC record itself.
+        """
+
+        # Set the `245` first indicator to "1", if a Main Entry (`1xx`) is present.
+        _245_fields = record.get_fields("245")
+        if len(_245_fields) > 0 and any(
+            field
+            for field in record.fields
+            if field.tag.startswith("1") and len(field.tag) == 3
+        ):
+            for field_245 in _245_fields:
+                field_245.indicator1 = "1"
 
     @classmethod
     def library_marc_record(
