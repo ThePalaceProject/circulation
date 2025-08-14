@@ -83,6 +83,7 @@ class Annotator(LoggerMixin):
         """
 
         # Set the `245` first indicator to "1", if a Main Entry (`1xx`) is present.
+        # See: https://www.loc.gov/marc/bibliographic/bd245.html
         _245_fields = record.get_fields("245")
         if len(_245_fields) > 0 and any(
             field

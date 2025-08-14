@@ -648,12 +648,6 @@ class TestAnnotator:
         assert field1.get_subfields("u")[0] == expected_client_url_1
         assert field2.get_subfields("u")[0] == expected_client_url_2
 
-    # @pytest.mark.parametrize(
-    #     "author",
-    #     (
-    #         pytest.param("An author.")
-    #     )
-    # )
     def test_normalize_record(
         self,
         db: DatabaseTransactionFixture,
