@@ -69,7 +69,31 @@ class Annotator(LoggerMixin):
         cls.add_summary(record, work)
         cls.add_genres(record, work)
 
+        # Normalize record should always be called after all additions to the
+        # record have been completed.
+        cls._normalize_record(record)
         return record
+
+    @classmethod
+    def _normalize_record(cls, record: Record) -> None:
+        """Make any necessary adjustments to the record.
+
+        This method is the place to add record updates that depend on
+        information from the MARC record itself.
+        """
+
+        # Set the `245` first indicator to "1", if a Main Entry (`1xx`) is present.
+        # Otherwise, set it to "0".
+        # See: https://www.loc.gov/marc/bibliographic/bd245.html
+        _245_fields = record.get_fields("245")
+        is_1xx_present = any(
+            field
+            for field in record.fields
+            if field.tag.startswith("1") and len(field.tag) == 3
+        )
+        _245_first_indicator = "1" if is_1xx_present else "0"
+        for field_245 in _245_fields:
+            field_245.indicator1 = _245_first_indicator
 
     @classmethod
     def library_marc_record(
@@ -289,6 +313,8 @@ class Annotator(LoggerMixin):
             subfields += [Subfield("b", str(edition.subtitle))]
         if edition.author:
             subfields += [Subfield("c", str(edition.author))]
+        # NB: The `245` first indicator is set to "0" here, but is normalized
+        # to its correct value in `cls._normalize_record`.
         record.add_field(
             Field(
                 tag="245",

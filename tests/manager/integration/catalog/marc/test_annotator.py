@@ -647,3 +647,66 @@ class TestAnnotator:
 
         assert field1.get_subfields("u")[0] == expected_client_url_1
         assert field2.get_subfields("u")[0] == expected_client_url_2
+
+    def test_normalize_record(
+        self,
+        db: DatabaseTransactionFixture,
+        annotator_fixture: AnnotatorFixture,
+    ):
+        # 1. Verify that a `245` in a record with at least one `1xx`
+        #    Main Entry field has a First Indicator of "1".
+        record = annotator_fixture.record()
+
+        # We need exactly one author and a sorted_author property on the
+        # edition to get a `100` field. And we need to get a `100` field
+        # here because it is the only "Main Entry" field that we currently
+        # support in the MARC export.
+        sorted_author = "Lastname, Firstname"
+        author = "Firstname Lastname"
+        edition = db.edition(authors=[author])
+        edition.sort_author = sorted_author
+        # Note the non-filing characters in the title.
+        edition.title = "Good Book"
+        non_filing_characters = 0
+
+        annotator_fixture.annotator.add_title(record, edition)
+        annotator_fixture.annotator.add_contributors(record, edition)
+        assert len(record.get_fields("245")) == 1
+        assert len(record.get_fields("100")) == 1
+
+        # Before we normalize the record, the `245`first indicator does
+        # not account for the `100` field...
+        annotator_fixture.assert_field(
+            record,
+            "245",
+            {
+                "a": edition.title,
+                "c": edition.author,
+            },
+            Indicators("0", str(non_filing_characters)),
+        )
+        # ... but, after normalization, it does.
+        annotator_fixture.annotator._normalize_record(record)
+        annotator_fixture.assert_field(
+            record,
+            "245",
+            {
+                "a": edition.title,
+                "c": edition.author,
+            },
+            Indicators("1", str(non_filing_characters)),
+        )
+
+        # If we remove the `100` field and re-normalize, then
+        # the `245` first indicator should be "0".
+        record.remove_fields("100")
+        annotator_fixture.annotator._normalize_record(record)
+        annotator_fixture.assert_field(
+            record,
+            "245",
+            {
+                "a": edition.title,
+                "c": edition.author,
+            },
+            Indicators("0", str(non_filing_characters)),
+        )
