@@ -673,6 +673,7 @@ class TestAnnotator:
         annotator_fixture.annotator.add_contributors(record, edition)
         assert len(record.get_fields("245")) == 1
         assert len(record.get_fields("100")) == 1
+
         # Before we normalize the record, the `245`first indicator does
         # not account for the `100` field...
         annotator_fixture.assert_field(
@@ -684,7 +685,6 @@ class TestAnnotator:
             },
             Indicators("0", str(non_filing_characters)),
         )
-
         # ... but, after normalization, it does.
         annotator_fixture.annotator._normalize_record(record)
         annotator_fixture.assert_field(
