@@ -696,3 +696,17 @@ class TestAnnotator:
             },
             Indicators("1", str(non_filing_characters)),
         )
+
+        # If we remove the `100` field and re-normalize, then
+        # the `245` first indicator should be "0".
+        record.remove_fields("100")
+        annotator_fixture.annotator._normalize_record(record)
+        annotator_fixture.assert_field(
+            record,
+            "245",
+            {
+                "a": edition.title,
+                "c": edition.author,
+            },
+            Indicators("0", str(non_filing_characters)),
+        )
