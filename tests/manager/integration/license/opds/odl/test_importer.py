@@ -320,7 +320,8 @@ class TestOPDS2WithODLImporter:
 
         # 4. Make sure that the failure is covered
         assert (
-            "Error validating publication (identifier: urn:isbn:9781234567897, title: None): 2 validation errors"
+            "Error validating publication (identifier: urn:isbn:9781234567897, "
+            "title: None, feed: http://example.com/feed): 2 validation errors"
             in caplog.text
         )
 
@@ -1216,6 +1217,6 @@ class TestOPDS2WithODLImporter:
 
         # We also logged a warning about the invalid publication
         assert (
-            "Error validating publication (identifier: None, title: None)"
+            "Error validating publication (identifier: None, title: None, feed: http://example.com/feed)"
             in caplog.text
         )

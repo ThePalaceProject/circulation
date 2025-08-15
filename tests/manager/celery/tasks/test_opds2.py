@@ -857,8 +857,8 @@ class TestImportCollection:
         assert len(imported) == 0
 
         assert (
-            "Error validating publication (identifier: urn:ISBN:9780792766919, title: Past Imperfect)"
-            in caplog.text
+            "Error validating publication (identifier: urn:ISBN:9780792766919, "
+            "title: Past Imperfect, feed: http://opds2.example.org/feed)" in caplog.text
         )
 
 
