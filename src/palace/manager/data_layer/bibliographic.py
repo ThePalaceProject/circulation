@@ -515,18 +515,14 @@ class BibliographicData(BaseMutableData):
                     f"Error classifying subject: {subject} for identifier {identifier}: {e}"
                 )
 
+        # update links
+        old_links = set()
+        new_links = set()
         # Associate all links with the primary identifier.
         if replace.links and self.links is not None:
-            surviving_hyperlinks = []
-            dirty = False
             for hyperlink in identifier.links:
                 if hyperlink.data_source == data_source:
-                    db.delete(hyperlink)
-                    dirty = True
-                else:
-                    surviving_hyperlinks.append(hyperlink)
-            if dirty:
-                identifier.links = surviving_hyperlinks
+                    old_links.add(hyperlink)
 
         link_objects = {}
 
@@ -565,31 +561,46 @@ class BibliographicData(BaseMutableData):
                     transformation_settings=link.transformation_settings,
                     db=db,
                 )
+
+                new_links.add(link_obj)
+
                 if link.rel in _REL_REQUIRES_NEW_PRESENTATION_EDITION:
                     work_requires_new_presentation_edition = True
                 elif link.rel in _REL_REQUIRES_FULL_RECALCULATION:
                     work_requires_full_recalculation = True
 
-            link_objects[link] = link_obj
-            if link.thumbnail:
-                thumbnail = link.thumbnail
-                thumbnail_obj, ignore = identifier.add_link(
-                    rel=thumbnail.rel,
-                    href=thumbnail.href,
-                    data_source=data_source,
-                    media_type=thumbnail.guessed_media_type,
-                    content=thumbnail.content,
-                )
-                work_requires_new_presentation_edition = True
-                if thumbnail_obj.resource and thumbnail_obj.resource.representation:
-                    thumbnail_obj.resource.representation.thumbnail_of = (
-                        link_obj.resource.representation
+                link_objects[link] = link_obj
+                if link.thumbnail:
+                    thumbnail = link.thumbnail
+                    thumbnail_obj, ignore = identifier.add_link(
+                        rel=thumbnail.rel,
+                        href=thumbnail.href,
+                        data_source=data_source,
+                        media_type=thumbnail.guessed_media_type,
+                        content=thumbnail.content,
                     )
-                else:
-                    self.log.error(
-                        "Thumbnail link %r cannot be marked as a thumbnail of %r because it has no Representation, probably due to a missing media type."
-                        % (link.thumbnail, link)
-                    )
+                    new_links.add(thumbnail_obj)
+                    work_requires_new_presentation_edition = True
+                    if (
+                        thumbnail_obj.resource
+                        and thumbnail_obj.resource.representation
+                        and thumbnail_obj.resource.representation.thumbnail_of
+                        != (link_obj.resource.representation)
+                    ):
+                        thumbnail_obj.resource.representation.thumbnail_of = (
+                            link_obj.resource.representation
+                        )
+                    else:
+                        self.log.error(
+                            "Thumbnail link %r cannot be marked as a thumbnail of %r because it has no Representation, probably due to a missing media type."
+                            % (link.thumbnail, link)
+                        )
+
+        if old_links != new_links:
+            links_to_delete = old_links - new_links
+            for link_to_delete in links_to_delete:
+                db.delete(link_to_delete)
+                identifier.links.remove(link_to_delete)
 
         # Apply all measurements to the primary identifier
         for measurement in self.measurements:
@@ -739,18 +750,9 @@ class BibliographicData(BaseMutableData):
         old_contributors = []
         new_contributors = []
 
-        if not replace and self.contributors:
-            # we've chosen to append new contributors, which exist
-            # this means the edition's contributor list will, indeed, change
-            contributors_changed = True
-
-        if replace and self.contributors:
-            # Remove any old Contributions from this data source --
-            # we're about to add a new set
+        if self.contributors:
             for contribution in edition.contributions:
                 old_contributors.append(contribution.contributor.id)
-                _db.delete(contribution)
-            edition.contributions = []
 
         for contributor_data in self.contributors:
 
@@ -770,17 +772,29 @@ class BibliographicData(BaseMutableData):
                     viaf=contributor_data.viaf,
                 )
                 new_contributors.append(contributor.id)
-                if contributor_data.display_name:
+                if (
+                    contributor_data.display_name
+                    and contributor_data.display_name != contributor.display_name
+                ):
                     contributor.display_name = contributor_data.display_name
-                if contributor_data.biography:
+                if (
+                    contributor_data.biography
+                    and contributor_data.biography != contributor.biography
+                ):
                     contributor.biography = contributor_data.biography
-                if contributor_data.aliases:
+                if (
+                    contributor_data.aliases
+                    and contributor_data.aliases != contributor.aliases
+                ):
                     contributor.aliases = contributor_data.aliases
-                if contributor_data.lc:
+                if contributor_data.lc and contributor_data.lc != contributor.lc:
                     contributor.lc = contributor_data.lc
-                if contributor_data.viaf:
+                if contributor_data.viaf and contributor_data.viaf != contributor.viaf:
                     contributor.viaf = contributor_data.viaf
-                if contributor_data.wikipedia_name:
+                if (
+                    contributor_data.wikipedia_name
+                    and contributor_data.wikipedia_name != contributor.wikipedia_name
+                ):
                     contributor.wikipedia_name = contributor_data.wikipedia_name
             else:
                 self.log.info(
@@ -788,7 +802,18 @@ class BibliographicData(BaseMutableData):
                     contributor_data.display_name,
                 )
 
-        if sorted(old_contributors) != sorted(new_contributors):
-            contributors_changed = True
+        old_contributors_set = set(old_contributors)
+        new_contributors_set = set(new_contributors)
+        contributors_changed = old_contributors_set != new_contributors_set
+        if contributors_changed and replace:
+            deleted_contributors = list(old_contributors_set - new_contributors_set)
+            contributions_to_be_deleted = [
+                c
+                for c in edition.contributions
+                if c.contributor.id in deleted_contributors
+            ]
+            for c in contributions_to_be_deleted:
+                _db.delete(c)
+                edition.contributions.remove(c)
 
         return contributors_changed
