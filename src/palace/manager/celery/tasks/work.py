@@ -10,10 +10,6 @@ from sqlalchemy.orm import Session, defer
 from palace.manager.celery.task import Task
 from palace.manager.data_layer.policy.presentation import PresentationCalculationPolicy
 from palace.manager.service.celery.celery import QueueNames
-from palace.manager.service.redis.models.lock import TaskLock
-from palace.manager.service.redis.models.work import (
-    WaitingForPresentationCalculation,
-)
 from palace.manager.sqlalchemy.model.classification import Classification, Subject
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import LicensePool
@@ -47,58 +43,6 @@ def calculate_work_presentation(
             wait_time = exponential_backoff(task.request.retries)
             task.log.error(f"{e}. Retrying in {wait_time} seconds.")
             raise task.retry(countdown=wait_time)
-
-
-@shared_task(queue=QueueNames.default, bind=True)
-def calculate_work_presentations(
-    task: Task,
-    batch_size: int = 100,
-) -> None:
-
-    with TaskLock(task).lock():
-        waiting = WaitingForPresentationCalculation(task.services.redis.client())
-        work_policies = waiting.pop(batch_size)
-
-        if work_policies:
-            try:
-                remaining_work_policies = work_policies.copy()
-                with (
-                    elapsed_time_logging(
-                        log_method=task.log.info,
-                        message_prefix=f"Presentation calculated presentation for works: count={len(work_policies)}, "
-                        f"remaining={waiting.len()}",
-                        skip_start=True,
-                    ),
-                ):
-                    for wp in work_policies:
-                        with task.transaction() as tx:
-                            work = get_one(tx, Work, id=wp.work_id)
-                            if not work:
-                                task.log.warning(
-                                    f"No work with id={wp.work_id}. Skipping..."
-                                )
-                                continue
-                            work.calculate_presentation(
-                                policy=wp.policy, disable_async_calculation=True
-                            )
-                            remaining_work_policies.remove(wp)
-            except Exception as e:
-                # if a failure occurs requeue the items so that can be recalculated in the next round
-                task.log.error(
-                    f"Failed to calculate_presentation for {wp.work_id}. "
-                    f"Re-queuing remaining {len(remaining_work_policies)} of {len(work_policies)} "
-                    f"for future processing.",
-                    exc_info=e,
-                )
-                waiting.add(*remaining_work_policies)
-                raise
-
-    if len(work_policies) == batch_size:
-        # This task is complete, but there are more works waiting to be recalculated. Requeue ourselves
-        # to process the next batch.
-        raise task.replace(calculate_work_presentations.s(batch_size=batch_size))
-
-    task.log.info(f"Finished calculating presentation for works.")
 
 
 @shared_task(queue=QueueNames.default, bind=True)
