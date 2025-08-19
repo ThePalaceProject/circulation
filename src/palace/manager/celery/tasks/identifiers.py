@@ -71,6 +71,10 @@ def mark_identifiers_unavailable(
     two IdentifierSets: the first represents existing identifiers that are available in the collection, and
     the second contains active identifiers received from the distributor.
 
+    If the calling task wants to abort marking identifiers as unavailable, it can return None for either
+    of the sets. This will cause the function to log a warning, clean up any IdentifierSets it was
+    passed and exit without marking any identifiers as unavailable.
+
     Any identifiers present in the existing set but not in the active set will be marked as unavailable in
     the collection. This is done by sending a circulation_apply task that sets both licenses_available and
     licenses_owned to 0 for each identifier in the collection.
@@ -86,8 +90,7 @@ def mark_identifiers_unavailable(
     if existing_identifier_kwargs is None or active_identifier_kwargs is None:
         # If one of the sets is None, one of the tasks in the chord failed.
         task.log.warning(
-            "None given for IdentifierSet. This likely means that one of the tasks in the chord failed. "
-            "Aborting without marking any identifiers as unavailable."
+            "Received None instead of IdentifierSet. Aborting without marking any identifiers as unavailable."
         )
         # Attempt to clean up any existing IdentifierSets that may have been created.
         for cleanup_kwargs in [existing_identifier_kwargs, active_identifier_kwargs]:
