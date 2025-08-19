@@ -899,7 +899,9 @@ class Identifier(Base, IdentifierConstants, LoggerMixin):
             rep, is_new = get_one_or_create(
                 _db, Representation, url=resource.url, media_type=media_type
             )
-            resource.representation = rep
+
+            if resource.representation != rep:
+                resource.representation = rep
         elif (
             media_type
             and resource.representation

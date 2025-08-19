@@ -196,7 +196,9 @@ class Resource(Base):
         representation, is_new = get_one_or_create(
             _db, Representation, url=self.url, media_type=media_type
         )
-        self.representation = representation
+
+        if self.representation != representation:
+            self.representation = representation
         representation.set_fetched_content(content, content_path)
 
     def set_estimated_quality(self, estimated_quality):
