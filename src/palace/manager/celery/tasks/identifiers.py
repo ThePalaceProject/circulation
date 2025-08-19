@@ -62,7 +62,7 @@ def existing_available_identifiers(task: Task, collection_id: int) -> Identifier
 @shared_task(queue=QueueNames.default, bind=True)
 def mark_identifiers_unavailable(
     task: Task,
-    existing_and_active_identifier_sets: list[RedisSetKwargs],
+    existing_and_active_identifier_sets: list[RedisSetKwargs | None],
     *,
     collection_id: int,
 ) -> None:
@@ -82,6 +82,19 @@ def mark_identifiers_unavailable(
     existing_identifier_kwargs, active_identifier_kwargs = (
         existing_and_active_identifier_sets
     )
+
+    if existing_identifier_kwargs is None or active_identifier_kwargs is None:
+        # If one of the sets is None, one of the tasks in the chord failed.
+        task.log.warning(
+            "None given for IdentifierSet. This likely means that one of the tasks in the chord failed. "
+            "Aborting without marking any identifiers as unavailable."
+        )
+        # Attempt to clean up any existing IdentifierSets that may have been created.
+        for cleanup_kwargs in [existing_identifier_kwargs, active_identifier_kwargs]:
+            if cleanup_kwargs is not None:
+                IdentifierSet(redis_client, **cleanup_kwargs).delete()
+        return None
+
     existing_identifiers = IdentifierSet(redis_client, **existing_identifier_kwargs)
     active_identifiers = IdentifierSet(redis_client, **active_identifier_kwargs)
 

@@ -190,6 +190,45 @@ class TestMarkIdentifiersUnavailable:
         # In the error case we still clean up the existing set
         assert existing_set.exists() is False
 
+    @pytest.mark.parametrize(
+        "existing,active",
+        [
+            pytest.param(None, None, id="both_none"),
+            pytest.param(True, None, id="existing_set_none"),
+            pytest.param(None, True, id="active_set_none"),
+        ],
+    )
+    def test_run_with_none_for_set(
+        self,
+        db: DatabaseTransactionFixture,
+        identifier_tasks_fixture: IdentifierTasksFixture,
+        caplog: pytest.LogCaptureFixture,
+        existing: Literal[True] | None,
+        active: Literal[True] | None,
+    ) -> None:
+        def create_set() -> IdentifierSet:
+            identifier_set = IdentifierSet(identifier_tasks_fixture.redis_client)
+            identifier_set.add(IdentifierData.from_identifier(db.identifier()))
+            return identifier_set
+
+        caplog.set_level(LogLevel.warning)
+
+        collection = db.collection()
+        existing_set = create_set() if existing else None
+        active_set = create_set() if active else None
+
+        identifiers.mark_identifiers_unavailable.delay(
+            [existing_set, active_set],
+            collection_id=collection.id,
+        ).wait()
+        assert "Aborting without marking any identifiers as unavailable" in caplog.text
+
+        # Any non-None set should be cleaned up
+        if existing_set is not None:
+            assert existing_set.exists() is False
+        if active_set is not None:
+            assert active_set.exists() is False
+
 
 @shared_task(bind=True)
 def identifiers_test_task(
