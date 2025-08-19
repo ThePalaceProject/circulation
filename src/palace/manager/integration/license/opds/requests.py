@@ -243,7 +243,10 @@ class OAuthOpdsRequest(BaseOpdsHttpRequest):
             return feed_parsed.links.get(
                 rel="http://opds-spec.org/auth/document", raising=True
             ).href
-        except (ValidationError, PalaceValueError) as e:
+        except (ValidationError, PalaceValueError):
+            # Either the feed failed to validate, or the link was not found.
+            # Either way, we return None to indicate that we couldn't find the
+            # auth document link.
             return None
 
     def _auth_document_link_from_feed(self, feed_response: Response) -> str | None:
@@ -294,7 +297,8 @@ class OAuthOpdsRequest(BaseOpdsHttpRequest):
         ):
             raise IntegrationException(
                 "Unable to fetch OPDS authentication document. Incorrect status code or content type.",
-                debug_message=f"Status code: '{resp.status_code}' (expected: '{expected_status_code}') Content-type: '{content_type}' Response: {resp.text}",
+                debug_message=f"Status code: '{resp.status_code}' (expected: '{expected_status_code}') "
+                f"Content-type: '{content_type}' Response: {resp.text}",
             )
         return resp.text
 
