@@ -6,6 +6,7 @@ from enum import Enum
 from functools import partial
 from typing import TypeVar, overload
 
+import feedparser
 from pydantic import ValidationError
 from requests import Response
 from typing_extensions import Unpack
@@ -14,6 +15,8 @@ from palace.manager.api.model.token import OAuthTokenResponse
 from palace.manager.core.exceptions import IntegrationException, PalaceValueError
 from palace.manager.integration.license.opds.exception import OpdsResponseException
 from palace.manager.opds.authentication import AuthenticationDocument
+from palace.manager.opds.opds2 import PublicationFeedNoValidation
+from palace.manager.util import first_or_default
 from palace.manager.util.http import (
     HTTP,
     BadResponseException,
@@ -223,16 +226,79 @@ class OAuthOpdsRequest(BaseOpdsHttpRequest):
 
         return token
 
+    @classmethod
+    def _auth_document_link_from_opds1_feed(cls, feed: bytes) -> str | None:
+        """Parse the authentication document link from the OPDS 1.0 feed."""
+        feed_parsed = feedparser.parse(feed)
+        links = feed_parsed.get("feed", {}).get("links", [])
+        return first_or_default(
+            l["href"] for l in links if l["rel"] == "http://opds-spec.org/auth/document"
+        )
+
+    @classmethod
+    def _auth_document_link_from_opds2_feed(cls, feed: bytes) -> str | None:
+        """Parse the authentication document link from the OPDS 2.0 feed."""
+        try:
+            feed_parsed = PublicationFeedNoValidation.model_validate_json(feed)
+            return feed_parsed.links.get(
+                rel="http://opds-spec.org/auth/document", raising=True
+            ).href
+        except (ValidationError, PalaceValueError):
+            # Either the feed failed to validate, or the link was not found.
+            # Either way, we return None to indicate that we couldn't find the
+            # auth document link.
+            return None
+
+    def _auth_document_link_from_feed(self, feed_response: Response) -> str | None:
+        """Parse the authentication document link from the OPDS feed."""
+        parsers = []
+
+        if "application/opds+json" in feed_response.headers.get("Content-Type", ""):
+            parsers.append(self._auth_document_link_from_opds2_feed)
+        elif "application/atom+xml" in feed_response.headers.get("Content-Type", ""):
+            parsers.append(self._auth_document_link_from_opds1_feed)
+        else:
+            # If we don't have a specific content type, try both parsers to see
+            # if we are able to find the auth document link.
+            parsers.extend(
+                [
+                    self._auth_document_link_from_opds1_feed,
+                    self._auth_document_link_from_opds2_feed,
+                ]
+            )
+
+        for parser in parsers:
+            if auth_document_link := parser(feed_response.content):
+                return auth_document_link
+
+        return None
+
     def _fetch_auth_document(self) -> str:
         resp = self._make_request("GET", self._feed_url)
-        content_type = resp.headers.get("Content-Type")
+
+        if resp.status_code == 200:
+            # The feed isn't protected, so we need to parse it to find the auth document link
+            auth_document_link = self._auth_document_link_from_feed(resp)
+            if not auth_document_link:
+                raise IntegrationException(
+                    f"No authentication document link found in feed.",
+                    debug_message=f"URL: '{self._feed_url}' Response: {resp.text}",
+                )
+            resp = self._make_request("GET", auth_document_link)
+            expected_status_code = 200
+        else:
+            # The feed is protected, so we expect a 401 response with the authentication document
+            expected_status_code = 401
+
+        content_type = resp.headers.get("Content-Type", "")
         if (
-            resp.status_code != 401
+            resp.status_code != expected_status_code
             or content_type not in AuthenticationDocument.content_types()
         ):
             raise IntegrationException(
                 "Unable to fetch OPDS authentication document. Incorrect status code or content type.",
-                debug_message=f"Status code: '{resp.status_code}' Content-type: '{content_type}' Response: {resp.text}",
+                debug_message=f"Status code: '{resp.status_code}' (expected: '{expected_status_code}') "
+                f"Content-type: '{content_type}' Response: {resp.text}",
             )
         return resp.text
 
@@ -249,31 +315,31 @@ class OAuthOpdsRequest(BaseOpdsHttpRequest):
         return self.session_token
 
 
-class OPDS2AuthType(Enum):
+class OpdsAuthType(Enum):
     BASIC = "Basic Auth"
     OAUTH = "OAuth (via OPDS authentication document)"
     NONE = "None"
 
 
 def get_opds_requests(
-    authentication: OPDS2AuthType,
+    authentication: OpdsAuthType,
     username: str | None,
     password: str | None,
     feed_url: str | None,
     requests_session: MakeRequestT = SentinelType.NotGiven,
 ) -> BaseOpdsHttpRequest:
     """Get the appropriate OPDS request class based on the authentication type."""
-    if authentication == OPDS2AuthType.BASIC:
+    if authentication == OpdsAuthType.BASIC:
         if not username or not password:
             raise PalaceValueError("Username and password are required for basic auth.")
         return BasicAuthOpdsRequest(username, password, requests_session)
-    elif authentication == OPDS2AuthType.OAUTH:
+    elif authentication == OpdsAuthType.OAUTH:
         if not username or not password or not feed_url:
             raise PalaceValueError(
                 "Username, password and feed_url are required for OAuth."
             )
         return OAuthOpdsRequest(feed_url, username, password, requests_session)
-    elif authentication == OPDS2AuthType.NONE:
+    elif authentication == OpdsAuthType.NONE:
         return NoAuthOpdsRequest(requests_session)
     else:
         raise PalaceValueError(

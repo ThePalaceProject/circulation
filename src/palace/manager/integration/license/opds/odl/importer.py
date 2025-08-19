@@ -17,7 +17,7 @@ from palace.manager.integration.license.opds.odl.extractor import OPDS2WithODLEx
 from palace.manager.integration.license.opds.opds2.settings import OPDS2ImporterSettings
 from palace.manager.integration.license.opds.requests import (
     BaseOpdsHttpRequest,
-    OPDS2AuthType,
+    OpdsAuthType,
     get_opds_requests,
 )
 from palace.manager.opds import opds2, rwpm
@@ -364,7 +364,7 @@ def importer_from_collection(
         settings.external_account_id,
         settings.data_source,
         settings.skipped_license_formats,
-        settings.auth_type == OPDS2AuthType.OAUTH,
+        settings.auth_type == OpdsAuthType.OAUTH,
     )
     return OPDS2WithODLImporter(
         request, extractor, _ODL_PUBLICATION_ADAPTOR.validate_python, settings

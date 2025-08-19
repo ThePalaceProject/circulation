@@ -3,10 +3,7 @@ from __future__ import annotations
 import datetime
 import json
 from collections.abc import Generator
-from typing import Any
 
-import feedparser
-from requests import Response
 from sqlalchemy.orm import Session
 from typing_extensions import Unpack
 
@@ -15,7 +12,6 @@ from palace.manager.api.circulation.data import HoldInfo, LoanInfo
 from palace.manager.api.circulation.exceptions import (
     CannotFulfill,
     DeliveryMechanismError,
-    LibraryAuthorizationFailedException,
 )
 from palace.manager.api.circulation.fulfillment import (
     DirectFulfillment,
@@ -27,11 +23,11 @@ from palace.manager.integration.license.opds.for_distributors.settings import (
     OPDSForDistributorsLibrarySettings,
     OPDSForDistributorsSettings,
 )
+from palace.manager.integration.license.opds.requests import OAuthOpdsRequest
 from palace.manager.integration.license.opds.settings.format_priority import (
     FormatPriorities,
 )
 from palace.manager.sqlalchemy.model.collection import Collection
-from palace.manager.sqlalchemy.model.credential import Credential
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.licensing import (
     DeliveryMechanism,
@@ -41,17 +37,13 @@ from palace.manager.sqlalchemy.model.licensing import (
 from palace.manager.sqlalchemy.model.patron import Loan, Patron
 from palace.manager.sqlalchemy.model.resource import Hyperlink
 from palace.manager.sqlalchemy.util import get_one
-from palace.manager.util import base64
 from palace.manager.util.datetime_helpers import utc_now
-from palace.manager.util.http import HTTP
 
 
 class OPDSForDistributorsAPI(
     BaseCirculationAPI[OPDSForDistributorsSettings, OPDSForDistributorsLibrarySettings],
     HasCollectionSelfTests,
 ):
-    BEARER_TOKEN_CREDENTIAL_TYPE = "OPDS For Distributors Bearer Token"
-
     # In OPDS For Distributors, all items are gated through the
     # BEARER_TOKEN access control scheme.
     #
@@ -84,10 +76,11 @@ class OPDSForDistributorsAPI(
         super().__init__(_db, collection)
 
         self.data_source_name = self.settings.data_source
-        self.username = self.settings.username
-        self.password = self.settings.password
-        self.feed_url = self.settings.external_account_id
-        self.auth_url: str | None = None
+        self._make_request = OAuthOpdsRequest(
+            self.settings.external_account_id,
+            self.settings.username,
+            self.settings.password,
+        )
         self._format_priorities = FormatPriorities(
             self.settings.prioritized_drm_schemes,
             self.settings.prioritized_content_types,
@@ -100,109 +93,8 @@ class OPDSForDistributorsAPI(
 
     def _run_self_tests(self, _db: Session) -> Generator[SelfTestResult]:
         """Try to get a token."""
-        yield self.run_test("Negotiate a fulfillment token", self._get_token, _db)
-
-    def _request_with_timeout(
-        self, method: str, url: str | None, *args: Any, **kwargs: Any
-    ) -> Response:
-        """Wrapper around HTTP.request_with_timeout to be overridden for tests."""
-        if url is None:
-            name = self.collection.name
-            raise LibraryAuthorizationFailedException(
-                f"No URL provided to request_with_timeout for collection: {name}/{self.collection_id}."
-            )
-        return HTTP.request_with_timeout(method, url, *args, **kwargs)
-
-    def _get_token(self, _db: Session) -> Credential:
-        # If this is the first time we're getting a token, we
-        # need to find the authenticate url in the OPDS
-        # authentication document.
-        if not self.auth_url:
-            # Keep track of the most recent URL we retrieved for error
-            # reporting purposes.
-            current_url = self.feed_url
-            response = self._request_with_timeout("GET", current_url)
-
-            if response.status_code != 401:
-                # This feed doesn't require authentication, so
-                # we need to find a link to the authentication document.
-                feed = feedparser.parse(response.content)
-                links = feed.get("feed", {}).get("links", [])
-                auth_doc_links = [
-                    l for l in links if l["rel"] == "http://opds-spec.org/auth/document"
-                ]
-                if not auth_doc_links:
-                    raise LibraryAuthorizationFailedException(
-                        "No authentication document link found in %s" % current_url
-                    )
-                current_url = auth_doc_links[0].get("href")
-
-                response = self._request_with_timeout("GET", current_url)
-
-            try:
-                auth_doc = json.loads(response.content)
-            except Exception as e:
-                raise LibraryAuthorizationFailedException(
-                    "Could not load authentication document from %s" % current_url
-                )
-            auth_types = auth_doc.get("authentication", [])
-            credentials_types = [
-                t
-                for t in auth_types
-                if t["type"] == "http://opds-spec.org/auth/oauth/client_credentials"
-            ]
-            if not credentials_types:
-                raise LibraryAuthorizationFailedException(
-                    "Could not find any credential-based authentication mechanisms in %s"
-                    % current_url
-                )
-
-            links = credentials_types[0].get("links", [])
-            auth_links = [l for l in links if l.get("rel") == "authenticate"]
-            if not auth_links:
-                raise LibraryAuthorizationFailedException(
-                    "Could not find any authentication links in %s" % current_url
-                )
-            self.auth_url = auth_links[0].get("href")
-
-        def refresh(credential: Credential) -> None:
-            headers = dict()
-            auth_header = "Basic %s" % base64.b64encode(
-                f"{self.username}:{self.password}"
-            )
-            headers["Authorization"] = auth_header
-            headers["Content-Type"] = "application/x-www-form-urlencoded"
-            body = dict(grant_type="client_credentials")
-            token_response = self._request_with_timeout(
-                "POST", self.auth_url, data=body, headers=headers
-            )
-            token = json.loads(token_response.content)
-            access_token = token.get("access_token")
-            expires_in = token.get("expires_in")
-            if not access_token or not expires_in:
-                raise LibraryAuthorizationFailedException(
-                    "Document retrieved from %s is not a bearer token: %s"
-                    % (
-                        # Response comes in as a byte string.
-                        self.auth_url,
-                        token_response.content.decode("utf-8"),
-                    )
-                )
-            credential.credential = access_token
-            expires_in = expires_in
-            # We'll avoid edge cases by assuming the token expires 75%
-            # into its useful lifetime.
-            credential.expires = utc_now() + datetime.timedelta(
-                seconds=expires_in * 0.75
-            )
-
-        return Credential.lookup(
-            _db,
-            self.data_source_name,
-            self.BEARER_TOKEN_CREDENTIAL_TYPE,
-            collection=self.collection,
-            patron=None,
-            refresher_method=refresh,
+        yield self.run_test(
+            "Negotiate a fulfillment token", self._make_request.refresh_token
         )
 
     def can_fulfill_without_loan(
@@ -303,24 +195,19 @@ class OPDSForDistributorsAPI(
         if open_access:
             return RedirectFulfillment(content_link=url, content_type=media_type)
 
-        # Obtain a Credential with the information from our
-        # bearer token.
-        _db = Session.object_session(licensepool)
-        credential = self._get_token(_db)
-        if credential.expires is None:
-            self.log.error(
-                f"Credential ({credential.id}) for patron ({patron.authorization_identifier}/{patron.id}) "
-                "has no expiration date. Cannot fulfill loan."
-            )
-            raise CannotFulfill()
+        # Make sure we have a session token to pass to the app. If the token expires in the
+        # next 10 minutes, we'll refresh it to make sure the app has enough time to download the book.
+        token = self._make_request.session_token
+        if token is None or token.expires - datetime.timedelta(minutes=10) < utc_now():
+            token = self._make_request.refresh_token()
 
-        # Build a application/vnd.librarysimplified.bearer-token
+        # Build an application/vnd.librarysimplified.bearer-token
         # document using information from the credential.
         now = utc_now()
-        expiration = int((credential.expires - now).total_seconds())
+        expiration = int((token.expires - now).total_seconds())
         token_document = dict(
             token_type="Bearer",
-            access_token=credential.credential,
+            access_token=token.access_token,
             expires_in=expiration,
             location=url,
         )
