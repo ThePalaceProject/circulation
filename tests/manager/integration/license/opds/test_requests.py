@@ -650,20 +650,47 @@ class TestOAuthOpdsRequest:
 
 class TestGetOpdsRequests:
     @pytest.mark.parametrize(
-        "authentication,expected",
+        "authentication,kwargs,expected",
         [
             pytest.param(
                 OpdsAuthType.BASIC,
+                {},
                 BasicAuthOpdsRequest,
                 id="basic auth",
             ),
             pytest.param(
+                OpdsAuthType.BASIC,
+                {"username": ""},
+                BasicAuthOpdsRequest,
+                id="basic auth empty username",
+            ),
+            pytest.param(
+                OpdsAuthType.BASIC,
+                {"password": ""},
+                BasicAuthOpdsRequest,
+                id="basic auth empty password",
+            ),
+            pytest.param(
                 OpdsAuthType.OAUTH,
+                {},
                 OAuthOpdsRequest,
                 id="oauth",
             ),
             pytest.param(
+                OpdsAuthType.OAUTH,
+                {"username": ""},
+                OAuthOpdsRequest,
+                id="oauth empty username",
+            ),
+            pytest.param(
+                OpdsAuthType.OAUTH,
+                {"password": ""},
+                OAuthOpdsRequest,
+                id="oauth empty password",
+            ),
+            pytest.param(
                 OpdsAuthType.NONE,
+                {},
                 NoAuthOpdsRequest,
                 id="no auth",
             ),
@@ -673,10 +700,11 @@ class TestGetOpdsRequests:
         self,
         opds_request_fixture: OpdsRequestFixture,
         authentication: OpdsAuthType,
+        kwargs: dict[str, Any],
         expected: type[BaseOpdsHttpRequest],
     ) -> None:
         assert isinstance(
-            opds_request_fixture.get_opds_requests(authentication), expected
+            opds_request_fixture.get_opds_requests(authentication, **kwargs), expected
         )
 
     def test_invalid_auth_type(self, opds_request_fixture: OpdsRequestFixture) -> None:
@@ -689,6 +717,12 @@ class TestGetOpdsRequests:
     @pytest.mark.parametrize(
         "authentication,kwargs,match",
         [
+            pytest.param(
+                OpdsAuthType.BASIC,
+                {"username": "has:colon"},
+                "Basic Auth username cannot contain a colon.",
+                id="basic auth username with colon",
+            ),
             pytest.param(
                 OpdsAuthType.BASIC,
                 {"username": None, "password": None},
@@ -730,6 +764,12 @@ class TestGetOpdsRequests:
                 {"feed_url": None},
                 "Username, password and feed_url are required for OAuth.",
                 id="oauth missing feed_url",
+            ),
+            pytest.param(
+                OpdsAuthType.OAUTH,
+                {"feed_url": ""},
+                "Username, password and feed_url are required for OAuth.",
+                id="oauth empty feed_url",
             ),
         ],
     )

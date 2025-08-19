@@ -115,6 +115,8 @@ class BasicAuthOpdsRequest(BaseOpdsHttpRequest):
         password: str,
         requests_session: MakeRequestT = SentinelType.NotGiven,
     ) -> None:
+        if ":" in username:
+            raise PalaceValueError("Basic Auth username cannot contain a colon.")
         super().__init__(requests_session)
         self._username = username
         self._password = password
@@ -330,11 +332,11 @@ def get_opds_requests(
 ) -> BaseOpdsHttpRequest:
     """Get the appropriate OPDS request class based on the authentication type."""
     if authentication == OpdsAuthType.BASIC:
-        if not username or not password:
+        if username is None or password is None:
             raise PalaceValueError("Username and password are required for basic auth.")
         return BasicAuthOpdsRequest(username, password, requests_session)
     elif authentication == OpdsAuthType.OAUTH:
-        if not username or not password or not feed_url:
+        if username is None or password is None or not feed_url:
             raise PalaceValueError(
                 "Username, password and feed_url are required for OAuth."
             )
