@@ -62,7 +62,7 @@ def existing_available_identifiers(task: Task, collection_id: int) -> Identifier
 @shared_task(queue=QueueNames.default, bind=True)
 def mark_identifiers_unavailable(
     task: Task,
-    existing_and_active_identifier_sets: list[RedisSetKwargs],
+    existing_and_active_identifier_sets: list[RedisSetKwargs | None],
     *,
     collection_id: int,
 ) -> None:
@@ -70,6 +70,10 @@ def mark_identifiers_unavailable(
     Takes a list of two RedisSetKwargs elements as the first positional argument. These are used to create
     two IdentifierSets: the first represents existing identifiers that are available in the collection, and
     the second contains active identifiers received from the distributor.
+
+    If the calling task wants to abort marking identifiers as unavailable, it can return None for either
+    of the sets. This will cause the function to log a warning, clean up any IdentifierSets it was
+    passed and exit without marking any identifiers as unavailable.
 
     Any identifiers present in the existing set but not in the active set will be marked as unavailable in
     the collection. This is done by sending a circulation_apply task that sets both licenses_available and
@@ -82,6 +86,18 @@ def mark_identifiers_unavailable(
     existing_identifier_kwargs, active_identifier_kwargs = (
         existing_and_active_identifier_sets
     )
+
+    if existing_identifier_kwargs is None or active_identifier_kwargs is None:
+        # If one of the sets is None, one of the tasks in the chord failed.
+        task.log.warning(
+            "Received None instead of IdentifierSet. Aborting without marking any identifiers as unavailable."
+        )
+        # Attempt to clean up any existing IdentifierSets that may have been created.
+        for cleanup_kwargs in [existing_identifier_kwargs, active_identifier_kwargs]:
+            if cleanup_kwargs is not None:
+                IdentifierSet(redis_client, **cleanup_kwargs).delete()
+        return None
+
     existing_identifiers = IdentifierSet(redis_client, **existing_identifier_kwargs)
     active_identifiers = IdentifierSet(redis_client, **active_identifier_kwargs)
 
