@@ -47,7 +47,7 @@ class OPDSForDistributorsImportMonitor(OPDSImportMonitor):
         auth header with the credentials for the collection.
         """
 
-        token = self.api._get_token(self._db).credential
+        token = self.api._make_request._auth.token
         headers = dict(headers or {})
         auth_header = "Bearer %s" % token
         headers["Authorization"] = auth_header

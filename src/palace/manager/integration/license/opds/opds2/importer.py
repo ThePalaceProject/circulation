@@ -7,7 +7,7 @@ from palace.manager.integration.license.opds.odl.importer import OPDS2WithODLImp
 from palace.manager.integration.license.opds.opds2.api import OPDS2API
 from palace.manager.integration.license.opds.opds2.settings import OPDS2ImporterSettings
 from palace.manager.integration.license.opds.requests import (
-    OPDS2AuthType,
+    OpdsAuthType,
     get_opds_requests,
 )
 from palace.manager.opds import opds2
@@ -32,9 +32,9 @@ def importer_from_collection(
     requests_session = HTTP.session(settings.max_retry_count)
     request = get_opds_requests(
         (
-            OPDS2AuthType.BASIC
+            OpdsAuthType.BASIC
             if settings.username and settings.password
-            else OPDS2AuthType.NONE
+            else OpdsAuthType.NONE
         ),
         settings.username,
         settings.password,

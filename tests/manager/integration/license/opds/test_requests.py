@@ -18,8 +18,14 @@ from palace.manager.integration.license.opds.requests import (
     BasicAuthOpdsRequest,
     NoAuthOpdsRequest,
     OAuthOpdsRequest,
-    OPDS2AuthType,
+    OpdsAuthType,
     get_opds_requests,
+)
+from palace.manager.opds.authentication import AuthenticationDocument
+from palace.manager.opds.opds2 import (
+    FeedMetadata,
+    PublicationFeedNoValidation,
+    StrictLink,
 )
 from tests.fixtures.http import MockHttpClientFixture
 from tests.mocks.mock import MockRequestsResponse
@@ -32,6 +38,7 @@ class OpdsRequestFixture:
         self.token = "token"
         self.feed_url = "http://example.com/feed"
         self.auth_url = "http://authenticate.example.com"
+        self.auth_doc_url = "http://example.com/authdoc"
         self.request_url = "http://example.com/123"
         self.headers = {"header": "value"}
         self.client = http_client
@@ -42,17 +49,37 @@ class OpdsRequestFixture:
             username=self.username,
             password=self.password,
         )
-        oauth_make_request = self.get_opds_requests(OPDS2AuthType.OAUTH)
+        oauth_make_request = self.get_opds_requests(OpdsAuthType.OAUTH)
         assert isinstance(oauth_make_request, OAuthOpdsRequest)
         self.oauth_make_request = oauth_make_request
-        no_auth_make_request = self.get_opds_requests(OPDS2AuthType.NONE)
+        no_auth_make_request = self.get_opds_requests(OpdsAuthType.NONE)
         assert isinstance(no_auth_make_request, NoAuthOpdsRequest)
         self.no_auth_make_request = no_auth_make_request
-        basic_auth_make_request = self.get_opds_requests(OPDS2AuthType.BASIC)
+        basic_auth_make_request = self.get_opds_requests(OpdsAuthType.BASIC)
         assert isinstance(basic_auth_make_request, BasicAuthOpdsRequest)
         self.basic_auth_make_request = basic_auth_make_request
 
         self.responses = {
+            "opds1_feed_with_auth_link": MockRequestsResponse(
+                200,
+                {"Content-Type": "application/atom+xml"},
+                f'<feed><link rel="http://opds-spec.org/auth/document" href="{self.auth_doc_url}"/></feed>',
+            ),
+            "opds2_feed_with_auth_link": MockRequestsResponse(
+                200,
+                {"Content-Type": PublicationFeedNoValidation.content_type()},
+                self.opds2_feed_with_auth_link,
+            ),
+            "opds2_feed_with_auth_link_no_content_type": MockRequestsResponse(
+                200,
+                {},
+                self.opds2_feed_with_auth_link,
+            ),
+            "auth_document_200": MockRequestsResponse(
+                200,
+                {"Content-Type": "application/vnd.opds.authentication.v1.0+json"},
+                json.dumps(self.auth_document),
+            ),
             "auth_document_401": MockRequestsResponse(
                 401,
                 {"Content-Type": "application/vnd.opds.authentication.v1.0+json"},
@@ -88,6 +115,25 @@ class OpdsRequestFixture:
             self.valid_token if not expired else self.expired_token
         )
         return make_request
+
+    @property
+    def opds2_feed_with_auth_link(self) -> str:
+        return PublicationFeedNoValidation(
+            metadata=FeedMetadata(title="Test Feed"),
+            publications=[],
+            links=[
+                StrictLink(
+                    rel="http://opds-spec.org/auth/document",
+                    href=self.auth_doc_url,
+                    type=AuthenticationDocument.content_type(),
+                ),
+                StrictLink(
+                    rel="self",
+                    href=self.auth_doc_url,
+                    type=PublicationFeedNoValidation.content_type(),
+                ),
+            ],
+        ).model_dump_json()
 
     @property
     def auth_document(self) -> dict[str, Any]:
@@ -395,20 +441,40 @@ class TestOAuthOpdsRequest:
             }
         ]
 
+    @pytest.mark.parametrize(
+        "responses,expected",
+        [
+            pytest.param(
+                ["other_401"],
+                "Unable to fetch OPDS authentication document",
+                id="Non-auth document 401 response",
+            ),
+            pytest.param(
+                ["opds1_feed_with_auth_link", "other_401"],
+                "Unable to fetch OPDS authentication document",
+                id="Feed response, but 401 when requesting auth document",
+            ),
+            pytest.param(
+                ["data"],
+                "No authentication document link found in feed",
+                id="Bad feed response",
+            ),
+        ],
+    )
     def test__fetch_auth_document_failure(
-        self, opds_request_fixture: OpdsRequestFixture
+        self,
+        opds_request_fixture: OpdsRequestFixture,
+        responses: list[str],
+        expected: str,
     ) -> None:
         """
         If the auth document request fails, an exception is raised.
         """
         make_request = opds_request_fixture.oauth_make_request
-        opds_request_fixture.client.queue_response(
-            401,
-            content="Unauthorized",
-        )
-        with pytest.raises(
-            IntegrationException, match="Unable to fetch OPDS authentication document"
-        ) as exc_info:
+        for response_name in responses:
+            response = opds_request_fixture.responses[response_name]
+            opds_request_fixture.client.queue_response(response)
+        with pytest.raises(IntegrationException, match=expected):
             make_request(
                 "GET",
                 opds_request_fixture.request_url,
@@ -427,7 +493,58 @@ class TestOAuthOpdsRequest:
                 ],
                 False,
                 False,
-                id="first request - full token refresh",
+                id="first request - feed 401 response - full token refresh",
+            ),
+            pytest.param(
+                [
+                    "opds1_feed_with_auth_link",
+                    "auth_document_200",
+                    "token_grant",
+                    "data",
+                ],
+                [
+                    "feed_url",
+                    "auth_doc_url",
+                    "auth_url",
+                    "request_url",
+                ],
+                False,
+                False,
+                id="first request - opds1 feed 200 response - full token refresh",
+            ),
+            pytest.param(
+                [
+                    "opds2_feed_with_auth_link",
+                    "auth_document_200",
+                    "token_grant",
+                    "data",
+                ],
+                [
+                    "feed_url",
+                    "auth_doc_url",
+                    "auth_url",
+                    "request_url",
+                ],
+                False,
+                False,
+                id="first request - opds2 feed 200 response - full token refresh",
+            ),
+            pytest.param(
+                [
+                    "opds2_feed_with_auth_link_no_content_type",
+                    "auth_document_200",
+                    "token_grant",
+                    "data",
+                ],
+                [
+                    "feed_url",
+                    "auth_doc_url",
+                    "auth_url",
+                    "request_url",
+                ],
+                False,
+                False,
+                id="first request - opds2 feed 200 response - no content type - full token refresh",
             ),
             pytest.param(
                 ["data"],
@@ -536,17 +653,17 @@ class TestGetOpdsRequests:
         "authentication,expected",
         [
             pytest.param(
-                OPDS2AuthType.BASIC,
+                OpdsAuthType.BASIC,
                 BasicAuthOpdsRequest,
                 id="basic auth",
             ),
             pytest.param(
-                OPDS2AuthType.OAUTH,
+                OpdsAuthType.OAUTH,
                 OAuthOpdsRequest,
                 id="oauth",
             ),
             pytest.param(
-                OPDS2AuthType.NONE,
+                OpdsAuthType.NONE,
                 NoAuthOpdsRequest,
                 id="no auth",
             ),
@@ -555,7 +672,7 @@ class TestGetOpdsRequests:
     def test_get_opds_requests(
         self,
         opds_request_fixture: OpdsRequestFixture,
-        authentication: OPDS2AuthType,
+        authentication: OpdsAuthType,
         expected: type[BaseOpdsHttpRequest],
     ) -> None:
         assert isinstance(
@@ -573,43 +690,43 @@ class TestGetOpdsRequests:
         "authentication,kwargs,match",
         [
             pytest.param(
-                OPDS2AuthType.BASIC,
+                OpdsAuthType.BASIC,
                 {"username": None, "password": None},
                 "Username and password are required for basic auth.",
                 id="basic auth missing credentials",
             ),
             pytest.param(
-                OPDS2AuthType.BASIC,
+                OpdsAuthType.BASIC,
                 {"username": None},
                 "Username and password are required for basic auth.",
                 id="basic auth missing username",
             ),
             pytest.param(
-                OPDS2AuthType.BASIC,
+                OpdsAuthType.BASIC,
                 {"password": None},
                 "Username and password are required for basic auth.",
                 id="basic auth missing password",
             ),
             pytest.param(
-                OPDS2AuthType.OAUTH,
+                OpdsAuthType.OAUTH,
                 {"username": None, "password": None, "feed_url": None},
                 "Username, password and feed_url are required for OAuth.",
                 id="oauth missing credentials",
             ),
             pytest.param(
-                OPDS2AuthType.OAUTH,
+                OpdsAuthType.OAUTH,
                 {"username": None},
                 "Username, password and feed_url are required for OAuth.",
                 id="oauth missing username",
             ),
             pytest.param(
-                OPDS2AuthType.OAUTH,
+                OpdsAuthType.OAUTH,
                 {"password": None},
                 "Username, password and feed_url are required for OAuth.",
                 id="oauth missing password",
             ),
             pytest.param(
-                OPDS2AuthType.OAUTH,
+                OpdsAuthType.OAUTH,
                 {"feed_url": None},
                 "Username, password and feed_url are required for OAuth.",
                 id="oauth missing feed_url",
@@ -619,7 +736,7 @@ class TestGetOpdsRequests:
     def test_invalid_auth_parameters(
         self,
         opds_request_fixture: OpdsRequestFixture,
-        authentication: OPDS2AuthType,
+        authentication: OpdsAuthType,
         kwargs: dict[str, Any],
         match: str,
     ) -> None:

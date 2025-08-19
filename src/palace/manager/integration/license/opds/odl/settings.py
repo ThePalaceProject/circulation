@@ -6,7 +6,7 @@ from pydantic import NonNegativeInt, PositiveInt
 from palace.manager.api.circulation.settings import BaseCirculationEbookLoanSettings
 from palace.manager.api.lcp.hash import HashingAlgorithm
 from palace.manager.integration.license.opds.opds2.settings import OPDS2ImporterSettings
-from palace.manager.integration.license.opds.requests import OPDS2AuthType
+from palace.manager.integration.license.opds.requests import OpdsAuthType
 from palace.manager.integration.settings import (
     ConfigurationFormItem,
     ConfigurationFormItemType,
@@ -60,14 +60,14 @@ class OPDS2WithODLSettings(OPDS2ImporterSettings):
             required=False,
         ),
     )
-    auth_type: OPDS2AuthType = FormField(
-        default=OPDS2AuthType.BASIC,
+    auth_type: OpdsAuthType = FormField(
+        default=OpdsAuthType.BASIC,
         form=ConfigurationFormItem(
             label="Feed authentication type",
             description="Method used to authenticate when interacting with the feed.",
             type=ConfigurationFormItemType.SELECT,
             required=True,
-            options={auth: auth.value for auth in OPDS2AuthType},
+            options={auth: auth.value for auth in OpdsAuthType},
         ),
     )
     password: str | None = FormField(

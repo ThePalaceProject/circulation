@@ -1,24 +1,19 @@
 import json
-from collections.abc import Callable
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, create_autospec
 
 import pytest
 
 from palace.manager.api.circulation.exceptions import (
     CannotFulfill,
     DeliveryMechanismError,
-    LibraryAuthorizationFailedException,
 )
 from palace.manager.api.circulation.fulfillment import (
     DirectFulfillment,
     RedirectFulfillment,
 )
-from palace.manager.integration.license.opds.for_distributors.api import (
-    OPDSForDistributorsAPI,
-)
+from palace.manager.integration.license.opds.requests import OAuthOpdsRequest
 from palace.manager.integration.license.overdrive.api import OverdriveAPI
 from palace.manager.sqlalchemy.constants import MediaTypes
-from palace.manager.sqlalchemy.model.credential import Credential
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism, RightsStatus
@@ -28,41 +23,6 @@ from palace.manager.util.datetime_helpers import utc_now
 from tests.manager.integration.license.opds.for_distributors.conftest import (
     OPDSForDistributorsAPIFixture,
 )
-from tests.mocks.opds_for_distributors import MockOPDSForDistributorsAPI
-
-
-@pytest.fixture()
-def authentication_document() -> Callable[[str], str]:
-    """Returns a method that computes an authentication document."""
-
-    def _auth_doc(without_links=False) -> str:
-        """Returns an authentication document.
-
-        :param without_links: Whether or not to include an authenticate link.
-        """
-        links = (
-            {
-                "links": [
-                    {
-                        "rel": "authenticate",
-                        "href": "http://authenticate",
-                    }
-                ],
-            }
-            if not without_links
-            else {}
-        )
-        doc: dict[str, list[dict[str, str | list]]] = {
-            "authentication": [
-                {
-                    **{"type": "http://opds-spec.org/auth/oauth/client_credentials"},
-                    **links,
-                },
-            ]
-        }
-        return json.dumps(doc)
-
-    return _auth_doc
 
 
 class TestOPDSForDistributorsAPI:
@@ -72,21 +32,14 @@ class TestOPDSForDistributorsAPI:
         """The self-test for OPDSForDistributorsAPI just tries to negotiate
         a fulfillment token.
         """
-
-        class Mock(OPDSForDistributorsAPI):
-            def __init__(self):
-                pass
-
-            def _get_token(self, _db):
-                self.called_with = _db
-                return "a token"
-
-        api = Mock()
+        api = opds_dist_api_fixture.api
+        mock_make_request = create_autospec(OAuthOpdsRequest)
+        api._make_request = mock_make_request
         [result] = api._run_self_tests(opds_dist_api_fixture.db.session)
-        assert opds_dist_api_fixture.db.session == api.called_with
-        assert "Negotiate a fulfillment token" == result.name
-        assert True == result.success
-        assert "a token" == result.result
+        mock_make_request.refresh_token.assert_called_once_with()
+        assert result.name == "Negotiate a fulfillment token"
+        assert result.success is True
+        assert result.result == mock_make_request.refresh_token.return_value
 
     def test_supported_media_types(
         self, opds_dist_api_fixture: OPDSForDistributorsAPIFixture
@@ -142,173 +95,6 @@ class TestOPDSForDistributorsAPI:
 
         lpdm.delivery_mechanism.drm_scheme = DeliveryMechanism.BEARER_TOKEN
         assert True == m(patron, pool, lpdm)
-
-    def test_get_token_success(
-        self,
-        authentication_document,
-        opds_dist_api_fixture: OPDSForDistributorsAPIFixture,
-    ):
-        # The API hasn't been used yet, so it will need to find the auth
-        # document and authenticate url.
-        feed = '<feed><link rel="http://opds-spec.org/auth/document" href="http://authdoc"/></feed>'
-
-        opds_dist_api_fixture.api.queue_response(200, content=feed)
-        opds_dist_api_fixture.api.queue_response(200, content=authentication_document())
-        token = opds_dist_api_fixture.db.fresh_str()
-        token_response = json.dumps({"access_token": token, "expires_in": 60})
-        opds_dist_api_fixture.api.queue_response(200, content=token_response)
-
-        assert (
-            token
-            == opds_dist_api_fixture.api._get_token(
-                opds_dist_api_fixture.db.session
-            ).credential
-        )
-
-        # Now that the API has the authenticate url, it only needs
-        # to get the token.
-        opds_dist_api_fixture.api.queue_response(200, content=token_response)
-        assert (
-            token
-            == opds_dist_api_fixture.api._get_token(
-                opds_dist_api_fixture.db.session
-            ).credential
-        )
-
-        # A credential was created.
-        [credential] = opds_dist_api_fixture.db.session.query(Credential).all()
-        assert token == credential.credential
-
-        # If we call _get_token again, it uses the existing credential.
-        assert (
-            token
-            == opds_dist_api_fixture.api._get_token(
-                opds_dist_api_fixture.db.session
-            ).credential
-        )
-
-        opds_dist_api_fixture.db.session.delete(credential)
-
-        # Create a new API that doesn't have an auth url yet.
-        opds_dist_api_fixture.api = MockOPDSForDistributorsAPI(
-            opds_dist_api_fixture.db.session, opds_dist_api_fixture.collection
-        )
-
-        # This feed requires authentication and returns the auth document.
-        opds_dist_api_fixture.api.queue_response(401, content=authentication_document())
-        token = opds_dist_api_fixture.db.fresh_str()
-        token_response = json.dumps({"access_token": token, "expires_in": 60})
-        opds_dist_api_fixture.api.queue_response(200, content=token_response)
-
-        assert (
-            token
-            == opds_dist_api_fixture.api._get_token(
-                opds_dist_api_fixture.db.session
-            ).credential
-        )
-
-    def test_credentials_for_multiple_collections(
-        self,
-        authentication_document,
-        opds_dist_api_fixture: OPDSForDistributorsAPIFixture,
-    ):
-        # We should end up with distinct credentials for each collection.
-        # We have an existing credential from the collection
-        # [credential1] = opds_dist_api_fixture.db.session.query(Credential).all()
-        # assert credential1.collection_id is not None
-
-        feed = '<feed><link rel="http://opds-spec.org/auth/document" href="http://authdoc"/></feed>'
-
-        # Getting a token for a collection should result in a cached credential.
-        collection1 = opds_dist_api_fixture.mock_collection(
-            name="Collection 1",
-        )
-        api1 = MockOPDSForDistributorsAPI(opds_dist_api_fixture.db.session, collection1)
-        token1 = opds_dist_api_fixture.db.fresh_str()
-        token1_response = json.dumps({"access_token": token1, "expires_in": 60})
-        api1.queue_response(200, content=feed)
-        api1.queue_response(200, content=authentication_document())
-        api1.queue_response(200, content=token1_response)
-        credential1 = api1._get_token(opds_dist_api_fixture.db.session)
-        all_credentials = opds_dist_api_fixture.db.session.query(Credential).all()
-
-        assert token1 == credential1.credential
-        assert credential1.collection_id == collection1.id
-        assert 1 == len(all_credentials)
-
-        # Getting a token for a second collection should result in an
-        # additional cached credential.
-        collection2 = opds_dist_api_fixture.mock_collection(
-            name="Collection 2",
-        )
-        api2 = MockOPDSForDistributorsAPI(opds_dist_api_fixture.db.session, collection2)
-        token2 = opds_dist_api_fixture.db.fresh_str()
-        token2_response = json.dumps({"access_token": token2, "expires_in": 60})
-        api2.queue_response(200, content=feed)
-        api2.queue_response(200, content=authentication_document())
-        api2.queue_response(200, content=token2_response)
-
-        credential2 = api2._get_token(opds_dist_api_fixture.db.session)
-        all_credentials = opds_dist_api_fixture.db.session.query(Credential).all()
-
-        assert token2 == credential2.credential
-        assert credential2.collection_id == collection2.id
-
-        # Both credentials should now be present.
-        assert 2 == len(all_credentials)
-        assert credential1 != credential2
-        assert credential1 in all_credentials
-        assert credential2 in all_credentials
-        assert token1 != token2
-
-    def test_get_token_errors(
-        self,
-        authentication_document,
-        opds_dist_api_fixture: OPDSForDistributorsAPIFixture,
-    ):
-        no_auth_document = "<feed></feed>"
-        opds_dist_api_fixture.api.queue_response(200, content=no_auth_document)
-        with pytest.raises(LibraryAuthorizationFailedException) as excinfo:
-            opds_dist_api_fixture.api._get_token(opds_dist_api_fixture.db.session)
-        assert "No authentication document link found in http://opds" in str(
-            excinfo.value
-        )
-
-        feed = '<feed><link rel="http://opds-spec.org/auth/document" href="http://authdoc"/></feed>'
-        opds_dist_api_fixture.api.queue_response(200, content=feed)
-        auth_doc_without_client_credentials = json.dumps({"authentication": []})
-        opds_dist_api_fixture.api.queue_response(
-            200, content=auth_doc_without_client_credentials
-        )
-        with pytest.raises(LibraryAuthorizationFailedException) as excinfo:
-            opds_dist_api_fixture.api._get_token(opds_dist_api_fixture.db.session)
-        assert (
-            "Could not find any credential-based authentication mechanisms in http://authdoc"
-            in str(excinfo.value)
-        )
-
-        # If our authentication document doesn't have a `rel="authenticate"` link
-        # then we will not be able to fetch a token, so should raise and exception.
-        opds_dist_api_fixture.api.queue_response(200, content=feed)
-        opds_dist_api_fixture.api.queue_response(
-            200, content=authentication_document(without_links=True)
-        )
-        with pytest.raises(LibraryAuthorizationFailedException) as excinfo:
-            opds_dist_api_fixture.api._get_token(opds_dist_api_fixture.db.session)
-        assert "Could not find any authentication links in http://authdoc" in str(
-            excinfo.value
-        )
-
-        opds_dist_api_fixture.api.queue_response(200, content=feed)
-        opds_dist_api_fixture.api.queue_response(200, content=authentication_document())
-        token_response = json.dumps({"error": "unexpected error"})
-        opds_dist_api_fixture.api.queue_response(200, content=token_response)
-        with pytest.raises(LibraryAuthorizationFailedException) as excinfo:
-            opds_dist_api_fixture.api._get_token(opds_dist_api_fixture.db.session)
-        assert (
-            'Document retrieved from http://authenticate is not a bearer token: {"error": "unexpected error"}'
-            in str(excinfo.value)
-        )
 
     def test_checkin(self, opds_dist_api_fixture: OPDSForDistributorsAPIFixture):
         # The patron has two loans, one from this API's collection and
@@ -440,12 +226,14 @@ class TestOPDSForDistributorsAPI:
         )
         delivery_mechanism.resource = link.resource
 
-        # Set the API's auth url so it doesn't have to get it -
-        # that's tested in test_get_token.
-        opds_dist_api_fixture.api.auth_url = "http://auth"
+        # Set the API's token URL so it doesn't have to get it -
+        # that's tested in TestOAuthOpdsRequest.
+        opds_dist_api_fixture.api._make_request._token_url = "http://auth"
 
-        token_response = json.dumps({"access_token": "token", "expires_in": 60})
-        opds_dist_api_fixture.api.queue_response(200, content=token_response)
+        token_response = json.dumps(
+            {"access_token": "token", "expires_in": 60, "token_type": "Bearer"}
+        )
+        opds_dist_api_fixture.http_client.queue_response(200, content=token_response)
 
         fulfillment = opds_dist_api_fixture.api.fulfill(
             patron, "1234", pool, delivery_mechanism

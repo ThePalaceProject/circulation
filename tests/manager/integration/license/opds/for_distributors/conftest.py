@@ -10,8 +10,8 @@ from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.library import Library
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import FilesFixture
+from tests.fixtures.http import MockHttpClientFixture
 from tests.fixtures.work import WorkIdPolicyQueuePresentationRecalculationFixture
-from tests.mocks.opds_for_distributors import MockOPDSForDistributorsAPI
 
 
 class OPDSForDistributorsFilesFixture(FilesFixture):
@@ -32,12 +32,14 @@ class OPDSForDistributorsAPIFixture:
         self,
         db: DatabaseTransactionFixture,
         files: OPDSForDistributorsFilesFixture,
+        http_client: MockHttpClientFixture,
         work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
     ):
         self.db = db
         self.collection = self.mock_collection(db.default_library())
-        self.api = MockOPDSForDistributorsAPI(db.session, self.collection)
+        self.api = OPDSForDistributorsAPI(db.session, self.collection)
         self.files = files
+        self.http_client = http_client
         self.work_policy_recalc_fixture = work_policy_recalc_fixture
 
     def mock_collection(
@@ -64,8 +66,9 @@ class OPDSForDistributorsAPIFixture:
 def opds_dist_api_fixture(
     db: DatabaseTransactionFixture,
     opds_dist_files_fixture: OPDSForDistributorsFilesFixture,
+    http_client: MockHttpClientFixture,
     work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
 ) -> OPDSForDistributorsAPIFixture:
     return OPDSForDistributorsAPIFixture(
-        db, opds_dist_files_fixture, work_policy_recalc_fixture
+        db, opds_dist_files_fixture, http_client, work_policy_recalc_fixture
     )

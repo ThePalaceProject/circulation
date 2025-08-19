@@ -21,7 +21,7 @@ from palace.manager.integration.license.opds.odl.importer import (
     OPDS2WithODLImporter,
     importer_from_collection,
 )
-from palace.manager.integration.license.opds.requests import OPDS2AuthType
+from palace.manager.integration.license.opds.requests import OpdsAuthType
 from palace.manager.opds.odl.info import Checkouts, LicenseInfo, LicenseStatus
 from palace.manager.opds.odl.terms import Terms
 from palace.manager.opds.opds2 import PublicationFeedNoValidation
@@ -431,22 +431,22 @@ class TestOPDS2WithODLImporter:
     @pytest.mark.parametrize(
         "auth_type",
         [
-            OPDS2AuthType.BASIC,
-            OPDS2AuthType.OAUTH,
+            OpdsAuthType.BASIC,
+            OpdsAuthType.OAUTH,
         ],
     )
     def test_import_open_access(
         self,
         db: DatabaseTransactionFixture,
         opds2_with_odl_importer_fixture: OPDS2WithODLImporterFixture,
-        auth_type: OPDS2AuthType,
+        auth_type: OpdsAuthType,
     ) -> None:
         """
         Ensure that OPDSWithODLImporter correctly processes and imports a feed with an
         open access book.
         """
         importer = opds2_with_odl_importer_fixture.importer
-        importer._extractor._bearer_token_drm = auth_type == OPDS2AuthType.OAUTH
+        importer._extractor._bearer_token_drm = auth_type == OpdsAuthType.OAUTH
         (
             imported_editions,
             pools,
@@ -487,22 +487,22 @@ class TestOPDS2WithODLImporter:
     @pytest.mark.parametrize(
         "auth_type",
         [
-            OPDS2AuthType.BASIC,
-            OPDS2AuthType.OAUTH,
+            OpdsAuthType.BASIC,
+            OpdsAuthType.OAUTH,
         ],
     )
     def test_import_unlimited_access(
         self,
         db: DatabaseTransactionFixture,
         opds2_with_odl_importer_fixture: OPDS2WithODLImporterFixture,
-        auth_type: OPDS2AuthType,
+        auth_type: OpdsAuthType,
     ) -> None:
         """
         Ensure that OPDSWithODLImporter correctly processes and imports a feed with an
         unlimited access book.
         """
         importer = opds2_with_odl_importer_fixture.importer
-        importer._extractor._bearer_token_drm = auth_type == OPDS2AuthType.OAUTH
+        importer._extractor._bearer_token_drm = auth_type == OpdsAuthType.OAUTH
 
         (
             imported_editions,
@@ -539,7 +539,7 @@ class TestOPDS2WithODLImporter:
             MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE,
             (
                 DeliveryMechanism.BEARER_TOKEN
-                if auth_type == OPDS2AuthType.OAUTH
+                if auth_type == OpdsAuthType.OAUTH
                 else None
             ),
         )
