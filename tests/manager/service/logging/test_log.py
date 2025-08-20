@@ -330,6 +330,30 @@ class TestJSONFormatter:
             assert data["celery"]["request_id"] == "id"
             assert data["celery"]["task_name"] == "name"
 
+    def test_extra_palace_context(self, log_record: LogRecordCallable) -> None:
+        formatter = JSONFormatter()
+        record = log_record()
+
+        record.__dict__["palace_custom"] = "custom_value"
+        record.__dict__["palace_another"] = {"key": "value"}
+        record.__dict__["not_palace"] = "not included"
+        record.__dict__["palace_not_json_serializable"] = {1, 2, 3}
+
+        data = json.loads(formatter.format(record))
+
+        # The custom Palace attributes are included in the log
+        assert "custom" in data
+        assert data["custom"] == "custom_value"
+        assert "another" in data
+        assert data["another"] == {"key": "value"}
+
+        # The non-Palace attributes are not included in the log
+        assert "not_palace" not in data
+
+        # If a Palace attribute is not JSON serializable, it is not included in the log instead of
+        # raising an error.
+        assert "palace_not_json_serializable" not in data
+
 
 class TestLogLoopPreventionFilter:
     @pytest.mark.parametrize(

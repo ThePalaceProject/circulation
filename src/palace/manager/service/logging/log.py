@@ -41,6 +41,14 @@ class JSONFormatter(logging.Formatter):
         self.hostname = socket.getfqdn()
         self.main_thread_id = threading.main_thread().ident
 
+    @staticmethod
+    def _is_json_serializable(v: Any) -> bool:
+        try:
+            json.dumps(v)
+            return True
+        except (TypeError, ValueError):
+            return False
+
     def format(self, record: logging.LogRecord) -> str:
         def ensure_str(s: Any) -> Any:
             """Ensure that unicode strings are used for a record's message.
@@ -153,6 +161,12 @@ class JSONFormatter(logging.Formatter):
                 "request_id": celery_task.request.id,
                 "task_name": celery_task.name,
             }
+
+        # Include any custom Palace-specific attributes that have been added to the log record
+        for key, value in record.__dict__.items():
+            if key.startswith("palace_") and self._is_json_serializable(value):
+                log_key = key[len("palace_") :]
+                data[log_key] = value
 
         return json.dumps(data)
 
