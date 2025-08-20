@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import logging
 import socket
 import threading
@@ -15,6 +14,7 @@ from palace.manager.api.admin.util.flask import get_request_admin
 from palace.manager.api.util.flask import get_request_library, get_request_patron
 from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.util.datetime_helpers import from_timestamp
+from palace.manager.util.json import json_serializer
 
 if TYPE_CHECKING:
     from mypy_boto3_logs import CloudWatchLogsClient
@@ -44,7 +44,7 @@ class JSONFormatter(logging.Formatter):
     @staticmethod
     def _is_json_serializable(v: Any) -> bool:
         try:
-            json.dumps(v)
+            json_serializer(v)
             return True
         except (TypeError, ValueError):
             return False
@@ -171,7 +171,7 @@ class JSONFormatter(logging.Formatter):
                     # or other parts of the logging system.
                     data[log_key] = value
 
-        return json.dumps(data)
+        return json_serializer(data)
 
 
 class LogLoopPreventionFilter(logging.Filter):

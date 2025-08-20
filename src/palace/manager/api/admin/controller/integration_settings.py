@@ -34,9 +34,9 @@ from palace.manager.sqlalchemy.model.integration import (
     IntegrationLibraryConfiguration,
 )
 from palace.manager.sqlalchemy.model.library import Library
-from palace.manager.sqlalchemy.session import json_serializer
 from palace.manager.sqlalchemy.util import create, get_one
 from palace.manager.util.cache import memoize
+from palace.manager.util.json import json_serializer
 from palace.manager.util.log import LoggerMixin
 from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
 

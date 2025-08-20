@@ -9,7 +9,7 @@ Create Date: 2025-04-09 14:24:59.558570+00:00
 import sqlalchemy as sa
 from alembic import op
 
-from palace.manager.sqlalchemy.session import json_serializer
+from palace.manager.util.json import json_serializer
 
 # revision identifiers, used by Alembic.
 revision = "b96d67e65177"

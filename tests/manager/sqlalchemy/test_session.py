@@ -6,10 +6,10 @@ from palace.manager.core.config import Configuration
 from palace.manager.sqlalchemy.model.coverage import Timestamp
 from palace.manager.sqlalchemy.session import (
     SessionManager,
-    json_serializer,
     production_session,
 )
 from palace.manager.sqlalchemy.util import get_one
+from palace.manager.util.json import json_serializer
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

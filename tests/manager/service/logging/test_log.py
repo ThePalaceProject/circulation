@@ -335,9 +335,9 @@ class TestJSONFormatter:
         record = log_record()
 
         record.__dict__["palace_custom"] = "custom_value"
-        record.__dict__["palace_another"] = {"key": "value"}
+        record.__dict__["palace_another"] = {1, 2, 3}
         record.__dict__["not_palace"] = "not included"
-        record.__dict__["palace_not_json_serializable"] = {1, 2, 3}
+        record.__dict__["palace_not_json_serializable"] = object()
         record.__dict__["palace_name"] = "Foo"
 
         data = json.loads(formatter.format(record))
@@ -346,14 +346,15 @@ class TestJSONFormatter:
         assert "custom" in data
         assert data["custom"] == "custom_value"
         assert "another" in data
-        assert data["another"] == {"key": "value"}
+        # Set is converted to list in the json conversion
+        assert data["another"] == [1, 2, 3]
 
         # The non-Palace attributes are not included in the log
         assert "not_palace" not in data
 
         # If a Palace attribute is not JSON serializable, it is not included in the log instead of
         # raising an error.
-        assert "palace_not_json_serializable" not in data
+        assert "not_json_serializable" not in data
 
         # Because "name" was already set by the formatter, it is not overwritten
         assert "name" in data
