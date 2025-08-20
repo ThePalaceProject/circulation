@@ -166,7 +166,10 @@ class JSONFormatter(logging.Formatter):
         for key, value in record.__dict__.items():
             if key.startswith("palace_") and self._is_json_serializable(value):
                 log_key = key[len("palace_") :]
-                data[log_key] = value
+                if log_key not in data:
+                    # Avoid overwriting existing keys, as they may have been set by the formatter
+                    # or other parts of the logging system.
+                    data[log_key] = value
 
         return json.dumps(data)
 

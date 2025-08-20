@@ -338,6 +338,7 @@ class TestJSONFormatter:
         record.__dict__["palace_another"] = {"key": "value"}
         record.__dict__["not_palace"] = "not included"
         record.__dict__["palace_not_json_serializable"] = {1, 2, 3}
+        record.__dict__["palace_name"] = "Foo"
 
         data = json.loads(formatter.format(record))
 
@@ -353,6 +354,10 @@ class TestJSONFormatter:
         # If a Palace attribute is not JSON serializable, it is not included in the log instead of
         # raising an error.
         assert "palace_not_json_serializable" not in data
+
+        # Because "name" was already set by the formatter, it is not overwritten
+        assert "name" in data
+        assert data["name"] == "some logger"
 
 
 class TestLogLoopPreventionFilter:
