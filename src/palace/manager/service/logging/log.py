@@ -162,14 +162,16 @@ class JSONFormatter(logging.Formatter):
                 "task_name": celery_task.name,
             }
 
-        # Include any custom Palace-specific attributes that have been added to the log record
+        # Include any custom Palace-specific ('palace_' prefixed) attributes that have been added to
+        # the LogRecord in our json output with the 'palace_' prefix removed.
         for key, value in record.__dict__.items():
-            if key.startswith("palace_") and self._is_json_serializable(value):
-                log_key = key[len("palace_") :]
-                if log_key not in data:
-                    # Avoid overwriting existing keys, as they may have been set by the formatter
-                    # or other parts of the logging system.
-                    data[log_key] = value
+            if (
+                key != (log_data_key := key.removeprefix("palace_"))
+                and value is not None
+                and self._is_json_serializable(value)
+                and log_data_key not in data
+            ):
+                data[log_data_key] = value
 
         return json_serializer(data)
 
