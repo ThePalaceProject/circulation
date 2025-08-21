@@ -330,6 +330,49 @@ class TestJSONFormatter:
             assert data["celery"]["request_id"] == "id"
             assert data["celery"]["task_name"] == "name"
 
+    def test_extra_palace_context(self, caplog: pytest.LogCaptureFixture) -> None:
+        caplog.set_level(LogLevel.info)
+
+        formatter = JSONFormatter()
+
+        log = logging.getLogger("some logger")
+        log.info(
+            "Test log message",
+            extra={
+                "palace_custom": "custom_value",
+                "palace_another": {1, 2, 3},
+                "not_palace": "not included",
+                "palace_not_json_serializable": object(),
+                "palace_name": "Not Overwritten",
+                "palace_none_value": None,
+            },
+        )
+
+        [record] = caplog.records
+
+        data = json.loads(formatter.format(record))
+
+        # The custom Palace attributes are included in the log
+        assert "custom" in data
+        assert data["custom"] == "custom_value"
+        assert "another" in data
+        # Set is converted to list in the json conversion
+        assert data["another"] == [1, 2, 3]
+
+        # The non-Palace attributes are not included in the log
+        assert "not_palace" not in data
+
+        # If a Palace attribute is not JSON serializable, it is not included in the log instead of
+        # raising an error.
+        assert "not_json_serializable" not in data
+
+        # If a Palace attribute is None, it is not included in the log.
+        assert "none_value" not in data
+
+        # Because "name" was already set by the formatter, it is not overwritten
+        assert "name" in data
+        assert data["name"] == "some logger"
+
 
 class TestLogLoopPreventionFilter:
     @pytest.mark.parametrize(

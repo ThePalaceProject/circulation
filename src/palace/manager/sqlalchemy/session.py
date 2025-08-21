@@ -1,10 +1,7 @@
 from __future__ import annotations
 
-import json
 import logging
-from typing import Any
 
-from pydantic_core import to_jsonable_python
 from sqlalchemy import create_engine, event, literal_column, select, table, text
 from sqlalchemy.engine import Connection, Engine, make_url
 from sqlalchemy.orm import Session, sessionmaker
@@ -19,23 +16,11 @@ from palace.manager.sqlalchemy.model.coverage import Timestamp
 from palace.manager.sqlalchemy.model.key import Key
 from palace.manager.sqlalchemy.util import get_one_or_create
 from palace.manager.util.datetime_helpers import utc_now
+from palace.manager.util.json import json_serializer
 from palace.manager.util.log import LoggerMixin
 from palace.manager.util.resources import resources_dir
 
 DEBUG = False
-
-
-def json_encoder(obj: Any) -> Any:
-    # Handle Flask Babel LazyString objects.
-    if hasattr(obj, "__html__"):
-        return str(obj.__html__())
-
-    # Pass everything else off to Pydantic JSON encoder.
-    return to_jsonable_python(obj)
-
-
-def json_serializer(*args, **kwargs) -> str:
-    return json.dumps(*args, default=json_encoder, **kwargs)
 
 
 class SessionManager(LoggerMixin):

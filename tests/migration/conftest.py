@@ -13,7 +13,7 @@ from sqlalchemy import text
 
 from palace.manager.integration.goals import Goals
 from palace.manager.integration.settings import BaseSettings
-from palace.manager.sqlalchemy.session import json_serializer
+from palace.manager.util.json import json_serializer
 from tests.fixtures.database import DatabaseFixture
 from tests.fixtures.services import ServicesFixture
 

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import logging
 import socket
 import threading
@@ -15,6 +14,7 @@ from palace.manager.api.admin.util.flask import get_request_admin
 from palace.manager.api.util.flask import get_request_library, get_request_patron
 from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.util.datetime_helpers import from_timestamp
+from palace.manager.util.json import json_serializer
 
 if TYPE_CHECKING:
     from mypy_boto3_logs import CloudWatchLogsClient
@@ -40,6 +40,14 @@ class JSONFormatter(logging.Formatter):
         super().__init__()
         self.hostname = socket.getfqdn()
         self.main_thread_id = threading.main_thread().ident
+
+    @staticmethod
+    def _is_json_serializable(v: Any) -> bool:
+        try:
+            json_serializer(v)
+            return True
+        except (TypeError, ValueError):
+            return False
 
     def format(self, record: logging.LogRecord) -> str:
         def ensure_str(s: Any) -> Any:
@@ -154,7 +162,18 @@ class JSONFormatter(logging.Formatter):
                 "task_name": celery_task.name,
             }
 
-        return json.dumps(data)
+        # Include any custom Palace-specific ('palace_' prefixed) attributes that have been added to
+        # the LogRecord in our json output with the 'palace_' prefix removed.
+        for key, value in record.__dict__.items():
+            if (
+                key != (log_data_key := key.removeprefix("palace_"))
+                and value is not None
+                and self._is_json_serializable(value)
+                and log_data_key not in data
+            ):
+                data[log_data_key] = value
+
+        return json_serializer(data)
 
 
 class LogLoopPreventionFilter(logging.Filter):

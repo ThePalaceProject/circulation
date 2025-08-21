@@ -11,7 +11,7 @@ from urllib.parse import urlparse
 import sqlalchemy as sa
 from alembic import op
 
-from palace.manager.sqlalchemy.session import json_serializer
+from palace.manager.util.json import json_serializer
 from palace.manager.util.migration.helpers import migration_logger
 
 # revision identifiers, used by Alembic.
