@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 import pytest
 from psycopg2._range import NumericRange
@@ -11,6 +11,7 @@ from palace.manager.celery.tasks import opds1
 from palace.manager.core.classifier import Classifier
 from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.integration.license.opds.opds1.api import OPDSAPI
+from palace.manager.integration.license.opds.opds2.api import OPDS2API
 from palace.manager.integration.license.opds.settings.wayfless import (
     SAMLWAYFlessFulfillmentError,
 )
@@ -613,3 +614,33 @@ class TestImportCollection:
             in caplog.text
         )
         assert "Traceback" in caplog.text
+
+
+class TestImportAll:
+    @pytest.mark.parametrize(
+        "force",
+        [
+            pytest.param(True, id="Force import"),
+            pytest.param(False, id="Do not force import"),
+        ],
+    )
+    def test_import_all(
+        self, db: DatabaseTransactionFixture, celery_fixture: CeleryFixture, force: bool
+    ) -> None:
+        collection1 = db.collection(protocol=OPDSAPI)
+        collection2 = db.collection(protocol=OPDSAPI)
+        decoy_collection = db.collection(protocol=OPDS2API)
+
+        with patch.object(opds1, "import_collection") as mock_import_collection:
+            opds1.import_all.delay(force=force).wait()
+
+        mock_import_collection.s.assert_called_once_with(
+            force=force,
+        )
+        mock_import_collection.s.return_value.delay.assert_has_calls(
+            [
+                call(collection_id=collection1.id),
+                call(collection_id=collection2.id),
+            ],
+            any_order=True,
+        )
