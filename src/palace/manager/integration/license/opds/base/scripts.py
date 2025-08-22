@@ -10,11 +10,6 @@ from palace.manager.celery.task import Task
 from palace.manager.scripts.input import CollectionInputScript
 
 
-class AllTaskCallable(Protocol):
-    def __call__(self, force: bool = False) -> Signature:
-        """Callable that takes a force flag and returns a Signature."""
-
-
 class CollectionTaskCallable(Protocol):
     def __call__(self, collection_id: int, force: bool = False) -> Signature:
         """Callable that takes a collection ID and a force flag and returns a Signature."""
@@ -28,7 +23,7 @@ class OpdsTaskScript(CollectionInputScript):
         task_type: str,
         *,
         collection_task: Task | CollectionTaskCallable,
-        all_task: Task | AllTaskCallable | None = None,
+        all_task: Task | None = None,
         db: Session | None = None,
     ):
         super().__init__(db)
@@ -51,10 +46,7 @@ class OpdsTaskScript(CollectionInputScript):
         if self._all_task is None:
             self.log.error("You must specify at least one collection.")
             sys.exit(1)
-        if isinstance(self._all_task, Task):
-            return self._all_task.delay(force=force)
-        else:
-            return self._all_task(force=force).delay()
+        return self._all_task.delay(force=force)
 
     def _call_collection_task(self, *, collection_id: int, force: bool) -> AsyncResult:
         if isinstance(self._collection_task, Task):
