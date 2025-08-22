@@ -1,14 +1,17 @@
+from unittest.mock import call, patch
+
 import pytest
 from freezegun import freeze_time
 
 from palace.manager.api.model.token import OAuthTokenResponse
-from palace.manager.celery.tasks import opds_for_distributors
+from palace.manager.celery.tasks import identifiers, opds_for_distributors
 from palace.manager.integration.license.opds.for_distributors.api import (
     OPDSForDistributorsAPI,
 )
 from palace.manager.integration.license.opds.for_distributors.settings import (
     OPDSForDistributorsSettings,
 )
+from palace.manager.integration.license.opds.opds2.api import OPDS2API
 from palace.manager.opds.authentication import Authentication, AuthenticationDocument
 from palace.manager.opds.opds2 import Link
 from palace.manager.sqlalchemy.model.collection import Collection
@@ -270,3 +273,91 @@ class TestImportCollection:
     #     assert 2 == len(get_one_mock.call_args_list)
     #     for call_args in get_one_mock.call_args_list:
     #         assert "collection" in call_args.kwargs
+
+
+class TestImportAll:
+    @pytest.mark.parametrize(
+        "force",
+        [
+            pytest.param(True, id="Force import"),
+            pytest.param(False, id="Do not force import"),
+        ],
+    )
+    def test_import_all(
+        self, db: DatabaseTransactionFixture, celery_fixture: CeleryFixture, force: bool
+    ) -> None:
+        collection1 = db.collection(protocol=OPDSForDistributorsAPI)
+        collection2 = db.collection(protocol=OPDSForDistributorsAPI)
+        decoy_collection = db.collection(protocol=OPDS2API)
+
+        with patch.object(
+            opds_for_distributors, "import_collection"
+        ) as mock_import_collection:
+            opds_for_distributors.import_all.delay(force=force).wait()
+
+        # We queued up tasks for all OPDS for Distributors collections.
+        mock_import_collection.s.assert_called_once_with(
+            force=force,
+        )
+        mock_import_collection.s.return_value.delay.assert_has_calls(
+            [
+                call(collection_id=collection1.id),
+                call(collection_id=collection2.id),
+            ],
+            any_order=True,
+        )
+
+
+class TestReapAll:
+    @pytest.mark.parametrize(
+        "force",
+        [
+            pytest.param(True, id="Force import"),
+            pytest.param(False, id="Do not force import"),
+        ],
+    )
+    def test_reap_all(
+        self, db: DatabaseTransactionFixture, celery_fixture: CeleryFixture, force: bool
+    ) -> None:
+        collection1 = db.collection(protocol=OPDSForDistributorsAPI)
+        collection2 = db.collection(protocol=OPDSForDistributorsAPI)
+        decoy_collection = db.collection(protocol=OPDS2API)
+
+        with patch.object(
+            opds_for_distributors, "import_and_reap_not_found_chord"
+        ) as mock_reap_chord:
+            opds_for_distributors.reap_all.delay(force=force).wait()
+
+        mock_reap_chord.assert_has_calls(
+            [
+                call(collection1.id, force),
+                call(collection2.id, force),
+            ],
+            any_order=True,
+        )
+
+
+class TestImportAndReapNotFoundChord:
+    @pytest.mark.parametrize(
+        "force",
+        [
+            pytest.param(True, id="Force reaping"),
+            pytest.param(False, id="Do not force reaping"),
+        ],
+    )
+    def test_import_and_reap_not_found_chord(self, force: bool) -> None:
+        """Test the import and reap not found chord."""
+        # Reap the collection
+        collection_id = 12  # Example collection ID
+        with (
+            patch.object(identifiers, "create_mark_unavailable_chord") as mock_chord,
+            patch.object(opds_for_distributors, "import_collection") as mock_import,
+        ):
+            opds_for_distributors.import_and_reap_not_found_chord(
+                collection_id=collection_id, force=force
+            )
+
+        mock_import.s.assert_called_once_with(
+            collection_id=collection_id, force=force, return_identifiers=True
+        )
+        mock_chord.assert_called_once_with(collection_id, mock_import.s.return_value)
