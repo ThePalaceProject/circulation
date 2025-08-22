@@ -227,53 +227,6 @@ class TestImportCollection:
             == "https://library.biblioboard.com/ext/api/media/04da95cd-6cfc-4e82-810f-121d418b6963/assets/content.epub"
         )
 
-    # def test_update_work_for_edition_returns_correct_license_pool(
-    #     self, opds_dist_api_fixture: OPDSForDistributorsAPIFixture
-    # ):
-    #     collection1 = opds_dist_api_fixture.mock_collection(name="Test Collection 1")
-    #     collection2 = opds_dist_api_fixture.mock_collection(name="Test Collection 2")
-    #
-    #     work = opds_dist_api_fixture.db.work(
-    #         with_license_pool=False,
-    #         collection=collection1,
-    #     )
-    #     edition = work.presentation_edition
-    #
-    #     collection1_lp = opds_dist_api_fixture.db.licensepool(
-    #         edition=edition, collection=collection1, set_edition_as_presentation=True
-    #     )
-    #     collection2_lp = opds_dist_api_fixture.db.licensepool(
-    #         edition=edition, collection=collection2, set_edition_as_presentation=True
-    #     )
-    #     importer1 = OPDSForDistributorsImporter(
-    #         opds_dist_api_fixture.db.session,
-    #         collection=collection1,
-    #     )
-    #     importer2 = OPDSForDistributorsImporter(
-    #         opds_dist_api_fixture.db.session,
-    #         collection=collection2,
-    #     )
-    #
-    #     with patch.object(importer, "get_one", wraps=get_one) as get_one_mock:
-    #         importer1_lp, _ = importer1.update_work_for_edition(edition)
-    #         importer2_lp, _ = importer2.update_work_for_edition(edition)
-    #
-    #     # Ensure distinct collections.
-    #     assert collection1_lp != collection2_lp
-    #     assert collection1_lp.collection.name == "Test Collection 1"
-    #     assert collection2_lp.collection.name == "Test Collection 2"
-    #
-    #     # The license pool returned to the importer should be the
-    #     # same one originally created for a given collection.
-    #     assert collection1_lp == importer1_lp
-    #     assert collection2_lp == importer2_lp
-    #
-    #     # With OPDS for Distributors imports, `update_work_for_edition`
-    #     # should include `collection` in the license pool lookup criteria.
-    #     assert 2 == len(get_one_mock.call_args_list)
-    #     for call_args in get_one_mock.call_args_list:
-    #         assert "collection" in call_args.kwargs
-
 
 class TestImportAll:
     @pytest.mark.parametrize(
