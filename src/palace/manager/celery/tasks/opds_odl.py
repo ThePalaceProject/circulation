@@ -321,6 +321,9 @@ def import_collection(
     *,
     force: bool = False,
 ) -> None:
+    """
+    Run an OPDS2+ODL import for the given collection.
+    """
     redis = task.services.redis().client()
     with import_lock(redis, collection_id).lock(), task.session() as session:
         collection = load_from_id(session, Collection, collection_id)

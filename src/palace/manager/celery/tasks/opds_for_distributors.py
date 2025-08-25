@@ -19,6 +19,9 @@ from palace.manager.sqlalchemy.model.collection import Collection
 
 @shared_task(queue=QueueNames.default, bind=True)
 def import_all(task: Task, force: bool = False) -> None:
+    """
+    Queue an import task for every OPDS for Distributors collection.
+    """
     with task.session() as session:
         registry = task.services.integration_registry().license_providers()
         collection_query = Collection.select_by_protocol(
@@ -35,6 +38,9 @@ def import_all(task: Task, force: bool = False) -> None:
 
 @shared_task(queue=QueueNames.default, bind=True)
 def reap_all(task: Task, force: bool = False) -> None:
+    """
+    Queue a reap task for every OPDS for Distributors collection.
+    """
     with task.session() as session:
         registry = task.services.integration_registry().license_providers()
         collection_query = Collection.select_by_protocol(
@@ -53,6 +59,9 @@ def import_collection(
     force: bool = False,
     return_identifiers: bool = False,
 ) -> IdentifierSet | None:
+    """
+    Run an OPDS for Distributors import for the given collection.
+    """
     registry = task.services.integration_registry().license_providers()
 
     with task.session() as session:

@@ -12,8 +12,8 @@ from sqlalchemy.orm import Session
 from palace.manager.data_layer.bibliographic import BibliographicData
 from palace.manager.data_layer.circulation import CirculationData
 from palace.manager.data_layer.identifier import IdentifierData
+from palace.manager.integration.license.opds.data import FailedPublication
 from palace.manager.integration.license.opds.extractor import (
-    FailedPublication,
     OpdsExtractor,
 )
 from palace.manager.integration.license.opds.requests import BaseOpdsHttpRequest

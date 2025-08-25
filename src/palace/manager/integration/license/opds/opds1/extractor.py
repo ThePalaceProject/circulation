@@ -20,8 +20,8 @@ from palace.manager.data_layer.link import LinkData
 from palace.manager.data_layer.measurement import MeasurementData
 from palace.manager.data_layer.subject import SubjectData
 from palace.manager.integration.license.opds.bearer_token_drm import BearerTokenDrmMixin
+from palace.manager.integration.license.opds.data import FailedPublication
 from palace.manager.integration.license.opds.extractor import (
-    FailedPublication,
     OpdsExtractor,
 )
 from palace.manager.integration.license.opds.opds1.settings import (

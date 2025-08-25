@@ -1,30 +1,13 @@
 from abc import ABC, abstractmethod
 from collections.abc import Iterable
-from dataclasses import dataclass
 from typing import Generic, TypeVar
 
 from palace.manager.data_layer.bibliographic import BibliographicData
 from palace.manager.data_layer.identifier import IdentifierData
+from palace.manager.integration.license.opds.data import FailedPublication
 from palace.manager.opds.odl.info import LicenseInfo
 from palace.manager.opds.odl.odl import License
 from palace.manager.util.log import LoggerMixin
-
-
-@dataclass(frozen=True)
-class FailedPublication:
-    """
-    Represents a publication that failed to extract.
-
-    Provides details about the error encountered during extraction, so that
-    the caller can handle it appropriately.
-    """
-
-    error: Exception
-    error_message: str
-    identifier: str | None
-    title: str | None
-    publication_data: str
-
 
 FeedType = TypeVar("FeedType")
 PublicationType = TypeVar("PublicationType")
