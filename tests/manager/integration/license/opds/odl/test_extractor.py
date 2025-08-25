@@ -11,9 +11,10 @@ from palace.manager.opds.lcp.status import LoanStatus
 from palace.manager.opds.odl.info import Checkouts, LicenseInfo, LicenseStatus
 from palace.manager.opds.odl.odl import License, LicenseMetadata
 from palace.manager.opds.odl.terms import Terms
-from palace.manager.opds.opds2 import StrictLink
+from palace.manager.opds.opds2 import PublicationFeedNoValidation, StrictLink
 from palace.manager.sqlalchemy.model.contributor import Contributor
 from palace.manager.util.datetime_helpers import utc_now
+from tests.fixtures.files import OPDS2FilesFixture
 
 
 class TestOPDS2WithODLExtractor:
@@ -153,3 +154,22 @@ class TestOPDS2WithODLExtractor:
         expected: datetime.date | None,
     ) -> None:
         assert OPDS2WithODLExtractor._extract_published_date(published) == expected
+
+    def test_feed_next_url(
+        self,
+        opds2_files_fixture: OPDS2FilesFixture,
+    ) -> None:
+        # No next links
+        feed = PublicationFeedNoValidation.model_validate_json(
+            opds2_files_fixture.sample_data("feed.json")
+        )
+        assert OPDS2WithODLExtractor.feed_next_url(feed) is None
+
+        # Feed has next link
+        feed = PublicationFeedNoValidation.model_validate_json(
+            opds2_files_fixture.sample_data("feed2.json")
+        )
+        assert (
+            OPDS2WithODLExtractor.feed_next_url(feed)
+            == "http://bookshelf-feed-demo.us-east-1.elasticbeanstalk.com/v1/publications?page=2&limit=100"
+        )

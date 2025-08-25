@@ -1,11 +1,11 @@
 from sqlalchemy.orm import Session
 
-from palace.manager.celery.tasks import opds2
+from palace.manager.celery.tasks import opds1
 from palace.manager.integration.license.opds.base.scripts import OpdsTaskScript
 
 
-class OPDS2ImportScript(OpdsTaskScript):
-    """Import all books from the OPDS2 feed associated with a collection."""
+class Opds1ImportScript(OpdsTaskScript):
+    """Import all books from the feed associated with a collection."""
 
     def __init__(
         self,
@@ -13,13 +13,13 @@ class OPDS2ImportScript(OpdsTaskScript):
     ):
         super().__init__(
             "import",
-            collection_task=opds2.import_collection,
-            all_task=opds2.import_all,
+            collection_task=opds1.import_collection,
+            all_task=opds1.import_all,
             db=db,
         )
 
 
-class OPDS2ReaperScript(OpdsTaskScript):
+class Opds1ReaperScript(OpdsTaskScript):
     """Mark all items in CM that are not in the feed as unavailable."""
 
     def __init__(
@@ -28,6 +28,6 @@ class OPDS2ReaperScript(OpdsTaskScript):
     ):
         super().__init__(
             "reap",
-            collection_task=opds2.import_and_reap_not_found_chord,
+            collection_task=opds1.import_and_reap_not_found_chord,
             db=db,
         )

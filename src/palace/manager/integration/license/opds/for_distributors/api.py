@@ -4,6 +4,7 @@ import datetime
 import json
 from collections.abc import Generator
 
+from celery.canvas import Signature
 from sqlalchemy.orm import Session
 from typing_extensions import Unpack
 
@@ -44,18 +45,6 @@ class OPDSForDistributorsAPI(
     BaseCirculationAPI[OPDSForDistributorsSettings, OPDSForDistributorsLibrarySettings],
     HasCollectionSelfTests,
 ):
-    # In OPDS For Distributors, all items are gated through the
-    # BEARER_TOKEN access control scheme.
-    #
-    # If the default client supports a given media type when
-    # combined with the BEARER_TOKEN scheme, then we should import
-    # titles with that media type...
-    SUPPORTED_MEDIA_TYPES = [
-        format
-        for (format, drm) in DeliveryMechanism.default_client_can_fulfill_lookup
-        if drm == (DeliveryMechanism.BEARER_TOKEN) and format is not None
-    ]
-
     @classmethod
     def settings_class(cls) -> type[OPDSForDistributorsSettings]:
         return OPDSForDistributorsSettings
@@ -240,3 +229,9 @@ class OPDSForDistributorsAPI(
         self, lpdms: list[LicensePoolDeliveryMechanism]
     ) -> list[LicensePoolDeliveryMechanism]:
         return self._format_priorities.prioritize_mechanisms(lpdms)
+
+    @classmethod
+    def import_task(cls, collection_id: int, force: bool = False) -> Signature:
+        from palace.manager.celery.tasks.opds_for_distributors import import_collection
+
+        return import_collection.s(collection_id, force=force)

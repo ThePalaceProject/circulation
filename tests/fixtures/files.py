@@ -132,3 +132,16 @@ class BoundlessFilesFixture(FilesFixture):
 def boundless_files_fixture() -> BoundlessFilesFixture:
     """A fixture providing access to Boundless files."""
     return BoundlessFilesFixture()
+
+
+class OPDSForDistributorsFilesFixture(FilesFixture):
+    """A fixture providing access to OPDSForDistributors files."""
+
+    def __init__(self):
+        super().__init__("opds_for_distributors")
+
+
+@pytest.fixture()
+def opds_dist_files_fixture() -> OPDSForDistributorsFilesFixture:
+    """A fixture providing access to OPDSForDistributors files."""
+    return OPDSForDistributorsFilesFixture()

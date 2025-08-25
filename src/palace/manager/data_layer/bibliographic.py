@@ -817,3 +817,24 @@ class BibliographicData(BaseMutableData):
                 edition.contributions.remove(c)
 
         return contributors_changed
+
+    def has_changed(self, session: Session) -> bool:
+        """
+        Test if the bibliographic data has changed since the last import.
+        """
+        edition = self.load_edition(session)
+        if edition is None:
+            return True
+
+        # If we don't have any information about the last update time, assume we need to update.
+        if edition.updated_at is None or self.data_source_last_updated is None:
+            return True
+
+        if self.data_source_last_updated > edition.updated_at:
+            return True
+
+        self.log.info(
+            f"Publication {self.primary_identifier_data} is unchanged. Last updated at "
+            f"{edition.updated_at}, data source last updated at {self.data_source_last_updated}"
+        )
+        return False

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from celery.canvas import Signature
+
 from palace.manager.integration.license.opds.base.api import BaseOPDSAPI
 from palace.manager.integration.license.opds.opds1.settings import (
     OPDSImporterLibrarySettings,
@@ -23,3 +25,9 @@ class OPDSAPI(BaseOPDSAPI):
     @classmethod
     def label(cls) -> str:
         return "OPDS Import"
+
+    @classmethod
+    def import_task(cls, collection_id: int, force: bool = False) -> Signature:
+        from palace.manager.celery.tasks.opds1 import import_collection
+
+        return import_collection.s(collection_id, force=force)

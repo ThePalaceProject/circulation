@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -11,6 +11,7 @@ from palace.manager.api.circulation.exceptions import (
     NotOnHold,
 )
 from palace.manager.api.circulation.fulfillment import RedirectFulfillment
+from palace.manager.celery.tasks import opds1
 from palace.manager.integration.license.opds.opds1.api import OPDSAPI
 from palace.manager.sqlalchemy.model.licensing import (
     DeliveryMechanism,
@@ -191,3 +192,12 @@ class TestOPDSAPI:
         assert isinstance(fulfillment, RedirectFulfillment)
         assert fulfillment.content_link == mock_lpdm.resource.representation.public_url
         assert fulfillment.content_type == mock_lpdm.resource.representation.media_type
+
+    def test_import_task(self) -> None:
+        collection_id = MagicMock()
+        force = MagicMock()
+        with patch.object(opds1, "import_collection") as mock_import:
+            result = OPDSAPI.import_task(collection_id, force)
+
+        mock_import.s.assert_called_once_with(collection_id, force=force)
+        assert result == mock_import.s.return_value
