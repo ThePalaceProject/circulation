@@ -36,8 +36,7 @@ from palace.manager.sqlalchemy.model.measurement import Measurement
 from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.sqlalchemy.model.resource import Representation
 from palace.manager.sqlalchemy.model.work import Work
-from tests.fixtures.apply import ApplyTaskFixture
-from tests.fixtures.celery import CeleryFixture
+from tests.fixtures.celery import ApplyTaskFixture, CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import OPDSFilesFixture
 from tests.fixtures.http import MockHttpClientFixture

@@ -59,8 +59,7 @@ from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.sqlalchemy.util import create
 from palace.manager.util import datetime_helpers
 from palace.manager.util.datetime_helpers import utc_now
-from tests.fixtures.apply import ApplyTaskFixture
-from tests.fixtures.celery import CeleryFixture
+from tests.fixtures.celery import ApplyTaskFixture, CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import OPDS2WithODLFilesFixture
 from tests.fixtures.http import MockHttpClientFixture
