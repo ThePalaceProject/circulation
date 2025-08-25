@@ -1,5 +1,5 @@
 import json
-from unittest.mock import MagicMock, create_autospec
+from unittest.mock import MagicMock, create_autospec, patch
 
 import pytest
 
@@ -11,6 +11,7 @@ from palace.manager.api.circulation.fulfillment import (
     DirectFulfillment,
     RedirectFulfillment,
 )
+from palace.manager.celery.tasks import opds_for_distributors
 from palace.manager.integration.license.opds.for_distributors.api import (
     OPDSForDistributorsAPI,
 )
@@ -341,3 +342,12 @@ class TestOPDSForDistributorsAPI:
             pool,
             delivery_mechanism,
         )
+
+    def test_import_task(self) -> None:
+        collection_id = MagicMock()
+        force = MagicMock()
+        with patch.object(opds_for_distributors, "import_collection") as mock_import:
+            result = OPDSForDistributorsAPI.import_task(collection_id, force)
+
+        mock_import.s.assert_called_once_with(collection_id, force=force)
+        assert result == mock_import.s.return_value
