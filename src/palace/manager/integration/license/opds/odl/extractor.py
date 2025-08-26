@@ -1,11 +1,13 @@
 from __future__ import annotations
 
-from collections.abc import Iterable, Sequence
+import json
+from collections.abc import Callable, Generator, Iterable, Sequence
 from datetime import date, datetime
-from typing import Any
+from typing import Any, TypeVar
 from urllib.parse import urljoin
 
 from frozendict import frozendict
+from pydantic import ValidationError
 
 from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.data_layer.bibliographic import BibliographicData
@@ -16,12 +18,21 @@ from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.data_layer.license import LicenseData
 from palace.manager.data_layer.link import LinkData
 from palace.manager.data_layer.subject import SubjectData
+from palace.manager.integration.license.opds.bearer_token_drm import BearerTokenDrmMixin
+from palace.manager.integration.license.opds.data import FailedPublication
+from palace.manager.integration.license.opds.extractor import (
+    OpdsExtractor,
+)
 from palace.manager.integration.license.opds.odl.constants import FEEDBOOKS_AUDIO
 from palace.manager.opds import opds2, rwpm
 from palace.manager.opds.lcp.status import LoanStatus
 from palace.manager.opds.odl import odl
 from palace.manager.opds.odl.info import LicenseInfo, LicenseStatus
-from palace.manager.opds.opds2 import AcquisitionObject
+from palace.manager.opds.opds2 import (
+    AcquisitionObject,
+    BasePublicationFeed,
+    PublicationFeedNoValidation,
+)
 from palace.manager.sqlalchemy.constants import LinkRelations, MediaTypes
 from palace.manager.sqlalchemy.model.classification import Subject
 from palace.manager.sqlalchemy.model.contributor import Contributor
@@ -34,10 +45,13 @@ from palace.manager.sqlalchemy.model.licensing import (
 )
 from palace.manager.sqlalchemy.model.resource import Hyperlink
 from palace.manager.util import first_or_default
-from palace.manager.util.log import LoggerMixin
+
+PublicationType = TypeVar("PublicationType", bound=opds2.BasePublication)
 
 
-class OPDS2WithODLExtractor(LoggerMixin):
+class OPDS2WithODLExtractor(
+    OpdsExtractor[PublicationFeedNoValidation, PublicationType], BearerTokenDrmMixin
+):
 
     _CONTRIBUTOR_ROLE_MAPPING: frozendict[str, str] = frozendict(
         {
@@ -58,21 +72,15 @@ class OPDS2WithODLExtractor(LoggerMixin):
         }
     )
 
-    _SUPPORTED_BEARER_TOKEN_MEDIA_TYPES = frozenset(
-        (
-            frmt
-            for frmt, drm in DeliveryMechanism.default_client_can_fulfill_lookup
-            if drm == DeliveryMechanism.BEARER_TOKEN and frmt is not None
-        )
-    )
-
     def __init__(
         self,
+        parse_publication: Callable[[dict[str, Any]], PublicationType],
         base_url: str,
         data_source: str,
         skipped_license_formats: Iterable[str] | None = None,
         bearer_token_drm: bool = False,
     ):
+        self._parse_publication = parse_publication
         self._base_url = base_url
         self._data_source = data_source
         self._bearer_token_drm = bearer_token_drm
@@ -381,15 +389,6 @@ class OPDS2WithODLExtractor(LoggerMixin):
         return Edition.additional_type_to_medium.get(publication.metadata.type)
 
     @classmethod
-    def extract_identifier(cls, publication: opds2.BasePublication) -> IdentifierData:
-        """
-        Extract the publication's identifier from its metadata.
-
-        Raises PalaceValueError if the identifier cannot be parsed.
-        """
-        return IdentifierData.parse_urn(publication.metadata.identifier)
-
-    @classmethod
     def _extract_published_date(cls, published: datetime | date | None) -> date | None:
         if isinstance(published, datetime):
             return published.date()
@@ -623,21 +622,17 @@ class OPDS2WithODLExtractor(LoggerMixin):
             ) in self._extract_supported_available_formats_from_link(link):
                 if (
                     self._bearer_token_drm
-                    and content_type in self._SUPPORTED_BEARER_TOKEN_MEDIA_TYPES
-                    and drm_scheme is None
-                    and link_data.rel == Hyperlink.GENERIC_OPDS_ACQUISITION
+                    and (
+                        format_data := self._bearer_token_format_data(
+                            link_data, content_type, drm_scheme
+                        )
+                    )
+                    is not None
                 ):
                     # Links to items with a non-open access acquisition type cannot be directly accessed
                     # if the feed is protected by OAuth. So we need to add a BEARER_TOKEN delivery mechanism
                     # to the formats, so we know we are able to fulfill these items indirectly via a bearer token.
-                    formats.append(
-                        FormatData(
-                            content_type=content_type,
-                            drm_scheme=DeliveryMechanism.BEARER_TOKEN,
-                            link=link_data,
-                            rights_uri=RightsStatus.IN_COPYRIGHT,
-                        )
-                    )
+                    formats.append(format_data)
                 else:
                     formats.append(
                         FormatData(
@@ -836,7 +831,81 @@ class OPDS2WithODLExtractor(LoggerMixin):
             duration=duration,
         )
 
-    def extract(
+    @classmethod
+    def feed_parse(cls, feed: bytes) -> PublicationFeedNoValidation:
+        return PublicationFeedNoValidation.model_validate_json(feed)
+
+    @classmethod
+    def feed_next_url(cls, feed: BasePublicationFeed[Any]) -> str | None:
+        """Get the next page URL from the feed."""
+        next_link = feed.links.get(rel="next", type=BasePublicationFeed.content_type())
+        if not next_link:
+            return None
+        return next_link.href
+
+    def feed_publications(
+        self, feed: PublicationFeedNoValidation
+    ) -> Generator[PublicationType | FailedPublication]:
+        for publication_dict in feed.publications:
+            try:
+                yield self._parse_publication(publication_dict)
+            except ValidationError as e:
+                yield self.failure_from_publication(
+                    publication=publication_dict,
+                    error=e,
+                    error_message="Error validating publication",
+                )
+
+    @classmethod
+    def publication_licenses(
+        cls, publication: opds2.BasePublication
+    ) -> list[odl.License]:
+        if not isinstance(publication, odl.Publication):
+            return []
+        return publication.licenses
+
+    @classmethod
+    def publication_available(cls, publication: opds2.BasePublication) -> bool:
+        """Check if the publication is available."""
+        return publication.metadata.availability.available
+
+    @classmethod
+    def publication_identifier(
+        cls, publication: opds2.BasePublication
+    ) -> IdentifierData:
+        """
+        Extract the publication's identifier from its metadata.
+
+        Raises PalaceValueError if the identifier cannot be parsed.
+        """
+        return IdentifierData.parse_urn(publication.metadata.identifier)
+
+    @classmethod
+    def failure_from_publication(
+        cls,
+        publication: opds2.BasePublication | dict[str, Any],
+        error: Exception,
+        error_message: str,
+    ) -> FailedPublication:
+        """Create a FailedPublication object from the given publication."""
+        if isinstance(publication, dict):
+            identifier = publication.get("metadata", {}).get("identifier")
+            title = publication.get("metadata", {}).get("title")
+            publication_data = publication
+        else:
+            identifier = publication.metadata.identifier
+            title = str(publication.metadata.title)
+            publication_data = publication.model_dump(mode="json")
+
+        return FailedPublication(
+            error=error,
+            error_message=error_message,
+            identifier=identifier,
+            title=title,
+            publication_data=json.dumps(publication_data, indent=2),
+        )
+
+    def publication_bibliographic(
         self,
         identifier: IdentifierData,
         publication: opds2.BasePublication,

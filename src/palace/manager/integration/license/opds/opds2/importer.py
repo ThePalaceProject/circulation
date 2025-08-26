@@ -2,25 +2,27 @@ from __future__ import annotations
 
 from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.integration.base import integration_settings_load
+from palace.manager.integration.license.opds.importer import OpdsImporter
 from palace.manager.integration.license.opds.odl.extractor import OPDS2WithODLExtractor
-from palace.manager.integration.license.opds.odl.importer import OPDS2WithODLImporter
 from palace.manager.integration.license.opds.opds2.api import OPDS2API
-from palace.manager.integration.license.opds.opds2.settings import OPDS2ImporterSettings
 from palace.manager.integration.license.opds.requests import (
     OpdsAuthType,
     get_opds_requests,
 )
 from palace.manager.opds import opds2
+from palace.manager.opds.opds2 import PublicationFeedNoValidation
 from palace.manager.service.integration_registry.license_providers import (
     LicenseProvidersRegistry,
 )
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.util.http import HTTP
 
+Opds2ImporterT = OpdsImporter[PublicationFeedNoValidation, opds2.Publication]
+
 
 def importer_from_collection(
     collection: Collection, registry: LicenseProvidersRegistry
-) -> OPDS2WithODLImporter[opds2.Publication, OPDS2ImporterSettings]:
+) -> Opds2ImporterT:
     """Create an OPDS2Importer from a Collection."""
     if not registry.equivalent(collection.protocol, OPDS2API):
         raise PalaceValueError(
@@ -42,8 +44,14 @@ def importer_from_collection(
         requests_session,
     )
     extractor = OPDS2WithODLExtractor(
-        settings.external_account_id, settings.data_source
+        opds2.Publication.model_validate,
+        settings.external_account_id,
+        settings.data_source,
     )
-    return OPDS2WithODLImporter(
-        request, extractor, opds2.Publication.model_validate, settings
+    return OpdsImporter(
+        request,
+        extractor,
+        settings.external_account_id,
+        settings.custom_accept_header,
+        settings.ignored_identifier_types,
     )

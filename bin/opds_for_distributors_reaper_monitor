@@ -1,7 +1,0 @@
-#!/usr/bin/env python
-"""Update the circulation manager server with to remove books that
-have been removed from OPDS for distributors collections."""
-
-from palace.manager.scripts.opds_import import OPDSForDistributorsReaperScript
-
-OPDSForDistributorsReaperScript().run()

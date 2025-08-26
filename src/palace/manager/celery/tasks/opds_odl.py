@@ -321,29 +321,32 @@ def import_collection(
     *,
     force: bool = False,
 ) -> None:
+    """
+    Run an OPDS2+ODL import for the given collection.
+    """
     redis = task.services.redis().client()
     with import_lock(redis, collection_id).lock(), task.session() as session:
         collection = load_from_id(session, Collection, collection_id)
         registry = task.services.integration_registry().license_providers()
 
-        importer = importer_from_collection(collection, registry)
-        feed_page = importer.get_feed(url)
-
-        importer.import_feed(
-            session,
-            feed_page,
+        import_result = importer_from_collection(collection, registry).import_feed(
             collection,
+            url,
             apply_bibliographic=apply.bibliographic_apply.delay,
             apply_circulation=apply.circulation_apply.delay,
             import_even_if_unchanged=force,
         )
 
-    next_link = importer.next_page(feed_page)
+    if not import_result:
+        task.log.info("Import failed, aborting task.")
+        return
+
+    next_link = import_result.next_url
     if next_link is not None:
         # This page is complete, but there are more pages to import, so we requeue ourselves with the
         # next page URL.
         raise task.replace(
-            import_collection.s(
+            task.s(
                 collection_id=collection_id,
                 url=next_link,
                 force=force,

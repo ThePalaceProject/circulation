@@ -1,5 +1,5 @@
 import json
-from unittest.mock import MagicMock, create_autospec
+from unittest.mock import MagicMock, create_autospec, patch
 
 import pytest
 
@@ -11,18 +11,74 @@ from palace.manager.api.circulation.fulfillment import (
     DirectFulfillment,
     RedirectFulfillment,
 )
+from palace.manager.celery.tasks import opds_for_distributors
+from palace.manager.integration.license.opds.for_distributors.api import (
+    OPDSForDistributorsAPI,
+)
+from palace.manager.integration.license.opds.for_distributors.settings import (
+    OPDSForDistributorsSettings,
+)
 from palace.manager.integration.license.opds.requests import OAuthOpdsRequest
 from palace.manager.integration.license.overdrive.api import OverdriveAPI
-from palace.manager.sqlalchemy.constants import MediaTypes
+from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.identifier import Identifier
+from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism, RightsStatus
 from palace.manager.sqlalchemy.model.patron import Loan
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
 from palace.manager.util.datetime_helpers import utc_now
-from tests.manager.integration.license.opds.for_distributors.conftest import (
-    OPDSForDistributorsAPIFixture,
-)
+from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.files import OPDSForDistributorsFilesFixture
+from tests.fixtures.http import MockHttpClientFixture
+from tests.fixtures.work import WorkIdPolicyQueuePresentationRecalculationFixture
+
+
+class OPDSForDistributorsAPIFixture:
+    def __init__(
+        self,
+        db: DatabaseTransactionFixture,
+        files: OPDSForDistributorsFilesFixture,
+        http_client: MockHttpClientFixture,
+        work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
+    ):
+        self.db = db
+        self.collection = self.mock_collection(db.default_library())
+        self.api = OPDSForDistributorsAPI(db.session, self.collection)
+        self.files = files
+        self.http_client = http_client
+        self.work_policy_recalc_fixture = work_policy_recalc_fixture
+
+    def mock_collection(
+        self,
+        library: Library | None = None,
+        name: str = "Test OPDS For Distributors Collection",
+    ) -> Collection:
+        """Create a mock OPDS For Distributors collection to use in tests."""
+        library = library or self.db.default_library()
+        return self.db.collection(
+            name,
+            protocol=OPDSForDistributorsAPI,
+            settings=OPDSForDistributorsSettings(
+                username="a",
+                password="b",
+                data_source="data_source",
+                external_account_id="http://opds",
+            ),
+            library=library,
+        )
+
+
+@pytest.fixture(scope="function")
+def opds_dist_api_fixture(
+    db: DatabaseTransactionFixture,
+    opds_dist_files_fixture: OPDSForDistributorsFilesFixture,
+    http_client: MockHttpClientFixture,
+    work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
+) -> OPDSForDistributorsAPIFixture:
+    return OPDSForDistributorsAPIFixture(
+        db, opds_dist_files_fixture, http_client, work_policy_recalc_fixture
+    )
 
 
 class TestOPDSForDistributorsAPI:
@@ -40,22 +96,6 @@ class TestOPDSForDistributorsAPI:
         assert result.name == "Negotiate a fulfillment token"
         assert result.success is True
         assert result.result == mock_make_request.refresh_token.return_value
-
-    def test_supported_media_types(
-        self, opds_dist_api_fixture: OPDSForDistributorsAPIFixture
-    ):
-        # If the default client supports media type X with the
-        # BEARER_TOKEN access control scheme, then X is a supported
-        # media type for an OPDS For Distributors collection.
-        supported = opds_dist_api_fixture.api.SUPPORTED_MEDIA_TYPES
-        for format, drm in DeliveryMechanism.default_client_can_fulfill_lookup:
-            if drm == (DeliveryMechanism.BEARER_TOKEN) and format is not None:
-                assert format in supported
-
-        # Here's a media type that sometimes shows up in OPDS For
-        # Distributors collections but is _not_ supported. Incoming
-        # items with this media type will _not_ be imported.
-        assert MediaTypes.JPEG_MEDIA_TYPE not in supported
 
     def test_can_fulfill_without_loan(
         self, opds_dist_api_fixture: OPDSForDistributorsAPIFixture
@@ -302,3 +342,12 @@ class TestOPDSForDistributorsAPI:
             pool,
             delivery_mechanism,
         )
+
+    def test_import_task(self) -> None:
+        collection_id = MagicMock()
+        force = MagicMock()
+        with patch.object(opds_for_distributors, "import_collection") as mock_import:
+            result = OPDSForDistributorsAPI.import_task(collection_id, force)
+
+        mock_import.s.assert_called_once_with(collection_id, force=force)
+        assert result == mock_import.s.return_value

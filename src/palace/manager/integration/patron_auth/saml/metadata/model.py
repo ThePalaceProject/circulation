@@ -1045,7 +1045,7 @@ class SAMLSubject:
 
     def __init__(
         self,
-        idp: str,
+        idp: str | None,
         name_id: SAMLNameID | None,
         attribute_statement: SAMLAttributeStatement | None,
         valid_till: datetime.datetime | datetime.timedelta | int | None = None,
@@ -1105,7 +1105,7 @@ class SAMLSubject:
         )
 
     @property
-    def idp(self) -> str:
+    def idp(self) -> str | None:
         """Return the IdP's entityID.
 
         :return: IdP's entityID.

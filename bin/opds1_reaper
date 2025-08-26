@@ -1,0 +1,5 @@
+#!/usr/bin/env python
+
+from palace.manager.integration.license.opds.opds1.scripts import Opds1ReaperScript
+
+Opds1ReaperScript().run()
