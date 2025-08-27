@@ -761,6 +761,10 @@ class TestCirculationData:
             primary_identifier_data=identifier,
         )
 
+        # Calling without a collection raises an error
+        with pytest.raises(ValueError) as excinfo:
+            circulation.license_pool(db.session, None)
+
         # If a pool doesn't exist, one is created
         pool_created, is_new = circulation.license_pool(db.session, collection)
         assert is_new is True
@@ -823,3 +827,38 @@ class TestCirculationData:
         assert pool_looked_up is not None
         assert pool_looked_up.identifier.type == identifier.type
         assert pool_looked_up.identifier.identifier == identifier.identifier
+
+    def test_has_changed(self, db: DatabaseTransactionFixture):
+        collection = db.collection()
+        identifier = IdentifierData(type="test identifier", identifier="2")
+        circulation = CirculationData.model_construct(
+            data_source_name="Test data source",
+            primary_identifier_data=identifier,
+            last_checked=None,  # type: ignore[arg-type]
+        )
+
+        today = utc_now()
+        one_day_ago = today - datetime.timedelta(days=1)
+        two_days_ago = today - datetime.timedelta(days=2)
+
+        # Since last_updated is None, we always consider the data to have changed
+        assert circulation.has_changed(db.session, collection=collection) is True
+
+        # The licensepool does not exist, so we consider the data to have changed
+        circulation.last_checked = one_day_ago
+        assert circulation.has_changed(db.session, collection=collection) is True
+
+        # Create the pool
+        pool, _ = circulation.license_pool(db.session, collection, autocreate=True)
+        pool.last_checked = None
+
+        # The pool exists but last_checked is None, so we consider the data to have changed
+        assert circulation.has_changed(db.session, collection=collection) is True
+
+        # Set last_checked to 2 days ago
+        pool.last_checked = two_days_ago
+        assert circulation.has_changed(db.session, collection=collection) is True
+
+        # But if the pool was checked more recently than the data, nothing has changed
+        pool.last_checked = today
+        assert circulation.has_changed(db.session, collection=collection) is False

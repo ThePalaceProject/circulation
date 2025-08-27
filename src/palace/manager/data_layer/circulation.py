@@ -287,7 +287,7 @@ class CirculationData(BaseMutableData):
         # Finally, if we have data for a specific Collection's license
         # for this book, find its LicensePool and update it.
         changed_availability = False
-        if pool and self.has_changed(_db, pool=pool, collection=collection):
+        if pool and self.has_changed(_db, pool=pool):
             # Update availability information. This may result in
             # the issuance of additional circulation events.
             if self.licenses is not None:
@@ -332,6 +332,22 @@ class CirculationData(BaseMutableData):
 
         return pool, made_changes
 
+    @overload
+    def has_changed(
+        self,
+        session: Session,
+        *,
+        collection: Collection,
+    ) -> bool: ...
+
+    @overload
+    def has_changed(
+        self,
+        session: Session,
+        *,
+        pool: LicensePool,
+    ) -> bool: ...
+
     def has_changed(
         self,
         session: Session,
@@ -342,6 +358,8 @@ class CirculationData(BaseMutableData):
         """
         Does this CirculationData represent information more recent than
         what we have for the given LicensePool?
+
+        One of `collection` or `pool` must be provided.
         """
         if not self.last_checked:
             # Assume that our data represents the state of affairs right now.
