@@ -405,6 +405,53 @@ class TestCirculationData:
         assert edition == pool2.presentation_edition
         assert pool.work == pool2.work
 
+    def test_apply_respects_last_checked_timestamp(
+        self, db: DatabaseTransactionFixture
+    ) -> None:
+        identifier = IdentifierData(type="test identifier", identifier="1")
+        circulation = CirculationData(
+            data_source_name="Test data source",
+            primary_identifier_data=identifier,
+            last_checked=utc_now() - datetime.timedelta(days=5),
+            licenses_owned=100,
+        )
+
+        collection = db.collection()
+        pool, new = circulation.license_pool(
+            db.session, db.default_collection(), autocreate=False
+        )
+        assert pool is None
+        assert new is False
+
+        # Even though the last_checked value is 5 days ago, we still apply this data because
+        # the license pool does not exist yet.
+        pool, changes = circulation.apply(db.session, collection)
+        assert changes is True
+        assert pool is not None
+        assert pool.last_checked == circulation.last_checked
+        assert pool.availability_time == pool.last_checked
+        assert pool.licenses_owned == 100
+
+        # If we try to apply the same data again, nothing will change because
+        # the last_checked value is older than the current last_checked value on the pool.
+        circulation.licenses_owned = 10
+        pool, changes = circulation.apply(db.session, collection)
+        assert changes is False
+        assert pool is not None
+        assert pool.last_checked == circulation.last_checked
+        assert pool.licenses_owned == 100
+
+        # Unless the replacement policy forces it.
+        pool, changes = circulation.apply(
+            db.session,
+            collection,
+            replace=ReplacementPolicy(even_if_not_apparently_updated=True),
+        )
+        assert changes is True
+        assert pool is not None
+        assert pool.last_checked == circulation.last_checked
+        assert pool.licenses_owned == 10
+
     def test_license_pool_sets_default_license_values(
         self, db: DatabaseTransactionFixture
     ):
@@ -831,10 +878,10 @@ class TestCirculationData:
     def test_has_changed(self, db: DatabaseTransactionFixture):
         collection = db.collection()
         identifier = IdentifierData(type="test identifier", identifier="2")
-        circulation = CirculationData.model_construct(
+        circulation = CirculationData(
             data_source_name="Test data source",
             primary_identifier_data=identifier,
-            last_checked=None,  # type: ignore[arg-type]
+            last_checked=None,
         )
 
         today = utc_now()

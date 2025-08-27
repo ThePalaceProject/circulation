@@ -466,6 +466,7 @@ class TestBibliographicData:
         m_link = bibliographic.links[0]
         assert e_link.rel == m_link.rel
         assert e_link.resource.url == m_link.href
+        assert edition.updated_at == bibliographic.data_source_last_updated
 
         # The series position can also be 0.
         edition.series_position = 0
@@ -757,6 +758,85 @@ class TestBibliographicData:
         # No coverage records were created.
         records = db.session.scalars(select(CoverageRecord)).all()
         assert len(records) == 0
+
+    def test_apply_no_changes_needed(self, db: DatabaseTransactionFixture):
+        edition, pool = db.edition(with_license_pool=True)
+        edition.title = "Old title"
+        edition.updated_at = utc_now()
+
+        # Create a bibliographic data object that is slightly out of date.
+        # It has a different title, but its data_source_last_updated is
+        # earlier than the Edition's updated_at, so no changes will be made.
+        stale_bibliographic = BibliographicData(
+            data_source_name=edition.data_source.name,
+            primary_identifier_data=IdentifierData.from_identifier(
+                edition.primary_identifier
+            ),
+            title="New title",
+            data_source_last_updated=utc_now() - datetime.timedelta(days=1),
+        )
+
+        # Applying a BibliographicData object created from an
+        # Edition to that same Edition results in no changes.
+        edition, changed = stale_bibliographic.apply(
+            db.session, edition, pool.collection
+        )
+        assert changed == False
+        assert edition.title != "New title"
+
+        # If we roll back the edition's updated_at to before the
+        # bibliographic's data_source_last_updated, the change will
+        # be made.
+        edition.updated_at = utc_now() - datetime.timedelta(days=2)
+        edition, changed = stale_bibliographic.apply(
+            db.session, edition, pool.collection
+        )
+        assert changed == True
+        assert edition.title == "New title"
+
+        # We will apply the changes even if we don't think its necessary when the replacement policy has
+        # even_if_not_apparently_updated set to True
+        edition.title = "Old title"
+        edition.updated_at = utc_now()
+        edition, changed = stale_bibliographic.apply(
+            db.session,
+            edition,
+            pool.collection,
+            replace=ReplacementPolicy(even_if_not_apparently_updated=True),
+        )
+        assert changed is True
+        assert edition.title == "New title"
+
+        # If the stale bibliographic has no data_source_last_updated, the change will be made.
+        stale_bibliographic.data_source_last_updated = None
+        edition.title = "Old title"
+        edition.updated_at = utc_now()
+
+        edition, changed = stale_bibliographic.apply(
+            db.session, edition, pool.collection
+        )
+        assert changed == True
+        assert edition.title == "New title"
+
+        # Even if we don't need to update the BibliographicData, we still check to see if the CirculationData
+        # needs to be updated.
+        stale_bibliographic.data_source_last_updated = utc_now() - datetime.timedelta(
+            days=1
+        )
+        stale_bibliographic.circulation = CirculationData(
+            data_source_name=stale_bibliographic.data_source_name,
+            primary_identifier_data=stale_bibliographic.primary_identifier_data,
+            licenses_owned=10,
+        )
+        assert pool.licenses_owned != 10
+        edition.title = "Old title"
+        edition.updated_at = utc_now()
+        edition, changed = stale_bibliographic.apply(
+            db.session, edition, pool.collection
+        )
+        assert changed is False
+        assert edition.title == "Old title"
+        assert pool.licenses_owned == 10
 
     def test_update_contributions(self, db: DatabaseTransactionFixture):
         edition = db.edition()
@@ -1070,17 +1150,10 @@ class TestBibliographicData:
         assert edition.updated_at == last_updated
         assert edition.updated_at != past
 
-        # If data_source_last_updated is None, updated_at will stay the same
-        # if there are no other changes.
-        bibliographic.data_source_last_updated = None
-        bibliographic.apply(db.session, edition, None)
-        assert edition.updated_at == last_updated
-
-        # But if there are other changes, updated_at will be updated to the
+        # If data_source_last_updated is None, updated_at will be updated to the
         # current time.
+        bibliographic.data_source_last_updated = None
         now = utc_now()
         with freeze_time(now):
-            bibliographic.data_source_last_updated = None
-            bibliographic.title = "New Title"
             bibliographic.apply(db.session, edition, None)
-            assert edition.updated_at == now
+        assert edition.updated_at == now

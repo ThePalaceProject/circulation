@@ -166,34 +166,24 @@ class TestEdition:
         with freeze_time(creation_time):
             record, _ = Edition.for_foreign_id(db.session, data_source, type_, id_)
 
-        # The edition automatically gets timestamps set on it
+        # The edition automatically gets its created_at timestamp set
         assert record.created_at == creation_time
-        assert record.updated_at == creation_time
+
+        # Its updated_at timestamp starts out as None
+        assert record.updated_at is None
 
         # Retrieving the same edition again does not change the timestamps.
         record, was_new = Edition.for_foreign_id(
             db.session, DataSource.GUTENBERG, type_, id_
         )
         assert record.created_at == creation_time
-        assert record.updated_at == creation_time
+        assert record.updated_at is None
 
-        # If I update the edition, the updated_at timestamp changes automatically
-        update_time = utc_now()
-        with freeze_time(update_time):
-            record.title = "New Title"
-            db.session.flush()
+        # If I update the edition, the updated_at timestamp does not update automatically
+        record.title = "New Title"
+        db.session.flush()
         assert record.created_at == creation_time
-        assert record.updated_at == update_time
-
-        # If I manually set the updated_at timestamp, it does not change automatically
-        manual_update_time = utc_now() + timedelta(days=1)
-        with freeze_time(manual_update_time):
-            record.title = "Another New Title"
-            record.updated_at = manual_update_time
-            record.series = "New Series"
-            db.session.flush()
-        assert record.created_at == creation_time
-        assert record.updated_at == manual_update_time
+        assert record.updated_at is None
 
     def test_sort_by_priority(self, db: DatabaseTransactionFixture):
         # Make editions created by the license source, the metadata
