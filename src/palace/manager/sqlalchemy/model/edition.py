@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 from collections import defaultdict
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal, overload
 
 from sqlalchemy import (
     Column,
@@ -36,7 +36,7 @@ from palace.manager.sqlalchemy.model.contributor import Contribution, Contributo
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism, LicensePool
-from palace.manager.sqlalchemy.util import get_one_or_create
+from palace.manager.sqlalchemy.util import get_one, get_one_or_create
 from palace.manager.util import MetadataSimilarity, TitleProcessor
 from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.languages import LanguageCodes
@@ -298,13 +298,36 @@ class Edition(Base, EditionConstants):
         return None
 
     @classmethod
+    @overload
     def for_foreign_id(
         cls,
         _db: Session,
         data_source: DataSource | str | None,
         foreign_id_type: str,
         foreign_id: str,
-    ) -> tuple[Edition, bool]:
+        autocreate: Literal[True] = ...,
+    ) -> tuple[Edition, bool]: ...
+
+    @classmethod
+    @overload
+    def for_foreign_id(
+        cls,
+        _db: Session,
+        data_source: DataSource | str | None,
+        foreign_id_type: str,
+        foreign_id: str,
+        autocreate: bool,
+    ) -> tuple[Edition | None, bool]: ...
+
+    @classmethod
+    def for_foreign_id(
+        cls,
+        _db: Session,
+        data_source: DataSource | str | None,
+        foreign_id_type: str,
+        foreign_id: str,
+        autocreate: bool = True,
+    ) -> tuple[Edition | None, bool]:
         """Find the Edition representing the given data source's view of
         the work that it primarily identifies by foreign ID.
         e.g. for_foreign_id(_db, DataSource.OVERDRIVE, Identifier.OVERDRIVE_ID, uuid)
@@ -319,15 +342,33 @@ class Edition(Base, EditionConstants):
         """
         # Look up the data source if necessary.
         if isinstance(data_source, str):
-            data_source = DataSource.lookup(_db, data_source)
+            data_source = DataSource.lookup(_db, data_source, autocreate=autocreate)
+        if data_source is None:
+            return None, False
 
-        identifier, ignore = Identifier.for_foreign_id(_db, foreign_id_type, foreign_id)
-        return get_one_or_create(
-            _db,
-            Edition,
-            data_source=data_source,
-            primary_identifier=identifier,
+        identifier, ignore = Identifier.for_foreign_id(
+            _db, foreign_id_type, foreign_id, autocreate=autocreate
         )
+        if identifier is None:
+            return None, False
+
+        if not autocreate:
+            is_new = False
+            edition = get_one(
+                _db,
+                Edition,
+                data_source=data_source,
+                primary_identifier=identifier,
+            )
+        else:
+            edition, is_new = get_one_or_create(
+                _db,
+                Edition,
+                data_source=data_source,
+                primary_identifier=identifier,
+            )
+
+        return edition, is_new
 
     @property
     def license_pools(self):

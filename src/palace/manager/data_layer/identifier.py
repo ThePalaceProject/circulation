@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import Field
 from sqlalchemy.orm import Session
-from typing_extensions import Self
+from typing_extensions import Self, overload
 
 from palace.manager.data_layer.base.frozen import BaseFrozenData
 from palace.manager.service.redis.key import RedisKeyGenerator
@@ -14,8 +16,22 @@ class IdentifierData(BaseFrozenData):
     identifier: str
     weight: float = Field(1.0, repr=False)
 
-    def load(self, _db: Session) -> tuple[Identifier, bool]:
-        return Identifier.for_foreign_id(_db, self.type, self.identifier)
+    @overload
+    def load(
+        self, _db: Session, autocreate: Literal[True] = ...
+    ) -> tuple[Identifier, bool]: ...
+
+    @overload
+    def load(
+        self, _db: Session, autocreate: bool
+    ) -> tuple[Identifier | None, bool]: ...
+
+    def load(
+        self, _db: Session, autocreate: bool = True
+    ) -> tuple[Identifier | None, bool]:
+        return Identifier.for_foreign_id(
+            _db, self.type, self.identifier, autocreate=autocreate
+        )
 
     @classmethod
     def from_identifier(cls, identifier: Identifier | IdentifierData) -> Self:

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import datetime
 from collections import defaultdict
-from typing import Any
+from typing import Any, Literal, overload
 
 from pydantic import AwareDatetime, Field, field_validator, model_validator
 from sqlalchemy import and_
@@ -242,51 +242,33 @@ class BibliographicData(BaseMutableData):
                     self.load_data_source(_db), same_work_id, 0.85
                 )
 
-    def load_edition(self, db: Session) -> Edition | None:
-        """
-        Find the Edition associated with this BibliographicData.
+    @overload
+    def edition(
+        self, _db: Session, autocreate: Literal[True] = ...
+    ) -> tuple[Edition, bool]: ...
 
-        Returns None if no Edition can be found.
-        """
-        if not self.primary_identifier_data:
-            raise PalaceValueError(
-                f"Cannot find edition: {self.__class__.__name__} has no primary identifier."
-            )
+    @overload
+    def edition(
+        self, _db: Session, autocreate: bool
+    ) -> tuple[Edition | None, bool]: ...
 
-        data_source = DataSource.lookup(db, self.data_source_name, autocreate=False)
-        if data_source is None:
-            return None
-
-        identifier, _ = Identifier.for_foreign_id(
-            db,
-            self.primary_identifier_data.type,
-            self.primary_identifier_data.identifier,
-            autocreate=False,
-        )
-        if identifier is None:
-            return None
-
-        return get_one(
-            db,
-            Edition,
-            data_source=data_source,
-            primary_identifier=identifier,
-        )
-
-    def edition(self, _db: Session) -> tuple[Edition, bool]:
+    def edition(
+        self, _db: Session, autocreate: bool = True
+    ) -> tuple[Edition | None, bool]:
         """Find or create the edition described by this BibliographicData object."""
         if not self.primary_identifier_data:
             raise PalaceValueError(
                 "Cannot find edition: BibliographicData has no primary identifier."
             )
 
-        data_source = self.load_data_source(_db)
+        data_source = self.load_data_source(_db, autocreate=autocreate)
 
         return Edition.for_foreign_id(
             _db,
             data_source,
             self.primary_identifier_data.type,
             self.primary_identifier_data.identifier,
+            autocreate=autocreate,
         )
 
     def consolidate_identifiers(self) -> None:
@@ -818,12 +800,14 @@ class BibliographicData(BaseMutableData):
 
         return contributors_changed
 
-    def has_changed(self, session: Session) -> bool:
+    def has_changed(self, session: Session, edition: Edition | None = None) -> bool:
         """
         Test if the bibliographic data has changed since the last import.
         """
-        edition = self.load_edition(session)
         if edition is None:
+            edition, _ = self.edition(session, autocreate=False)
+        if edition is None:
+            # We don't have an edition, so we definitely need to create one.
             return True
 
         # If we don't have any information about the last update time, assume we need to update.
