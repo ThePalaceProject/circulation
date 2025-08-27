@@ -1551,7 +1551,7 @@ class OverdriveAPI(
             self._db,
             DataSource.OVERDRIVE,
             Identifier.OVERDRIVE_ID,
-            book_id,
+            cast(str, book_id),
             collection=self.collection,
         )
         if is_new or not license_pool.work:
