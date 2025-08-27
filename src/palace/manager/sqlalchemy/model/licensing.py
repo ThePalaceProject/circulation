@@ -454,7 +454,11 @@ class LicensePool(Base):
             )
 
         # Get the Identifier.
-        identifier, ignore = Identifier.for_foreign_id(_db, foreign_id_type, foreign_id)
+        identifier, ignore = Identifier.for_foreign_id(
+            _db, foreign_id_type, foreign_id, autocreate=autocreate
+        )
+        if identifier is None:
+            return None, False
 
         kw: dict[str, Any] = dict(
             data_source=data_source, identifier=identifier, collection=collection
