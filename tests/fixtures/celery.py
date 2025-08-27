@@ -12,12 +12,14 @@ from celery import Celery
 from celery.app import autoretry
 from celery.worker import WorkController
 from sqlalchemy import select
+from sqlalchemy.orm import Session
 from typing_extensions import Self
 
 from palace.manager.celery.task import Task
 from palace.manager.celery.tasks import apply
 from palace.manager.data_layer.bibliographic import BibliographicData
 from palace.manager.data_layer.circulation import CirculationData
+from palace.manager.data_layer.policy.replacement import ReplacementPolicy
 from palace.manager.service.celery.celery import task_queue_config
 from palace.manager.service.celery.configuration import CeleryConfiguration
 from palace.manager.service.celery.container import CeleryContainer
@@ -28,6 +30,7 @@ from palace.manager.sqlalchemy.model.licensing import (
     LicensePool,
 )
 from palace.manager.sqlalchemy.model.work import Work
+from palace.manager.sqlalchemy.util import get_one
 from tests.fixtures.database import DatabaseTransactionFixture, MockSessionMaker
 from tests.fixtures.http import MockHttpClientFixture
 from tests.fixtures.services import ServicesFixture
@@ -92,12 +95,14 @@ class CeleryRetriesMock:
 
     @property
     def retry_count(self) -> int:
-        """Return the number of times the task has been retried."""
-        call_args = self.mock.call_args
-        if call_args is None:
-            return 0
+        """
+        Return the number of times the task has been retried.
 
-        return call_args.kwargs.get("retries", 0)
+        If the task hits its max retries, this number will be one more than the
+        number of times the task was actually retried, since the last call to
+        the mock happens before the task fails permanently.
+        """
+        return self.mock.call_count
 
 
 @dataclass
@@ -159,6 +164,59 @@ def celery_fixture(
         )
 
 
+@dataclass(frozen=True)
+class ApplyBibliographicCall:
+    bibliographic: BibliographicData
+    edition_id: int | None = None
+    collection_id: int | None = None
+    replace: ReplacementPolicy | None = None
+
+    def mock_apply(self, db: Session) -> None:
+        """Apply the bibliographic data to the database."""
+        if self.edition_id is None:
+            edition, _ = self.bibliographic.edition(db)
+        else:
+            edition_or_none = get_one(db, Edition, id=self.edition_id)
+            if edition_or_none is None:
+                raise ValueError(f"Edition with id {self.edition_id} not found")
+            edition = edition_or_none
+
+        if self.collection_id is not None:
+            collection = Collection.by_id(db, self.collection_id)
+            if collection is None:
+                raise ValueError(f"Collection with id {self.collection_id} not found")
+        else:
+            collection = None
+
+        self.bibliographic.apply(
+            db,
+            edition,
+            collection,
+            replace=self.replace,
+            disable_async_calculation=True,
+            create_coverage_record=False,
+        )
+
+
+@dataclass(frozen=True)
+class ApplyCirculationCall:
+    circulation: CirculationData
+    collection_id: int
+    replace: ReplacementPolicy | None = None
+
+    def mock_apply(self, db: Session) -> None:
+        """Apply the circulation data to the database."""
+        collection = Collection.by_id(db, self.collection_id)
+        if collection is None:
+            raise ValueError(f"Collection with id {self.collection_id} not found")
+
+        self.circulation.apply(
+            db,
+            collection,
+            replace=self.replace,
+        )
+
+
 class ApplyTaskFixture:
     """
     A test fixture that helps with testing tasks that enqueue celery
@@ -179,9 +237,7 @@ class ApplyTaskFixture:
     ) -> None:
         self._db = db
         self.client = http_client
-        self.apply_queue: list[
-            tuple[Collection | None, BibliographicData | CirculationData]
-        ] = []
+        self.apply_queue: list[ApplyBibliographicCall | ApplyCirculationCall] = []
         self.mock_bibliographic = mock_bibliographic_apply
         self.mock_circulation = mock_circulation_apply
 
@@ -202,29 +258,12 @@ class ApplyTaskFixture:
         ):
             yield cls(db, http_client, mock_bibliographic_apply, mock_circulation_apply)
 
-    def _apply_bibliographic(
-        self, data: BibliographicData, collection: Collection | None
-    ) -> None:
-        """Apply bibliographic data directly to the database."""
-        edition, _ = data.edition(self._db.session)
-        data.apply(
-            self._db.session,
-            edition,
-            collection,
-            disable_async_calculation=True,
-            create_coverage_record=False,
-        )
-
-    def _apply_circulation(
-        self, data: CirculationData, collection: Collection | None
-    ) -> None:
-        """Apply circulation data directly to the database."""
-        data.apply(self._db.session, collection)
-
     def _mock_bibliographic_apply(
         self,
         bibliographic: BibliographicData,
+        edition_id: int | None = None,
         collection_id: int | None = None,
+        replace: ReplacementPolicy | None = None,
     ) -> None:
         """
         Mock bibliographic apply
@@ -234,17 +273,15 @@ class ApplyTaskFixture:
         workflow, assuming that the task we are testing, and all the apply tasks
         run to completion.
         """
-        collection = (
-            None
-            if collection_id is None
-            else Collection.by_id(self._db.session, collection_id)
+        self.apply_queue.append(
+            ApplyBibliographicCall(bibliographic, edition_id, collection_id, replace)
         )
-        self.apply_queue.append((collection, bibliographic))
 
     def _mock_circulation_apply(
         self,
         circulation: CirculationData,
-        collection_id: int | None = None,
+        collection_id: int,
+        replace: ReplacementPolicy | None = None,
     ) -> None:
         """
         Mock circulation apply
@@ -254,12 +291,9 @@ class ApplyTaskFixture:
         workflow, assuming that the task we are testing, and all the apply tasks
         run to completion.
         """
-        collection = (
-            None
-            if collection_id is None
-            else Collection.by_id(self._db.session, collection_id)
+        self.apply_queue.append(
+            ApplyCirculationCall(circulation, collection_id, replace)
         )
-        self.apply_queue.append((collection, circulation))
 
     def process_apply_queue(self) -> None:
         """
@@ -268,13 +302,8 @@ class ApplyTaskFixture:
         This function does the same basic logic as the apply tasks.
         Since we test those separately, we can assume that they works correctly.
         """
-        for collection, data in self.apply_queue:
-            if isinstance(data, CirculationData):
-                self._apply_circulation(data, collection)
-            elif isinstance(data, BibliographicData):
-                self._apply_bibliographic(data, collection)
-            else:
-                raise ValueError(f"Unknown data type: {type(data)}")
+        for call in self.apply_queue:
+            call.mock_apply(self._db.session)
         self.apply_queue.clear()
 
     def get_editions(self) -> list[Edition]:

@@ -3,14 +3,17 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass
 from functools import cached_property
-from typing import Any, Generic, Literal, Protocol, TypeVar
+from typing import Generic, Literal, TypeVar
 from urllib.parse import urljoin
 
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
+from palace.manager.celery.tasks.apply import (
+    ApplyBibliographicCallable,
+    ApplyCirculationCallable,
+)
 from palace.manager.data_layer.bibliographic import BibliographicData
-from palace.manager.data_layer.circulation import CirculationData
 from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.integration.license.opds.data import FailedPublication
 from palace.manager.integration.license.opds.extractor import (
@@ -23,35 +26,6 @@ from palace.manager.service.redis.models.set import IdentifierSet
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.util.http import BadResponseException
 from palace.manager.util.log import LoggerMixin
-
-
-class ApplyBibliographicCallable(Protocol):
-    """
-    A callable that applies bibliographic data to the system.
-
-    For example, this could be the signature of a Celery task that processes
-    bibliographic data and updates the database accordingly:
-    apply.bibliographic_apply.delay
-    """
-
-    def __call__(
-        self, bibliographic: BibliographicData, /, *, collection_id: int
-    ) -> Any: ...
-
-
-class ApplyCirculationCallable(Protocol):
-    """
-    A callable that applies circulation data to the system.
-
-    For example, this could be the signature of a Celery task that processes
-    circulation data and updates the database accordingly:
-    apply.circulation_apply.delay
-    """
-
-    def __call__(
-        self, circulation: CirculationData, /, *, collection_id: int
-    ) -> Any: ...
-
 
 FeedType = TypeVar("FeedType")
 PublicationType = TypeVar("PublicationType")
