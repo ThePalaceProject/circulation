@@ -74,7 +74,7 @@ class TestBibliographicApply:
         # Calling apply, creates a new edition, and sets the title as you would expect
         apply.bibliographic_apply.delay(data).wait()
 
-        edition = data.load_edition(db.session)
+        edition, _ = data.edition(db.session, autocreate=False)
         assert edition is not None
         assert edition.title == title
         assert edition.primary_identifier.type == identifier.type

@@ -1,6 +1,7 @@
 import datetime
 import logging
 from copy import deepcopy
+from functools import partial
 from unittest.mock import patch
 
 import pytest
@@ -982,7 +983,7 @@ class TestBibliographicData:
         equivalent_identifiers = [x.output for x in identifier.equivalencies]
         assert [book.primary_identifier] == equivalent_identifiers
 
-    def test_load_edition(self, db: DatabaseTransactionFixture) -> None:
+    def test_edition_autocreate_false(self, db: DatabaseTransactionFixture) -> None:
         identifier = IdentifierData(
             type=db.fresh_str(),
             identifier=db.fresh_str(),
@@ -991,30 +992,32 @@ class TestBibliographicData:
             data_source_name=db.fresh_str(),
         )
 
-        # Need to have a primary identifier to load an edition.
+        get_edition = partial(data.edition, db.session, autocreate=False)
+
+        # Need to have a primary identifier to get an edition.
         with pytest.raises(
             PalaceValueError, match="BibliographicData has no primary identifier"
         ):
-            data.load_edition(db.session)
+            get_edition()
 
         data.primary_identifier_data = identifier
 
         # No datasource, no edition.
-        assert data.load_edition(db.session) is None
+        assert get_edition() == (None, False)
 
         # Datasource exists, but no identifier.
         DataSource.lookup(db.session, data.data_source_name, autocreate=True)
-        assert data.load_edition(db.session) is None
+        assert get_edition() == (None, False)
 
         # Identifier exists, but no edition.
         identifier.load(db.session)
-        assert data.load_edition(db.session) is None
+        assert get_edition() == (None, False)
 
         # Edition exists!
         edition, _ = Edition.for_foreign_id(
             db.session, data.data_source_name, identifier.type, identifier.identifier
         )
-        assert data.load_edition(db.session) is edition
+        assert get_edition() == (edition, False)
 
     def test_roundtrip(self) -> None:
         bibliographic = BibliographicData(

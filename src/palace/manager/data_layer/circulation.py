@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime
+from typing import Literal, overload
 
 from pydantic import Field, model_validator
 from sqlalchemy.orm import Session
@@ -116,9 +117,22 @@ class CirculationData(BaseMutableData):
 
         return self
 
+    @overload
     def license_pool(
-        self, _db: Session, collection: Collection | None
-    ) -> tuple[LicensePool, bool]:
+        self,
+        _db: Session,
+        collection: Collection | None,
+        autocreate: Literal[True] = ...,
+    ) -> tuple[LicensePool, bool]: ...
+
+    @overload
+    def license_pool(
+        self, _db: Session, collection: Collection | None, autocreate: bool
+    ) -> tuple[LicensePool | None, bool]: ...
+
+    def license_pool(
+        self, _db: Session, collection: Collection | None, autocreate: bool = True
+    ) -> tuple[LicensePool | None, bool]:
         """Find or create a LicensePool object for this CirculationData.
 
         :param collection: The LicensePool object will be associated with
@@ -126,18 +140,24 @@ class CirculationData(BaseMutableData):
         """
         if not collection:
             raise ValueError("Cannot find license pool: no collection provided.")
-        identifier = self.load_primary_identifier(_db)
+        identifier = self.load_primary_identifier(_db, autocreate=autocreate)
+        if identifier is None:
+            return None, False
 
-        data_source_obj = self.load_data_source(_db)
+        data_source_obj = self.load_data_source(_db, autocreate=autocreate)
+        if data_source_obj is None:
+            return None, False
+
         license_pool, is_new = LicensePool.for_foreign_id(
             _db,
             data_source=data_source_obj,
             foreign_id_type=identifier.type,
             foreign_id=identifier.identifier,
             collection=collection,
+            autocreate=autocreate,
         )
 
-        if is_new:
+        if license_pool is not None and is_new:
             license_pool.open_access = self.has_open_access_link
             license_pool.availability_time = self.last_checked
             license_pool.last_checked = self.last_checked
@@ -267,7 +287,7 @@ class CirculationData(BaseMutableData):
         # Finally, if we have data for a specific Collection's license
         # for this book, find its LicensePool and update it.
         changed_availability = False
-        if pool and self._availability_needs_update(pool):
+        if pool and self.has_changed(_db, pool=pool):
             # Update availability information. This may result in
             # the issuance of additional circulation events.
             if self.licenses is not None:
@@ -312,14 +332,45 @@ class CirculationData(BaseMutableData):
 
         return pool, made_changes
 
-    def _availability_needs_update(self, pool: LicensePool) -> bool:
-        """Does this CirculationData represent information more recent than
+    @overload
+    def has_changed(
+        self,
+        session: Session,
+        *,
+        collection: Collection,
+    ) -> bool: ...
+
+    @overload
+    def has_changed(
+        self,
+        session: Session,
+        *,
+        pool: LicensePool,
+    ) -> bool: ...
+
+    def has_changed(
+        self,
+        session: Session,
+        *,
+        collection: Collection | None = None,
+        pool: LicensePool | None = None,
+    ) -> bool:
+        """
+        Does this CirculationData represent information more recent than
         what we have for the given LicensePool?
+
+        One of `collection` or `pool` must be provided.
         """
         if not self.last_checked:
-            # Assume that our data represents the state of affairs
-            # right now.
+            # Assume that our data represents the state of affairs right now.
             return True
+
+        if pool is None:
+            pool, _ = self.license_pool(session, collection, autocreate=False)
+        if pool is None:
+            # We don't have an existing license pool, so we need to create one.
+            return True
+
         if not pool.last_checked:
             # It looks like the LicensePool has never been checked.
             return True

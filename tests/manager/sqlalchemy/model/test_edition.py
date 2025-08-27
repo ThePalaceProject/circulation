@@ -99,6 +99,64 @@ class TestEdition:
         assert identifier == record.primary_identifier
         assert False == was_new
 
+    def test_for_foreign_id_autocreate_false(self, db: DatabaseTransactionFixture):
+        """Verify we can get a data source's view of a foreign id."""
+        data_source = "test datasource"
+        id = db.fresh_str()
+        type = "test id type"
+
+        # The edition was not created because autocreate is False
+        edition, was_new = Edition.for_foreign_id(
+            db.session, data_source, type, id, autocreate=False
+        )
+        assert edition is None
+        assert was_new is False
+
+        # The associated datasource and identifier were not created either
+        ds = DataSource.lookup(db.session, data_source, autocreate=False)
+        assert ds is None
+
+        identifier, was_new = Identifier.for_foreign_id(
+            db.session, type, id, autocreate=False
+        )
+        assert identifier is None
+        assert was_new is False
+
+        # Create the datasource
+        DataSource.lookup(db.session, data_source, autocreate=True)
+
+        # Looking up the edition again with autocreate=False still finds nothing
+        edition, was_new = Edition.for_foreign_id(
+            db.session, data_source, type, id, autocreate=False
+        )
+        assert edition is None
+        assert was_new is False
+
+        # The associated identifier was not created either
+        identifier, was_new = Identifier.for_foreign_id(
+            db.session, type, id, autocreate=False
+        )
+        assert identifier is None
+        assert was_new is False
+
+        # Now create the edition
+        created_edition, was_new = Edition.for_foreign_id(
+            db.session, data_source, type, id, autocreate=True
+        )
+        assert created_edition is not None
+        assert was_new is True
+        assert created_edition.data_source.name == data_source
+        assert created_edition.primary_identifier.type == type
+        assert created_edition.primary_identifier.identifier == id
+
+        # This time looking up the edition with autocreate=False finds it
+        edition, was_new = Edition.for_foreign_id(
+            db.session, data_source, type, id, autocreate=False
+        )
+        assert edition is not None
+        assert was_new is False
+        assert edition == created_edition
+
     def test_created_and_updated_timestamps(self, db: DatabaseTransactionFixture):
         data_source = DataSource.lookup(db.session, DataSource.GUTENBERG)
         id_ = db.fresh_str()
