@@ -32,6 +32,7 @@ from palace.manager.sqlalchemy.model.licensing import LicensePool, RightsStatus
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Resource
 from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.sqlalchemy.util import get_one, get_one_or_create
+from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.languages import LanguageCodes
 from palace.manager.util.median import median
 
@@ -145,6 +146,7 @@ class BibliographicData(BaseMutableData):
             primary_identifier_data=primary_identifier,
             contributors=contributors,
             links=links,
+            data_source_last_updated=edition.updated_at,
             **kwargs,
         )
 
@@ -363,9 +365,6 @@ class BibliographicData(BaseMutableData):
             New: If contributors changed, this is now considered a core change,
             so work.simple_opds_feed refresh can be triggered.
         """
-        # Record the time the edition was last updated, before all our changes.
-        edition_updated_at = edition.updated_at
-
         # If summary, subjects, or measurements change, then any Work
         # associated with this edition will need a full presentation
         # recalculation.
@@ -399,8 +398,16 @@ class BibliographicData(BaseMutableData):
                 )
 
         # Check whether we should do any work at all.
-        data_source = self.load_data_source(db)
+        if not replace.even_if_not_apparently_updated and not self.has_changed(
+            db, edition
+        ):
+            # No need to update the bibliographic data, but we might have fresh
+            # circulation data, that we should apply.
+            if self.circulation:
+                self.circulation.apply(db, collection, replace)
+            return edition, False
 
+        data_source = self.load_data_source(db)
         identifier = edition.primary_identifier
 
         self.log.info("APPLYING BIBLIOGRAPHIC DATA TO EDITION: %s", self.title)
@@ -675,16 +682,17 @@ class BibliographicData(BaseMutableData):
                         policy=PresentationCalculationPolicy.recalculate_presentation_edition(),
                     )
 
+        # If we don't have a last updated timestamp, we use the current time.
+        updated_at = (
+            utc_now()
+            if self.data_source_last_updated is None
+            else self.data_source_last_updated
+        )
+
         # If the edition was last updated before the data source was last updated,
         # we set the edition's updated_at to the data source's last updated time.
-        # We compare to edition_updated_at instead of edition.updated_at, because
-        # it is likely in the course of this function that the editions updated_at
-        # timestamp is defaulted to the current time.
-        if self.data_source_last_updated is not None and (
-            edition_updated_at is None
-            or edition_updated_at < self.data_source_last_updated
-        ):
-            edition.updated_at = self.data_source_last_updated
+        if edition.updated_at is None or edition.updated_at < updated_at:
+            edition.updated_at = updated_at
 
         return edition, work_requires_new_presentation_edition
 

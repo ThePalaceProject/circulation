@@ -171,7 +171,7 @@ class Edition(Base, EditionConstants):
 
     # Timestamps to let us know when this item was created in our database, and when it was last updated.
     created_at = Column(DateTime(timezone=True), default=utc_now)
-    updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+    updated_at = Column(DateTime(timezone=True), default=None)
 
     def __repr__(self):
         id_repr = repr(self.primary_identifier)

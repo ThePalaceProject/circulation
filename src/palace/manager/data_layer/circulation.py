@@ -3,7 +3,7 @@ from __future__ import annotations
 import datetime
 from typing import Literal, overload
 
-from pydantic import Field, model_validator
+from pydantic import model_validator
 from sqlalchemy.orm import Session
 from typing_extensions import Self
 
@@ -42,7 +42,7 @@ class CirculationData(BaseMutableData):
     links: list[LinkData] = []
     formats: list[FormatData] = []
     licenses: list[LicenseData] | None = None
-    last_checked: datetime.datetime = Field(default_factory=utc_now)
+    last_checked: datetime.datetime | None = None
     should_track_playtime: bool = False
 
     @model_validator(mode="after")
@@ -158,9 +158,11 @@ class CirculationData(BaseMutableData):
         )
 
         if license_pool is not None and is_new:
+            license_pool.availability_time = (
+                self.last_checked if self.last_checked else utc_now()
+            )
+            license_pool.last_checked = None
             license_pool.open_access = self.has_open_access_link
-            license_pool.availability_time = self.last_checked
-            license_pool.last_checked = self.last_checked
             license_pool.should_track_playtime = self.should_track_playtime
 
         return license_pool, is_new
@@ -287,7 +289,9 @@ class CirculationData(BaseMutableData):
         # Finally, if we have data for a specific Collection's license
         # for this book, find its LicensePool and update it.
         changed_availability = False
-        if pool and self.has_changed(_db, pool=pool):
+        if pool and (
+            replace.even_if_not_apparently_updated or self.has_changed(_db, pool=pool)
+        ):
             # Update availability information. This may result in
             # the issuance of additional circulation events.
             if self.licenses is not None:
@@ -374,4 +378,5 @@ class CirculationData(BaseMutableData):
         if not pool.last_checked:
             # It looks like the LicensePool has never been checked.
             return True
-        return self.last_checked >= pool.last_checked
+
+        return self.last_checked > pool.last_checked
