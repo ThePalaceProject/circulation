@@ -1,3 +1,5 @@
+from functools import partial
+
 import pytest
 
 from palace.manager.data_layer.bibliographic import BibliographicData
@@ -6,6 +8,7 @@ from palace.manager.data_layer.contributor import ContributorData
 from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.data_layer.subject import SubjectData
 from palace.manager.integration.license.boundless.api import BoundlessApi
+from palace.manager.integration.license.boundless.importer import BoundlessImporter
 from palace.manager.sqlalchemy.model.classification import Subject
 from palace.manager.sqlalchemy.model.contributor import Contributor
 from palace.manager.sqlalchemy.model.datasource import DataSource
@@ -14,6 +17,7 @@ from palace.manager.util.datetime_helpers import datetime_utc
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import BoundlessFilesFixture
 from tests.fixtures.http import MockHttpClientFixture
+from tests.fixtures.services import ServicesFixture
 from tests.fixtures.work import WorkIdPolicyQueuePresentationRecalculationFixture
 
 
@@ -62,6 +66,7 @@ class BoundlessFixture:
         db: DatabaseTransactionFixture,
         http_client: MockHttpClientFixture,
         files: BoundlessFilesFixture,
+        services_fixture: ServicesFixture,
         work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
     ):
         self.db = db
@@ -72,6 +77,13 @@ class BoundlessFixture:
         self.http_client = http_client
         self.api = BoundlessApi(db.session, self.collection)
         self.work_policy_recalc_fixture = work_policy_recalc_fixture
+        registry = services_fixture.services.integration_registry().license_providers()
+        self.create_importer = partial(
+            BoundlessImporter,
+            self.db.session,
+            collection=self.collection,
+            registry=registry,
+        )
 
 
 @pytest.fixture(scope="function")
@@ -79,6 +91,7 @@ def boundless(
     db: DatabaseTransactionFixture,
     http_client: MockHttpClientFixture,
     boundless_files_fixture: BoundlessFilesFixture,
+    services_fixture: ServicesFixture,
     work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
 ) -> BoundlessFixture:
     # Typically the first request to the api will trigger a token refresh, so we queue
@@ -89,5 +102,9 @@ def boundless(
     )
 
     return BoundlessFixture(
-        db, http_client, boundless_files_fixture, work_policy_recalc_fixture
+        db,
+        http_client,
+        boundless_files_fixture,
+        services_fixture,
+        work_policy_recalc_fixture,
     )

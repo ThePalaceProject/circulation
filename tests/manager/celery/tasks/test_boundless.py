@@ -1,688 +1,301 @@
-import logging
-from datetime import timedelta
-from unittest.mock import MagicMock, create_autospec, patch
+from unittest.mock import call, create_autospec, patch
 
 import pytest
-from psycopg2.errors import DeadlockDetected
-from sqlalchemy.exc import OperationalError
-from sqlalchemy.orm.exc import ObjectDeletedError, StaleDataError
 
-from palace.manager.celery.task import Task
-from palace.manager.celery.tasks import boundless
-from palace.manager.celery.tasks.boundless import (
-    DEFAULT_BATCH_SIZE,
-    DEFAULT_START_TIME,
-    _redis_lock_list_identifiers_for_import,
-    import_all_collections,
-    import_identifiers,
-    list_identifiers_for_import,
-    reap_all_collections,
-    reap_collection,
-    timestamp,
-)
+from palace.manager.celery.importer import import_lock
+from palace.manager.celery.tasks import boundless, identifiers
 from palace.manager.core.exceptions import IntegrationException
-from palace.manager.data_layer.bibliographic import BibliographicData
-from palace.manager.data_layer.circulation import CirculationData
 from palace.manager.data_layer.identifier import IdentifierData
-from palace.manager.data_layer.policy.presentation import PresentationCalculationPolicy
 from palace.manager.integration.license.boundless.api import BoundlessApi
-from palace.manager.integration.license.boundless.requests import BoundlessRequests
-from palace.manager.sqlalchemy.model.collection import Collection
+from palace.manager.integration.license.boundless.importer import BoundlessImporter
+from palace.manager.service.logging.configuration import LogLevel
+from palace.manager.service.redis.models.lock import LockNotAcquired
+from palace.manager.service.redis.models.set import IdentifierSet
+from palace.manager.sqlalchemy.model.coverage import Timestamp
 from palace.manager.sqlalchemy.model.identifier import Identifier
-from palace.manager.sqlalchemy.model.work import Work
+from palace.manager.sqlalchemy.util import get_one
 from palace.manager.util.datetime_helpers import utc_now
-from palace.manager.util.http import BadResponseException
-from tests.fixtures.celery import CeleryFixture
+from tests.fixtures.celery import ApplyTaskFixture, CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
-from tests.fixtures.files import BoundlessFilesFixture
+from tests.fixtures.files import FilesFixture
 from tests.fixtures.http import MockHttpClientFixture
 from tests.fixtures.redis import RedisFixture
-from tests.fixtures.work import (
-    WorkIdPolicyQueuePresentationRecalculationFixture,
-)
-from tests.mocks.mock import MockRequestsResponse
+from tests.fixtures.services import ServicesFixture
 
 
-class QueueCollectionImportLockFixture:
-    def __init__(self, redis_fixture: RedisFixture, db: DatabaseTransactionFixture):
-        self.redis_fixture = redis_fixture
-        self.redis_client = redis_fixture.client
-        self.task = MagicMock()
-        self.task.request.root_id = "fake"
-        self.collection = db.collection(protocol=BoundlessApi)
-        self.task_lock = _redis_lock_list_identifiers_for_import(
-            self.redis_client, collection_id=self.collection.id
+class TestImportCollection:
+    def test_import_lock(
+        self,
+        celery_fixture: CeleryFixture,
+        redis_fixture: RedisFixture,
+        services_fixture: ServicesFixture,
+    ) -> None:
+        """
+        The import_collection task is protected by a lock, so only one import can run at a time.
+        """
+        mock_collection_id = 1234
+        redis = services_fixture.services.redis().client()
+        import_lock(redis, mock_collection_id).acquire()
+        with pytest.raises(LockNotAcquired):
+            boundless.import_collection.delay(collection_id=mock_collection_id).wait()
+
+    @pytest.mark.parametrize(
+        "return_identifiers, import_all",
+        [
+            pytest.param(True, True, id="return identifiers, import all"),
+            pytest.param(True, False, id="return identifiers, no import all"),
+            pytest.param(False, True, id="no return identifiers, import all"),
+            pytest.param(False, False, id="no return identifiers, no import all"),
+        ],
+    )
+    def test_parameters_passed_to_importer(
+        self,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        redis_fixture: RedisFixture,
+        services_fixture: ServicesFixture,
+        return_identifiers: bool,
+        import_all: bool,
+    ) -> None:
+        """
+        The import_collection task passes the correct parameters to the BoundlessImporter.
+        """
+        collection = db.collection(name="test_collection", protocol=BoundlessApi)
+        with (
+            patch.object(
+                boundless, "BoundlessImporter", autospec=BoundlessImporter
+            ) as mock_importer,
+            patch.object(boundless, "IdentifierSet") as mock_identifier_set,
+        ):
+            mock_importer.return_value.import_collection.return_value = None
+            boundless.import_collection.delay(
+                collection_id=collection.id,
+                import_all=import_all,
+                return_identifiers=return_identifiers,
+            ).wait()
+
+        if return_identifiers:
+            mock_identifier_set.assert_called_once()
+        else:
+            mock_identifier_set.assert_not_called()
+
+        registry = services_fixture.services.integration_registry().license_providers()
+
+        mock_importer.assert_called_once_with(
+            db.session,
+            collection,
+            registry,
+            import_all,
+            mock_identifier_set.return_value if return_identifiers else None,
         )
 
-
-@pytest.fixture
-def queue_collection_import_lock_fixture(
-    redis_fixture: RedisFixture, db: DatabaseTransactionFixture
-):
-    return QueueCollectionImportLockFixture(redis_fixture, db)
-
-
-def test_queue_collection_import_lock(
-    celery_fixture: CeleryFixture,
-    queue_collection_import_lock_fixture: QueueCollectionImportLockFixture,
-    caplog: pytest.LogCaptureFixture,
-):
-    set_caplog_level_to_info(caplog)
-    queue_collection_import_lock_fixture.task_lock.acquire()
-    list_identifiers_for_import.delay(
-        collection_id=queue_collection_import_lock_fixture.collection.id
-    ).wait()
-    assert "Skipping list_identifiers_for_import" in caplog.text
-
-
-def test_list_identifiers_for_import_configuration_error(
-    db: DatabaseTransactionFixture,
-    celery_fixture: CeleryFixture,
-    redis_fixture: RedisFixture,
-    caplog: pytest.LogCaptureFixture,
-):
-    collection = db.collection(name="test_collection", protocol=BoundlessApi)
-    with patch.object(boundless, "BoundlessApi") as mock_create_api:
-        mock_create_api.return_value.api_requests.refresh_bearer_token.side_effect = (
-            BadResponseException("service", "uh oh", MockRequestsResponse(401))
+    def test_full_import(
+        self,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        redis_fixture: RedisFixture,
+        apply_task_fixture: ApplyTaskFixture,
+        boundless_files_fixture: FilesFixture,
+        http_client: MockHttpClientFixture,
+    ) -> None:
+        """
+        Test a full import run from the task.
+        """
+        collection = db.collection(name="test_collection", protocol=BoundlessApi)
+        assert get_one(db.session, Timestamp, collection=collection) is None
+        http_client.queue_response(
+            200,
+            content=boundless_files_fixture.sample_text("token.json"),
         )
-        list_identifiers_for_import.delay(collection_id=collection.id).wait()
-    assert "Failed to authenticate with Boundless API" in caplog.text
+        http_client.queue_response(
+            200, content=boundless_files_fixture.sample_data("single_item.xml")
+        )
 
+        # The identifier that will be imported
+        expected_identifier = IdentifierData(
+            type=Identifier.AXIS_360_ID, identifier="0003642860"
+        )
 
-def test_list_identifiers_for_import_integration_error(
-    db: DatabaseTransactionFixture,
-    celery_fixture: CeleryFixture,
-    redis_fixture: RedisFixture,
-    caplog: pytest.LogCaptureFixture,
-):
-    collection = db.collection(name="test_collection", protocol=BoundlessApi)
-    test_ids = ["a", "b", "c"]
-    with patch.object(boundless, "BoundlessApi") as mock_create_api:
-        mock_create_api.return_value.recent_activity.side_effect = [
-            IntegrationException("service", "uh oh"),
-            generate_test_bibliographic_and_circulation_objects(test_ids),
-        ]
-        result_test_ids = list_identifiers_for_import.delay(
-            collection_id=collection.id
+        identifiers_kwargs = boundless.import_collection.delay(
+            collection_id=collection.id,
+            import_all=True,
+            return_identifiers=True,
         ).wait()
-        assert result_test_ids == test_ids
-    assert (
-        "Something unexpected went wrong while retrieving a batch of titles"
-        in caplog.text
-    )
+
+        # Check that we would have queued up the expected apply tasks.
+        assert len(apply_task_fixture.apply_queue) == 1
+        apply_task_fixture.process_apply_queue()
+
+        # A LicensePool was created. We know both how many copies of this
+        # book are available, and what formats it's available in.
+        [pool] = apply_task_fixture.get_pools()
+
+        assert pool.identifier.type == expected_identifier.type
+        assert pool.identifier.identifier == expected_identifier.identifier
+
+        assert pool.licenses_owned == 9
+        [lpdm] = pool.delivery_mechanisms
+        assert (
+            lpdm.delivery_mechanism.name
+            == "application/epub+zip (application/vnd.adobe.adept+xml)"
+        )
+
+        # A Work was created and made presentation ready.
+        assert pool.work.title == "Faith of My Fathers : A Family Memoir"
+        assert pool.work.presentation_ready is True
+
+        # We returned an IdentifierSet with one identifier in it.
+        assert isinstance(identifiers_kwargs, dict)
+        identifier_set = IdentifierSet(redis_fixture.client, **identifiers_kwargs)
+        assert identifier_set.get() == {expected_identifier}
+
+        # We created a Timestamp for this import.
+        timestamp = get_one(db.session, Timestamp, collection=collection)
+        assert timestamp is not None
+        assert timestamp.start is not None
+        assert timestamp.finish is not None
+        assert timestamp.start <= timestamp.finish <= utc_now()
+
+        # If we do the exact same import again, nothing new happens.
+        http_client.queue_response(
+            200,
+            content=boundless_files_fixture.sample_text("token.json"),
+        )
+        http_client.queue_response(
+            200, content=boundless_files_fixture.sample_data("single_item.xml")
+        )
+        assert (
+            boundless.import_collection.delay(
+                collection_id=collection.id,
+                import_all=False,
+                return_identifiers=False,
+            ).wait()
+            is None
+        )
+        assert len(apply_task_fixture.apply_queue) == 0
+
+    def test_retry_due_to_integration_exception(
+        self,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        redis_fixture: RedisFixture,
+        apply_task_fixture: ApplyTaskFixture,
+        boundless_files_fixture: FilesFixture,
+        http_client: MockHttpClientFixture,
+    ):
+        collection = db.collection(name="test_collection", protocol=BoundlessApi)
+        expected_result = [1, 2, 3]
+
+        with (
+            celery_fixture.patch_retry_backoff() as retries,
+            patch.object(boundless, "BoundlessImporter") as mock_create_importer,
+        ):
+            mock_importer = create_autospec(BoundlessImporter)
+            mock_create_importer.return_value = mock_importer
+            mock_importer.import_collection.side_effect = [
+                IntegrationException("Temporary failure"),
+                IntegrationException("Another Temporary failure"),
+                expected_result,
+            ]
+
+            assert (
+                boundless.import_collection.delay(
+                    collection_id=collection.id,
+                ).wait()
+                == expected_result
+            )
+
+        assert retries.retry_count == 2
+        assert mock_importer.import_collection.call_count == 3
 
 
-def set_caplog_level_to_info(caplog):
-    caplog.set_level(
-        logging.INFO,
-        "palace.manager.celery.tasks.boundless",
-    )
-
-
+@pytest.mark.parametrize(
+    "import_all",
+    [
+        pytest.param(True, id="import all flag"),
+        pytest.param(False, id="no import all flag"),
+    ],
+)
 def test_import_all_collections(
     db: DatabaseTransactionFixture,
     celery_fixture: CeleryFixture,
     caplog: pytest.LogCaptureFixture,
+    import_all: bool,
 ):
-    set_caplog_level_to_info(caplog)
-    db.default_collection()
-    collection2 = db.collection(name="test_collection", protocol=BoundlessApi.label())
-    with patch.object(
-        boundless, "list_identifiers_for_import"
-    ) as mock_list_identifiers_for_import:
-        import_all_collections.delay().wait()
+    caplog.set_level(LogLevel.info)
+    decoy_collection = db.default_collection()
+    collection1 = db.collection(protocol=BoundlessApi)
+    collection2 = db.collection(protocol=BoundlessApi)
+    with patch.object(boundless, "import_collection") as import_collection:
+        boundless.import_all_collections.delay(import_all=import_all).wait()
 
-        assert mock_list_identifiers_for_import.apply_async.call_count == 1
-        import_args = {
-            "kwargs": {"collection_id": collection2.id},
-            "countdown": 0,
-            "link": import_identifiers.s(
-                collection_id=collection2.id,
-                batch_size=DEFAULT_BATCH_SIZE,
-            ),
-        }
-        assert (
-            mock_list_identifiers_for_import.apply_async.call_args_list[0].kwargs
-            == import_args
-        )
-        assert "Finished queuing 1 collection." in caplog.text
-
-
-def test_timestamp(db: DatabaseTransactionFixture):
-    c1 = db.default_collection()
-    ts1 = timestamp(
-        _db=db.session,
-        collection=c1,
-        service_name="test task",
-        default_start_time=DEFAULT_START_TIME,
+    import_collection.s.assert_called_once_with(import_all=import_all)
+    import_collection.s.return_value.delay.assert_has_calls(
+        [call(collection_id=collection1.id), call(collection_id=collection2.id)],
+        any_order=True,
     )
-
-    assert ts1.start == DEFAULT_START_TIME
-    assert ts1.finish is None
-
-    ts2 = timestamp(
-        _db=db.session,
-        collection=c1,
-        service_name="test task",
-        default_start_time=DEFAULT_START_TIME,
-    )
-
-    assert ts1.id == ts2.id
-
-    ts2.start = utc_now() - timedelta(days=1)
-    ts2.finish = utc_now()
-    ts3 = timestamp(
-        _db=db.session,
-        collection=c1,
-        service_name="test task",
-        default_start_time=DEFAULT_START_TIME,
-    )
-
-    assert ts2.id == ts3.id
-    assert ts3.start != DEFAULT_START_TIME
-    assert ts3.finish is not None
+    assert "Queued 2 collections for import." in caplog.text
 
 
-def test_list_identifiers_for_import(
-    db: DatabaseTransactionFixture,
-    celery_fixture: CeleryFixture,
-    queue_collection_import_lock_fixture: QueueCollectionImportLockFixture,
-    caplog: pytest.LogCaptureFixture,
-):
-    set_caplog_level_to_info(caplog)
-    collection = db.collection(name="test_collection", protocol=BoundlessApi.label())
-    mock_api = MagicMock()
-    current_time = utc_now()
-    test_ids = ["a", "b", "c"]
-    mock_api.recent_activity.return_value = (
-        generate_test_bibliographic_and_circulation_objects(test_ids)
-    )
-    with patch.object(boundless, "BoundlessApi") as mock_create_api:
-        mock_create_api.return_value = mock_api
-        identifiers = list_identifiers_for_import.delay(
-            collection_id=collection.id
-        ).get(timeout=100)
-        assert identifiers == ["a", "b", "c"]
-
-    ts = timestamp(
-        _db=db.session,
-        collection=collection,
-        service_name="palace.manager.celery.tasks.boundless.list_identifiers_for_import",
-        default_start_time=DEFAULT_START_TIME,
-    )
-
-    assert ts.start and ts.start > current_time
-    assert not queue_collection_import_lock_fixture.task_lock.locked()
-    assert mock_api.recent_activity.call_count == 1
-    assert mock_api.recent_activity.call_args[0][0] == boundless.DEFAULT_START_TIME
-    assert "Finished listing identifiers in collection" in caplog.text
-
-
-def generate_test_bibliographic_and_circulation_objects(
-    test_ids: list[str],
-) -> list[tuple[BibliographicData, CirculationData]]:
-    metadata_and_circulation_data_list = []
-    for id in test_ids:
-        data_source = "data_source"
-        identifier = IdentifierData(type=Identifier.AXIS_360_ID, identifier=id)
-        metadata_and_circulation_data_list.append(
-            (
-                BibliographicData(
-                    data_source_name=data_source, primary_identifier_data=identifier
-                ),
-                CirculationData(
-                    data_source_name=data_source, primary_identifier_data=identifier
-                ),
-            )
-        )
-    return metadata_and_circulation_data_list
-
-
-def test_import_items(
-    db: DatabaseTransactionFixture,
-    celery_fixture: CeleryFixture,
-    queue_collection_import_lock_fixture: QueueCollectionImportLockFixture,
-    caplog: pytest.LogCaptureFixture,
-):
-    set_caplog_level_to_info(caplog)
-    collection = db.collection(name="test_collection", protocol=BoundlessApi.label())
-
-    mock_api = MagicMock()
-    with (patch.object(boundless, "BoundlessApi") as mock_create_api,):
-        mock_create_api.return_value = mock_api
-        edition_1, lp_1 = db.edition(with_license_pool=True)
-        edition_2, lp_2 = db.edition(with_license_pool=True)
-        title_ids = [x.primary_identifier.identifier for x in [edition_1, edition_2]]
-        mock_api.availability_by_title_ids.return_value = (
-            generate_test_bibliographic_and_circulation_objects(title_ids)
-        )
-        identifiers = [x.primary_identifier.identifier for x in [edition_1, edition_2]]
-        mock_api.update_book.side_effect = [
-            (edition_1, False, lp_1, False),
-            (edition_2, False, lp_2, False),
-        ]
-        import_identifiers.delay(
-            collection_id=collection.id, identifiers=identifiers, batch_size=25
-        ).wait()
-
-    assert mock_api.availability_by_title_ids.call_count == 1
-    assert mock_api.availability_by_title_ids.call_args.kwargs["title_ids"] == title_ids
-    assert mock_api.update_book.call_count == 2
-
-    assert f"Edition (id={edition_1.id}" in caplog.text
-    assert (
-        f"Finished importing identifiers for collection ({collection.name}, id={collection.id})"
-        in caplog.text
-    )
-    assert (
-        f"Import run complete for collection ({collection.name}, id={collection.id}:  {len(title_ids)} identifiers imported successfully"
-        in caplog.text
-    )
-
-
-def test_import_identifiers_with_requeue(
-    db: DatabaseTransactionFixture,
-    celery_fixture: CeleryFixture,
-    queue_collection_import_lock_fixture: QueueCollectionImportLockFixture,
-    caplog: pytest.LogCaptureFixture,
-):
-    set_caplog_level_to_info(caplog)
-    collection = db.collection(name="test_collection", protocol=BoundlessApi.label())
-
-    mock_api = MagicMock()
-    with (patch.object(boundless, "BoundlessApi") as mock_create_api,):
-        mock_create_api.return_value = mock_api
-        edition_1, lp_1 = db.edition(with_license_pool=True)
-        edition_2, lp_2 = db.edition(with_license_pool=True)
-        title_ids = [x.primary_identifier.identifier for x in [edition_1, edition_2]]
-        mock_api.availability_by_title_ids.return_value = (
-            generate_test_bibliographic_and_circulation_objects(title_ids[0:1])
-        )
-        identifiers = [x.primary_identifier.identifier for x in [edition_1, edition_2]]
-        mock_api.update_book.side_effect = [
-            (edition_1, False, lp_1, False),
-            (edition_2, False, lp_2, False),
-        ]
-
-        import_identifiers.delay(
-            identifiers=identifiers,
-            collection_id=collection.id,
-            batch_size=1,
-        ).wait()
-
-    assert mock_api.availability_by_title_ids.call_count == 2
-    assert (
-        mock_api.availability_by_title_ids.call_args_list[0].kwargs["title_ids"]
-        == title_ids[0:1]
-    )
-    assert (
-        mock_api.availability_by_title_ids.call_args_list[1].kwargs["title_ids"]
-        == title_ids[1:]
-    )
-    assert mock_api.update_book.call_count == 2
-
-    assert f"Edition (id={edition_1.id}" in caplog.text
-    assert f"Finished run" not in caplog.text
-    assert f"Imported {2} identifiers"
-    assert f"Replacing task to continue importing remaining 1 identifier" in caplog.text
-
-
+@pytest.mark.parametrize(
+    "import_all",
+    [
+        pytest.param(True, id="import all flag"),
+        pytest.param(False, id="no import all flag"),
+    ],
+)
 def test_reap_all_collections(
     db: DatabaseTransactionFixture,
     celery_fixture: CeleryFixture,
     caplog: pytest.LogCaptureFixture,
+    import_all: bool,
 ):
-    set_caplog_level_to_info(caplog)
-    db.default_collection()
-    collection2 = db.collection(name="test_collection", protocol=BoundlessApi.label())
-    with patch.object(boundless, "reap_collection") as mock_reap_collection:
-        reap_all_collections.delay().wait()
+    caplog.set_level(LogLevel.info)
+    decoy_collection = db.default_collection()
+    collection1 = db.collection(protocol=BoundlessApi)
+    collection2 = db.collection(protocol=BoundlessApi)
+    with patch.object(boundless, "import_and_reap_not_found_chord") as mock_reap:
+        boundless.reap_all_collections.delay(import_all=import_all).wait()
 
-        assert mock_reap_collection.apply_async.call_count == 1
-        reap_collection_args = {
-            "kwargs": {
-                "collection_id": collection2.id,
-            },
-            "countdown": 0,
-        }
-
-        assert (
-            mock_reap_collection.apply_async.call_args_list[0].kwargs
-            == reap_collection_args
-        )
-        assert "Finished queuing all reap_collection tasks" in caplog.text
-
-
-def test_reap_collection_configuration_error(
-    db: DatabaseTransactionFixture,
-    celery_fixture: CeleryFixture,
-    queue_collection_import_lock_fixture: QueueCollectionImportLockFixture,
-    caplog: pytest.LogCaptureFixture,
-):
-    collection = db.collection(name="test_collection", protocol=BoundlessApi.label())
-    db.edition(
-        with_license_pool=True,
-        identifier_type=Identifier.AXIS_360_ID,
-        collection=collection,
+    mock_reap.assert_has_calls(
+        [
+            call(collection_id=collection1.id, import_all=import_all),
+            call(collection_id=collection2.id, import_all=import_all),
+        ],
+        any_order=True,
     )
 
-    with patch.object(boundless, "BoundlessApi") as mock_create_api:
-        mock_create_api.return_value.api_requests.refresh_bearer_token.side_effect = (
-            BadResponseException("service", "uh oh", MockRequestsResponse(401))
-        )
-        reap_collection.delay(collection_id=collection.id).wait()
+    assert mock_reap.return_value.delay.call_count == 2
 
-    assert "Failed to authenticate with Boundless API" in caplog.text
-
-
-def test_reap_collection_with_requeue(
-    db: DatabaseTransactionFixture,
-    celery_fixture: CeleryFixture,
-    queue_collection_import_lock_fixture: QueueCollectionImportLockFixture,
-    caplog: pytest.LogCaptureFixture,
-):
-    set_caplog_level_to_info(caplog)
-    collection = db.collection(name="test_collection", protocol=BoundlessApi.label())
-    editions = []
-    for i in range(0, 3):
-        edition, lp = db.edition(
-            with_license_pool=True,
-            identifier_type=Identifier.AXIS_360_ID,
-            collection=collection,
-        )
-        editions.append(edition)
-
-    identifiers = [x.primary_identifier for x in editions]
-    mock_api = MagicMock()
-    with patch.object(boundless, "BoundlessApi") as mock_create_api:
-        mock_create_api.return_value = mock_api
-
-        reap_collection.delay(collection_id=collection.id, batch_size=2).wait()
-
-        update_license_pools = mock_api.update_licensepools_for_identifiers
-        assert update_license_pools.call_count == 2
-
-        assert update_license_pools.call_args_list[0].kwargs == {
-            "identifiers": identifiers[0:2]
-        }
-        assert update_license_pools.call_args_list[1].kwargs == {
-            "identifiers": identifiers[2:]
-        }
-        assert f"Re-queuing reap_collection task at offset=2" in caplog.text
+    for collection in [collection1, collection2]:
         assert (
-            f'Reaping of collection (name="{collection.name}", id={collection.id}) complete.'
+            f'Queued collection("{collection.name}" [id={collection.id}] for reaping...'
             in caplog.text
         )
+    assert "Finished queuing all collection reaping tasks" in caplog.text
 
 
-def test_retry_import_identifiers_due_to_integration_exception(
-    db: DatabaseTransactionFixture,
-    celery_fixture: CeleryFixture,
-    queue_collection_import_lock_fixture: QueueCollectionImportLockFixture,
-):
-    collection = db.collection(name="test_collection", protocol=BoundlessApi.label())
-
-    edition, licensepool = db.edition(
-        collection=collection,
-        with_license_pool=True,
-        identifier_type=Identifier.AXIS_360_ID,
-        identifier_id="012345678",
-    )
-
-    mock_api = MagicMock()
-    with patch.object(boundless, "BoundlessApi") as mock_create_api:
-        mock_create_api.return_value = mock_api
-        edition, lp = db.edition(with_license_pool=True)
-
-        mock_api.availability_by_title_ids.side_effect = [
-            IntegrationException("not a 401 error"),
-            [
-                (
-                    {},
-                    {},
-                )
-            ],
-        ]
-
-        mock_api.update_book.return_value = (edition, False, licensepool, False)
-
-        import_identifiers.delay(
-            collection_id=collection.id,
-            identifiers=[edition.primary_identifier.identifier],
-        ).wait()
-
-        assert mock_api.availability_by_title_ids.call_count == 2
-        assert mock_api.update_book.call_count == 1
-
-
-@pytest.mark.parametrize(
-    "error, update_count, no_retry_expected",
-    [
-        [ObjectDeletedError(None), 2, False],
-        [StaleDataError(None), 2, False],
-        [OperationalError(params={}, orig=DeadlockDetected(), statement=""), 2, False],
+class TestImportAndReapNotFoundChord:
+    @pytest.mark.parametrize(
+        "import_all",
         [
-            OperationalError(params={}, orig=Exception("other db issue"), statement=""),
-            1,
-            True,
+            pytest.param(True, id="import all flag"),
+            pytest.param(False, id="no import all flag"),
         ],
-    ],
-)
-def test_retry_import_identifiers(
-    db: DatabaseTransactionFixture,
-    celery_fixture: CeleryFixture,
-    queue_collection_import_lock_fixture: QueueCollectionImportLockFixture,
-    caplog: pytest.LogCaptureFixture,
-    error: Exception,
-    update_count: int,
-    no_retry_expected: bool,
-):
-    set_caplog_level_to_info(caplog)
-    collection = db.collection(protocol=BoundlessApi.label())
-
-    edition, licensepool = db.edition(
-        collection=collection,
-        with_license_pool=True,
-        identifier_type=Identifier.AXIS_360_ID,
     )
+    def test_import_and_reap_not_found_chord(self, import_all: bool) -> None:
+        """Test the import and reap not found chord."""
+        # Reap the collection
+        collection_id = 12  # Example collection ID
+        with (
+            patch.object(identifiers, "create_mark_unavailable_chord") as mock_chord,
+            patch.object(boundless, "import_collection") as mock_import,
+        ):
+            boundless.import_and_reap_not_found_chord(
+                collection_id=collection_id, import_all=import_all
+            )
 
-    mock_api = MagicMock()
-    with patch.object(boundless, "BoundlessApi") as mock_create_api:
-        mock_create_api.return_value = mock_api
-        edition, lp = db.edition(with_license_pool=True)
-
-        mock_api.availability_by_title_ids.return_value = [({}, {})]
-
-        mock_api.update_book.side_effect = [
-            error,
-            (edition, False, licensepool, False),
-        ]
-
-        if no_retry_expected:
-            # expect an exception if non-deadlock
-            with pytest.raises(Exception):
-                import_identifiers.delay(
-                    collection_id=collection.id,
-                    identifiers=[edition.primary_identifier.identifier],
-                ).wait()
-        else:
-            import_identifiers.delay(
-                collection_id=collection.id,
-                identifiers=[edition.primary_identifier.identifier],
-            ).wait()
-
-        assert mock_api.update_book.call_count == update_count
-
-
-@pytest.mark.parametrize(
-    "error, update_count, no_retry_expected",
-    [
-        [IntegrationException("non-auth issue"), 2, False],
-        [OperationalError(params={}, orig=DeadlockDetected(), statement=""), 2, False],
-        [
-            OperationalError(params={}, orig=Exception("other db issue"), statement=""),
-            1,
-            True,
-        ],
-    ],
-)
-def test_retry_reap_collection(
-    db: DatabaseTransactionFixture,
-    celery_fixture: CeleryFixture,
-    queue_collection_import_lock_fixture: QueueCollectionImportLockFixture,
-    caplog: pytest.LogCaptureFixture,
-    error: Exception,
-    update_count: int,
-    no_retry_expected: bool,
-):
-    set_caplog_level_to_info(caplog)
-    collection = db.collection(protocol=BoundlessApi.label())
-    db.edition(
-        with_license_pool=True,
-        identifier_type=Identifier.AXIS_360_ID,
-        collection=collection,
-    )
-
-    mock_api = MagicMock()
-    mock_api.update_licensepools_for_identifiers.side_effect = [
-        error,  # first time throw error
-        None,  # second call is successful
-    ]
-
-    with patch.object(boundless, "BoundlessApi") as mock_create_api:
-        mock_create_api.return_value = mock_api
-
-        if no_retry_expected:
-            with pytest.raises(Exception):
-                reap_collection.delay(collection_id=collection.id, batch_size=1).wait()
-        else:
-            reap_collection.delay(collection_id=collection.id, batch_size=1).wait()
-
-        update_license_pools = mock_api.update_licensepools_for_identifiers
-        assert update_license_pools.call_count == update_count
-
-
-def test_process_item_creates_presentation_ready_work(
-    boundless_files_fixture: BoundlessFilesFixture,
-    db: DatabaseTransactionFixture,
-    http_client: MockHttpClientFixture,
-    celery_fixture: CeleryFixture,
-    work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
-):
-    """Test the normal workflow where we ask for data,
-    Boundless provides it, and we create a presentation-ready work.
-    """
-    library = db.default_library()
-    collection = db.collection(protocol=BoundlessApi, library=library)
-    http_client.queue_response(
-        200, content=boundless_files_fixture.sample_data("token.json")
-    )
-    http_client.queue_response(
-        200, content=boundless_files_fixture.sample_data("single_item.xml")
-    )
-
-    # Here's the book mentioned in single_item.xml.
-    identifier = db.identifier(identifier_type=Identifier.AXIS_360_ID)
-    identifier.identifier = "0003642860"
-
-    # This book has no LicensePool.
-    assert [] == identifier.licensed_through
-
-    import_identifiers.delay(
-        collection_id=collection.id, identifiers=[identifier.identifier]
-    ).wait()
-
-    assert work_policy_recalc_fixture.is_queued(
-        identifier.work.id,
-        PresentationCalculationPolicy.recalculate_everything(),
-    )
-
-    # A LicensePool was created. We know both how many copies of this
-    # book are available, and what formats it's available in.
-    [pool] = identifier.licensed_through
-    assert 9 == pool.licenses_owned
-    [lpdm] = pool.delivery_mechanisms
-    assert (
-        "application/epub+zip (application/vnd.adobe.adept+xml)"
-        == lpdm.delivery_mechanism.name
-    )
-
-    # A Work was created and made presentation ready.
-    assert "Faith of My Fathers : A Family Memoir" == pool.work.title
-    assert pool.work.presentation_ready is True
-
-
-def test_transient_failure_if_requested_book_not_mentioned(
-    boundless_files_fixture: BoundlessFilesFixture,
-    db: DatabaseTransactionFixture,
-    http_client: MockHttpClientFixture,
-    celery_fixture: CeleryFixture,
-    work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
-):
-    """Test an unrealistic case where we ask Boundless about one book and
-    it tells us about a totally different book.
-    """
-    library = db.default_library()
-    collection = db.collection(protocol=BoundlessApi, library=library)
-
-    # We're going to ask about abcdef
-    identifier = db.identifier(identifier_type=Identifier.AXIS_360_ID)
-    identifier.identifier = "abcdef"
-
-    # But we're going to get told about 0003642860.
-    http_client.queue_response(
-        200, content=boundless_files_fixture.sample_data("token.json")
-    )
-    data = boundless_files_fixture.sample_data("single_item.xml")
-    http_client.queue_response(200, content=data)
-
-    import_identifiers.delay(
-        collection_id=collection.id, identifiers=[identifier.identifier]
-    ).wait()
-
-    # And nothing major was done about the book we were told
-    # about. We created an Identifier record for its identifier,
-    # but no LicensePool or Edition.
-    wrong_identifier = Identifier.for_foreign_id(
-        db.session, Identifier.AXIS_360_ID, "0003642860"
-    )
-    assert [] == identifier.licensed_through
-    assert [] == identifier.primarily_identifies
-
-    work = Work.from_identifiers(_db=db.session, identifiers=[identifier])
-    assert work_policy_recalc_fixture.queue_size() == 1
-
-
-def test__check_api_credentials():
-    mock_task = create_autospec(Task)
-    mock_collection = create_autospec(Collection)
-    mock_api_requests = create_autospec(BoundlessRequests)
-
-    # If api.bearer_token() runs successfully, the function should return True
-    assert (
-        boundless._check_api_credentials(mock_task, mock_collection, mock_api_requests)
-        is True
-    )
-    mock_api_requests.refresh_bearer_token.assert_called_once()
-
-    # If a BadResponseException is raised with a 401 status code, the function should return False
-    mock_api_requests.refresh_bearer_token.side_effect = BadResponseException(
-        "service", "uh oh", MockRequestsResponse(401)
-    )
-    assert (
-        boundless._check_api_credentials(mock_task, mock_collection, mock_api_requests)
-        is False
-    )
-
-    # If a BadResponseException is raised with a status code other than 401, the function should raise the exception
-    mock_api_requests.refresh_bearer_token.side_effect = BadResponseException(
-        "service", "uh oh", MockRequestsResponse(500)
-    )
-    with pytest.raises(BadResponseException):
-        boundless._check_api_credentials(mock_task, mock_collection, mock_api_requests)
-
-    # Any other exception should be raised
-    mock_api_requests.refresh_bearer_token.side_effect = ValueError
-    with pytest.raises(ValueError):
-        boundless._check_api_credentials(mock_task, mock_collection, mock_api_requests)
+        mock_import.s.assert_called_once_with(
+            collection_id=collection_id, import_all=import_all, return_identifiers=True
+        )
+        mock_chord.assert_called_once_with(collection_id, mock_import.s.return_value)

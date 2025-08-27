@@ -244,6 +244,7 @@ class BibliographicParser(LoggerMixin):
             licenses_available=title.availability.available_copies,
             licenses_reserved=0,
             patrons_in_hold_queue=title.availability.holds_queue_size,
+            last_checked=title.availability.update_date,
         )
 
         bibliographic = BibliographicData(
@@ -262,6 +263,11 @@ class BibliographicParser(LoggerMixin):
             links=cls._extract_links(title),
             circulation=circulationdata,
             duration=title.runtime,
+            # This isn't 100% accurate, we don't get a last updated
+            # date for the bibliographic metadata, just the availability
+            # information, but it should suffice to keep track of
+            # whether something has changed.
+            data_source_last_updated=title.availability.update_date,
         )
         return bibliographic, circulationdata
 

@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import datetime
+from collections.abc import Generator
+from contextlib import contextmanager
 from typing import TYPE_CHECKING, Literal
 
 from sqlalchemy import (
@@ -18,6 +20,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, relationship
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import and_, literal, literal_column, or_
+from typing_extensions import Self
 
 from palace.manager.sqlalchemy.bulk_operation import SessionBulkOperation
 from palace.manager.sqlalchemy.model.base import Base
@@ -311,6 +314,48 @@ class Timestamp(Base):
             achievements=self.achievements,
             counter=self.counter,
         )
+
+    @property
+    def elapsed(self) -> datetime.timedelta | None:
+        """The amount of time that elapsed between the start and finish of the
+        service's last run, if both are known.
+        """
+        if self.start is None:
+            return None
+
+        finish = utc_now() if self.finish is None else self.finish
+        return finish - self.start
+
+    @property
+    def elapsed_seconds(self) -> float | None:
+        """
+        The amount of time that elapsed between the start and finish of the
+        service's last run, if both are known.
+
+        This is a float value measured in seconds. If possible we retain
+        microsecond precision.
+        """
+        elapsed = self.elapsed
+        if elapsed is None:
+            return None
+
+        return elapsed / datetime.timedelta(microseconds=1) / 1_000_000
+
+    @contextmanager
+    def recording(self) -> Generator[Self]:
+        """Context manager that records the start and finish times of a
+        service's run, and captures any exception that occurs.
+        """
+        self.start = utc_now()
+        self.finish = None
+        self.exception = None
+        try:
+            yield self
+        except Exception as e:
+            self.exception = str(e)
+            raise
+        finally:
+            self.finish = utc_now()
 
     __table_args__ = (UniqueConstraint("service", "collection_id"),)
 
