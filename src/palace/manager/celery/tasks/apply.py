@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 from datetime import timedelta
 from functools import partial
+from typing import Any, Protocol
 
 from celery import shared_task
 
@@ -106,3 +109,41 @@ def bibliographic_apply(
         bibliographic.apply(
             session, edition, collection, replace, create_coverage_record=False
         )
+
+
+class ApplyBibliographicCallable(Protocol):
+    """
+    A callable that applies bibliographic data to the system.
+
+    For example, this could be the signature of a Celery task that processes
+    bibliographic data and updates the database accordingly:
+    apply.bibliographic_apply.delay
+    """
+
+    def __call__(
+        self,
+        bibliographic: BibliographicData,
+        /,
+        *,
+        collection_id: int,
+        replace: ReplacementPolicy | None = None,
+    ) -> Any: ...
+
+
+class ApplyCirculationCallable(Protocol):
+    """
+    A callable that applies circulation data to the system.
+
+    For example, this could be the signature of a Celery task that processes
+    circulation data and updates the database accordingly:
+    apply.circulation_apply.delay
+    """
+
+    def __call__(
+        self,
+        circulation: CirculationData,
+        /,
+        *,
+        collection_id: int,
+        replace: ReplacementPolicy | None = None,
+    ) -> Any: ...
