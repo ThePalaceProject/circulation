@@ -6,7 +6,7 @@ import datetime
 import logging
 from collections.abc import Sequence
 from enum import IntEnum, auto
-from typing import TYPE_CHECKING, Literal, NamedTuple, overload
+from typing import TYPE_CHECKING, Any, Literal, NamedTuple, overload
 
 from frozendict import frozendict
 from sqlalchemy import (
@@ -386,37 +386,38 @@ class LicensePool(Base):
     @overload
     def for_foreign_id(
         self,
-        _db,
-        data_source,
-        foreign_id_type,
-        foreign_id,
-        rights_status=None,
-        collection=None,
+        _db: Session,
+        data_source: DataSource | str,
+        foreign_id_type: str,
+        foreign_id: str,
+        rights_status: str | None = ...,
+        collection: Collection | None = ...,
+        autocreate: Literal[True] = ...,
     ) -> tuple[LicensePool, bool]: ...
 
     @classmethod
     @overload
     def for_foreign_id(
         self,
-        _db,
-        data_source,
-        foreign_id_type,
-        foreign_id,
-        rights_status,
-        collection,
-        autocreate: Literal[False],
+        _db: Session,
+        data_source: DataSource | str,
+        foreign_id_type: str,
+        foreign_id: str,
+        rights_status: str | None = ...,
+        collection: Collection | None = ...,
+        autocreate: bool = ...,
     ) -> tuple[LicensePool | None, bool]: ...
 
     @classmethod
     def for_foreign_id(
         self,
-        _db,
-        data_source,
-        foreign_id_type,
-        foreign_id,
-        rights_status=None,
-        collection=None,
-        autocreate=True,
+        _db: Session,
+        data_source: DataSource | str,
+        foreign_id_type: str,
+        foreign_id: str,
+        rights_status: str | None = None,
+        collection: Collection | None = None,
+        autocreate: bool = True,
     ) -> tuple[LicensePool | None, bool]:
         """Find or create a LicensePool for the given foreign ID."""
         from palace.manager.sqlalchemy.model.collection import CollectionMissing
@@ -428,18 +429,19 @@ class LicensePool(Base):
 
         # Get the DataSource.
         if isinstance(data_source, str):
-            data_source = DataSource.lookup(_db, data_source)
-
-        active_foreign_id_type = Identifier.get_active_type(foreign_id_type)
-        active_primary_identifier_type = Identifier.get_active_type(
-            data_source.primary_identifier_type
-        )
+            data_source_or_none = DataSource.lookup(
+                _db, data_source, autocreate=autocreate
+            )
+            if data_source_or_none is None:
+                return None, False
+            data_source = data_source_or_none
 
         # The type of the foreign ID must be the primary identifier
         # type for the data source.
         if (
-            data_source.primary_identifier_type
-            and active_foreign_id_type != active_primary_identifier_type
+            data_source.primary_identifier_type is not None
+            and Identifier.get_active_type(foreign_id_type)
+            != Identifier.get_active_type(data_source.primary_identifier_type)
         ):
             raise ValueError(
                 "License pools for data source '%s' are keyed to "
@@ -452,9 +454,15 @@ class LicensePool(Base):
             )
 
         # Get the Identifier.
-        identifier, ignore = Identifier.for_foreign_id(_db, foreign_id_type, foreign_id)
+        identifier, ignore = Identifier.for_foreign_id(
+            _db, foreign_id_type, foreign_id, autocreate=autocreate
+        )
+        if identifier is None:
+            return None, False
 
-        kw = dict(data_source=data_source, identifier=identifier, collection=collection)
+        kw: dict[str, Any] = dict(
+            data_source=data_source, identifier=identifier, collection=collection
+        )
         if rights_status:
             kw["rights_status"] = rights_status
 

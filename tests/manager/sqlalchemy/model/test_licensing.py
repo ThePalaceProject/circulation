@@ -693,6 +693,76 @@ class TestLicensePool:
         assert pool is not None
         assert pool.identifier.type == Identifier.GUTENBERG_ID
 
+    def test_for_foreign_id_with_autocreate_false(self, db: DatabaseTransactionFixture):
+        # If autocreate is False, we get None back when no LicensePool
+        # exists.
+        source = "test data source"
+        id_type = "test identifier type"
+        identifier = db.fresh_str()
+        collection = db.default_collection()
+
+        pool, was_new = LicensePool.for_foreign_id(
+            db.session,
+            source,
+            id_type,
+            identifier,
+            collection=collection,
+            autocreate=False,
+        )
+        assert pool is None
+        assert was_new is False
+
+        # The call did not create the datasource or identifier.
+        assert DataSource.lookup(db.session, source, autocreate=False) is None
+        assert Identifier.for_foreign_id(
+            db.session, id_type, identifier, autocreate=False
+        ) == (None, False)
+
+        # Create the datasource, but not the identifier
+        DataSource.lookup(db.session, source, autocreate=True)
+
+        # The call should still return None because the identifier doesn't exist, and it should not
+        # create the identifier.
+        pool, was_new = LicensePool.for_foreign_id(
+            db.session,
+            source,
+            id_type,
+            identifier,
+            collection=collection,
+            autocreate=False,
+        )
+        assert pool is None
+        assert was_new is False
+
+        # The call did not create the identifier
+        assert Identifier.for_foreign_id(
+            db.session, id_type, identifier, autocreate=False
+        ) == (None, False)
+
+        # Create the licensepool
+        LicensePool.for_foreign_id(
+            db.session,
+            source,
+            id_type,
+            identifier,
+            collection=collection,
+        )
+
+        pool, was_new = LicensePool.for_foreign_id(
+            db.session,
+            source,
+            id_type,
+            identifier,
+            collection=collection,
+            autocreate=False,
+        )
+        assert pool is not None
+        assert was_new is False
+
+        assert pool.identifier.type == id_type
+        assert pool.identifier.identifier == identifier
+        assert pool.data_source.name == source
+
     def test_with_no_delivery_mechanisms(self, db: DatabaseTransactionFixture):
         # LicensePool.with_no_delivery_mechanisms returns a
         # query that finds all LicensePools which are missing

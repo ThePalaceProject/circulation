@@ -48,10 +48,12 @@ class TestCirculationEvent:
         # Identify the source of the event.
         source_name = data["source"]
         source = DataSource.lookup(db.session, source_name)
+        assert source is not None
 
         # Identify which LicensePool the event is talking about.
         foreign_id = data["id"]
         identifier_type = source.primary_identifier_type
+        assert identifier_type is not None
         collection = data["collection"]
 
         license_pool, was_new = LicensePool.for_foreign_id(
