@@ -852,6 +852,22 @@ class TestBibliographicData:
         # the contributions should change because the contributor will not be removed.
         assert bibliographic.update_contributions(_db=db.session, edition=edition)
 
+        # now specify a contributor with a sort name but no display_name
+        contributor = ContributorData(
+            display_name="",
+            sort_name="test",
+            roles=[Contributor.Role.PRIMARY_AUTHOR],
+        )
+
+        bibliographic = BibliographicData(
+            data_source_name=DataSource.OVERDRIVE, contributors=[contributor]
+        )
+
+        edition2 = db.edition()
+        # the contributions should change because the contributor will not be removed. Why not?
+        # Because a display name is not required if a sort name is provided.
+        assert bibliographic.update_contributions(_db=db.session, edition=edition2)
+
     def test_bibliographic_data_can_be_deepcopied(self):
         # Check that we didn't put something in the BibliographicData that
         # will prevent it from being copied. (e.g., self.log)

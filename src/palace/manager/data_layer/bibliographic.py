@@ -755,15 +755,14 @@ class BibliographicData(BaseMutableData):
                 old_contributors.append(contribution.contributor.id)
 
         for contributor_data in self.contributors:
-
-            dn = contributor_data.display_name
-            if not dn or not dn.strip():
+            try:
+                contributor_sort_name = contributor_data.find_sort_name(_db)
+            except ValueError as e:
                 self.log.warning(
-                    f"contributor display name is blank for {contributor_data}: skipping..."
+                    f"ValueError for {contributor_data}: message='{e}': skipping..."
                 )
                 continue
 
-            contributor_sort_name = contributor_data.find_sort_name(_db)
             if contributor_sort_name or contributor_data.lc or contributor_data.viaf:
                 contributor = edition.add_contributor(
                     name=contributor_sort_name,
