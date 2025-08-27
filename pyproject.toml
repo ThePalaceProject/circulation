@@ -9,6 +9,7 @@ exclude_also = [
     '^\s*\.\.\.\s*$',
     '^\s*pass\s*$',
     '^\s*raise NotImplementedError\s*$',
+    'class .*\bProtocol\):',
 ]
 include_namespace_packages = true
 
