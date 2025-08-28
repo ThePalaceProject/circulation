@@ -27,7 +27,7 @@ from palace.manager.api.admin.problem_details import (
     UNKNOWN_PROTOCOL,
 )
 from palace.manager.api.selftest import HasCollectionSelfTests
-from palace.manager.celery.tasks import opds_odl
+from palace.manager.celery.tasks import boundless, opds_odl
 from palace.manager.core.selftest import HasSelfTests
 from palace.manager.integration.goals import Goals
 from palace.manager.integration.license.boundless.api import BoundlessApi
@@ -715,6 +715,7 @@ class TestCollectionSettings:
             patch(
                 "palace.manager.api.admin.controller.collection_settings.reap_unassociated_holds"
             ) as reap_holds,
+            patch.object(boundless, "import_collection") as mock_import,
         ):
             flask.request.form = ImmutableMultiDict(
                 [
@@ -736,6 +737,10 @@ class TestCollectionSettings:
             assert reap_holds.delay.call_count == 0
             assert response.status_code == 200
 
+        # We queued up an import task for the collection.
+        mock_import.s.assert_called_once_with(collection.id, import_all=False)
+        mock_import.s.return_value.apply_async.assert_called_once()
+
         # Additional settings were set on the collection+library.
         assert isinstance(l1.id, int)
         l1_settings = collection.integration_configuration.for_library(l1.id)
@@ -751,6 +756,7 @@ class TestCollectionSettings:
             patch(
                 "palace.manager.api.admin.controller.collection_settings.reap_unassociated_holds"
             ) as reap_holds,
+            patch.object(boundless, "import_collection") as mock_import,
         ):
             flask.request.form = ImmutableMultiDict(
                 [
@@ -770,6 +776,10 @@ class TestCollectionSettings:
             assert reap_holds.delay.call_count == 1
             assert response.status_code == 200
             assert isinstance(response, Response)
+
+        # We queued up an import task for the collection.
+        mock_import.s.assert_called_once_with(collection.id, import_all=False)
+        mock_import.s.return_value.apply_async.assert_called_once()
 
         assert collection.integration_configuration.id == int(response.get_data())
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """Import a Boundless Collection by name"""
 
-from palace.manager.scripts.boundless_import import ImportCollection
+from palace.manager.integration.license.boundless.scripts import ImportCollection
 
 ImportCollection().run()

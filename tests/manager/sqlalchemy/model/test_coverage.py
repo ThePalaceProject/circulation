@@ -1,4 +1,5 @@
 import datetime
+from unittest.mock import MagicMock
 
 import pytest
 from freezegun import freeze_time
@@ -155,6 +156,79 @@ class TestTimestamp:
         assert stamp.finish == data.finish
         assert stamp.achievements == data.achievements
         assert stamp.counter == data.counter
+
+    def test_elapsed(self) -> None:
+        stamp = Timestamp()
+
+        # If start is None, elapsed is None.
+        assert stamp.start is None
+        assert stamp.elapsed is None
+
+        # If start is set but finish is None, elapsed uses the current time
+        # as the finish time.
+        stamp.start = datetime_utc(2010, 1, 1, 0, 0)
+        with freeze_time(datetime_utc(2010, 1, 1, 0, 1)):
+            assert stamp.finish is None
+            assert stamp.elapsed == datetime.timedelta(minutes=1)
+
+        # If both start and finish are set, elapsed uses those values.
+        stamp.finish = datetime_utc(2010, 1, 1, 0, 10)
+        assert stamp.elapsed == datetime.timedelta(minutes=10)
+
+    def test_elapsed_seconds(self) -> None:
+        stamp = Timestamp()
+
+        # If elapsed is None, elapsed_seconds is None.
+        assert stamp.elapsed is None
+        assert stamp.elapsed_seconds is None
+
+        # If elapsed is set, elapsed_seconds is the number of seconds
+        # in elapsed, as a float.
+        stamp.start = datetime_utc(2010, 1, 1, 0, 0)
+        stamp.finish = datetime_utc(2010, 1, 1, 0, 1, 5, 6000)
+
+        assert stamp.elapsed_seconds == 65.006
+
+    def test_recording(self) -> None:
+        stamp = Timestamp()
+
+        # Set some initial values for start, finish, and exception
+        stamp.start = MagicMock()
+        stamp.finish = MagicMock()
+        stamp.exception = MagicMock()
+
+        # When we enter the recording context, start is set to the
+        # current time, and finish and exception are cleared.
+        now = utc_now()
+        delta = datetime.timedelta(minutes=5)
+        with freeze_time(now) as frozen_time:
+            with stamp.recording():
+                assert stamp.start == now
+                assert stamp.finish is None
+                assert stamp.exception is None
+                frozen_time.tick(delta=delta)
+
+            # When we exit the context, finish is set to the current time.
+            assert stamp.start == now
+            assert stamp.finish == now + delta
+
+        # If an exception was raised, it is recorded in the exception
+        # field.
+        now = now + datetime.timedelta(minutes=10)
+        with freeze_time(now) as frozen_time:
+            try:
+                with stamp.recording():
+                    assert stamp.start == now
+                    assert stamp.finish is None
+                    assert stamp.exception is None
+                    frozen_time.tick(delta=delta)
+                    raise ValueError("testing")
+            except ValueError:
+                pass
+
+            assert stamp.start == now
+            assert stamp.finish == now + delta
+            assert stamp.exception == "testing"
 
 
 class TestBaseCoverageRecord:

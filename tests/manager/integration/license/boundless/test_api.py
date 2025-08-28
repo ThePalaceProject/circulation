@@ -20,6 +20,7 @@ from palace.manager.api.circulation.exceptions import (
     RemoteInitiatedServerError,
 )
 from palace.manager.api.circulation.fulfillment import DirectFulfillment
+from palace.manager.celery.tasks import boundless as boundless_tasks
 from palace.manager.data_layer.bibliographic import BibliographicData
 from palace.manager.data_layer.circulation import CirculationData
 from palace.manager.data_layer.format import FormatData
@@ -63,10 +64,11 @@ class TestBoundlessApi:
             return_value=MagicMock(access_token="the new token"),
         )
         api.api_requests.refresh_bearer_token = mock_refresh_bearer_token
-        mock_recent_activity = create_autospec(
-            api.recent_activity, return_value=[(1, "a"), (2, "b"), (3, "c")]
+        mock_availability = create_autospec(
+            api.api_requests.availability,
+            return_value=MagicMock(titles=[(1, "a"), (2, "b"), (3, "c")]),
         )
-        api.recent_activity = mock_recent_activity
+        api.api_requests.availability = mock_availability
         mock_patron_activity = create_autospec(
             api.patron_activity, return_value=["loan", "hold"]
         )
@@ -113,8 +115,8 @@ class TestBoundlessApi:
         )
         assert recent_circulation_events.success is True
         assert recent_circulation_events.result == "Found 3 event(s)"
-        mock_recent_activity.assert_called_once_with(
-            time_run - datetime.timedelta(minutes=5)
+        mock_availability.assert_called_once_with(
+            since=time_run - datetime.timedelta(minutes=5)
         )
 
         assert (
@@ -921,25 +923,6 @@ class TestBoundlessApi:
 
         assert availability.call_args_list[0].kwargs["title_ids"] == ids
 
-    def test_recent_activity(self, boundless: BoundlessFixture):
-        # Test the recent_activity method, which returns a list of
-        # recent activity for the collection.
-        api = boundless.api
-        data = boundless.files.sample_data("tiny_collection.xml")
-        boundless.http_client.queue_response(200, content=data)
-
-        # Get the activity for the last 5 minutes.
-        since = datetime_utc(2012, 10, 1, 15, 45, 25, 4456)
-        activity = list(api.recent_activity(since))
-
-        # We made a request to the correct URL.
-        assert "/availability/v2" in boundless.http_client.requests[1]
-        assert boundless.http_client.requests_args[1]["params"] == {
-            "updatedDate": "10-01-2012 15:45:25",
-        }
-
-        assert len(activity) == 2
-
     def test__delivery_mechanism_to_internal_format(self) -> None:
         lpdm = LicensePoolDeliveryMechanism(delivery_mechanism=DeliveryMechanism())
 
@@ -1008,3 +991,12 @@ class TestBoundlessApi:
             (MediaTypes.EPUB_MEDIA_TYPE, DeliveryMechanism.BAKER_TAYLOR_KDRM_DRM),
             (MediaTypes.EPUB_MEDIA_TYPE, DeliveryMechanism.ADOBE_DRM),
         ]
+
+    def test_import_task(self) -> None:
+        collection_id = MagicMock()
+        force = MagicMock()
+        with patch.object(boundless_tasks, "import_collection") as mock_import:
+            result = BoundlessApi.import_task(collection_id, force)
+
+        mock_import.s.assert_called_once_with(collection_id, import_all=force)
+        assert result == mock_import.s.return_value

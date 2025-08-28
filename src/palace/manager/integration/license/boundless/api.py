@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-import datetime
 import html
 import re
 from collections.abc import Callable, Generator, Sequence
 from datetime import timedelta
 from typing import Annotated, cast
 
+from celery.canvas import Signature
 from flask_babel import lazy_gettext as _
 from pydantic import StringConstraints, TypeAdapter, ValidationError
 from sqlalchemy.orm import Session
@@ -28,6 +28,7 @@ from palace.manager.api.circulation.exceptions import (
 from palace.manager.api.circulation.fulfillment import DirectFulfillment, Fulfillment
 from palace.manager.api.selftest import HasCollectionSelfTests
 from palace.manager.api.web_publication_manifest import FindawayManifest, SpineItem
+from palace.manager.celery.tasks import boundless
 from palace.manager.core.selftest import SelfTestResult
 from palace.manager.data_layer.bibliographic import BibliographicData
 from palace.manager.data_layer.circulation import CirculationData
@@ -147,7 +148,7 @@ class BoundlessApi(
         def _count_events() -> str:
             now = utc_now()
             five_minutes_ago = now - timedelta(minutes=5)
-            count = len(list(self.recent_activity(since=five_minutes_ago)))
+            count = len(self.api_requests.availability(since=five_minutes_ago).titles)
             return "Found %d event(s)" % count
 
         yield self.run_test(
@@ -670,16 +671,6 @@ class BoundlessApi(
             self._db, collection, ReplacementPolicy.from_license_source(self._db)
         )
 
-    def recent_activity(
-        self, since: datetime.datetime
-    ) -> Generator[tuple[BibliographicData, CirculationData]]:
-        """Find books that have had recent activity.
-
-        :yield: A sequence of (BibliographicData, CirculationData) 2-tuples
-        """
-        availability_response = self.api_requests.availability(since=since)
-        yield from BibliographicParser.parse(availability_response)
-
     def availability_by_title_ids(
         self,
         title_ids: list[str],
@@ -727,3 +718,7 @@ class BoundlessApi(
             )
 
         return lpdms
+
+    @classmethod
+    def import_task(cls, collection_id: int, force: bool = False) -> Signature:
+        return boundless.import_collection.s(collection_id, import_all=force)
