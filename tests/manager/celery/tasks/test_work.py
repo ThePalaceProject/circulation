@@ -3,7 +3,7 @@ from unittest.mock import call, patch
 import pytest
 from sqlalchemy.exc import SQLAlchemyError
 
-from palace.manager.celery.tasks import work as work_tasks
+from palace.manager.celery.tasks import apply, work as work_tasks
 from palace.manager.data_layer.policy.presentation import PresentationCalculationPolicy
 from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.sqlalchemy.model.classification import Subject
@@ -29,7 +29,7 @@ def test_calculate_work_presentation(
     with (
         patch.object(Work, "calculate_presentation") as calc_presentation,
         patch.object(
-            work_tasks, "apply_task_lock", wraps=work_tasks.apply_task_lock
+            work_tasks, "apply_task_lock", wraps=apply.apply_task_lock
         ) as apply_lock,
     ):
         work_tasks.calculate_work_presentation.delay(
@@ -46,7 +46,7 @@ def test_calculate_work_presentation(
     with (
         patch.object(Work, "calculate_presentation") as calc_presentation,
         patch.object(
-            work_tasks, "apply_task_lock", wraps=work_tasks.apply_task_lock
+            work_tasks, "apply_task_lock", wraps=apply.apply_task_lock
         ) as apply_lock,
     ):
         work_tasks.calculate_work_presentation.delay(
