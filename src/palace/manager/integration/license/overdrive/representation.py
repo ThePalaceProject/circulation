@@ -254,7 +254,7 @@ class OverdriveRepresentationExtractor(LoggerMixin):
         # see http://developer.overdrive.com/apis/library-availability-new
 
         # TODO: Cost-per-circ titles
-        # (availabilityType="LimitedAvailablility") can be handled
+        # (availabilityType="LimitedAvailability") can be handled
         # similarly, though those can abruptly become unavailable, so
         # UNLIMITED_ACCESS is probably not appropriate.
 
