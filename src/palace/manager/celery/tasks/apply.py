@@ -19,7 +19,7 @@ from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.edition import Edition
 
 
-def _lock(client: Redis, identifier: IdentifierData) -> RedisLock:
+def apply_task_lock(client: Redis, identifier: IdentifierData) -> RedisLock:
     """
     Create a lock for the given identifier.
 
@@ -62,7 +62,7 @@ def circulation_apply(
     )
 
     with (
-        _lock(redis_client, primary_identifier).lock(),
+        apply_task_lock(redis_client, primary_identifier).lock(),
         task.transaction() as session,
     ):
         collection = load_from_id(session, Collection, collection_id)
@@ -94,7 +94,7 @@ def bibliographic_apply(
     )
 
     with (
-        _lock(redis_client, primary_identifier).lock(),
+        apply_task_lock(redis_client, primary_identifier).lock(),
         task.transaction() as session,
     ):
         if edition_id is None:

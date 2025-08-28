@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from collections.abc import Generator
+from contextlib import AbstractContextManager, nullcontext
+from typing import Any
 
 from celery import shared_task
 from sqlalchemy import tuple_
@@ -8,41 +10,55 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, defer
 
 from palace.manager.celery.task import Task
+from palace.manager.celery.tasks.apply import apply_task_lock
+from palace.manager.celery.utils import load_from_id
+from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.data_layer.policy.presentation import PresentationCalculationPolicy
 from palace.manager.service.celery.celery import QueueNames
+from palace.manager.service.redis.models.lock import LockNotAcquired
 from palace.manager.sqlalchemy.model.classification import Classification, Subject
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import LicensePool
 from palace.manager.sqlalchemy.model.work import Work
-from palace.manager.sqlalchemy.util import get_one
-from palace.manager.util.backoff import exponential_backoff
+from palace.manager.util import first_or_default
 from palace.manager.util.log import elapsed_time_logging
 
 
-@shared_task(queue=QueueNames.default, bind=True, max_retries=4)
+@shared_task(
+    queue=QueueNames.apply,
+    bind=True,
+    autoretry_for=(LockNotAcquired, SQLAlchemyError),
+    max_retries=4,
+    retry_backoff=60,
+    retry_backoff_max=15 * 60,
+)
 def calculate_work_presentation(
     task: Task,
     work_id: int,
     policy: PresentationCalculationPolicy,
 ) -> None:
-    with elapsed_time_logging(
-        log_method=task.log.info,
-        message_prefix=f"Presentation calculated for work: work_id={work_id}, policy={policy}",
-        skip_start=True,
-    ):
-        try:
-            with task.transaction() as tx:
-                work = get_one(tx, Work, id=work_id)
-                if not work:
-                    task.log.warning(f"No work with id={work_id}. Skipping...")
-                    return
-                work.calculate_presentation(
-                    policy=policy, disable_async_calculation=True
-                )
-        except SQLAlchemyError as e:
-            wait_time = exponential_backoff(task.request.retries)
-            task.log.error(f"{e}. Retrying in {wait_time} seconds.")
-            raise task.retry(countdown=wait_time)
+    redis_client = task.services.redis().client()
+    with task.transaction() as tx:
+        work = load_from_id(tx, Work, work_id)
+        pool = first_or_default(work.license_pools)
+        lock_ctx_manager: AbstractContextManager[Any]
+        if pool is None:
+            task.log.warning(
+                f"Work {work.id} has no LicensePool. Continuing without lock."
+            )
+            lock_ctx_manager = nullcontext()
+        else:
+            identifier = IdentifierData.from_identifier(pool.identifier)
+            lock_ctx_manager = apply_task_lock(redis_client, identifier).lock()
+        with (
+            lock_ctx_manager,
+            elapsed_time_logging(
+                log_method=task.log.info,
+                message_prefix=f"Presentation calculated for work: work_id={work_id}, policy={policy}",
+                skip_start=True,
+            ),
+        ):
+            work.calculate_presentation(policy=policy, disable_async_calculation=True)
 
 
 @shared_task(queue=QueueNames.default, bind=True)

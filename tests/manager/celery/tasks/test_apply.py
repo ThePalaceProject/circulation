@@ -109,7 +109,7 @@ class TestBibliographicApply:
         )
 
         # Lock the identifier, so the task will fail to acquire the lock
-        apply._lock(redis_fixture.client, identifier).acquire()
+        apply.apply_task_lock(redis_fixture.client, identifier).acquire()
 
         with (
             # Patch the retry backoff, so we don't have to wait for the retries
