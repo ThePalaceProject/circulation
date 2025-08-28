@@ -1,52 +1,83 @@
-from unittest.mock import patch
+from unittest.mock import call, patch
 
+import pytest
 from sqlalchemy.exc import SQLAlchemyError
 
-from palace.manager.celery.tasks.work import (
-    _paginate_query,
-    calculate_work_presentation,
-    classify_unchecked_subjects,
-)
+from palace.manager.celery.tasks import apply, work as work_tasks
 from palace.manager.data_layer.policy.presentation import PresentationCalculationPolicy
+from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.sqlalchemy.model.classification import Subject
 from palace.manager.sqlalchemy.model.work import Work
 from tests.fixtures.celery import CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.redis import RedisFixture
 from tests.fixtures.work import WorkIdPolicyQueuePresentationRecalculationFixture
 
 
 def test_calculate_work_presentation(
     db: DatabaseTransactionFixture,
     celery_fixture: CeleryFixture,
+    redis_fixture: RedisFixture,
+    caplog: pytest.LogCaptureFixture,
 ):
     work = db.work()
     policy = PresentationCalculationPolicy.recalculate_everything()
+    caplog.set_level(LogLevel.warning)
 
-    with patch(
-        "palace.manager.sqlalchemy.model.work.Work.calculate_presentation"
-    ) as calc_presentations:
-        calculate_work_presentation.delay(work_id=work.id, policy=policy).wait()
-        assert calc_presentations.call_count == 1
-        cal = calc_presentations.call_args_list
-        assert cal[0].kwargs["policy"] == policy
+    # A work with no license pool does have its presentation calculated,
+    # but we log a warning and don't attempt to acquire a lock.
+    with (
+        patch.object(Work, "calculate_presentation") as calc_presentation,
+        patch.object(
+            work_tasks, "apply_task_lock", wraps=apply.apply_task_lock
+        ) as apply_lock,
+    ):
+        work_tasks.calculate_work_presentation.delay(
+            work_id=work.id, policy=policy
+        ).wait()
+    calc_presentation.assert_called_once_with(
+        policy=policy, disable_async_calculation=True
+    )
+    apply_lock.assert_not_called()
+    assert "has no LicensePool" in caplog.text
+
+    # If we have a license pool, we attempt to acquire a lock.
+    work = db.work(with_license_pool=True)
+    with (
+        patch.object(Work, "calculate_presentation") as calc_presentation,
+        patch.object(
+            work_tasks, "apply_task_lock", wraps=apply.apply_task_lock
+        ) as apply_lock,
+    ):
+        work_tasks.calculate_work_presentation.delay(
+            work_id=work.id, policy=policy
+        ).wait()
+    calc_presentation.assert_called_once_with(
+        policy=policy, disable_async_calculation=True
+    )
+    apply_lock.assert_called_once()
 
 
 def test_calculate_work_presentation_retry(
     db: DatabaseTransactionFixture,
     celery_fixture: CeleryFixture,
+    redis_fixture: RedisFixture,
 ):
     work = db.work()
     policy = PresentationCalculationPolicy.recalculate_everything()
 
-    with patch(
-        "palace.manager.sqlalchemy.model.work.Work.calculate_presentation"
-    ) as calc_presentations:
-        calc_presentations.side_effect = [SQLAlchemyError(), None]
-        calculate_work_presentation.delay(work_id=work.id, policy=policy).wait()
-        assert calc_presentations.call_count == 2
-        cal = calc_presentations.call_args_list
-        for i in range(0, 2):
-            assert cal[i].kwargs["policy"] == policy
+    with (
+        patch.object(Work, "calculate_presentation") as calc_presentation,
+        celery_fixture.patch_retry_backoff(),
+    ):
+        calc_presentation.side_effect = [SQLAlchemyError(), None]
+        work_tasks.calculate_work_presentation.delay(
+            work_id=work.id, policy=policy
+        ).wait()
+    assert calc_presentation.call_count == 2
+    calc_presentation.assert_has_calls(
+        [call(policy=policy, disable_async_calculation=True)] * 2
+    )
 
 
 def test_paginate(db: DatabaseTransactionFixture):
@@ -63,7 +94,7 @@ def test_paginate(db: DatabaseTransactionFixture):
         )
         works.append(work)
 
-    for ix, [work] in enumerate(_paginate_query(db.session, batch_size=1)):
+    for ix, [work] in enumerate(work_tasks._paginate_query(db.session, batch_size=1)):
         # We are coming in via "id" order
         assert work == works[ix]
 
@@ -76,7 +107,7 @@ def test_paginate(db: DatabaseTransactionFixture):
         other_subject,
         last_work.license_pools[0].data_source,
     )
-    next_works = next(_paginate_query(db.session, batch_size=100))
+    next_works = next(work_tasks._paginate_query(db.session, batch_size=100))
     # Works are only iterated over ONCE per loop
     assert len(next_works) == 20
 
@@ -90,7 +121,7 @@ def test_paginate(db: DatabaseTransactionFixture):
     )
     another_subject.checked = True
     db.session.commit()
-    next_works = next(_paginate_query(db.session, batch_size=100))
+    next_works = next(work_tasks._paginate_query(db.session, batch_size=100))
     assert len(next_works) == 20
     assert not_work not in next_works
 
@@ -113,7 +144,7 @@ def test_subject_checked(
         )
         works.append(work)
 
-    classify_unchecked_subjects.delay().wait()
+    work_tasks.classify_unchecked_subjects.delay().wait()
     for work in works:
         assert work_policy_recalc_fixture.is_queued(
             work_id=work.id,
@@ -123,5 +154,5 @@ def test_subject_checked(
     # now verify that no recalculation occurs when the subject.checked property is true.
     work_policy_recalc_fixture.clear()
     subject.checked = True
-    classify_unchecked_subjects.delay().wait()
+    work_tasks.classify_unchecked_subjects.delay().wait()
     assert work_policy_recalc_fixture.queue_size() == 0
