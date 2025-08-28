@@ -9,5 +9,13 @@ source env/bin/activate
 mkdir -p /var/log/celery
 chown 1000:adm /var/log/celery
 
+# Tune the configuration for this worker, since it handles high volume
+# short running tasks, its configuration needs to be different from the
+# other workers.
+# These can be overridden by setting the environment variables
+# PALACE_CELERY_WORKER_APPLY_* before starting the container.
+export PALACE_CELERY_WORKER_MAX_TASKS_PER_CHILD="${PALACE_CELERY_WORKER_APPLY_MAX_TASKS_PER_CHILD:-500}"
+export PALACE_CELERY_WORKER_PREFETCH_MULTIPLIER="${PALACE_CELERY_WORKER_APPLY_PREFETCH_MULTIPLIER:-32}"
+
 # Start the celery worker
-exec env/bin/celery -A "palace.manager.celery.app" worker --uid 1000 --gid 1000 --concurrency 4 --hostname apply@%h -Q apply --logfile /var/log/celery/apply.log
+exec env/bin/celery -A "palace.manager.celery.app" worker --uid 1000 --gid 1000 --concurrency 6 --hostname apply@%h -Q apply --logfile /var/log/celery/apply.log
