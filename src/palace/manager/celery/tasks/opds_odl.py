@@ -24,6 +24,7 @@ from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.licensing import License, LicensePool
 from palace.manager.sqlalchemy.model.patron import Hold
 from palace.manager.util.datetime_helpers import utc_now
+from palace.manager.util.http import BadResponseException
 
 
 def _remove_expired_holds_for_collection(
@@ -313,7 +314,13 @@ def import_all(task: Task, force: bool = False) -> None:
         )
 
 
-@shared_task(queue=QueueNames.default, bind=True)
+@shared_task(
+    queue=QueueNames.default,
+    bind=True,
+    max_retries=5,
+    autoretry_for=(BadResponseException,),
+    retry_backoff=60,
+)
 def import_collection(
     task: Task,
     collection_id: int,
