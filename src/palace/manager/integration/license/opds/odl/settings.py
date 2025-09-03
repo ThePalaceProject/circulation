@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from flask_babel import lazy_gettext as _
-from pydantic import NonNegativeInt, PositiveInt
+from pydantic import NonNegativeInt, PositiveInt, model_validator
+from typing_extensions import Self
 
+from palace.manager.api.admin.problem_details import INCOMPLETE_CONFIGURATION
 from palace.manager.api.circulation.settings import BaseCirculationEbookLoanSettings
 from palace.manager.api.lcp.hash import HashingAlgorithm
 from palace.manager.integration.license.opds.opds2.settings import OPDS2ImporterSettings
@@ -11,6 +13,7 @@ from palace.manager.integration.settings import (
     ConfigurationFormItem,
     ConfigurationFormItemType,
     FormField,
+    SettingsValidationError,
 )
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.util.pydantic import HttpUrl
@@ -128,6 +131,27 @@ class OPDS2WithODLSettings(OPDS2ImporterSettings):
             required=False,
         ),
     )
+
+    @model_validator(mode="after")
+    def validate_auth_parameters(self) -> Self:
+        missing = []
+        if self.auth_type == OpdsAuthType.BASIC or self.auth_type == OpdsAuthType.OAUTH:
+            if not self.username:
+                missing.append("username")
+            if not self.password:
+                missing.append("password")
+
+        if missing:
+            labels = ", ".join(
+                [f"'{self.get_form_field_label(name)}'" for name in missing]
+            )
+            fields = "fields" if len(missing) > 1 else "field"
+            raise SettingsValidationError(
+                problem_detail=INCOMPLETE_CONFIGURATION.detailed(
+                    f"Missing required {fields} for {self.auth_type.value} authentication: {labels}"
+                )
+            )
+        return self
 
 
 class OPDS2WithODLLibrarySettings(BaseCirculationEbookLoanSettings):
