@@ -29,16 +29,21 @@ def load_from_id(db: Session, model: type[T], id: int) -> T:
     This function will raise a ModelNotFoundError if the instance is not found.
     """
 
-    instance = get_one(db, model, id=id)
-    return validate_not_none(instance, f"{model.__name__} with id '{id}' not found.")
+    try:
+        instance = get_one(db, model, id=id)
+        return validate_not_none(
+            instance, f"{model.__name__} with id '{id}' not found."
+        )
+    except PalaceTypeError as e:
+        raise ModelNotFoundError(e.message)
 
 
 def validate_not_none(value: T | None, message: str) -> T:
     """
     Validate that a value is not None.
 
-    Raises a ModelNotFoundError if the value is None.
+    Raises a PalaceTypeError if the value is None.
     """
     if value is None:
-        raise ModelNotFoundError(message)
+        raise PalaceTypeError(message)
     return value
