@@ -250,6 +250,9 @@ class HTTP(LoggerMixin):
             total=max_retry_count,
             status_forcelist=cls.RETRY_STATUS_CODES,
             backoff_factor=backoff_factor,
+            # We set raise_on_status to False, so if our automatic retries are exhausted,
+            # we can handle the final response ourselves in _process_response.
+            raise_on_status=False,
         )
         adapter = HTTPAdapter(max_retries=retry_strategy)
 
