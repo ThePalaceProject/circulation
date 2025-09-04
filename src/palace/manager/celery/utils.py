@@ -6,10 +6,16 @@ from typing import TypeVar
 
 from sqlalchemy.orm import Session
 
-from palace.manager.core.exceptions import PalaceValueError
+from palace.manager.core.exceptions import PalaceTypeError
 from palace.manager.sqlalchemy.util import get_one
 
 T = TypeVar("T")
+
+
+class ModelNotFoundError(PalaceTypeError):
+    """
+    Raised when a model instance is not found in the database.
+    """
 
 
 def load_from_id(db: Session, model: type[T], id: int) -> T:
@@ -20,7 +26,7 @@ def load_from_id(db: Session, model: type[T], id: int) -> T:
     these tasks are asynchronous, we need to load the instance from the database
     and its possible the instance has been deleted or modified in the meantime.
 
-    This function will raise a PalaceValueError if the instance is not found.
+    This function will raise a ModelNotFoundError if the instance is not found.
     """
 
     instance = get_one(db, model, id=id)
@@ -31,8 +37,8 @@ def validate_not_none(value: T | None, message: str) -> T:
     """
     Validate that a value is not None.
 
-    Raises a PalaceValueError if the value is None.
+    Raises a ModelNotFoundError if the value is None.
     """
     if value is None:
-        raise PalaceValueError(message)
+        raise ModelNotFoundError(message)
     return value
