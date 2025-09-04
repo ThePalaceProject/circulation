@@ -1,9 +1,9 @@
 from unittest.mock import call, patch
 
 import pytest
-from sqlalchemy.exc import SQLAlchemyError
 
 from palace.manager.celery.tasks import apply, work as work_tasks
+from palace.manager.celery.utils import ModelNotFoundError
 from palace.manager.data_layer.policy.presentation import PresentationCalculationPolicy
 from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.sqlalchemy.model.classification import Subject
@@ -70,7 +70,7 @@ def test_calculate_work_presentation_retry(
         patch.object(Work, "calculate_presentation") as calc_presentation,
         celery_fixture.patch_retry_backoff(),
     ):
-        calc_presentation.side_effect = [SQLAlchemyError(), None]
+        calc_presentation.side_effect = [ModelNotFoundError(), None]
         work_tasks.calculate_work_presentation.delay(
             work_id=work.id, policy=policy
         ).wait()
