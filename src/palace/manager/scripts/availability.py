@@ -35,6 +35,6 @@ class AvailabilityRefreshScript(IdentifierInputScript):
         elif identifier.type == Identifier.OVERDRIVE_ID:
             api = OverdriveAPI(self._db)
             for identifier in identifiers:
-                api.update_licensepool(identifier.identifier)
+                api.update_licensepools(identifier.identifier)
         else:
             self.log.warn("Cannot update coverage for %r" % identifier.type)
