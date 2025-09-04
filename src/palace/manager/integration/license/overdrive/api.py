@@ -1597,39 +1597,3 @@ class OverdriveAPI(
             licensepool.identifier.type,
             licensepool.identifier.identifier,
         )
-
-    # TODO: This method is only being used in tests - can it be safely removed?
-    def update_licensepool_with_book_info(
-        self,
-        book: dict[str, Any],
-        license_pool: LicensePool,
-        is_new_pool: bool,
-    ) -> tuple[LicensePool, bool, bool]:
-        """Update a book's LicensePool with information from a JSON
-        representation of its circulation info.
-
-        Then, create an Edition and make sure it has bibliographic
-        coverage. If the new Edition is the only candidate for the
-        pool's presentation_edition, promote it to presentation
-        status.
-        """
-        extractor = OverdriveRepresentationExtractor(self)
-
-        # accounts are applied to the database either here or in the circulation apply method.
-        circulation_tuples = extractor.book_info_to_circulation(
-            self._db, collection=license_pool.collection, book=book
-        )
-        circulation_changed = False
-        for collection, circulation in circulation_tuples:
-            lp, changed = circulation.apply(self._db, collection)
-            if changed:
-                circulation_changed = True
-            if lp is not None:
-                license_pool = lp
-
-            edition, is_new_edition = self._edition(license_pool)
-
-            if is_new_pool:
-                license_pool.open_access = False
-                self.log.info("New Overdrive book discovered: %r", edition)
-        return license_pool, is_new_pool, circulation_changed
