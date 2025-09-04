@@ -13,6 +13,9 @@ class BasePalaceException(Exception):
 class PalaceValueError(BasePalaceException, ValueError): ...
 
 
+class PalaceTypeError(BasePalaceException, TypeError): ...
+
+
 class IntegrationException(BasePalaceException):
     """An exception that happens when the site's connection to a
     third-party service is broken.

@@ -6,12 +6,11 @@ from typing import Any
 
 from celery import shared_task
 from sqlalchemy import tuple_
-from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, defer
 
 from palace.manager.celery.task import Task
 from palace.manager.celery.tasks.apply import apply_task_lock
-from palace.manager.celery.utils import load_from_id
+from palace.manager.celery.utils import ModelNotFoundError, load_from_id
 from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.data_layer.policy.presentation import PresentationCalculationPolicy
 from palace.manager.service.celery.celery import QueueNames
@@ -27,7 +26,10 @@ from palace.manager.util.log import elapsed_time_logging
 @shared_task(
     queue=QueueNames.apply,
     bind=True,
-    autoretry_for=(LockNotAcquired, SQLAlchemyError),
+    autoretry_for=(
+        LockNotAcquired,  # Lock held by another task, we want to wait for it to finish and retry.
+        ModelNotFoundError,  # Often this means the transaction creating the work hasn't committed yet.
+    ),
     max_retries=4,
     retry_backoff=60,
     retry_backoff_max=15 * 60,

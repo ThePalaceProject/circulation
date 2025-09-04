@@ -1,7 +1,7 @@
 import pytest
 
 from palace.manager.celery.tasks import apply
-from palace.manager.core.exceptions import PalaceValueError
+from palace.manager.core.exceptions import PalaceTypeError
 from palace.manager.data_layer.bibliographic import BibliographicData
 from palace.manager.data_layer.circulation import CirculationData
 from palace.manager.data_layer.identifier import IdentifierData
@@ -92,7 +92,7 @@ class TestBibliographicApply:
             primary_identifier_data=None,
         )
 
-        with pytest.raises(PalaceValueError, match="No primary identifier provided"):
+        with pytest.raises(PalaceTypeError, match="No primary identifier provided"):
             apply.bibliographic_apply.delay(data, edition.id, None).wait()
 
     def test_already_locked(
