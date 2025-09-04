@@ -99,8 +99,8 @@ def beat_schedule() -> dict[str, Any]:
         "opds2_odl_import_all": {
             "task": opds_odl.import_all.name,
             "schedule": crontab(
-                minute="45",
-            ),  # Run every hour at 45 minutes past the hour
+                minute="45", hour="*/3"
+            ),  # Run every 3 hours at 45 minutes past the hour
         },
         "rotate_jwe_key": {
             "task": rotate_jwe_key.rotate_jwe_key.name,
