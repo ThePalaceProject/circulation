@@ -6,13 +6,13 @@ from typing import TypeVar
 
 from sqlalchemy.orm import Session
 
-from palace.manager.core.exceptions import PalaceTypeError
+from palace.manager.core.exceptions import PalaceTypeError, PalaceValueError
 from palace.manager.sqlalchemy.util import get_one
 
 T = TypeVar("T")
 
 
-class ModelNotFoundError(PalaceTypeError):
+class ModelNotFoundError(PalaceValueError):
     """
     Raised when a model instance is not found in the database.
     """
