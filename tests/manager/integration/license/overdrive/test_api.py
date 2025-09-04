@@ -1633,7 +1633,7 @@ class TestOverdriveAPI:
         http = overdrive_api_fixture.mock_http
         http.queue_response(500, content="An error occured.")
         book = dict(id=identifier.identifier, availability_link=db.fresh_url())
-        pool, was_new, changed = overdrive_api_fixture.api.update_licensepool(book)
+        pool, was_new, changed = overdrive_api_fixture.api.update_licensepools(book)
         assert pool is None
 
     def test_update_licensepool_not_found(
@@ -1654,7 +1654,7 @@ class TestOverdriveAPI:
         http.queue_response(404, content=not_found)
 
         book = dict(id=identifier.identifier, availability_link=db.fresh_url())
-        pool, was_new, changed = overdrive_api_fixture.api.update_licensepool(book)
+        pool, was_new, changed = overdrive_api_fixture.api.update_licensepools(book)
         assert pool.licenses_owned == 0
         assert pool.licenses_available == 0
         assert pool.patrons_in_hold_queue == 0
@@ -1689,7 +1689,7 @@ class TestOverdriveAPI:
         # then the bibliographic information. It will then trigger the
         # OverdriveBibliographicCoverageProvider, which will
         # create an Edition and a presentation-ready Work.
-        pool, was_new, changed = overdrive_api_fixture.api.update_licensepool(
+        pool, was_new, changed = overdrive_api_fixture.api.update_licensepools(
             identifier.identifier
         )
         assert was_new is True
@@ -1726,7 +1726,7 @@ class TestOverdriveAPI:
         assert not pool.work
         http.queue_response(200, content=availability)
         http.queue_response(200, content=bibliographic)
-        pool, was_new, changed = overdrive_api_fixture.api.update_licensepool(
+        pool, was_new, changed = overdrive_api_fixture.api.update_licensepools(
             identifier.identifier
         )
         assert was_new is False

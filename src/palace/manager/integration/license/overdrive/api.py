@@ -1510,19 +1510,18 @@ class OverdriveAPI(
         replace = ReplacementPolicy.from_license_source(self._db)
         bibliographic.apply(self._db, edition, self.collection, replace=replace)
 
-    def update_licensepool(
-        self, book_id: str | dict[str, Any]
-    ) -> tuple[LicensePool | None, bool | None, bool]:
-        """Update availability information for a single book.
+    def update_licensepools(self, book_id: str | dict[str, Any]) -> bool:
+        """Update availability information for a single book across all relevant licensepools.
 
-        If the book has never been seen before, a new LicensePool
-        will be created for the book.
+        If the book has never been seen before,  a new LicensePool
+        will be created for each overdrive main and advantage account associated with the book.
 
-        The book's LicensePool will be updated with current
+        The book's LicensePools will be updated with current
         circulation information. Bibliographic coverage will be
         ensured for the Overdrive Identifier, and a Work will be
         created for the LicensePool and set as presentation-ready.
         """
+
         # Retrieve current circulation information about this book
         try:
             book, (status_code, headers, content) = self.circulation_lookup(book_id)
@@ -1542,30 +1541,51 @@ class OverdriveAPI(
                 book_id,
                 status_code,
             )
-            return None, None, False
+            return False
+
         book.update(json.loads(content))
 
+        # parse the circulation data here so that we can determine which
+        # licensepools will need to be create/updated.
+        extractor = OverdriveRepresentationExtractor(self)
+
+        # get a list of circulation data objects - one for each of the following:
+        # the parent account, the consortial account if there is one
+        # and one for each of the advantage accounts.
+        circulation_by_collection = extractor.book_info_to_circulation(
+            self._db, collection=self.collection, book=book
+        )
         # Update book_id now that we know we have new data.
         book_id = book["id"]
-        license_pool, is_new = LicensePool.for_foreign_id(
-            self._db,
-            DataSource.OVERDRIVE,
-            Identifier.OVERDRIVE_ID,
-            cast(str, book_id),
-            collection=self.collection,
-        )
-        if is_new or not license_pool.work:
-            # Either this is the first time we've seen this book or its doesn't
-            # have an associated work. Make sure its identifier has bibliographic coverage.
-            self.overdrive_bibliographic_coverage_provider.ensure_coverage(
-                license_pool.identifier, force=True
+
+        changed = False
+
+        # for each circulation info:
+        for collection, circulation in circulation_by_collection:
+            #
+            license_pool, is_new = LicensePool.for_foreign_id(
+                self._db,
+                DataSource.OVERDRIVE,
+                Identifier.OVERDRIVE_ID,
+                cast(str, book_id),
+                collection=self.collection,
+            )
+            if is_new or not license_pool.work:
+                changed = True
+
+            # for each licensepool - apply apply the circuation data with the related overdrive account's circulation info.
+            circ_changed = circulation.apply(
+                _db=self._db, collection=collection, replace=None
             )
 
-        return self.update_licensepool_with_book_info(book, license_pool, is_new)
+            if circ_changed:
+                changed = True
+
+        return changed
 
     # Alias for the CirculationAPI interface
     def update_availability(self, licensepool: LicensePool) -> None:
-        self.update_licensepool(licensepool.identifier.identifier)
+        self.update_licensepools(licensepool.identifier.identifier)
 
     def _edition(self, licensepool: LicensePool) -> tuple[Edition, bool]:
         """Find or create the Edition that would be used to contain
@@ -1578,8 +1598,12 @@ class OverdriveAPI(
             licensepool.identifier.identifier,
         )
 
+    # TODO: This method is only being used in tests - can it be safely removed?
     def update_licensepool_with_book_info(
-        self, book: dict[str, Any], license_pool: LicensePool, is_new_pool: bool
+        self,
+        book: dict[str, Any],
+        license_pool: LicensePool,
+        is_new_pool: bool,
     ) -> tuple[LicensePool, bool, bool]:
         """Update a book's LicensePool with information from a JSON
         representation of its circulation info.
@@ -1590,14 +1614,22 @@ class OverdriveAPI(
         status.
         """
         extractor = OverdriveRepresentationExtractor(self)
-        circulation = extractor.book_info_to_circulation(book)
-        lp, circulation_changed = circulation.apply(self._db, license_pool.collection)
-        if lp is not None:
-            license_pool = lp
 
-        edition, is_new_edition = self._edition(license_pool)
+        # accounts are applied to the database either here or in the circulation apply method.
+        circulation_tuples = extractor.book_info_to_circulation(
+            self._db, collection=license_pool.collection, book=book
+        )
+        circulation_changed = False
+        for collection, circulation in circulation_tuples:
+            lp, changed = circulation.apply(self._db, collection)
+            if changed:
+                circulation_changed = True
+            if lp is not None:
+                license_pool = lp
 
-        if is_new_pool:
-            license_pool.open_access = False
-            self.log.info("New Overdrive book discovered: %r", edition)
+            edition, is_new_edition = self._edition(license_pool)
+
+            if is_new_pool:
+                license_pool.open_access = False
+                self.log.info("New Overdrive book discovered: %r", edition)
         return license_pool, is_new_pool, circulation_changed

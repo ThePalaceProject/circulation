@@ -100,7 +100,7 @@ class OverdriveCirculationMonitor(CollectionMonitor, TimelineMonitor):
         # Attempt to create/update the book up to MAXIMUM_BOOK_RETRIES times.
         try:
             with self._db.begin_nested():
-                _, _, is_changed = self.api.update_licensepool(book)
+                is_changed = self.api.update_licensepools(book)
                 book_changed = is_changed
         except Exception:
             self.log.exception("exception on update_licensepool: ")
@@ -222,7 +222,7 @@ class OverdriveCollectionReaper(IdentifierSweepMonitor):
         self.api = api_class(_db, collection)
 
     def process_item(self, identifier: Identifier) -> None:
-        self.api.update_licensepool(identifier.identifier)
+        self.api.update_licensepools(identifier.identifier)
 
 
 class RecentOverdriveCollectionMonitor(OverdriveCirculationMonitor):
