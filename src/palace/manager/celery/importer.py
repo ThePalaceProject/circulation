@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from celery.canvas import Signature
 
 from palace.manager.service.redis.models.lock import RedisLock
@@ -46,4 +48,4 @@ def import_lock(client: Redis, collection_id: int) -> RedisLock:
     This makes sure only one task is importing data for the collection
     at a time.
     """
-    return RedisLock(client, import_key(collection_id))
+    return RedisLock(client, import_key(collection_id), lock_timeout=timedelta(hours=1))
