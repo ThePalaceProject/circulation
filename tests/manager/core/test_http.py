@@ -5,7 +5,7 @@ from dataclasses import dataclass
 import pytest
 import requests
 
-from palace.manager.util.http import HTTP, RequestNetworkException
+from palace.manager.util.http import HTTP, BadResponseException
 from tests.manager.util.test_mock_web_server import MockAPIServer, MockAPIServerResponse
 
 
@@ -34,7 +34,7 @@ class TestHTTP:
             response.status_code = 502
             test_http_fixture.server.enqueue_response("GET", "/test", response)
 
-        with pytest.raises(RequestNetworkException):
+        with pytest.raises(BadResponseException):
             test_http_fixture.request_with_timeout(
                 "GET", test_http_fixture.server.url("/test")
             )
@@ -50,7 +50,7 @@ class TestHTTP:
         response.status_code = 502
 
         test_http_fixture.server.enqueue_response("GET", "/test", response)
-        with pytest.raises(RequestNetworkException):
+        with pytest.raises(BadResponseException):
             test_http_fixture.request_with_timeout(
                 "GET", test_http_fixture.server.url("/test"), max_retry_count=0
             )
