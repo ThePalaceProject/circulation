@@ -1,7 +1,7 @@
 import pytest
 
 from palace.manager.celery.utils import load_from_id
-from palace.manager.core.exceptions import PalaceValueError
+from palace.manager.core.exceptions import PalaceTypeError
 from palace.manager.sqlalchemy.model.collection import Collection
 from tests.fixtures.database import DatabaseTransactionFixture
 
@@ -19,6 +19,6 @@ class TestLoadFromId:
         db.session.delete(collection)
 
         with pytest.raises(
-            PalaceValueError, match=f"Collection with id '{collection_id}' not found."
+            PalaceTypeError, match=f"Collection with id '{collection_id}' not found."
         ):
             load_from_id(db.session, Collection, collection_id)
