@@ -689,6 +689,14 @@ def generate_inventory_report():
     return app.manager.admin_report_controller.generate_inventory_report()
 
 
+@library_route("/admin/reports/<report_key>", methods=["POST"])
+@has_library
+@returns_json_or_response_or_problem_detail
+@requires_admin
+def generate_report(report_key: str):
+    return app.manager.admin_report_controller.generate_report(report_key=report_key)
+
+
 @app.route("/admin/sign_in_again")
 def admin_sign_in_again():
     """Allows an  admin with expired credentials to sign back in
