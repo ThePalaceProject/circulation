@@ -4,7 +4,6 @@ import pytest
 
 from palace.manager.celery.importer import import_lock
 from palace.manager.celery.tasks import boundless, identifiers
-from palace.manager.core.exceptions import IntegrationException
 from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.integration.license.boundless.api import BoundlessApi
 from palace.manager.integration.license.boundless.importer import BoundlessImporter
@@ -15,12 +14,14 @@ from palace.manager.sqlalchemy.model.coverage import Timestamp
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.util import get_one
 from palace.manager.util.datetime_helpers import utc_now
+from palace.manager.util.http import BadResponseException
 from tests.fixtures.celery import ApplyTaskFixture, CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import FilesFixture
 from tests.fixtures.http import MockHttpClientFixture
 from tests.fixtures.redis import RedisFixture
 from tests.fixtures.services import ServicesFixture
+from tests.mocks.mock import MockRequestsResponse
 
 
 class TestImportCollection:
@@ -174,7 +175,7 @@ class TestImportCollection:
         )
         assert len(apply_task_fixture.apply_queue) == 0
 
-    def test_retry_due_to_integration_exception(
+    def test_retry_due_to_bad_response_exception(
         self,
         db: DatabaseTransactionFixture,
         celery_fixture: CeleryFixture,
@@ -193,8 +194,14 @@ class TestImportCollection:
             mock_importer = create_autospec(BoundlessImporter)
             mock_create_importer.return_value = mock_importer
             mock_importer.import_collection.side_effect = [
-                IntegrationException("Temporary failure"),
-                IntegrationException("Another Temporary failure"),
+                BadResponseException(
+                    "http://test.com", "Temporary failure", MockRequestsResponse(500)
+                ),
+                BadResponseException(
+                    "http://test.com",
+                    "Another Temporary failure",
+                    MockRequestsResponse(500),
+                ),
                 expected_result,
             ]
 
