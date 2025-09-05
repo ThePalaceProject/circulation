@@ -1633,8 +1633,8 @@ class TestOverdriveAPI:
         http = overdrive_api_fixture.mock_http
         http.queue_response(500, content="An error occured.")
         book = dict(id=identifier.identifier, availability_link=db.fresh_url())
-        pool, was_new, changed = overdrive_api_fixture.api.update_licensepool(book)
-        assert pool is None
+        changed = overdrive_api_fixture.api.update_licensepools(book)
+        assert not changed
 
     def test_update_licensepool_not_found(
         self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
@@ -1654,10 +1654,14 @@ class TestOverdriveAPI:
         http.queue_response(404, content=not_found)
 
         book = dict(id=identifier.identifier, availability_link=db.fresh_url())
-        pool, was_new, changed = overdrive_api_fixture.api.update_licensepool(book)
+        changed = overdrive_api_fixture.api.update_licensepools(book)
+        pools = identifier.licensed_through
+        assert len(pools) == 1
+        pool = pools[0]
         assert pool.licenses_owned == 0
         assert pool.licenses_available == 0
         assert pool.patrons_in_hold_queue == 0
+        assert changed
 
     def test_update_licensepool_provides_bibliographic_coverage(
         self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
@@ -1684,15 +1688,15 @@ class TestOverdriveAPI:
         http.queue_response(200, content=availability)
         http.queue_response(200, content=bibliographic)
 
-        # Now we're ready. When we call update_licensepool, the
+        # Now we're ready. When we call update_licensepools, the
         # OverdriveAPI will retrieve the availability information,
         # then the bibliographic information. It will then trigger the
         # OverdriveBibliographicCoverageProvider, which will
         # create an Edition and a presentation-ready Work.
-        pool, was_new, changed = overdrive_api_fixture.api.update_licensepool(
-            identifier.identifier
-        )
-        assert was_new is True
+        changed = overdrive_api_fixture.api.update_licensepools(identifier.identifier)
+        assert changed is True
+        assert len(identifier.licensed_through) == 1
+        pool = identifier.licensed_through[0]
         assert pool.licenses_owned == availability["copiesOwned"]
 
         edition = pool.presentation_edition
@@ -1726,166 +1730,9 @@ class TestOverdriveAPI:
         assert not pool.work
         http.queue_response(200, content=availability)
         http.queue_response(200, content=bibliographic)
-        pool, was_new, changed = overdrive_api_fixture.api.update_licensepool(
-            identifier.identifier
-        )
-        assert was_new is False
+        changed = overdrive_api_fixture.api.update_licensepools(identifier.identifier)
+        assert changed is True
         assert pool.work.presentation_ready is True
-
-    def test_update_new_licensepool(
-        self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
-    ):
-
-        data, raw = overdrive_api_fixture.sample_json(
-            "overdrive_availability_information.json"
-        )
-
-        # Create an identifier
-        identifier = db.identifier(identifier_type=Identifier.OVERDRIVE_ID)
-
-        # Make it look like the availability information is for the
-        # newly created Identifier.
-        raw["reserveId"] = identifier.identifier
-
-        pool, was_new = LicensePool.for_foreign_id(
-            db.session,
-            DataSource.OVERDRIVE,
-            identifier.type,
-            identifier.identifier,
-            collection=overdrive_api_fixture.collection,
-        )
-
-        (
-            pool,
-            was_new,
-            changed,
-        ) = overdrive_api_fixture.api.update_licensepool_with_book_info(
-            raw, pool, was_new
-        )
-        assert was_new is True
-        assert changed is True
-
-        db.session.commit()
-        assert pool is not None
-        assert pool.licenses_owned == raw["copiesOwned"]
-        assert pool.licenses_available == raw["copiesAvailable"]
-        assert pool.licenses_reserved == 0
-        assert pool.patrons_in_hold_queue == raw["numberOfHolds"]
-
-    def test_update_existing_licensepool(
-        self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
-    ):
-
-        data, raw = overdrive_api_fixture.sample_json(
-            "overdrive_availability_information.json"
-        )
-
-        # Create a LicensePool.
-        wr, pool = db.edition(
-            data_source_name=DataSource.OVERDRIVE,
-            identifier_type=Identifier.OVERDRIVE_ID,
-            with_license_pool=True,
-        )
-
-        # Make it look like the availability information is for the
-        # newly created LicensePool.
-        raw["id"] = pool.identifier.identifier
-
-        wr.title = "The real title."
-        assert pool.licenses_owned == 1
-        assert pool.licenses_available == 1
-        assert pool.licenses_reserved == 0
-        assert pool.patrons_in_hold_queue == 0
-
-        (
-            p2,
-            was_new,
-            changed,
-        ) = overdrive_api_fixture.api.update_licensepool_with_book_info(
-            raw, pool, False
-        )
-        assert was_new is False
-        assert changed is True
-        assert pool == p2
-        # The title didn't change to that title given in the availability
-        # information, because we already set a title for that work.
-        assert wr.title == "The real title."
-        assert pool.licenses_owned == raw["copiesOwned"]
-        assert pool.licenses_available == raw["copiesAvailable"]
-        assert pool.licenses_reserved == 0
-        assert pool.patrons_in_hold_queue == raw["numberOfHolds"]
-
-    def test_update_new_licensepool_when_same_book_has_pool_in_different_collection(
-        self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
-    ):
-
-        old_edition, old_pool = db.edition(
-            data_source_name=DataSource.OVERDRIVE,
-            identifier_type=Identifier.OVERDRIVE_ID,
-            with_license_pool=True,
-        )
-        old_pool.calculate_work()
-        collection = db.collection()
-
-        data, raw = overdrive_api_fixture.sample_json(
-            "overdrive_availability_information.json"
-        )
-
-        # Make it look like the availability information is for the
-        # old pool's Identifier.
-        identifier = old_pool.identifier
-        raw["id"] = identifier.identifier
-
-        new_pool, was_new = LicensePool.for_foreign_id(
-            db.session,
-            DataSource.OVERDRIVE,
-            identifier.type,
-            identifier.identifier,
-            collection=collection,
-        )
-        # The new pool doesn't have a presentation edition yet,
-        # but it will be updated to share the old pool's edition.
-        assert new_pool is not None
-        assert new_pool.presentation_edition is None
-
-        (
-            new_pool,
-            was_new,
-            changed,
-        ) = overdrive_api_fixture.api.update_licensepool_with_book_info(
-            raw, new_pool, was_new
-        )
-        assert new_pool is not None
-        assert was_new is True
-        assert changed is True
-        assert new_pool.presentation_edition == old_edition
-        assert new_pool.work == old_pool.work
-
-    def test_update_licensepool_with_holds(
-        self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
-    ):
-        data, raw = overdrive_api_fixture.sample_json(
-            "overdrive_availability_information_holds.json"
-        )
-        identifier = db.identifier(identifier_type=Identifier.OVERDRIVE_ID)
-        raw["id"] = identifier.identifier
-
-        license_pool, is_new = LicensePool.for_foreign_id(
-            db.session,
-            DataSource.OVERDRIVE,
-            identifier.type,
-            identifier.identifier,
-            collection=db.default_collection(),
-        )
-        (
-            pool,
-            was_new,
-            changed,
-        ) = overdrive_api_fixture.api.update_licensepool_with_book_info(
-            raw, license_pool, is_new
-        )
-        assert pool.patrons_in_hold_queue == 10
-        assert changed is True
 
     def test__refresh_patron_oauth_token(
         self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
