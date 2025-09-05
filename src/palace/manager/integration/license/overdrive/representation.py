@@ -278,6 +278,17 @@ class OverdriveRepresentationExtractor(LoggerMixin):
             licenses_owned = 0
             licenses_available = 0
             patrons_in_hold_queue = 0
+            circulation_data = CirculationData(
+                data_source_name=DataSource.OVERDRIVE,
+                primary_identifier_data=primary_identifier,
+                licenses_owned=licenses_owned,
+                licenses_available=licenses_available,
+                licenses_reserved=licenses_reserved,
+                patrons_in_hold_queue=patrons_in_hold_queue,
+            )
+            collection_circulation_data_tuple_list.insert(
+                0, (collection, circulation_data)
+            )
         elif book.get("isOwnedByCollections") is not False:
             # We own this book.
             if "numberOfHolds" in book:
@@ -288,31 +299,45 @@ class OverdriveRepresentationExtractor(LoggerMixin):
             if collection.parent:
                 # validate that the account id matches collection's external identifier by
                 # get the external identifier for collection
-                external_account_id = collection.integration_configuration.settings[
-                    "external_account_id"
-                ]
+                external_account_id = (
+                    collection.integration_configuration.settings_dict[
+                        "external_account_id"
+                    ]
+                )
                 # and use it to resolve the account
-                [account] = [a for a in accounts if a.get("id") == external_account_id]
-                licenses_owned = int(account.get("copiesOwned", 0))
-                licenses_available = int(account.get("copiesAvailable", 0))
-                # and return a single tuple in the list.
-                circulation_data = CirculationData(
-                    data_source_name=DataSource.OVERDRIVE,
-                    primary_identifier_data=primary_identifier,
-                    licenses_owned=licenses_owned,
-                    licenses_available=licenses_available,
-                    licenses_reserved=licenses_reserved,
-                    patrons_in_hold_queue=patrons_in_hold_queue,
-                )
-                collection_circulation_data_tuple_list.append(
-                    (collection, circulation_data)
-                )
+
+                matches = [
+                    a for a in accounts if a.get("id") == int(external_account_id)
+                ]
+                if matches:
+                    account = matches[0]
+                    shared = account.get("shared", False)
+                    licenses_owned = 0 if shared else int(account.get("copiesOwned", 0))
+                    licenses_available = (
+                        0 if shared else int(account.get("copiesAvailable", 0))
+                    )
+                    # and return a single tuple in the list.
+                    circulation_data = CirculationData(
+                        data_source_name=DataSource.OVERDRIVE,
+                        primary_identifier_data=primary_identifier,
+                        licenses_owned=licenses_owned,
+                        licenses_available=licenses_available,
+                        licenses_reserved=licenses_reserved,
+                        patrons_in_hold_queue=patrons_in_hold_queue,
+                    )
+                    collection_circulation_data_tuple_list.append(
+                        (collection, circulation_data)
+                    )
+
                 return collection_circulation_data_tuple_list
 
             else:
                 shared_licenses_owned = 0
                 shared_licenses_available = 0
-
+                child_accounts_by_id = {
+                    c.integration_configuration.settings_dict["external_account_id"]: c
+                    for c in collection.children
+                }
                 for account in accounts:
                     account_id = account.get("id")
                     licenses_owned = int(account.get("copiesOwned", 0))
@@ -325,9 +350,8 @@ class OverdriveRepresentationExtractor(LoggerMixin):
                     else:
                         # is child account
                         # look up the child collection with matching external id
-                        child_collection = self._find_child_collection_by_account_id(
-                            account_id
-                        )
+                        child_collection = child_accounts_by_id[str(account_id)]
+
                         # if the resources are shared
                         if account.get("shared", False):
                             # update the shared account's license counts
@@ -349,18 +373,18 @@ class OverdriveRepresentationExtractor(LoggerMixin):
                             (child_collection, circulation_data)
                         )
 
-                    # prepend main circulation data
-                    circulation_data = CirculationData(
-                        data_source_name=DataSource.OVERDRIVE,
-                        primary_identifier_data=primary_identifier,
-                        licenses_owned=shared_licenses_owned,
-                        licenses_available=shared_licenses_available,
-                        licenses_reserved=licenses_reserved,
-                        patrons_in_hold_queue=patrons_in_hold_queue,
-                    )
-                    collection_circulation_data_tuple_list.insert(
-                        0, (collection, circulation_data)
-                    )
+                # prepend main circulation data
+                circulation_data = CirculationData(
+                    data_source_name=DataSource.OVERDRIVE,
+                    primary_identifier_data=primary_identifier,
+                    licenses_owned=shared_licenses_owned,
+                    licenses_available=shared_licenses_available,
+                    licenses_reserved=licenses_reserved,
+                    patrons_in_hold_queue=patrons_in_hold_queue,
+                )
+                collection_circulation_data_tuple_list.insert(
+                    0, (collection, circulation_data)
+                )
         return collection_circulation_data_tuple_list
 
     def _get_applicable_accounts(

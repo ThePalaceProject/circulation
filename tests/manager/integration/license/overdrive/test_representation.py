@@ -95,23 +95,56 @@ class TestOverdriveRepresentationExtractor:
     def test_book_info_to_circulation_advantage(
         self, overdrive_api_fixture: OverdriveAPIFixture
     ):
+        advantage_library_a_id = 61
+        advantage_library_b_id = 62
+        advantage_library_c_id = 63
         # Overdrive Advantage accounts (a.k.a. "child" or "sub" accounts derive
         # different information from the same API responses as "main" Overdrive
         # accounts.
         fixture = overdrive_api_fixture
         raw, info = fixture.sample_json("overdrive_availability_advantage.json")
 
+        parent_collection = fixture.collection
+        child_collection_a = fixture.create_collection(
+            name="Advantage A",
+            library=fixture.library,
+            library_id=str(advantage_library_a_id),
+        )
+        child_collection_b = fixture.create_collection(
+            name="Advantage B",
+            library=fixture.library,
+            library_id=str(advantage_library_b_id),
+        )
+        child_collection_c = fixture.create_collection(
+            name="Advantage C",
+            library=fixture.library,
+            library_id=str(advantage_library_c_id),
+        )
+
+        for c in [child_collection_a, child_collection_b, child_collection_c]:
+            c.parent = parent_collection
+
         extractor = OverdriveRepresentationExtractor(fixture.api)
         # Calling in the context of a main account should return a count of
         # the main account and any shared sub account owned and available.
-        consortial_data = extractor.book_info_to_circulation(info)
+        all_data = extractor.book_info_to_circulation(
+            fixture.db.session, collection=parent_collection, book=info
+        )
+        assert len(all_data) == 3
+
+        coll, consortial_data = all_data[0]
+        assert coll == parent_collection
         assert 10 == consortial_data.licenses_owned
         assert 10 == consortial_data.licenses_available
 
         # Pretend to be an API for an Overdrive Advantage collection with
-        # library ID 61.
-        extractor = OverdriveRepresentationExtractor(MagicMock(advantage_library_id=61))
-        advantage_data = extractor.book_info_to_circulation(info)
+        # library ID A.
+        extractor = OverdriveRepresentationExtractor(
+            MagicMock(advantage_library_id=advantage_library_a_id)
+        )
+        [(child_collection_a, advantage_data)] = extractor.book_info_to_circulation(
+            fixture.db.session, collection=child_collection_a, book=info
+        )
         assert 1 == advantage_data.licenses_owned
         assert 1 == advantage_data.licenses_available
 
@@ -125,18 +158,22 @@ class TestOverdriveRepresentationExtractor:
         # relevant collection at all, no collection-specific
         # information is gleaned.
         #
-        # TODO: It would probably be better not to return a
-        # CirculationData object at all, but this shouldn't happen in
-        # a real scenario.
-        extractor = OverdriveRepresentationExtractor(MagicMock(advantage_library_id=62))
-        advantage_data = extractor.book_info_to_circulation(info)
-        assert 0 == advantage_data.licenses_owned
-        assert 0 == advantage_data.licenses_available
+        extractor = OverdriveRepresentationExtractor(
+            MagicMock(advantage_library_id=advantage_library_b_id)
+        )
+        collection_circulation_data = extractor.book_info_to_circulation(
+            fixture.db.session, collection=child_collection_b, book=info
+        )
+        assert not collection_circulation_data
 
         # Pretend to be an API for an Overdrive Advantage collection with
-        # library ID 63 which contains shared copies.
-        extractor = OverdriveRepresentationExtractor(MagicMock(advantage_library_id=63))
-        advantage_data = extractor.book_info_to_circulation(info)
+        # library ID C which contains shared copies.
+        extractor = OverdriveRepresentationExtractor(
+            MagicMock(advantage_library_id=advantage_library_c_id)
+        )
+        [(child_collection_c, advantage_data)] = extractor.book_info_to_circulation(
+            fixture.db.session, collection=child_collection_c, book=info
+        )
         # since these copies are shared and counted as part of the main
         # context we do not count them here.
         assert 0 == advantage_data.licenses_owned

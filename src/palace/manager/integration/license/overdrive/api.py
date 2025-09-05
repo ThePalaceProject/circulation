@@ -1570,8 +1570,15 @@ class OverdriveAPI(
                 cast(str, book_id),
                 collection=self.collection,
             )
-            if is_new or not license_pool.work:
+            if is_new:
                 changed = True
+
+            if is_new or not license_pool.work:
+                # Either this is the first time we've seen this book or its doesn't
+                # have an associated work. Make sure its identifier has bibliographic coverage.
+                self.overdrive_bibliographic_coverage_provider.ensure_coverage(
+                    license_pool.identifier, force=True
+                )
 
             # for each licensepool - apply apply the circuation data with the related overdrive account's circulation info.
             circ_changed = circulation.apply(
