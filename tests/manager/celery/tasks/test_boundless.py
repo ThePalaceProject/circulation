@@ -195,7 +195,9 @@ class TestImportCollection:
             mock_create_importer.return_value = mock_importer
             mock_importer.import_collection.side_effect = [
                 BadResponseException(
-                    "http://test.com", "Temporary failure", MockRequestsResponse(500)
+                    "http://test.com",
+                    "Temporary failure",
+                    MockRequestsResponse(500),
                 ),
                 BadResponseException(
                     "http://test.com",
