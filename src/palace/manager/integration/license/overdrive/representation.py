@@ -251,7 +251,7 @@ class OverdriveRepresentationExtractor(LoggerMixin):
             type=Identifier.OVERDRIVE_ID, identifier=overdrive_id
         )
 
-        accounts = book.get("accounts")
+        accounts = book.get("accounts", [])
         # TODO: We might be able to use this information to avoid the
         # need for explicit configuration of Advantage collections, or
         # at least to keep Advantage collections more up-to-date than

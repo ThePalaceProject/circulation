@@ -75,7 +75,9 @@ class TestOverdriveRepresentationExtractor:
 
         raw, info = fixture.sample_json("overdrive_availability_information_2.json")
         extractor = OverdriveRepresentationExtractor(fixture.api)
-        circulationdata = extractor.book_info_to_circulation(info)
+        [(collection, circulationdata)] = extractor.book_info_to_circulation(
+            fixture.db.session, collection=fixture.collection, book=info
+        )
 
         # NOTE: It's not realistic for licenses_available and
         # patrons_in_hold_queue to both be nonzero; this is just to
@@ -194,14 +196,16 @@ class TestOverdriveRepresentationExtractor:
         with pytest.raises(
             PalaceValueError, match="Book must have an id to be processed"
         ):
-            m(info)
+            m(fixture.db.session, collection=fixture.collection, book=info)
 
         # However, if an ID was added to `info` ahead of time (as the
         # circulation code does), we do know, and we can create a
         # CirculationData.
         identifier = transaction.identifier(identifier_type=Identifier.OVERDRIVE_ID)
         info["id"] = identifier.identifier
-        data = m(info)
+        [(collection, data)] = m(
+            fixture.db.session, collection=fixture.collection, book=info
+        )
         assert identifier == data.load_primary_identifier(transaction.session)
         assert 0 == data.licenses_owned
         assert 0 == data.licenses_available
