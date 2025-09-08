@@ -317,10 +317,11 @@ class TestBoundlessRequests:
         boundless_requests.client.queue_response(200, content=data)
         boundless_requests.requests.availability()
 
-        # The availability API request has no timeout set, because it
-        # may take time proportionate to the total size of the
-        # collection.
-        assert boundless_requests.client.requests_args[1]["timeout"] is None
+        # The availability API request defaults to the timeout we give in settings.
+        assert (
+            boundless_requests.client.requests_args[1]["timeout"]
+            == boundless_requests.settings.timeout
+        )
 
     @pytest.mark.parametrize(
         "filename",

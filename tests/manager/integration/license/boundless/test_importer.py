@@ -28,9 +28,13 @@ class TestBoundlessImporter:
 
         # We made a request to the correct URL.
         assert "/availability/v2" in boundless.http_client.requests[1]
-        assert boundless.http_client.requests_args[1]["params"] == {
+        args = boundless.http_client.requests_args[1]
+        assert args["params"] == {
             "updatedDate": "10-01-2012 15:45:25",
         }
+
+        # We made the request with a long timeout.
+        assert args["timeout"] == 600
 
         assert len(activity) == 2
 

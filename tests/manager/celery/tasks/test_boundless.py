@@ -14,7 +14,7 @@ from palace.manager.sqlalchemy.model.coverage import Timestamp
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.util import get_one
 from palace.manager.util.datetime_helpers import utc_now
-from palace.manager.util.http import BadResponseException
+from palace.manager.util.http import BadResponseException, RequestTimedOut
 from tests.fixtures.celery import ApplyTaskFixture, CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import FilesFixture
@@ -199,10 +199,9 @@ class TestImportCollection:
                     "Temporary failure",
                     MockRequestsResponse(500),
                 ),
-                BadResponseException(
+                RequestTimedOut(
                     "http://test.com",
-                    "Another Temporary failure",
-                    MockRequestsResponse(500),
+                    "Temporary timeout",
                 ),
                 expected_result,
             ]
