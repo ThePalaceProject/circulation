@@ -115,6 +115,11 @@ class OverdriveCirculationMonitor(CollectionMonitor, TimelineMonitor):
     ) -> bool | None:
         pass
 
+    def _filter_collection(cls, collection: Collection) -> bool:
+        """Since parent collections will also automatically import all child collection data,
+        only process parent collections"""
+        return collection.parent is None
+
 
 class NewTitlesOverdriveCollectionMonitor(OverdriveCirculationMonitor):
     """Monitor the Overdrive collection for newly added titles.

@@ -377,6 +377,12 @@ class CollectionMonitor(Monitor):
             )
 
     @classmethod
+    def _filter_collection(cls, collection) -> bool:
+        """A filter hook for subclasses to filter the list of collections to be
+        processed in the all() class method."""
+        return True
+
+    @classmethod
     def all(cls, _db, collections=None, **constructor_kwargs):
         """Yield a sequence of CollectionMonitor objects: one for every
         Collection associated with cls.PROTOCOL.
@@ -427,7 +433,8 @@ class CollectionMonitor(Monitor):
                 Timestamp.start.asc().nullsfirst()
             )
         for collection in collections:
-            yield cls(_db=_db, collection=collection, **constructor_kwargs)
+            if cls._filter_collection(collection):
+                yield cls(_db=_db, collection=collection, **constructor_kwargs)
 
 
 class SweepMonitor(CollectionMonitor):
