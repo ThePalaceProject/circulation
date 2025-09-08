@@ -13,6 +13,7 @@ from palace.manager.integration.license.opds.opds1.importer import (
 from palace.manager.service.celery.celery import QueueNames
 from palace.manager.service.redis.models.set import IdentifierSet
 from palace.manager.sqlalchemy.model.collection import Collection
+from palace.manager.util.http import BadResponseException
 
 
 @shared_task(queue=QueueNames.default, bind=True)
@@ -32,7 +33,13 @@ def import_all(task: Task, force: bool = False) -> None:
         )
 
 
-@shared_task(queue=QueueNames.default, bind=True)
+@shared_task(
+    queue=QueueNames.default,
+    bind=True,
+    max_retries=4,
+    autoretry_for=(BadResponseException,),
+    retry_backoff=60,
+)
 def import_collection(
     task: Task,
     collection_id: int,
