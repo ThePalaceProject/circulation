@@ -14,7 +14,7 @@ from palace.manager.integration.license.boundless.importer import BoundlessImpor
 from palace.manager.service.celery.celery import QueueNames
 from palace.manager.service.redis.models.set import IdentifierSet
 from palace.manager.sqlalchemy.model.collection import Collection
-from palace.manager.util.http import BadResponseException
+from palace.manager.util.http import BadResponseException, RequestTimedOut
 
 
 @shared_task(queue=QueueNames.default, bind=True)
@@ -41,7 +41,7 @@ def import_all_collections(task: Task, *, import_all: bool = False) -> None:
     queue=QueueNames.default,
     bind=True,
     max_retries=4,
-    autoretry_for=(BadResponseException,),
+    autoretry_for=(BadResponseException, RequestTimedOut),
     retry_backoff=60,
 )
 def import_collection(

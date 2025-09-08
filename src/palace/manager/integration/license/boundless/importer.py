@@ -83,7 +83,14 @@ class BoundlessImporter(LoggerMixin):
 
         :yield: A sequence of (BibliographicData, CirculationData) 2-tuples
         """
-        availability_response = self._api_requests.availability(since=since)
+        # If we are fetching all activity, it can take a very long time, since the Boundless API
+        # provides no way to page through results. We don't want to hang in the case the server
+        # never gives us a response though, so we set the timeout to 10 (!) minutes, so that we do
+        # eventually give up and let the task be retried. I chose 10 minutes based on querying our
+        # logs to get an idea the maximum time we've seen for a full feed response in the past.
+        availability_response = self._api_requests.availability(
+            since=since, timeout=10 * 60
+        )
         yield from BibliographicParser.parse(availability_response)
 
     def _check_api_credentials(self) -> bool:

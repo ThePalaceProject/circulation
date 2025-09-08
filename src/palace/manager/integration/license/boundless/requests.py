@@ -173,6 +173,7 @@ class BoundlessRequests(LoggerMixin):
         patron_id: str | None | None = None,
         since: datetime.datetime | None = None,
         title_ids: list[str] | None = None,
+        timeout: int | None | Literal[SentinelType.NotGiven] = SentinelType.NotGiven,
     ) -> AvailabilityResponse:
         url = self._base_url + "availability/v2"
         params = {}
@@ -184,7 +185,7 @@ class BoundlessRequests(LoggerMixin):
         if title_ids:
             params["titleIds"] = ",".join(title_ids)
         response = self._request(
-            "GET", url, AvailabilityResponse.from_xml, params=params, timeout=None
+            "GET", url, AvailabilityResponse.from_xml, params=params, timeout=timeout
         )
         return response
 
