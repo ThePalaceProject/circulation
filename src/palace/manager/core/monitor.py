@@ -377,7 +377,7 @@ class CollectionMonitor(Monitor):
             )
 
     @classmethod
-    def _filter_collection(cls, collection) -> bool:
+    def _filter_collection(cls, collection: Collection) -> bool:
         """A filter hook for subclasses to filter the list of collections to be
         processed in the all() class method."""
         return True

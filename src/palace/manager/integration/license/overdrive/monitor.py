@@ -115,6 +115,7 @@ class OverdriveCirculationMonitor(CollectionMonitor, TimelineMonitor):
     ) -> bool | None:
         pass
 
+    @classmethod
     def _filter_collection(cls, collection: Collection) -> bool:
         """Since parent collections will also automatically import all child collection data,
         only process parent collections"""
