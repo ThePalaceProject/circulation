@@ -65,6 +65,15 @@ class OverdriveCirculationMonitor(CollectionMonitor, TimelineMonitor):
         """
         overdrive_data_source = DataSource.lookup(self._db, DataSource.OVERDRIVE)
 
+        if self.collection.parent is None:
+            # If it is a parent account, generate child (Advantage) collections if they don't already exist.
+            # if any child accounts that were configured are no longer configured on the overdrive side,
+            # we do not delete them just so the users aren't surprised if an Advantage account that
+            # they configured disappears.  Also, if the user changes the name of the advantage collection
+            # we do not overwrite it.
+            for advantage_account in self.api.get_advantage_accounts():
+                advantage_account.to_collection(self._db, overwrite_name=False)
+
         # Ask for changes between the last time covered by the Monitor
         # and the current time.
         total_books = 0
