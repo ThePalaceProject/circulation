@@ -74,6 +74,8 @@ class TestOverdriveCirculationMonitor:
         #
         # The method stops when should_stop() -- called on every book
         # -- returns True.
+        advantage_account = MagicMock()
+
         class MockAPI:
             def __init__(self, *ignore, **kwignore):
                 self.licensepools = []
@@ -83,6 +85,9 @@ class TestOverdriveCirculationMonitor:
                 is_changed = self.licensepools.pop(0)
                 self.update_licensepool_calls.append(book_id)
                 return is_changed
+
+            def get_advantage_accounts(self):
+                return [advantage_account]
 
         class MockMonitor(OverdriveCirculationMonitor):
             recently_changed_ids_called_with = None
@@ -161,6 +166,9 @@ class TestOverdriveCirculationMonitor:
         # and 3.
         assert "Books processed: 4." == progress.achievements
 
+        # validate that advantage collections are created if they don't exist.
+        advantage_account.to_collection.assert_called_once()
+
     def test_catch_up_from_with_failures_retried(
         self, overdrive_api_fixture: OverdriveAPIFixture
     ):
@@ -190,6 +198,9 @@ class TestOverdriveCirculationMonitor:
                 is_changed = self.licensepools.pop(0)
                 self.update_licensepool_calls.append(book_id)
                 return is_changed
+
+            def get_advantage_accounts(self):
+                return []
 
         monitor = OverdriveCirculationMonitor(
             db.session,
@@ -233,6 +244,9 @@ class TestOverdriveCirculationMonitor:
                 current_count = current_count + 1
                 self.tries[str(book_id)] = current_count
                 raise Exception("Generic exception that will cause bypass retries")
+
+            def get_advantage_accounts(self):
+                return []
 
         monitor = OverdriveCirculationMonitor(
             db.session,
@@ -290,6 +304,9 @@ class TestOverdriveCirculationMonitor:
                         raise ObjectDeletedError({}, "object deleted")
 
                 return False
+
+            def get_advantage_accounts(self):
+                return []
 
         monitor = OverdriveCirculationMonitor(
             db.session,
