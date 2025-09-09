@@ -5,6 +5,7 @@ from collections.abc import Mapping
 from typing import TYPE_CHECKING, NamedTuple
 
 from lxml import etree
+from requests import Response
 
 from palace.manager.api.circulation.exceptions import (
     AlreadyCheckedOut,
@@ -24,7 +25,7 @@ from palace.manager.api.circulation.exceptions import (
     RemoteInitiatedServerError,
 )
 from palace.manager.core.exceptions import BasePalaceException
-from palace.manager.util.http import BadResponseException
+from palace.manager.util.http.exception import BadResponseException
 from palace.manager.util.problem_detail import BaseProblemDetailException, ProblemDetail
 
 if TYPE_CHECKING:
@@ -36,7 +37,7 @@ if TYPE_CHECKING:
 class BoundlessException(BasePalaceException): ...
 
 
-class BoundlessValidationError(BadResponseException, BoundlessException):
+class BoundlessValidationError(BadResponseException[Response], BoundlessException):
     """
     Raise when we are unable to validate a response from Boundless (Axis 360).
     """

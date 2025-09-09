@@ -20,7 +20,7 @@ from palace.manager.integration.metadata.novelist import (
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.resource import HttpResponseTuple, Representation
-from palace.manager.util.http import HTTP
+from palace.manager.util.http.http import HTTP
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import FilesFixture
 from tests.fixtures.http import MockHttpClientFixture

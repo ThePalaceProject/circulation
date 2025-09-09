@@ -240,5 +240,6 @@ def setup_logging(
         "requests.packages.urllib3.connectionpool",
         "botocore",
         "urllib3.connectionpool",
+        "httpx",
     ):
         logging.getLogger(logger).setLevel(verbose_level.value)

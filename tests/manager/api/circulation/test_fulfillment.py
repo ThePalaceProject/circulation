@@ -6,7 +6,7 @@ from palace.manager.api.circulation.fulfillment import (
     FetchFulfillment,
     RedirectFulfillment,
 )
-from palace.manager.util.http import BadResponseException
+from palace.manager.util.http.exception import BadResponseException
 from tests.fixtures.http import MockHttpClientFixture
 
 

@@ -25,7 +25,7 @@ from palace.manager.integration.settings import (
 )
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.sqlalchemy.model.patron import Patron
-from palace.manager.util.http import HTTP
+from palace.manager.util.http.http import HTTP
 from palace.manager.util.pydantic import HttpUrl
 
 if TYPE_CHECKING:

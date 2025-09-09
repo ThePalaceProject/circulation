@@ -48,7 +48,10 @@ from palace.manager.sqlalchemy.model.patron import Hold, Loan
 from palace.manager.sqlalchemy.model.resource import Hyperlink
 from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.util.datetime_helpers import datetime_utc, utc_now
-from palace.manager.util.http import BadResponseException, RemoteIntegrationException
+from palace.manager.util.http.exception import (
+    BadResponseException,
+    RemoteIntegrationException,
+)
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import OPDS2FilesFixture
 from tests.fixtures.odl import OPDS2WithODLApiFixture

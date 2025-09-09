@@ -1,11 +1,11 @@
 from requests import Response
 from typing_extensions import Self
 
-from palace.manager.util.http import BadResponseException
+from palace.manager.util.http.exception import BadResponseException
 from palace.manager.util.problem_detail import ProblemDetail
 
 
-class OpdsResponseException(BadResponseException):
+class OpdsResponseException(BadResponseException[Response]):
     """
     OPDS in general, and ODL (and Readium LCP) in particular, often return errors as
     Problem Detail documents. This isn't always the case, but we try to use this information

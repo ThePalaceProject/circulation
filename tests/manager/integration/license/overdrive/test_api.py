@@ -53,7 +53,7 @@ from palace.manager.sqlalchemy.model.patron import Hold
 from palace.manager.sqlalchemy.model.resource import Representation
 from palace.manager.util import base64
 from palace.manager.util.datetime_helpers import utc_now
-from palace.manager.util.http import BadResponseException
+from palace.manager.util.http.exception import BadResponseException
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.library import LibraryFixture
 from tests.fixtures.overdrive import OverdriveAPIFixture

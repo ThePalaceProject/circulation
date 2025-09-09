@@ -60,7 +60,7 @@ from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.sqlalchemy.util import get_one, get_one_or_create
 from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.flask_util import OPDSEntryResponse, Response
-from palace.manager.util.http import RemoteIntegrationException
+from palace.manager.util.http.exception import RemoteIntegrationException
 from palace.manager.util.opds_writer import AtomFeed, OPDSFeed
 from palace.manager.util.problem_detail import ProblemDetail
 from tests.fixtures.api_controller import CirculationControllerFixture

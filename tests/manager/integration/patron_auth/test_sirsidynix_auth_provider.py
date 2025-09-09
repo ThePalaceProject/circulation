@@ -22,7 +22,7 @@ from palace.manager.integration.patron_auth.sirsidynix_authentication_provider i
     SirsiDynixPatronData,
 )
 from palace.manager.sqlalchemy.model.patron import Patron
-from palace.manager.util.http import HTTP
+from palace.manager.util.http.http import HTTP
 from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.mocks.mock import MockRequestsResponse

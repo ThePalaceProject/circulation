@@ -5,7 +5,9 @@ from abc import ABC, abstractmethod
 import requests
 from flask import Response
 
-from palace.manager.util.http import HTTP, BadResponseException, ResponseCodesT
+from palace.manager.util.http.base import ResponseCodesTypes
+from palace.manager.util.http.exception import BadResponseException
+from palace.manager.util.http.http import HTTP
 from palace.manager.util.log import LoggerMixin
 
 
@@ -95,7 +97,7 @@ class FetchFulfillment(UrlFulfillment, LoggerMixin):
         content_type: str | None = None,
         *,
         include_headers: dict[str, str] | None = None,
-        allowed_response_codes: ResponseCodesT = None,
+        allowed_response_codes: ResponseCodesTypes | None = None,
     ) -> None:
         super().__init__(content_link, content_type)
         self.include_headers = include_headers or {}

@@ -10,7 +10,7 @@ import pytest
 from requests import Response
 from typing_extensions import Self, Unpack, overload
 
-from palace.manager.util.http import HTTP, GetRequestKwargs, RequestKwargs
+from palace.manager.util.http.http import HTTP, GetRequestKwargs, RequestKwargs
 from tests.mocks.mock import MockRequestsResponse
 
 

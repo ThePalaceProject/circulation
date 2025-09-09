@@ -35,7 +35,7 @@ from palace.manager.sqlalchemy.model.discovery_service_registration import (
 from palace.manager.sqlalchemy.model.integration import IntegrationConfiguration
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.util import get_one, get_one_or_create
-from palace.manager.util.http import HTTP, RequestKwargs
+from palace.manager.util.http.http import HTTP, RequestKwargs
 from palace.manager.util.problem_detail import ProblemDetailException
 from palace.manager.util.pydantic import HttpUrl
 

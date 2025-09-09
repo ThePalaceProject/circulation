@@ -16,7 +16,7 @@ from palace.manager.service.redis.models.patron_activity import (
     PatronActivity,
     PatronActivityStatus,
 )
-from palace.manager.util.http import RemoteIntegrationException
+from palace.manager.util.http.exception import RemoteIntegrationException
 from tests.fixtures.celery import CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.redis import RedisFixture
