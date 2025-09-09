@@ -281,7 +281,7 @@ class OverdriveRepresentationExtractor(LoggerMixin):
             licenses_owned: int,
             licenses_available: int,
             prepend: bool = False,
-        ):
+        ) -> None:
             circulation_data = CirculationData(
                 data_source_name=DataSource.OVERDRIVE,
                 primary_identifier_data=primary_identifier,
