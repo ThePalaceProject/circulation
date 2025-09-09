@@ -1,6 +1,7 @@
 import threading
 from collections.abc import Generator
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from typing import Any
 
 import pytest
 
@@ -25,16 +26,19 @@ class MockAPIServerRequest:
 class MockAPIServerResponse:
     """A response returned from a server."""
 
-    status_code: int
-    content: bytes
-    headers: dict[str, str]
-    close_obnoxiously: bool
-
-    def __init__(self) -> None:
-        self.status_code = 200
-        self.content = b""
-        self.headers = {}
-        self.close_obnoxiously = False
+    def __init__(
+        self,
+        status_code: int = 200,
+        content: bytes | str = b"",
+        headers: dict[str, str] | None = None,
+        close_obnoxiously: bool = False,
+    ) -> None:
+        self.status_code = status_code
+        self.content = (
+            content if isinstance(content, bytes) else content.encode("utf-8")
+        )
+        self.headers = headers if headers else {}
+        self.close_obnoxiously = close_obnoxiously
 
     def set_content(self, data: bytes) -> None:
         """A convenience method that automatically sets the correct content length for data."""
@@ -85,17 +89,12 @@ class MockAPIServerRequestHandler(BaseHTTPRequestHandler, LoggerMixin):
             )
         self._send_everything(_response)
 
-    def do_GET(self) -> None:
-        self.log.info("GET")
-        self._handle_everything()
-
-    def do_POST(self) -> None:
-        self.log.info("POST")
-        self._handle_everything()
-
-    def do_PUT(self) -> None:
-        self.log.info("PUT")
-        self._handle_everything()
+    def __getattr__(self, name: str) -> Any:
+        if name.startswith("do_"):
+            method = name.removeprefix("do_")
+            self.log.info(method)
+            return self._handle_everything
+        raise AttributeError(f"{type(self).__name__} has no attribute {name}")
 
     def version_string(self) -> str:
         return ""
@@ -148,6 +147,7 @@ class MockAPIServer(LoggerMixin):
     def enqueue_response(
         self, request_method: str, request_path: str, response: MockAPIServerResponse
     ) -> None:
+        request_method = request_method.upper()
         _by_method = self._responses.get(request_method) or {}
         _by_path = _by_method.get(request_path) or []
         _by_path.append(response)
@@ -175,6 +175,17 @@ class MockAPIServer(LoggerMixin):
 
     def requests(self) -> list[MockAPIServerRequest]:
         return list(self._requests)
+
+    @property
+    def latest_request(self) -> MockAPIServerRequest:
+        if self._requests:
+            return self._requests[-1]
+        raise IndexError("No requests have been made to the server yet.")
+
+    def reset_mock(self) -> None:
+        """Clear all enqueued responses and recorded requests."""
+        self._responses.clear()
+        self._requests.clear()
 
 
 @pytest.fixture

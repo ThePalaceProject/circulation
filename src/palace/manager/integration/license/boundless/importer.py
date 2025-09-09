@@ -22,7 +22,7 @@ from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.coverage import Timestamp
 from palace.manager.sqlalchemy.util import get_one_or_create
 from palace.manager.util.datetime_helpers import datetime_utc
-from palace.manager.util.http import BadResponseException
+from palace.manager.util.http.exception import BadResponseException
 from palace.manager.util.log import LoggerMixin
 
 

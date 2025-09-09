@@ -14,7 +14,7 @@ from palace.manager.integration.license.boundless.importer import BoundlessImpor
 from palace.manager.service.celery.celery import QueueNames
 from palace.manager.service.redis.models.set import IdentifierSet
 from palace.manager.sqlalchemy.model.collection import Collection
-from palace.manager.util.http import (
+from palace.manager.util.http.exception import (
     BadResponseException,
     RemoteIntegrationException,
     RequestTimedOut,

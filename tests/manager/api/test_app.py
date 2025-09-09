@@ -6,7 +6,7 @@ from palace.manager.api.app import (
     initialize_application,
     initialize_circulation_manager,
 )
-from palace.manager.util.http import HTTP
+from palace.manager.util.http.http import HTTP
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.services import ServicesFixture
 

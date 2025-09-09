@@ -71,7 +71,10 @@ from palace.manager.sqlalchemy.model.resource import Resource
 from palace.manager.sqlalchemy.util import get_one
 from palace.manager.util import base64
 from palace.manager.util.datetime_helpers import utc_now
-from palace.manager.util.http import BadResponseException, RemoteIntegrationException
+from palace.manager.util.http.exception import (
+    BadResponseException,
+    RemoteIntegrationException,
+)
 
 
 class OPDS2WithODLApi(

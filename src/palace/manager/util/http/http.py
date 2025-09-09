@@ -2,151 +2,37 @@ from __future__ import annotations
 
 import logging
 import time
-from collections.abc import Callable, Collection, Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from io import BytesIO, StringIO
 from json import JSONDecodeError
 from typing import Any, Literal, Protocol, TypedDict
-from urllib.parse import urlparse
 
 import requests
-from flask_babel import lazy_gettext as _
 from requests import PreparedRequest, Session as RequestsSession
 from requests.adapters import HTTPAdapter, Response
 from requests.auth import AuthBase
-from typing_extensions import Self, Unpack
+from typing_extensions import Unpack
 from urllib3 import Retry
 
-from palace import manager
-from palace.manager.core.exceptions import IntegrationException, PalaceValueError
+from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.core.problem_details import INTEGRATION_ERROR
+from palace.manager.util.http.base import (
+    ResponseCodesTypes,
+    get_default_headers,
+    get_series,
+    raise_for_bad_response,
+)
+from palace.manager.util.http.exception import (
+    RequestNetworkException,
+    RequestTimedOut,
+)
 from palace.manager.util.log import LoggerMixin
 from palace.manager.util.problem_detail import (
     JSON_MEDIA_TYPE as PROBLEM_DETAIL_JSON_MEDIA_TYPE,
-    BaseProblemDetailException,
-    ProblemDetail,
     ProblemDetailException,
 )
 from palace.manager.util.sentinel import SentinelType
 
-
-class RemoteIntegrationException(IntegrationException, BaseProblemDetailException):
-    """An exception that happens when we try and fail to communicate
-    with a third-party service over HTTP.
-    """
-
-    title = _("Failure contacting external service")
-    detail = _(
-        "The server tried to access %(service)s but the third-party service experienced an error."
-    )
-    internal_message = "Error accessing %s: %s"
-
-    def __init__(
-        self, url_or_service: str, message: str, debug_message: str | None = None
-    ) -> None:
-        """Indicate that a remote integration has failed.
-
-        `param url_or_service` The name of the service that failed
-           (e.g. "Overdrive"), or the specific URL that had the problem.
-        """
-        if url_or_service and any(
-            url_or_service.startswith(x) for x in ("http:", "https:")
-        ):
-            self.url = url_or_service
-            self.service = urlparse(url_or_service).netloc
-        else:
-            self.url = self.service = url_or_service
-
-        super().__init__(message, debug_message)
-
-    def __str__(self) -> str:
-        message = super().__str__()
-        if self.debug_message:
-            message += "\n\n" + self.debug_message
-        return self.internal_message % (self.url, message)
-
-    @property
-    def problem_detail(self) -> ProblemDetail:
-        return INTEGRATION_ERROR.detailed(
-            detail=self.document_detail(),
-            title=self.title,
-            debug_message=self.document_debug_message(),
-        )
-
-    def document_detail(self) -> str:
-        return _(str(self.detail), service=self.service)  # type: ignore[no-any-return]
-
-    def document_debug_message(self) -> str:
-        return str(self)
-
-
-class BadResponseException(RemoteIntegrationException):
-    """The request seemingly went okay, but we got a bad response."""
-
-    title = _("Bad response")
-    detail = _(
-        "The server made a request to %(service)s, and got an unexpected or invalid response."
-    )
-    internal_message = "Bad response from %s: %s"
-
-    BAD_STATUS_CODE_MESSAGE = (
-        "Got status code %s from external server, cannot continue."
-    )
-
-    def __init__(
-        self,
-        url_or_service: str,
-        message: str,
-        response: Response,
-        debug_message: str | None = None,
-    ):
-        """Indicate that a remote integration has failed.
-
-        `param url_or_service` The name of the service that failed
-           (e.g. "Overdrive"), or the specific URL that had the problem.
-        """
-        if debug_message is None:
-            debug_message = (
-                f"Status code: {response.status_code}\nContent: {response.text}"
-            )
-
-        super().__init__(url_or_service, message, debug_message)
-        self.response = response
-
-    @classmethod
-    def bad_status_code(cls, url: str, response: Response) -> Self:
-        """The response is bad because the status code is wrong."""
-        message = cls.BAD_STATUS_CODE_MESSAGE % response.status_code
-        return cls(
-            url,
-            message,
-            response,
-        )
-
-
-class RequestNetworkException(
-    RemoteIntegrationException, requests.exceptions.RequestException
-):
-    """An exception from the requests module that can be represented as
-    a problem detail document.
-    """
-
-    title = _("Network failure contacting third-party service")
-    detail = _("The server experienced a network error while contacting %(service)s.")
-    internal_message = "Network error contacting %s: %s"
-
-
-class RequestTimedOut(RequestNetworkException, requests.exceptions.Timeout):
-    """A timeout exception that can be represented as a problem
-    detail document.
-    """
-
-    title = _("Timeout")
-    detail = _("The server made a request to %(service)s, and that request timed out.")
-    internal_message = "Timeout accessing %s: %s"
-
-
-_ResponseCodesLiteral = Literal["2xx", "3xx", "4xx", "5xx"]
-ResponseCodesT = Collection[_ResponseCodesLiteral | int] | None
 MakeRequestT = (
     RequestsSession | Callable[..., Response] | Literal[SentinelType.NotGiven]
 )
@@ -154,15 +40,15 @@ MakeRequestT = (
 
 class GetRequestKwargs(TypedDict, total=False):
     params: Mapping[str, str | int | float | None] | None
-    headers: Mapping[str, str | None] | None
+    headers: Mapping[str, str] | None
     auth: tuple[str, str] | AuthBase | None
     timeout: float | int | None
     allow_redirects: bool
     stream: bool | None
     verify: bool | None
 
-    allowed_response_codes: ResponseCodesT
-    disallowed_response_codes: ResponseCodesT
+    allowed_response_codes: ResponseCodesTypes
+    disallowed_response_codes: ResponseCodesTypes
     verbose: bool
     max_retry_count: int
     backoff_factor: float
@@ -198,17 +84,13 @@ class _ProcessResponseCallable(Protocol):
         self,
         url: str,
         response: Response,
-        allowed_response_codes: ResponseCodesT = None,
-        disallowed_response_codes: ResponseCodesT = None,
+        allowed_response_codes: ResponseCodesTypes,
+        disallowed_response_codes: ResponseCodesTypes,
     ) -> Response: ...
 
 
 class HTTP(LoggerMixin):
     """A helper for the `requests` module."""
-
-    # In case an app version is not present, we can use this version as a fallback
-    # for all outgoing http requests without a custom user-agent
-    DEFAULT_USER_AGENT_VERSION = "1.x.x"
 
     DEFAULT_REQUEST_RETRIES = 5
     DEFAULT_REQUEST_TIMEOUT = 20
@@ -332,7 +214,7 @@ class HTTP(LoggerMixin):
         """
         cls._validate_kwargs(kwargs)
 
-        process_response_with = process_response_with or cls._process_response
+        process_response_with = process_response_with or raise_for_bad_response
         make_request_with: MakeRequestT = kwargs.pop(
             "make_request_with", SentinelType.NotGiven
         )
@@ -348,12 +230,7 @@ class HTTP(LoggerMixin):
         backoff_factor: float | None = kwargs.pop("backoff_factor", None)
 
         # Set a user-agent if not already present
-        version = (
-            manager.__version__
-            if manager.__version__
-            else cls.DEFAULT_USER_AGENT_VERSION
-        )
-        headers: dict[str, str | None] = {"User-Agent": f"Palace Manager/{version}"}
+        headers = get_default_headers()
         if (additional_headers := kwargs.get("headers")) is not None:
             headers.update(additional_headers)
         kwargs["headers"] = headers
@@ -397,82 +274,6 @@ class HTTP(LoggerMixin):
             allowed_response_codes,
             disallowed_response_codes,
         )
-
-    @classmethod
-    def _process_response(
-        cls,
-        url: str,
-        response: Response,
-        allowed_response_codes: ResponseCodesT = None,
-        disallowed_response_codes: ResponseCodesT = None,
-    ) -> Response:
-        """Raise a RequestNetworkException if the response code indicates a
-        server-side failure, or behavior so unpredictable that we can't
-        continue.
-
-        :param allowed_response_codes If passed, then only the responses with
-            http status codes in this list are processed.  The rest generate
-            BadResponseExceptions. If both allowed_response_codes and
-            disallowed_response_codes are passed, then the allowed_response_codes
-            list is used.
-        :param disallowed_response_codes The values passed are added to 5xx, as
-            http status codes that would generate BadResponseExceptions.
-        """
-        allowed_response_codes_str = (
-            list(map(str, allowed_response_codes)) if allowed_response_codes else []
-        )
-        disallowed_response_codes_str = (
-            list(map(str, disallowed_response_codes))
-            if disallowed_response_codes
-            else []
-        )
-
-        series = cls.series(response.status_code)
-        code = str(response.status_code)
-
-        if code in allowed_response_codes_str or series in allowed_response_codes_str:
-            # The code or series has been explicitly allowed. Allow
-            # the request to be processed.
-            return response
-
-        error_message = None
-        if (
-            series == "5xx"
-            or code in disallowed_response_codes_str
-            or series in disallowed_response_codes_str
-        ):
-            # Unless explicitly allowed, the 5xx series always results in
-            # an exception.
-            error_message = BadResponseException.BAD_STATUS_CODE_MESSAGE
-        elif allowed_response_codes and not (
-            code in allowed_response_codes_str or series in allowed_response_codes_str
-        ):
-            error_message = (
-                "Got status code %%s from external server, but can only continue on: %s."
-                % (", ".join(sorted(allowed_response_codes_str)),)
-            )
-
-        if error_message:
-            raise BadResponseException(
-                url,
-                error_message % code,
-                debug_message="Response content: %s"
-                % cls._decode_response_content(response, url),
-                response=response,
-            )
-        return response
-
-    @classmethod
-    def _decode_response_content(cls, response: Response, url: str) -> str:
-        try:
-            return response.text
-        except Exception as e:
-            raise RequestNetworkException(url, str(e)) from e
-
-    @classmethod
-    def series(cls, status_code: int) -> _ResponseCodesLiteral:
-        """Return the HTTP series for the given status code."""
-        return "%sxx" % (int(status_code) // 100)  # type: ignore[return-value]
 
     @classmethod
     def debuggable_get(cls, url: str, **kwargs: Unpack[GetRequestKwargs]) -> Response:
@@ -523,8 +324,8 @@ class HTTP(LoggerMixin):
         cls,
         url: str,
         response: Response,
-        allowed_response_codes: ResponseCodesT = None,
-        disallowed_response_codes: ResponseCodesT = None,
+        allowed_response_codes: ResponseCodesTypes,
+        disallowed_response_codes: ResponseCodesTypes,
     ) -> Response:
         """If there was a problem with an integration request,
         raise ProblemError with an appropriate ProblemDetail. Otherwise, return the
@@ -537,7 +338,7 @@ class HTTP(LoggerMixin):
         disallowed_response_codes_str = list(map(str, disallowed_response_codes))
 
         code = response.status_code
-        series = cls.series(code)
+        series = get_series(code)
         if (
             str(code) in allowed_response_codes_str
             or series in allowed_response_codes_str

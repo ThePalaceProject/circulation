@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from palace.manager.integration.license.bibliotheca import BibliothecaAPI
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.library import Library
-from palace.manager.util.http import HTTP
+from palace.manager.util.http.base import raise_for_bad_response
 from tests.mocks.mock import MockRequestsResponse
 
 
@@ -43,11 +43,11 @@ class MockBibliothecaAPI(BibliothecaAPI):
         """Simulate HTTP.request_with_timeout."""
         self.requests.append([method, url, args, kwargs])
         response = self.responses.pop()
-        return HTTP._process_response(
+        return raise_for_bad_response(
             url,
             response,
-            kwargs.get("allowed_response_codes"),
-            kwargs.get("disallowed_response_codes"),
+            kwargs.get("allowed_response_codes", []),
+            kwargs.get("disallowed_response_codes", []),
         )
 
     def _simple_http_get(self, url, headers, *args, **kwargs):

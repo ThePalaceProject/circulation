@@ -17,7 +17,7 @@ from palace.manager.service.integration_registry.license_providers import (
     LicenseProvidersRegistry,
 )
 from palace.manager.sqlalchemy.model.collection import Collection
-from palace.manager.util.http import HTTP
+from palace.manager.util.http.http import HTTP
 
 _ODL_PUBLICATION_ADAPTOR: TypeAdapter[Opds2OrOpds2WithOdlPublication] = TypeAdapter(
     Opds2OrOpds2WithOdlPublication

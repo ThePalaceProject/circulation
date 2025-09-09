@@ -1,4 +1,6 @@
-from collections.abc import Mapping, Sequence
+import functools
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
 from functools import partial
 from typing import Any
 from unittest import mock
@@ -13,16 +15,36 @@ from requests_mock import Mocker
 from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.core.problem_details import INTEGRATION_ERROR, INVALID_INPUT
 from palace.manager.service.logging.configuration import LogLevel
-from palace.manager.util.http import (
-    HTTP,
+from palace.manager.util.http.base import raise_for_bad_response
+from palace.manager.util.http.exception import (
     BadResponseException,
-    BearerAuth,
-    RemoteIntegrationException,
     RequestNetworkException,
     RequestTimedOut,
 )
+from palace.manager.util.http.http import (
+    HTTP,
+    BearerAuth,
+)
 from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
+from tests.fixtures.webserver import MockAPIServer, MockAPIServerResponse
 from tests.mocks.mock import MockRequestsResponse
+
+
+@dataclass
+class HttpTestFixture:
+    server: MockAPIServer
+    request_with_timeout: Callable[..., requests.Response]
+
+
+@pytest.fixture
+def test_http_fixture(mock_web_server: MockAPIServer) -> HttpTestFixture:
+    # Make sure we don't wait for retries, as that will slow down the tests.
+    request_with_timeout = functools.partial(
+        HTTP.request_with_timeout, timeout=1, backoff_factor=0
+    )
+    return HttpTestFixture(
+        server=mock_web_server, request_with_timeout=request_with_timeout
+    )
 
 
 class FakeRequest:
@@ -40,12 +62,6 @@ class FakeRequest:
 
 
 class TestHTTP:
-    def test_series(self) -> None:
-        m = HTTP.series
-        assert m(201) == "2xx"
-        assert m(399) == "3xx"
-        assert m(500) == "5xx"
-
     def test_session(self) -> None:
         # If supplied with a max_retry_count and backoff_factor, they are used to
         # create and mount a requests HTTPAdapter.
@@ -85,7 +101,7 @@ class TestHTTP:
                 "GET", "url", headers=mock.ANY, timeout=10
             )
 
-    @mock.patch("palace.manager.util.http.manager.__version__", "<VERSION>")
+    @mock.patch("palace.manager.util.http.base.manager.__version__", "<VERSION>")
     def test_request_with_timeout_success(self) -> None:
         request = FakeRequest(MockRequestsResponse(200, content="Success!"))
         response = HTTP._request_with_timeout(
@@ -183,7 +199,7 @@ class TestHTTP:
             timeout=20,
         )
 
-    @mock.patch("palace.manager.util.http.manager.__version__", None)
+    @mock.patch("palace.manager.util.http.base.manager.__version__", None)
     def test_default_user_agent(self) -> None:
         request = FakeRequest()
         assert (
@@ -192,7 +208,7 @@ class TestHTTP:
             ).status_code
             == 201
         )
-        assert request.agent == "Palace Manager/1.x.x"
+        assert request.agent == "Palace Manager/x.x.x"
 
         # User agent is still set if headers are None
         assert (
@@ -201,7 +217,7 @@ class TestHTTP:
             ).status_code
             == 201
         )
-        assert request.agent == "Palace Manager/1.x.x"
+        assert request.agent == "Palace Manager/x.x.x"
 
         # The headers are not modified if they are passed into the function
         original_headers = {"header": "value"}
@@ -214,7 +230,7 @@ class TestHTTP:
             ).status_code
             == 201
         )
-        assert request.agent == "Palace Manager/1.x.x"
+        assert request.agent == "Palace Manager/x.x.x"
         assert original_headers == {"header": "value"}
 
     def test_request_with_timeout_failure(self) -> None:
@@ -228,13 +244,13 @@ class TestHTTP:
                 "PUT", "http://url/", make_request_with=immediately_timeout
             )
 
-    @mock.patch("palace.manager.util.http.manager.__version__", None)
+    @mock.patch("palace.manager.util.http.base.manager.__version__", None)
     def test_request_with_timeout_verbose(self, caplog: pytest.LogCaptureFixture):
         """
         When the verbose flag is set, we log the request and response.
         """
         caplog.set_level(LogLevel.info)
-        mock_process_response = create_autospec(HTTP._process_response)
+        mock_raise_for_bad_response = create_autospec(raise_for_bad_response)
         make_request = MagicMock(
             return_value=MockRequestsResponse(
                 204, headers={"test": "response header"}, content="Success!"
@@ -245,7 +261,7 @@ class TestHTTP:
             "POST",
             "http://url/",
             make_request_with=make_request,
-            process_response_with=mock_process_response,
+            process_response_with=mock_raise_for_bad_response,
             verbose=True,
             headers={"header": "value"},
         )
@@ -253,12 +269,12 @@ class TestHTTP:
         assert make_request.call_count == 1
         assert make_request.call_args.args == ("POST", "http://url/")
 
-        assert mock_process_response.call_count == 1
-        assert response == mock_process_response.return_value
+        assert mock_raise_for_bad_response.call_count == 1
+        assert response == mock_raise_for_bad_response.return_value
 
         assert (
             "Sending POST request to http://url/: kwargs {'headers': {'User-Agent':"
-            " 'Palace Manager/1.x.x', 'header': 'value'}, 'timeout': 20}"
+            " 'Palace Manager/x.x.x', 'header': 'value'}, 'timeout': 20}"
         ) in caplog.messages
         assert (
             "Response from http://url/: 204 {'test': 'response header'} b'Success!'"
@@ -405,7 +421,11 @@ class TestHTTP:
         """Test a method that gives more detailed information when a
         problem happens.
         """
-        m = HTTP.process_debuggable_response
+        m = partial(
+            HTTP.process_debuggable_response,
+            allowed_response_codes=[],
+            disallowed_response_codes=[],
+        )
         success = MockRequestsResponse(200, content="Success!")
         assert success == m("url", success)
 
@@ -439,173 +459,73 @@ class TestHTTP:
         assert error == m("url", error, allowed_response_codes=["400"])  # type: ignore[list-item]
         assert error == m("url", error, allowed_response_codes=["4xx"])
 
+    def test_retries_unspecified(self, test_http_fixture: HttpTestFixture):
+        for i in range(1, 7):
+            response = MockAPIServerResponse()
+            response.content = b"Ouch."
+            response.status_code = 502
+            test_http_fixture.server.enqueue_response("GET", "/test", response)
 
-class TestRemoteIntegrationException:
-    def test_with_service_name(self):
-        """You don't have to provide a URL when creating a
-        RemoteIntegrationException; you can just provide the service
-        name.
-        """
-        exc = RemoteIntegrationException(
-            "Unreliable Service", "I just can't handle your request right now."
+        with pytest.raises(BadResponseException):
+            test_http_fixture.request_with_timeout(
+                "GET", test_http_fixture.server.url("/test")
+            )
+
+        assert len(test_http_fixture.server.requests()) == 6
+        request = test_http_fixture.server.requests().pop()
+        assert request.path == "/test"
+        assert request.method == "GET"
+
+    def test_retries_none(self, test_http_fixture: HttpTestFixture):
+        response = MockAPIServerResponse()
+        response.content = b"Ouch."
+        response.status_code = 502
+
+        test_http_fixture.server.enqueue_response("GET", "/test", response)
+        with pytest.raises(BadResponseException):
+            test_http_fixture.request_with_timeout(
+                "GET", test_http_fixture.server.url("/test"), max_retry_count=0
+            )
+
+        assert len(test_http_fixture.server.requests()) == 1
+        request = test_http_fixture.server.requests().pop()
+        assert request.path == "/test"
+        assert request.method == "GET"
+
+    def test_retries_3(self, test_http_fixture: HttpTestFixture):
+        response0 = MockAPIServerResponse()
+        response0.content = b"Ouch."
+        response0.status_code = 502
+
+        response1 = MockAPIServerResponse()
+        response1.content = b"Ouch."
+        response1.status_code = 502
+
+        response2 = MockAPIServerResponse()
+        response2.content = b"OK!"
+        response2.status_code = 200
+
+        test_http_fixture.server.enqueue_response("GET", "/test", response0)
+        test_http_fixture.server.enqueue_response("GET", "/test", response1)
+        test_http_fixture.server.enqueue_response("GET", "/test", response2)
+
+        response = test_http_fixture.request_with_timeout(
+            "GET", test_http_fixture.server.url("/test"), max_retry_count=3
         )
+        assert response.status_code == 200
 
-        details = exc.document_detail()
-        assert (
-            "The server tried to access Unreliable Service but the third-party service experienced an error."
-            == details
-        )
+        assert len(test_http_fixture.server.requests()) == 3
+        request = test_http_fixture.server.requests().pop()
+        assert request.path == "/test"
+        assert request.method == "GET"
 
-        debug_details = exc.document_debug_message()
-        assert (
-            "Error accessing Unreliable Service: I just can't handle your request right now."
-            == debug_details
-        )
+        request = test_http_fixture.server.requests().pop()
+        assert request.path == "/test"
+        assert request.method == "GET"
 
-        assert str(exc) == debug_details
-
-        assert exc.problem_detail.title == "Failure contacting external service"
-        assert exc.problem_detail.detail == details
-        assert exc.problem_detail.debug_message == debug_details
-
-    def test_with_service_url(self):
-        # If you do provide a URL, it's included in the error message.
-        exc = RemoteIntegrationException(
-            "http://unreliable-service/",
-            "I just can't handle your request right now.",
-        )
-
-        # The url isn't included in the main details
-        details = exc.document_detail()
-        assert (
-            "The server tried to access unreliable-service but the third-party service experienced an error."
-            == details
-        )
-
-        # But it is included in the debug details.
-        debug_details = exc.document_debug_message()
-        assert (
-            "Error accessing http://unreliable-service/: I just can't handle your request right now."
-            == debug_details
-        )
-
-        assert str(exc) == debug_details
-
-        assert exc.problem_detail.title == "Failure contacting external service"
-        assert exc.problem_detail.detail == details
-        assert exc.problem_detail.debug_message == debug_details
-
-    def test_with_debug_message(self):
-        # If you provide a debug message, it's included in the debug details.
-        exc = RemoteIntegrationException(
-            "http://unreliable-service/",
-            "I just can't handle your request right now.",
-            "technical details",
-        )
-        details = exc.document_detail()
-        assert (
-            "The server tried to access unreliable-service but the third-party service experienced an error."
-            == details
-        )
-
-        debug_details = exc.document_debug_message()
-        assert (
-            "Error accessing http://unreliable-service/: I just can't handle your request right now.\n\ntechnical details"
-            == debug_details
-        )
-
-
-class TestBadResponseException:
-    def test__init__(self):
-        response = MockRequestsResponse(102, content="nonsense")
-        exc = BadResponseException(
-            "http://url/", "Terrible response, just terrible", response
-        )
-
-        # the response gets set on the exception
-        assert exc.response is response
-
-        # Turn the exception into a problem detail document, and it's full
-        # of useful information.
-        problem_detail = exc.problem_detail
-
-        assert problem_detail.title == "Bad response"
-        assert (
-            problem_detail.detail
-            == "The server made a request to url, and got an unexpected or invalid response."
-        )
-        assert (
-            problem_detail.debug_message
-            == "Bad response from http://url/: Terrible response, just terrible\n\nStatus code: 102\nContent: nonsense"
-        )
-        assert problem_detail.status_code == 502
-
-    def test_bad_status_code(self):
-        response = MockRequestsResponse(500, content="Internal Server Error!")
-        exc = BadResponseException.bad_status_code("http://url/", response)
-        doc = exc.problem_detail
-
-        assert doc.title == "Bad response"
-        assert (
-            doc.detail
-            == "The server made a request to url, and got an unexpected or invalid response."
-        )
-        assert (
-            doc.debug_message
-            == "Bad response from http://url/: Got status code 500 from external server, cannot continue.\n\nStatus code: 500\nContent: Internal Server Error!"
-        )
-
-    def test_problem_detail(self):
-        response = MockRequestsResponse(401, content="You are not authorized!")
-        exception = BadResponseException(
-            "http://url/",
-            "What even is this",
-            debug_message="some debug info",
-            response=response,
-        )
-        document = exception.problem_detail
-        assert 502 == document.status_code
-        assert "Bad response" == document.title
-        assert (
-            "The server made a request to url, and got an unexpected or invalid response."
-            == document.detail
-        )
-        assert (
-            "Bad response from http://url/: What even is this\n\nsome debug info"
-            == document.debug_message
-        )
-        assert exception.response is response
-
-
-class TestRequestTimedOut:
-    def test_problem_detail(self):
-        exception = RequestTimedOut("http://url/", "I give up")
-
-        detail = exception.problem_detail
-        assert "Timeout" == detail.title
-        assert (
-            "The server made a request to url, and that request timed out."
-            == detail.detail
-        )
-        assert detail.status_code == 502
-        assert detail.debug_message == "Timeout accessing http://url/: I give up"
-
-
-class TestRequestNetworkException:
-    def test_problem_detail(self):
-        exception = RequestNetworkException("http://url/", "Colossal failure")
-
-        detail = exception.problem_detail
-        assert "Network failure contacting third-party service" == detail.title
-        assert (
-            "The server experienced a network error while contacting url."
-            == detail.detail
-        )
-        assert detail.status_code == 502
-        assert (
-            detail.debug_message
-            == "Network error contacting http://url/: Colossal failure"
-        )
+        request = test_http_fixture.server.requests().pop()
+        assert request.path == "/test"
+        assert request.method == "GET"
 
 
 class TestBearerAuth:

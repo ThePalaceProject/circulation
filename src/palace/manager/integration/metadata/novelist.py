@@ -38,7 +38,7 @@ from palace.manager.sqlalchemy.model.resource import (
     HttpResponseTuple,
     Representation,
 )
-from palace.manager.util.http import HTTP
+from palace.manager.util.http.http import HTTP
 from palace.manager.util.log import LoggerMixin
 
 if sys.version_info >= (3, 11):

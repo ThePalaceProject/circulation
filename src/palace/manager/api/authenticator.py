@@ -44,7 +44,7 @@ from palace.manager.sqlalchemy.model.key import Key, KeyType
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.patron import Patron, PatronProfileStorage
 from palace.manager.util.authentication_for_opds import AuthenticationForOPDSDocument
-from palace.manager.util.http import RemoteIntegrationException
+from palace.manager.util.http.exception import RemoteIntegrationException
 from palace.manager.util.log import LoggerMixin, elapsed_time_logging
 from palace.manager.util.opds_writer import OPDSFeed
 from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException

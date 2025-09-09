@@ -38,7 +38,10 @@ from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism, License
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
 from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.util.datetime_helpers import datetime_utc, utc_now
-from palace.manager.util.http import RemoteIntegrationException, RequestTimedOut
+from palace.manager.util.http.exception import (
+    RemoteIntegrationException,
+    RequestTimedOut,
+)
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import FilesFixture
 from tests.fixtures.work import (

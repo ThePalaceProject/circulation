@@ -8,7 +8,7 @@ from palace.manager.integration.license.boundless.importer import BoundlessImpor
 from palace.manager.integration.license.boundless.requests import BoundlessRequests
 from palace.manager.service.redis.models.set import IdentifierSet
 from palace.manager.util.datetime_helpers import datetime_utc
-from palace.manager.util.http import BadResponseException
+from palace.manager.util.http.exception import BadResponseException
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.manager.integration.license.boundless.conftest import BoundlessFixture
 from tests.mocks.mock import MockRequestsResponse
