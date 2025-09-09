@@ -170,3 +170,31 @@ class TestIdentifierSet:
         # We can also diff a set with a normal set
         assert identifier_set1 - identifiers2 == identifiers1 - identifiers2
         assert identifiers2 - identifier_set1 == identifiers2 - identifiers1
+
+    def test_add_none(
+        self, redis_fixture: RedisFixture, db: DatabaseTransactionFixture
+    ) -> None:
+        client = redis_fixture.client
+        identifier_set = IdentifierSet(client)
+
+        # Adding no identifiers should return 0 and not raise an error
+        assert identifier_set.add() == 0
+        assert identifier_set.exists() is False
+
+        # Add an identifier, so that the set exists
+        identifier = IdentifierData.from_identifier(db.identifier())
+        identifier_set.add(identifier)
+        assert identifier_set.exists() is True
+
+        # Reset the expiration time, so we can test that adding nothing to the set extends its expiration
+        client.expire(identifier_set._key, 30)
+        assert 0 < client.ttl(identifier_set._key) <= 30
+
+        # Adding no identifiers should extend the expiration time
+        assert identifier_set.add() == 0
+        assert identifier_set.exists() is True
+        assert (
+            identifier_set.expire_time.total_seconds()
+            >= client.ttl(identifier_set._key)
+            > 30
+        )
