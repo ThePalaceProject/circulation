@@ -17,6 +17,7 @@ from palace.manager.integration.patron_auth.saml.configuration.model import (
     SAMLOneLoginConfiguration,
     SAMLWebSSOAuthSettings,
 )
+from palace.manager.integration.patron_auth.saml.credential import SAMLCredentialManager
 from palace.manager.integration.patron_auth.saml.metadata.filter import (
     SAMLSubjectFilter,
 )
@@ -49,9 +50,11 @@ from palace.manager.integration.patron_auth.saml.python_expression_dsl.evaluator
 from palace.manager.integration.patron_auth.saml.python_expression_dsl.parser import (
     DSLParser,
 )
+from palace.manager.sqlalchemy.model.credential import Credential
 from palace.manager.util.datetime_helpers import datetime_utc, utc_now
 from palace.manager.util.problem_detail import ProblemDetail
 from tests.fixtures.api_controller import ControllerFixture
+from tests.fixtures.database import DatabaseTransactionFixture
 from tests.mocks import saml_strings
 
 SERVICE_PROVIDER = SAMLServiceProviderMetadata(
@@ -746,3 +749,81 @@ class TestSAMLWebSSOAuthenticationProvider:
 
         provider = create_saml_provider()
         assert provider.get_credential_from_header(auth) is None
+
+    @pytest.mark.parametrize(
+        "provider_token, credential_token, expect_success",
+        (
+            pytest.param(
+                "unique token",
+                "unique token",
+                True,
+                id="matching-unique",
+            ),
+            pytest.param(
+                "unique token",
+                None,
+                False,
+                id="provider-but-no-credential",
+            ),
+            # These next must match each other and the other patron token below.
+            pytest.param(
+                "other-patrons-valid-token",
+                "other-patrons-valid-token",
+                True,
+                id="matches-both-libraries",
+            ),
+            pytest.param(
+                "other-patrons-valid-token",
+                None,
+                False,
+                id="only-matches-other-library",
+            ),
+        ),
+    )
+    def test_authenticated_patron(
+        self,
+        controller_fixture: ControllerFixture,
+        db: DatabaseTransactionFixture,
+        create_saml_configuration: Callable[..., SAMLWebSSOAuthSettings],
+        create_saml_provider: Callable[..., SAMLWebSSOAuthenticationProvider],
+        provider_token: str,
+        credential_token: str | None,
+        expect_success: bool,
+    ):
+        configuration = create_saml_configuration()
+        credential_manager = SAMLCredentialManager()
+        saml_data_source = credential_manager._get_token_data_source(db.session)
+
+        # This is a patron of a different library.
+        other_library = db.library()
+        other_patron = db.patron(library=other_library)
+        Credential.temporary_token_create(
+            db.session,
+            saml_data_source,
+            SAMLCredentialManager.TOKEN_TYPE,
+            other_patron,
+            datetime.timedelta(days=1),
+            "other-patrons-valid-token",
+        )
+
+        # Our test library and patron.
+        # This patron may or may not have a valid SAML token.
+        test_library = db.library()
+        test_patron = db.patron(library=test_library)
+        if credential_token is not None:
+            Credential.temporary_token_create(
+                db.session,
+                saml_data_source,
+                SAMLCredentialManager.TOKEN_TYPE,
+                test_patron,
+                datetime.timedelta(days=1),
+                credential_token,
+            )
+        expected_result = test_patron if expect_success else None
+
+        # Set up a auth provider for our test library.
+        provider = create_saml_provider(settings=configuration)
+        provider.library_id = test_library.id
+        result = provider.authenticated_patron(db.session, provider_token)
+
+        assert result == expected_result
