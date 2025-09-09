@@ -1568,7 +1568,7 @@ class OverdriveAPI(
                 DataSource.OVERDRIVE,
                 Identifier.OVERDRIVE_ID,
                 cast(str, book_id),
-                collection=self.collection,
+                collection=collection,
             )
             if is_new:
                 changed = True
