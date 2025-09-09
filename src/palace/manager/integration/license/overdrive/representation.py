@@ -48,6 +48,7 @@ class OverdriveRepresentationExtractor(LoggerMixin):
         Overdrive collection.
         """
         self.library_id = api.advantage_library_id
+        self.api = api
 
     @classmethod
     def availability_link_list(cls, book_list: dict[str, Any]) -> list[dict[str, str]]:
@@ -274,10 +275,13 @@ class OverdriveRepresentationExtractor(LoggerMixin):
         # The current behavior will respond to errors other than
         # NotFound by leaving the book alone, but this might not be
         # the right behavior.
-        if error_code == "NotFound":
-            licenses_owned = 0
-            licenses_available = 0
-            patrons_in_hold_queue = 0
+
+        def add_circulation_data(
+            the_collection: Collection,
+            licenses_owned: int,
+            licenses_available: int,
+            prepend: bool = False,
+        ):
             circulation_data = CirculationData(
                 data_source_name=DataSource.OVERDRIVE,
                 primary_identifier_data=primary_identifier,
@@ -286,9 +290,20 @@ class OverdriveRepresentationExtractor(LoggerMixin):
                 licenses_reserved=licenses_reserved,
                 patrons_in_hold_queue=patrons_in_hold_queue,
             )
-            collection_circulation_data_tuple_list.insert(
-                0, (collection, circulation_data)
-            )
+            if prepend:
+                collection_circulation_data_tuple_list.insert(
+                    0, (the_collection, circulation_data)
+                )
+            else:
+                collection_circulation_data_tuple_list.append(
+                    (the_collection, circulation_data)
+                )
+
+        if error_code == "NotFound":
+            licenses_owned = 0
+            licenses_available = 0
+            patrons_in_hold_queue = 0
+            add_circulation_data(collection, licenses_owned, licenses_available)
         elif book.get("isOwnedByCollections") is not False:
             # We own this book.
             if "numberOfHolds" in book:
@@ -317,17 +332,7 @@ class OverdriveRepresentationExtractor(LoggerMixin):
                         0 if shared else int(account.get("copiesAvailable", 0))
                     )
                     # and return a single tuple in the list.
-                    circulation_data = CirculationData(
-                        data_source_name=DataSource.OVERDRIVE,
-                        primary_identifier_data=primary_identifier,
-                        licenses_owned=licenses_owned,
-                        licenses_available=licenses_available,
-                        licenses_reserved=licenses_reserved,
-                        patrons_in_hold_queue=patrons_in_hold_queue,
-                    )
-                    collection_circulation_data_tuple_list.append(
-                        (collection, circulation_data)
-                    )
+                    add_circulation_data(collection, licenses_owned, licenses_available)
 
                 return collection_circulation_data_tuple_list
 
@@ -350,7 +355,16 @@ class OverdriveRepresentationExtractor(LoggerMixin):
                     else:
                         # is child account
                         # look up the child collection with matching external id
-                        child_collection = child_accounts_by_id[str(account_id)]
+                        child_collection = child_accounts_by_id.get(
+                            str(account_id), None
+                        )
+
+                        # if child account does not exist, create it
+                        if child_collection is None:
+                            self.log.warning(
+                                f"Advantage account (id={account_id}) not found. Skipping..)."
+                            )
+                            continue
 
                         # if the resources are shared
                         if account.get("shared", False):
@@ -361,29 +375,16 @@ class OverdriveRepresentationExtractor(LoggerMixin):
                             licenses_owned = 0
                             licenses_available = 0
                         # add a  collection circulation data object tuple
-                        circulation_data = CirculationData(
-                            data_source_name=DataSource.OVERDRIVE,
-                            primary_identifier_data=primary_identifier,
-                            licenses_owned=licenses_owned,
-                            licenses_available=licenses_available,
-                            licenses_reserved=licenses_reserved,
-                            patrons_in_hold_queue=patrons_in_hold_queue,
-                        )
-                        collection_circulation_data_tuple_list.append(
-                            (child_collection, circulation_data)
+                        add_circulation_data(
+                            child_collection, licenses_owned, licenses_available
                         )
 
                 # prepend main circulation data
-                circulation_data = CirculationData(
-                    data_source_name=DataSource.OVERDRIVE,
-                    primary_identifier_data=primary_identifier,
-                    licenses_owned=shared_licenses_owned,
-                    licenses_available=shared_licenses_available,
-                    licenses_reserved=licenses_reserved,
-                    patrons_in_hold_queue=patrons_in_hold_queue,
-                )
-                collection_circulation_data_tuple_list.insert(
-                    0, (collection, circulation_data)
+                add_circulation_data(
+                    collection,
+                    shared_licenses_owned,
+                    shared_licenses_available,
+                    prepend=True,
                 )
         return collection_circulation_data_tuple_list
 
