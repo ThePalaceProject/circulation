@@ -320,7 +320,6 @@ class OverdriveRepresentationExtractor(LoggerMixin):
                     ]
                 )
                 # and use it to resolve the account
-
                 matches = [
                     a for a in accounts if a.get("id") == int(external_account_id)
                 ]
@@ -339,7 +338,7 @@ class OverdriveRepresentationExtractor(LoggerMixin):
             else:
                 shared_licenses_owned = 0
                 shared_licenses_available = 0
-                child_accounts_by_id = {
+                child_collections_by_id = {
                     c.integration_configuration.settings_dict["external_account_id"]: c
                     for c in collection.children
                 }
@@ -355,7 +354,7 @@ class OverdriveRepresentationExtractor(LoggerMixin):
                     else:
                         # is child account
                         # look up the child collection with matching external id
-                        child_collection = child_accounts_by_id.get(
+                        child_collection = child_collections_by_id.get(
                             str(account_id), None
                         )
 
@@ -372,6 +371,7 @@ class OverdriveRepresentationExtractor(LoggerMixin):
                             shared_licenses_available += licenses_available
                             shared_licenses_owned += licenses_owned
                             # and set the child owned and available to zero
+                            # since the count has been allocated to the parent.
                             licenses_owned = 0
                             licenses_available = 0
                         # add a  collection circulation data object tuple
