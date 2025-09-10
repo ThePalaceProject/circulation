@@ -1,5 +1,6 @@
 from flask import url_for
 from flask_babel import lazy_gettext as _
+from sqlalchemy.orm import Session
 from werkzeug.datastructures import Authorization
 
 from palace.manager.api.authentication.base import PatronData
@@ -267,7 +268,7 @@ class SAMLWebSSOAuthenticationProvider(
     def _run_self_tests(self, _db):
         pass
 
-    def authenticated_patron(self, db, token):
+    def authenticated_patron(self, db: Session, token: dict | str):
         """Go from a token to an authenticated Patron.
 
         :param db: Database session
@@ -284,7 +285,9 @@ class SAMLWebSSOAuthenticationProvider(
             ProblemDetail if an error occurs.
         :rtype: Union[Patron, ProblemDetail]
         """
-        credential = self._credential_manager.lookup_saml_token_by_value(db, token)
+        credential = self._credential_manager.lookup_saml_token_by_value(
+            db, token, self.library_id
+        )
         if credential:
             return credential.patron
 
