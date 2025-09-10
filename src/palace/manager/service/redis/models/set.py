@@ -74,6 +74,12 @@ class RedisSet(Generic[T], LoggerMixin):
         Add models to the set. This method will also set an expiration time for the set,
         resetting the expiration time if the set already exists.
         """
+        if not models:
+            # Extend the expiration time, even if no models are added. In the case
+            # where the set doesn't exist, this is a no-op.
+            self._redis_client.expire(self._key, self.expire_time)
+            return 0
+
         with self._redis_client.pipeline() as pipe:
             pipe.sadd(self._key, *self._strs_from_models(*models))
             pipe.expire(self._key, self.expire_time)
