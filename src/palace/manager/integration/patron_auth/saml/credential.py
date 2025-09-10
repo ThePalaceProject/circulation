@@ -4,6 +4,7 @@ import logging
 from copy import deepcopy
 
 import sqlalchemy
+from sqlalchemy import and_, exists
 
 from palace.manager.integration.patron_auth.saml.metadata.model import (
     SAMLNameIDFormat,
@@ -138,20 +139,33 @@ class SAMLCredentialManager:
         return credential
 
     def lookup_saml_token_by_value(
-        self, db: sqlalchemy.orm.session.Session, token: dict
+        self, db: sqlalchemy.orm.session.Session, token: dict | str, library_id: int
     ) -> Credential | None:
         """Look up for a SAML token.
 
         :param db: Database session
         :param token: SAML token
+        :param library_id: The id of the library associated with the token.
         :return: SAML subject (if any)
         """
-        self._logger.debug("Started looking up for a SAML token")
-
-        credential = Credential.lookup_by_token(
-            db, self._get_token_data_source(db), self.TOKEN_TYPE, token
+        self._logger.debug(
+            f"Started looking up for a SAML token (library id={library_id})"
         )
 
-        self._logger.debug(f"Finished looking up for a SAML token: {credential}")
+        # Constrain the token lookup to patrons of the specified library.
+        credential_constraint = exists().where(
+            and_(Patron.id == Credential.patron_id, Patron.library_id == library_id)
+        )
+        credential = Credential.lookup_by_token(
+            db,
+            self._get_token_data_source(db),
+            self.TOKEN_TYPE,
+            token,  # type: ignore[arg-type]
+            constraint=credential_constraint,
+        )
+
+        self._logger.debug(
+            f"Finished looking up for a SAML token (library id={library_id}): {credential}"
+        )
 
         return credential

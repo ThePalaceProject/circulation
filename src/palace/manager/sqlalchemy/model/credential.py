@@ -97,7 +97,7 @@ class Credential(Base):
 
     @classmethod
     def _filter_invalid_credential(
-        cls, credential: Credential, allow_persistent_token: bool
+        cls, credential: Credential | None, allow_persistent_token: bool
     ) -> Credential | None:
         """Filter out invalid credentials based on their expiration time and persistence.
 
@@ -158,15 +158,33 @@ class Credential(Base):
 
     @classmethod
     def lookup_by_token(
-        cls, _db, data_source, token_type, token, allow_persistent_token=False
-    ):
+        cls,
+        _db: Session,
+        data_source: DataSource | None,
+        token_type: str | None,
+        token: str,
+        allow_persistent_token: bool = False,
+        *,
+        constraint: Any = None,
+    ) -> Credential | None:
         """Look up a unique token.
         Lookup will fail on expired tokens. Unless persistent tokens
         are specifically allowed, lookup will fail on persistent tokens.
-        """
 
+        :param _db: A database session.
+        :param token_type: The type of the token / credential.
+        :param token: The value of the token / credential.
+        :param data_source: A DataSource associated with the token.
+        :param allow_persistent_token: Boolean indicating whether persistent tokens are allowed.
+        :param constraint: A `sqlalchemy.Query.filter` clause.
+        """
         credential = get_one(
-            _db, Credential, data_source=data_source, type=token_type, credential=token
+            _db,
+            Credential,
+            data_source=data_source,
+            type=token_type,
+            credential=token,
+            constraint=constraint,
         )
 
         return cls._filter_invalid_credential(credential, allow_persistent_token)
