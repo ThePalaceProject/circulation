@@ -167,7 +167,8 @@ class Credential(Base):
         *,
         constraint: Any = None,
     ) -> Credential | None:
-        """Look up a unique token.
+        """Look up a unique, valid token.
+
         Lookup will fail on expired tokens. Unless persistent tokens
         are specifically allowed, lookup will fail on persistent tokens.
 
@@ -177,6 +178,7 @@ class Credential(Base):
         :param data_source: A DataSource associated with the token.
         :param allow_persistent_token: Boolean indicating whether persistent tokens are allowed.
         :param constraint: A `sqlalchemy.Query.filter` clause.
+        :return: A matching Credential object on success or None on failure.
         """
         credential = get_one(
             _db,
