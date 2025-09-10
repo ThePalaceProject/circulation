@@ -1,8 +1,9 @@
 import datetime
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
 
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.credential import Credential
@@ -195,8 +196,8 @@ class TestCredentials:
 
             # With a constraint.
             _ = Credential.lookup_by_token(
-                "mock_db",
-                "data source",
+                MagicMock(spec=Session),
+                MagicMock(spec=DataSource),
                 "doesn't matter",
                 "a token",
                 constraint=test_constraint,
@@ -210,8 +211,8 @@ class TestCredentials:
 
             # Without a constraint.
             _ = Credential.lookup_by_token(
-                "mock_db",
-                "data source",
+                MagicMock(spec=Session),
+                MagicMock(spec=DataSource),
                 "doesn't matter",
                 "a token",
             )
