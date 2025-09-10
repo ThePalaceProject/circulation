@@ -1,7 +1,9 @@
 import datetime
+from unittest.mock import MagicMock, patch
 
 import pytest
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
 
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.credential import Credential
@@ -181,6 +183,45 @@ class TestCredentials:
                 *args, allow_persistent_token=True, allow_empty_token=False
             )
         assert "Refresher method was called" in str(excinfo.value)
+
+    def test_lookup_by_token_constraint(self, db: DatabaseTransactionFixture):
+        """Ensure that `constraint` is passed on to `get_one`."""
+        test_constraint = "mock_constraint"
+
+        with patch(
+            "palace.manager.sqlalchemy.model.credential.get_one"
+        ) as mock_get_one:
+            # Return a real credential for the validator.
+            mock_get_one.return_value = db.credential()
+
+            # With a constraint.
+            _ = Credential.lookup_by_token(
+                MagicMock(spec=Session),
+                MagicMock(spec=DataSource),
+                "doesn't matter",
+                "a token",
+                constraint=test_constraint,
+            )
+
+            # Verify get_one was called with the constraint
+            mock_get_one.assert_called_once()
+            _, kwargs = mock_get_one.call_args
+            mock_get_one.reset_mock()
+            assert kwargs["constraint"] == test_constraint
+
+            # Without a constraint.
+            _ = Credential.lookup_by_token(
+                MagicMock(spec=Session),
+                MagicMock(spec=DataSource),
+                "doesn't matter",
+                "a token",
+            )
+
+            # Verify get_one was called with the constraint
+            mock_get_one.assert_called_once()
+            _, kwargs = mock_get_one.call_args
+            mock_get_one.reset_mock()
+            assert kwargs["constraint"] is None
 
     def test_force_refresher_method(self, db: DatabaseTransactionFixture):
         # Ensure that passing `force_refresh=True` triggers the
