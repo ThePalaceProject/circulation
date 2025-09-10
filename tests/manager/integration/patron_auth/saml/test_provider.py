@@ -750,6 +750,29 @@ class TestSAMLWebSSOAuthenticationProvider:
         provider = create_saml_provider()
         assert provider.get_credential_from_header(auth) is None
 
+    def test_authenticated_patron_lookup_params(
+        self,
+        db: DatabaseTransactionFixture,
+        create_saml_configuration: Callable[..., SAMLWebSSOAuthSettings],
+        create_saml_provider: Callable[..., SAMLWebSSOAuthenticationProvider],
+    ):
+        configuration = create_saml_configuration()
+        provider = create_saml_provider(settings=configuration)
+
+        library = db.library()
+        provider.library_id = library.id
+
+        token_value = "test-token"
+
+        with patch.object(
+            provider._credential_manager,
+            "lookup_saml_token_by_value",
+            return_value=None,
+        ) as mock_lookup:
+            provider.authenticated_patron(db.session, token_value)
+
+            mock_lookup.assert_called_once_with(db.session, token_value, library.id)
+
     @pytest.mark.parametrize(
         "provider_token, credential_token, expect_success",
         (
