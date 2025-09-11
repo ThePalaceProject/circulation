@@ -5,6 +5,7 @@ import re
 from typing import TYPE_CHECKING, Any
 
 import isbnlib
+from sqlalchemy.orm import Session
 
 from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.data_layer.bibliographic import BibliographicData
@@ -21,6 +22,7 @@ from palace.manager.integration.license.overdrive.constants import (
 from palace.manager.integration.license.overdrive.util import _make_link_safe
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.classification import Classification, Subject
+from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.contributor import Contributor
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
@@ -46,6 +48,7 @@ class OverdriveRepresentationExtractor(LoggerMixin):
         Overdrive collection.
         """
         self.library_id = api.advantage_library_id
+        self.api = api
 
     @classmethod
     def availability_link_list(cls, book_list: dict[str, Any]) -> list[dict[str, str]]:
@@ -216,10 +219,17 @@ class OverdriveRepresentationExtractor(LoggerMixin):
                 processed.append(cls.overdrive_role_to_simplified_role[x])
         return processed
 
-    def book_info_to_circulation(self, book: dict[str, Any]) -> CirculationData:
+    def book_info_to_circulation(
+        self, _db: Session, collection: Collection, book: dict[str, Any]
+    ) -> list[tuple[Collection, CirculationData]]:
         """Note:  The json data passed into this method is from a different file/stream
         from the json data that goes into the book_info_to_metadata() method.
         """
+
+        collection_circulation_data_tuple_list: list[
+            tuple[Collection, CirculationData]
+        ] = []
+
         # In Overdrive, 'reserved' books show up as books on
         # hold. There is no separate notion of reserved books.
         licenses_reserved = 0
@@ -241,6 +251,8 @@ class OverdriveRepresentationExtractor(LoggerMixin):
         primary_identifier = IdentifierData(
             type=Identifier.OVERDRIVE_ID, identifier=overdrive_id
         )
+
+        accounts = book.get("accounts", [])
         # TODO: We might be able to use this information to avoid the
         # need for explicit configuration of Advantage collections, or
         # at least to keep Advantage collections more up-to-date than
@@ -263,32 +275,118 @@ class OverdriveRepresentationExtractor(LoggerMixin):
         # The current behavior will respond to errors other than
         # NotFound by leaving the book alone, but this might not be
         # the right behavior.
+
+        def add_circulation_data(
+            the_collection: Collection,
+            licenses_owned: int,
+            licenses_available: int,
+            prepend: bool = False,
+        ) -> None:
+            circulation_data = CirculationData(
+                data_source_name=DataSource.OVERDRIVE,
+                primary_identifier_data=primary_identifier,
+                licenses_owned=licenses_owned,
+                licenses_available=licenses_available,
+                licenses_reserved=licenses_reserved,
+                patrons_in_hold_queue=patrons_in_hold_queue,
+            )
+            if prepend:
+                collection_circulation_data_tuple_list.insert(
+                    0, (the_collection, circulation_data)
+                )
+            else:
+                collection_circulation_data_tuple_list.append(
+                    (the_collection, circulation_data)
+                )
+
         if error_code == "NotFound":
             licenses_owned = 0
             licenses_available = 0
             patrons_in_hold_queue = 0
+            add_circulation_data(collection, licenses_owned, licenses_available)
         elif book.get("isOwnedByCollections") is not False:
             # We own this book.
-            licenses_owned = 0
-            licenses_available = 0
-
-            for account in self._get_applicable_accounts(book.get("accounts", [])):
-                licenses_owned += int(account.get("copiesOwned", 0))
-                licenses_available += int(account.get("copiesAvailable", 0))
-
             if "numberOfHolds" in book:
                 if patrons_in_hold_queue is None:
                     patrons_in_hold_queue = 0
                 patrons_in_hold_queue += book["numberOfHolds"]
+            # if the collection associated with this API instance is a child account
+            if collection.parent:
+                # validate that the account id matches collection's external identifier by
+                # get the external identifier for collection
+                external_account_id = (
+                    collection.integration_configuration.settings_dict[
+                        "external_account_id"
+                    ]
+                )
+                # and use it to resolve the account
+                matches = [
+                    a for a in accounts if a.get("id") == int(external_account_id)
+                ]
+                if matches:
+                    account = matches[0]
+                    shared = account.get("shared", False)
+                    licenses_owned = 0 if shared else int(account.get("copiesOwned", 0))
+                    licenses_available = (
+                        0 if shared else int(account.get("copiesAvailable", 0))
+                    )
+                    # and return a single tuple in the list.
+                    add_circulation_data(collection, licenses_owned, licenses_available)
 
-        return CirculationData(
-            data_source_name=DataSource.OVERDRIVE,
-            primary_identifier_data=primary_identifier,
-            licenses_owned=licenses_owned,
-            licenses_available=licenses_available,
-            licenses_reserved=licenses_reserved,
-            patrons_in_hold_queue=patrons_in_hold_queue,
-        )
+                return collection_circulation_data_tuple_list
+
+            else:
+                shared_licenses_owned = 0
+                shared_licenses_available = 0
+                child_collections_by_id = {
+                    c.integration_configuration.settings_dict["external_account_id"]: c
+                    for c in collection.children
+                }
+                for account in accounts:
+                    account_id = account.get("id")
+                    licenses_owned = int(account.get("copiesOwned", 0))
+                    licenses_available = int(account.get("copiesAvailable", 0))
+                    # if the account is the main account
+                    if account_id == OVERDRIVE_MAIN_ACCOUNT_ID:
+                        # update the shared counts
+                        shared_licenses_available += licenses_available
+                        shared_licenses_owned += licenses_owned
+                    else:
+                        # is child account
+                        # look up the child collection with matching external id
+                        child_collection = child_collections_by_id.get(
+                            str(account_id), None
+                        )
+
+                        # if child account does not exist, create it
+                        if child_collection is None:
+                            self.log.warning(
+                                f"Advantage account (id={account_id}) not found. Skipping..)."
+                            )
+                            continue
+
+                        # if the resources are shared
+                        if account.get("shared", False):
+                            # update the shared account's license counts
+                            shared_licenses_available += licenses_available
+                            shared_licenses_owned += licenses_owned
+                            # and set the child owned and available to zero
+                            # since the count has been allocated to the parent.
+                            licenses_owned = 0
+                            licenses_available = 0
+                        # add a  collection circulation data object tuple
+                        add_circulation_data(
+                            child_collection, licenses_owned, licenses_available
+                        )
+
+                # prepend main circulation data
+                add_circulation_data(
+                    collection,
+                    shared_licenses_owned,
+                    shared_licenses_available,
+                    prepend=True,
+                )
+        return collection_circulation_data_tuple_list
 
     def _get_applicable_accounts(
         self, accounts: list[dict[str, Any]]

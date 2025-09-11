@@ -59,7 +59,9 @@ class OverdriveAdvantageAccount:
                 token=token,
             )
 
-    def to_collection(self, _db: Session) -> tuple[Collection, Collection]:
+    def to_collection(
+        self, _db: Session, overwrite_name: bool = True
+    ) -> tuple[Collection, Collection]:
         """Find or create a Collection object for this Overdrive Advantage
         account.
 
@@ -109,7 +111,8 @@ class OverdriveAdvantageAccount:
             )
         else:
             # Set or update the name of the collection to reflect the name of
-            # the library, just in case that name has changed.
-            child.integration_configuration.name = name
+            # the library, just in case that name has changed but only if overwrite has been enabled.
+            if overwrite_name:
+                child.integration_configuration.name = name
 
         return parent, child

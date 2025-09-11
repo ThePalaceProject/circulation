@@ -65,6 +65,15 @@ class OverdriveCirculationMonitor(CollectionMonitor, TimelineMonitor):
         """
         overdrive_data_source = DataSource.lookup(self._db, DataSource.OVERDRIVE)
 
+        if self.collection.parent is None:
+            # If it is a parent account, generate child (Advantage) collections if they don't already exist.
+            # if any child accounts that were configured are no longer configured on the overdrive side,
+            # we do not delete them just so the users aren't surprised if an Advantage account that
+            # they configured disappears.  Also, if the user changes the name of the advantage collection
+            # we do not overwrite it.
+            for advantage_account in self.api.get_advantage_accounts():
+                advantage_account.to_collection(self._db, overwrite_name=False)
+
         # Ask for changes between the last time covered by the Monitor
         # and the current time.
         total_books = 0
@@ -100,7 +109,7 @@ class OverdriveCirculationMonitor(CollectionMonitor, TimelineMonitor):
         # Attempt to create/update the book up to MAXIMUM_BOOK_RETRIES times.
         try:
             with self._db.begin_nested():
-                _, _, is_changed = self.api.update_licensepool(book)
+                is_changed = self.api.update_licensepools(book)
                 book_changed = is_changed
         except Exception:
             self.log.exception("exception on update_licensepool: ")
@@ -114,6 +123,12 @@ class OverdriveCirculationMonitor(CollectionMonitor, TimelineMonitor):
         is_changed: bool,
     ) -> bool | None:
         pass
+
+    @classmethod
+    def _filter_collection(cls, collection: Collection) -> bool:
+        """Since parent collections will also automatically import all child collection data,
+        only process parent collections"""
+        return collection.parent is None
 
 
 class NewTitlesOverdriveCollectionMonitor(OverdriveCirculationMonitor):
@@ -222,7 +237,7 @@ class OverdriveCollectionReaper(IdentifierSweepMonitor):
         self.api = api_class(_db, collection)
 
     def process_item(self, identifier: Identifier) -> None:
-        self.api.update_licensepool(identifier.identifier)
+        self.api.update_licensepools(identifier.identifier)
 
 
 class RecentOverdriveCollectionMonitor(OverdriveCirculationMonitor):

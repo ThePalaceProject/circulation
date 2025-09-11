@@ -74,15 +74,20 @@ class TestOverdriveCirculationMonitor:
         #
         # The method stops when should_stop() -- called on every book
         # -- returns True.
+        advantage_account = MagicMock()
+
         class MockAPI:
             def __init__(self, *ignore, **kwignore):
                 self.licensepools = []
                 self.update_licensepool_calls = []
 
-            def update_licensepool(self, book_id):
-                pool, is_new, is_changed = self.licensepools.pop(0)
-                self.update_licensepool_calls.append((book_id, pool))
-                return pool, is_new, is_changed
+            def update_licensepools(self, book_id):
+                is_changed = self.licensepools.pop(0)
+                self.update_licensepool_calls.append(book_id)
+                return is_changed
+
+            def get_advantage_accounts(self):
+                return [advantage_account]
 
         class MockMonitor(OverdriveCirculationMonitor):
             recently_changed_ids_called_with = None
@@ -116,9 +121,9 @@ class TestOverdriveCirculationMonitor:
         lp2 = db.licensepool(None)
         lp3 = db.licensepool(None)
         lp4 = MagicMock()
-        api.licensepools.append((lp1, True, True))
-        api.licensepools.append((lp2, False, False))
-        api.licensepools.append((lp3, False, True))
+        api.licensepools.append(True)
+        api.licensepools.append(False)
+        api.licensepools.append(True)
         api.licensepools.append(lp4)
 
         progress = TimestampData()
@@ -135,12 +140,12 @@ class TestOverdriveCirculationMonitor:
         # update_licensepool on the first three valid 'books'. The
         # mock API delivered the first three LicensePools from the
         # queue.
-        assert [(1, lp1), (2, lp2), (3, lp3)] == api.update_licensepool_calls
+        assert [(1), (2), (3)] == api.update_licensepool_calls
 
         # After each book was processed, should_stop was called, using
         # the LicensePool, the start date, plus information about
         # whether the LicensePool was changed (or created) during
-        # update_licensepool().
+        # update_licensepools().
         assert [
             (start, 1, True),
             (start, 2, False),
@@ -161,6 +166,9 @@ class TestOverdriveCirculationMonitor:
         # and 3.
         assert "Books processed: 4." == progress.achievements
 
+        # validate that advantage collections are created if they don't exist.
+        advantage_account.to_collection.assert_called_once()
+
     def test_catch_up_from_with_failures_retried(
         self, overdrive_api_fixture: OverdriveAPIFixture
     ):
@@ -177,7 +185,7 @@ class TestOverdriveCirculationMonitor:
             def recently_changed_ids(self, start, cutoff):
                 return [1, 2, 3]
 
-            def update_licensepool(self, book_id):
+            def update_licensepools(self, book_id):
                 current_count = self.tries.get(str(book_id)) or 0
                 current_count = current_count + 1
                 self.tries[str(book_id)] = current_count
@@ -187,9 +195,12 @@ class TestOverdriveCirculationMonitor:
                 elif current_count < 2:
                     raise ObjectDeletedError({}, "Ouch Deleted!")
 
-                pool, is_new, is_changed = self.licensepools.pop(0)
-                self.update_licensepool_calls.append((book_id, pool))
-                return pool, is_new, is_changed
+                is_changed = self.licensepools.pop(0)
+                self.update_licensepool_calls.append(book_id)
+                return is_changed
+
+            def get_advantage_accounts(self):
+                return []
 
         monitor = OverdriveCirculationMonitor(
             db.session,
@@ -198,13 +209,9 @@ class TestOverdriveCirculationMonitor:
         )
         api = cast(MockAPI, monitor.api)
 
-        lp1 = db.licensepool(None)
-        lp1.last_checked = utc_now()
-        lp2 = db.licensepool(None)
-        lp3 = db.licensepool(None)
-        api.licensepools.append((lp1, True, True))
-        api.licensepools.append((lp2, False, False))
-        api.licensepools.append((lp3, False, True))
+        api.licensepools.append(True)
+        api.licensepools.append(False)
+        api.licensepools.append(True)
 
         progress = TimestampData()
         start = MagicMock()
@@ -232,11 +239,14 @@ class TestOverdriveCirculationMonitor:
             def recently_changed_ids(self, start, cutoff):
                 return [1, 2, 3]
 
-            def update_licensepool(self, book_id):
+            def update_licensepools(self, book_id):
                 current_count = self.tries.get(str(book_id)) or 0
                 current_count = current_count + 1
                 self.tries[str(book_id)] = current_count
                 raise Exception("Generic exception that will cause bypass retries")
+
+            def get_advantage_accounts(self):
+                return []
 
         monitor = OverdriveCirculationMonitor(
             db.session,
@@ -250,9 +260,9 @@ class TestOverdriveCirculationMonitor:
         lp1.last_checked = utc_now()
         lp2 = db.licensepool(None)
         lp3 = db.licensepool(None)
-        api.licensepools.append((lp1, True, True))
-        api.licensepools.append((lp2, False, False))
-        api.licensepools.append((lp3, False, True))
+        api.licensepools.append(True)
+        api.licensepools.append(False)
+        api.licensepools.append(True)
 
         progress = TimestampData()
         start = MagicMock()
@@ -282,7 +292,7 @@ class TestOverdriveCirculationMonitor:
             def recently_changed_ids(self, start, cutoff):
                 return [book1, book2]
 
-            def update_licensepool(self, book_id):
+            def update_licensepools(self, book_id):
                 current_count = self.tries.get(str(book_id)) or 0
                 current_count = current_count + 1
                 self.tries[str(book_id)] = current_count
@@ -293,7 +303,10 @@ class TestOverdriveCirculationMonitor:
                     if current_count == 1:
                         raise ObjectDeletedError({}, "object deleted")
 
-                return None, None, False
+                return False
+
+            def get_advantage_accounts(self):
+                return []
 
         monitor = OverdriveCirculationMonitor(
             db.session,
@@ -303,11 +316,8 @@ class TestOverdriveCirculationMonitor:
 
         api = cast(MockAPI, monitor.api)
 
-        lp1 = db.licensepool(None)
-        lp1.last_checked = utc_now()
-        lp2 = db.licensepool(None)
-        api.licensepools.append((lp1, True, True))
-        api.licensepools.append((lp2, False, False))
+        api.licensepools.append(True)
+        api.licensepools.append(False)
 
         progress = TimestampData()
         start = MagicMock()
