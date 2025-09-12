@@ -9,7 +9,7 @@ from palace.manager.api.authentication.basic import (
 )
 from palace.manager.integration.settings import ConfigurationFormItem, FormField
 from palace.manager.sqlalchemy.model.patron import Patron
-from palace.manager.util.http import HTTP
+from palace.manager.util.http.http import HTTP
 from palace.manager.util.pydantic import HttpUrl
 
 

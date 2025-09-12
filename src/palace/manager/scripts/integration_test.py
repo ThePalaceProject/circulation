@@ -16,11 +16,13 @@ from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.scripts.base import Script
 from palace.manager.util.aes import CryptAESCBC
 from palace.manager.util.datetime_helpers import utc_now
-from palace.manager.util.http import (
-    HTTP,
+from palace.manager.util.http.exception import (
     BadResponseException,
     RequestNetworkException,
     RequestTimedOut,
+)
+from palace.manager.util.http.http import (
+    HTTP,
 )
 
 

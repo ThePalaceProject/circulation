@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from palace.manager.integration.license.enki import EnkiAPI
 from palace.manager.sqlalchemy.model.collection import Collection
-from palace.manager.util.http import HTTP
+from palace.manager.util.http.base import raise_for_bad_response
 from tests.mocks.mock import MockRequestsResponse
 
 
@@ -24,9 +24,9 @@ class MockEnkiAPI(EnkiAPI):
         """
         self.requests.append([method, url, headers, data, params, kwargs])
         response = self.responses.pop()
-        return HTTP._process_response(
+        return raise_for_bad_response(
             url,
             response,
-            kwargs.get("allowed_response_codes"),
-            kwargs.get("disallowed_response_codes"),
+            kwargs.get("allowed_response_codes", []),
+            kwargs.get("disallowed_response_codes", []),
         )

@@ -15,7 +15,7 @@ from palace.manager.service.integration_registry.license_providers import (
     LicenseProvidersRegistry,
 )
 from palace.manager.sqlalchemy.model.collection import Collection
-from palace.manager.util.http import HTTP
+from palace.manager.util.http.http import HTTP
 
 Opds2ImporterT = OpdsImporter[PublicationFeedNoValidation, opds2.Publication]
 

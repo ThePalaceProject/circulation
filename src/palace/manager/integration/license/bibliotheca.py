@@ -103,7 +103,8 @@ from palace.manager.util.datetime_helpers import (
     to_utc,
     utc_now,
 )
-from palace.manager.util.http import HTTP, RemoteIntegrationException, RequestKwargs
+from palace.manager.util.http.exception import RemoteIntegrationException
+from palace.manager.util.http.http import HTTP, RequestKwargs
 from palace.manager.util.log import LoggerMixin
 from palace.manager.util.problem_detail import BaseProblemDetailException
 from palace.manager.util.xmlparser import XMLParser, XMLProcessor

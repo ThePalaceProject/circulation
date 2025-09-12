@@ -21,7 +21,7 @@ from palace.manager.sqlalchemy.flask_sqlalchemy_session import flask_scoped_sess
 from palace.manager.sqlalchemy.model.key import Key, KeyType
 from palace.manager.sqlalchemy.session import SessionManager
 from palace.manager.util.cache import CachedData
-from palace.manager.util.http import HTTP
+from palace.manager.util.http.http import HTTP
 from palace.manager.util.languages import LanguageCodes
 
 

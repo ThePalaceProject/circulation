@@ -48,7 +48,7 @@ from palace.manager.sqlalchemy.util import (
     get_one_or_create,
 )
 from palace.manager.util.datetime_helpers import utc_now
-from palace.manager.util.http import HTTP
+from palace.manager.util.http.http import HTTP
 
 if TYPE_CHECKING:
     from palace.manager.sqlalchemy.model.datasource import DataSource

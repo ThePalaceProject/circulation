@@ -38,7 +38,8 @@ from palace.manager.integration.license.boundless.model.xml import (
     EarlyCheckinResponse,
     RemoveHoldResponse,
 )
-from palace.manager.util.http import HTTP, BadResponseException, RequestKwargs
+from palace.manager.util.http.exception import BadResponseException
+from palace.manager.util.http.http import HTTP, RequestKwargs
 from palace.manager.util.log import LoggerMixin
 from palace.manager.util.sentinel import SentinelType
 

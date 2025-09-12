@@ -17,13 +17,13 @@ from palace.manager.integration.license.opds.exception import OpdsResponseExcept
 from palace.manager.opds.authentication import AuthenticationDocument
 from palace.manager.opds.opds2 import PublicationFeedNoValidation
 from palace.manager.util import first_or_default
-from palace.manager.util.http import (
+from palace.manager.util.http.base import ResponseCodesTypes
+from palace.manager.util.http.exception import BadResponseException
+from palace.manager.util.http.http import (
     HTTP,
-    BadResponseException,
     BearerAuth,
     MakeRequestT,
     RequestKwargs,
-    ResponseCodesT,
 )
 from palace.manager.util.sentinel import SentinelType
 
@@ -151,8 +151,8 @@ class OAuthOpdsRequest(BaseOpdsHttpRequest):
     ) -> Response:
         # If the request restricts allowed response codes, we need to add 401 to the allowed response codes
         # so that we can handle the 401 response and refresh the token, if necessary.
-        original_allowed_response_codes: ResponseCodesT = kwargs.get(
-            "allowed_response_codes"
+        original_allowed_response_codes: ResponseCodesTypes = kwargs.get(
+            "allowed_response_codes", []
         )
         if (
             original_allowed_response_codes
