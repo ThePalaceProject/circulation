@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Iterable
 from dataclasses import dataclass
 from functools import cached_property
@@ -22,10 +23,12 @@ from palace.manager.integration.license.opds.extractor import (
 from palace.manager.integration.license.opds.requests import BaseOpdsHttpRequest
 from palace.manager.opds import rwpm
 from palace.manager.opds.odl.info import LicenseInfo
+from palace.manager.opds.odl.odl import License
 from palace.manager.service.redis.models.set import IdentifierSet
 from palace.manager.sqlalchemy.model.collection import Collection
+from palace.manager.util.http.async_http import AsyncClient
 from palace.manager.util.http.exception import BadResponseException
-from palace.manager.util.log import LoggerMixin
+from palace.manager.util.log import LoggerMixin, elapsed_time_logging
 
 FeedType = TypeVar("FeedType")
 PublicationType = TypeVar("PublicationType")
@@ -43,6 +46,8 @@ class OpdsImporter(Generic[FeedType, PublicationType], LoggerMixin):
         feed_base_url: str,
         accept_header: str,
         ignored_identifier_types: Iterable[str],
+        *,
+        async_http_client: AsyncClient | None = None,
     ) -> None:
         """
         Constructor.
@@ -56,6 +61,7 @@ class OpdsImporter(Generic[FeedType, PublicationType], LoggerMixin):
         self._feed_base_url = feed_base_url
         self._accept_header = accept_header
         self._ignored_identifier_types = set(ignored_identifier_types)
+        self._async_http_client = async_http_client or AsyncClient.for_worker()
 
     def _absolute_url(self, url: str | None) -> str:
         """
@@ -91,31 +97,36 @@ class OpdsImporter(Generic[FeedType, PublicationType], LoggerMixin):
         """
         return identifier.type in self._ignored_identifier_types
 
-    def _fetch_license_document(self, document_link: str) -> LicenseInfo | None:
+    async def _fetch_license_document(
+        self, license_: License
+    ) -> tuple[str, LicenseInfo] | None:
         """
         Fetch a license document from the given link and return it as a LicenseInfo object.
         """
+        license_link = license_.links.get(
+            rel=rwpm.LinkRelations.self,
+            type=LicenseInfo.content_type(),
+            raising=True,
+        ).href
+
         try:
-            return self._request(
-                "GET",
-                document_link,
-                parser=LicenseInfo.model_validate_json,
-                allowed_response_codes=["2xx"],
+            response = await self._async_http_client.get(
+                license_link, allowed_response_codes=["2xx"]
+            )
+            return license_.metadata.identifier, LicenseInfo.model_validate_json(
+                response.content
             )
         except BadResponseException as e:
-            resp = e.response
             self.log.warning(
                 f"License Info Document is not available. "
-                f"Status link {document_link} failed with {resp.status_code} code."
+                f"Status link {license_link} failed with {e.response.status_code} code. {e}"
             )
             return None
         except ValidationError as e:
-            self.log.error(
-                f"License Info Document at {document_link} is not valid. {e}"
-            )
+            self.log.error(f"License Info Document at {license_link} is not valid. {e}")
             return None
 
-    def _fetch_license_documents(
+    async def _fetch_license_documents(
         self, publication: PublicationType
     ) -> dict[str, LicenseInfo]:
         """
@@ -125,37 +136,109 @@ class OpdsImporter(Generic[FeedType, PublicationType], LoggerMixin):
         :return: A dictionary mapping license identifiers to LicenseInfo objects.
         """
         publication_available = self._extractor.publication_available(publication)
+        requests = [
+            self._fetch_license_document(license_)
+            for license_ in self._extractor.publication_licenses(publication)
+            if license_.metadata.availability.available and publication_available
+        ]
+        responses = [
+            response
+            for response in await asyncio.gather(*requests)
+            if response is not None
+        ]
+
+        return dict(responses)
+
+    def _license_document_urls(self, publication: PublicationType) -> dict[str, str]:
+        """
+        Get the license document URLs for a publication.
+
+        :param publication: The publication from which to get license document URLs.
+        :return: A list of license document URLs.
+        """
+        publication_available = self._extractor.publication_available(publication)
+        if not publication_available:
+            return {}
+
         return {
-            license_document.identifier: license_document
+            license_.metadata.identifier: license_.links.get(
+                rel=rwpm.LinkRelations.self,
+                type=LicenseInfo.content_type(),
+                raising=True,
+            ).href
             for license_ in self._extractor.publication_licenses(publication)
             if license_.metadata.availability.available
-            and publication_available
-            and (
-                license_document := self._fetch_license_document(
-                    license_.links.get(
-                        rel=rwpm.LinkRelations.self,
-                        type=LicenseInfo.content_type(),
-                        raising=True,
-                    ).href
-                )
-            )
-            is not None
         }
+
+    async def _fetch_license_documents_concurrently(
+        self,
+        results: list[tuple[IdentifierData, PublicationType, dict[str, str]]],
+    ) -> list[tuple[IdentifierData, PublicationType, dict[str, LicenseInfo]]]:
+        """
+        Fetch license documents for multiple publications concurrently.
+
+        :param results: A list of tuples containing the identifier, publication, and license document URLs.
+        :return: A list of tuples containing the identifier, publication, and fetched license documents.
+        """
+        tasks = [
+            self._fetch_license_documents(publication) for _, publication, _ in results
+        ]
+        fetched_license_documents = await asyncio.gather(*tasks)
+
+        return [
+            (identifier, publication, license_info_documents)
+            for (identifier, publication, _), license_info_documents in zip(
+                results, fetched_license_documents
+            )
+        ]
 
     def _extract_publications_from_feed(
         self, feed: FeedType
     ) -> tuple[dict[IdentifierData, BibliographicData], list[FailedPublication]]:
         """
         Extract each publication's bibliographic data from the feed.
+
+        This method processes publications in three phases:
+        1. Initial validation and filtering
+        2. Concurrent license document fetching
+        3. Bibliographic data extraction
         """
-        bibliographic_data = {}
+        # Phase 1: Initial validation and filtering
+        valid_results, failures = self._validate_and_filter_publications(feed)
+
+        if not valid_results:
+            return {}, failures
+
+        # Phase 2: Fetch license documents concurrently
+        publications_with_licenses = self._fetch_all_license_documents(valid_results)
+
+        # Phase 3: Extract bibliographic data
+        bibliographic_data, extraction_failures = self._extract_bibliographic_data(
+            publications_with_licenses
+        )
+        failures.extend(extraction_failures)
+
+        return bibliographic_data, failures
+
+    def _validate_and_filter_publications(self, feed: FeedType) -> tuple[
+        list[tuple[IdentifierData, PublicationType, dict[str, str]]],
+        list[FailedPublication],
+    ]:
+        """
+        Phase 1: Validate publications and filter out invalid ones.
+
+        Returns a tuple of (valid_results, failures).
+        """
+        results = []
         failures = []
 
         for publication in self._extractor.feed_publications(feed):
+            # Handle already failed publications
             if isinstance(publication, FailedPublication):
                 failures.append(publication)
                 continue
 
+            # Extract and validate identifier
             try:
                 identifier = self._extractor.publication_identifier(publication)
             except ValueError as e:
@@ -168,6 +251,7 @@ class OpdsImporter(Generic[FeedType, PublicationType], LoggerMixin):
                 )
                 continue
 
+            # Check if identifier type should be ignored
             if self._is_identifier_ignored(identifier):
                 self.log.warning(
                     f"Publication {identifier} not imported because its "
@@ -175,8 +259,48 @@ class OpdsImporter(Generic[FeedType, PublicationType], LoggerMixin):
                 )
                 continue
 
-            license_info_documents = self._fetch_license_documents(publication)
+            # Get license document URLs for later fetching
+            license_urls = self._license_document_urls(publication)
+            results.append((identifier, publication, license_urls))
 
+        return results, failures
+
+    def _fetch_all_license_documents(
+        self, results: list[tuple[IdentifierData, PublicationType, dict[str, str]]]
+    ) -> list[tuple[IdentifierData, PublicationType, dict[str, LicenseInfo]]]:
+        """
+        Phase 2: Fetch license documents concurrently for all valid publications.
+        """
+        if not results:
+            return []
+
+        with elapsed_time_logging(
+            log_method=self.log.info,
+            message_prefix=f"Fetching {len(results)} license documents",
+        ):
+            results_with_license_info = asyncio.run(
+                self._fetch_license_documents_concurrently(results)
+            )
+
+        return results_with_license_info
+
+    def _extract_bibliographic_data(
+        self,
+        publications_with_licenses: list[
+            tuple[IdentifierData, PublicationType, dict[str, LicenseInfo]]
+        ],
+    ) -> tuple[dict[IdentifierData, BibliographicData], list[FailedPublication]]:
+        """
+        Phase 3: Extract bibliographic data from publications with license information.
+        """
+        bibliographic_data = {}
+        failures = []
+
+        for (
+            identifier,
+            publication,
+            license_info_documents,
+        ) in publications_with_licenses:
             try:
                 bibliographic_data[identifier] = (
                     self._extractor.publication_bibliographic(
@@ -191,7 +315,6 @@ class OpdsImporter(Generic[FeedType, PublicationType], LoggerMixin):
                         "Could not extract bibliographic data from the publication",
                     )
                 )
-                continue
 
         return bibliographic_data, failures
 
