@@ -130,6 +130,8 @@ class MockHttpxResponse(httpx.Response):
         url: str | None = None,
         request: httpx.Request | None = None,
     ) -> None:
+        import datetime
+
         # Handle content encoding similar to MockRequestsResponse
         response_content: bytes
         headers_dict = dict(headers) if headers else {}
@@ -163,6 +165,10 @@ class MockHttpxResponse(httpx.Response):
             content=response_content,
             request=request,
         )
+
+        # Set the _elapsed attribute to simulate a completed request
+        # This allows the elapsed property to work properly
+        self._elapsed = datetime.timedelta(milliseconds=100)
 
 
 class MockAsyncClientFixture:
