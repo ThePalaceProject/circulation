@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import random
-import time
 from collections.abc import AsyncIterable, Iterable, Mapping, Sequence
 from types import TracebackType
 from typing import IO, Any, TypedDict, Union, cast
@@ -199,7 +198,7 @@ WORKER_DEFAULT_MAX_RETRIES = 3
 WORKER_DEFAULT_BACKOFF_FACTOR = 1
 WORKER_DEFAULT_MAX_BACKOFF = 30
 
-DEFAULT_LIMITS = httpx.Limits(max_connections=5, max_keepalive_connections=None)
+DEFAULT_LIMITS = httpx.Limits(max_connections=10, max_keepalive_connections=None)
 
 
 class AsyncClient(LoggerMixin):
@@ -348,10 +347,10 @@ class AsyncClient(LoggerMixin):
         Perform a single HTTP request, handling exceptions and logging, without retries.
         """
         try:
-            request_start_time = time.perf_counter()
             response = await self._httpx_client.request(method, url, **kwargs)
-            elapsed_time = time.perf_counter() - request_start_time
-            self.log.info(f"Request time for {url} took {elapsed_time:.2f} seconds")
+            self.log.info(
+                f"Request time for {url} took {response.elapsed.total_seconds():.2f} seconds"
+            )
 
         except httpx.TimeoutException as e:
             # Wrap the httpx-specific Timeout exception in a generic RequestTimedOut exception.
