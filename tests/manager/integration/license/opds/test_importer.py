@@ -4,12 +4,13 @@ import uuid
 from typing import Any
 from unittest.mock import MagicMock
 
+from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.integration.license.opds.odl.api import OPDS2WithODLApi
 from palace.manager.integration.license.opds.odl.importer import (
     importer_from_collection,
 )
 from palace.manager.opds.odl.info import Checkouts, LicenseInfo, LicenseStatus
-from palace.manager.opds.odl.odl import License
+from palace.manager.opds.odl.odl import License, Opds2OrOpds2WithOdlPublication
 from palace.manager.opds.odl.terms import Terms
 from palace.manager.opds.opds2 import PublicationFeedNoValidation
 from palace.manager.sqlalchemy.model.identifier import Identifier
@@ -221,13 +222,6 @@ class TestOpdsImporter:
         opds2_feed = json.loads(opds2_files_fixture.sample_text("feed.json"))
         opds2_feed["publications"] = [opds2_feed["publications"][0], {}]
         feed = PublicationFeedNoValidation.model_validate(opds2_feed)
-
-        # Queue multiple empty responses for license document fetching (if any)
-        # Since the sample feed might have license URLs, we need to handle those
-        # Need multiple responses in case of retries or multiple license documents
-        for _ in range(10):  # Queue enough responses to handle any license requests
-            async_http_client.queue_response(200, content="{}")
-
         successful, failed = importer._extract_publications_from_feed(feed)
 
         # Only the first publication is valid, so it is the one returned
@@ -297,12 +291,6 @@ class TestOpdsImporter:
         opds2_feed = json.loads(opds2_files_fixture.sample_text("feed.json"))
         feed = PublicationFeedNoValidation.model_validate(opds2_feed)
         valid_results, _ = importer._validate_and_filter_publications(feed)
-
-        # Mock license document responses (empty since no ODL licenses in sample)
-        # Queue multiple responses to handle any license document requests
-        for _ in range(10):
-            async_http_client.queue_response(200, content="{}")
-
         results_with_licenses = importer._fetch_all_license_documents(valid_results)
 
         # Should have same number of results
@@ -327,16 +315,13 @@ class TestOpdsImporter:
 
         # Create mock input data (what would come from phase 2)
         opds2_feed = json.loads(opds2_files_fixture.sample_text("feed.json"))
+
         # Use only the first publication (like the other tests)
         opds2_feed["publications"] = [opds2_feed["publications"][0]]
         feed = PublicationFeedNoValidation.model_validate(opds2_feed)
         valid_results, _ = importer._validate_and_filter_publications(feed)
 
         # Simulate phase 2 output with empty license info
-        from palace.manager.data_layer.identifier import IdentifierData
-        from palace.manager.opds.odl.info import LicenseInfo
-        from palace.manager.opds.odl.odl import Opds2OrOpds2WithOdlPublication
-
         publications_with_licenses: list[
             tuple[
                 IdentifierData, Opds2OrOpds2WithOdlPublication, dict[str, LicenseInfo]
