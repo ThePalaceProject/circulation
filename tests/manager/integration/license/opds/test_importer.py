@@ -4,8 +4,6 @@ import uuid
 from typing import Any
 from unittest.mock import MagicMock
 
-import pytest
-
 from palace.manager.integration.license.opds.odl.api import OPDS2WithODLApi
 from palace.manager.integration.license.opds.odl.importer import (
     importer_from_collection,
@@ -23,7 +21,6 @@ from tests.fixtures.services import ServicesFixture
 
 
 class TestOpdsImporter:
-    @pytest.mark.asyncio
     async def test_fetch_license_document(
         self,
         db: DatabaseTransactionFixture,
