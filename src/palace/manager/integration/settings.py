@@ -410,7 +410,9 @@ class BaseSettings(BaseModel, LoggerMixin):
         if "exclude_extra" in kwargs:
             exclude_extra = kwargs.pop("exclude_extra")
             if exclude_extra:
-                kwargs["exclude"] = self.model_fields_set - self.model_fields.keys()
+                kwargs["exclude"] = (
+                    self.model_fields_set - self.__class__.model_fields.keys()
+                )
 
         return super().model_dump(**kwargs)
 

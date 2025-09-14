@@ -83,9 +83,22 @@ class CompactCollection(Sequence[LinkT]):
         else:
             list_schema = handler.generate_schema(list)
 
-        return core_schema.no_info_after_validator_function(
-            cls._validate,
-            list_schema,
+        from_list_schema = core_schema.chain_schema(
+            [
+                list_schema,
+                core_schema.no_info_plain_validator_function(cls._validate),
+            ]
+        )
+
+        return core_schema.json_or_python_schema(
+            json_schema=from_list_schema,
+            python_schema=core_schema.union_schema(
+                [
+                    # check if it's an instance first before doing any further work
+                    core_schema.is_instance_schema(cls),
+                    from_list_schema,
+                ]
+            ),
             serialization=core_schema.plain_serializer_function_ser_schema(
                 lambda x: x._links, when_used="json"
             ),

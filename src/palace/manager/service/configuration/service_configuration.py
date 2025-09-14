@@ -49,7 +49,7 @@ class ServiceConfiguration(BaseSettings):
                     first_error_location = str(pydantic_location[0])
                     env_var = (
                         f"{self.model_config.get('env_prefix')}{first_error_location.upper()}"
-                        if self.model_fields.get(first_error_location)
+                        if self.__class__.model_fields.get(first_error_location)
                         else first_error_location.upper()
                     )
                     location = delimiter.join(
