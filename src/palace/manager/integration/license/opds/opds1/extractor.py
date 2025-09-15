@@ -137,7 +137,9 @@ class Opds1Extractor(OpdsExtractor[OPDS1Feed, OPDS1Publication], BearerTokenDrmM
 
     @classmethod
     def _extract_last_update_date(cls, entry_fp: dict[str, Any]) -> datetime | None:
-        return cls._datetime(entry_fp, "updated_parsed")
+        if "updated_parsed" in entry_fp:
+            return cls._datetime(entry_fp, "updated_parsed")
+        return cls._datetime(entry_fp, "published_parsed")
 
     @staticmethod
     def _extract_publisher(entry_fp: dict[str, Any]) -> str | None:
