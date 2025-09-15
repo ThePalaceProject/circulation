@@ -59,13 +59,15 @@ class BoundlessAcsFulfillment(UrlFulfillment, LoggerMixin):
         try:
             if self.verify:
                 # Actually verify the ssl certificates
-                ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS)
+                ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
                 ssl_context.verify_mode = ssl.CERT_REQUIRED
                 ssl_context.check_hostname = True
                 ssl_context.load_verify_locations(cafile=certifi.where())
             else:
                 # Default context does no ssl verification
-                ssl_context = ssl.SSLContext()
+                ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+                ssl_context.check_hostname = False
+                ssl_context.verify_mode = ssl.CERT_NONE
             req = urllib.request.Request(self.content_link)
             with urllib.request.urlopen(
                 req, timeout=20, context=ssl_context
