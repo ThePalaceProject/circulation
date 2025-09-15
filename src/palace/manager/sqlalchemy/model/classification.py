@@ -138,7 +138,9 @@ class Subject(Base):
 
     # Each Subject may claim affinity with one Genre.
     genre_id = Column(Integer, ForeignKey("genres.id"), index=True)
-    genre: Mapped[Genre | None] = relationship("Genre", back_populates="subjects")
+    genre: Mapped[Genre | None] = relationship(
+        "Genre", back_populates="subjects", cascade_backrefs=False
+    )
 
     # A locked Subject has been reviewed by a human and software will
     # not mess with it without permission.
@@ -150,7 +152,7 @@ class Subject(Base):
 
     # One Subject may participate in many Classifications.
     classifications: Mapped[list[Classification]] = relationship(
-        "Classification", back_populates="subject"
+        "Classification", back_populates="subject", cascade_backrefs=False
     )
 
     # Type + identifier must be unique.
@@ -345,15 +347,17 @@ class Classification(Base):
         Integer, ForeignKey("identifiers.id"), index=True, nullable=False
     )
     identifier: Mapped[Identifier] = relationship(
-        "Identifier", back_populates="classifications"
+        "Identifier", back_populates="classifications", cascade_backrefs=False
     )
     subject_id = Column(Integer, ForeignKey("subjects.id"), index=True, nullable=False)
-    subject: Mapped[Subject] = relationship("Subject", back_populates="classifications")
+    subject: Mapped[Subject] = relationship(
+        "Subject", back_populates="classifications", cascade_backrefs=False
+    )
     data_source_id = Column(
         Integer, ForeignKey("datasources.id"), index=True, nullable=False
     )
     data_source: Mapped[DataSource] = relationship(
-        "DataSource", back_populates="classifications"
+        "DataSource", back_populates="classifications", cascade_backrefs=False
     )
 
     # How much weight the data source gives to this classification.
@@ -485,17 +489,22 @@ class Genre(Base, HasSessionCache, LoggerMixin):
     name: Mapped[str] = Column(Unicode, unique=True, index=True, nullable=False)
 
     # One Genre may have affinity with many Subjects.
-    subjects: Mapped[list[Subject]] = relationship("Subject", back_populates="genre")
+    subjects: Mapped[list[Subject]] = relationship(
+        "Subject", back_populates="genre", cascade_backrefs=False
+    )
 
     # One Genre may participate in many WorkGenre assignments.
     works = association_proxy("work_genres", "work")
 
     work_genres: Mapped[list[WorkGenre]] = relationship(
-        "WorkGenre", back_populates="genre", cascade="all, delete-orphan"
+        "WorkGenre",
+        back_populates="genre",
+        cascade="all, delete-orphan",
+        cascade_backrefs=False,
     )
 
     lane_genres: Mapped[list[LaneGenre]] = relationship(
-        "LaneGenre", back_populates="genre"
+        "LaneGenre", back_populates="genre", cascade_backrefs=False
     )
 
     def __repr__(self) -> str:

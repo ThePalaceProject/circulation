@@ -56,52 +56,55 @@ class DataSource(Base, HasSessionCache, DataSourceConstants):
 
     # One DataSource can generate many Editions.
     editions: Mapped[list[Edition]] = relationship(
-        "Edition", back_populates="data_source", uselist=True
+        "Edition", back_populates="data_source", uselist=True, cascade_backrefs=False
     )
 
     # One DataSource can generate many CoverageRecords.
     coverage_records: Mapped[list[CoverageRecord]] = relationship(
-        "CoverageRecord", back_populates="data_source"
+        "CoverageRecord", back_populates="data_source", cascade_backrefs=False
     )
 
     # One DataSource can generate many IDEquivalencies.
     id_equivalencies: Mapped[list[Equivalency]] = relationship(
-        "Equivalency", back_populates="data_source"
+        "Equivalency", back_populates="data_source", cascade_backrefs=False
     )
 
     # One DataSource can grant access to many LicensePools.
     license_pools: Mapped[list[LicensePool]] = relationship(
-        "LicensePool", back_populates="data_source", overlaps="delivery_mechanisms"
+        "LicensePool",
+        back_populates="data_source",
+        overlaps="delivery_mechanisms",
+        cascade_backrefs=False,
     )
 
     # One DataSource can provide many Hyperlinks.
     links: Mapped[list[Hyperlink]] = relationship(
-        "Hyperlink", back_populates="data_source"
+        "Hyperlink", back_populates="data_source", cascade_backrefs=False
     )
 
     # One DataSource can provide many Resources.
     resources: Mapped[list[Resource]] = relationship(
-        "Resource", back_populates="data_source"
+        "Resource", back_populates="data_source", cascade_backrefs=False
     )
 
     # One DataSource can generate many Measurements.
     measurements: Mapped[list[Measurement]] = relationship(
-        "Measurement", back_populates="data_source"
+        "Measurement", back_populates="data_source", cascade_backrefs=False
     )
 
     # One DataSource can provide many Classifications.
     classifications: Mapped[list[Classification]] = relationship(
-        "Classification", back_populates="data_source"
+        "Classification", back_populates="data_source", cascade_backrefs=False
     )
 
     # One DataSource can have many associated Credentials.
     credentials: Mapped[list[Credential]] = relationship(
-        "Credential", back_populates="data_source"
+        "Credential", back_populates="data_source", cascade_backrefs=False
     )
 
     # One DataSource can generate many CustomLists.
     custom_lists: Mapped[list[CustomList]] = relationship(
-        "CustomList", back_populates="data_source"
+        "CustomList", back_populates="data_source", cascade_backrefs=False
     )
 
     # One DataSource can provide many LicensePoolDeliveryMechanisms.
@@ -109,18 +112,21 @@ class DataSource(Base, HasSessionCache, DataSourceConstants):
         "LicensePoolDeliveryMechanism",
         back_populates="data_source",
         foreign_keys="LicensePoolDeliveryMechanism.data_source_id",
+        cascade_backrefs=False,
     )
 
     license_lanes: Mapped[list[Lane]] = relationship(
         "Lane",
         back_populates="license_datasource",
         foreign_keys="Lane.license_datasource_id",
+        cascade_backrefs=False,
     )
 
     list_lanes: Mapped[list[Lane]] = relationship(
         "Lane",
         back_populates="_list_datasource",
         foreign_keys="Lane._list_datasource_id",
+        cascade_backrefs=False,
     )
 
     metadata_lookups_by_identifier_type: defaultdict[str | None, list[str]]

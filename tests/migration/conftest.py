@@ -76,10 +76,10 @@ class AlembicDatabaseFixture:
         return "".join(random.choices(string.ascii_lowercase, k=length))
 
     def fetch_library(self, library_id: int) -> Row:
-        with self._engine.connect() as connection:
+        with self._engine.connect() as connection, connection.begin():
             result = connection.execute(
                 text("SELECT * FROM libraries WHERE id = :id"),
-                id=library_id,
+                {"id": library_id},
             )
             return result.one()
 
@@ -115,9 +115,9 @@ class AlembicDatabaseFixture:
         keys = ",".join(args.keys())
         values = ",".join([f"'{value}'" for value in args.values()])
 
-        with self._engine.connect() as connection:
+        with self._engine.connect() as connection, connection.begin():
             library = connection.execute(
-                f"INSERT INTO libraries ({keys}) VALUES ({values}) returning id"
+                text(f"INSERT INTO libraries ({keys}) VALUES ({values}) returning id")
             ).fetchone()
 
         assert library is not None
@@ -125,10 +125,10 @@ class AlembicDatabaseFixture:
         return library.id
 
     def fetch_integration(self, integration_id: int) -> Row:
-        with self._engine.connect() as connection:
+        with self._engine.connect() as connection, connection.begin():
             result = connection.execute(
                 text("SELECT * FROM integration_configurations WHERE id = :id"),
-                id=integration_id,
+                {"id": integration_id},
             )
             return result.one()
 
@@ -167,7 +167,7 @@ class AlembicDatabaseFixture:
         context_json = json_serializer(context)
         self_test_results_json = json_serializer(self_test_results)
 
-        with self._engine.connect() as connection:
+        with self._engine.connect() as connection, connection.begin():
             integration = connection.execute(
                 text(
                     "INSERT INTO integration_configurations "

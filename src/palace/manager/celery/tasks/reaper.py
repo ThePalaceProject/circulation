@@ -78,7 +78,10 @@ def work_reaper(task: Task, batch_size: int = 1000) -> None:
         # We defer loading of any fields defined as large on the Work to speed up
         # our query, and since we are loading works without license pools, we want
         # to override the default joined eager loading of license_pools.
-        .options(*(defer(f) for f in Work.LARGE_FIELDS), lazyload(Work.license_pools))
+        .options(
+            *(defer(getattr(Work, f)) for f in Work.LARGE_FIELDS),
+            lazyload(Work.license_pools),
+        )
     )
     search_index = task.services.search.index()
     with task.transaction() as session:

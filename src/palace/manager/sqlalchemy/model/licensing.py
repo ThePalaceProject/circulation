@@ -149,12 +149,17 @@ class License(Base, LicenseFunctions):
         Integer, ForeignKey("licensepools.id"), index=True, nullable=False
     )
     license_pool: Mapped[LicensePool] = relationship(
-        "LicensePool", back_populates="licenses"
+        "LicensePool",
+        back_populates="licenses",
+        cascade_backrefs=False,
     )
 
     # One License can have many Loans.
     loans: Mapped[list[Loan]] = relationship(
-        "Loan", back_populates="license", cascade="all, delete-orphan"
+        "Loan",
+        back_populates="license",
+        cascade="all, delete-orphan",
+        cascade_backrefs=False,
     )
 
     __table_args__ = (UniqueConstraint("identifier", "license_pool_id"),)
@@ -219,7 +224,9 @@ class LicensePool(Base):
     # A LicensePool may be associated with a Work. (If it's not, no one
     # can check it out.)
     work_id = Column(Integer, ForeignKey("works.id"), index=True)
-    work: Mapped[Work | None] = relationship("Work", back_populates="license_pools")
+    work: Mapped[Work | None] = relationship(
+        "Work", back_populates="license_pools", cascade_backrefs=False
+    )
 
     # Each LicensePool is associated with one DataSource and one
     # Identifier.
@@ -227,14 +234,20 @@ class LicensePool(Base):
         Integer, ForeignKey("datasources.id"), index=True, nullable=False
     )
     data_source: Mapped[DataSource] = relationship(
-        "DataSource", back_populates="license_pools", lazy="joined"
+        "DataSource",
+        back_populates="license_pools",
+        lazy="joined",
+        cascade_backrefs=False,
     )
 
     identifier_id: Mapped[int] = Column(
         Integer, ForeignKey("identifiers.id"), index=True, nullable=False
     )
     identifier: Mapped[Identifier] = relationship(
-        "Identifier", back_populates="licensed_through", lazy="joined"
+        "Identifier",
+        back_populates="licensed_through",
+        lazy="joined",
+        cascade_backrefs=False,
     )
 
     # Each LicensePool belongs to one Collection.
@@ -243,14 +256,18 @@ class LicensePool(Base):
     )
 
     collection: Mapped[Collection] = relationship(
-        "Collection", back_populates="licensepools"
+        "Collection",
+        back_populates="licensepools",
+        cascade_backrefs=False,
     )
 
     # Each LicensePool has an Edition which contains the metadata used
     # to describe this book.
     presentation_edition_id = Column(Integer, ForeignKey("editions.id"), index=True)
     presentation_edition: Mapped[Edition | None] = relationship(
-        "Edition", back_populates="is_presentation_for"
+        "Edition",
+        back_populates="is_presentation_for",
+        cascade_backrefs=False,
     )
 
     # If the source provides information about individual licenses, the
@@ -260,21 +277,31 @@ class LicensePool(Base):
         back_populates="license_pool",
         cascade="all, delete-orphan",
         uselist=True,
+        cascade_backrefs=False,
     )
 
     # One LicensePool can have many Loans.
     loans: Mapped[list[Loan]] = relationship(
-        "Loan", back_populates="license_pool", cascade="all, delete-orphan"
+        "Loan",
+        back_populates="license_pool",
+        cascade="all, delete-orphan",
+        cascade_backrefs=False,
     )
 
     # One LicensePool can have many Holds.
     holds: Mapped[list[Hold]] = relationship(
-        "Hold", back_populates="license_pool", cascade="all, delete-orphan"
+        "Hold",
+        back_populates="license_pool",
+        cascade="all, delete-orphan",
+        cascade_backrefs=False,
     )
 
     # One LicensePool can have many CirculationEvents
     circulation_events: Mapped[list[CirculationEvent]] = relationship(
-        "CirculationEvent", back_populates="license_pool", cascade="all, delete-orphan"
+        "CirculationEvent",
+        back_populates="license_pool",
+        cascade="all, delete-orphan",
+        cascade_backrefs=False,
     )
 
     # The date this LicensePool was first created in our db
@@ -1586,7 +1613,9 @@ class LicensePoolDeliveryMechanism(Base):
         Integer, ForeignKey("datasources.id"), index=True, nullable=False
     )
     data_source: Mapped[DataSource] = relationship(
-        "DataSource", back_populates="delivery_mechanisms"
+        "DataSource",
+        back_populates="delivery_mechanisms",
+        cascade_backrefs=False,
     )
 
     identifier_id: Mapped[int] = Column(
@@ -1602,6 +1631,7 @@ class LicensePoolDeliveryMechanism(Base):
     delivery_mechanism: Mapped[DeliveryMechanism] = relationship(
         "DeliveryMechanism",
         back_populates="license_pool_delivery_mechanisms",
+        cascade_backrefs=False,
     )
 
     # With some distributors we don't know for sure if a particular delivery
@@ -1612,11 +1642,15 @@ class LicensePoolDeliveryMechanism(Base):
 
     resource_id = Column(Integer, ForeignKey("resources.id"), nullable=True)
     resource: Mapped[Resource | None] = relationship(
-        "Resource", back_populates="licensepooldeliverymechanisms"
+        "Resource",
+        back_populates="licensepooldeliverymechanisms",
+        cascade_backrefs=False,
     )
 
     # One LicensePoolDeliveryMechanism may fulfill many Loans.
-    fulfills: Mapped[list[Loan]] = relationship("Loan", back_populates="fulfillment")
+    fulfills: Mapped[list[Loan]] = relationship(
+        "Loan", back_populates="fulfillment", cascade_backrefs=False
+    )
 
     # One LicensePoolDeliveryMechanism may be associated with one RightsStatus.
     rightsstatus_id = Column(Integer, ForeignKey("rightsstatus.id"), index=True)
@@ -1963,6 +1997,7 @@ class DeliveryMechanism(Base, HasSessionCache):
             "LicensePoolDeliveryMechanism",
             back_populates="delivery_mechanism",
             uselist=True,
+            cascade_backrefs=False,
         )
     )
 
@@ -2249,12 +2284,16 @@ class RightsStatus(Base):
 
     # One RightsStatus may apply to many LicensePoolDeliveryMechanisms.
     licensepooldeliverymechanisms: Mapped[list[LicensePoolDeliveryMechanism]] = (
-        relationship("LicensePoolDeliveryMechanism", back_populates="rights_status")
+        relationship(
+            "LicensePoolDeliveryMechanism",
+            back_populates="rights_status",
+            cascade_backrefs=False,
+        )
     )
 
     # One RightsStatus may apply to many Resources.
     resources: Mapped[list[Resource]] = relationship(
-        "Resource", back_populates="rights_status"
+        "Resource", back_populates="rights_status", cascade_backrefs=False
     )
 
     @classmethod

@@ -80,11 +80,17 @@ class Resource(Base):
     # Many Editions may choose this resource (as opposed to other
     # resources linked to them with rel="image") as their cover image.
     cover_editions: Mapped[list[Edition]] = relationship(
-        "Edition", back_populates="cover", foreign_keys=[Edition.cover_id]
+        "Edition",
+        back_populates="cover",
+        foreign_keys=[Edition.cover_id],
+        cascade_backrefs=False,
     )
 
     summary_works: Mapped[list[Work]] = relationship(
-        "Work", back_populates="summary", foreign_keys="Work.summary_id"
+        "Work",
+        back_populates="summary",
+        foreign_keys="Work.summary_id",
+        cascade_backrefs=False,
     )
 
     # Many LicensePools (but probably one at most) may use this
@@ -94,17 +100,22 @@ class Resource(Base):
             "LicensePoolDeliveryMechanism",
             back_populates="resource",
             foreign_keys=[LicensePoolDeliveryMechanism.resource_id],
+            cascade_backrefs=False,
         )
     )
 
     links: Mapped[list[Hyperlink]] = relationship(
-        "Hyperlink", back_populates="resource"
+        "Hyperlink",
+        back_populates="resource",
+        cascade_backrefs=False,
     )
 
     # The DataSource that is the controlling authority for this Resource.
     data_source_id = Column(Integer, ForeignKey("datasources.id"), index=True)
     data_source: Mapped[DataSource | None] = relationship(
-        "DataSource", back_populates="resources"
+        "DataSource",
+        back_populates="resources",
+        cascade_backrefs=False,
     )
 
     # An archived Representation of this Resource.
@@ -116,7 +127,9 @@ class Resource(Base):
     # The rights status of this Resource.
     rights_status_id = Column(Integer, ForeignKey("rightsstatus.id"))
     rights_status: Mapped[RightsStatus | None] = relationship(
-        "RightsStatus", back_populates="resources"
+        "RightsStatus",
+        back_populates="resources",
+        cascade_backrefs=False,
     )
 
     # An optional explanation of the rights status.
@@ -129,6 +142,7 @@ class Resource(Base):
         lazy="joined",
         back_populates="original",
         uselist=True,
+        cascade_backrefs=False,
     )
 
     # A derivative resource may have one original.
@@ -394,7 +408,10 @@ class ResourceTransformation(Base):
         Integer, ForeignKey("resources.id"), index=True, primary_key=True
     )
     derivative: Mapped[Resource] = relationship(
-        "Resource", back_populates="derived_through", foreign_keys=[derivative_id]
+        "Resource",
+        back_populates="derived_through",
+        foreign_keys=[derivative_id],
+        cascade_backrefs=False,
     )
 
     # The original resource that was transformed into the derivative.
@@ -420,13 +437,17 @@ class Hyperlink(Base, LinkRelations):
     identifier_id: Mapped[int] = Column(
         Integer, ForeignKey("identifiers.id"), index=True, nullable=False
     )
-    identifier: Mapped[Identifier] = relationship("Identifier", back_populates="links")
+    identifier: Mapped[Identifier] = relationship(
+        "Identifier", back_populates="links", cascade_backrefs=False
+    )
 
     # The DataSource through which this link was discovered.
     data_source_id: Mapped[int] = Column(
         Integer, ForeignKey("datasources.id"), index=True, nullable=False
     )
-    data_source: Mapped[DataSource] = relationship("DataSource", back_populates="links")
+    data_source: Mapped[DataSource] = relationship(
+        "DataSource", back_populates="links", cascade_backrefs=False
+    )
 
     # The link relation between the Identifier and the Resource.
     rel: Mapped[str] = Column(Unicode, index=True, nullable=False)
@@ -435,7 +456,9 @@ class Hyperlink(Base, LinkRelations):
     resource_id: Mapped[int] = Column(
         Integer, ForeignKey("resources.id"), index=True, nullable=False
     )
-    resource: Mapped[Resource] = relationship("Resource", back_populates="links")
+    resource: Mapped[Resource] = relationship(
+        "Resource", back_populates="links", cascade_backrefs=False
+    )
 
     @classmethod
     def generic_uri(cls, data_source, identifier, rel, content=None):
@@ -493,7 +516,10 @@ class Representation(Base, MediaTypes):
     media_type = Column(Unicode)
 
     resource: Mapped[Resource | None] = relationship(
-        "Resource", back_populates="representation", uselist=False
+        "Resource",
+        back_populates="representation",
+        uselist=False,
+        cascade_backrefs=False,
     )
 
     ### Records of things we tried to do with this representation.
@@ -535,6 +561,7 @@ class Representation(Base, MediaTypes):
         back_populates="thumbnails",
         remote_side=[id],
         post_update=True,
+        cascade_backrefs=False,
     )
     thumbnails: Mapped[list[Representation]] = relationship(
         "Representation",

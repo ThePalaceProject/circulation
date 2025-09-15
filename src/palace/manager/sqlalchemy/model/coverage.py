@@ -139,7 +139,7 @@ class Timestamp(Base):
         Integer, ForeignKey("collections.id"), index=True, nullable=True
     )
     collection: Mapped[Collection | None] = relationship(
-        "Collection", back_populates="timestamps"
+        "Collection", back_populates="timestamps", cascade_backrefs=False
     )
 
     # The last time the service _started_ running.
@@ -374,14 +374,14 @@ class CoverageRecord(Base, BaseCoverageRecord):
     id: Mapped[int] = Column(Integer, primary_key=True)
     identifier_id = Column(Integer, ForeignKey("identifiers.id"), index=True)
     identifier: Mapped[Identifier | None] = relationship(
-        "Identifier", back_populates="coverage_records"
+        "Identifier", back_populates="coverage_records", cascade_backrefs=False
     )
 
     # If applicable, this is the ID of the data source that took the
     # Identifier as input.
     data_source_id = Column(Integer, ForeignKey("datasources.id"))
     data_source: Mapped[DataSource | None] = relationship(
-        "DataSource", back_populates="coverage_records"
+        "DataSource", back_populates="coverage_records", cascade_backrefs=False
     )
     operation = Column(String(255), default=None)
 
@@ -395,7 +395,7 @@ class CoverageRecord(Base, BaseCoverageRecord):
     # for Metadata Wrangler coverage.
     collection_id = Column(Integer, ForeignKey("collections.id"), nullable=True)
     collection: Mapped[Collection | None] = relationship(
-        "Collection", back_populates="coverage_records"
+        "Collection", back_populates="coverage_records", cascade_backrefs=False
     )
 
     __table_args__ = (
@@ -676,7 +676,7 @@ class EquivalencyCoverageRecord(Base, BaseCoverageRecord):
         nullable=False,
     )
     equivalency: Mapped[Equivalency] = relationship(
-        "Equivalency", foreign_keys=equivalency_id
+        "Equivalency", foreign_keys=equivalency_id, cascade_backrefs=False
     )
 
     operation = Column(String(255), index=True, default=None)

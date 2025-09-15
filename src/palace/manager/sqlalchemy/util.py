@@ -39,7 +39,7 @@ def pg_advisory_lock(
             # If there was an IntegrityError, and we are in a transaction,
             # we need to roll it back before we are able to release the lock.
             transaction = connection.get_transaction()
-            if transaction is not None:
+            if transaction is not None and transaction.is_active:
                 transaction.rollback()
             raise
         finally:

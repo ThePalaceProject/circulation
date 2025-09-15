@@ -32,7 +32,9 @@ class DeviceToken(Base):
         index=True,
         nullable=False,
     )
-    patron: Mapped[Patron] = relationship("Patron", back_populates="device_tokens")
+    patron: Mapped[Patron] = relationship(
+        "Patron", back_populates="device_tokens", cascade_backrefs=False
+    )
 
     token_type: Mapped[str] = Column(
         Enum(

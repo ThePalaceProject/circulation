@@ -99,17 +99,26 @@ class Library(Base, HasSessionCache):
 
     # A library may have many Patrons.
     patrons: Mapped[list[Patron]] = relationship(
-        "Patron", back_populates="library", cascade="all, delete-orphan"
+        "Patron",
+        back_populates="library",
+        cascade="all, delete-orphan",
+        cascade_backrefs=False,
     )
 
     # An Library may have many admin roles.
     adminroles: Mapped[list[AdminRole]] = relationship(
-        "AdminRole", back_populates="library", cascade="all, delete-orphan"
+        "AdminRole",
+        back_populates="library",
+        cascade="all, delete-orphan",
+        cascade_backrefs=False,
     )
 
     # A Library may have many CustomLists.
     custom_lists: Mapped[list[CustomList]] = relationship(
-        "CustomList", back_populates="library", uselist=True
+        "CustomList",
+        back_populates="library",
+        uselist=True,
+        cascade_backrefs=False,
     )
 
     # Lists shared with this library
@@ -119,6 +128,7 @@ class Library(Base, HasSessionCache):
         secondary="customlist_sharedlibraries",
         back_populates="shared_locally_with_libraries",
         uselist=True,
+        cascade_backrefs=False,
     )
 
     # Any additional configuration information is stored as JSON on this column.
@@ -126,13 +136,17 @@ class Library(Base, HasSessionCache):
 
     # A Library may have many CirculationEvents
     circulation_events: Mapped[list[CirculationEvent]] = relationship(
-        "CirculationEvent", back_populates="library", cascade="all, delete-orphan"
+        "CirculationEvent",
+        back_populates="library",
+        cascade="all, delete-orphan",
+        cascade_backrefs=False,
     )
 
     library_announcements: Mapped[list[Announcement]] = relationship(
         "Announcement",
         back_populates="library",
         cascade="all, delete-orphan",
+        cascade_backrefs=False,
     )
 
     # A class-wide cache mapping library ID to the calculated value
@@ -148,6 +162,7 @@ class Library(Base, HasSessionCache):
         back_populates="library",
         foreign_keys="Lane.library_id",
         cascade="all, delete-orphan",
+        cascade_backrefs=False,
     )
 
     # The library's public / private RSA key-pair.
@@ -163,6 +178,7 @@ class Library(Base, HasSessionCache):
         cascade="all, delete-orphan",
         lazy="select",
         uselist=False,
+        cascade_backrefs=False,
     )
 
     def _associated_collections_query(self, base_query: Select | None = None) -> Select:
@@ -535,7 +551,10 @@ class LibraryLogo(Base):
         Integer, ForeignKey("libraries.id"), primary_key=True
     )
     library: Mapped[Library] = relationship(
-        "Library", back_populates="logo", uselist=False
+        "Library",
+        back_populates="logo",
+        uselist=False,
+        cascade_backrefs=False,
     )
 
     # The logo stored as a base-64 encoded png.

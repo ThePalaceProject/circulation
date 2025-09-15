@@ -28,15 +28,17 @@ class Credential(Base):
     id: Mapped[int] = Column(Integer, primary_key=True)
     data_source_id = Column(Integer, ForeignKey("datasources.id"), index=True)
     data_source: Mapped[DataSource | None] = relationship(
-        "DataSource", back_populates="credentials"
+        "DataSource", back_populates="credentials", cascade_backrefs=False
     )
     patron_id = Column(
         Integer, ForeignKey("patrons.id", ondelete="CASCADE"), index=True
     )
-    patron: Mapped[Patron | None] = relationship("Patron", back_populates="credentials")
+    patron: Mapped[Patron | None] = relationship(
+        "Patron", back_populates="credentials", cascade_backrefs=False
+    )
     collection_id = Column(Integer, ForeignKey("collections.id"), index=True)
     collection: Mapped[Collection | None] = relationship(
-        "Collection", back_populates="credentials"
+        "Collection", back_populates="credentials", cascade_backrefs=False
     )
     type = Column(String(255), index=True)
     credential = Column(String)

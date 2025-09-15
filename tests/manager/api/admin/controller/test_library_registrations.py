@@ -215,10 +215,6 @@ class TestLibraryRegistration:
         db: DatabaseTransactionFixture,
         library_fixture: LibraryFixture,
     ) -> None:
-        """Test what might happen when you POST to
-        discovery_service_library_registrations.
-        """
-
         # Here, the user doesn't have permission to start the
         # registration process.
         with flask_app_fixture.test_request_context("/", method="POST"):
@@ -227,6 +223,13 @@ class TestLibraryRegistration:
                 controller.process_discovery_service_library_registrations,
             )
 
+    def test_discovery_service_library_registrations_post_invalid_input_no_integration_id(
+        self,
+        controller: DiscoveryServiceLibraryRegistrationsController,
+        flask_app_fixture: FlaskAppFixture,
+        db: DatabaseTransactionFixture,
+        library_fixture: LibraryFixture,
+    ) -> None:
         # We might not get an integration ID parameter.
         with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict()
@@ -234,6 +237,13 @@ class TestLibraryRegistration:
             assert isinstance(response, ProblemDetail)
             assert INVALID_INPUT.uri == response.uri
 
+    def test_discovery_service_library_registrations_post_missing_service(
+        self,
+        controller: DiscoveryServiceLibraryRegistrationsController,
+        flask_app_fixture: FlaskAppFixture,
+        db: DatabaseTransactionFixture,
+        library_fixture: LibraryFixture,
+    ) -> None:
         # The integration ID might not correspond to a valid integration.
         with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
@@ -245,6 +255,13 @@ class TestLibraryRegistration:
             assert isinstance(response, ProblemDetail)
             assert MISSING_SERVICE == response
 
+    def test_discovery_service_library_registrations_post_no_short_name(
+        self,
+        controller: DiscoveryServiceLibraryRegistrationsController,
+        flask_app_fixture: FlaskAppFixture,
+        db: DatabaseTransactionFixture,
+        library_fixture: LibraryFixture,
+    ) -> None:
         # Create an IntegrationConfiguration to avoid that problem in future tests.
         discovery_service = db.discovery_service_integration(
             url="http://register-here.com/"
@@ -261,6 +278,16 @@ class TestLibraryRegistration:
             assert isinstance(response, ProblemDetail)
             assert INVALID_INPUT.uri == response.uri
 
+    def test_discovery_service_library_registrations_post_library_doesnt_exist(
+        self,
+        controller: DiscoveryServiceLibraryRegistrationsController,
+        flask_app_fixture: FlaskAppFixture,
+        db: DatabaseTransactionFixture,
+        library_fixture: LibraryFixture,
+    ) -> None:
+        discovery_service = db.discovery_service_integration(
+            url="http://register-here.com/"
+        )
         # The library name might not correspond to a real library.
         with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
@@ -272,7 +299,16 @@ class TestLibraryRegistration:
             response = controller.process_discovery_service_library_registrations()
             assert NO_SUCH_LIBRARY == response
 
-        # Take care of that problem.
+    def test_discovery_service_library_registrations_post_no_stage(
+        self,
+        controller: DiscoveryServiceLibraryRegistrationsController,
+        flask_app_fixture: FlaskAppFixture,
+        db: DatabaseTransactionFixture,
+        library_fixture: LibraryFixture,
+    ) -> None:
+        discovery_service = db.discovery_service_integration(
+            url="http://register-here.com/"
+        )
         library = library_fixture.library()
 
         # We might not get a registration stage.
@@ -287,6 +323,18 @@ class TestLibraryRegistration:
             assert isinstance(response, ProblemDetail)
             assert INVALID_INPUT.uri == response.uri
 
+    def test_discovery_service_library_registrations_post_invalid_stage(
+        self,
+        controller: DiscoveryServiceLibraryRegistrationsController,
+        flask_app_fixture: FlaskAppFixture,
+        db: DatabaseTransactionFixture,
+        library_fixture: LibraryFixture,
+    ) -> None:
+        discovery_service = db.discovery_service_integration(
+            url="http://register-here.com/"
+        )
+        library = library_fixture.library()
+
         # The registration stage might not be valid.
         with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
@@ -299,6 +347,18 @@ class TestLibraryRegistration:
             response = controller.process_discovery_service_library_registrations()
             assert isinstance(response, ProblemDetail)
             assert INVALID_INPUT.uri == response.uri
+
+    def test_discovery_service_library_registrations_post_remote_failure(
+        self,
+        controller: DiscoveryServiceLibraryRegistrationsController,
+        flask_app_fixture: FlaskAppFixture,
+        db: DatabaseTransactionFixture,
+        library_fixture: LibraryFixture,
+    ) -> None:
+        discovery_service = db.discovery_service_integration(
+            url="http://register-here.com/"
+        )
+        library = library_fixture.library()
 
         form = ImmutableMultiDict(
             [
@@ -319,6 +379,26 @@ class TestLibraryRegistration:
             flask.request.form = form
             response = controller.process_discovery_service_library_registrations()
             assert REMOTE_INTEGRATION_FAILED == response
+
+    def test_discovery_service_library_registrations_post_success(
+        self,
+        controller: DiscoveryServiceLibraryRegistrationsController,
+        flask_app_fixture: FlaskAppFixture,
+        db: DatabaseTransactionFixture,
+        library_fixture: LibraryFixture,
+    ) -> None:
+        discovery_service = db.discovery_service_integration(
+            url="http://register-here.com/"
+        )
+        library = library_fixture.library()
+
+        form = ImmutableMultiDict(
+            [
+                ("integration_id", str(discovery_service.id)),
+                ("library_short_name", str(library.short_name)),
+                ("registration_stage", RegistrationStage.TESTING.value),
+            ]
+        )
 
         # But if that doesn't happen, success!
         mock_registry = MagicMock(spec=OpdsRegistrationService)

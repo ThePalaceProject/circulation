@@ -61,7 +61,7 @@ class Edition(Base, EditionConstants):
         Integer, ForeignKey("datasources.id"), index=True, nullable=False
     )
     data_source: Mapped[DataSource] = relationship(
-        "DataSource", back_populates="editions"
+        "DataSource", back_populates="editions", cascade_backrefs=False
     )
 
     MAX_THUMBNAIL_HEIGHT = 300
@@ -94,23 +94,26 @@ class Edition(Base, EditionConstants):
         Integer, ForeignKey("identifiers.id"), index=True, nullable=False
     )
     primary_identifier: Mapped[Identifier] = relationship(
-        "Identifier", back_populates="primarily_identifies"
+        "Identifier", back_populates="primarily_identifies", cascade_backrefs=False
     )
 
     # An Edition may be the presentation edition for a single Work. If it's not
     # a presentation edition for a work, work will be None.
     work: Mapped[Work | None] = relationship(
-        "Work", uselist=False, back_populates="presentation_edition"
+        "Work",
+        uselist=False,
+        back_populates="presentation_edition",
+        cascade_backrefs=False,
     )
 
     # An Edition may show up in many CustomListEntries.
     custom_list_entries: Mapped[list[CustomListEntry]] = relationship(
-        "CustomListEntry", back_populates="edition"
+        "CustomListEntry", back_populates="edition", cascade_backrefs=False
     )
 
     # An Edition may be the presentation edition for many LicensePools.
     is_presentation_for: Mapped[list[LicensePool]] = relationship(
-        "LicensePool", back_populates="presentation_edition"
+        "LicensePool", back_populates="presentation_edition", cascade_backrefs=False
     )
 
     title = Column(Unicode, index=True)
@@ -129,7 +132,7 @@ class Edition(Base, EditionConstants):
     sort_author = Column(Unicode, index=True)
 
     contributions: Mapped[list[Contribution]] = relationship(
-        "Contribution", back_populates="edition", uselist=True
+        "Contribution", back_populates="edition", uselist=True, cascade_backrefs=False
     )
 
     language = Column(Unicode, index=True)
@@ -157,7 +160,10 @@ class Edition(Base, EditionConstants):
         index=True,
     )
     cover: Mapped[Resource | None] = relationship(
-        "Resource", back_populates="cover_editions", foreign_keys=[cover_id]
+        "Resource",
+        back_populates="cover_editions",
+        foreign_keys=[cover_id],
+        cascade_backrefs=False,
     )
     # These two let us avoid actually loading up the cover Resource
     # every time.

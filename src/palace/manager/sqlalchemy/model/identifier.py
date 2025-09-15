@@ -240,7 +240,10 @@ class Identifier(Base, IdentifierConstants, LoggerMixin):
     identifier: Mapped[str] = Column(String, index=True, nullable=False)
 
     collections: Mapped[list[Collection]] = relationship(
-        "Collection", secondary="collections_identifiers", back_populates="catalog"
+        "Collection",
+        secondary="collections_identifiers",
+        back_populates="catalog",
+        cascade_backrefs=False,
     )
 
     equivalencies: Mapped[list[Equivalency]] = relationship(
@@ -249,6 +252,7 @@ class Identifier(Base, IdentifierConstants, LoggerMixin):
         back_populates="input",
         cascade="all, delete-orphan",
         uselist=True,
+        cascade_backrefs=False,
     )
 
     inbound_equivalencies: Mapped[list[Equivalency]] = relationship(
@@ -257,11 +261,12 @@ class Identifier(Base, IdentifierConstants, LoggerMixin):
         back_populates="output",
         cascade="all, delete-orphan",
         uselist=True,
+        cascade_backrefs=False,
     )
 
     # One Identifier may have many associated CoverageRecords.
     coverage_records: Mapped[list[CoverageRecord]] = relationship(
-        "CoverageRecord", back_populates="identifier"
+        "CoverageRecord", back_populates="identifier", cascade_backrefs=False
     )
 
     def __repr__(self) -> str:
@@ -275,7 +280,7 @@ class Identifier(Base, IdentifierConstants, LoggerMixin):
     # One Identifier may serve as the primary identifier for
     # several Editions.
     primarily_identifies: Mapped[list[Edition]] = relationship(
-        "Edition", back_populates="primary_identifier"
+        "Edition", back_populates="primary_identifier", cascade_backrefs=False
     )
 
     # One Identifier may serve as the identifier for many
@@ -285,32 +290,39 @@ class Identifier(Base, IdentifierConstants, LoggerMixin):
         back_populates="identifier",
         lazy="joined",
         overlaps="delivery_mechanisms",
+        cascade_backrefs=False,
     )
 
     # One Identifier may have many Links.
     links: Mapped[list[Hyperlink]] = relationship(
-        "Hyperlink", back_populates="identifier", uselist=True
+        "Hyperlink",
+        back_populates="identifier",
+        uselist=True,
+        cascade_backrefs=False,
     )
 
     # One Identifier may be the subject of many Measurements.
     measurements: Mapped[list[Measurement]] = relationship(
-        "Measurement", back_populates="identifier"
+        "Measurement", back_populates="identifier", cascade_backrefs=False
     )
 
     # One Identifier may participate in many Classifications.
     classifications: Mapped[list[Classification]] = relationship(
-        "Classification", back_populates="identifier"
+        "Classification",
+        back_populates="identifier",
+        cascade_backrefs=False,
     )
 
     # One identifier may participate in many Annotations.
     annotations: Mapped[list[Annotation]] = relationship(
-        "Annotation", back_populates="identifier"
+        "Annotation", back_populates="identifier", cascade_backrefs=False
     )
 
     # One Identifier can have many LicensePoolDeliveryMechanisms.
     delivery_mechanisms: Mapped[list[LicensePoolDeliveryMechanism]] = relationship(
         "LicensePoolDeliveryMechanism",
         back_populates="identifier",
+        cascade_backrefs=False,
     )
 
     # Type + identifier is unique.
@@ -769,7 +781,7 @@ class Identifier(Base, IdentifierConstants, LoggerMixin):
         fn = cls._recursively_equivalent_identifier_ids_query(
             identifier_id_column, policy
         )
-        return select([fn])
+        return select(fn)
 
     @classmethod
     def _recursively_equivalent_identifier_ids_query(
@@ -806,7 +818,7 @@ class Identifier(Base, IdentifierConstants, LoggerMixin):
            data quality, and sheer number of equivalent identifiers.
         """
         fn = cls._recursively_equivalent_identifier_ids_query(Identifier.id, policy)
-        query = select([Identifier.id, fn], Identifier.id.in_(identifier_ids))
+        query = select(Identifier.id, fn).where(Identifier.id.in_(identifier_ids))
         results = _db.execute(query)
         equivalents = defaultdict(list)
         for r in results:
@@ -1073,7 +1085,7 @@ class Identifier(Base, IdentifierConstants, LoggerMixin):
                 resources = resources.filter(Hyperlink.rel.in_(rel))
             else:
                 resources = resources.filter(Hyperlink.rel == rel)
-        resources = resources.options(joinedload("representation"))
+        resources = resources.options(joinedload(Resource.representation))
         return resources
 
     @classmethod
@@ -1083,7 +1095,7 @@ class Identifier(Base, IdentifierConstants, LoggerMixin):
         classifications = _db.query(Classification).filter(
             Classification.identifier_id.in_(identifier_ids)
         )
-        return classifications.options(joinedload("subject"))
+        return classifications.options(joinedload(Classification.subject))
 
     @classmethod
     def best_cover_for(
@@ -1252,7 +1264,10 @@ class Equivalency(Base):
         Integer, ForeignKey("identifiers.id"), index=True, nullable=False
     )
     input: Mapped[Identifier] = relationship(
-        "Identifier", foreign_keys=input_id, back_populates="equivalencies"
+        "Identifier",
+        foreign_keys=input_id,
+        back_populates="equivalencies",
+        cascade_backrefs=False,
     )
     output_id: Mapped[int] = Column(Integer, ForeignKey("identifiers.id"), index=True)
     output: Mapped[Identifier] = relationship(
@@ -1262,7 +1277,9 @@ class Equivalency(Base):
     # Who says?
     data_source_id = Column(Integer, ForeignKey("datasources.id"), index=True)
     data_source: Mapped[DataSource | None] = relationship(
-        "DataSource", back_populates="id_equivalencies"
+        "DataSource",
+        back_populates="id_equivalencies",
+        cascade_backrefs=False,
     )
 
     # How many distinct votes went into this assertion? This will let
@@ -1343,7 +1360,9 @@ class RecursiveEquivalencyCache(Base):
         Integer, ForeignKey("identifiers.id", ondelete="CASCADE")
     )
     parent_identifier: Mapped[Identifier | None] = relationship(
-        "Identifier", foreign_keys=parent_identifier_id
+        "Identifier",
+        foreign_keys=parent_identifier_id,
+        cascade_backrefs=False,
     )
 
     # The identifier chained to the parent

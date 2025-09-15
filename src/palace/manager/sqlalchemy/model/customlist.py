@@ -52,7 +52,7 @@ class CustomList(Base):
     primary_language = Column(Unicode, index=True)
     data_source_id = Column(Integer, ForeignKey("datasources.id"), index=True)
     data_source: Mapped[DataSource | None] = relationship(
-        "DataSource", back_populates="custom_lists"
+        "DataSource", back_populates="custom_lists", cascade_backrefs=False
     )
     foreign_identifier = Column(Unicode, index=True)
     name = Column(Unicode, index=True)
@@ -62,7 +62,7 @@ class CustomList(Base):
     responsible_party = Column(Unicode)
     library_id = Column(Integer, ForeignKey("libraries.id"), index=True, nullable=True)
     library: Mapped[Library | None] = relationship(
-        "Library", back_populates="custom_lists"
+        "Library", back_populates="custom_lists", cascade_backrefs=False
     )
 
     # How many titles are in this list? This is calculated and
@@ -70,7 +70,10 @@ class CustomList(Base):
     size: Mapped[int] = Column(Integer, nullable=False, default=0)
 
     entries: Mapped[list[CustomListEntry]] = relationship(
-        "CustomListEntry", back_populates="customlist", uselist=True
+        "CustomListEntry",
+        back_populates="customlist",
+        uselist=True,
+        cascade_backrefs=False,
     )
 
     # List sharing mechanisms
@@ -79,6 +82,7 @@ class CustomList(Base):
         secondary="customlist_sharedlibraries",
         back_populates="shared_custom_lists",
         uselist=True,
+        cascade_backrefs=False,
     )
 
     auto_update_enabled: Mapped[bool] = Column(Boolean, default=False, nullable=False)
@@ -92,11 +96,17 @@ class CustomList(Base):
     )
 
     collections: Mapped[list[Collection]] = relationship(
-        "Collection", secondary="collections_customlists", back_populates="customlists"
+        "Collection",
+        secondary="collections_customlists",
+        back_populates="customlists",
+        cascade_backrefs=False,
     )
 
     lane: Mapped[list[Lane]] = relationship(
-        "Lane", secondary="lanes_customlists", back_populates="customlists"
+        "Lane",
+        secondary="lanes_customlists",
+        back_populates="customlists",
+        cascade_backrefs=False,
     )
 
     __table_args__ = (
@@ -389,17 +399,17 @@ class CustomListEntry(Base):
     id: Mapped[int] = Column(Integer, primary_key=True)
     list_id = Column(Integer, ForeignKey("customlists.id"), index=True)
     customlist: Mapped[CustomList | None] = relationship(
-        "CustomList", back_populates="entries"
+        "CustomList", back_populates="entries", cascade_backrefs=False
     )
 
     edition_id = Column(Integer, ForeignKey("editions.id"), index=True)
     edition: Mapped[Edition | None] = relationship(
-        "Edition", back_populates="custom_list_entries"
+        "Edition", back_populates="custom_list_entries", cascade_backrefs=False
     )
 
     work_id = Column(Integer, ForeignKey("works.id"), index=True)
     work: Mapped[Work | None] = relationship(
-        "Work", back_populates="custom_list_entries"
+        "Work", back_populates="custom_list_entries", cascade_backrefs=False
     )
 
     featured: Mapped[bool] = Column(Boolean, nullable=False, default=False)

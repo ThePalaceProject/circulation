@@ -19,7 +19,9 @@ class SAMLFederation(Base):
     certificate = Column(Text(), nullable=True)
 
     identity_providers: Mapped[list[SAMLFederatedIdentityProvider]] = relationship(
-        "SAMLFederatedIdentityProvider", back_populates="federation"
+        "SAMLFederatedIdentityProvider",
+        back_populates="federation",
+        cascade_backrefs=False,
     )
 
     def __init__(self, federation_type, idp_metadata_service_url, certificate=None):
@@ -92,6 +94,7 @@ class SAMLFederatedIdentityProvider(Base):
         "SAMLFederation",
         foreign_keys=federation_id,
         back_populates="identity_providers",
+        cascade_backrefs=False,
     )
 
     def __init__(self, federation, entity_id, display_name, xml_metadata):

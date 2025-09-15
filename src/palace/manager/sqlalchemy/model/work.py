@@ -92,12 +92,16 @@ class WorkGenre(Base):
     genre_id: Mapped[int] = Column(
         Integer, ForeignKey("genres.id"), index=True, nullable=False
     )
-    genre: Mapped[Genre] = relationship("Genre", back_populates="work_genres")
+    genre: Mapped[Genre] = relationship(
+        "Genre", back_populates="work_genres", cascade_backrefs=False
+    )
 
     work_id: Mapped[int] = Column(
         Integer, ForeignKey("works.id"), index=True, nullable=False
     )
-    work: Mapped[Work] = relationship("Work", back_populates="work_genres")
+    work: Mapped[Work] = relationship(
+        "Work", back_populates="work_genres", cascade_backrefs=False
+    )
 
     affinity: Mapped[float] = Column(Float, index=True, default=0, nullable=False)
 
@@ -154,27 +158,38 @@ class Work(Base, LoggerMixin):
 
     # One Work may have copies scattered across many LicensePools.
     license_pools: Mapped[list[LicensePool]] = relationship(
-        "LicensePool", back_populates="work", lazy="joined", uselist=True
+        "LicensePool",
+        back_populates="work",
+        lazy="joined",
+        uselist=True,
+        cascade_backrefs=False,
     )
 
     # A Work takes its presentation metadata from a single Edition.
     # But this Edition is a composite of provider, admin interface, etc.-derived Editions.
     presentation_edition_id = Column(Integer, ForeignKey("editions.id"), index=True)
     presentation_edition: Mapped[Edition | None] = relationship(
-        "Edition", back_populates="work"
+        "Edition",
+        back_populates="work",
+        cascade_backrefs=False,
     )
 
     # One Work may be associated with many CustomListEntries.
     # However, a CustomListEntry may lose its Work without
     # ceasing to exist.
     custom_list_entries: Mapped[list[CustomListEntry]] = relationship(
-        "CustomListEntry", back_populates="work"
+        "CustomListEntry",
+        back_populates="work",
+        cascade_backrefs=False,
     )
 
     # One Work may participate in many WorkGenre assignments.
     genres = association_proxy("work_genres", "genre", creator=WorkGenre.from_genre)
     work_genres: Mapped[list[WorkGenre]] = relationship(
-        "WorkGenre", back_populates="work", cascade="all, delete-orphan"
+        "WorkGenre",
+        back_populates="work",
+        cascade="all, delete-orphan",
+        cascade_backrefs=False,
     )
     audience = Column(Unicode, index=True)
     target_age = Column(INT4RANGE, index=True)
@@ -186,7 +201,10 @@ class Work(Base, LoggerMixin):
         index=True,
     )
     summary: Mapped[Resource | None] = relationship(
-        "Resource", foreign_keys=[summary_id], back_populates="summary_works"
+        "Resource",
+        foreign_keys=[summary_id],
+        back_populates="summary_works",
+        cascade_backrefs=False,
     )
     # This gives us a convenient place to store a cleaned-up version of
     # the content of the summary Resource.
@@ -244,7 +262,10 @@ class Work(Base, LoggerMixin):
 
     # Supress this work from appearing in any feeds for a specific library.
     suppressed_for: Mapped[list[Library]] = relationship(
-        "Library", secondary="work_library_suppressions", passive_deletes=True
+        "Library",
+        secondary="work_library_suppressions",
+        passive_deletes=True,
+        cascade_backrefs=False,
     )
 
     # These fields are potentially large and can be deferred if you
@@ -828,6 +849,13 @@ class Work(Base, LoggerMixin):
 
         # if the edition is the presentation edition for any license
         # pools, let them know they have a Work.
+        from sqlalchemy.orm import Session
+
+        session = Session.object_session(self)
+        if session is None:
+            raise BasePalaceException(
+                "Session is required to set presentation edition."
+            )
         for pool in self.presentation_edition.is_presentation_for:
             pool.work = self
 
@@ -1457,11 +1485,9 @@ class Work(Base, LoggerMixin):
         )
 
         identifiers_query = select(
-            [
-                equivalent_identifiers.c.work_id,
-                Identifier.identifier,
-                Identifier.type,
-            ]
+            equivalent_identifiers.c.work_id,
+            Identifier.identifier,
+            Identifier.type,
         ).join_from(
             Identifier,
             equivalent_identifiers,
@@ -1479,7 +1505,7 @@ class Work(Base, LoggerMixin):
         ## TODO: Improve this, maybe only run this section once a day???
         # Map our constants for Subject type to their URIs.
         scheme_column: Any = case(
-            [
+            *[
                 (Subject.type == key, literal_column("'%s'" % val))
                 for key, val in list(Subject.uri_lookup.items())
             ]
@@ -1489,7 +1515,7 @@ class Work(Base, LoggerMixin):
         # Also, 3M's classifications have slashes, e.g. "FICTION/Adventure". Make sure
         # we get separated words for search.
         term_column = func.replace(
-            case([(Subject.name != None, Subject.name)], else_=Subject.identifier),
+            case((Subject.name != None, Subject.name), else_=Subject.identifier),
             "/",
             " ",
         )
@@ -1502,12 +1528,12 @@ class Work(Base, LoggerMixin):
 
         subjects = (
             select(
-                [
-                    equivalent_identifiers.c.work_id,
-                    scheme_column.label("scheme"),
-                    term_column.label("term"),
-                    weight_column.label("weight"),
-                ],
+                equivalent_identifiers.c.work_id,
+                scheme_column.label("scheme"),
+                term_column.label("term"),
+                weight_column.label("weight"),
+            )
+            .where(
                 # Only include Subjects with terms that are useful for search.
                 and_(Subject.type.in_(Subject.TYPES_FOR_SEARCH), term_column != None),
             )
@@ -1736,19 +1762,19 @@ class Work(Base, LoggerMixin):
         # it alone. Otherwise, we subtract one to make it inclusive.
         upper_field = func.upper(Work.target_age)
         upper = case(
-            [(func.upper_inc(Work.target_age), upper_field)], else_=upper_field - 1
+            (func.upper_inc(Work.target_age), upper_field), else_=upper_field - 1
         ).label("upper")
 
         # If the lower limit of the target age is inclusive, we leave
         # it alone. Otherwise, we add one to make it inclusive.
         lower_field = func.lower(Work.target_age)
         lower = case(
-            [(func.lower_inc(Work.target_age), lower_field)], else_=lower_field + 1
+            (func.lower_inc(Work.target_age), lower_field), else_=lower_field + 1
         ).label("lower")
 
         # Subquery for target age. This has to be a subquery so it can
         # become a nested object in the final json.
-        target_age = select([upper, lower]).where(Work.id == foreign_work_id_field)
+        target_age = select(upper, lower).where(Work.id == foreign_work_id_field)
         return target_age
 
     def to_search_document(self) -> dict[str, Any]:

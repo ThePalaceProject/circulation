@@ -333,8 +333,10 @@ class TestUniquenessConstraints:
         token = "a token"
 
         c1 = Credential(data_source=data.data_source, type=data.type, credential=token)
+        session.add(c1)
         session.flush()
         c2 = Credential(data_source=data.data_source, type=data.type, credential=token)
+        session.add(c2)
         pytest.raises(IntegrityError, session.flush)
 
     def test_duplicate_patron_credential(
@@ -350,10 +352,12 @@ class TestUniquenessConstraints:
         c1 = Credential(
             data_source=data.data_source, type=data.type, patron=data.patron
         )
+        session.add(c1)
         session.flush()
         c2 = Credential(
             data_source=data.data_source, type=data.type, patron=data.patron
         )
+        session.add(c2)
         pytest.raises(IntegrityError, session.flush)
 
     def test_duplicate_patron_collection_credential(
@@ -371,12 +375,14 @@ class TestUniquenessConstraints:
             patron=data.patron,
             collection=data.col1,
         )
+        session.add(c1)
         c2 = Credential(
             data_source=data.data_source,
             type=data.type,
             patron=data.patron,
             collection=data.col2,
         )
+        session.add(c2)
         session.flush()
         c3 = Credential(
             data_source=data.data_source,
@@ -384,6 +390,7 @@ class TestUniquenessConstraints:
             patron=data.patron,
             collection=data.col1,
         )
+        session.add(c3)
         pytest.raises(IntegrityError, session.flush)
 
     def test_duplicate_collection_credential(
@@ -397,8 +404,10 @@ class TestUniquenessConstraints:
         c1 = Credential(
             data_source=data.data_source, type=data.type, collection=data.col1
         )
+        session.add(c1)
         session.flush()
         c2 = Credential(
             data_source=data.data_source, type=data.type, collection=data.col1
         )
+        session.add(c2)
         pytest.raises(IntegrityError, session.flush)

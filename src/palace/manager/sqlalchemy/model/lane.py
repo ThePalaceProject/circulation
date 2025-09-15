@@ -53,7 +53,11 @@ from palace.manager.sqlalchemy.model.integration import (
     IntegrationLibraryConfiguration,
 )
 from palace.manager.sqlalchemy.model.library import Library
-from palace.manager.sqlalchemy.model.licensing import LicensePool
+from palace.manager.sqlalchemy.model.licensing import (
+    LicensePool,
+    LicensePoolDeliveryMechanism,
+)
+from palace.manager.sqlalchemy.model.resource import Resource
 from palace.manager.sqlalchemy.model.work import Work, WorkGenre
 from palace.manager.sqlalchemy.util import (
     get_one_or_create,
@@ -2340,20 +2344,22 @@ class DatabaseBackedWorkList(WorkList):
         # else who uses this.)
         qu = qu.options(
             # These speed up the process of generating acquisition links.
-            joinedload(license_pool_name, "available_delivery_mechanisms"),
-            joinedload(
-                license_pool_name, "available_delivery_mechanisms", "delivery_mechanism"
+            joinedload(Work.license_pools).joinedload(
+                LicensePool.available_delivery_mechanisms
             ),
-            joinedload(license_pool_name, "identifier"),
+            joinedload(Work.license_pools)
+            .joinedload(LicensePool.available_delivery_mechanisms)
+            .joinedload(LicensePoolDeliveryMechanism.delivery_mechanism),
+            joinedload(Work.license_pools).joinedload(LicensePool.identifier),
             # These speed up the process of generating the open-access link
             # for open-access works.
-            joinedload(license_pool_name, "available_delivery_mechanisms", "resource"),
-            joinedload(
-                license_pool_name,
-                "available_delivery_mechanisms",
-                "resource",
-                "representation",
-            ),
+            joinedload(Work.license_pools)
+            .joinedload(LicensePool.available_delivery_mechanisms)
+            .joinedload(LicensePoolDeliveryMechanism.resource),
+            joinedload(Work.license_pools)
+            .joinedload(LicensePool.available_delivery_mechanisms)
+            .joinedload(LicensePoolDeliveryMechanism.resource)
+            .joinedload(Resource.representation),
         )
         return qu
 
@@ -2543,11 +2549,15 @@ class LaneGenre(Base):
     lane_id: Mapped[int] = Column(
         Integer, ForeignKey("lanes.id"), index=True, nullable=False
     )
-    lane: Mapped[Lane] = relationship("Lane", back_populates="lane_genres")
+    lane: Mapped[Lane] = relationship(
+        "Lane", back_populates="lane_genres", cascade_backrefs=False
+    )
     genre_id: Mapped[int] = Column(
         Integer, ForeignKey("genres.id"), index=True, nullable=False
     )
-    genre: Mapped[Genre] = relationship(Genre, back_populates="lane_genres")
+    genre: Mapped[Genre] = relationship(
+        Genre, back_populates="lane_genres", cascade_backrefs=False
+    )
 
     # An inclusive relationship means that books classified under the
     # genre are included in the lane. An exclusive relationship means
@@ -2589,13 +2599,16 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
     library_id: Mapped[int] = Column(
         Integer, ForeignKey("libraries.id"), index=True, nullable=False
     )
-    library: Mapped[Library] = relationship(Library, back_populates="lanes")
+    library: Mapped[Library] = relationship(
+        Library, back_populates="lanes", cascade_backrefs=False
+    )
 
     parent_id = Column(Integer, ForeignKey("lanes.id"), index=True, nullable=True)
     parent: Mapped[Lane | None] = relationship(
         "Lane",
         back_populates="sublanes",
         remote_side=[id],
+        cascade_backrefs=False,
     )
 
     priority: Mapped[int] = Column(Integer, index=True, nullable=False, default=0)
@@ -2612,6 +2625,7 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
     sublanes: Mapped[list[Lane]] = relationship(
         "Lane",
         back_populates="parent",
+        cascade_backrefs=False,
     )
 
     # A lane may have multiple associated LaneGenres. For most lanes,
@@ -2621,6 +2635,7 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
         "LaneGenre",
         back_populates="lane",
         cascade="all, delete-orphan",
+        cascade_backrefs=False,
     )
 
     # display_name is the name of the lane as shown to patrons.  It's
@@ -2663,6 +2678,7 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
         "DataSource",
         back_populates="license_lanes",
         foreign_keys=[license_datasource_id],
+        cascade_backrefs=False,
     )
 
     # Only books on one or more CustomLists obtained from this
@@ -2671,7 +2687,10 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
         Integer, ForeignKey("datasources.id"), index=True, nullable=True
     )
     _list_datasource: Mapped[DataSource | None] = relationship(
-        "DataSource", back_populates="list_lanes", foreign_keys=[_list_datasource_id]
+        "DataSource",
+        back_populates="list_lanes",
+        foreign_keys=[_list_datasource_id],
+        cascade_backrefs=False,
     )
 
     # Only the books on these specific CustomLists will be shown.
@@ -3009,8 +3028,8 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
             # Find the ID of every CustomList from a certain
             # DataSource.
             _db = Session.object_session(self)
-            query = select(
-                [CustomList.id], CustomList.data_source_id == self.list_datasource.id
+            query = select(CustomList.id).where(
+                CustomList.data_source_id == self.list_datasource.id
             )
             ids = [x[0] for x in _db.execute(query)]
         else:

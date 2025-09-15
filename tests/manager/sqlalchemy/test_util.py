@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, call, patch
 
 import pytest
 from psycopg2.extras import NumericRange
-from sqlalchemy import not_
+from sqlalchemy import not_, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.exc import MultipleResultsFound
 
@@ -192,7 +192,9 @@ class TestAdvisoryLock:
     TEST_LOCK_ID = 999999
 
     def _lock_exists(self, session, lock_id):
-        result = list(session.execute(f"SELECT * from pg_locks where objid={lock_id}"))
+        result = list(
+            session.execute(text(f"SELECT * from pg_locks where objid={lock_id}"))
+        )
         return len(result) != 0
 
     def test_lock_unlock(self, db: DatabaseTransactionFixture):
