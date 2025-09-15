@@ -116,6 +116,8 @@ class MediumEntryPoint(EntryPoint):
         """
         from palace.manager.sqlalchemy.model.edition import Edition
 
+        # The query should already have the necessary joins.
+        # We just filter by Edition.medium.
         return qu.filter(Edition.medium == cls.INTERNAL_NAME)
 
     @classmethod

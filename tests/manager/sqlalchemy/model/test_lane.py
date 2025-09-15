@@ -3184,7 +3184,8 @@ class TestDatabaseBackedWorkList:
                 worklist = DatabaseBackedWorkList()
                 worklist.initialize(db.default_library(), **initialize_kwargs)
             qu, clauses = worklist.bibliographic_filter_clauses(db.session, original_qu)
-            qu = qu.filter(and_(*clauses))
+            if clauses:
+                qu = qu.filter(and_(*clauses))
             expect_titles = sorted(x.sort_title for x in expect_books)
             actual_titles = sorted(x.sort_title for x in qu)
             assert expect_titles == actual_titles

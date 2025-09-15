@@ -325,15 +325,15 @@ class Statistics:
         union_query = union(
             cls._loans_or_holds_query(Loan).add_columns(Patron.id.label("patron_id")),
             cls._loans_or_holds_query(Hold).add_columns(Patron.id.label("patron_id")),
-        )
+        ).subquery()
 
         return (
             select(
-                func.count(distinct(union_query.columns["patron_id"])).label("count"),
-                union_query.columns["library_id"],
+                func.count(distinct(union_query.c["patron_id"])).label("count"),
+                union_query.c["library_id"],
             )
             .select_from(union_query)
-            .group_by(union_query.columns["library_id"])
+            .group_by(union_query.c["library_id"])
         )
 
     def _gather_patron_stats(

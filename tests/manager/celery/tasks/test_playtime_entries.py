@@ -331,7 +331,7 @@ class TestSumPlaytimeEntriesTask:
         assert list(
             db.session.query(PlaytimeEntry)
             .order_by(PlaytimeEntry.id)
-            .values(PlaytimeEntry.tracking_id)
+            .with_entities(PlaytimeEntry.tracking_id)
         ) == [("4",), ("5",)]
 
     def test_deleted_related_rows(

@@ -99,13 +99,20 @@ class TestEverythingEntryPoint:
 class TestMediumEntryPoint:
     def test_modify_database_query(self, db: DatabaseTransactionFixture):
         # Create a video, and a entry point that contains videos.
+        from palace.manager.sqlalchemy.model.licensing import LicensePool
+
         work = db.work(with_license_pool=True)
         work.license_pools[0].presentation_edition.medium = Edition.VIDEO_MEDIUM
 
         class Videos(MediumEntryPoint):
             INTERNAL_NAME = Edition.VIDEO_MEDIUM
 
-        qu = db.session.query(Work)
+        # Create a query that joins Work+LicensePool+Edition as expected by modify_database_query
+        qu = (
+            db.session.query(Work)
+            .join(Work.license_pools)
+            .join(Edition, LicensePool.presentation_edition_id == Edition.id)
+        )
 
         # The default entry points filter out the video.
         for entrypoint in EbooksEntryPoint, AudiobooksEntryPoint:

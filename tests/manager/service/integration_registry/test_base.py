@@ -253,8 +253,8 @@ def test_registry_configurations_query() -> None:
 
     # Produces a select query, that looks for the integration by goal and protocol
     selected = registry.configurations_query(MockIntegration)
-    assert len(selected.froms) == 1
-    assert selected.froms[0] == IntegrationConfiguration.__table__
+    assert len(selected.get_final_froms()) == 1
+    assert selected.get_final_froms()[0] == IntegrationConfiguration.__table__
     assert len(selected.whereclause.clauses) == 2
     goal_clause, protocol_clause = selected.whereclause.clauses
     assert goal_clause.left.name == "goal"
@@ -269,8 +269,8 @@ def test_registry_configurations_query() -> None:
     registry.register(MockIntegration, aliases=["test", "test2"])
     for protocol in (MockIntegration, "test"):
         selected = registry.configurations_query(protocol)
-        assert len(selected.froms) == 1
-        assert selected.froms[0] == IntegrationConfiguration.__table__
+        assert len(selected.get_final_froms()) == 1
+        assert selected.get_final_froms()[0] == IntegrationConfiguration.__table__
         assert len(selected.whereclause.clauses) == 2
         goal_clause, protocol_clause = selected.whereclause.clauses
         assert goal_clause.left.name == "goal"

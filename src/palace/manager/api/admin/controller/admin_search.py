@@ -65,14 +65,14 @@ class AdminSearchController(AdminController):
 
         # Concrete values
         subjects_list = list(
-            classification_query.group_by(Subject.name).values(
+            classification_query.group_by(Subject.name).with_entities(
                 func.distinct(Subject.name), func.count(Subject.name)
             )
         )
         subjects = self._unzip(subjects_list)
 
         audiences_list = list(
-            classification_query.group_by(Subject.audience).values(
+            classification_query.group_by(Subject.audience).with_entities(
                 func.distinct(Subject.audience), func.count(Subject.audience)
             )
         )
@@ -81,19 +81,19 @@ class AdminSearchController(AdminController):
         genres_list = list(
             classification_query.join(Subject.genre)
             .group_by(Genre.name)
-            .values(func.distinct(Genre.name), func.count(Genre.name))
+            .with_entities(func.distinct(Genre.name), func.count(Genre.name))
         )
         genres = self._unzip(genres_list)
 
         distributors_list = list(
             editions_query.join(Edition.data_source)
             .group_by(DataSource.name)
-            .values(func.distinct(DataSource.name), func.count(DataSource.name))
+            .with_entities(func.distinct(DataSource.name), func.count(DataSource.name))
         )
         distributors = self._unzip(distributors_list)
 
         languages_list = list(
-            editions_query.group_by(Edition.language).values(
+            editions_query.group_by(Edition.language).with_entities(
                 func.distinct(Edition.language), func.count(Edition.language)
             )
         )
@@ -107,7 +107,7 @@ class AdminSearchController(AdminController):
         languages = self._unzip(converted_languages_list)
 
         publishers_list = list(
-            editions_query.group_by(Edition.publisher).values(
+            editions_query.group_by(Edition.publisher).with_entities(
                 func.distinct(Edition.publisher), func.count(Edition.publisher)
             )
         )
