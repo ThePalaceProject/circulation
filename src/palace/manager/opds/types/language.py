@@ -210,19 +210,32 @@ class LanguageMap(Mapping[str, str]):
         then passed into the class constructor, which does some
         further validation, raising TypeErrors if the input is invalid.
         """
-        return core_schema.no_info_after_validator_function(
-            cls,
-            core_schema.union_schema(
-                [
-                    core_schema.str_schema(),
-                    core_schema.dict_schema(
+        from_str_dict_schema = core_schema.chain_schema(
+            [
+                core_schema.union_schema(
+                    [
                         core_schema.str_schema(),
-                        core_schema.str_schema(),
-                    ),
-                ],
-                serialization=core_schema.plain_serializer_function_ser_schema(
-                    cls._serialize, when_used="json"
+                        core_schema.dict_schema(
+                            core_schema.str_schema(),
+                            core_schema.str_schema(),
+                        ),
+                    ]
                 ),
+                core_schema.no_info_plain_validator_function(cls),
+            ]
+        )
+
+        return core_schema.json_or_python_schema(
+            json_schema=from_str_dict_schema,
+            python_schema=core_schema.union_schema(
+                [
+                    # check if it's an instance first before doing any further work
+                    core_schema.is_instance_schema(cls),
+                    from_str_dict_schema,
+                ]
+            ),
+            serialization=core_schema.plain_serializer_function_ser_schema(
+                cls._serialize, when_used="json"
             ),
         )
 
