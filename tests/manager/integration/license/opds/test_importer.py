@@ -313,7 +313,7 @@ class TestOpdsImporter:
         registry = services_fixture.services.integration_registry().license_providers()
         importer = importer_from_collection(collection, registry)
 
-        # Create mock input data (what would come from phase 2)
+        # Create mock input data (which would come from phase 2)
         opds2_feed = json.loads(opds2_files_fixture.sample_text("feed.json"))
 
         # Use only the first publication (like the other tests)
