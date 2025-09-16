@@ -78,7 +78,7 @@ from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.util import MoneyUtility
 from palace.manager.util.authentication_for_opds import AuthenticationForOPDSDocument
 from palace.manager.util.datetime_helpers import utc_now
-from palace.manager.util.http import RemoteIntegrationException
+from palace.manager.util.http.exception import RemoteIntegrationException
 from palace.manager.util.opds_writer import OPDSFeed
 from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
 from tests.fixtures.announcements import AnnouncementFixture

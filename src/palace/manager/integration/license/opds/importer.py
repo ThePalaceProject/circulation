@@ -24,7 +24,7 @@ from palace.manager.opds import rwpm
 from palace.manager.opds.odl.info import LicenseInfo
 from palace.manager.service.redis.models.set import IdentifierSet
 from palace.manager.sqlalchemy.model.collection import Collection
-from palace.manager.util.http import BadResponseException
+from palace.manager.util.http.exception import BadResponseException
 from palace.manager.util.log import LoggerMixin
 
 FeedType = TypeVar("FeedType")

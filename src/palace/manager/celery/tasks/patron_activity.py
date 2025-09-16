@@ -14,7 +14,7 @@ from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.sqlalchemy.util import get_one
 from palace.manager.util.backoff import exponential_backoff
-from palace.manager.util.http import RemoteIntegrationException
+from palace.manager.util.http.exception import RemoteIntegrationException
 
 
 @shared_task(queue=QueueNames.high, bind=True, max_retries=4)

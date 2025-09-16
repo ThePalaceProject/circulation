@@ -9,7 +9,7 @@ import certifi
 from palace.manager.api.circulation.fulfillment import UrlFulfillment
 from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism
 from palace.manager.util.flask_util import Response
-from palace.manager.util.http import RemoteIntegrationException
+from palace.manager.util.http.exception import RemoteIntegrationException
 from palace.manager.util.log import LoggerMixin
 
 

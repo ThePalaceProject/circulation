@@ -1,6 +1,7 @@
 import pytest
 
-from palace.manager.util.http import HTTP, RequestNetworkException
+from palace.manager.util.http.exception import RequestNetworkException
+from palace.manager.util.http.http import HTTP
 from tests.fixtures.webserver import MockAPIServer, MockAPIServerResponse
 
 

@@ -11,7 +11,8 @@ from requests import RequestException
 from palace.manager.service.configuration.service_configuration import (
     ServiceConfiguration,
 )
-from palace.manager.util.http import HTTP, RequestNetworkException
+from palace.manager.util.http.exception import RequestNetworkException
+from palace.manager.util.http.http import HTTP
 from palace.manager.util.log import LoggerMixin
 
 

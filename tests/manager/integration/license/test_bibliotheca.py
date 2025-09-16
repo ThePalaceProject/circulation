@@ -62,7 +62,10 @@ from palace.manager.sqlalchemy.model.measurement import Measurement
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
 from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.util.datetime_helpers import datetime_utc, utc_now
-from palace.manager.util.http import BadResponseException, RemoteIntegrationException
+from palace.manager.util.http.exception import (
+    BadResponseException,
+    RemoteIntegrationException,
+)
 from palace.manager.util.web_publication_manifest import AudiobookManifest
 from tests.fixtures.work import (
     WorkIdPolicyQueuePresentationRecalculationFixture,

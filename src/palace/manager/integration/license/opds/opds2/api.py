@@ -20,7 +20,7 @@ from palace.manager.sqlalchemy.model.licensing import (
     LicensePoolDeliveryMechanism,
 )
 from palace.manager.sqlalchemy.model.patron import Patron
-from palace.manager.util.http import HTTP
+from palace.manager.util.http.http import HTTP
 
 
 class OPDS2API(BaseOPDSAPI):

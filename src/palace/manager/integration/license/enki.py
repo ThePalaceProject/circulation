@@ -65,7 +65,11 @@ from palace.manager.sqlalchemy.model.licensing import (
 from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
 from palace.manager.util.datetime_helpers import from_timestamp, strptime_utc, utc_now
-from palace.manager.util.http import HTTP, RemoteIntegrationException, RequestTimedOut
+from palace.manager.util.http.exception import (
+    RemoteIntegrationException,
+    RequestTimedOut,
+)
+from palace.manager.util.http.http import HTTP
 from palace.manager.util.log import LoggerMixin
 from palace.manager.util.pydantic import HttpUrl
 
@@ -272,7 +276,6 @@ class EnkiAPI(
             data=data,
             params=params,
             timeout=90,
-            disallowed_response_codes=None,
             **kwargs,
         )
 
