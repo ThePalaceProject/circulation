@@ -9,6 +9,7 @@ from palace.manager.core.entrypoint import (
 )
 from palace.manager.search.external_search import Filter
 from palace.manager.sqlalchemy.model.edition import Edition
+from palace.manager.sqlalchemy.model.licensing import LicensePool
 from palace.manager.sqlalchemy.model.work import Work
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.library import LibraryFixture
@@ -105,7 +106,12 @@ class TestMediumEntryPoint:
         class Videos(MediumEntryPoint):
             INTERNAL_NAME = Edition.VIDEO_MEDIUM
 
-        qu = db.session.query(Work)
+        # Create a query that joins Work+LicensePool+Edition as expected by modify_database_query
+        qu = (
+            db.session.query(Work)
+            .join(Work.license_pools)
+            .join(Edition, LicensePool.presentation_edition_id == Edition.id)
+        )
 
         # The default entry points filter out the video.
         for entrypoint in EbooksEntryPoint, AudiobooksEntryPoint:

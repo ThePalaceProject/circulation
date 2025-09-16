@@ -20,6 +20,7 @@ class CirculationEvent(Base):
     """
 
     __tablename__ = "circulationevents"
+    __mapper_args__ = {"confirm_deleted_rows": False}
 
     # Used to explicitly tag an event as happening at an unknown time.
     NO_DATE = object()

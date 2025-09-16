@@ -125,6 +125,7 @@ class License(Base, LicenseFunctions):
     """
 
     __tablename__ = "licenses"
+    __mapper_args__ = {"confirm_deleted_rows": False}
     id: Mapped[int] = Column(Integer, primary_key=True)
 
     identifier = Column(Unicode)
@@ -212,6 +213,7 @@ class LicensePool(Base):
     UNLIMITED_ACCESS = -1
 
     __tablename__ = "licensepools"
+    __mapper_args__ = {"confirm_deleted_rows": False}
     id: Mapped[int] = Column(Integer, primary_key=True)
 
     # A LicensePool may be associated with a Work. (If it's not, no one

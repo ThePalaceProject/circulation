@@ -503,6 +503,7 @@ Index("ix_patron_library_id_username", Patron.library_id, Patron.username)
 
 class Loan(Base, LoanAndHoldMixin):
     __tablename__ = "loans"
+    __mapper_args__ = {"confirm_deleted_rows": False}
     id: Mapped[int] = Column(Integer, primary_key=True)
 
     patron_id: Mapped[int] = Column(
@@ -561,6 +562,7 @@ class Hold(Base, LoanAndHoldMixin):
     """A patron is in line to check out a book."""
 
     __tablename__ = "holds"
+    __mapper_args__ = {"confirm_deleted_rows": False}
     id: Mapped[int] = Column(Integer, primary_key=True)
     patron_id: Mapped[int] = Column(
         Integer,

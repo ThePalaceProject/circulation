@@ -94,7 +94,7 @@ class EquivalentIdentifiersCoverageProvider(BaseCoverageProvider):
         qu = (
             qu.select_from(Identifier)
             .where(Identifier.id.in_(identifier_ids))
-            .column(Identifier.id)
+            .add_columns(Identifier.id)
         )
 
         chained_identifiers = self._db.execute(qu).fetchall()

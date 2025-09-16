@@ -483,7 +483,8 @@ class DatabaseTransactionFixture:
         # Roll back all database changes that happened during this
         # test, whether in the session that was just closed or some
         # other session.
-        self._transaction.rollback()
+        if self._transaction.is_active:
+            self._transaction.rollback()
 
         Configuration.SITE_CONFIGURATION_LAST_UPDATE = None
         Configuration.LAST_CHECKED_FOR_SITE_CONFIGURATION_UPDATE = None

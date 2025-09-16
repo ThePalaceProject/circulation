@@ -301,12 +301,12 @@ def reap_loans_or_holds_in_inactive_collections(
     """
     active_colls = Collection.active_collections_filter(
         sa_select=select(Collection.id)
-    ).subquery("active_collections")
+    ).scalar_subquery()
     ids_to_delete = (
         select(deletion_class.id)
         .join(LicensePool)
         .where(LicensePool.collection_id.not_in(active_colls))
-        .subquery()
+        .scalar_subquery()
     )
     deletion_query = delete(deletion_class).where(deletion_class.id.in_(ids_to_delete))
 

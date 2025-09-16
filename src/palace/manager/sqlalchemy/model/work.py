@@ -707,8 +707,9 @@ class Work(Base, LoggerMixin):
 
         covers = (
             _db.query(Resource)
-            .join(Hyperlink.identifier)
-            .join(Identifier.licensed_through)
+            .join(Hyperlink, Hyperlink.resource_id == Resource.id)
+            .join(Identifier, Hyperlink.identifier_id == Identifier.id)
+            .join(LicensePool, Identifier.id == LicensePool.identifier_id)
             .filter(Resource.url.in_(cover_urls), LicensePool.work_id.in_(work_ids))
         )
 
