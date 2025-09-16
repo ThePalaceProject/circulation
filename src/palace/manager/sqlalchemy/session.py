@@ -65,7 +65,7 @@ class SessionManager(LoggerMixin):
     @classmethod
     def sessionmaker(cls, application_name: str | None = None):
         bind_obj = cls.engine(application_name=application_name)
-        session_factory = sessionmaker(bind=bind_obj)  # type: ignore[call-overload]
+        session_factory = sessionmaker(bind=bind_obj)
         cls.setup_event_listener(session_factory)
         return session_factory
 
