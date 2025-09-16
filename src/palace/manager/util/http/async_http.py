@@ -251,9 +251,11 @@ class AsyncClient(LoggerMixin):
         self._max_backoff = max_backoff
 
     @staticmethod
-    def _defaults(kwargs: ClientKwargs) -> ClientKwargs:
+    def _defaults(kwargs: ClientKwargs) -> None:
         """
         Sets our global defaults for httpx.AsyncClient parameters.
+
+        Modifies the passed in kwargs in place.
         """
 
         # We can't use setdefault here, because we need to merge headers
@@ -266,8 +268,6 @@ class AsyncClient(LoggerMixin):
         kwargs.setdefault("verify", True)
         kwargs.setdefault("limits", DEFAULT_LIMITS)
         kwargs.setdefault("follow_redirects", True)
-
-        return kwargs
 
     @classmethod
     def for_web(
@@ -283,7 +283,7 @@ class AsyncClient(LoggerMixin):
         This means that timeouts are relatively short, redirects are limited,
         and retries are disabled by default.
         """
-        kwargs = cls._defaults(kwargs)
+        cls._defaults(kwargs)
         kwargs.setdefault("timeout", WEB_DEFAULT_TIMEOUT)
         kwargs.setdefault("max_redirects", WEB_DEFAULT_MAX_REDIRECTS)
         return cls(
@@ -309,7 +309,7 @@ class AsyncClient(LoggerMixin):
         This means that timeouts are longer, redirects are more permissive,
         and retries are enabled by default.
         """
-        kwargs = cls._defaults(kwargs)
+        cls._defaults(kwargs)
         kwargs.setdefault("timeout", WORKER_DEFAULT_TIMEOUT)
         kwargs.setdefault("max_redirects", WORKER_DEFAULT_MAX_REDIRECTS)
         return cls(
