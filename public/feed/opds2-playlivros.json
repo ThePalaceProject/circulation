@@ -2,5 +2,126 @@
   "metadata": {
     "title": "PlayLivros OPDS2"
   },
-  "publications": []
+  "publications": [
+    {
+      "metadata": {
+        "title": "Pg21209 Images 3"
+      },
+      "links": [
+        {
+          "rel": "http://opds-spec.org/acquisition/open-access",
+          "type": "application/epub+zip",
+          "href": "https://s3.us-east-005.backblazeb2.com/PlayLivros/pg21209-images-3.epub"
+        }
+      ]
+    },
+    {
+      "metadata": {
+        "title": "Pg26777 Images 3"
+      },
+      "links": [
+        {
+          "rel": "http://opds-spec.org/acquisition/open-access",
+          "type": "application/epub+zip",
+          "href": "https://s3.us-east-005.backblazeb2.com/PlayLivros/pg26777-images-3.epub"
+        }
+      ]
+    },
+    {
+      "metadata": {
+        "title": "Pg30859 Images 3"
+      },
+      "links": [
+        {
+          "rel": "http://opds-spec.org/acquisition/open-access",
+          "type": "application/epub+zip",
+          "href": "https://s3.us-east-005.backblazeb2.com/PlayLivros/pg30859-images-3.epub"
+        }
+      ]
+    },
+    {
+      "metadata": {
+        "title": "Pg31347 Images 3"
+      },
+      "links": [
+        {
+          "rel": "http://opds-spec.org/acquisition/open-access",
+          "type": "application/epub+zip",
+          "href": "https://s3.us-east-005.backblazeb2.com/PlayLivros/pg31347-images-3.epub"
+        }
+      ]
+    },
+    {
+      "metadata": {
+        "title": "Pg31509 Images 3"
+      },
+      "links": [
+        {
+          "rel": "http://opds-spec.org/acquisition/open-access",
+          "type": "application/epub+zip",
+          "href": "https://s3.us-east-005.backblazeb2.com/PlayLivros/pg31509-images-3.epub"
+        }
+      ]
+    },
+    {
+      "metadata": {
+        "title": "Pg31552 Images 3"
+      },
+      "links": [
+        {
+          "rel": "http://opds-spec.org/acquisition/open-access",
+          "type": "application/epub+zip",
+          "href": "https://s3.us-east-005.backblazeb2.com/PlayLivros/pg31552-images-3.epub"
+        }
+      ]
+    },
+    {
+      "metadata": {
+        "title": "Pg3333 Images 3"
+      },
+      "links": [
+        {
+          "rel": "http://opds-spec.org/acquisition/open-access",
+          "type": "application/epub+zip",
+          "href": "https://s3.us-east-005.backblazeb2.com/PlayLivros/pg3333-images-3.epub"
+        }
+      ]
+    },
+    {
+      "metadata": {
+        "title": "Pg55752 Images 3"
+      },
+      "links": [
+        {
+          "rel": "http://opds-spec.org/acquisition/open-access",
+          "type": "application/epub+zip",
+          "href": "https://s3.us-east-005.backblazeb2.com/PlayLivros/pg55752-images-3.epub"
+        }
+      ]
+    },
+    {
+      "metadata": {
+        "title": "Pg62383 Images 3"
+      },
+      "links": [
+        {
+          "rel": "http://opds-spec.org/acquisition/open-access",
+          "type": "application/epub+zip",
+          "href": "https://s3.us-east-005.backblazeb2.com/PlayLivros/pg62383-images-3.epub"
+        }
+      ]
+    },
+    {
+      "metadata": {
+        "title": "Pg71031 Images 3"
+      },
+      "links": [
+        {
+          "rel": "http://opds-spec.org/acquisition/open-access",
+          "type": "application/epub+zip",
+          "href": "https://s3.us-east-005.backblazeb2.com/PlayLivros/pg71031-images-3.epub"
+        }
+      ]
+    }
+  ]
 }
