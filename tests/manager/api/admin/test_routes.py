@@ -770,9 +770,10 @@ class TestAdminLanes:
         fixture.assert_supported_methods(url, "POST")
 
 
-class TestAdminInventoryReports:
+class TestAdminReports:
     CONTROLLER_NAME = "admin_report_controller"
-    URL = "/admin/reports/inventory_report/<library_short_name>"
+    INVENTORY_REPORT_URL = "/admin/reports/inventory_report/<library_short_name>"
+    REPORT_ENDPOINT_URL = "/admin/reports"
 
     @pytest.fixture(scope="function")
     def fixture(self, admin_route_fixture: AdminRouteFixture) -> AdminRouteFixture:
@@ -780,12 +781,12 @@ class TestAdminInventoryReports:
         return admin_route_fixture
 
     def test_inventory_report(self, fixture: AdminRouteFixture):
-        fixture.assert_supported_methods(self.URL, "GET", "POST")
+        fixture.assert_supported_methods(self.INVENTORY_REPORT_URL, "GET", "POST")
 
     def test_inventory_report_info(
         self, fixture: AdminRouteFixture, monkeypatch: pytest.MonkeyPatch
     ):
-        url = self.URL
+        url = self.INVENTORY_REPORT_URL
         mock_response = MagicMock(
             return_value=Response(
                 '{"collections": []}',
@@ -803,7 +804,7 @@ class TestAdminInventoryReports:
     def test_generate_inventory_report(
         self, fixture: AdminRouteFixture, monkeypatch: pytest.MonkeyPatch
     ):
-        url = self.URL
+        url = self.INVENTORY_REPORT_URL
         mock_response = MagicMock(
             return_value=Response(
                 '{"message": "A success message."}',
@@ -816,6 +817,28 @@ class TestAdminInventoryReports:
         )
         fixture.assert_authenticated_request_calls(
             url, fixture.controller.generate_inventory_report, http_method="POST"
+        )
+
+    def test_generate_report(
+        self, fixture: AdminRouteFixture, monkeypatch: pytest.MonkeyPatch
+    ):
+        test_report_key = "my-report-key"
+        url = f"{self.REPORT_ENDPOINT_URL}/{test_report_key}"
+        mock_response = MagicMock(
+            return_value=Response(
+                '{"message": "A success message."}',
+                status=HTTPStatus.ACCEPTED,
+                mimetype=MediaTypes.APPLICATION_JSON_MEDIA_TYPE,
+            )
+        )
+        monkeypatch.setattr(
+            fixture.controller.generate_report, "response", mock_response
+        )
+        fixture.assert_authenticated_request_calls(
+            url,
+            fixture.controller.generate_report,
+            http_method="POST",
+            report_key=test_report_key,
         )
 
 
