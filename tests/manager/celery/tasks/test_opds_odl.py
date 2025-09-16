@@ -62,7 +62,7 @@ from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.celery import ApplyTaskFixture, CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import OPDS2WithODLFilesFixture
-from tests.fixtures.http import MockHttpClientFixture
+from tests.fixtures.http import MockAsyncClientFixture, MockHttpClientFixture
 from tests.fixtures.redis import RedisFixture
 from tests.fixtures.services import ServicesFixture
 
@@ -517,6 +517,7 @@ class OPDS2WithODLImportFixture:
         self,
         db: DatabaseTransactionFixture,
         http_client: MockHttpClientFixture,
+        async_http_client: MockAsyncClientFixture,
         files_fixture: OPDS2WithODLFilesFixture,
         apply_fixture: ApplyTaskFixture,
     ):
@@ -526,17 +527,25 @@ class OPDS2WithODLImportFixture:
             settings=db.opds2_odl_settings(data_source="test collection"),
         )
         self.client = http_client
+        self.async_client = async_http_client
         self.files = files_fixture
         self.apply_fixture = apply_fixture
 
-    def queue_response(self, item: LicenseInfo | str | bytes) -> None:
-        if isinstance(item, LicenseInfo):
-            self.client.queue_response(200, content=item.model_dump_json())
-        else:
-            self.client.queue_response(200, content=item)
+    def queue_license_response(self, item: LicenseInfo) -> None:
+        """Queue a license response to the async client."""
+        self.async_client.queue_response(200, content=item.model_dump_json())
+
+    def queue_feed_response(self, content: str | bytes) -> None:
+        """Queue a feed response to the sync client."""
+        self.client.queue_response(200, content=content)
 
     def queue_fixture_file(self, filename: str) -> None:
+        """Queue a feed fixture file to the sync client."""
         self.client.queue_response(200, content=self.files.sample_data(filename))
+
+    def queue_license_fixture_file(self, filename: str) -> None:
+        """Queue a license fixture file to the async client."""
+        self.async_client.queue_response(200, content=self.files.sample_data(filename))
 
     def import_fixture_file(
         self,
@@ -552,7 +561,7 @@ class OPDS2WithODLImportFixture:
 
         if licenses is not None:
             for _license in licenses:
-                self.queue_response(_license)
+                self.queue_license_response(_license)
             feed = Template(feed).render(licenses=licenses)
 
         return self.import_feed(feed, collection)
@@ -611,6 +620,7 @@ class OPDS2WithODLImportFixture:
 def opds2_with_odl_import_fixture(
     db: DatabaseTransactionFixture,
     http_client: MockHttpClientFixture,
+    async_http_client: MockAsyncClientFixture,
     opds2_with_odl_files_fixture: OPDS2WithODLFilesFixture,
     apply_task_fixture: ApplyTaskFixture,
     celery_fixture: CeleryFixture,
@@ -619,6 +629,7 @@ def opds2_with_odl_import_fixture(
     return OPDS2WithODLImportFixture(
         db,
         http_client,
+        async_http_client,
         opds2_with_odl_files_fixture,
         apply_task_fixture,
     )
@@ -863,7 +874,9 @@ class TestImportCollection:
     ) -> None:
         """Ensure that OPDSWithODLImporter correctly processes and imports a feed with an audiobook."""
 
-        opds2_with_odl_import_fixture.queue_fixture_file("license-audiobook.json")
+        opds2_with_odl_import_fixture.queue_license_fixture_file(
+            "license-audiobook.json"
+        )
         (imported_editions, pools, works) = (
             opds2_with_odl_import_fixture.import_fixture_file(
                 "feed-audiobook-streaming.json"
@@ -914,7 +927,9 @@ class TestImportCollection:
         Ensure that OPDSWithODLImporter correctly processes and imports a feed with an audiobook
         that is not available for streaming.
         """
-        opds2_with_odl_import_fixture.queue_fixture_file("license-audiobook.json")
+        opds2_with_odl_import_fixture.queue_license_fixture_file(
+            "license-audiobook.json"
+        )
 
         (
             imported_editions,
@@ -1140,10 +1155,10 @@ class TestImportCollection:
                 ),
             )
 
-        opds2_with_odl_import_fixture.queue_response(
+        opds2_with_odl_import_fixture.queue_license_response(
             license_status_reply(MOBY_DICK_LICENSE_ID)
         )
-        opds2_with_odl_import_fixture.queue_response(
+        opds2_with_odl_import_fixture.queue_license_response(
             license_status_reply(HUCK_FINN_LICENSE_ID)
         )
 
@@ -1231,7 +1246,7 @@ class TestImportCollection:
         }
 
         # Mock responses from license status server
-        opds2_with_odl_import_fixture.queue_response(
+        opds2_with_odl_import_fixture.queue_license_response(
             license_status_reply(TEST_BOOK_LICENSE_ID, checkouts=None, expires=None)
         )
 
