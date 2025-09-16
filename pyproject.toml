@@ -16,6 +16,11 @@ include_namespace_packages = true
 [tool.coverage.run]
 branch = true
 concurrency = ["multiprocessing", "thread"]
+# For some reason coverage wants to include this file, even though
+# it doesn't exist. I believe this a bug in either dependency-injector
+# or coverage, but it's not impacting us negatively, so we can just
+# tell coverage to ignore it, so we don't get a warning about it.
+omit = ["src/dependency_injector/providers.pxd", "src/dependency_injector/providers.pyx"]
 parallel = true
 relative_files = true
 source = ["src"]
