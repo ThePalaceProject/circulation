@@ -71,10 +71,10 @@ class Task(celery.Task, LoggerMixin, SessionMixin):
             engine = SessionManager.engine(
                 poolclass=NullPool, application_name=self.name
             )
-            maker = sessionmaker(bind=engine)  # type: ignore[call-overload]
+            maker = sessionmaker(bind=engine)
             SessionManager.setup_event_listener(maker)
             self._session_maker = maker
-        return self._session_maker  # type: ignore[no-any-return]
+        return self._session_maker
 
     @property
     def services(self) -> Services:

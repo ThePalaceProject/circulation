@@ -204,13 +204,11 @@ class CompactCollection(Sequence[LinkT]):
             case None, _:
                 if self._by_type is None:
                     self._by_type = self._build_by_type()
-                return self.__class__(self._by_type.get(cast(str, type), ()))
+                return self.__class__(self._by_type.get(type, ()))
             case _:
                 if self._by_rel_type is None:
                     self._by_rel_type = self._build_by_rel_type()
-                return self.__class__(
-                    self._by_rel_type.get((cast(str, rel), cast(str, type)), ())
-                )
+                return self.__class__(self._by_rel_type.get((rel, type), ()))
 
     def _build_by_rel(self) -> dict[str, tuple[LinkT, ...]]:
         by_rel = defaultdict(list)
