@@ -9,6 +9,7 @@ from palace.manager.core.entrypoint import (
 )
 from palace.manager.search.external_search import Filter
 from palace.manager.sqlalchemy.model.edition import Edition
+from palace.manager.sqlalchemy.model.licensing import LicensePool
 from palace.manager.sqlalchemy.model.work import Work
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.library import LibraryFixture
@@ -99,8 +100,6 @@ class TestEverythingEntryPoint:
 class TestMediumEntryPoint:
     def test_modify_database_query(self, db: DatabaseTransactionFixture):
         # Create a video, and a entry point that contains videos.
-        from palace.manager.sqlalchemy.model.licensing import LicensePool
-
         work = db.work(with_license_pool=True)
         work.license_pools[0].presentation_edition.medium = Edition.VIDEO_MEDIUM
 
