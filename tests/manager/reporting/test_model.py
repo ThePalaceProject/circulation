@@ -7,6 +7,7 @@ from sqlalchemy import Integer, String, bindparam, select
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import Select
 
+from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.reporting.model import TabularQueryDefinition
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.integration import IntegrationConfiguration
@@ -212,7 +213,7 @@ class TestTabularQueryDefinition:
         )
         # Without defining columns, accessing headings should raise an error.
         with pytest.raises(
-            ValueError,
+            PalaceValueError,
             match=rf"Unsupported statement in '{definition_title}' query \(id='{definition_key}'\).",
         ):
             _ = no_columns.headings

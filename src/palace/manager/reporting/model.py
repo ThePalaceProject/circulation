@@ -9,6 +9,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy.sql import Select
 from sqlalchemy.sql.selectable import TextualSelect
 
+from palace.manager.core.exceptions import PalaceValueError
+
 TTabularRowData = Sequence[Any]
 TTabularRows = Iterable[TTabularRowData]
 TTabularHeadings = Sequence[str]
@@ -28,16 +30,16 @@ class TabularQueryDefinition:
         try:
             headings = tuple(c.name for c in self.statement.c)
         except AttributeError as e:
-            raise ValueError(
+            raise PalaceValueError(
                 f"Unsupported statement in '{self.title}' query (id='{self.key}')."
             ) from e
         if not headings:
-            raise ValueError(f"No columns in '{self.title}' query (id='{self.key}').")
+            raise PalaceValueError(
+                f"No columns in '{self.title}' query (id='{self.key}')."
+            )
         return headings
 
-    def rows(
-        self, *, session: Session, **query_params
-    ) -> Generator[tuple[str | int | float | bool, ...]]:
+    def rows(self, *, session: Session, **query_params) -> Generator[tuple[Any, ...]]:
         """Run the query and yield its rows."""
         for row in session.execute(self.statement.params(**query_params)):
             yield tuple(row)
