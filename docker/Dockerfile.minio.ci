@@ -1,0 +1,9 @@
+FROM minio/minio:latest AS minio
+
+ENV MINIO_ROOT_USER=palace
+ENV MINIO_ROOT_PASSWORD=palace123
+
+EXPOSE 9000 9001
+
+ENTRYPOINT []
+CMD minio server /data --address "0.0.0.0:9000" --console-address "0.0.0.0:9001"
