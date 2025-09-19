@@ -20,9 +20,7 @@ LOCK_ID_DB_INIT = 1000000001
 
 
 @contextmanager
-def pg_advisory_lock(
-    connection: Connection | Session, lock_id: int | None
-) -> Generator[None]:
+def pg_advisory_lock(connection: Connection, lock_id: int | None) -> Generator[None]:
     """
     Application wide locking based on Lock IDs
 
@@ -39,7 +37,7 @@ def pg_advisory_lock(
             # If there was an IntegrityError, and we are in a transaction,
             # we need to roll it back before we are able to release the lock.
             transaction = connection.get_transaction()
-            if transaction is not None and transaction.is_active:
+            if transaction is not None:
                 transaction.rollback()
             raise
         finally:
