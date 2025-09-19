@@ -80,7 +80,10 @@ services:
       retries: 3
 
   minio:
-    image: "bitnami/minio:2023.2.27"
+    build:
+      dockerfile: docker/Dockerfile.minio.ci
+      target: minio
+      context: .
     ports:
       - "9000:9000"
       - "9001:9001"
@@ -97,7 +100,7 @@ services:
 
   os:
     build:
-      dockerfile: docker/Dockerfile.ci
+      dockerfile: docker/Dockerfile.os.ci
       target: opensearch
       context: .
     environment:
