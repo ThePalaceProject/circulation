@@ -42,6 +42,7 @@ class TestSessionManager:
             "json_serializer": json_serializer,
             "pool_pre_ping": True,
             "poolclass": None,
+            "future": True,
         }
 
         # If a URL is passed in, it's used.

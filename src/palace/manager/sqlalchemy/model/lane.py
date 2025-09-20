@@ -53,7 +53,11 @@ from palace.manager.sqlalchemy.model.integration import (
     IntegrationLibraryConfiguration,
 )
 from palace.manager.sqlalchemy.model.library import Library
-from palace.manager.sqlalchemy.model.licensing import LicensePool
+from palace.manager.sqlalchemy.model.licensing import (
+    LicensePool,
+    LicensePoolDeliveryMechanism,
+)
+from palace.manager.sqlalchemy.model.resource import Resource
 from palace.manager.sqlalchemy.model.work import Work, WorkGenre
 from palace.manager.sqlalchemy.util import (
     get_one_or_create,
@@ -2340,20 +2344,22 @@ class DatabaseBackedWorkList(WorkList):
         # else who uses this.)
         qu = qu.options(
             # These speed up the process of generating acquisition links.
-            joinedload(license_pool_name, "available_delivery_mechanisms"),
-            joinedload(
-                license_pool_name, "available_delivery_mechanisms", "delivery_mechanism"
+            joinedload(Work.license_pools).joinedload(
+                LicensePool.available_delivery_mechanisms
             ),
-            joinedload(license_pool_name, "identifier"),
+            joinedload(Work.license_pools)
+            .joinedload(LicensePool.available_delivery_mechanisms)
+            .joinedload(LicensePoolDeliveryMechanism.delivery_mechanism),
+            joinedload(Work.license_pools).joinedload(LicensePool.identifier),
             # These speed up the process of generating the open-access link
             # for open-access works.
-            joinedload(license_pool_name, "available_delivery_mechanisms", "resource"),
-            joinedload(
-                license_pool_name,
-                "available_delivery_mechanisms",
-                "resource",
-                "representation",
-            ),
+            joinedload(Work.license_pools)
+            .joinedload(LicensePool.available_delivery_mechanisms)
+            .joinedload(LicensePoolDeliveryMechanism.resource),
+            joinedload(Work.license_pools)
+            .joinedload(LicensePool.available_delivery_mechanisms)
+            .joinedload(LicensePoolDeliveryMechanism.resource)
+            .joinedload(Resource.representation),
         )
         return qu
 
@@ -2593,9 +2599,7 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
 
     parent_id = Column(Integer, ForeignKey("lanes.id"), index=True, nullable=True)
     parent: Mapped[Lane | None] = relationship(
-        "Lane",
-        back_populates="sublanes",
-        remote_side=[id],
+        "Lane", back_populates="sublanes", remote_side=[id]
     )
 
     priority: Mapped[int] = Column(Integer, index=True, nullable=False, default=0)
@@ -2609,18 +2613,13 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
     size_by_entrypoint = Column(JSON, nullable=True)
 
     # A lane may have one parent lane and many sublanes.
-    sublanes: Mapped[list[Lane]] = relationship(
-        "Lane",
-        back_populates="parent",
-    )
+    sublanes: Mapped[list[Lane]] = relationship("Lane", back_populates="parent")
 
     # A lane may have multiple associated LaneGenres. For most lanes,
     # this is how the contents of the lanes are defined.
     genres = association_proxy("lane_genres", "genre", creator=LaneGenre.from_genre)
     lane_genres: Mapped[list[LaneGenre]] = relationship(
-        "LaneGenre",
-        back_populates="lane",
-        cascade="all, delete-orphan",
+        "LaneGenre", back_populates="lane", cascade="all, delete-orphan"
     )
 
     # display_name is the name of the lane as shown to patrons.  It's
@@ -3009,8 +3008,8 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
             # Find the ID of every CustomList from a certain
             # DataSource.
             _db = Session.object_session(self)
-            query = select(
-                [CustomList.id], CustomList.data_source_id == self.list_datasource.id
+            query = select(CustomList.id).where(
+                CustomList.data_source_id == self.list_datasource.id
             )
             ids = [x[0] for x in _db.execute(query)]
         else:

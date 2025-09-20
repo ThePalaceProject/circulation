@@ -1600,8 +1600,7 @@ class LicensePoolDeliveryMechanism(Base):
         Integer, ForeignKey("deliverymechanisms.id"), index=True, nullable=False
     )
     delivery_mechanism: Mapped[DeliveryMechanism] = relationship(
-        "DeliveryMechanism",
-        back_populates="license_pool_delivery_mechanisms",
+        "DeliveryMechanism", back_populates="license_pool_delivery_mechanisms"
     )
 
     # With some distributors we don't know for sure if a particular delivery

@@ -40,7 +40,7 @@ class ScopedSessionFixture:
     def fixture(
         cls, db_fixture: DatabaseFixture, services_fixture: ServicesFixture
     ) -> Generator[Self, None, None]:
-        with Session(db_fixture.connection) as session:
+        with db_fixture.engine.connect() as connection, Session(connection) as session:
             fixture = cls(db_fixture, services_fixture, session)
             yield fixture
             fixture._cleanup()

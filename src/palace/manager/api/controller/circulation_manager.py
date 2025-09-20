@@ -4,7 +4,7 @@ from typing import TypeVar
 
 from flask_babel import lazy_gettext as _
 from sqlalchemy import select
-from sqlalchemy.orm import Session, eagerload
+from sqlalchemy.orm import Session, joinedload
 
 from palace.manager.api.circulation.dispatcher import CirculationApiDispatcher
 from palace.manager.api.controller.base import BaseCirculationManagerController
@@ -59,7 +59,7 @@ class CirculationManagerController(BaseCirculationManagerController):
                 object_class.patron_id == patron.id,
                 object_class.license_pool_id.in_(pool_ids),
             )
-            .options(eagerload(object_class.license_pool))
+            .options(joinedload(object_class.license_pool))
             .all()
         )
 

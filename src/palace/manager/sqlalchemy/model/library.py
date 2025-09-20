@@ -130,9 +130,7 @@ class Library(Base, HasSessionCache):
     )
 
     library_announcements: Mapped[list[Announcement]] = relationship(
-        "Announcement",
-        back_populates="library",
-        cascade="all, delete-orphan",
+        "Announcement", back_populates="library", cascade="all, delete-orphan"
     )
 
     # A class-wide cache mapping library ID to the calculated value

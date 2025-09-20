@@ -441,17 +441,15 @@ class NoveListAPI(
 
         isbnQuery = (
             select(
-                [
-                    i1.identifier,
-                    i1.type,
-                    i2.identifier,
-                    Edition.title,
-                    Edition.medium,
-                    Edition.published,
-                    Contribution.role,
-                    Contributor.sort_name,
-                    DataSource.name,
-                ],
+                i1.identifier,
+                i1.type,
+                i2.identifier,
+                Edition.title,
+                Edition.medium,
+                Edition.published,
+                Contribution.role,
+                Contributor.sort_name,
+                DataSource.name,
             )
             .select_from(
                 join(LicensePool, i1, i1.id == LicensePool.identifier_id)

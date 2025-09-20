@@ -17,7 +17,7 @@ from sqlalchemy import (
     select,
 )
 from sqlalchemy.ext.associationproxy import association_proxy
-from sqlalchemy.orm import Mapped, Query, aliased, mapper, relationship
+from sqlalchemy.orm import Mapped, Query, aliased, relationship
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql import Select
 from sqlalchemy.sql.expression import and_, or_
@@ -733,7 +733,7 @@ class CollectionMissing(BasePalaceException):
     """
 
 
-mapper(
+Base.registry.map_imperatively(
     CollectionIdentifier,
     collections_identifiers,
     primary_key=(
