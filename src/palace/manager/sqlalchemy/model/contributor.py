@@ -65,10 +65,7 @@ class Contributor(Base):
     )
 
     contributions: Mapped[list[Contribution]] = relationship(
-        "Contribution",
-        back_populates="contributor",
-        uselist=True,
-        cascade_backrefs=False,
+        "Contribution", back_populates="contributor", uselist=True
     )
 
     # Types of roles
@@ -490,9 +487,7 @@ class Contribution(Base):
     __tablename__ = "contributions"
     id: Mapped[int] = Column(Integer, primary_key=True)
 
-    edition: Mapped[Edition] = relationship(
-        "Edition", back_populates="contributions", cascade_backrefs=False
-    )
+    edition: Mapped[Edition] = relationship("Edition", back_populates="contributions")
     edition_id: Mapped[int] = Column(
         Integer, ForeignKey("editions.id"), index=True, nullable=False
     )
@@ -501,7 +496,7 @@ class Contribution(Base):
         Integer, ForeignKey("contributors.id"), index=True, nullable=False
     )
     contributor: Mapped[Contributor] = relationship(
-        "Contributor", back_populates="contributions", cascade_backrefs=False
+        "Contributor", back_populates="contributions"
     )
 
     role: Mapped[str] = Column(Unicode, index=True, nullable=False)

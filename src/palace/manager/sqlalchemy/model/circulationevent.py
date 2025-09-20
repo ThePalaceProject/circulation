@@ -30,7 +30,7 @@ class CirculationEvent(Base):
     # One LicensePool can have many circulation events.
     license_pool_id = Column(Integer, ForeignKey("licensepools.id"), index=True)
     license_pool: Mapped[LicensePool | None] = relationship(
-        "LicensePool", back_populates="circulation_events", cascade_backrefs=False
+        "LicensePool", back_populates="circulation_events"
     )
 
     type = Column(String(50), index=True)
@@ -44,7 +44,7 @@ class CirculationEvent(Base):
     # context of a particular Library and we know which one.
     library_id = Column(Integer, ForeignKey("libraries.id"), index=True, nullable=True)
     library: Mapped[Library | None] = relationship(
-        "Library", back_populates="circulation_events", cascade_backrefs=False
+        "Library", back_populates="circulation_events"
     )
 
     __table_args__ = (

@@ -31,7 +31,7 @@ class MarcFile(Base):
         nullable=True,
         index=True,
     )
-    library: Mapped[Library | None] = relationship("Library", cascade_backrefs=False)
+    library: Mapped[Library | None] = relationship("Library")
 
     # The collection should never be null in normal operation, but similar to the library, if a collection is deleted,
     # we don't want to lose the record of the MARC file, so we set the collection to null.
@@ -41,9 +41,7 @@ class MarcFile(Base):
         nullable=True,
         index=True,
     )
-    collection: Mapped[Collection | None] = relationship(
-        "Collection", cascade_backrefs=False
-    )
+    collection: Mapped[Collection | None] = relationship("Collection")
 
     # The key in s3 used to store the file.
     key: Mapped[str] = Column(Unicode, nullable=False)

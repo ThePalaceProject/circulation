@@ -85,15 +85,11 @@ class IntegrationConfiguration(Base):
             uselist=True,
             cascade="all, delete-orphan",
             passive_deletes=True,
-            cascade_backrefs=False,
         )
     )
 
     collection: Mapped[Collection] = relationship(
-        "Collection",
-        back_populates="integration_configuration",
-        uselist=False,
-        cascade_backrefs=False,
+        "Collection", back_populates="integration_configuration", uselist=False
     )
 
     # https://docs.sqlalchemy.org/en/14/orm/extensions/associationproxy.html#simplifying-association-objects
@@ -204,9 +200,7 @@ class IntegrationLibraryConfiguration(Base):
         nullable=False,
     )
     parent: Mapped[IntegrationConfiguration] = relationship(
-        "IntegrationConfiguration",
-        back_populates="library_configurations",
-        cascade_backrefs=False,
+        "IntegrationConfiguration", back_populates="library_configurations"
     )
 
     # The library this integration is associated with.
@@ -216,7 +210,7 @@ class IntegrationLibraryConfiguration(Base):
         primary_key=True,
         nullable=False,
     )
-    library: Mapped[Library] = relationship("Library", cascade_backrefs=False)
+    library: Mapped[Library] = relationship("Library")
 
     # The configuration settings for this integration. Stored as json.
     settings_dict: Mapped[dict[str, Any]] = Column(

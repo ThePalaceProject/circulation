@@ -714,17 +714,13 @@ class Measurement(Base):
     # A Measurement is always associated with some Identifier.
     identifier_id = Column(Integer, ForeignKey("identifiers.id"), index=True)
     identifier: Mapped[Identifier | None] = relationship(
-        "Identifier",
-        back_populates="measurements",
-        cascade_backrefs=False,
+        "Identifier", back_populates="measurements"
     )
 
     # A Measurement always comes from some DataSource.
     data_source_id = Column(Integer, ForeignKey("datasources.id"), index=True)
     data_source: Mapped[DataSource | None] = relationship(
-        "DataSource",
-        back_populates="measurements",
-        cascade_backrefs=False,
+        "DataSource", back_populates="measurements"
     )
 
     # The quantity being measured.

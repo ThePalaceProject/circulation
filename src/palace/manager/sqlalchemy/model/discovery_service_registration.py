@@ -55,7 +55,7 @@ class DiscoveryServiceRegistration(Base):
         primary_key=True,
     )
     integration: Mapped[IntegrationConfiguration] = relationship(
-        "IntegrationConfiguration", cascade_backrefs=False
+        "IntegrationConfiguration"
     )
 
     # The Library this registration is associated with.
@@ -65,6 +65,6 @@ class DiscoveryServiceRegistration(Base):
         nullable=False,
         primary_key=True,
     )
-    library: Mapped[Library] = relationship("Library", cascade_backrefs=False)
+    library: Mapped[Library] = relationship("Library")
 
     vendor_id = Column(Unicode)

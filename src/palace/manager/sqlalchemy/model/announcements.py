@@ -41,7 +41,7 @@ class Announcement(Base):
         nullable=True,
     )
     library: Mapped[Library | None] = relationship(
-        "Library", back_populates="library_announcements", cascade_backrefs=False
+        "Library", back_populates="library_announcements"
     )
 
     @classmethod

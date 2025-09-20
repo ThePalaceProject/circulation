@@ -81,9 +81,7 @@ class Patron(Base, RedisKeyMixin):
     library_id: Mapped[int] = Column(
         Integer, ForeignKey("libraries.id"), index=True, nullable=False
     )
-    library: Mapped[Library] = relationship(
-        "Library", back_populates="patrons", cascade_backrefs=False
-    )
+    library: Mapped[Library] = relationship("Library", back_populates="patrons")
 
     # The patron's permanent unique identifier in an external library
     # system, probably never seen by the patron.
@@ -156,7 +154,6 @@ class Patron(Base, RedisKeyMixin):
         cascade="delete",
         uselist=True,
         passive_deletes=True,
-        cascade_backrefs=False,
     )
     holds: Mapped[list[Hold]] = relationship(
         "Hold",
@@ -165,25 +162,19 @@ class Patron(Base, RedisKeyMixin):
         uselist=True,
         order_by="Hold.id",
         passive_deletes=True,
-        cascade_backrefs=False,
     )
 
     annotations: Mapped[list[Annotation]] = relationship(
         "Annotation",
         back_populates="patron",
         order_by="desc(Annotation.timestamp)",
-        cascade_backrefs=False,
         cascade="delete",
         passive_deletes=True,
     )
 
     # One Patron can have many associated Credentials.
     credentials: Mapped[list[Credential]] = relationship(
-        "Credential",
-        back_populates="patron",
-        cascade="delete",
-        passive_deletes=True,
-        cascade_backrefs=False,
+        "Credential", back_populates="patron", cascade="delete", passive_deletes=True
     )
 
     device_tokens: Mapped[list[DeviceToken]] = relationship(
@@ -521,26 +512,20 @@ class Loan(Base, LoanAndHoldMixin):
         index=True,
         nullable=False,
     )
-    patron: Mapped[Patron] = relationship(
-        "Patron", back_populates="loans", cascade_backrefs=False
-    )
+    patron: Mapped[Patron] = relationship("Patron", back_populates="loans")
 
     # A Loan is always associated with a LicensePool.
     license_pool_id: Mapped[int] = Column(
         Integer, ForeignKey("licensepools.id"), index=True, nullable=False
     )
     license_pool: Mapped[LicensePool] = relationship(
-        "LicensePool",
-        back_populates="loans",
-        cascade_backrefs=False,
+        "LicensePool", back_populates="loans"
     )
 
     # It may also be associated with an individual License if the source
     # provides information about individual licenses.
     license_id = Column(Integer, ForeignKey("licenses.id"), index=True, nullable=True)
-    license: Mapped[License | None] = relationship(
-        "License", back_populates="loans", cascade_backrefs=False
-    )
+    license: Mapped[License | None] = relationship("License", back_populates="loans")
 
     fulfillment_id = Column(Integer, ForeignKey("licensepooldeliveries.id"))
     fulfillment: Mapped[LicensePoolDeliveryMechanism | None] = relationship(
@@ -586,10 +571,7 @@ class Hold(Base, LoanAndHoldMixin):
         nullable=False,
     )
     patron: Mapped[Patron] = relationship(
-        "Patron",
-        back_populates="holds",
-        lazy="joined",
-        cascade_backrefs=False,
+        "Patron", back_populates="holds", lazy="joined"
     )
     license_pool_id: Mapped[int] = Column(
         Integer, ForeignKey("licensepools.id"), index=True, nullable=False
@@ -761,9 +743,7 @@ class Annotation(Base):
     patron_id = Column(
         Integer, ForeignKey("patrons.id", ondelete="CASCADE"), index=True
     )
-    patron: Mapped[Patron] = relationship(
-        "Patron", back_populates="annotations", cascade_backrefs=False
-    )
+    patron: Mapped[Patron] = relationship("Patron", back_populates="annotations")
 
     identifier_id = Column(Integer, ForeignKey("identifiers.id"), index=True)
     identifier: Mapped[Identifier | None] = relationship(

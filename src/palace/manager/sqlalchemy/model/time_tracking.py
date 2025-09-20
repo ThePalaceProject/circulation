@@ -39,25 +39,19 @@ class PlaytimeEntry(Base):
         ForeignKey("identifiers.id", onupdate="CASCADE", ondelete="SET NULL"),
         nullable=True,
     )
-    identifier: Mapped[Identifier | None] = relationship(
-        "Identifier", uselist=False, cascade_backrefs=False
-    )
+    identifier: Mapped[Identifier | None] = relationship("Identifier", uselist=False)
     collection_id = Column(
         Integer,
         ForeignKey("collections.id", onupdate="CASCADE", ondelete="SET NULL"),
         nullable=True,
     )
-    collection: Mapped[Collection | None] = relationship(
-        "Collection", uselist=False, cascade_backrefs=False
-    )
+    collection: Mapped[Collection | None] = relationship("Collection", uselist=False)
     library_id = Column(
         Integer,
         ForeignKey("libraries.id", onupdate="CASCADE", ondelete="SET NULL"),
         nullable=True,
     )
-    library: Mapped[Library | None] = relationship(
-        "Library", uselist=False, cascade_backrefs=False
-    )
+    library: Mapped[Library | None] = relationship("Library", uselist=False)
     # Related objects can be deleted, so we keep string representation.
     identifier_str: Mapped[str] = Column(String, nullable=False)
     collection_name: Mapped[str] = Column(String, nullable=False)
@@ -102,27 +96,21 @@ class PlaytimeSummary(Base):
         nullable=True,
         index=True,
     )
-    identifier: Mapped[Identifier | None] = relationship(
-        "Identifier", uselist=False, cascade_backrefs=False
-    )
+    identifier: Mapped[Identifier | None] = relationship("Identifier", uselist=False)
     collection_id = Column(
         Integer,
         ForeignKey("collections.id", onupdate="CASCADE", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )
-    collection: Mapped[Collection | None] = relationship(
-        "Collection", uselist=False, cascade_backrefs=False
-    )
+    collection: Mapped[Collection | None] = relationship("Collection", uselist=False)
     library_id = Column(
         Integer,
         ForeignKey("libraries.id", onupdate="CASCADE", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )
-    library: Mapped[Library | None] = relationship(
-        "Library", uselist=False, cascade_backrefs=False
-    )
+    library: Mapped[Library | None] = relationship("Library", uselist=False)
     # Related objects can be deleted, so we keep string representation.
     identifier_str: Mapped[str] = Column(String, nullable=False)
     collection_name: Mapped[str] = Column(String, nullable=False)

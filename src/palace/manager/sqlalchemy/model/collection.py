@@ -82,7 +82,6 @@ class Collection(Base, HasSessionCache, RedisKeyMixin):
         back_populates="collection",
         cascade="all,delete-orphan",
         single_parent=True,
-        cascade_backrefs=False,
     )
 
     # A Collection may specialize some other Collection. For instance,
@@ -92,17 +91,14 @@ class Collection(Base, HasSessionCache, RedisKeyMixin):
     # external_account_id.
     parent_id = Column(Integer, ForeignKey("collections.id"), index=True)
     parent: Mapped[Collection | None] = relationship(
-        "Collection",
-        remote_side=[id],
-        back_populates="children",
-        cascade_backrefs=False,
+        "Collection", remote_side=[id], back_populates="children"
     )
 
     # A collection may have many child collections. For example,
     # An Overdrive collection may have many children corresponding
     # to Overdrive Advantage collections.
     children: Mapped[list[Collection]] = relationship(
-        "Collection", back_populates="parent", uselist=True, cascade_backrefs=False
+        "Collection", back_populates="parent", uselist=True
     )
 
     # When deleting a collection, this flag is set to True so that the deletion
@@ -122,37 +118,27 @@ class Collection(Base, HasSessionCache, RedisKeyMixin):
         back_populates="collection",
         cascade="all, delete-orphan",
         uselist=True,
-        cascade_backrefs=False,
     )
 
     # A Collection can have many associated Credentials.
     credentials: Mapped[list[Credential]] = relationship(
-        "Credential",
-        back_populates="collection",
-        cascade="delete",
-        cascade_backrefs=False,
+        "Credential", back_populates="collection", cascade="delete"
     )
 
     # A Collection can be monitored by many Monitors, each of which
     # will have its own Timestamp.
     timestamps: Mapped[list[Timestamp]] = relationship(
-        "Timestamp", back_populates="collection", cascade_backrefs=False
+        "Timestamp", back_populates="collection"
     )
 
     catalog: Mapped[list[Identifier]] = relationship(
-        "Identifier",
-        secondary="collections_identifiers",
-        back_populates="collections",
-        cascade_backrefs=False,
+        "Identifier", secondary="collections_identifiers", back_populates="collections"
     )
 
     # A Collection can be associated with multiple CoverageRecords
     # for Identifiers in its catalog.
     coverage_records: Mapped[list[CoverageRecord]] = relationship(
-        "CoverageRecord",
-        back_populates="collection",
-        cascade="all",
-        cascade_backrefs=False,
+        "CoverageRecord", back_populates="collection", cascade="all"
     )
 
     # A collection may be associated with one or more custom lists.
@@ -161,10 +147,7 @@ class Collection(Base, HasSessionCache, RedisKeyMixin):
     # the list and they won't be added back, so the list doesn't
     # necessarily match the collection.
     customlists: Mapped[list[CustomList]] = relationship(
-        "CustomList",
-        secondary="collections_customlists",
-        back_populates="collections",
-        cascade_backrefs=False,
+        "CustomList", secondary="collections_customlists", back_populates="collections"
     )
 
     export_marc_records: Mapped[bool] = Column(Boolean, default=False, nullable=False)

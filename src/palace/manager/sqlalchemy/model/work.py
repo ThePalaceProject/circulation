@@ -92,16 +92,12 @@ class WorkGenre(Base):
     genre_id: Mapped[int] = Column(
         Integer, ForeignKey("genres.id"), index=True, nullable=False
     )
-    genre: Mapped[Genre] = relationship(
-        "Genre", back_populates="work_genres", cascade_backrefs=False
-    )
+    genre: Mapped[Genre] = relationship("Genre", back_populates="work_genres")
 
     work_id: Mapped[int] = Column(
         Integer, ForeignKey("works.id"), index=True, nullable=False
     )
-    work: Mapped[Work] = relationship(
-        "Work", back_populates="work_genres", cascade_backrefs=False
-    )
+    work: Mapped[Work] = relationship("Work", back_populates="work_genres")
 
     affinity: Mapped[float] = Column(Float, index=True, default=0, nullable=False)
 
@@ -158,38 +154,27 @@ class Work(Base, LoggerMixin):
 
     # One Work may have copies scattered across many LicensePools.
     license_pools: Mapped[list[LicensePool]] = relationship(
-        "LicensePool",
-        back_populates="work",
-        lazy="joined",
-        uselist=True,
-        cascade_backrefs=False,
+        "LicensePool", back_populates="work", lazy="joined", uselist=True
     )
 
     # A Work takes its presentation metadata from a single Edition.
     # But this Edition is a composite of provider, admin interface, etc.-derived Editions.
     presentation_edition_id = Column(Integer, ForeignKey("editions.id"), index=True)
     presentation_edition: Mapped[Edition | None] = relationship(
-        "Edition",
-        back_populates="work",
-        cascade_backrefs=False,
+        "Edition", back_populates="work"
     )
 
     # One Work may be associated with many CustomListEntries.
     # However, a CustomListEntry may lose its Work without
     # ceasing to exist.
     custom_list_entries: Mapped[list[CustomListEntry]] = relationship(
-        "CustomListEntry",
-        back_populates="work",
-        cascade_backrefs=False,
+        "CustomListEntry", back_populates="work"
     )
 
     # One Work may participate in many WorkGenre assignments.
     genres = association_proxy("work_genres", "genre", creator=WorkGenre.from_genre)
     work_genres: Mapped[list[WorkGenre]] = relationship(
-        "WorkGenre",
-        back_populates="work",
-        cascade="all, delete-orphan",
-        cascade_backrefs=False,
+        "WorkGenre", back_populates="work", cascade="all, delete-orphan"
     )
     audience = Column(Unicode, index=True)
     target_age = Column(INT4RANGE, index=True)
@@ -201,10 +186,7 @@ class Work(Base, LoggerMixin):
         index=True,
     )
     summary: Mapped[Resource | None] = relationship(
-        "Resource",
-        foreign_keys=[summary_id],
-        back_populates="summary_works",
-        cascade_backrefs=False,
+        "Resource", foreign_keys=[summary_id], back_populates="summary_works"
     )
     # This gives us a convenient place to store a cleaned-up version of
     # the content of the summary Resource.
@@ -262,10 +244,7 @@ class Work(Base, LoggerMixin):
 
     # Supress this work from appearing in any feeds for a specific library.
     suppressed_for: Mapped[list[Library]] = relationship(
-        "Library",
-        secondary="work_library_suppressions",
-        passive_deletes=True,
-        cascade_backrefs=False,
+        "Library", secondary="work_library_suppressions", passive_deletes=True
     )
 
     # These fields are potentially large and can be deferred if you

@@ -2549,15 +2549,11 @@ class LaneGenre(Base):
     lane_id: Mapped[int] = Column(
         Integer, ForeignKey("lanes.id"), index=True, nullable=False
     )
-    lane: Mapped[Lane] = relationship(
-        "Lane", back_populates="lane_genres", cascade_backrefs=False
-    )
+    lane: Mapped[Lane] = relationship("Lane", back_populates="lane_genres")
     genre_id: Mapped[int] = Column(
         Integer, ForeignKey("genres.id"), index=True, nullable=False
     )
-    genre: Mapped[Genre] = relationship(
-        Genre, back_populates="lane_genres", cascade_backrefs=False
-    )
+    genre: Mapped[Genre] = relationship(Genre, back_populates="lane_genres")
 
     # An inclusive relationship means that books classified under the
     # genre are included in the lane. An exclusive relationship means
@@ -2599,16 +2595,11 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
     library_id: Mapped[int] = Column(
         Integer, ForeignKey("libraries.id"), index=True, nullable=False
     )
-    library: Mapped[Library] = relationship(
-        Library, back_populates="lanes", cascade_backrefs=False
-    )
+    library: Mapped[Library] = relationship(Library, back_populates="lanes")
 
     parent_id = Column(Integer, ForeignKey("lanes.id"), index=True, nullable=True)
     parent: Mapped[Lane | None] = relationship(
-        "Lane",
-        back_populates="sublanes",
-        remote_side=[id],
-        cascade_backrefs=False,
+        "Lane", back_populates="sublanes", remote_side=[id]
     )
 
     priority: Mapped[int] = Column(Integer, index=True, nullable=False, default=0)
@@ -2622,20 +2613,13 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
     size_by_entrypoint = Column(JSON, nullable=True)
 
     # A lane may have one parent lane and many sublanes.
-    sublanes: Mapped[list[Lane]] = relationship(
-        "Lane",
-        back_populates="parent",
-        cascade_backrefs=False,
-    )
+    sublanes: Mapped[list[Lane]] = relationship("Lane", back_populates="parent")
 
     # A lane may have multiple associated LaneGenres. For most lanes,
     # this is how the contents of the lanes are defined.
     genres = association_proxy("lane_genres", "genre", creator=LaneGenre.from_genre)
     lane_genres: Mapped[list[LaneGenre]] = relationship(
-        "LaneGenre",
-        back_populates="lane",
-        cascade="all, delete-orphan",
-        cascade_backrefs=False,
+        "LaneGenre", back_populates="lane", cascade="all, delete-orphan"
     )
 
     # display_name is the name of the lane as shown to patrons.  It's
@@ -2678,7 +2662,6 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
         "DataSource",
         back_populates="license_lanes",
         foreign_keys=[license_datasource_id],
-        cascade_backrefs=False,
     )
 
     # Only books on one or more CustomLists obtained from this
@@ -2687,10 +2670,7 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
         Integer, ForeignKey("datasources.id"), index=True, nullable=True
     )
     _list_datasource: Mapped[DataSource | None] = relationship(
-        "DataSource",
-        back_populates="list_lanes",
-        foreign_keys=[_list_datasource_id],
-        cascade_backrefs=False,
+        "DataSource", back_populates="list_lanes", foreign_keys=[_list_datasource_id]
     )
 
     # Only the books on these specific CustomLists will be shown.
