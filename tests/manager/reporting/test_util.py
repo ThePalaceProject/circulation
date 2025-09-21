@@ -1,4 +1,6 @@
 import io
+import logging
+from collections.abc import MutableMapping
 from functools import partial
 from typing import Any
 
@@ -6,6 +8,7 @@ import _csv
 import pytest
 
 from palace.manager.reporting.util import (
+    RequestIdLoggerAdapter,
     row_counter_wrapper,
     write_csv,
 )
@@ -172,3 +175,101 @@ class TestReportTableProcessors:
 
         assert counted_rows.count == expected_count
         assert output.getvalue() == expected_output
+
+
+class TestRequestIdLoggerAdapter:
+    @pytest.mark.parametrize(
+        "extra_data, expected_suffix",
+        (
+            pytest.param(
+                {"id": "abc123"}, " (request ID: abc123)", id="with_request_id"
+            ),
+            pytest.param({}, "", id="no_request_id"),
+            pytest.param({"id": None}, "", id="none_request_id"),
+            pytest.param({"id": ""}, "", id="empty_string_request_id"),
+            pytest.param({"id": 0}, " (request ID: 0)", id="zero_request_id"),
+            pytest.param({"id": False}, " (request ID: False)", id="false_request_id"),
+            pytest.param({"id": 42}, " (request ID: 42)", id="numeric_request_id"),
+            pytest.param({"other_key": "value"}, "", id="extra_without_id_key"),
+            pytest.param(
+                {"id": "req-456", "other": "data"},
+                " (request ID: req-456)",
+                id="id_with_other_data",
+            ),
+        ),
+    )
+    def test_process_with_extra_data(
+        self,
+        extra_data: dict[str, Any],
+        expected_suffix: str,
+    ):
+        logger = logging.getLogger("test_logger")
+        adapter = RequestIdLoggerAdapter(logger, extra_data)
+
+        msg = "Test message"
+        kwargs: MutableMapping[str, Any] = {}
+
+        result_msg, result_kwargs = adapter.process(msg, kwargs)
+
+        assert result_msg == f"{msg}{expected_suffix}"
+        assert result_kwargs is kwargs
+
+    def test_process_with_none_extra(self):
+        extra_data = None
+        logger = logging.getLogger("test_logger")
+        adapter = RequestIdLoggerAdapter(logger, extra_data)
+
+        msg = "Test message"
+        kwargs: MutableMapping[str, Any] = {}
+
+        result_msg, result_kwargs = adapter.process(msg, kwargs)
+
+        assert result_msg == msg
+        assert result_kwargs is kwargs
+
+    @pytest.mark.parametrize(
+        "extra_data, log_level, expected_in_output",
+        (
+            pytest.param(
+                {"id": "test-123"},
+                "info",
+                "Original message (request ID: test-123)",
+                id="info_with_id",
+            ),
+            pytest.param({}, "warning", "Original message", id="warning_without_id"),
+            pytest.param(
+                {"id": "error-456"},
+                "error",
+                "Original message (request ID: error-456)",
+                id="error_with_id",
+            ),
+        ),
+    )
+    def test_logging_integration(
+        self,
+        extra_data: dict[str, Any],
+        log_level: str,
+        expected_in_output: str,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        caplog.set_level(logging.INFO)
+        logger = logging.getLogger("test_request_logger")
+        adapter = RequestIdLoggerAdapter(logger, extra_data)
+
+        log_method = getattr(adapter, log_level)
+        log_method("Original message")
+
+        assert expected_in_output in caplog.text
+
+    def test_kwargs_pass_through(self):
+        logger = logging.getLogger("test_logger")
+        adapter = RequestIdLoggerAdapter(logger, {"id": "test"})
+
+        msg = "Test message"
+        original_kwargs: MutableMapping[str, Any] = {"original": {"custom": "data"}}
+
+        result_msg, result_kwargs = adapter.process(msg, original_kwargs)
+
+        # Kwargs should make it through unscathed.
+        assert result_kwargs is original_kwargs
+        assert result_kwargs == {"original": {"custom": "data"}}

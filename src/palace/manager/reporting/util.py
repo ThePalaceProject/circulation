@@ -79,6 +79,13 @@ class RequestIdLoggerAdapter(ExtraDataLoggerAdapter):
     def process(
         self, msg: str, kwargs: MutableMapping[str, Any]
     ) -> tuple[str, MutableMapping[str, Any]]:
-        report_id = None if self.extra is None else self.extra.get("id")
-        new_msg = f"{msg}{f' (request ID: {report_id})' if report_id else ''}"
+        request_id = (
+            id_value
+            if self.extra is not None
+            and (id_value := self.extra.get("id")) not in (None, "")
+            else None
+        )
+        new_msg = (
+            f"{msg}{f' (request ID: {request_id})' if request_id is not None else ''}"
+        )
         return new_msg, kwargs
