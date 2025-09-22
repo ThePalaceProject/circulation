@@ -32,8 +32,8 @@ def upgrade() -> None:
     )
 
     # Migrate the existing playtime records before we set the new columns to not nullable.
-    conn.execute("UPDATE playtime_entries SET loan_identifier = ''")
-    conn.execute("UPDATE playtime_summaries SET loan_identifier = ''")
+    conn.execute(sa.text("UPDATE playtime_entries SET loan_identifier = ''"))
+    conn.execute(sa.text("UPDATE playtime_summaries SET loan_identifier = ''"))
 
     op.alter_column(
         "playtime_entries",

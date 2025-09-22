@@ -56,12 +56,8 @@ class AdminControllerFixture:
         with self.ctrl.request_context_with_library(route, *args, **kwargs) as c:
             c.request.form = {}
             c.request.files = {}
-            self.ctrl.db.session.begin_nested()
             setattr(c.request, "admin", admin)
-            try:
-                yield c
-            finally:
-                self.ctrl.db.session.commit()
+            yield c
 
 
 @pytest.fixture(scope="function")

@@ -45,7 +45,7 @@ class SAMLMetadataMonitor(Monitor):
     def run_once(self, progress):
         self._logger.info("Started running the SAML metadata monitor")
 
-        with self._db.begin(subtransactions=True):
+        with self._db.begin_nested():
             saml_federations = self._db.query(SAMLFederation).all()
 
             self._logger.info(f"Found {len(saml_federations)} SAML federations")

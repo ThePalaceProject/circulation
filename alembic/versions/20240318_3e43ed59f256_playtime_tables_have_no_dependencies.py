@@ -209,18 +209,22 @@ def downgrade() -> None:
 def update_summary_isbn_and_title(session: Session) -> None:
     """Update existing playtime summary records in the database."""
     conn = session.connection()
-    rows = conn.execute("SELECT id, identifier_id FROM playtime_summaries").all()
+    rows = conn.execute(
+        sa.text("SELECT id, identifier_id FROM playtime_summaries")
+    ).all()
 
     for row in rows:
         identifier = get_one(session, Identifier, id=row.identifier_id)
         isbn = cached_isbn_lookup(identifier)
         title = cached_title_lookup(identifier)
         conn.execute(
-            """
-            UPDATE playtime_summaries
-            SET isbn = %(isbn)s, title = %(title)s
-            WHERE id = %(id)s
-            """,
+            sa.text(
+                """
+                UPDATE playtime_summaries
+                SET isbn = %(isbn)s, title = %(title)s
+                WHERE id = %(id)s
+                """
+            ),
             {"id": row.id, "isbn": isbn, "title": title},
         )
 
@@ -240,16 +244,20 @@ def cached_title_lookup(identifier: Identifier) -> str | None:
 def update_playtime_entries(conn: Connection) -> None:
     """Update existing playtime entries in the database."""
     rows = conn.execute(
-        "SELECT id, identifier_id, collection_id, library_id FROM playtime_entries"
+        sa.text(
+            "SELECT id, identifier_id, collection_id, library_id FROM playtime_entries"
+        )
     ).all()
 
     for row in rows:
         conn.execute(
-            """
-            UPDATE playtime_entries
-            SET identifier_str = %(urn)s, collection_name = %(collection_name)s, library_name = %(library_name)s
-            WHERE id = %(id)s
-            """,
+            sa.text(
+                """
+                UPDATE playtime_entries
+                SET identifier_str = %(urn)s, collection_name = %(collection_name)s, library_name = %(library_name)s
+                WHERE id = %(id)s
+                """
+            ),
             {
                 "id": row.id,
                 "urn": get_identifier_urn(conn, row.identifier_id),
@@ -263,12 +271,14 @@ def update_playtime_entries(conn: Connection) -> None:
 def get_collection_name(conn: Connection, collection_id: int) -> str:
     """Given the id of a collection, return its name."""
     return conn.execute(
-        """
-        SELECT ic.name
-        FROM collections c
-        JOIN integration_configurations ic on c.integration_configuration_id = ic.id
-        WHERE c.id = %s
-        """,
+        sa.text(
+            """
+            SELECT ic.name
+            FROM collections c
+            JOIN integration_configurations ic on c.integration_configuration_id = ic.id
+            WHERE c.id = %s
+            """
+        ),
         (collection_id,),
     ).scalar_one()
 
@@ -277,11 +287,13 @@ def get_collection_name(conn: Connection, collection_id: int) -> str:
 def get_identifier_urn(conn: Connection, identifier_id: int) -> str:
     """Given the id of an identifier id, return its urn."""
     row = conn.execute(
-        """
-        SELECT type, identifier
-        FROM identifiers
-        WHERE id = %s
-        """,
+        sa.text(
+            """
+            SELECT type, identifier
+            FROM identifiers
+            WHERE id = %s
+            """
+        ),
         (identifier_id,),
     ).one()
     return Identifier._urn_from_type_and_value(row.type, row.identifier)
@@ -291,5 +303,5 @@ def get_identifier_urn(conn: Connection, identifier_id: int) -> str:
 def get_library_name(conn: Connection, library_id: int) -> str:
     """Given the id of a library, return its name."""
     return conn.execute(
-        "SELECT name FROM libraries WHERE id = %s", (library_id,)
+        sa.text("SELECT name FROM libraries WHERE id = %s"), (library_id,)
     ).scalar_one()

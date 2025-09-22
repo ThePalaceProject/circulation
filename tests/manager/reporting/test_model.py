@@ -26,7 +26,7 @@ class TestTabularQueryDefinition:
         col_b = Mock()
         col_b.name = "Column B"
         columns = [col_a, col_b]
-        statement.c = columns
+        statement.selected_columns = columns
 
         mock_parameterized_statement = MagicMock(spec=Select)
         statement.params.return_value = mock_parameterized_statement
@@ -66,7 +66,7 @@ class TestTabularQueryDefinition:
             mock_col = Mock()
             mock_col.name = name
             mock_columns.append(mock_col)
-        statement.c = mock_columns
+        statement.selected_columns = mock_columns
         statement.params.return_value = statement
 
         definition = TabularQueryDefinition(

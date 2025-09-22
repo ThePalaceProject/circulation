@@ -107,7 +107,7 @@ class TestDiscoveryServices:
             "url"
         )
 
-    def test_discovery_services_post_errors(
+    def test_discovery_services_post_error_unknown_protocol(
         self,
         flask_app_fixture: FlaskAppFixture,
         controller_fixture: DiscoveryServicesControllerFixture,
@@ -123,6 +123,12 @@ class TestDiscoveryServices:
             response = controller_fixture.process_discovery_services()
             assert response == UNKNOWN_PROTOCOL
 
+    def test_discovery_services_post_error_no_protocol(
+        self,
+        flask_app_fixture: FlaskAppFixture,
+        controller_fixture: DiscoveryServicesControllerFixture,
+        db: DatabaseTransactionFixture,
+    ):
         with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
@@ -132,6 +138,12 @@ class TestDiscoveryServices:
             response = controller_fixture.process_discovery_services()
             assert response == NO_PROTOCOL_FOR_NEW_SERVICE
 
+    def test_discovery_services_post_error_missing_service(
+        self,
+        flask_app_fixture: FlaskAppFixture,
+        controller_fixture: DiscoveryServicesControllerFixture,
+        db: DatabaseTransactionFixture,
+    ):
         with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
@@ -143,6 +155,12 @@ class TestDiscoveryServices:
             response = controller_fixture.process_discovery_services()
             assert response == MISSING_SERVICE
 
+    def test_discovery_services_post_error_already_in_use(
+        self,
+        flask_app_fixture: FlaskAppFixture,
+        controller_fixture: DiscoveryServicesControllerFixture,
+        db: DatabaseTransactionFixture,
+    ):
         integration_url = db.fresh_url()
         existing_integration = db.discovery_service_integration(url=integration_url)
         with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
@@ -157,6 +175,14 @@ class TestDiscoveryServices:
             response = controller_fixture.process_discovery_services()
             assert response == INTEGRATION_NAME_ALREADY_IN_USE
 
+    def test_discovery_services_post_error_url_already_in_use(
+        self,
+        flask_app_fixture: FlaskAppFixture,
+        controller_fixture: DiscoveryServicesControllerFixture,
+        db: DatabaseTransactionFixture,
+    ):
+        integration_url = db.fresh_url()
+        existing_integration = db.discovery_service_integration(url=integration_url)
         with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             assert isinstance(existing_integration.protocol, str)
             flask.request.form = ImmutableMultiDict(
@@ -169,6 +195,14 @@ class TestDiscoveryServices:
             response = controller_fixture.process_discovery_services()
             assert response == INTEGRATION_URL_ALREADY_IN_USE
 
+    def test_discovery_services_post_error_incomplete(
+        self,
+        flask_app_fixture: FlaskAppFixture,
+        controller_fixture: DiscoveryServicesControllerFixture,
+        db: DatabaseTransactionFixture,
+    ):
+        integration_url = db.fresh_url()
+        existing_integration = db.discovery_service_integration(url=integration_url)
         with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
@@ -180,6 +214,12 @@ class TestDiscoveryServices:
             assert isinstance(response, ProblemDetail)
             assert response.uri == INCOMPLETE_CONFIGURATION.uri
 
+    def test_discovery_services_post_error_not_authorized(
+        self,
+        flask_app_fixture: FlaskAppFixture,
+        controller_fixture: DiscoveryServicesControllerFixture,
+        db: DatabaseTransactionFixture,
+    ):
         with flask_app_fixture.test_request_context("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
@@ -249,7 +289,7 @@ class TestDiscoveryServices:
             == OpdsRegistrationService.settings_load(discovery_service).url
         )
 
-    def test_check_name_unique(
+    def test_check_name_unique_error(
         self,
         flask_app_fixture: FlaskAppFixture,
         controller_fixture: DiscoveryServicesControllerFixture,
@@ -271,6 +311,14 @@ class TestDiscoveryServices:
             )
             response = controller_fixture.process_discovery_services()
             assert response == INTEGRATION_NAME_ALREADY_IN_USE
+
+    def test_check_name_unique_edit(
+        self,
+        flask_app_fixture: FlaskAppFixture,
+        controller_fixture: DiscoveryServicesControllerFixture,
+        db: DatabaseTransactionFixture,
+    ):
+        existing_service = db.discovery_service_integration()
 
         # Try to edit existing service without changing its name -- this is fine.
         with flask_app_fixture.test_request_context_system_admin("/", method="POST"):

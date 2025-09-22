@@ -309,8 +309,7 @@ class Identifier(Base, IdentifierConstants, LoggerMixin):
 
     # One Identifier can have many LicensePoolDeliveryMechanisms.
     delivery_mechanisms: Mapped[list[LicensePoolDeliveryMechanism]] = relationship(
-        "LicensePoolDeliveryMechanism",
-        back_populates="identifier",
+        "LicensePoolDeliveryMechanism", back_populates="identifier"
     )
 
     # Type + identifier is unique.
@@ -769,7 +768,7 @@ class Identifier(Base, IdentifierConstants, LoggerMixin):
         fn = cls._recursively_equivalent_identifier_ids_query(
             identifier_id_column, policy
         )
-        return select([fn])
+        return select(fn)
 
     @classmethod
     def _recursively_equivalent_identifier_ids_query(
@@ -806,7 +805,7 @@ class Identifier(Base, IdentifierConstants, LoggerMixin):
            data quality, and sheer number of equivalent identifiers.
         """
         fn = cls._recursively_equivalent_identifier_ids_query(Identifier.id, policy)
-        query = select([Identifier.id, fn], Identifier.id.in_(identifier_ids))
+        query = select(Identifier.id, fn).where(Identifier.id.in_(identifier_ids))
         results = _db.execute(query)
         equivalents = defaultdict(list)
         for r in results:
@@ -1073,7 +1072,7 @@ class Identifier(Base, IdentifierConstants, LoggerMixin):
                 resources = resources.filter(Hyperlink.rel.in_(rel))
             else:
                 resources = resources.filter(Hyperlink.rel == rel)
-        resources = resources.options(joinedload("representation"))
+        resources = resources.options(joinedload(Resource.representation))
         return resources
 
     @classmethod
@@ -1083,7 +1082,7 @@ class Identifier(Base, IdentifierConstants, LoggerMixin):
         classifications = _db.query(Classification).filter(
             Classification.identifier_id.in_(identifier_ids)
         )
-        return classifications.options(joinedload("subject"))
+        return classifications.options(joinedload(Classification.subject))
 
     @classmethod
     def best_cover_for(
