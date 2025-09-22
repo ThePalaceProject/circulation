@@ -1457,11 +1457,9 @@ class Work(Base, LoggerMixin):
         )
 
         identifiers_query = select(
-            [
-                equivalent_identifiers.c.work_id,
-                Identifier.identifier,
-                Identifier.type,
-            ]
+            equivalent_identifiers.c.work_id,
+            Identifier.identifier,
+            Identifier.type,
         ).join_from(
             Identifier,
             equivalent_identifiers,
@@ -1479,7 +1477,7 @@ class Work(Base, LoggerMixin):
         ## TODO: Improve this, maybe only run this section once a day???
         # Map our constants for Subject type to their URIs.
         scheme_column: Any = case(
-            [
+            *[
                 (Subject.type == key, literal_column("'%s'" % val))
                 for key, val in list(Subject.uri_lookup.items())
             ]
@@ -1489,7 +1487,7 @@ class Work(Base, LoggerMixin):
         # Also, 3M's classifications have slashes, e.g. "FICTION/Adventure". Make sure
         # we get separated words for search.
         term_column = func.replace(
-            case([(Subject.name != None, Subject.name)], else_=Subject.identifier),
+            case((Subject.name != None, Subject.name), else_=Subject.identifier),
             "/",
             " ",
         )
@@ -1502,12 +1500,12 @@ class Work(Base, LoggerMixin):
 
         subjects = (
             select(
-                [
-                    equivalent_identifiers.c.work_id,
-                    scheme_column.label("scheme"),
-                    term_column.label("term"),
-                    weight_column.label("weight"),
-                ],
+                equivalent_identifiers.c.work_id,
+                scheme_column.label("scheme"),
+                term_column.label("term"),
+                weight_column.label("weight"),
+            )
+            .where(
                 # Only include Subjects with terms that are useful for search.
                 and_(Subject.type.in_(Subject.TYPES_FOR_SEARCH), term_column != None),
             )
@@ -1736,19 +1734,19 @@ class Work(Base, LoggerMixin):
         # it alone. Otherwise, we subtract one to make it inclusive.
         upper_field = func.upper(Work.target_age)
         upper = case(
-            [(func.upper_inc(Work.target_age), upper_field)], else_=upper_field - 1
+            (func.upper_inc(Work.target_age), upper_field), else_=upper_field - 1
         ).label("upper")
 
         # If the lower limit of the target age is inclusive, we leave
         # it alone. Otherwise, we add one to make it inclusive.
         lower_field = func.lower(Work.target_age)
         lower = case(
-            [(func.lower_inc(Work.target_age), lower_field)], else_=lower_field + 1
+            (func.lower_inc(Work.target_age), lower_field), else_=lower_field + 1
         ).label("lower")
 
         # Subquery for target age. This has to be a subquery so it can
         # become a nested object in the final json.
-        target_age = select([upper, lower]).where(Work.id == foreign_work_id_field)
+        target_age = select(upper, lower).where(Work.id == foreign_work_id_field)
         return target_age
 
     def to_search_document(self) -> dict[str, Any]:

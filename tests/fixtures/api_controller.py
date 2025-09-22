@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import datetime
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from typing import Any
 
 import pytest
 from sqlalchemy.orm import Session
+from typing_extensions import Self
 from werkzeug.datastructures import Authorization
 
 from palace.manager.api.adobe_vendor_id import AuthdataUtility
@@ -248,17 +249,31 @@ class ControllerFixture:
             setattr(c.request, "library", library)
             yield c
 
+    @classmethod
+    @contextmanager
+    def fixture(
+        cls, db: DatabaseTransactionFixture, services_fixture: ServicesFixture
+    ) -> Generator[Self]:
+        time_then = datetime.datetime.now()
+        fixture = cls(db, services_fixture)
+        time_now = datetime.datetime.now()
+        time_diff = time_now - time_then
+        logging.info("controller init took %s", time_diff)
+        try:
+            yield fixture
+        finally:
+            # After the test is done, make sure the app is cleaned up, so
+            # we don't change the state for later tests.
+            fixture.app._db = None  # type: ignore[assignment]
+            delattr(fixture.app, "manager")
+
 
 @pytest.fixture(scope="function")
 def controller_fixture(
     db: DatabaseTransactionFixture, services_fixture: ServicesFixture
 ):
-    time_then = datetime.datetime.now()
-    fixture = ControllerFixture(db, services_fixture)
-    time_now = datetime.datetime.now()
-    time_diff = time_now - time_then
-    logging.info("controller init took %s", time_diff)
-    yield fixture
+    with ControllerFixture.fixture(db, services_fixture) as fixture:
+        yield fixture
 
 
 class WorkSpec:
@@ -336,9 +351,5 @@ class CirculationControllerFixture(ControllerFixture):
 def circulation_fixture(
     db: DatabaseTransactionFixture, services_fixture: ServicesFixture
 ):
-    time_then = datetime.datetime.now()
-    fixture = CirculationControllerFixture(db, services_fixture)
-    time_now = datetime.datetime.now()
-    time_diff = time_now - time_then
-    logging.info("circulation controller init took %s", time_diff)
-    yield fixture
+    with CirculationControllerFixture.fixture(db, services_fixture) as fixture:
+        yield fixture

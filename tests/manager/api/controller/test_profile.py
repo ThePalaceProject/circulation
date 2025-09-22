@@ -28,7 +28,8 @@ class ProfileFixture(ControllerFixture):
 
 @pytest.fixture(scope="function")
 def profile_fixture(db: DatabaseTransactionFixture, services_fixture: ServicesFixture):
-    return ProfileFixture(db, services_fixture)
+    with ProfileFixture.fixture(db, services_fixture) as fixture:
+        yield fixture
 
 
 class TestProfileController:

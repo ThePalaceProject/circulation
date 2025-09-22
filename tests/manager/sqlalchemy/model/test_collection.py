@@ -669,7 +669,7 @@ class TestCollection:
         assert [] == library.associated_collections
 
         # The collection based coverage record got deleted
-        assert db.session.query(CoverageRecord).get(record.id) == None
+        assert db.session.get(CoverageRecord, record.id) == None
 
         # The deletion of the Collection's sole LicensePool has
         # cascaded to Loan, Hold, License, and

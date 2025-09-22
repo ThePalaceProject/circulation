@@ -23,7 +23,8 @@ class AnalyticsFixture(CirculationControllerFixture):
 def analytics_fixture(
     db: DatabaseTransactionFixture, services_fixture: ServicesFixture
 ):
-    return AnalyticsFixture(db, services_fixture)
+    with AnalyticsFixture.fixture(db, services_fixture) as fixture:
+        yield fixture
 
 
 class TestAnalyticsController:

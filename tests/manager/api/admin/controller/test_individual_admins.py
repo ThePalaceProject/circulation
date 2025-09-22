@@ -1,4 +1,5 @@
 import json
+from contextlib import nullcontext
 
 import flask
 import pytest
@@ -21,9 +22,64 @@ from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.flask import FlaskAppFixture
 
 
+class IndividualAdminControllerFixture:
+    def __init__(self, db: DatabaseTransactionFixture) -> None:
+        self.controller = IndividualAdminSettingsController(db.session)
+
+        self.l1 = db.library(short_name="l1")
+        self.system, ignore = create(db.session, Admin, email="system@example.com")
+        self.system.add_role(AdminRole.SYSTEM_ADMIN)
+        assert self.system.is_system_admin()
+
+        self.sitewide_manager, ignore = create(
+            db.session, Admin, email="sitewide_manager@example.com"
+        )
+        self.sitewide_manager.add_role(AdminRole.SITEWIDE_LIBRARY_MANAGER)
+        assert self.sitewide_manager.is_sitewide_library_manager()
+
+        self.sitewide_librarian, ignore = create(
+            db.session, Admin, email="sitewide_librarian@example.com"
+        )
+        self.sitewide_librarian.add_role(AdminRole.SITEWIDE_LIBRARIAN)
+        assert self.sitewide_manager.is_sitewide_librarian()
+
+        self.manager1, ignore = create(
+            db.session, Admin, email="library_manager_l1@example.com"
+        )
+        self.manager1.add_role(AdminRole.LIBRARY_MANAGER, self.l1)
+        assert self.manager1.is_library_manager(self.l1)
+
+        self.librarian1, ignore = create(
+            db.session, Admin, email="librarian_l1@example.com"
+        )
+        self.librarian1.add_role(AdminRole.LIBRARIAN, self.l1)
+        assert self.librarian1.is_librarian(self.l1)
+
+        self.l2 = db.library(short_name="l2")
+        self.manager2, ignore = create(
+            db.session, Admin, email="library_manager_l2@example.com"
+        )
+        self.manager2.add_role(AdminRole.LIBRARY_MANAGER, self.l2)
+        assert self.manager2.is_library_manager(self.l2)
+
+        self.librarian2, ignore = create(
+            db.session, Admin, email="librarian_l2@example.com"
+        )
+        self.librarian2.add_role(AdminRole.LIBRARIAN, self.l2)
+        assert self.librarian2.is_librarian(self.l2)
+
+        self.manager1_2, ignore = create(
+            db.session, Admin, email="library_manager_l1_l2@example.com"
+        )
+        self.manager1_2.add_role(AdminRole.LIBRARY_MANAGER, self.l1)
+        self.manager1_2.add_role(AdminRole.LIBRARY_MANAGER, self.l2)
+
+
 @pytest.fixture
-def controller(db: DatabaseTransactionFixture) -> IndividualAdminSettingsController:
-    return IndividualAdminSettingsController(db.session)
+def controller_fixture(
+    db: DatabaseTransactionFixture,
+) -> IndividualAdminControllerFixture:
+    return IndividualAdminControllerFixture(db)
 
 
 class TestIndividualAdmins:
@@ -31,7 +87,7 @@ class TestIndividualAdmins:
         self,
         flask_app_fixture: FlaskAppFixture,
         db: DatabaseTransactionFixture,
-        controller: IndividualAdminSettingsController,
+        controller_fixture: IndividualAdminControllerFixture,
     ):
         for admin in db.session.query(Admin):
             db.session.delete(admin)
@@ -59,7 +115,7 @@ class TestIndividualAdmins:
 
         with flask_app_fixture.test_request_context("/", admin=admin1):
             # A system admin can see all other admins' roles.
-            response = controller.process_get()
+            response = controller_fixture.controller.process_get()
             admins = response.get("individualAdmins", [])
 
             expected = {
@@ -105,7 +161,7 @@ class TestIndividualAdmins:
 
         with flask_app_fixture.test_request_context("/", admin=admin2):
             # A sitewide librarian or library manager can also see all admins' roles.
-            response = controller.process_get()
+            response = controller_fixture.controller.process_get()
             admins = response.get("individualAdmins")
             expected_admins: list[dict[str, str | list[dict[str, str]]]] = [
                 {
@@ -145,11 +201,11 @@ class TestIndividualAdmins:
             # A librarian cannot view this API anymore
             pytest.raises(
                 AdminNotAuthorized,
-                controller.process_get,
+                controller_fixture.controller.process_get,
             )
 
         with flask_app_fixture.test_request_context("/", admin=admin4):
-            response = controller.process_get()
+            response = controller_fixture.controller.process_get()
             admins = response.get("individualAdmins")
             expected_admins = [
                 {
@@ -191,11 +247,11 @@ class TestIndividualAdmins:
         with flask_app_fixture.test_request_context("/", admin=admin5):
             pytest.raises(
                 AdminNotAuthorized,
-                controller.process_get,
+                controller_fixture.controller.process_get,
             )
 
         with flask_app_fixture.test_request_context("/", admin=admin6):
-            response = controller.process_get()
+            response = controller_fixture.controller.process_get()
             admins = response.get("individualAdmins")
             expected_admins = [
                 {
@@ -252,27 +308,37 @@ class TestIndividualAdmins:
     def test_individual_admins_get_no_admin(
         self,
         flask_app_fixture: FlaskAppFixture,
-        controller: IndividualAdminSettingsController,
+        controller_fixture: IndividualAdminControllerFixture,
     ):
         # When the application is first started, there is no admin user. In that
         # case, we return a problem detail.
 
         with flask_app_fixture.test_request_context("/", method="GET"):
-            response = controller.process_get()
+            response = controller_fixture.controller.process_get()
             assert response == ADMIN_AUTH_NOT_CONFIGURED
 
-    def test_individual_admins_post_errors(
+    def test_individual_admins_post_error_incomplete_config(
         self,
         flask_app_fixture: FlaskAppFixture,
         db: DatabaseTransactionFixture,
-        controller: IndividualAdminSettingsController,
+        controller_fixture: IndividualAdminControllerFixture,
     ):
-        with flask_app_fixture.test_request_context("/", method="POST"):
+        with flask_app_fixture.test_request_context(
+            "/", method="POST", admin=controller_fixture.system
+        ):
             flask.request.form = ImmutableMultiDict([])
-            response = controller.process_post()
+            response = controller_fixture.controller.process_post()
             assert response.uri == INCOMPLETE_CONFIGURATION.uri
 
-        with flask_app_fixture.test_request_context("/", method="POST"):
+    def test_individual_admins_post_error_library_not_found(
+        self,
+        flask_app_fixture: FlaskAppFixture,
+        db: DatabaseTransactionFixture,
+        controller_fixture: IndividualAdminControllerFixture,
+    ):
+        with flask_app_fixture.test_request_context(
+            "/", method="POST", admin=controller_fixture.system
+        ):
             flask.request.form = ImmutableMultiDict(
                 [
                     ("email", "test@library.org"),
@@ -285,22 +351,37 @@ class TestIndividualAdmins:
                     ),
                 ]
             )
-            response = controller.process_post()
+            response = controller_fixture.controller.process_post()
             assert response.uri == LIBRARY_NOT_FOUND.uri
 
-        with flask_app_fixture.test_request_context("/", method="POST"):
+    def test_individual_admins_post_error_invalid_email(
+        self,
+        flask_app_fixture: FlaskAppFixture,
+        db: DatabaseTransactionFixture,
+        controller_fixture: IndividualAdminControllerFixture,
+    ):
+        with flask_app_fixture.test_request_context(
+            "/", method="POST", admin=controller_fixture.system
+        ):
             flask.request.form = ImmutableMultiDict(
                 [
                     ("email", "not-a-email"),
                     ("password", "334df3f70bfe1979"),
                 ]
             )
-            response = controller.process_post()
+            response = controller_fixture.controller.process_post()
             assert response.uri == INVALID_EMAIL.uri
             assert '"not-a-email" is not a valid email address' in response.detail
 
-        library = db.library()
-        with flask_app_fixture.test_request_context("/", method="POST"):
+    def test_individual_admins_post_error_unknown_role(
+        self,
+        flask_app_fixture: FlaskAppFixture,
+        db: DatabaseTransactionFixture,
+        controller_fixture: IndividualAdminControllerFixture,
+    ):
+        with flask_app_fixture.test_request_context(
+            "/", method="POST", admin=controller_fixture.system
+        ):
             flask.request.form = ImmutableMultiDict(
                 [
                     ("email", "test@library.org"),
@@ -308,250 +389,225 @@ class TestIndividualAdmins:
                     (
                         "roles",
                         json.dumps(
-                            [{"role": "notarole", "library": library.short_name}]
+                            [
+                                {
+                                    "role": "notarole",
+                                    "library": controller_fixture.l1.short_name,
+                                }
+                            ]
                         ),
                     ),
                 ]
             )
-            response = controller.process_post()
+            response = controller_fixture.controller.process_post()
             assert response.uri == UNKNOWN_ROLE.uri
 
-    def test_individual_admins_post_permissions(
+    @pytest.mark.parametrize(
+        "admin_making_request_str,target_admin_str,roles,allowed",
+        [
+            # Various types of user trying to change a system admin's roles
+            ("system", "system", [], True),
+            ("sitewide_manager", "system", [], False),
+            ("sitewide_librarian", "system", [], False),
+            ("manager1", "system", [], False),
+            ("librarian1", "system", [], False),
+            ("manager2", "system", [], False),
+            ("librarian2", "system", [], False),
+            # Various types of user trying to change a sitewide manager's roles
+            ("system", "sitewide_manager", [], True),
+            ("sitewide_manager", "sitewide_manager", [], True),
+            ("sitewide_librarian", "sitewide_manager", [], False),
+            ("manager1", "sitewide_manager", [], False),
+            ("librarian1", "sitewide_manager", [], False),
+            ("manager2", "sitewide_manager", [], False),
+            ("librarian2", "sitewide_manager", [], False),
+            # Various types of user trying to change a sitewide librarian's roles
+            ("system", "sitewide_librarian", [], True),
+            ("sitewide_manager", "sitewide_librarian", [], True),
+            ("sitewide_librarian", "sitewide_librarian", [], False),
+            ("manager1", "sitewide_librarian", [], False),
+            ("librarian1", "sitewide_librarian", [], False),
+            ("manager2", "sitewide_librarian", [], False),
+            ("librarian2", "sitewide_librarian", [], False),
+            # Various other role changing tests
+            ("manager1", "manager1", [], True),
+            (
+                "manager1",
+                "sitewide_librarian",
+                [
+                    {"role": AdminRole.SITEWIDE_LIBRARIAN},
+                    {"role": AdminRole.LIBRARY_MANAGER, "library": "l1"},
+                ],
+                True,
+            ),
+            ("manager1", "librarian1", [], True),
+            (
+                "manager2",
+                "librarian2",
+                [{"role": AdminRole.LIBRARIAN, "library": "l1"}],
+                False,
+            ),
+            (
+                "manager2",
+                "librarian1",
+                [{"role": AdminRole.LIBRARY_MANAGER, "library": "l1"}],
+                False,
+            ),
+            ("sitewide_librarian", "librarian1", [], False),
+            (
+                "sitewide_manager",
+                "sitewide_manager",
+                [{"role": AdminRole.SYSTEM_ADMIN}],
+                False,
+            ),
+            (
+                "sitewide_librarian",
+                "manager1",
+                [{"role": AdminRole.SITEWIDE_LIBRARY_MANAGER}],
+                False,
+            ),
+        ],
+    )
+    def test_individual_admins_post_permissions_changing_roles(
         self,
         flask_app_fixture: FlaskAppFixture,
         db: DatabaseTransactionFixture,
-        controller: IndividualAdminSettingsController,
-    ):
-        l1 = db.library()
-        l2 = db.library()
-        system, ignore = create(db.session, Admin, email="system@example.com")
-        system.add_role(AdminRole.SYSTEM_ADMIN)
-        assert system.is_system_admin()
+        controller_fixture: IndividualAdminControllerFixture,
+        admin_making_request_str: str,
+        target_admin_str: str,
+        roles: list[dict[str, str]],
+        allowed: bool,
+    ) -> None:
+        admin_making_request = getattr(controller_fixture, admin_making_request_str)
+        target_admin = getattr(controller_fixture, target_admin_str)
 
-        sitewide_manager, ignore = create(
-            db.session, Admin, email="sitewide_manager@example.com"
-        )
-        sitewide_manager.add_role(AdminRole.SITEWIDE_LIBRARY_MANAGER)
-        assert sitewide_manager.is_sitewide_library_manager()
-
-        sitewide_librarian, ignore = create(
-            db.session, Admin, email="sitewide_librarian@example.com"
-        )
-        sitewide_librarian.add_role(AdminRole.SITEWIDE_LIBRARIAN)
-        assert sitewide_manager.is_sitewide_librarian()
-
-        manager1, ignore = create(
-            db.session, Admin, email="library_manager_l1@example.com"
-        )
-        manager1.add_role(AdminRole.LIBRARY_MANAGER, l1)
-        assert manager1.is_library_manager(l1)
-
-        librarian1, ignore = create(db.session, Admin, email="librarian_l1@example.com")
-        librarian1.add_role(AdminRole.LIBRARIAN, l1)
-        assert librarian1.is_librarian(l1)
-
-        l2 = db.library()
-        manager2, ignore = create(
-            db.session, Admin, email="library_manager_l2@example.com"
-        )
-        manager2.add_role(AdminRole.LIBRARY_MANAGER, l2)
-        assert manager2.is_library_manager(l2)
-
-        librarian2, ignore = create(db.session, Admin, email="librarian_l2@example.com")
-        librarian2.add_role(AdminRole.LIBRARIAN, l2)
-        assert librarian2.is_librarian(l2)
-
-        def test_changing_roles(
-            admin_making_request, target_admin, roles=None, allowed=False
+        with flask_app_fixture.test_request_context(
+            "/", method="POST", admin=admin_making_request
         ):
-            with flask_app_fixture.test_request_context(
-                "/", method="POST", admin=admin_making_request
-            ):
-                flask.request.form = ImmutableMultiDict(
-                    [
-                        ("email", target_admin.email),
-                        ("roles", json.dumps(roles or [])),
-                    ]
-                )
-                if allowed:
-                    controller.process_post()
-                    db.session.rollback()
-                else:
-                    pytest.raises(
-                        AdminNotAuthorized,
-                        controller.process_post,
-                    )
+            flask.request.form = ImmutableMultiDict(
+                [
+                    ("email", target_admin.email),
+                    ("roles", json.dumps(roles)),
+                ]
+            )
+            context_manager = (
+                nullcontext() if allowed else pytest.raises(AdminNotAuthorized)
+            )
+            with context_manager:
+                controller_fixture.controller.process_post()
 
-        # Various types of user trying to change a system admin's roles
-        test_changing_roles(system, system, allowed=True)
-        test_changing_roles(sitewide_manager, system)
-        test_changing_roles(sitewide_librarian, system)
-        test_changing_roles(manager1, system)
-        test_changing_roles(librarian1, system)
-        test_changing_roles(manager2, system)
-        test_changing_roles(librarian2, system)
+    @pytest.mark.parametrize(
+        "admin_making_request_str,target_admin_str,allowed",
+        [
+            # Various types of user trying to change a system admin's password
+            ("system", "system", True),
+            ("sitewide_manager", "system", False),
+            ("sitewide_librarian", "system", False),
+            ("manager1", "system", False),
+            ("librarian1", "system", False),
+            ("manager2", "system", False),
+            ("librarian2", "system", False),
+            # Various types of user trying to change a sitewide manager's password
+            ("system", "sitewide_manager", True),
+            ("sitewide_manager", "sitewide_manager", True),
+            ("sitewide_librarian", "sitewide_manager", False),
+            ("manager1", "sitewide_manager", False),
+            ("librarian1", "sitewide_manager", False),
+            ("manager2", "sitewide_manager", False),
+            ("librarian2", "sitewide_manager", False),
+            # Various types of user trying to change a sitewide librarian's password
+            ("system", "sitewide_librarian", True),
+            ("sitewide_manager", "sitewide_librarian", True),
+            ("manager1", "sitewide_librarian", False),
+            ("manager2", "sitewide_librarian", False),
+            ("sitewide_librarian", "sitewide_librarian", False),
+            ("librarian1", "sitewide_librarian", False),
+            ("librarian2", "sitewide_librarian", False),
+            # Various types of user trying to change a manager's password
+            # Manager 1
+            ("system", "manager1", True),
+            ("sitewide_manager", "manager1", True),
+            ("manager1", "manager1", True),
+            ("sitewide_librarian", "manager1", False),
+            ("manager2", "manager1", False),
+            ("librarian2", "manager1", False),
+            # Manager 2
+            ("system", "manager2", True),
+            ("sitewide_manager", "manager2", True),
+            ("manager2", "manager2", True),
+            ("sitewide_librarian", "manager2", False),
+            ("manager1", "manager2", False),
+            ("librarian1", "manager2", False),
+            # Various types of user trying to change a librarian's password
+            # Librarian 1
+            ("system", "librarian1", True),
+            ("sitewide_manager", "librarian1", True),
+            ("manager1", "librarian1", True),
+            ("sitewide_librarian", "librarian1", False),
+            ("manager2", "librarian1", False),
+            ("librarian2", "librarian1", False),
+            # Librarian 2
+            ("system", "librarian2", True),
+            ("sitewide_manager", "librarian2", True),
+            ("manager2", "librarian2", True),
+            ("sitewide_librarian", "librarian2", False),
+            ("manager1", "librarian2", False),
+            ("librarian1", "librarian2", False),
+            # A manager of library1 should not be allowed for a manager of library1 and library2
+            ("system", "manager1_2", True),
+            ("sitewide_manager", "manager1_2", True),
+            ("manager1_2", "manager1_2", True),
+            ("sitewide_librarian", "manager1_2", False),
+            ("manager1", "manager1_2", False),
+            ("manager2", "manager1_2", False),
+            ("librarian1", "manager1_2", False),
+            # A manager of both libraries should be able to change the passwords of both
+            ("manager1_2", "manager1", True),
+            ("manager1_2", "manager2", True),
+            ("manager1_2", "librarian1", True),
+            ("manager1_2", "librarian2", True),
+            ("manager1_2", "system", False),
+            ("manager1_2", "sitewide_manager", False),
+            ("manager1_2", "sitewide_librarian", False),
+        ],
+    )
+    def test_individual_admins_post_permissions_changing_password(
+        self,
+        flask_app_fixture: FlaskAppFixture,
+        db: DatabaseTransactionFixture,
+        controller_fixture: IndividualAdminControllerFixture,
+        admin_making_request_str: str,
+        target_admin_str: str,
+        allowed: bool,
+    ) -> None:
+        admin_making_request = getattr(controller_fixture, admin_making_request_str)
+        target_admin = getattr(controller_fixture, target_admin_str)
 
-        # Various types of user trying to change a sitewide manager's roles
-        test_changing_roles(system, sitewide_manager, allowed=True)
-        test_changing_roles(sitewide_manager, sitewide_manager, allowed=True)
-        test_changing_roles(sitewide_librarian, sitewide_manager)
-        test_changing_roles(manager1, sitewide_manager)
-        test_changing_roles(librarian1, sitewide_manager)
-        test_changing_roles(manager2, sitewide_manager)
-        test_changing_roles(librarian2, sitewide_manager)
+        with flask_app_fixture.test_request_context(
+            "/", method="POST", admin=admin_making_request
+        ):
+            flask.request.form = ImmutableMultiDict(
+                [
+                    ("email", target_admin.email),
+                    ("password", "new password"),
+                    (
+                        "roles",
+                        json.dumps([role.to_dict() for role in target_admin.roles]),
+                    ),
+                ]
+            )
+            context_manager = (
+                nullcontext() if allowed else pytest.raises(AdminNotAuthorized)
+            )
 
-        # Various types of user trying to change a sitewide librarian's roles
-        test_changing_roles(system, sitewide_librarian, allowed=True)
-        test_changing_roles(sitewide_manager, sitewide_librarian, allowed=True)
-        test_changing_roles(sitewide_librarian, sitewide_librarian)
-        test_changing_roles(manager1, sitewide_librarian)
-        test_changing_roles(librarian1, sitewide_librarian)
-        test_changing_roles(manager2, sitewide_librarian)
-        test_changing_roles(librarian2, sitewide_librarian)
-
-        test_changing_roles(manager1, manager1, allowed=True)
-        test_changing_roles(
-            manager1,
-            sitewide_librarian,
-            roles=[
-                {"role": AdminRole.SITEWIDE_LIBRARIAN},
-                {"role": AdminRole.LIBRARY_MANAGER, "library": l1.short_name},
-            ],
-            allowed=True,
-        )
-        test_changing_roles(manager1, librarian1, allowed=True)
-        test_changing_roles(
-            manager2,
-            librarian2,
-            roles=[{"role": AdminRole.LIBRARIAN, "library": l1.short_name}],
-        )
-        test_changing_roles(
-            manager2,
-            librarian1,
-            roles=[{"role": AdminRole.LIBRARY_MANAGER, "library": l1.short_name}],
-        )
-
-        test_changing_roles(sitewide_librarian, librarian1)
-
-        test_changing_roles(
-            sitewide_manager, sitewide_manager, roles=[{"role": AdminRole.SYSTEM_ADMIN}]
-        )
-        test_changing_roles(
-            sitewide_librarian,
-            manager1,
-            roles=[{"role": AdminRole.SITEWIDE_LIBRARY_MANAGER}],
-        )
-
-        def test_changing_password(admin_making_request, target_admin, allowed=False):
-            with flask_app_fixture.test_request_context(
-                "/", method="POST", admin=admin_making_request
-            ):
-                flask.request.form = ImmutableMultiDict(
-                    [
-                        ("email", target_admin.email),
-                        ("password", "new password"),
-                        (
-                            "roles",
-                            json.dumps([role.to_dict() for role in target_admin.roles]),
-                        ),
-                    ]
-                )
-                if allowed:
-                    controller.process_post()
-                    db.session.rollback()
-                else:
-                    pytest.raises(
-                        AdminNotAuthorized,
-                        controller.process_post,
-                    )
-
-        # Various types of user trying to change a system admin's password
-        test_changing_password(system, system, allowed=True)
-        test_changing_password(sitewide_manager, system)
-        test_changing_password(sitewide_librarian, system)
-        test_changing_password(manager1, system)
-        test_changing_password(librarian1, system)
-        test_changing_password(manager2, system)
-        test_changing_password(librarian2, system)
-
-        # Various types of user trying to change a sitewide manager's password
-        test_changing_password(system, sitewide_manager, allowed=True)
-        test_changing_password(sitewide_manager, sitewide_manager, allowed=True)
-        test_changing_password(sitewide_librarian, sitewide_manager)
-        test_changing_password(manager1, sitewide_manager)
-        test_changing_password(librarian1, sitewide_manager)
-        test_changing_password(manager2, sitewide_manager)
-        test_changing_password(librarian2, sitewide_manager)
-
-        # Various types of user trying to change a sitewide librarian's password
-        test_changing_password(system, sitewide_librarian, allowed=True)
-        test_changing_password(sitewide_manager, sitewide_librarian, allowed=True)
-        test_changing_password(manager1, sitewide_librarian)
-        test_changing_password(manager2, sitewide_librarian)
-        test_changing_password(sitewide_librarian, sitewide_librarian)
-        test_changing_password(librarian1, sitewide_librarian)
-        test_changing_password(librarian2, sitewide_librarian)
-
-        # Various types of user trying to change a manager's password
-        # Manager 1
-        test_changing_password(system, manager1, allowed=True)
-        test_changing_password(sitewide_manager, manager1, allowed=True)
-        test_changing_password(manager1, manager1, allowed=True)
-        test_changing_password(sitewide_librarian, manager1)
-        test_changing_password(manager2, manager1)
-        test_changing_password(librarian2, manager1)
-        # Manager 2
-        test_changing_password(system, manager2, allowed=True)
-        test_changing_password(sitewide_manager, manager2, allowed=True)
-        test_changing_password(manager2, manager2, allowed=True)
-        test_changing_password(sitewide_librarian, manager2)
-        test_changing_password(manager1, manager2)
-        test_changing_password(librarian1, manager2)
-
-        # Various types of user trying to change a librarian's password
-        # Librarian 1
-        test_changing_password(system, librarian1, allowed=True)
-        test_changing_password(sitewide_manager, librarian1, allowed=True)
-        test_changing_password(manager1, librarian1, allowed=True)
-        test_changing_password(sitewide_librarian, librarian1)
-        test_changing_password(manager2, librarian1)
-        test_changing_password(librarian2, librarian1)
-        # Librarian 2
-        test_changing_password(system, librarian2, allowed=True)
-        test_changing_password(sitewide_manager, librarian2, allowed=True)
-        test_changing_password(manager2, librarian2, allowed=True)
-        test_changing_password(sitewide_librarian, librarian2)
-        test_changing_password(manager1, librarian2)
-        test_changing_password(librarian1, librarian2)
-
-        # Library crossover tests
-        manager1_2, ignore = create(
-            db.session, Admin, email="library_manager_l1_l2@example.com"
-        )
-        manager1_2.add_role(AdminRole.LIBRARY_MANAGER, l1)
-        manager1_2.add_role(AdminRole.LIBRARY_MANAGER, l2)
-        # A manager of library1 should not be allowed for a manager of library1 and library2
-        test_changing_password(system, manager1_2, allowed=True)
-        test_changing_password(sitewide_manager, manager1_2, allowed=True)
-        test_changing_password(manager1_2, manager1_2, allowed=True)
-        test_changing_password(sitewide_librarian, manager1_2)
-        test_changing_password(manager1, manager1_2)
-        test_changing_password(manager2, manager1_2)
-        test_changing_password(librarian1, manager1_2)
-        # A manager of both libraries should be able to change the passwords of both
-        test_changing_password(manager1_2, manager1, allowed=True)
-        test_changing_password(manager1_2, manager2, allowed=True)
-        test_changing_password(manager1_2, librarian1, allowed=True)
-        test_changing_password(manager1_2, librarian2, allowed=True)
-        test_changing_password(manager1_2, system)
-        test_changing_password(manager1_2, sitewide_manager)
-        test_changing_password(manager1_2, sitewide_librarian)
+            with context_manager:
+                controller_fixture.controller.process_post()
 
     def test_individual_admins_post_create(
         self,
         flask_app_fixture: FlaskAppFixture,
         db: DatabaseTransactionFixture,
-        controller: IndividualAdminSettingsController,
+        controller_fixture: IndividualAdminControllerFixture,
     ):
         with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
@@ -571,7 +627,7 @@ class TestIndividualAdmins:
                     ),
                 ]
             )
-            response = controller.process_post()
+            response = controller_fixture.controller.process_post()
             assert response.status_code == 201
 
         # The admin was created.
@@ -606,7 +662,7 @@ class TestIndividualAdmins:
                     ),
                 ]
             )
-            response = controller.process_post()
+            response = controller_fixture.controller.process_post()
             assert response.status_code == 201
 
         admin_match = Admin.authenticate(db.session, "admin2@nypl.org", "pass")
@@ -623,7 +679,7 @@ class TestIndividualAdmins:
         self,
         flask_app_fixture: FlaskAppFixture,
         db: DatabaseTransactionFixture,
-        controller: IndividualAdminSettingsController,
+        controller_fixture: IndividualAdminControllerFixture,
     ):
         # An admin exists.
         admin, ignore = create(
@@ -653,7 +709,7 @@ class TestIndividualAdmins:
                     ),
                 ]
             )
-            response = controller.process_post()
+            response = controller_fixture.controller.process_post()
             assert response.status_code == 200
 
         assert admin.email == response.get_data(as_text=True)
@@ -681,7 +737,7 @@ class TestIndividualAdmins:
         self,
         flask_app_fixture: FlaskAppFixture,
         db: DatabaseTransactionFixture,
-        controller: IndividualAdminSettingsController,
+        controller_fixture: IndividualAdminControllerFixture,
     ):
         librarian, ignore = create(db.session, Admin, email=db.fresh_str())
         librarian.password = "password"
@@ -698,26 +754,26 @@ class TestIndividualAdmins:
         ):
             pytest.raises(
                 AdminNotAuthorized,
-                controller.process_delete,
+                controller_fixture.controller.process_delete,
                 librarian.email,
             )
 
         with flask_app_fixture.test_request_context(
             "/", method="DELETE", admin=sitewide_manager
         ):
-            response = controller.process_delete(librarian.email)
+            response = controller_fixture.controller.process_delete(librarian.email)
             assert response.status_code == 200
 
             pytest.raises(
                 AdminNotAuthorized,
-                controller.process_delete,
+                controller_fixture.controller.process_delete,
                 system_admin.email,
             )
 
         with flask_app_fixture.test_request_context(
             "/", method="DELETE", admin=system_admin
         ):
-            response = controller.process_delete(system_admin.email)
+            response = controller_fixture.controller.process_delete(system_admin.email)
             assert response.status_code == 200
 
         admin = get_one(db.session, Admin, id=librarian.id)
@@ -730,7 +786,7 @@ class TestIndividualAdmins:
         self,
         flask_app_fixture: FlaskAppFixture,
         db: DatabaseTransactionFixture,
-        controller: IndividualAdminSettingsController,
+        controller_fixture: IndividualAdminControllerFixture,
     ):
         """Creating an admin that's not a system admin will fail."""
 
@@ -758,14 +814,14 @@ class TestIndividualAdmins:
             flask.request.files = ImmutableMultiDict()
             pytest.raises(
                 AdminNotAuthorized,
-                controller.process_post,
+                controller_fixture.controller.process_post,
             )
 
     def test_individual_admins_post_create_requires_password(
         self,
         flask_app_fixture: FlaskAppFixture,
         db: DatabaseTransactionFixture,
-        controller: IndividualAdminSettingsController,
+        controller_fixture: IndividualAdminControllerFixture,
     ):
         """The password is required."""
 
@@ -780,7 +836,7 @@ class TestIndividualAdmins:
                 ]
             )
             flask.request.files = ImmutableMultiDict()
-            response = controller.process_post()
+            response = controller_fixture.controller.process_post()
             assert 400 == response.status_code
             assert response.uri == INCOMPLETE_CONFIGURATION.uri
 
@@ -788,7 +844,7 @@ class TestIndividualAdmins:
         self,
         flask_app_fixture: FlaskAppFixture,
         db: DatabaseTransactionFixture,
-        controller: IndividualAdminSettingsController,
+        controller_fixture: IndividualAdminControllerFixture,
     ):
         """The password is required."""
 
@@ -804,7 +860,7 @@ class TestIndividualAdmins:
                 ]
             )
             flask.request.files = ImmutableMultiDict()
-            response = controller.process_post()
+            response = controller_fixture.controller.process_post()
             assert 400 == response.status_code
             assert response.uri == INCOMPLETE_CONFIGURATION.uri
 
@@ -812,7 +868,7 @@ class TestIndividualAdmins:
         self,
         flask_app_fixture: FlaskAppFixture,
         db: DatabaseTransactionFixture,
-        controller: IndividualAdminSettingsController,
+        controller_fixture: IndividualAdminControllerFixture,
     ):
         """Creating a system admin with a password works."""
 
@@ -828,7 +884,7 @@ class TestIndividualAdmins:
                 ]
             )
             flask.request.files = ImmutableMultiDict()
-            response = controller.process_post()
+            response = controller_fixture.controller.process_post()
             assert 201 == response.status_code
 
         # The admin was created.
@@ -845,7 +901,7 @@ class TestIndividualAdmins:
         self,
         flask_app_fixture: FlaskAppFixture,
         db: DatabaseTransactionFixture,
-        controller: IndividualAdminSettingsController,
+        controller_fixture: IndividualAdminControllerFixture,
     ):
         """Creating a second admin with a password works."""
 
@@ -866,14 +922,14 @@ class TestIndividualAdmins:
                 ]
             )
             flask.request.files = ImmutableMultiDict()
-            response = controller.process_post()
+            response = controller_fixture.controller.process_post()
             assert 201 == response.status_code
 
     def test_individual_admins_post_create_second_admin_no_roles(
         self,
         flask_app_fixture: FlaskAppFixture,
         db: DatabaseTransactionFixture,
-        controller: IndividualAdminSettingsController,
+        controller_fixture: IndividualAdminControllerFixture,
     ):
         """Creating a second admin with a password works."""
 
@@ -890,14 +946,14 @@ class TestIndividualAdmins:
                 [("email", "second_admin@nypl.org"), ("password", "pass")]
             )
             flask.request.files = ImmutableMultiDict()
-            response = controller.process_post()
+            response = controller_fixture.controller.process_post()
             assert 201 == response.status_code
 
     def test_individual_admins_post_create_second_admin_no_password(
         self,
         flask_app_fixture: FlaskAppFixture,
         db: DatabaseTransactionFixture,
-        controller: IndividualAdminSettingsController,
+        controller_fixture: IndividualAdminControllerFixture,
     ):
         """Creating a second admin without a password fails."""
 
@@ -917,14 +973,14 @@ class TestIndividualAdmins:
                 ]
             )
             flask.request.files = ImmutableMultiDict()
-            response = controller.process_post()
+            response = controller_fixture.controller.process_post()
             assert 400 == response.status_code
 
     def test_individual_admins_post_create_second_admin_empty_password(
         self,
         flask_app_fixture: FlaskAppFixture,
         db: DatabaseTransactionFixture,
-        controller: IndividualAdminSettingsController,
+        controller_fixture: IndividualAdminControllerFixture,
     ):
         """Creating a second admin without a password fails."""
 
@@ -945,14 +1001,14 @@ class TestIndividualAdmins:
                 ]
             )
             flask.request.files = ImmutableMultiDict()
-            response = controller.process_post()
+            response = controller_fixture.controller.process_post()
             assert 400 == response.status_code
 
     def test_individual_admins_post_create_second_admin_blank_password(
         self,
         flask_app_fixture: FlaskAppFixture,
         db: DatabaseTransactionFixture,
-        controller: IndividualAdminSettingsController,
+        controller_fixture: IndividualAdminControllerFixture,
     ):
         """Creating a second admin without a password fails."""
 
@@ -973,5 +1029,5 @@ class TestIndividualAdmins:
                 ]
             )
             flask.request.files = ImmutableMultiDict()
-            response = controller.process_post()
+            response = controller_fixture.controller.process_post()
             assert 400 == response.status_code

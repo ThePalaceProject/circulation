@@ -6,6 +6,7 @@ Create Date: 2024-12-02 19:42:23.775579+00:00
 
 """
 
+import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
@@ -18,8 +19,10 @@ depends_on = None
 def upgrade() -> None:
     conn = op.get_bind()
     conn.execute(
-        "UPDATE libraries set settings_dict = "
-        "settings_dict - array['facets_enabled_collection', 'facets_default_collection']"
+        sa.text(
+            "UPDATE libraries set settings_dict = "
+            "settings_dict - array['facets_enabled_collection', 'facets_default_collection']"
+        )
     )
 
 

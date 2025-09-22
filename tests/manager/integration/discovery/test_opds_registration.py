@@ -772,7 +772,12 @@ class TestLibraryRegistrationScript:
             "--registry-url=http://registry.com",
         ]
         manager = MockCirculationManager(db.session, services_fixture.services)
-        script.do_run(cmd_args=cmd_args, manager=manager)
+        from palace.manager.api.app import app
+
+        try:
+            script.do_run(cmd_args=cmd_args, manager=manager)
+        finally:
+            delattr(app, "manager")
 
         # One library was processed.
         processed = script.processed.pop()
@@ -786,7 +791,12 @@ class TestLibraryRegistrationScript:
 
         # Now run the script again without specifying a particular
         # library or the --stage argument.
-        script.do_run(cmd_args=["--registry-url=http://registry.com"], manager=manager)
+        try:
+            script.do_run(
+                cmd_args=["--registry-url=http://registry.com"], manager=manager
+            )
+        finally:
+            delattr(app, "manager")
 
         # Every library was processed.
         assert {library, library2} == {x.library for x in script.processed}

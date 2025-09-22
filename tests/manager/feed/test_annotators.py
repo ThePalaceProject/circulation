@@ -397,7 +397,7 @@ class TestAnnotators:
         session.add(sample_link)
         session.commit()
 
-        with DBStatementCounter(db.database.connection) as counter:
+        with DBStatementCounter(db.connection) as counter:
             links = Annotator.samples(edition)
             count = counter.count
 
