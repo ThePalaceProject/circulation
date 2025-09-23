@@ -139,3 +139,9 @@ def test_exponential_backoff_combined_with_base() -> None:
 def test_exponential_backoff_invalid_base_too_small(base: float) -> None:
     with pytest.raises(PalaceValueError, match="base must be greater than 1"):
         exponential_backoff(0, base=base)
+
+
+@pytest.mark.parametrize("max_time", [-1.0, -0.1, 0.0])
+def test_exponential_backoff_invalid_max_time(max_time: float) -> None:
+    with pytest.raises(PalaceValueError, match="max_time must be non-negative"):
+        exponential_backoff(0, max_time=max_time)
