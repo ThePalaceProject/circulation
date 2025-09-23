@@ -1,6 +1,7 @@
 import logging
 from collections.abc import MutableMapping
 from typing import Any
+from unittest.mock import Mock
 
 import pytest
 from pytest import LogCaptureFixture
@@ -10,6 +11,7 @@ from palace.manager.util.log import (
     ExtraDataLoggerAdapter,
     LoggerAdapterType,
     LoggerMixin,
+    elapsed_time_logging,
     log_elapsed_time,
     pluralize,
 )
@@ -131,3 +133,130 @@ class TestExtraDataLoggerAdapter:
         test_instance = ClassThatUsesExtraDataAdapter("test_instance")
         test_instance.do_something("Another test message")
         assert "Another test message [test_value]" in log_capture.text
+
+
+class TestElapsedTimeLogging:
+    class MockLogger:
+        def __init__(self):
+            self.messages: list[str] = []
+            self.log_method = Mock(side_effect=lambda msg: self.messages.append(msg))
+
+    @pytest.fixture
+    def mock_logger(self) -> MockLogger:
+        """Fixture that provides a mock log method with message collection."""
+        return TestElapsedTimeLogging.MockLogger()
+
+    def test_basic_usage(self, mock_logger: MockLogger):
+        with elapsed_time_logging(log_method=mock_logger.log_method):
+            pass
+
+        assert len(mock_logger.messages) == 2
+        assert mock_logger.messages[0] == "Starting..."
+        assert "Completed. (elapsed time:" in mock_logger.messages[1]
+        assert "seconds)" in mock_logger.messages[1]
+        mock_logger.log_method.assert_called()
+
+    def test_with_message_prefix(self, mock_logger: MockLogger):
+        with elapsed_time_logging(
+            log_method=mock_logger.log_method, message_prefix="Test Operation"
+        ):
+            pass
+
+        assert len(mock_logger.messages) == 2
+        assert mock_logger.messages[0] == "Test Operation: Starting..."
+        assert "Test Operation: Completed. (elapsed time:" in mock_logger.messages[1]
+
+    def test_skip_start_message(self, mock_logger: MockLogger):
+        with elapsed_time_logging(log_method=mock_logger.log_method, skip_start=True):
+            pass
+
+        assert len(mock_logger.messages) == 1
+        assert "Completed. (elapsed time:" in mock_logger.messages[0]
+        assert "Starting..." not in mock_logger.messages[0]
+
+    def test_with_prefix_and_skip_start(self, mock_logger: MockLogger):
+        with elapsed_time_logging(
+            log_method=mock_logger.log_method,
+            message_prefix="Custom Task",
+            skip_start=True,
+        ):
+            pass
+
+        assert len(mock_logger.messages) == 1
+        assert "Custom Task: Completed. (elapsed time:" in mock_logger.messages[0]
+
+    def test_exception_raised(self, mock_logger: MockLogger):
+        with pytest.raises(ValueError):
+            with elapsed_time_logging(log_method=mock_logger.log_method):
+                raise ValueError("Test exception")
+
+        assert len(mock_logger.messages) == 2
+        assert mock_logger.messages[0] == "Starting..."
+        assert "Failed (raised ValueError). (elapsed time:" in mock_logger.messages[1]
+
+    def test_exception_with_prefix(self, mock_logger: MockLogger):
+        with pytest.raises(RuntimeError):
+            with elapsed_time_logging(
+                log_method=mock_logger.log_method, message_prefix="Error Task"
+            ):
+                raise RuntimeError("Something went wrong")
+
+        assert len(mock_logger.messages) == 2
+        assert mock_logger.messages[0] == "Error Task: Starting..."
+        assert (
+            "Error Task: Failed (raised RuntimeError). (elapsed time:"
+            in mock_logger.messages[1]
+        )
+
+    def test_exception_with_skip_start(self, mock_logger: MockLogger):
+        with pytest.raises(Exception):
+            with elapsed_time_logging(
+                log_method=mock_logger.log_method, skip_start=True
+            ):
+                raise Exception("Test")
+
+        assert len(mock_logger.messages) == 1
+        assert "Failed (raised Exception). (elapsed time:" in mock_logger.messages[0]
+
+    def test_elapsed_time_format(self, mock_logger: MockLogger):
+        import time
+
+        with elapsed_time_logging(log_method=mock_logger.log_method):
+            time.sleep(0.01)
+
+        assert len(mock_logger.messages) == 2
+        elapsed_msg = mock_logger.messages[1]
+
+        import re
+
+        match = re.search(r"elapsed time: (\d+\.\d{4}) seconds", elapsed_msg)
+        assert match is not None
+        elapsed_time = float(match.group(1))
+        assert elapsed_time >= 0.01
+        assert elapsed_time < 0.1
+
+    def test_with_actual_logger(self, caplog: LogCaptureFixture):
+        caplog.set_level(logging.INFO)
+        logger = logging.getLogger("test_elapsed_time")
+
+        with elapsed_time_logging(log_method=logger.info, message_prefix="Logger Test"):
+            pass
+
+        assert len(caplog.records) == 2
+        assert caplog.records[0].message == "Logger Test: Starting..."
+        assert "Logger Test: Completed. (elapsed time:" in caplog.records[1].message
+
+    def test_nested_context_managers(self, mock_logger: MockLogger):
+        with elapsed_time_logging(
+            log_method=mock_logger.log_method, message_prefix="Outer"
+        ):
+            with elapsed_time_logging(
+                log_method=mock_logger.log_method, message_prefix="Inner"
+            ):
+                pass
+
+        assert len(mock_logger.messages) == 4
+        assert mock_logger.messages[0] == "Outer: Starting..."
+        assert mock_logger.messages[1] == "Inner: Starting..."
+        assert "Inner: Completed." in mock_logger.messages[2]
+        assert "Outer: Completed." in mock_logger.messages[3]
