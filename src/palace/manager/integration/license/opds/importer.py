@@ -116,12 +116,6 @@ class OpdsImporter(Generic[FeedType, PublicationType], LoggerMixin):
             return license_.metadata.identifier, LicenseInfo.model_validate_json(
                 response.content
             )
-        except BadResponseException as e:
-            self.log.warning(
-                f"License Info Document is not available. "
-                f"Status link {license_link} failed with {e.response.status_code} code. {e}"
-            )
-            return None
         except ValidationError as e:
             self.log.error(f"License Info Document at {license_link} is not valid. {e}")
             return None
@@ -181,9 +175,17 @@ class OpdsImporter(Generic[FeedType, PublicationType], LoggerMixin):
         :return: A list of tuples containing the identifier, publication, and fetched license documents.
         """
         tasks = [
-            self._fetch_license_documents(publication) for _, publication, _ in results
+            asyncio.create_task(self._fetch_license_documents(publication))
+            for _, publication, _ in results
         ]
-        fetched_license_documents = await asyncio.gather(*tasks)
+
+        try:
+            fetched_license_documents = await asyncio.gather(*tasks)
+        except BadResponseException as e:
+            self.log.error(f"Failed to fetch license documents: {e}")
+            for task in tasks:
+                task.cancel()
+            raise
 
         return [
             (identifier, publication, license_info_documents)
@@ -277,6 +279,7 @@ class OpdsImporter(Generic[FeedType, PublicationType], LoggerMixin):
         with elapsed_time_logging(
             log_method=self.log.info,
             message_prefix=f"Fetching {len(results)} license documents",
+            skip_start=True,
         ):
             results_with_license_info = asyncio.run(
                 self._fetch_license_documents_concurrently(results)

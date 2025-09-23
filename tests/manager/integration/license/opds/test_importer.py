@@ -4,6 +4,8 @@ import uuid
 from typing import Any
 from unittest.mock import MagicMock
 
+import pytest
+
 from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.integration.license.opds.odl.api import OPDS2WithODLApi
 from palace.manager.integration.license.opds.odl.importer import (
@@ -15,6 +17,7 @@ from palace.manager.opds.odl.terms import Terms
 from palace.manager.opds.opds2 import PublicationFeedNoValidation
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.util.datetime_helpers import utc_now
+from palace.manager.util.http.exception import BadResponseException
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import OPDS2FilesFixture
 from tests.fixtures.http import MockAsyncClientFixture
@@ -48,6 +51,9 @@ class TestOpdsImporter:
 
         # Use the real AsyncClient but with mocked transport via async_http_client fixture
 
+        # Set the backoff factor to 0 to avoid delays in tests
+        importer._async_http_client._backoff_factor = 0
+
         # Create a mock license with required structure
         def create_mock_license(identifier: str) -> License:
             mock_license = MagicMock(spec=License)
@@ -65,8 +71,11 @@ class TestOpdsImporter:
             async_http_client.queue_response(400, content=b"Bad Request")
 
         license_mock = create_mock_license("test-id-1")
-        result = await importer._fetch_license_document(license_mock)
-        assert result is None
+        with pytest.raises(
+            BadResponseException, match="Got status code 400 from external server"
+        ):
+            await importer._fetch_license_document(license_mock)
+
         # Should have multiple requests due to retries (1 initial + 3 retries = 4 total)
         assert len(async_http_client.requests) == 4
         assert all(
