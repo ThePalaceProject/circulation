@@ -1,8 +1,9 @@
+import asyncio
 import datetime
 import json
 import uuid
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -12,7 +13,11 @@ from palace.manager.integration.license.opds.odl.importer import (
     importer_from_collection,
 )
 from palace.manager.opds.odl.info import Checkouts, LicenseInfo, LicenseStatus
-from palace.manager.opds.odl.odl import License, Opds2OrOpds2WithOdlPublication
+from palace.manager.opds.odl.odl import (
+    License,
+    Opds2OrOpds2WithOdlPublication,
+    Publication,
+)
 from palace.manager.opds.odl.terms import Terms
 from palace.manager.opds.opds2 import PublicationFeedNoValidation
 from palace.manager.sqlalchemy.model.identifier import Identifier
@@ -352,3 +357,115 @@ class TestOpdsImporter:
         assert identifier.type == Identifier.ISBN
         assert identifier.identifier == "978-3-16-148410-0"
         assert bibliographic.primary_identifier_data == identifier
+
+    async def test__fetch_license_documents_concurrently_cancels_on_bad_response(
+        self,
+        db: DatabaseTransactionFixture,
+        services_fixture: ServicesFixture,
+        async_http_client: MockAsyncClientFixture,
+        opds2_files_fixture: OPDS2FilesFixture,
+    ) -> None:
+        """Test that when one fetch returns BadResponseException, all other outstanding tasks are cancelled."""
+        collection = db.collection(
+            protocol=OPDS2WithODLApi,
+            settings=db.opds2_odl_settings(data_source="test collection"),
+        )
+        registry = services_fixture.services.integration_registry().license_providers()
+        importer = importer_from_collection(collection, registry)
+
+        # Set the backoff factor to 0 to avoid delays in tests
+        importer._async_http_client._backoff_factor = 0
+
+        # Create a mock publication with licenses
+        def create_mock_publication_with_license(
+            identifier: str,
+        ) -> tuple[Publication, list[License]]:
+            mock_publication = MagicMock()
+            mock_license = MagicMock()
+            mock_license.metadata.identifier = identifier
+            mock_license.metadata.availability.available = True
+            mock_link = MagicMock()
+            mock_link.href = f"http://example.org/license/{identifier}"
+            mock_license.links.get = MagicMock(return_value=mock_link)
+            return mock_publication, [mock_license]
+
+        # Create test input data
+        results = []
+        for i in range(4):
+            identifier = IdentifierData(type="Test Identifier", identifier=f"{i}")
+            publication, licenses = create_mock_publication_with_license(f"license-{i}")
+            license_urls: dict[str, str] = {
+                f"license-{i}": f"http://example.org/license/{i}"
+            }
+            results.append((identifier, publication, license_urls))
+
+        # Track which tasks get cancelled
+        cancelled_tasks: list[asyncio.Task[Any]] = []
+        created_tasks: list[asyncio.Task[Any]] = []
+
+        # Track asyncio task creation and cancellation
+        original_create_task = asyncio.create_task
+
+        def track_create_task(coro: Any) -> asyncio.Task[Any]:
+            task = original_create_task(coro)
+            created_tasks.append(task)
+
+            # Wrap the cancel method to track cancellations
+            original_cancel = task.cancel
+
+            def tracked_cancel(msg: Any = None) -> bool:
+                result = original_cancel(msg)
+                if result:
+                    cancelled_tasks.append(task)
+                return result
+
+            task.cancel = tracked_cancel
+            return task
+
+        # Mock _fetch_license_documents to simulate one task failing
+        call_count = 0
+
+        async def mock_fetch_license_documents(
+            publication: Any,
+        ) -> dict[str, LicenseInfo]:
+            nonlocal call_count
+            call_count += 1
+
+            # First call completes successfully
+            if call_count == 1:
+                return {}
+
+            # Second call raises BadResponseException
+            elif call_count == 2:
+                await asyncio.sleep(0.01)  # Small delay to ensure other tasks start
+                # Create a mock response with status_code for the exception
+                mock_response = MagicMock()
+                mock_response.status_code = 500
+                mock_response.text = "Test error response"
+                raise BadResponseException(
+                    "http://test.com", "Test error", mock_response
+                )
+
+            # Other calls should be long-running (will be cancelled)
+            else:
+                await asyncio.sleep(10)
+                return {}
+
+        # Apply the mocks
+        with (
+            patch.object(asyncio, "create_task", side_effect=track_create_task),
+            patch.object(
+                importer,
+                "_fetch_license_documents",
+                side_effect=mock_fetch_license_documents,
+            ),
+        ):
+            # Call the method and expect it to raise BadResponseException
+            with pytest.raises(BadResponseException, match="Test error"):
+                await importer._fetch_license_documents_concurrently(results)
+
+            # Verify that tasks were created
+            assert len(created_tasks) == 4
+
+            # After the exception, the other tasks should have been cancelled
+            assert len(cancelled_tasks) == 2

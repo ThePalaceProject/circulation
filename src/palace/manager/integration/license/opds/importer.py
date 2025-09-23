@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from functools import cached_property
 from typing import Generic, Literal, TypeVar
@@ -166,7 +166,7 @@ class OpdsImporter(Generic[FeedType, PublicationType], LoggerMixin):
 
     async def _fetch_license_documents_concurrently(
         self,
-        results: list[tuple[IdentifierData, PublicationType, dict[str, str]]],
+        results: Sequence[tuple[IdentifierData, PublicationType, dict[str, str]]],
     ) -> list[tuple[IdentifierData, PublicationType, dict[str, LicenseInfo]]]:
         """
         Fetch license documents for multiple publications concurrently.
