@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import random
 from collections.abc import AsyncIterable, Iterable, Mapping, Sequence
 from types import TracebackType
 from typing import IO, Any, TypedDict, Union, cast
@@ -9,6 +8,7 @@ from typing import IO, Any, TypedDict, Union, cast
 import httpx
 from typing_extensions import Self, Unpack
 
+from palace.manager.util.backoff import exponential_backoff
 from palace.manager.util.http.base import (
     ResponseCodesTypes,
     get_default_headers,
@@ -196,7 +196,7 @@ WORKER_DEFAULT_TIMEOUT = httpx.Timeout(20.0, pool=None)
 WORKER_DEFAULT_MAX_REDIRECTS = 20
 WORKER_DEFAULT_MAX_RETRIES = 3
 WORKER_DEFAULT_BACKOFF_FACTOR = 1
-WORKER_DEFAULT_MAX_BACKOFF = 30
+WORKER_DEFAULT_MAX_BACKOFF = 45
 
 DEFAULT_LIMITS = httpx.Limits(max_connections=10, max_keepalive_connections=None)
 
@@ -321,19 +321,6 @@ class AsyncClient(LoggerMixin):
             max_backoff=WORKER_DEFAULT_MAX_BACKOFF,
         )
 
-    @staticmethod
-    def _calculate_backoff(
-        attempt: int, backoff_factor: float, max_backoff: float
-    ) -> float:
-        """
-        Calculate the backoff time for a given retry attempt, with jitter.
-        """
-        base_delay: float = backoff_factor * (2**attempt)
-        jitter = random.uniform(0.5, 1.5)  # Add ±50% jitter
-        calculated_delay = base_delay * jitter
-        delay = min(calculated_delay, max_backoff)
-        return delay
-
     async def _perform_request(
         self,
         method: str,
@@ -400,8 +387,11 @@ class AsyncClient(LoggerMixin):
                 if attempt >= max_retries:
                     raise e
 
+                # Calculate backoff time
+                delay = exponential_backoff(
+                    attempt, factor=backoff_factor, max_time=max_backoff
+                )
                 attempt += 1
-                delay = self._calculate_backoff(attempt, backoff_factor, max_backoff)
                 self.log.warning(
                     f"Request to {url} failed ({e}). "
                     f"Retrying in {delay:.2f}s... (attempt {attempt}/{max_retries})"
