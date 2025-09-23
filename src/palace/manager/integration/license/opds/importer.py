@@ -182,6 +182,9 @@ class OpdsImporter(Generic[FeedType, PublicationType], LoggerMixin):
         try:
             fetched_license_documents = await asyncio.gather(*tasks)
         except BadResponseException as e:
+            # If any task fails, we cancel all the outstanding tasks, so we aren't
+            # doing unnecessary fetches, then re-raise the exception to be handled
+            # by the caller.
             self.log.error(f"Failed to fetch license documents: {e}")
             for task in tasks:
                 task.cancel()
