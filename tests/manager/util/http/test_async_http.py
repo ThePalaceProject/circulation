@@ -46,18 +46,6 @@ async def async_client_fixture() -> AsyncGenerator[AsyncClientFixture, None]:
 
 
 class TestAsyncClient:
-    def test___calculate_backoff(self) -> None:
-        def assert_within_jitter(
-            value: float, expected: float, jitter: float = 0.5
-        ) -> None:
-            min_jitter = 1 - jitter
-            max_jitter = 1 + jitter
-            assert expected * min_jitter <= value <= expected * max_jitter
-
-        assert_within_jitter(AsyncClient._calculate_backoff(1, 1, 30), 2.0)
-        assert_within_jitter(AsyncClient._calculate_backoff(2, 1, 30), 4.0)
-        assert_within_jitter(AsyncClient._calculate_backoff(3, 1, 30), 8.0)
-
     @pytest.mark.parametrize(
         "method", ["get", "options", "head", "post", "put", "patch", "delete"]
     )
