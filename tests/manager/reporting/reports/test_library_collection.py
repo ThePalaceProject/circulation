@@ -33,7 +33,7 @@ class LibraryCollectionReportFixture:
         KEY = "test_report"
         TITLE = "Test Report"
 
-        def _run_report(self) -> bool:
+        def _run_report(self, *args, **kwargs) -> bool:
             return True
 
     @property

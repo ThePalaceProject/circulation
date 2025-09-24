@@ -222,7 +222,7 @@ class LibraryCollectionReport(LoggerMixin):
                 f"Report file added to Zip archive '{archive.filename}' as '{member_name}'."
             )
 
-    def _run_report(self) -> bool:
+    def _run_report(self, *, session: Session) -> bool:
         """Run the report for the given library."""
 
         library = self.library
@@ -233,7 +233,11 @@ class LibraryCollectionReport(LoggerMixin):
 
         # Instantiate the table objects for this report.
         tables = [
-            t(library=library, collection_ids=self.collection_ids)
+            t(
+                session=session,
+                library_id=library.id,
+                collection_ids=self.collection_ids,
+            )
             for t in self.table_classes
         ]
 
@@ -299,4 +303,4 @@ class LibraryCollectionReport(LoggerMixin):
             f"Set library '{self.library.name}' ({self.library.short_name}) for report '{self.title}' ({self.key})."
         )
 
-        return self._run_report()
+        return self._run_report(session=session)
