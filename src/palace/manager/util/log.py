@@ -85,12 +85,23 @@ def elapsed_time_logging(
     if not skip_start:
         log_method(f"{prefix}Starting...")
     tic = time.perf_counter()
+    exception_raised = None
     try:
         yield
+    except Exception as e:
+        exception_raised = e.__class__.__name__
+        raise
     finally:
         toc = time.perf_counter()
         elapsed_time = toc - tic
-        log_method(f"{prefix}Completed. (elapsed time: {elapsed_time:0.4f} seconds)")
+        completion_message = (
+            f"Failed (raised {exception_raised})"
+            if exception_raised is not None
+            else "Completed"
+        )
+        log_method(
+            f"{prefix}{completion_message}. (elapsed time: {elapsed_time:0.4f} seconds)"
+        )
 
 
 def logger_for_cls(cls: type[object]) -> logging.Logger:
