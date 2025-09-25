@@ -13,6 +13,7 @@ from palace.manager.util.backoff import exponential_backoff
 from palace.manager.util.http.base import (
     ResponseCodesTypes,
     get_default_headers,
+    parse_retry_after,
     raise_for_bad_response,
     status_code_matches,
 )
@@ -143,6 +144,21 @@ class RequestNoBodyKwargs(TypedDict, total=False):
     backoff is applied.
     """
 
+    respect_retry_after: bool
+    """
+    Whether to respect the Retry-After header when retrying requests.
+    If True and the server sends a Retry-After header, the client will wait
+    at least that long before retrying (using the larger of the calculated
+    backoff and the Retry-After value).
+    """
+
+    max_retry_after_delay: float
+    """
+    Maximum delay in seconds to respect from Retry-After header.
+    If the Retry-After header specifies a longer delay, this maximum will be used instead.
+    This prevents servers from causing excessive delays.
+    """
+
 
 class RequestKwargs(RequestNoBodyKwargs, total=False):
     """
@@ -207,6 +223,9 @@ WORKER_DEFAULT_BACKOFF = functools.partial(
 
 DEFAULT_LIMITS = httpx.Limits(max_connections=10, max_keepalive_connections=None)
 
+# Default maximum delay for Retry-After header (2 minutes)
+DEFAULT_MAX_RETRY_AFTER_DELAY = 2 * 60.0
+
 
 class AsyncClient(LoggerMixin):
     """
@@ -226,6 +245,8 @@ class AsyncClient(LoggerMixin):
         no_retry_status_codes: ResponseCodesTypes | None = None,
         max_retries: int = 0,
         backoff: Callable[[int], float] | None = None,
+        respect_retry_after: bool = True,
+        max_retry_after_delay: float = DEFAULT_MAX_RETRY_AFTER_DELAY,
     ) -> None:
         """
         Initialize the AsyncClient.
@@ -248,6 +269,13 @@ class AsyncClient(LoggerMixin):
         :param backoff:
             The default value for backoff for requests made with this client. This will be
             used if the backoff parameter is not provided to the request method.
+        :param respect_retry_after:
+            The default value for respect_retry_after for requests made with this client. This will be
+            used if the respect_retry_after parameter is not provided to the request method.
+        :param max_retry_after_delay:
+            The default maximum delay in seconds to respect from Retry-After header. This will be
+            used if the max_retry_after_delay parameter is not provided to the request method.
+            Prevents servers from causing excessive delays.
         """
 
         self._httpx_client = client
@@ -257,6 +285,8 @@ class AsyncClient(LoggerMixin):
         self._no_retry_status_codes = no_retry_status_codes or []
         self._max_retries = max_retries
         self._backoff = backoff
+        self._respect_retry_after = respect_retry_after
+        self._max_retry_after_delay = max_retry_after_delay
 
     @staticmethod
     def _defaults(kwargs: ClientKwargs) -> None:
@@ -390,6 +420,12 @@ class AsyncClient(LoggerMixin):
         )
         max_retries = kwargs.pop("max_retries", self._max_retries)
         backoff = kwargs.pop("backoff", self._backoff)
+        respect_retry_after = kwargs.pop(
+            "respect_retry_after", self._respect_retry_after
+        )
+        max_retry_after_delay = kwargs.pop(
+            "max_retry_after_delay", self._max_retry_after_delay
+        )
 
         attempt = 0
         while True:
@@ -408,15 +444,14 @@ class AsyncClient(LoggerMixin):
             except (BadResponseException, RequestTimedOut) as e:
                 # Check if this is a BadResponseException with a status code we shouldn't retry
                 should_retry = True
-                if isinstance(e, BadResponseException) and e.response:
-                    if status_code_matches(
-                        e.response.status_code, no_retry_status_codes
-                    ):
-                        should_retry = False
-                        self.log.info(
-                            f"Not retrying {url} - status code {e.response.status_code} "
-                            f"in no_retry_status_codes list"
-                        )
+                if isinstance(e, BadResponseException) and status_code_matches(
+                    e.response.status_code, no_retry_status_codes
+                ):
+                    should_retry = False
+                    self.log.info(
+                        f"Not retrying {url} - status code {e.response.status_code} "
+                        f"in no_retry_status_codes list"
+                    )
 
                 if not should_retry or attempt >= max_retries:
                     # Update the retry count before re-raising
@@ -425,6 +460,30 @@ class AsyncClient(LoggerMixin):
 
                 # Calculate backoff time
                 delay = backoff(attempt) if backoff is not None else 0
+
+                # Check for Retry-After header
+                if isinstance(e, BadResponseException) and respect_retry_after:
+                    retry_after_header = e.response.headers.get("Retry-After")
+                    retry_after_delay = parse_retry_after(retry_after_header)
+
+                    if retry_after_delay:
+                        # Apply max_retry_after_delay cap
+                        if retry_after_delay > max_retry_after_delay:
+                            self.log.warning(
+                                f"Retry-After header specified {retry_after_delay:.2f}s, "
+                                f"capping at max_retry_after_delay={max_retry_after_delay:.2f}s"
+                            )
+                            retry_after_delay = max_retry_after_delay
+
+                        # Use the larger of the two delays
+                        original_delay = delay
+                        delay = max(delay, retry_after_delay)
+                        if retry_after_delay > original_delay:
+                            self.log.info(
+                                f"Using Retry-After header delay of {retry_after_delay:.2f}s "
+                                f"(was going to use {original_delay:.2f}s)"
+                            )
+
                 attempt += 1
                 self.log.warning(
                     f"Request to {url} failed ({e}). "
@@ -432,7 +491,11 @@ class AsyncClient(LoggerMixin):
                 )
 
                 # Wait before retrying
-                await asyncio.sleep(delay)
+                await self._sleep(delay)
+
+    @staticmethod
+    async def _sleep(delay: float) -> None:
+        await asyncio.sleep(delay)
 
     async def get(
         self,

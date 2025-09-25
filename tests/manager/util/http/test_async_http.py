@@ -1,9 +1,12 @@
 from collections.abc import AsyncGenerator
-from unittest.mock import MagicMock, call, create_autospec, patch
+from datetime import timedelta
+from unittest.mock import AsyncMock, MagicMock, call, create_autospec, patch
 
 import httpx
 import pytest
+from freezegun import freeze_time
 
+from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.http.async_http import (
     WEB_DEFAULT_BACKOFF,
     WEB_DEFAULT_MAX_REDIRECTS,
@@ -423,6 +426,169 @@ class TestAsyncClient:
         assert response.text == "Success"
         # Should have 0 retries since it succeeded on first attempt
         assert response.extensions.get("retry_count") == 0
+
+    async def test_retry_after_header_seconds(
+        self,
+        async_client_fixture: AsyncClientFixture,
+        async_http_client: MockAsyncClientFixture,
+    ) -> None:
+        """Test that Retry-After header with delay-seconds format is respected."""
+        # Queue responses with Retry-After header
+        async_http_client.queue_response(503, headers={"Retry-After": "2"})
+        async_http_client.queue_response(200, content="Success")
+
+        client = async_client_fixture.client
+
+        # Track sleep calls to verify correct delay
+        with patch.object(client, "_sleep", new_callable=AsyncMock) as mock_sleep:
+            response = await client.get("http://example.com/test")
+
+        assert response.status_code == 200
+        assert response.text == "Success"
+
+        # Check we have the correct delay (should be 2.0 seconds from Retry-After, instead of 0.0 from backoff)
+        mock_sleep.assert_awaited_once_with(2.0)
+
+    @freeze_time()
+    async def test_retry_after_header_http_date(
+        self,
+        async_client_fixture: AsyncClientFixture,
+        async_http_client: MockAsyncClientFixture,
+    ) -> None:
+        """Test that Retry-After header with HTTP-date format is respected."""
+        # Calculate a future date (15 seconds from now)
+        future_date = utc_now() + timedelta(seconds=15)
+        retry_after_date = future_date.strftime("%a, %d %b %Y %H:%M:%S GMT")
+
+        # Queue responses with Retry-After header using HTTP-date
+        async_http_client.queue_response(503, headers={"Retry-After": retry_after_date})
+        async_http_client.queue_response(200, content="Success")
+
+        client = async_client_fixture.client
+
+        # Track sleep calls to verify correct delay
+        with patch.object(client, "_sleep", new_callable=AsyncMock) as mock_sleep:
+            response = await client.get("http://example.com/test")
+
+        assert response.status_code == 200
+        assert response.text == "Success"
+
+        # Check we have the correct delay (should be ~15 seconds from Retry-After date)
+        # Since the timestamp only has a 1-second resolution, the actual delay will be
+        # slightly less than 15 seconds depending on where in the current second we are.
+        mock_sleep.assert_awaited_once()
+        sleep_delay = mock_sleep.await_args.args[0]
+        assert 14 < sleep_delay <= 15
+
+    async def test_retry_after_uses_larger_delay(
+        self, async_http_client: MockAsyncClientFixture
+    ) -> None:
+        """Test that the larger of Retry-After and backoff delay is used."""
+
+        # Queue response with Retry-After of 5 seconds (larger than backoff)
+        async_http_client.queue_response(503, headers={"Retry-After": "5"})
+        async_http_client.queue_response(200, content="Success")
+
+        # Set up client with backoff that would normally wait 2 seconds
+        # Track sleep calls to verify correct delay
+        async with AsyncClient.for_worker(backoff=lambda retries: 2) as client:
+            with patch.object(client, "_sleep", new_callable=AsyncMock) as mock_sleep:
+                response = await client.get("http://example.com/test")
+
+        assert response.status_code == 200
+        assert response.text == "Success"
+
+        # Should use Retry-After value (5 seconds) instead of backoff (2 seconds)
+        mock_sleep.assert_awaited_once_with(5.0)
+
+    async def test_retry_after_disabled(
+        self, async_http_client: MockAsyncClientFixture
+    ) -> None:
+        """Test that Retry-After can be disabled with respect_retry_after=False."""
+
+        # Queue response with Retry-After header
+        async_http_client.queue_response(503, headers={"Retry-After": "10"})
+        async_http_client.queue_response(200, content="Success")
+
+        # Set up client with normal backoff of 2 seconds
+        async with AsyncClient.for_worker(backoff=lambda retries: 2) as client:
+            with patch.object(client, "_sleep", new_callable=AsyncMock) as mock_sleep:
+                # Disable Retry-After header respect
+                response = await client.get(
+                    "http://example.com/test", respect_retry_after=False
+                )
+
+        assert response.status_code == 200
+        assert response.text == "Success"
+
+        # Should use normal backoff (2 seconds) instead of Retry-After (10 seconds)
+        mock_sleep.assert_awaited_once_with(2)
+
+    async def test_retry_after_invalid_header(
+        self, async_http_client: MockAsyncClientFixture
+    ) -> None:
+        """Test that invalid Retry-After headers are gracefully ignored."""
+
+        # Queue response with invalid Retry-After header
+        async_http_client.queue_response(503, headers={"Retry-After": "invalid-value"})
+        async_http_client.queue_response(200, content="Success")
+
+        # Set up client with normal backoff of 3 seconds
+        async with AsyncClient.for_worker(backoff=lambda retries: 3) as client:
+            with patch.object(client, "_sleep", new_callable=AsyncMock) as mock_sleep:
+                response = await client.get("http://example.com/test")
+
+        assert response.status_code == 200
+        assert response.text == "Success"
+
+        # Should fall back to normal backoff when header is invalid
+        mock_sleep.assert_awaited_once_with(3)
+
+    async def test_max_retry_after_delay_caps_large_values(
+        self, async_http_client: MockAsyncClientFixture
+    ) -> None:
+        """Test that max_retry_after_delay caps excessive Retry-After values."""
+
+        # Queue response with large Retry-After header (1 hour)
+        async_http_client.queue_response(503, headers={"Retry-After": "3600"})
+        async_http_client.queue_response(200, content="Success")
+
+        # Set up client with normal backoff
+        async with AsyncClient.for_worker(backoff=lambda retries: 1) as client:
+            with patch.object(client, "_sleep", new_callable=AsyncMock) as mock_sleep:
+                # Use a small max_retry_after_delay of 10 seconds
+                response = await client.get(
+                    "http://example.com/test", max_retry_after_delay=10.0
+                )
+
+        assert response.status_code == 200
+        assert response.text == "Success"
+
+        # Should have capped the delay at 10 seconds
+        mock_sleep.assert_awaited_once_with(10.0)
+
+    async def test_max_retry_after_delay_allows_smaller_values(
+        self, async_http_client: MockAsyncClientFixture
+    ) -> None:
+        """Test that max_retry_after_delay doesn't affect smaller Retry-After values."""
+
+        # Queue response with small Retry-After header
+        async_http_client.queue_response(503, headers={"Retry-After": "2"})
+        async_http_client.queue_response(200, content="Success")
+
+        # Set up client with normal backoff
+        async with AsyncClient.for_worker(backoff=lambda retries: 1) as client:
+            with patch.object(client, "_sleep", new_callable=AsyncMock) as mock_sleep:
+                # Use a larger max_retry_after_delay
+                response = await client.get(
+                    "http://example.com/test", max_retry_after_delay=60.0
+                )
+
+        assert response.status_code == 200
+        assert response.text == "Success"
+
+        # Should have used the actual Retry-After value
+        mock_sleep.assert_awaited_once_with(2.0)
 
     async def test_client_default_headers(
         self, async_http_client: MockAsyncClientFixture
