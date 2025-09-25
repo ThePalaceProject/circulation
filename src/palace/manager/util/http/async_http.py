@@ -13,6 +13,7 @@ from palace.manager.util.http.base import (
     ResponseCodesTypes,
     get_default_headers,
     raise_for_bad_response,
+    status_code_matches,
 )
 from palace.manager.util.http.exception import (
     BadResponseException,
@@ -120,6 +121,13 @@ class RequestNoBodyKwargs(TypedDict, total=False):
     includes all 5xx response codes.
     """
 
+    no_retry_status_codes: ResponseCodesTypes
+    """
+    The HTTP response codes that should not trigger retries. If the response code
+    is in this list, no retry will be attempted even if the response would normally
+    cause a BadResponseException.
+    """
+
     max_retries: int
     """
     The maximum number of times to retry a request if it fails due to a
@@ -216,6 +224,7 @@ class AsyncClient(LoggerMixin):
         client: httpx.AsyncClient,
         allowed_response_codes: ResponseCodesTypes | None = None,
         disallowed_response_codes: ResponseCodesTypes | None = None,
+        no_retry_status_codes: ResponseCodesTypes | None = None,
         max_retries: int = 0,
         backoff_factor: float = 0,
         max_backoff: float = 0,
@@ -231,6 +240,10 @@ class AsyncClient(LoggerMixin):
         :param disallowed_response_codes:
             The default value for disallowed_response_codes for requests made with this client. This will be
             used if the disallowed_response_codes parameter is not provided to the request method.
+        :param no_retry_status_codes:
+            The default value for no_retry_status_codes for requests made with this client. This will be
+            used if the no_retry_status_codes parameter is not provided to the request method.
+            These status codes will not trigger retries even if they would normally cause a BadResponseException.
         :param max_retries:
             The default value for max_retries for requests made with this client. This will be
             used if the max_retries parameter is not provided to the request method.
@@ -246,6 +259,7 @@ class AsyncClient(LoggerMixin):
 
         self._allowed_response_codes = allowed_response_codes or []
         self._disallowed_response_codes = disallowed_response_codes or []
+        self._no_retry_status_codes = no_retry_status_codes or []
         self._max_retries = max_retries
         self._backoff_factor = backoff_factor
         self._max_backoff = max_backoff
@@ -275,6 +289,7 @@ class AsyncClient(LoggerMixin):
         *,
         allowed_response_codes: ResponseCodesTypes | None = None,
         disallowed_response_codes: ResponseCodesTypes | None = None,
+        no_retry_status_codes: ResponseCodesTypes | None = None,
         **kwargs: Unpack[ClientKwargs],
     ) -> Self:
         """
@@ -290,6 +305,7 @@ class AsyncClient(LoggerMixin):
             client=httpx.AsyncClient(**kwargs),
             allowed_response_codes=allowed_response_codes,
             disallowed_response_codes=disallowed_response_codes,
+            no_retry_status_codes=no_retry_status_codes,
             max_retries=WEB_DEFAULT_MAX_RETRIES,
             backoff_factor=WEB_DEFAULT_BACKOFF_FACTOR,
             max_backoff=WEB_DEFAULT_MAX_BACKOFF,
@@ -301,6 +317,7 @@ class AsyncClient(LoggerMixin):
         *,
         allowed_response_codes: ResponseCodesTypes | None = None,
         disallowed_response_codes: ResponseCodesTypes | None = None,
+        no_retry_status_codes: ResponseCodesTypes | None = None,
         **kwargs: Unpack[ClientKwargs],
     ) -> Self:
         """
@@ -316,6 +333,7 @@ class AsyncClient(LoggerMixin):
             client=httpx.AsyncClient(**kwargs),
             allowed_response_codes=allowed_response_codes,
             disallowed_response_codes=disallowed_response_codes,
+            no_retry_status_codes=no_retry_status_codes,
             max_retries=WORKER_DEFAULT_MAX_RETRIES,
             backoff_factor=WORKER_DEFAULT_BACKOFF_FACTOR,
             max_backoff=WORKER_DEFAULT_MAX_BACKOFF,
@@ -366,6 +384,9 @@ class AsyncClient(LoggerMixin):
         disallowed_response_codes = kwargs.pop(
             "disallowed_response_codes", self._disallowed_response_codes
         )
+        no_retry_status_codes = kwargs.pop(
+            "no_retry_status_codes", self._no_retry_status_codes
+        )
         max_retries = kwargs.pop("max_retries", self._max_retries)
         backoff_factor = kwargs.pop("backoff_factor", self._backoff_factor)
         max_backoff = kwargs.pop("max_backoff", self._max_backoff)
@@ -384,7 +405,15 @@ class AsyncClient(LoggerMixin):
                     **cast(Any, kwargs),
                 )
             except (BadResponseException, RequestTimedOut) as e:
-                if attempt >= max_retries:
+                # Check if this is a BadResponseException with a status code we shouldn't retry
+                should_retry = True
+                if isinstance(e, BadResponseException) and e.response:
+                    if status_code_matches(
+                        e.response.status_code, no_retry_status_codes
+                    ):
+                        should_retry = False
+
+                if not should_retry or attempt >= max_retries:
                     raise e
 
                 # Calculate backoff time
