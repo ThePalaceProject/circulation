@@ -21,7 +21,6 @@ from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Equivalency, Identifier
 from palace.manager.sqlalchemy.model.integration import (
     IntegrationConfiguration,
-    IntegrationLibraryConfiguration,
 )
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.licensing import LicensePool
@@ -29,8 +28,8 @@ from palace.manager.sqlalchemy.model.work import Work, WorkGenre
 from palace.manager.sqlalchemy.util import get_one
 
 
-def library_all_titles_query() -> Select:
-    """Select the results to report on."""
+def collections_all_titles_query() -> Select:
+    """A query for all titles for the designated collections."""
 
     work_genre_alias = aliased(WorkGenre)
     genre_alias = aliased(Genre)
@@ -93,14 +92,7 @@ def library_all_titles_query() -> Select:
             IntegrationConfiguration,
             Collection.integration_configuration_id == IntegrationConfiguration.id,
         )
-        .join(
-            IntegrationLibraryConfiguration,
-            Collection.integration_configuration_id
-            == IntegrationLibraryConfiguration.parent_id,
-        )
-        .join(Library, IntegrationLibraryConfiguration.library_id == Library.id)
         .where(
-            Library.id == bindparam("library_id"),
             IntegrationConfiguration.id.in_(
                 bindparam("integration_ids", expanding=True)
             ),
@@ -118,12 +110,12 @@ TReturn = TypeVar("TReturn")
 
 
 class LibraryAllTitleReportTable(ReportTable):
-    """A report table with all titles in the specified library."""
+    """A report table with all titles in a library's collections."""
 
     DEFINITION = TabularQueryDefinition(
         key="all-title",
         title="All Title",
-        statement=library_all_titles_query(),
+        statement=collections_all_titles_query(),
     )
 
     @property
@@ -164,13 +156,13 @@ class LibraryAllTitleReportTable(ReportTable):
     ) -> list[Collection]:
         """Return the collections to be included in the results.
 
+        :param session: A database session.
         :param library_id: The id of the library.
         :param collection_ids: IDs requested for inclusion. If provided, all
             requested collections must be among the given library's *associated*
             collections to be considered eligible. Otherwise (i.e., not provided),
             all *active* collections for the library are considered eligible.
         :return: The list of collections.
-
         :raises PalaceValueError: If any of the requested collections are not among
             the library's associated collections.
         """
@@ -200,14 +192,11 @@ class LibraryAllTitleReportTable(ReportTable):
 
     @property
     def rows(self) -> TTabularRows:
-        # Get the integration IDs for the collections.
+        """Run the query to get the rows."""
         integration_ids: list[int] = [
             c.integration_configuration_id for c in self.collections
         ]
-
-        # Return the rows.
-        return self.DEFINITION.rows(
+        return self.definition.rows(
             session=self.session,
-            library_id=self.library_id,
             integration_ids=integration_ids,
         )

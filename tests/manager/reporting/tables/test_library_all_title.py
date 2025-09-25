@@ -79,9 +79,7 @@ class TestLibraryAllTitleReportTable:
                     mock_execute.return_value = iter([])
                     # This is the actual call we're testing.
                     list(table.rows)
-                    mock_params.assert_called_once_with(
-                        library_id=library.id, integration_ids=integration_ids
-                    )
+                    mock_params.assert_called_once_with(integration_ids=integration_ids)
 
                     mock_execute.assert_called_once_with(mock_statement)
 
