@@ -20,9 +20,7 @@ LOCK_ID_DB_INIT = 1000000001
 
 
 @contextmanager
-def pg_advisory_lock(
-    connection: Connection | Session, lock_id: int | None
-) -> Generator[None]:
+def pg_advisory_lock(connection: Connection, lock_id: int | None) -> Generator[None]:
     """
     Application wide locking based on Lock IDs
 

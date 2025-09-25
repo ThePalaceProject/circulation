@@ -77,31 +77,29 @@ class LocalAnalyticsExporter:
         # it. This makes up the bulk of the data.
         events_alias = (
             select(
-                [
-                    func.to_char(CirculationEvent.start, "YYYY-MM-DD HH24:MI:SS").label(
-                        "start"
-                    ),
-                    CirculationEvent.type.label("event_type"),
-                    Identifier.identifier,
-                    Identifier.type.label("identifier_type"),
-                    Edition.sort_title,
-                    Edition.sort_author,
-                    case(
-                        [(Work.fiction == True, literal_column("'fiction'"))],
-                        else_=literal_column("'nonfiction'"),
-                    ).label("fiction"),
-                    Work.id.label("work_id"),
-                    Work.audience,
-                    Edition.publisher,
-                    Edition.imprint,
-                    Edition.language,
-                    IntegrationConfiguration.name.label("collection_name"),
-                    Library.short_name.label("library_short_name"),
-                    Library.name.label("library_name"),
-                    Edition.medium,
-                    DataSource.name.label("distributor"),
-                    LicensePool.open_access,
-                ],
+                func.to_char(CirculationEvent.start, "YYYY-MM-DD HH24:MI:SS").label(
+                    "start"
+                ),
+                CirculationEvent.type.label("event_type"),
+                Identifier.identifier,
+                Identifier.type.label("identifier_type"),
+                Edition.sort_title,
+                Edition.sort_author,
+                case(
+                    (Work.fiction == True, literal_column("'fiction'")),
+                    else_=literal_column("'nonfiction'"),
+                ).label("fiction"),
+                Work.id.label("work_id"),
+                Work.audience,
+                Edition.publisher,
+                Edition.imprint,
+                Edition.language,
+                IntegrationConfiguration.name.label("collection_name"),
+                Library.short_name.label("library_short_name"),
+                Library.name.label("library_name"),
+                Edition.medium,
+                DataSource.name.label("distributor"),
+                LicensePool.open_access,
             )
             .select_from(
                 join(
@@ -140,7 +138,7 @@ class LocalAnalyticsExporter:
         # string column (Genre.name). Genres with higher affinities with
         # this work go first.
         genres_alias = (
-            select([Genre.name.label("genre_name")])
+            select(Genre.name.label("genre_name"))
             .select_from(join(WorkGenre, Genre, WorkGenre.genre_id == Genre.id))
             .where(WorkGenre.work_id == work_id_column)
             .order_by(WorkGenre.affinity.desc(), Genre.name)
@@ -152,7 +150,7 @@ class LocalAnalyticsExporter:
         # Work. Then use array_to_string to convert the array into a
         # single comma-separated string.
         genres = select(
-            [func.array_to_string(func.array_agg(genres_alias.c.genre_name), ",")]
+            func.array_to_string(func.array_agg(genres_alias.c.genre_name), ",")
         ).select_from(genres_alias)
 
         # This subquery gets the a Work's target age as a single string.
@@ -168,42 +166,36 @@ class LocalAnalyticsExporter:
         # the empty string. This simulates the behavior of
         # Work.target_age_string.
         target_age_string = select(
-            [
-                case(
-                    [
-                        (
-                            or_(target_age.c.lower != None, target_age.c.upper != None),
-                            func.concat(target_age.c.lower, "-", target_age.c.upper),
-                        )
-                    ],
-                    else_=literal_column("''"),
-                )
-            ]
+            case(
+                (
+                    or_(target_age.c.lower != None, target_age.c.upper != None),
+                    func.concat(target_age.c.lower, "-", target_age.c.upper),
+                ),
+                else_=literal_column("''"),
+            )
         ).select_from(target_age)
 
         # Build the main query out of the subqueries.
         events = events_alias.c
         query = select(
-            [
-                events.start,
-                events.event_type,
-                events.identifier,
-                events.identifier_type,
-                events.sort_title,
-                events.sort_author,
-                events.fiction,
-                events.audience,
-                events.publisher,
-                events.imprint,
-                events.language,
-                target_age_string.label("target_age"),
-                genres.label("genres"),
-                events.collection_name,
-                events.library_short_name,
-                events.library_name,
-                events.medium,
-                events.distributor,
-                case({True: "true", False: "false"}, value=events.open_access),
-            ]
+            events.start,
+            events.event_type,
+            events.identifier,
+            events.identifier_type,
+            events.sort_title,
+            events.sort_author,
+            events.fiction,
+            events.audience,
+            events.publisher,
+            events.imprint,
+            events.language,
+            target_age_string.label("target_age"),
+            genres.label("genres"),
+            events.collection_name,
+            events.library_short_name,
+            events.library_name,
+            events.medium,
+            events.distributor,
+            case({True: "true", False: "false"}, value=events.open_access),
         ).select_from(events_alias)
         return query

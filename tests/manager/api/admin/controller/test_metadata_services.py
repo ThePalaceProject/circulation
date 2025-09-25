@@ -164,7 +164,7 @@ class TestMetadataServices:
         [library] = service.get("libraries")
         assert library.get("short_name") == db.default_library().short_name
 
-    def test_metadata_services_post_errors(
+    def test_metadata_services_post_error_unknown_protocol(
         self,
         metadata_services_fixture: MetadataServicesFixture,
         flask_app_fixture: FlaskAppFixture,
@@ -180,6 +180,12 @@ class TestMetadataServices:
             response = controller.process_post()
             assert response == UNKNOWN_PROTOCOL
 
+    def test_metadata_services_post_error_missing_service_name(
+        self,
+        metadata_services_fixture: MetadataServicesFixture,
+        flask_app_fixture: FlaskAppFixture,
+    ):
+        controller = metadata_services_fixture.controller
         with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
@@ -190,6 +196,12 @@ class TestMetadataServices:
             assert isinstance(response, ProblemDetail)
             assert response == MISSING_SERVICE_NAME
 
+    def test_metadata_services_post_error_no_protocol(
+        self,
+        metadata_services_fixture: MetadataServicesFixture,
+        flask_app_fixture: FlaskAppFixture,
+    ):
+        controller = metadata_services_fixture.controller
         with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
@@ -200,6 +212,12 @@ class TestMetadataServices:
             assert isinstance(response, ProblemDetail)
             assert response == NO_PROTOCOL_FOR_NEW_SERVICE
 
+    def test_metadata_services_post_error_missing_service(
+        self,
+        metadata_services_fixture: MetadataServicesFixture,
+        flask_app_fixture: FlaskAppFixture,
+    ):
+        controller = metadata_services_fixture.controller
         with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
@@ -212,6 +230,12 @@ class TestMetadataServices:
             assert isinstance(response, ProblemDetail)
             assert response == MISSING_SERVICE
 
+    def test_metadata_services_post_error_name_in_use(
+        self,
+        metadata_services_fixture: MetadataServicesFixture,
+        flask_app_fixture: FlaskAppFixture,
+    ):
+        controller = metadata_services_fixture.controller
         service = metadata_services_fixture.create_novelist_integration()
         service.name = "name"
 
@@ -226,6 +250,14 @@ class TestMetadataServices:
             assert isinstance(response, ProblemDetail)
             assert response == INTEGRATION_NAME_ALREADY_IN_USE
 
+    def test_metadata_services_post_error_cannot_change_protocol(
+        self,
+        metadata_services_fixture: MetadataServicesFixture,
+        flask_app_fixture: FlaskAppFixture,
+    ):
+        controller = metadata_services_fixture.controller
+        service = metadata_services_fixture.create_novelist_integration()
+
         with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
@@ -236,6 +268,14 @@ class TestMetadataServices:
             )
             response = controller.process_post()
             assert response == CANNOT_CHANGE_PROTOCOL
+
+    def test_metadata_services_post_error_incomplete_configuration(
+        self,
+        metadata_services_fixture: MetadataServicesFixture,
+        flask_app_fixture: FlaskAppFixture,
+    ):
+        controller = metadata_services_fixture.controller
+        service = metadata_services_fixture.create_novelist_integration()
 
         with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
@@ -248,6 +288,13 @@ class TestMetadataServices:
             assert isinstance(response, ProblemDetail)
             assert response.uri == INCOMPLETE_CONFIGURATION.uri
 
+    def test_metadata_services_post_error_no_such_library(
+        self,
+        metadata_services_fixture: MetadataServicesFixture,
+        flask_app_fixture: FlaskAppFixture,
+    ):
+        controller = metadata_services_fixture.controller
+        service = metadata_services_fixture.create_novelist_integration()
         with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
@@ -380,7 +427,7 @@ class TestMetadataServices:
         assert settings.password == "newpass"
         assert novelist_service.libraries == [l2]
 
-    def test_check_name_unique(
+    def test_check_name_unique_same_name(
         self,
         metadata_services_fixture: MetadataServicesFixture,
         flask_app_fixture: FlaskAppFixture,
@@ -410,6 +457,19 @@ class TestMetadataServices:
             assert isinstance(response, ProblemDetail)
             assert response == INTEGRATION_NAME_ALREADY_IN_USE
 
+    def test_check_name_unique(
+        self,
+        metadata_services_fixture: MetadataServicesFixture,
+        flask_app_fixture: FlaskAppFixture,
+        db: DatabaseTransactionFixture,
+    ):
+        existing_service = metadata_services_fixture.create_novelist_integration(
+            name="existing service",
+        )
+        new_service = metadata_services_fixture.create_novelist_integration(
+            name="new service",
+        )
+        controller = metadata_services_fixture.controller
         # Try to edit existing service without changing its name -- this is fine.
         with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(

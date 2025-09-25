@@ -644,12 +644,12 @@ def test_reap_loans_in_inactive_collections(
     # make the collection inactive.
     biblio_collection.is_active
 
-    yesterday = utc_now() - datetime.timedelta(days=1)
-    day_before_yesterday = yesterday - datetime.timedelta(days=1)
+    day_before_yesterday = utc_now() - datetime.timedelta(days=2)
+    one_week_ago = utc_now() - datetime.timedelta(days=7)
 
     biblio_collection._set_settings(
-        subscription_expiration_date=yesterday.date(),
-        subscription_activation_date=day_before_yesterday.date(),
+        subscription_expiration_date=day_before_yesterday.date(),
+        subscription_activation_date=one_week_ago.date(),
     )
 
     assert not biblio_collection.is_active
@@ -695,12 +695,12 @@ def test_reap_holds_in_inactive_collections(
     # make the collection inactive.
     biblio_collection.is_active
 
-    yesterday = utc_now() - datetime.timedelta(days=1)
-    day_before_yesterday = yesterday - datetime.timedelta(days=1)
+    day_before_yesterday = utc_now() - datetime.timedelta(days=2)
+    one_week_ago = utc_now() - datetime.timedelta(days=7)
 
     biblio_collection._set_settings(
-        subscription_expiration_date=yesterday.date(),
-        subscription_activation_date=day_before_yesterday.date(),
+        subscription_expiration_date=day_before_yesterday,
+        subscription_activation_date=one_week_ago,
     )
 
     assert not biblio_collection.is_active

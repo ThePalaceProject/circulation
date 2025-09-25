@@ -28,7 +28,7 @@ class TabularQueryDefinition:
     def headings(self) -> tuple[str, ...]:
         """Return the headings for the table's rows."""
         try:
-            headings = tuple(c.name for c in self.statement.c)
+            headings = tuple(c.name for c in self.statement.selected_columns)
         except AttributeError as e:
             raise PalaceValueError(
                 f"Unsupported statement in '{self.title}' query (id='{self.key}')."

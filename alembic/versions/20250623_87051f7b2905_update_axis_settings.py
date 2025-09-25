@@ -59,8 +59,10 @@ def upgrade() -> None:
                 WHERE id = :integration_id
                 """
             ),
-            settings=json_serializer(settings_dict),
-            integration_id=integration_id,
+            {
+                "settings": json_serializer(settings_dict),
+                "integration_id": integration_id,
+            },
         )
 
 
@@ -91,6 +93,8 @@ def downgrade() -> None:
                 WHERE id = :integration_id
                 """
             ),
-            settings=json_serializer(settings_dict),
-            integration_id=integration_id,
+            {
+                "settings": json_serializer(settings_dict),
+                "integration_id": integration_id,
+            },
         )

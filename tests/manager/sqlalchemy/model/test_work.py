@@ -1873,6 +1873,7 @@ class TestWorkConsolidation:
 
         # This edition is unique to the existing work.
         preexisting_work = Work()
+        db.session.add(preexisting_work)
         preexisting_work.set_presentation_edition(edition1)
 
         # This edition is unique to the new LicensePool
