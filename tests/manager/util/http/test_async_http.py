@@ -260,6 +260,56 @@ class TestAsyncClient:
             assert excinfo.value.response.status_code == 429
             assert len(mock_web_server.requests()) == 1  # No retry attempted
 
+    async def test_no_retry_status_codes_with_timeout(
+        self, async_http_client: MockAsyncClientFixture
+    ) -> None:
+        """Test that timeout exceptions are not affected by no_retry_status_codes.
+
+        Timeouts should always retry (up to max_retries) regardless of
+        no_retry_status_codes since they don't have a status code.
+        """
+        # Queue timeout exceptions followed by a success
+        async_http_client.queue_exception(httpx.TimeoutException("Timeout 1"))
+        async_http_client.queue_exception(httpx.TimeoutException("Timeout 2"))
+        async_http_client.queue_response(200, content="success")
+
+        async with AsyncClient.for_worker(
+            no_retry_status_codes=[500, "5xx"],  # These should not affect timeouts
+        ) as client:
+            # Set up client with retries
+            client._max_retries = 3
+            client._backoff_factor = 0
+
+            # Should retry timeouts and eventually succeed
+            response = await client.get("https://example.com/test")
+            assert response.status_code == 200
+            assert response.text == "success"
+
+            # Verify that we made 3 requests (2 retries + 1 success)
+            assert len(async_http_client.requests) == 3
+
+        # Now test that timeouts still fail after max retries
+        async_http_client.reset_mock()
+        async_http_client.queue_exception(httpx.TimeoutException("Timeout 1"))
+        async_http_client.queue_exception(httpx.TimeoutException("Timeout 2"))
+        async_http_client.queue_exception(httpx.TimeoutException("Timeout 3"))
+        async_http_client.queue_exception(httpx.TimeoutException("Timeout 4"))
+
+        async with AsyncClient.for_worker(
+            no_retry_status_codes=["5xx"],  # Should not affect timeouts
+        ) as client:
+            # Set up client with retries
+            client._max_retries = 3
+            client._backoff_factor = 0
+
+            # Should fail after max retries
+            with pytest.raises(RequestTimedOut) as excinfo:
+                await client.get("https://example.com/test")
+
+            assert "Timeout 4" in str(excinfo.value)
+            # Verify that we made 4 requests (3 retries + 1 initial)
+            assert len(async_http_client.requests) == 4
+
     async def test_client_default_headers(
         self, async_http_client: MockAsyncClientFixture
     ) -> None:

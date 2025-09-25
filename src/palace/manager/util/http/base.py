@@ -96,7 +96,7 @@ def raise_for_bad_response(
     ):
         error_message = (
             "Got status code %%s from external server, but can only continue on: %s."
-            % ", ".join(sorted(list(map(str, allowed_response_codes))))
+            % (", ".join(sorted(list(map(str, allowed_response_codes)))),)
         )
 
     if error_message:
