@@ -414,6 +414,8 @@ class AsyncClient(LoggerMixin):
                         should_retry = False
 
                 if not should_retry or attempt >= max_retries:
+                    # Update the retry count before re-raising
+                    e.retry_count = attempt
                     raise e
 
                 # Calculate backoff time

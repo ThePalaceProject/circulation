@@ -107,6 +107,26 @@ class TestBadResponseException:
         )
         assert problem_detail.status_code == 502
 
+    def test_retry_count(self):
+        """Test that retry_count is tracked properly."""
+        response = MockRequestsResponse(500, content="Server Error")
+
+        # Test without retry_count (should default to None)
+        exc_no_retry = BadResponseException("http://url/", "Error message", response)
+        assert exc_no_retry.retry_count is None
+
+        # Test with explicit retry_count of 0
+        exc_zero_retries = BadResponseException(
+            "http://url/", "Error message", response, retry_count=0
+        )
+        assert exc_zero_retries.retry_count == 0
+
+        # Test with retry_count > 0
+        exc_with_retries = BadResponseException(
+            "http://url/", "Error message", response, retry_count=3
+        )
+        assert exc_with_retries.retry_count == 3
+
     def test_bad_status_code(self):
         response = MockRequestsResponse(500, content="Internal Server Error!")
         exc = BadResponseException.bad_status_code("http://url/", response)
@@ -156,6 +176,24 @@ class TestRequestTimedOut:
         )
         assert detail.status_code == 502
         assert detail.debug_message == "Timeout accessing http://url/: I give up"
+
+    def test_retry_count(self):
+        """Test that retry_count is tracked properly."""
+        # Test without retry_count (should default to None)
+        exc_no_retry = RequestTimedOut("http://url/", "Timeout occurred")
+        assert exc_no_retry.retry_count is None
+
+        # Test with explicit retry_count of 0
+        exc_zero_retries = RequestTimedOut(
+            "http://url/", "Timeout occurred", retry_count=0
+        )
+        assert exc_zero_retries.retry_count == 0
+
+        # Test with retry_count > 0
+        exc_with_retries = RequestTimedOut(
+            "http://url/", "Timeout occurred", retry_count=2
+        )
+        assert exc_with_retries.retry_count == 2
 
 
 class TestRequestNetworkException:
