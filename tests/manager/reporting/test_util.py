@@ -1,6 +1,7 @@
 import io
 import logging
 from collections.abc import MutableMapping
+from datetime import datetime
 from functools import partial
 from typing import Any
 
@@ -9,6 +10,7 @@ import pytest
 
 from palace.manager.reporting.util import (
     RequestIdLoggerAdapter,
+    TimestampFormat,
     row_counter_wrapper,
     write_csv,
 )
@@ -273,3 +275,27 @@ class TestRequestIdLoggerAdapter:
         # Kwargs should make it through unscathed.
         assert result_kwargs is original_kwargs
         assert result_kwargs == {"original": {"custom": "data"}}
+
+
+class TestTimestampFormat:
+    @pytest.mark.parametrize(
+        "timestamp, expected_string",
+        [
+            (datetime(2024, 1, 1, 12, 0, 0), "2024-01-01T12-00-00"),
+            (datetime(2023, 12, 31, 23, 59, 59), "2023-12-31T23-59-59"),
+        ],
+        ids=["first", "second"],
+    )
+    def test_timestamp_filename_string(self, timestamp, expected_string):
+        assert TimestampFormat.FILENAME.format_timestamp(timestamp) == expected_string
+
+    @pytest.mark.parametrize(
+        "timestamp, expected_string",
+        [
+            (datetime(2024, 1, 1, 12, 0, 0), "2024-01-01 12:00:00"),
+            (datetime(2023, 12, 31, 23, 59, 59), "2023-12-31 23:59:59"),
+        ],
+        ids=["first", "second"],
+    )
+    def test_timestamp_email_string(self, timestamp, expected_string):
+        assert TimestampFormat.EMAIL.format_timestamp(timestamp) == expected_string

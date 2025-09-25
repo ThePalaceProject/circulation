@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import csv
 from collections.abc import Iterable, MutableMapping
+from datetime import datetime
+from enum import Enum
 from functools import wraps
 from typing import IO, Any
 
@@ -89,3 +91,18 @@ class RequestIdLoggerAdapter(ExtraDataLoggerAdapter):
             f"{msg}{f' (request ID: {request_id})' if request_id is not None else ''}"
         )
         return new_msg, kwargs
+
+
+class TimestampFormat(Enum):
+    """Standard timestamp formats used throughout the reporting system."""
+
+    FILENAME = "%Y-%m-%dT%H-%M-%S"
+    EMAIL = "%Y-%m-%d %H:%M:%S"
+
+    def format_timestamp(self, timestamp: datetime) -> str:
+        """Format a datetime using this timestamp format.
+
+        :param timestamp: The datetime to format.
+        :return: The formatted timestamp string.
+        """
+        return timestamp.strftime(self.value)
