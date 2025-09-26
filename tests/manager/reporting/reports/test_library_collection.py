@@ -1,18 +1,20 @@
-import os
-import tempfile
+import logging
 import zipfile
+from contextlib import closing
 from datetime import datetime, timedelta
-from functools import partial
-from io import BytesIO, StringIO
+from io import BytesIO
+from pathlib import Path
 from unittest.mock import MagicMock, PropertyMock, create_autospec, patch
 
 import freezegun
 import pytest
 
 from palace.manager.celery.task import Task
+from palace.manager.core.exceptions import IntegrationException
 from palace.manager.reporting.model import ReportTable, TabularQueryDefinition
 from palace.manager.reporting.reports.library_collection import (
     LibraryCollectionReport,
+    TableProcessingResult,
 )
 from palace.manager.reporting.util import RequestIdLoggerAdapter
 from palace.manager.service.email.email import SendEmailCallable
@@ -30,7 +32,7 @@ class LibraryCollectionReportFixture:
         self.s3_service = MagicMock(spec=S3Service)
 
     class MockLibraryCollectionReport(LibraryCollectionReport):
-        KEY = "test_report"
+        KEY = "test-report"
         TITLE = "Test Report"
 
         def _run_report(self, *args, **kwargs) -> bool:
@@ -127,42 +129,6 @@ class TestLibraryCollectionReport:
         with freezegun.freeze_time(check_time):
             assert report.timestamp == start_time
 
-    @pytest.mark.parametrize(
-        "timestamp, expected_string",
-        [
-            (datetime(2024, 1, 1, 12, 0, 0), "2024-01-01T12-00-00"),
-            (datetime(2023, 12, 31, 23, 59, 59), "2023-12-31T23-59-59"),
-        ],
-        ids=["first", "second"],
-    )
-    def test_timestamp_filename_string(
-        self, report_fixture: LibraryCollectionReportFixture, timestamp, expected_string
-    ):
-        report = report_fixture.report
-        report._timestamp = timestamp
-
-        actual_string = report.timestamp_filename_string()
-
-        assert actual_string == expected_string
-
-    @pytest.mark.parametrize(
-        "timestamp, expected_string",
-        [
-            (datetime(2024, 1, 1, 12, 0, 0), "2024-01-01 12:00:00"),
-            (datetime(2023, 12, 31, 23, 59, 59), "2023-12-31 23:59:59"),
-        ],
-        ids=["first", "second"],
-    )
-    def test_timestamp_email_string(
-        self, report_fixture: LibraryCollectionReportFixture, timestamp, expected_string
-    ):
-        report = report_fixture.report
-        report._timestamp = timestamp
-
-        actual_email_string = report.timestamp_email_string()
-
-        assert actual_email_string == expected_string
-
     def test_report_file_name(self, report_fixture: LibraryCollectionReportFixture):
         report = report_fixture.report
         report._library = report_fixture.db.default_library()
@@ -177,27 +143,31 @@ class TestLibraryCollectionReport:
         report._timestamp = datetime(2024, 1, 1, 12, 0, 0)
         report._library = report_fixture.db.default_library()
 
-        test_library_name = "Test Library"
+        for_text = "some library"
         subject_format = (
-            f"Palace report '{report.title}' for library '{{library_name}}' run at {report.timestamp_email_string()} "
+            f"Palace report '{report.title}' for {{library_text}} run at {report.timestamp_email_string()} "
             f"(request id: {report.request_id})"
         )
 
-        assert "{library_name}" in subject_format
-        assert test_library_name != report.library.name
+        # Make sure that the template variable survived f-string expansion ...
+        assert "{library_text}" in subject_format
+        # ... and that our label text doesn't match the real library name.
+        assert for_text != report.library.name
 
-        # If a library_name is provided, it is used in the subject.
-        subject = report.email_subject(library_name=test_library_name)
-        assert subject == subject_format.format(library_name=test_library_name)
+        # If `library_text` is provided, it is used as-is in the subject.
+        subject = report.email_subject(library_text=for_text)
+        assert subject == subject_format.format(library_text=for_text)
 
-        # Otherwise, the name of the report's library is used.
+        # Otherwise, the name of the report's library is prefixed with the word "library".
         subject = report.email_subject()
-        assert subject == subject_format.format(library_name=report.library.name)
+        assert subject == subject_format.format(
+            library_text=f"library '{report.library.name}'"
+        )
 
     def test_send_success_notification(
         self, report_fixture: LibraryCollectionReportFixture
     ):
-        download_url = "test_download_url"
+        access_url = "test_download_url"
         timestamp = datetime(2024, 1, 1, 12, 3, 27)
 
         report = report_fixture.report
@@ -211,11 +181,11 @@ class TestLibraryCollectionReport:
             f"(request id: {report.request_id})"
         )
         expected_text = (
-            f"Download report here -> {download_url} \n\n"
+            f"You may access the report here -> {access_url} \n\n"
             "This report will be available to download for 30 days."
         )
 
-        report.send_success_notification(download_url=download_url)
+        report.send_success_notification(access_url=access_url)
 
         report_fixture.send_email.assert_called_once()
         args, kwargs = report_fixture.send_email.call_args
@@ -225,85 +195,47 @@ class TestLibraryCollectionReport:
         assert kwargs["subject"] == expected_subject
         assert kwargs["text"] == expected_text
 
-    def test_send_error_notificationxx(
-        self, report_fixture: LibraryCollectionReportFixture
-    ):
-        subject = "Error notification subject"
-
-        timestamp = datetime(2024, 1, 1, 12, 3, 27)
-        report = report_fixture.report
-        report._library = report_fixture.db.default_library()
-        report._timestamp = timestamp
-
     @pytest.mark.parametrize(
-        "subject, library_name, library_set, expected_library_name, expected_subject",
+        "library_name_param, library_set, expected_email_text, expected_subject",
         [
             pytest.param(
                 None,
-                None,
                 True,
-                "Test Library",
-                "Palace report 'Test Report' for library 'Test Library' run at 2024-01-01 12:00:00 (request id: test_request_id)",
+                "library 'Report Library'",
+                "Palace report 'Test Report' for library 'Report Library' run at 2024-01-01 12:00:00 (request id: test_request_id)",
                 id="none-subject-default-library",
             ),
             pytest.param(
-                None,
                 "Custom Library Name",
                 True,
-                "Custom Library Name",
+                "library 'Custom Library Name'",
                 "Palace report 'Test Report' for library 'Custom Library Name' run at 2024-01-01 12:00:00 (request id: test_request_id)",
                 id="none-subject-custom-library",
             ),
             pytest.param(
-                "Custom Subject",
-                None,
-                True,
-                "Test Library",
-                "Custom Subject",
-                id="custom-subject-default-library",
-            ),
-            pytest.param(
-                "Custom Subject",
-                "Custom Library Name",
-                True,
-                "Custom Library Name",
-                "Custom Subject",
-                id="custom-subject-custom-library",
-            ),
-            pytest.param(
-                None,
                 None,
                 False,
                 "an unknown library",
-                "Palace report 'Test Report' for library 'an unknown library' run at 2024-01-01 12:00:00 (request id: test_request_id)",
+                "Palace report 'Test Report' for an unknown library run at 2024-01-01 12:00:00 (request id: test_request_id)",
                 id="none-subject-no-library",
-            ),
-            pytest.param(
-                "Explicit Subject",
-                None,
-                False,
-                "an unknown library",
-                "Explicit Subject",
-                id="custom-subject-no-library",
             ),
         ],
     )
     def test_send_error_notification(
         self,
         report_fixture: LibraryCollectionReportFixture,
-        subject,
-        library_name,
-        library_set,
-        expected_library_name,
-        expected_subject,
+        library_name_param,  # The library name provided on the `send_error_notification` call.
+        library_set: bool,  # Has the library been set yet in the report?
+        expected_email_text: str,  # The library label as we see it in the email.
+        expected_subject: str,
     ):
         report = report_fixture.report
         report._timestamp = datetime(2024, 1, 1, 12, 0, 0)
 
         if library_set:
-            report._library = report_fixture.db.library(name=expected_library_name)
+            report._library = report_fixture.db.library(name="Report Library")
 
-        report.send_error_notification(subject=subject, library_name=library_name)
+        report.send_error_notification(library_name=library_name_param)
 
         report_fixture.send_email.assert_called_once()
         args, kwargs = report_fixture.send_email.call_args
@@ -312,7 +244,7 @@ class TestLibraryCollectionReport:
         assert kwargs["subject"] == expected_subject
         assert (
             kwargs["text"]
-            == f"There was an error generating the 'Test Report' report for {expected_library_name}. \n\n"
+            == f"There was an error generating the 'Test Report' report for {expected_email_text}. \n\n"
             "If the issue persists, please contact support."
         )
 
@@ -363,7 +295,7 @@ class TestLibraryCollectionReport:
         report = report_fixture.report
         assert report.title == report.TITLE
 
-    def test_eligible_integrations(self, db: DatabaseTransactionFixture):
+    def test_eligible_collections(self, db: DatabaseTransactionFixture):
         library = db.default_library()
         active = db.default_collection()
         inactive = db.default_inactive_collection()
@@ -371,121 +303,13 @@ class TestLibraryCollectionReport:
         # The library has two collections, one of which is inactive.
         assert set(library.associated_collections) == {active, inactive}
         assert library.active_collections == [active]
-        assert active.is_active is True
-        assert inactive.is_active is False
 
         # Only the active collections are deemed eligible.
-        eligible_integrations = LibraryCollectionReport.eligible_integrations(library)
-        assert len(eligible_integrations) == 1
-        assert eligible_integrations == [active.integration_configuration]
+        eligible_collections = LibraryCollectionReport.eligible_collections(library)
+        assert len(eligible_collections) == 1
+        assert eligible_collections == [active]
 
-    def test_correct_collections_are_included(
-        self, report_fixture: LibraryCollectionReportFixture
-    ):
-        report = report_fixture.report
-        library = report_fixture.db.default_library()
-        active = report_fixture.db.default_collection()
-        inactive = report_fixture.db.default_inactive_collection()
-
-    @pytest.mark.parametrize(
-        "file_content_bytes, name, extension, expected_extension, content_type",
-        (
-            pytest.param(
-                b"This is the report content.",
-                "test_library/test_report",
-                ".zip",
-                ".zip",
-                "application/zip",
-                id="standard_input",
-            ),
-            pytest.param(
-                b"",
-                "another/sub/dir/empty-report-content",
-                ".zip",
-                ".zip",
-                "application/zip",
-                id="empty_content",
-            ),
-            pytest.param(
-                b"Report content",
-                "dotted-report_name.v2.1",
-                None,
-                "",
-                "plain/text",
-                id="no_extension",
-            ),
-            pytest.param(
-                b"Report content",
-                "dotted-report_name.v2.1",
-                "",
-                "",
-                "plain/text",
-                id="empty_extension",
-            ),
-        ),
-    )
-    def test_store_to_s3(
-        self,
-        report_fixture: LibraryCollectionReportFixture,
-        file_content_bytes: bytes,
-        name: str,
-        extension: str | None,
-        expected_extension: str,
-        content_type,
-    ) -> None:
-        """Verify that we interact with the S3 service as expected."""
-        report = report_fixture.report
-
-        expected_key = f"{S3Service.DOWNLOADS_PREFIX}/reports/{name}-{report.request_id}{expected_extension}"
-        expected_url = f"https://s3.example.com/{expected_key}"
-
-        # extension is None means don't pass the argument.
-        store_function = (
-            partial(report.store_to_s3, extension=extension)
-            if extension is not None
-            else partial(report.store_to_s3)
-        )
-
-        file_stream = BytesIO(file_content_bytes)
-        report_fixture.s3_service.store_stream.return_value = expected_url
-        result_url = store_function(
-            file=file_stream, name=name, content_type=content_type
-        )
-
-        assert result_url == expected_url
-        report_fixture.s3_service.store_stream.assert_called_once_with(
-            expected_key,
-            file_stream,
-            content_type=content_type,
-        )
-
-    def test_store_to_s3_storage_failure(
-        self, report_fixture: LibraryCollectionReportFixture
-    ) -> None:
-        """An exception during S3 storage is propagated."""
-        report = report_fixture.report
-        s3_store = report_fixture.s3_service.store_stream
-        s3_store.side_effect = Exception("S3 Upload Error")
-
-        file_stream = BytesIO(b"Report data")
-        name = "failed_lib/failed_report"
-        extension = ".zip"
-        content_type = "plain/text"
-        expected_key = f"{S3Service.DOWNLOADS_PREFIX}/reports/{name}-{report.request_id}{extension}"
-
-        with pytest.raises(Exception, match="S3 Upload Error"):
-            report.store_to_s3(
-                file=file_stream,
-                name=name,
-                extension=extension,
-                content_type=content_type,
-            )
-
-        s3_store.assert_called_once_with(
-            expected_key, file_stream, content_type=content_type
-        )
-
-    def test_zip_results(
+    def test_process_table(
         self,
         report_fixture: LibraryCollectionReportFixture,
     ):
@@ -494,7 +318,7 @@ class TestLibraryCollectionReport:
 
         mock_table = MagicMock(spec=ReportTable)
         mock_definition = MagicMock(
-            spec=TabularQueryDefinition, id="test_table_id", headings=["col1"]
+            spec=TabularQueryDefinition, key="test-table", headings=["col1"]
         )
         type(mock_table).definition = PropertyMock(return_value=mock_definition)
 
@@ -508,124 +332,575 @@ class TestLibraryCollectionReport:
 
         mock_table.side_effect = report_table_call
 
-        # Create a temporary that we can use to mock tempfile.NamedTemporaryFile later.
-        # We're not deleting it here, so should ensure it's deleted by the end of the test.
-        real_temp_file = tempfile.NamedTemporaryFile(
-            "w", encoding="utf-8", delete=False, newline="\n"
-        )
+        report = report_fixture.report
+        report._library = report_fixture.db.default_library()
+        report._timestamp = datetime(2024, 1, 1, 12, 0, 0)
 
-        # Setup to zip the result file.
-        member_name = "report_part_1.csv"
-        zip_buffer = BytesIO()
+        result = report._process_table(mock_table)
 
-        try:
-            # Call zip_results to write to the archive.
-            with (
-                zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_STORED) as archive,
-                patch("tempfile.NamedTemporaryFile") as mock_temp_file,
-            ):
-                mock_temp_file.return_value.__enter__.return_value = real_temp_file
-                # Now actually call zip_results.
-                report_fixture.report.zip_results(
-                    archive=archive, member_name=member_name, table=mock_table
-                )
+        assert result.table_key == "test-table"
+        assert result.filename == "palace-test_table_id-default-2024-01-01T12-00-00.csv"
+        assert result.row_count == 2
+        assert hasattr(result.content_stream, "read")
 
-                # Verify the temporary file was written with the correct content.
-                with open(
-                    real_temp_file.name, encoding="utf-8", newline=""
-                ) as temp_file:
-                    assert temp_file.read() == expected_csv_content
-        finally:
-            # Clean up the temporary file, now that we're done with it.
-            os.remove(real_temp_file.name)
+        content = result.content_stream.read().decode("utf-8")
+        assert content == expected_csv_content
 
-        # Verify the archive contains the member with the correct content.
-        with zipfile.ZipFile(zip_buffer, "r") as read_archive:
-            with read_archive.open(member_name) as archive_member:
-                assert archive_member.read().decode("utf-8") == expected_csv_content
+        result.cleanup()
 
-    @patch("tempfile.NamedTemporaryFile")
-    def test_zip_results_table_processing_error(
+    def test_process_table_error(
         self,
-        mock_named_temp_file: MagicMock,
         report_fixture: LibraryCollectionReportFixture,
     ):
-        """An exception during table processing is propagated."""
-        mock_temp_file_buffer = StringIO()
-        mock_temp_file_buffer.name = "/tmp/fake_temp_file.csv"
-        mock_named_temp_file.return_value.__enter__.return_value = mock_temp_file_buffer
-
         mock_table = MagicMock(spec=ReportTable)
-        type(mock_table).definition = PropertyMock(
-            return_value=MagicMock(spec=TabularQueryDefinition, id="test_table_id")
-        )
-        # Make the report table's callable raise an error.
+        mock_definition = MagicMock(spec=TabularQueryDefinition, key="error_table")
+        type(mock_table).definition = PropertyMock(return_value=mock_definition)
+
         mock_table.side_effect = ValueError("Failed to generate table data")
 
-        member_name = "report_part_error.csv"
-        zip_buffer = BytesIO()
+        report = report_fixture.report
+        report._library = report_fixture.db.default_library()
+        report._timestamp = datetime(2024, 1, 1, 12, 0, 0)
 
-        with (
-            zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_STORED) as archive,
-            pytest.raises(ValueError, match="Failed to generate table data"),
-        ):
-            mock_archive_write = MagicMock()
-            archive.write = mock_archive_write
-            report_fixture.report.zip_results(
-                archive=archive, member_name=member_name, table=mock_table
-            )
+        with pytest.raises(ValueError, match="Failed to generate table data"):
+            report._process_table(mock_table)
 
-        # Ensure nothing was written to the temp file buffer.
-        assert mock_temp_file_buffer.getvalue() == ""
-        mock_archive_write.assert_not_called()
-        mock_named_temp_file.assert_called_once()
-
-    @patch("tempfile.NamedTemporaryFile")
-    def test_zip_results_archive_write_error(
+    def test_package_results(
         self,
-        mock_named_temp_file: MagicMock,
         report_fixture: LibraryCollectionReportFixture,
     ):
-        """An exception during archive write is propagated."""
-        table_rows = [("r1c1",), ("r2c1",)]
-        expected_csv_content = "col1\r\nr1c1\r\nr2c1\r\n"
+        # We'll assume two tables in our report this time.
+        result1_content = b"header1,header2\r\ndata1,data2\r\n"
+        result2_content = b"colA,colB\r\nvalA,valB\r\n"
 
-        mock_temp_file_buffer = StringIO()
-        mock_temp_file_buffer.name = "/tmp/fake_temp_file.csv"
-        mock_named_temp_file.return_value.__enter__.return_value = mock_temp_file_buffer
+        result1 = TableProcessingResult(
+            table_key="table1",
+            filename="table1.csv",
+            row_count=1,
+            content_stream=BytesIO(result1_content),
+        )
+        result2 = TableProcessingResult(
+            table_key="table2",
+            filename="table2.csv",
+            row_count=1,
+            content_stream=BytesIO(result2_content),
+        )
+        results = [result1, result2]
+
+        report = report_fixture.report
+
+        with (
+            closing(report._package_results(results)) as package,
+            zipfile.ZipFile(package, "r") as archive,
+        ):
+            # Both files are included...
+            assert "table1.csv" in archive.namelist()
+            assert "table2.csv" in archive.namelist()
+
+            # ... and the contents match.
+            with archive.open("table1.csv") as f:
+                assert f.read() == result1_content
+            with archive.open("table2.csv") as f:
+                assert f.read() == result2_content
+
+    def test_package_results_empty(
+        self,
+        report_fixture: LibraryCollectionReportFixture,
+    ):
+        results: list[TableProcessingResult] = []
+        report = report_fixture.report
+
+        with (
+            closing(report._package_results(results)) as package,
+            zipfile.ZipFile(package, "r") as archive,
+        ):
+            assert len(archive.namelist()) == 0
+
+        package.close()
+
+    def test_package_results_rollover(
+        self,
+        report_fixture: LibraryCollectionReportFixture,
+    ):
+        """Test that SpooledTemporaryFile rollover works correctly with zipfile.
+
+        I added this test to ensure that the pre-Python 3.11, SpooledTemporaryFile
+        behaves correctly when it "rolls over" to on-disk storage.
+        TODO: This is probably amply tested in Python 3.11+, so we can probably
+         remove once we drop support for Python 3.10. Though there's no harm in
+         in keeping this test around, either.
+        """
+        content = b"header1,header2\r\ndata1,data2\r\n"
+
+        result = TableProcessingResult(
+            table_key="test-table",
+            filename="test-table.csv",
+            row_count=1,
+            content_stream=BytesIO(content),
+        )
+        results = [result]
+
+        report = report_fixture.report
+        package = report._package_results(results)
+
+        # Force rollover to disk...
+        package.rollover()  # type: ignore[attr-defined]
+
+        # ... and verify that we are allowed to seek.
+        package.seek(0)
+        with zipfile.ZipFile(package, "r") as archive:
+            assert "test-table.csv" in archive.namelist()
+
+            with archive.open("test-table.csv") as f:
+                assert f.read() == content
+
+        package.close()
+
+    def test_store_package(
+        self,
+        report_fixture: LibraryCollectionReportFixture,
+    ):
+        package_content = b"some zipped report content"
+        package = BytesIO(package_content)
+
+        report = report_fixture.report
+        report._library = report_fixture.db.default_library()
+        report._timestamp = datetime(2024, 1, 1, 12, 0, 0)
+
+        expected_url = "https://s3.example.com/test-key"
+        report_fixture.s3_service.store_stream.return_value = expected_url
+
+        result_url = report._store_package(package)
+
+        assert result_url == expected_url
+
+        report_fixture.s3_service.store_stream.assert_called_once()
+        call_args = report_fixture.s3_service.store_stream.call_args
+        assert call_args[1]["content_type"] == "application/zip"
+        assert "reports/" in call_args[0][0]
+
+    def test_store_package_failure(
+        self,
+        report_fixture: LibraryCollectionReportFixture,
+    ):
+        package = BytesIO(b"any old content")
+
+        report = report_fixture.report
+        report._library = report_fixture.db.default_library()
+        report._timestamp = datetime(2024, 1, 1, 12, 0, 0)
+
+        # Note: `store_stream` returns None on failure.
+        report_fixture.s3_service.store_stream.return_value = None
+
+        with pytest.raises(
+            IntegrationException,
+            match=r"Failed to store report 'test_report' for library 'default' \(default\) to S3.",
+        ):
+            report._store_package(package)
+
+    def test_cleanup_results(self):
+        import tempfile
+
+        temp_file1 = tempfile.NamedTemporaryFile(delete=False)
+        temp_file2 = tempfile.NamedTemporaryFile(delete=False)
+
+        temp_file1.write(b"test content 1")
+        temp_file2.write(b"test content 2")
+        temp_file1.close()
+        temp_file2.close()
+
+        # Simulate reopening in binary mode.
+        stream1 = open(temp_file1.name, "rb")
+        stream2 = open(temp_file2.name, "rb")
+
+        results = [
+            TableProcessingResult("t1", "f1.csv", 1, stream1),
+            TableProcessingResult("t2", "f2.csv", 1, stream2),
+        ]
+
+        # Verify files exist before cleanup...
+        assert Path(temp_file1.name).exists()
+        assert Path(temp_file2.name).exists()
+
+        # ... then do the clean up ...
+        LibraryCollectionReport._cleanup_results(results)
+
+        # ... and verify that clean up occurred.
+        assert not Path(temp_file1.name).exists()
+        assert not Path(temp_file2.name).exists()
+        assert stream1.closed
+        assert stream2.closed
+
+    def test_get_table_processor(
+        self,
+        report_fixture: LibraryCollectionReportFixture,
+    ):
+        from io import StringIO
 
         mock_table = MagicMock(spec=ReportTable)
-        mock_definition = MagicMock(
-            spec=TabularQueryDefinition, id="test_table_id", headings=["col1"]
-        )
-        type(mock_table).definition = PropertyMock(return_value=mock_definition)
+        report = report_fixture.report
 
-        def report_table_call(processor):
-            counted_iterator, write_csv_result = processor(
-                rows=table_rows, headings=mock_definition.headings
+        test_rows = [["data1", "data2"], ["data3", "data4"]]
+        test_headings = ["header1", "header2"]
+
+        # Preset file parameter.
+        output1 = StringIO()
+        processor_with_preset_file = report.get_table_processor(
+            mock_table, file=output1
+        )
+        processor_with_preset_file(rows=test_rows, headings=test_headings)
+
+        expected_comma = "header1,header2\r\ndata1,data2\r\ndata3,data4\r\n"
+        assert output1.getvalue() == expected_comma
+
+        # Both preset file and custom delimiter.
+        output2 = StringIO()
+        processor_with_both = report.get_table_processor(
+            mock_table, file=output2, delimiter="|"
+        )
+        processor_with_both(rows=test_rows, headings=test_headings)
+
+        expected_pipe = "header1|header2\r\ndata1|data2\r\ndata3|data4\r\n"
+        assert output2.getvalue() == expected_pipe
+
+    def test_initialize_tables(
+        self,
+        report_fixture: LibraryCollectionReportFixture,
+        db: DatabaseTransactionFixture,
+    ):
+        mock_table_class = MagicMock()
+        mock_table_instance = MagicMock(spec=ReportTable)
+        mock_table_class.return_value = mock_table_instance
+
+        with patch.object(
+            report_fixture.MockLibraryCollectionReport,
+            "TABLE_CLASSES",
+            [mock_table_class],
+        ):
+            report = report_fixture.report
+            report._library = db.default_library()
+
+            tables = report._initialize_tables(db.session)
+
+            assert len(tables) == 1
+            assert tables[0] == mock_table_instance
+
+            mock_table_class.assert_called_once_with(
+                session=db.session,
+                library_id=db.default_library().id,
+                collection_ids=None,
             )
-            assert counted_iterator.count == 2
-            assert write_csv_result is None
-            return counted_iterator, write_csv_result
 
-        mock_table.side_effect = report_table_call
 
-        member_name = "report_part_io_error.csv"
+class IntegrationLibraryCollectionReportFixture(LibraryCollectionReportFixture):
+    class MockLibraryCollectionReport(LibraryCollectionReport):
+        KEY = "test-report"
+        TITLE = "Test Report"
 
-        zip_buffer = BytesIO()
-        mock_archive_write = MagicMock(side_effect=IOError("Disk full"))
 
-        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_STORED) as archive:
-            archive.write = mock_archive_write
-            with pytest.raises(IOError, match="Disk full"):
-                report_fixture.report.zip_results(
-                    archive=archive, member_name=member_name, table=mock_table
-                )
+@pytest.fixture
+def integration_report_fixture(
+    db: DatabaseTransactionFixture,
+) -> LibraryCollectionReportFixture:
+    return IntegrationLibraryCollectionReportFixture(db)
 
-        assert mock_temp_file_buffer.getvalue() == expected_csv_content
-        mock_archive_write.assert_called_once_with(
-            filename=mock_temp_file_buffer.name, arcname=member_name
+
+class TestLibraryCollectionRun:
+
+    def test_run_success(
+        self,
+        integration_report_fixture: LibraryCollectionReportFixture,
+    ):
+        mock_table_class = MagicMock()
+        mock_table_instance = MagicMock(spec=ReportTable)
+        mock_definition = MagicMock(
+            spec=TabularQueryDefinition,
+            key="test-table",
+            title="Test Table",
         )
-        archive.close()
+        type(mock_table_instance).definition = PropertyMock(
+            return_value=mock_definition
+        )
 
-        mock_named_temp_file.assert_called_once()
+        def table_call(processor):
+            test_rows = [("header1", "header2"), ("data1", "data2")]
+            counted_rows, _ = processor(rows=test_rows[1:], headings=test_rows[0])
+            return counted_rows, None
+
+        mock_table_instance.side_effect = table_call
+        mock_table_class.return_value = mock_table_instance
+
+        with patch.object(
+            integration_report_fixture.MockLibraryCollectionReport,
+            "TABLE_CLASSES",
+            [mock_table_class],
+        ):
+            report = integration_report_fixture.report
+
+            expected_url = "https://s3.example.com/reports/test-report.zip"
+            integration_report_fixture.s3_service.store_stream.return_value = (
+                expected_url
+            )
+
+            success = report.run(session=integration_report_fixture.db.session)
+
+            assert success is True
+
+            assert report.library == integration_report_fixture.db.default_library()
+            assert report.timestamp is not None
+
+            mock_table_class.assert_called_once_with(
+                session=integration_report_fixture.db.session,
+                library_id=integration_report_fixture.db.default_library().id,
+                collection_ids=None,
+            )
+
+            integration_report_fixture.s3_service.store_stream.assert_called_once()
+            integration_report_fixture.send_email.assert_called_once()
+            email_args = integration_report_fixture.send_email.call_args[1]
+            assert email_args["receivers"] == report.email_address
+            assert (
+                "Palace report 'Test Report' for library 'default'"
+                in email_args["subject"]
+            )
+            assert "You may access the report here" in email_args["text"]
+            assert expected_url in email_args["text"]
+
+    def test_run_table_processing_failure(
+        self,
+        integration_report_fixture: LibraryCollectionReportFixture,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        caplog.set_level(logging.ERROR)
+
+        mock_table_class = MagicMock()
+        mock_table_instance = MagicMock(spec=ReportTable)
+        mock_definition = MagicMock(
+            spec=TabularQueryDefinition,
+            key="test-table",
+            title="Test Table",
+        )
+        type(mock_table_instance).definition = PropertyMock(
+            return_value=mock_definition
+        )
+        mock_table_instance.side_effect = ValueError("Table processing failed")
+        mock_table_class.return_value = mock_table_instance
+
+        with patch.object(
+            integration_report_fixture.MockLibraryCollectionReport,
+            "TABLE_CLASSES",
+            [mock_table_class],
+        ):
+
+            report = integration_report_fixture.report
+            success = report.run(session=integration_report_fixture.db.session)
+
+            assert success is False
+            integration_report_fixture.send_email.assert_called_once()
+            email_args = integration_report_fixture.send_email.call_args[1]
+            assert report.email_address == email_args["receivers"]
+            assert (
+                "Palace report 'Test Report' for library 'default'"
+                in email_args["subject"]
+            )
+            assert (
+                "There was an error generating the 'Test Report' report for library 'default'."
+                in email_args["text"]
+            )
+            assert "Table processing failed" in caplog.text
+
+    def test_run_packaging_failure(
+        self,
+        integration_report_fixture: LibraryCollectionReportFixture,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        caplog.set_level(logging.ERROR)
+
+        mock_table_class = MagicMock()
+        mock_table_instance = MagicMock(spec=ReportTable)
+        mock_definition = MagicMock(
+            spec=TabularQueryDefinition,
+            key="test-table",
+            title="Test Table",
+        )
+        type(mock_table_instance).definition = PropertyMock(
+            return_value=mock_definition
+        )
+
+        def table_call(processor):
+            counted_rows, _ = processor(
+                rows=[("data1", "data2")], headings=["col1", "col2"]
+            )
+            return counted_rows, None
+
+        mock_table_instance.side_effect = table_call
+        mock_table_class.return_value = mock_table_instance
+
+        with patch.object(
+            integration_report_fixture.MockLibraryCollectionReport,
+            "TABLE_CLASSES",
+            [mock_table_class],
+        ):
+            report = integration_report_fixture.report
+
+            with patch.object(report, "_package_results") as mock_store_package:
+                mock_store_package.side_effect = ValueError("It didn't work.")
+                success = report.run(session=integration_report_fixture.db.session)
+
+            assert success is False
+            integration_report_fixture.send_email.assert_called_once()
+            email_args = integration_report_fixture.send_email.call_args[1]
+            assert report.email_address == email_args["receivers"]
+            assert (
+                "Palace report 'Test Report' for library 'default'"
+                in email_args["subject"]
+            )
+            assert (
+                "There was an error generating the 'Test Report' report for library 'default'."
+                in email_args["text"]
+            )
+            assert "Failed to package results" in caplog.text
+
+    def test_run_s3_storage_failure(
+        self,
+        integration_report_fixture: LibraryCollectionReportFixture,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        caplog.set_level(logging.ERROR)
+
+        mock_table_class = MagicMock()
+        mock_table_instance = MagicMock(spec=ReportTable)
+        mock_definition = MagicMock(
+            spec=TabularQueryDefinition,
+            key="test-table",
+            title="Test Table",
+        )
+        type(mock_table_instance).definition = PropertyMock(
+            return_value=mock_definition
+        )
+
+        def table_call(processor):
+            counted_rows, _ = processor(
+                rows=[("data1", "data2")], headings=["col1", "col2"]
+            )
+            return counted_rows, None
+
+        mock_table_instance.side_effect = table_call
+        mock_table_class.return_value = mock_table_instance
+
+        with patch.object(
+            integration_report_fixture.MockLibraryCollectionReport,
+            "TABLE_CLASSES",
+            [mock_table_class],
+        ):
+            report = integration_report_fixture.report
+
+            integration_report_fixture.s3_service.store_stream.return_value = None
+
+            success = report.run(session=integration_report_fixture.db.session)
+
+            assert success is False
+
+            integration_report_fixture.send_email.assert_called_once()
+            email_args = integration_report_fixture.send_email.call_args[1]
+            assert report.email_address == email_args["receivers"]
+            assert (
+                "Palace report 'Test Report' for library 'default'"
+                in email_args["subject"]
+            )
+            assert (
+                "There was an error generating the 'Test Report' report for library 'default'."
+                in email_args["text"]
+            )
+            assert (
+                "Failed to store report 'test-report' for library 'default' (default) to S3"
+                in caplog.text
+            )
+
+    def test_run_library_not_found(
+        self,
+        integration_report_fixture: LibraryCollectionReportFixture,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        caplog.set_level(logging.ERROR)
+
+        report = integration_report_fixture.MockLibraryCollectionReport(
+            send_email=integration_report_fixture.send_email,
+            s3_service=integration_report_fixture.s3_service,
+            request_id="test_request_id",
+            library_id=999999,
+            email_address="test@example.com",
+        )
+
+        success = report.run(session=integration_report_fixture.db.session)
+
+        assert success is False
+
+        integration_report_fixture.send_email.assert_called_once()
+        email_args = integration_report_fixture.send_email.call_args[1]
+        assert report.email_address == email_args["receivers"]
+        assert (
+            "Palace report 'Test Report' for an unknown library"
+            in email_args["subject"]
+        )
+        assert (
+            "There was an error generating the 'Test Report' report for an unknown library"
+            in email_args["text"]
+        )
+        assert (
+            "Unable to generate report 'Test Report' (test-report) for an unknown library (id=999999)"
+            in caplog.text
+        )
+        assert "library not found" in caplog.text
+
+    def test_run_with_collection_ids(
+        self,
+        integration_report_fixture: LibraryCollectionReportFixture,
+    ):
+        collection1 = integration_report_fixture.db.collection()
+        collection2 = integration_report_fixture.db.collection()
+        collection_ids = [collection1.id, collection2.id]
+
+        report = integration_report_fixture.MockLibraryCollectionReport(
+            send_email=integration_report_fixture.send_email,
+            s3_service=integration_report_fixture.s3_service,
+            request_id="test_request_id",
+            library_id=integration_report_fixture.db.default_library().id,
+            collection_ids=collection_ids,
+            email_address="test@example.com",
+        )
+
+        mock_table_class = MagicMock()
+        mock_table_instance = MagicMock(spec=ReportTable)
+        mock_definition = MagicMock(
+            spec=TabularQueryDefinition, key="test-table", title="Test Table"
+        )
+        type(mock_table_instance).definition = PropertyMock(
+            return_value=mock_definition
+        )
+
+        def table_call(processor):
+            counted_rows, _ = processor(rows=[("data",)], headings=["col1"])
+            return counted_rows, None
+
+        mock_table_instance.side_effect = table_call
+        mock_table_class.return_value = mock_table_instance
+
+        with patch.object(
+            integration_report_fixture.MockLibraryCollectionReport,
+            "TABLE_CLASSES",
+            [mock_table_class],
+        ):
+            integration_report_fixture.s3_service.store_stream.return_value = (
+                "https://s3.example.com/test.zip"
+            )
+
+            success = report.run(session=integration_report_fixture.db.session)
+
+            assert success is True
+
+            mock_table_class.assert_called_once_with(
+                session=integration_report_fixture.db.session,
+                library_id=integration_report_fixture.db.default_library().id,
+                collection_ids=collection_ids,
+            )

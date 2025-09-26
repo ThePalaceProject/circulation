@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import sys
 import tempfile
 import zipfile
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import datetime
 from functools import cached_property, partial
 from pathlib import Path
@@ -12,15 +14,17 @@ from sqlalchemy.orm import Session
 from typing_extensions import Unpack
 
 from palace.manager.celery.task import Task
-from palace.manager.reporting.model import ReportTable
+from palace.manager.core.exceptions import IntegrationException
+from palace.manager.reporting.model import ReportTable, TTabularDataProcessor
 from palace.manager.reporting.util import (
     RequestIdLoggerAdapter,
+    TimestampFormat,
     row_counter_wrapper,
     write_csv,
 )
 from palace.manager.service.email.email import SendEmailCallable
 from palace.manager.service.storage.s3 import S3Service
-from palace.manager.sqlalchemy.model.integration import IntegrationConfiguration
+from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.util import get_one
 from palace.manager.util.log import LoggerAdapterType, LoggerMixin
@@ -35,15 +39,34 @@ class LibraryReportKwargs(TypedDict, total=False):
     collection_ids: Sequence[int] | None
 
 
+@dataclass
+class TableProcessingResult:
+    """Result of processing a single table."""
+
+    table_key: str
+    filename: str
+    row_count: int
+    content_stream: IO[bytes]
+
+    def cleanup(self) -> None:
+        """Clean up the content stream and its associated temporary file."""
+        if hasattr(self.content_stream, "close"):
+            self.content_stream.close()
+        if hasattr(self.content_stream, "name"):
+            Path(self.content_stream.name).unlink(missing_ok=True)
+
+
 T = TypeVar("T", bound="LibraryCollectionReport")
 
 
 class LibraryCollectionReport(LoggerMixin):
-    TIMESTAMP_FORMAT_FOR_FILENAMES = "%Y-%m-%dT%H-%M-%S"
-    TIMESTAMP_FORMAT_FOR_EMAILS = "%Y-%m-%d %H:%M:%S"
-    # The following must be defined in subclasses.
+    # The following must be defined in subclasses:
+    #   A unique key for this report.
     KEY: ClassVar[str]
+    #   A human-readable title for this report.
     TITLE: ClassVar[str]
+    #   A list of the classes for the tables that constitute this report.
+    #   Note: A report may consist of more than one table.
     TABLE_CLASSES: ClassVar[list[type[ReportTable]]] = []
 
     @property
@@ -113,177 +136,251 @@ class LibraryCollectionReport(LoggerMixin):
         return self._timestamp
 
     @classmethod
-    def eligible_integrations(cls, library: Library) -> list[IntegrationConfiguration]:
-        """Return the "eligible" IntegrationConfigurations for the given Library."""
-        return [c.integration_configuration for c in library.active_collections]
-
-    def timestamp_filename_string(self) -> str:
-        return self.timestamp.strftime(self.TIMESTAMP_FORMAT_FOR_FILENAMES)
+    def eligible_collections(cls, library: Library) -> list[Collection]:
+        """Return the "eligible" Collections for the given Library."""
+        return list(library.active_collections)
 
     def timestamp_email_string(self) -> str:
-        return self.timestamp.strftime(self.TIMESTAMP_FORMAT_FOR_EMAILS)
+        return TimestampFormat.EMAIL.format_timestamp(self.timestamp)
 
     def get_filename(self, key: str | None = None) -> str:
         _key: str = key if key is not None else self.key
-        date_str = self.timestamp_filename_string()
+        date_str = TimestampFormat.FILENAME.format_timestamp(self.timestamp)
         return f"palace-{_key}-{self.library.short_name}-{date_str}"
 
-    def email_subject(self, library_name: str | None = None) -> str:
-        if library_name is None:
-            library_name = self.library.name
+    def email_subject(self, library_text: str | None = None) -> str:
+        if library_text is None:
+            library_text = f"library '{self.library.name}'"
+        runtime = TimestampFormat.EMAIL.format_timestamp(self.timestamp)
         return (
-            f"Palace report '{self.title}' for library '{library_name}' run at {self.timestamp_email_string()} "
+            f"Palace report '{self.title}' for {library_text} run at {runtime} "
             f"(request id: {self.request_id})"
         )
 
-    def send_success_notification(self, *, download_url: str) -> None:
+    def send_success_notification(self, *, access_url: str) -> None:
         self.send_email(
             receivers=self.email_address,
             subject=self.email_subject(),
             text=(
-                f"Download report here -> {download_url} \n\n"
+                f"You may access the report here -> {access_url} \n\n"
                 f"This report will be available to download for 30 days."
             ),
         )
 
-    def send_error_notification(
-        self, *, subject: str | None = None, library_name: str | None = None
-    ) -> None:
-        _library_name = (
+    def send_error_notification(self, *, library_name: str | None = None) -> None:
+        library_name_ = (
             library_name
             if library_name is not None
-            else (self.library.name if self._library else "an unknown library")
+            else (self.library.name if self._library else None)
         )
-        _subject = (
-            subject
-            if subject is not None
-            else self.email_subject(library_name=_library_name)
-        )
-        self.log.error(
-            f"Error generating report '{self.title}' ({self.key}) for library {_library_name}."
+        library_text = (
+            f"library '{library_name_}'" if library_name_ else "an unknown library"
         )
         self.send_email(
             receivers=self.email_address,
-            subject=_subject,
+            subject=self.email_subject(library_text=library_text),
             text=(
-                f"There was an error generating the '{self.title}' report for {_library_name}. \n\n"
+                f"There was an error generating the '{self.title}' report for {library_text}. \n\n"
                 "If the issue persists, please contact support."
             ),
         )
 
-    def store_to_s3(
-        self, *, file: IO[bytes], name: str, extension: str = "", content_type: str
-    ) -> str | None:
-        """Store content to S3.
+    def get_table_processor(
+        self, table: ReportTable, **kwargs
+    ) -> TTabularDataProcessor:
+        """Get the processor for a specific table.
 
-        The name and extension are used to construct a key for the S3
-        object. A request ID is injected into the key to avoid creating
-        predictable S3 URLs.
+        Override in subclasses for different processing strategies (e.g.,
+        non-CSV or different processors for different tables).
 
-        :param file: A file-like object with the contents to store.
-        :param name: The name for the S3 key.
-        :param extension: The extension, including the dot('.'), for the S3 key.
-        :param content_type: The MIME type for the stored object.
-        :return: The URL for the stored object on success or None on failure.
+        Note: This looks like a static method, but it is not. As a hook, it
+        may need information about the table being processed or information
+        from the class or instance.
+
+        :param table: The table for which to get a processor.
+        :return: A tabular data processor for the table.
         """
-        key = (
-            f"{S3Service.DOWNLOADS_PREFIX}/reports/{name}-{self.request_id}{extension}"
+        delimiter = kwargs.pop("delimiter", ",")
+        return partial(write_csv, delimiter=delimiter, **kwargs)
+
+    def _process_table(self, table: ReportTable) -> TableProcessingResult:
+        """Process a single table and return the result with metadata."""
+        filename = f"{self.get_filename(key=table.definition.key)}.csv"
+
+        # Create a single temporary file opened in text mode
+        temp_file = tempfile.NamedTemporaryFile(
+            "w+", encoding="utf-8", newline="", delete=False
         )
-        return self.store_s3_stream(
-            key,
-            file,
-            content_type=content_type,
-        )
 
-    def zip_results(
-        self,
-        *,
-        archive: zipfile.ZipFile,
-        member_name: str,
-        table: ReportTable,
-    ) -> None:
-        with tempfile.NamedTemporaryFile(
-            "w", encoding="utf-8", newline=""
-        ) as temp_file:
-            # Generate the report.
-            csv_file_writer = partial(write_csv, file=temp_file, delimiter=",")
-            processor = row_counter_wrapper(csv_file_writer)
-            counted_rows, _ = table(processor)
-            self.log.debug(
-                f"Wrote {counted_rows.get_count()} rows to file {temp_file.name}."
+        try:
+            # Get the table processor bound to the output file.
+            processor_func = self.get_table_processor(table, file=temp_file)
+            counting_processor = row_counter_wrapper(processor_func)
+
+            # Process the table
+            counted_rows, _ = table(counting_processor)
+
+            temp_file.flush()
+            temp_file.close()
+
+            # Reopen in binary mode for reading
+            binary_file = open(temp_file.name, "rb")
+
+            row_count = counted_rows.get_count()
+
+            return TableProcessingResult(
+                table_key=table.definition.key,
+                filename=filename,
+                row_count=row_count,
+                content_stream=binary_file,
             )
+        except:
+            # Clean up on error
+            Path(temp_file.name).unlink(missing_ok=True)
+            raise
 
-            # Put it in the Zip file.
-            archive.write(
-                filename=temp_file.name,
-                arcname=member_name,
-            )
-            self.log.debug(
-                f"Report file added to Zip archive '{archive.filename}' as '{member_name}'."
-            )
+    def _package_results(self, results: list[TableProcessingResult]) -> IO[bytes]:
+        """Package processing results into a ZIP archive.
 
-    def _run_report(self, *, session: Session) -> bool:
-        """Run the report for the given library."""
+        Override in subclasses, depending on the packaging approach.
 
+        This is a good place to apply a consistent process to each table's results.
+
+        :param results: List of table processing results to package.
+        :return: A stream containing the packaged results.
+        :raises: Any exception raised during packaging.
+        """
+        zip_buffer = tempfile.SpooledTemporaryFile(max_size=10 * 1024 * 1024)
+
+        # Before Python 3.11, SpooledTemporaryFile is missing the `seekable` attribute.
+        # See https://stackoverflow.com/questions/47160211/why-doesnt-tempfile-spooledtemporaryfile-implement-readable-writable-seekable
+        # TODO: Remove this once we drop support for Python 3.10.
+        if not hasattr(zip_buffer, "seekable") and sys.version_info < (3, 11):
+            zip_buffer.seekable = lambda: True  # type: ignore[method-assign]
+
+        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_STORED) as archive:
+            for result in results:
+                # Read content and add to ZIP
+                content = result.content_stream.read()
+                archive.writestr(result.filename, content)
+
+                self.log.debug(
+                    f"Added {result.filename} ({result.row_count} rows) to ZIP archive."
+                )
+
+        zip_buffer.seek(0)
+        return zip_buffer
+
+    @staticmethod
+    def _cleanup_results(results: list[TableProcessingResult]) -> None:
+        """Clean up all processing results."""
+        for result in results:
+            result.cleanup()
+
+    def _store_package(self, package: IO[bytes]) -> str:
+        """Store the packaged results to S3.
+
+        The request ID is used to obfuscate the URL.
+
+        Override in subclasses for different storage strategies.
+
+        :param package: The packaged results to store.
+        :return: Access URL for the stored results.
+        :raises: IntegrationException if the storage operation fails.
+        """
         library = self.library
-        report_filename = self.get_filename(key=self.key)
-        self.log.info(
-            f"Creating report '{self.key}' for {library.name} ({library.short_name})."
+
+        # Construct S3 key with request ID for obfuscation.
+        key = (
+            f"{S3Service.DOWNLOADS_PREFIX}/reports/"
+            f"{library.short_name}/{self.get_filename()}-{self.request_id}.zip"
         )
 
-        # Instantiate the table objects for this report.
-        tables = [
+        result = self.store_s3_stream(
+            key,
+            package,
+            content_type="application/zip",
+        )
+        if result is None:
+            message = f"Failed to store report '{self.key}' for library '{library.name}' ({library.short_name}) to S3."
+            self.log.error(message)
+            raise IntegrationException(message)
+        return result
+
+    def _initialize_tables(self, session: Session) -> list[ReportTable]:
+        """Prepare table instances for the report.
+
+        :param session: Database session.
+        :return: List of instantiated table objects.
+        """
+        return [
             t(
                 session=session,
-                library_id=library.id,
+                library_id=self.library.id,
                 collection_ids=self.collection_ids,
             )
             for t in self.table_classes
         ]
 
-        with tempfile.NamedTemporaryFile() as temp_zip_file:
-            zip_path = Path(temp_zip_file.name)
-
-            with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_STORED) as archive:
-                for table in tables:
-                    self.zip_results(
-                        archive=archive,
-                        member_name=f"{self.get_filename(key=table.definition.key)}.csv",
-                        table=table,
-                    )
-            self.log.debug(f"Zip file written to '{zip_path}'.")
-
-            # This step must be done after the Zip `archive` has been closed,
-            # but before it's temporary file has been deleted. `archive` is
-            # automatically closed when its context manager exits, so this step
-            # should happen outside of that context manager or after `archive.close()`
-            # has been called. The temporary file will be deleted when its context
-            # manager exits, so this step must be performed within that context manager.
-            # Store the Zip to S3.
-            s3_url = self.store_to_s3(
-                file=temp_zip_file,
-                name=f"{library.short_name}/{report_filename}",
-                extension=".zip",
-                content_type="application/zip",
-            )
-            if s3_url is None:
-                self.log.error(
-                    f"Failed to store report '{self.key}' for {library.name} ({library.short_name}) to S3."
-                )
-                self.send_error_notification()
-                return False
-
-        # Notify the requestor.
-        self.send_success_notification(download_url=s3_url)
+    def _run_report(self, *, session: Session) -> bool:
+        """Run the report for the given library."""
+        library = self.library
         self.log.info(
-            f"Emailed notification for report '{self.title}' ({self.key}) for "
-            f"library {library.name} ({library.short_name}) to {self.email_address}."
+            f"Creating report '{self.key}' for {library.name} ({library.short_name})."
         )
 
-        return True
+        # Set up the tables.
+        tables = self._initialize_tables(session=session)
+
+        # We need to track the results so that we can clean them up later.
+        processing_results: list[TableProcessingResult] = []
+        try:
+            # Process each table.
+            for table in tables:
+                try:
+                    result = self._process_table(table)
+                    processing_results.append(result)
+                except Exception as e:
+                    self.log.error(
+                        f"Failed to process table '{table.definition.key}': {e}"
+                    )
+                    raise
+                self.log.debug(
+                    f"Processed table '{table.definition.title}' ({table.definition.key}) ({result.row_count} rows) "
+                    f"to '{result.filename}' for report '{self.title}' ({self.key})"
+                )
+
+            # Package up the results.
+            try:
+                package = self._package_results(processing_results)
+            except Exception as e:
+                self.log.error(f"Failed to package results: {e}")
+                raise
+
+            # Store the package.
+            try:
+                location = self._store_package(package)
+            finally:
+                package.close()
+
+            # Send success notification.
+            self.send_success_notification(access_url=location)
+            self.log.info(
+                f"Emailed notification for report '{self.title}' ({self.key}) for "
+                f"library {library.name} ({library.short_name}) to {self.email_address}."
+            )
+            return True
+
+        finally:
+            # Always clean up processing results, regardless of success or failure
+            self._cleanup_results(processing_results)
 
     def run(self, *, session: Session) -> bool:
-        """Run the main report task with a database session."""
+        """Set up and run the report.
+
+        :param session: Database session.
+        :return: True if the report was successfully generated, False otherwise.
+        """
 
         # Set the timestamp for the current run.
         self._timestamp = datetime.now()
@@ -291,16 +388,17 @@ class LibraryCollectionReport(LoggerMixin):
         library = get_one(session, Library, id=self.library_id)
         if not library:
             self.log.error(
-                f"Unable to generate report '{self.title}' ({self.key}) for library id={self.library_id}: "
+                f"Unable to generate report '{self.title}' ({self.key}) for an unknown library (id={self.library_id}): "
                 "library not found."
             )
-            self.send_error_notification(
-                subject=self.email_subject(library_name="an unknown library")
-            )
+            self.send_error_notification()
             return False
         self._library = library
-        self.log.info(
-            f"Set library '{self.library.name}' ({self.library.short_name}) for report '{self.title}' ({self.key})."
-        )
-
-        return self._run_report(session=session)
+        try:
+            return self._run_report(session=session)
+        except Exception as e:
+            self.log.error(
+                f"Unable to generate report '{self.title}' ({self.key}) for library '{library.name}': {e}"
+            )
+            self.send_error_notification()
+            return False

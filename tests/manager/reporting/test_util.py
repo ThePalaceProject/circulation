@@ -178,6 +178,17 @@ class TestReportTableProcessors:
         assert counted_rows.count == expected_count
         assert output.getvalue() == expected_output
 
+    def test_row_counter_wrapper_rows_not_iterable(self):
+        output = io.StringIO()
+        table_data_processor = partial(write_csv, file=output)
+        counting_table_data_processor = row_counter_wrapper(table_data_processor)
+
+        with pytest.raises(
+            TypeError,
+            match="The 'rows' argument for `.+` must be an Iterable.",
+        ):
+            counting_table_data_processor(rows=123)
+
 
 class TestRequestIdLoggerAdapter:
     @pytest.mark.parametrize(

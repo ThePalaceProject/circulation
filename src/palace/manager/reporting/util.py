@@ -37,16 +37,13 @@ def row_counter_wrapper(
         *, rows: TTabularRows, headings: TTabularHeadings | None = None
     ) -> tuple[CountingIterator, TTabularDataProcessorReturn]:
         if not isinstance(rows, Iterable):
-            raise TypeError(
-                f"The 'rows' argument for {func.__name__} must be an Iterable."
-            )
+            raise TypeError(f"The 'rows' argument for `{func}` must be an Iterable.")
         counted_rows = CountingIterator(rows)
         wrapped_result: TTabularDataProcessorReturn = func(
             rows=counted_rows, headings=headings
         )
         return counted_rows, wrapped_result
 
-    # Ignoring the type because mypy can't figure it out.
     return wrapper
 
 
