@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Collection
 from email.utils import parsedate_to_datetime
 from typing import Literal, TypeVar
@@ -111,6 +112,9 @@ def raise_for_bad_response(
     return response
 
 
+log = logging.getLogger(__name__)
+
+
 def parse_retry_after(header_value: str | None) -> float | None:
     """
     Parse the Retry-After header value and return the delay in seconds.
@@ -139,4 +143,5 @@ def parse_retry_after(header_value: str | None) -> float | None:
         return max(0, delay)
     except (TypeError, ValueError, AttributeError):
         # Invalid date format
+        log.warning(f"Invalid Retry-After header format: {header_value}")
         return None
