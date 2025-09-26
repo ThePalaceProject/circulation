@@ -56,8 +56,8 @@ class TestOpdsImporter:
 
         # Use the real AsyncClient but with mocked transport via async_http_client fixture
 
-        # Set the backoff factor to 0 to avoid delays in tests
-        importer._async_http_client._backoff_factor = 0
+        # Set the backoff to None to avoid delays in tests
+        importer._async_http_client._backoff = None
 
         # Create a mock license with required structure
         def create_mock_license(identifier: str) -> License:
@@ -373,8 +373,8 @@ class TestOpdsImporter:
         registry = services_fixture.services.integration_registry().license_providers()
         importer = importer_from_collection(collection, registry)
 
-        # Set the backoff factor to 0 to avoid delays in tests
-        importer._async_http_client._backoff_factor = 0
+        # Set the backoff to None to avoid delays in tests
+        importer._async_http_client._backoff = None
 
         # Create a mock publication with licenses
         def create_mock_publication_with_license(

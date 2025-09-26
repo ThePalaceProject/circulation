@@ -1,17 +1,15 @@
 from collections.abc import AsyncGenerator
-from unittest.mock import create_autospec, patch
+from unittest.mock import MagicMock, call, create_autospec, patch
 
 import httpx
 import pytest
 
 from palace.manager.util.http.async_http import (
-    WEB_DEFAULT_BACKOFF_FACTOR,
-    WEB_DEFAULT_MAX_BACKOFF,
+    WEB_DEFAULT_BACKOFF,
     WEB_DEFAULT_MAX_REDIRECTS,
     WEB_DEFAULT_MAX_RETRIES,
     WEB_DEFAULT_TIMEOUT,
-    WORKER_DEFAULT_BACKOFF_FACTOR,
-    WORKER_DEFAULT_MAX_BACKOFF,
+    WORKER_DEFAULT_BACKOFF,
     WORKER_DEFAULT_MAX_REDIRECTS,
     WORKER_DEFAULT_MAX_RETRIES,
     WORKER_DEFAULT_TIMEOUT,
@@ -28,11 +26,8 @@ from tests.fixtures.webserver import MockAPIServer, MockAPIServerResponse
 
 class AsyncClientFixture:
     def __init__(self) -> None:
-        self.client = AsyncClient.for_worker()
-
         # Setup the client to have no backoff for testing retries
-        self.client._max_retries = 4
-        self.client._backoff_factor = 0
+        self.client = AsyncClient.for_worker(max_retries=4, backoff=None)
 
         self.mock_client = AsyncClient(client=create_autospec(httpx.AsyncClient))
 
@@ -248,16 +243,17 @@ class TestAsyncClient:
         )
 
         async with AsyncClient.for_worker(
-            disallowed_response_codes=[429], no_retry_status_codes=[429]
+            disallowed_response_codes=["4xx"],
+            no_retry_status_codes=[429],
+            max_retries=3,
+            backoff=None,
         ) as client:
             # Set up client with retries but 429 shouldn't retry
-            client._max_retries = 3
-            client._backoff_factor = 0
-
             with pytest.raises(BadResponseException) as excinfo:
                 await client.get(mock_web_server.url("/test"))
 
             assert excinfo.value.response.status_code == 429
+            assert excinfo.value.retry_count == 0
             assert len(mock_web_server.requests()) == 1  # No retry attempted
 
     async def test_retry_count_in_exceptions(
@@ -304,17 +300,18 @@ class TestAsyncClient:
         async_http_client.queue_exception(httpx.TimeoutException("Timeout 2"))
         async_http_client.queue_exception(httpx.TimeoutException("Timeout 3"))
 
-        async with AsyncClient.for_worker() as client:
-            # Set up client with retries
-            client._max_retries = 2
-            client._backoff_factor = 0
-
+        # Set up client with retries
+        mock_backoff = MagicMock(return_value=0)
+        async with AsyncClient.for_worker(
+            max_retries=2, backoff=mock_backoff
+        ) as client:
             with pytest.raises(RequestTimedOut) as excinfo:
                 await client.get("https://example.com/test")
 
             assert excinfo.value.retry_count == 2  # 2 retries were made
             assert "Timeout 3" in str(excinfo.value)
             assert len(async_http_client.requests) == 3
+            mock_backoff.assert_has_calls([call(0), call(1)])
 
         # Test timeout with no retries
         async_http_client.reset_mock()
@@ -344,11 +341,9 @@ class TestAsyncClient:
 
         async with AsyncClient.for_worker(
             no_retry_status_codes=[500, "5xx"],  # These should not affect timeouts
+            max_retries=3,
+            backoff=None,
         ) as client:
-            # Set up client with retries
-            client._max_retries = 3
-            client._backoff_factor = 0
-
             # Should retry timeouts and eventually succeed
             response = await client.get("https://example.com/test")
             assert response.status_code == 200
@@ -366,11 +361,9 @@ class TestAsyncClient:
 
         async with AsyncClient.for_worker(
             no_retry_status_codes=["5xx"],  # Should not affect timeouts
+            max_retries=3,
+            backoff=None,
         ) as client:
-            # Set up client with retries
-            client._max_retries = 3
-            client._backoff_factor = 0
-
             # Should fail after max retries
             with pytest.raises(RequestTimedOut) as excinfo:
                 await client.get("https://example.com/test")
@@ -536,8 +529,7 @@ class TestAsyncClient:
 
         # Check that the AsyncClient wrapper has the correct defaults
         assert client._max_retries == WEB_DEFAULT_MAX_RETRIES
-        assert client._backoff_factor == WEB_DEFAULT_BACKOFF_FACTOR
-        assert client._max_backoff == WEB_DEFAULT_MAX_BACKOFF
+        assert client._backoff == WEB_DEFAULT_BACKOFF
 
         # Check that the underlying httpx client has the correct configuration
         assert client._httpx_client.timeout == WEB_DEFAULT_TIMEOUT
@@ -565,8 +557,7 @@ class TestAsyncClient:
 
         # Check that the AsyncClient wrapper has the correct defaults
         assert client._max_retries == WORKER_DEFAULT_MAX_RETRIES
-        assert client._backoff_factor == WORKER_DEFAULT_BACKOFF_FACTOR
-        assert client._max_backoff == WORKER_DEFAULT_MAX_BACKOFF
+        assert client._backoff == WORKER_DEFAULT_BACKOFF
 
         # Check that the underlying httpx client has the correct configuration
         assert client._httpx_client.timeout == WORKER_DEFAULT_TIMEOUT
