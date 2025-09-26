@@ -33,6 +33,7 @@ class TestParseRetryAfter:
         result = parse_retry_after(date_str)
         # Should be approximately 60 seconds, allowing for slight timing differences
         # due to rounding since the time is captured at second resolution
+        assert result is not None
         assert 59 < result <= 60
 
     @freeze_time()
