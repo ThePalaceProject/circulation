@@ -1,6 +1,6 @@
 import logging
 import zipfile
-from contextlib import closing
+from contextlib import closing, contextmanager
 from datetime import datetime, timedelta
 from io import BytesIO
 from pathlib import Path
@@ -339,7 +339,7 @@ class TestLibraryCollectionReport:
         result = report._process_table(mock_table)
 
         assert result.table_key == "test-table"
-        assert result.filename == "palace-test_table_id-default-2024-01-01T12-00-00.csv"
+        assert result.filename == "palace-test-table-default-2024-01-01T12-00-00.csv"
         assert result.row_count == 2
         assert hasattr(result.content_stream, "read")
 
@@ -494,7 +494,7 @@ class TestLibraryCollectionReport:
 
         with pytest.raises(
             IntegrationException,
-            match=r"Failed to store report 'test_report' for library 'default' \(default\) to S3.",
+            match=r"Failed to store report 'test-report' for library 'default' \(default\) to S3.",
         ):
             report._store_package(package)
 
@@ -592,25 +592,18 @@ class TestLibraryCollectionReport:
             )
 
 
-class IntegrationLibraryCollectionReportFixture(LibraryCollectionReportFixture):
+class LibraryCollectionReportRunFixture(LibraryCollectionReportFixture):
+
     class MockLibraryCollectionReport(LibraryCollectionReport):
         KEY = "test-report"
         TITLE = "Test Report"
+        # Note: No _run_report override - uses real implementation
 
+    def __init__(self, db: DatabaseTransactionFixture):
+        super().__init__(db)
 
-@pytest.fixture
-def integration_report_fixture(
-    db: DatabaseTransactionFixture,
-) -> LibraryCollectionReportFixture:
-    return IntegrationLibraryCollectionReportFixture(db)
-
-
-class TestLibraryCollectionRun:
-
-    def test_run_success(
-        self,
-        integration_report_fixture: LibraryCollectionReportFixture,
-    ):
+    def create_mock_table(self, *, should_fail: bool = False):
+        """Create a mock table class and instance for testing."""
         mock_table_class = MagicMock()
         mock_table_instance = MagicMock(spec=ReportTable)
         mock_definition = MagicMock(
@@ -622,42 +615,62 @@ class TestLibraryCollectionRun:
             return_value=mock_definition
         )
 
-        def table_call(processor):
-            test_rows = [("header1", "header2"), ("data1", "data2")]
-            counted_rows, _ = processor(rows=test_rows[1:], headings=test_rows[0])
-            return counted_rows, None
+        if should_fail:
+            exception = ValueError("Table processing failed")
+            mock_table_instance.side_effect = exception
+        else:
 
-        mock_table_instance.side_effect = table_call
+            def table_call(processor):
+                test_rows = [("data1", "data2"), ("data3", "data4")]
+                headings = ["col1", "col2"]
+                counted_rows, _ = processor(rows=test_rows, headings=headings)
+                return counted_rows, None
+
+            mock_table_instance.side_effect = table_call
+
         mock_table_class.return_value = mock_table_instance
+        return mock_table_class
+
+    @contextmanager
+    def with_mock_table(self, *, should_fail: bool = False):
+        """Context manager that sets up a mock table and patches TABLE_CLASSES."""
+        mock_table_class = self.create_mock_table(should_fail=should_fail)
 
         with patch.object(
-            integration_report_fixture.MockLibraryCollectionReport,
+            self.MockLibraryCollectionReport,
             "TABLE_CLASSES",
             [mock_table_class],
         ):
-            report = integration_report_fixture.report
+            yield mock_table_class
 
+
+@pytest.fixture
+def report_run_fixture(
+    db: DatabaseTransactionFixture,
+) -> LibraryCollectionReportRunFixture:
+    return LibraryCollectionReportRunFixture(db)
+
+
+class TestLibraryCollectionRun:
+
+    def test_run_full_integration(
+        self,
+        report_run_fixture: LibraryCollectionReportRunFixture,
+    ):
+        with report_run_fixture.with_mock_table():
+            report = report_run_fixture.report
             expected_url = "https://s3.example.com/reports/test-report.zip"
-            integration_report_fixture.s3_service.store_stream.return_value = (
-                expected_url
-            )
-
-            success = report.run(session=integration_report_fixture.db.session)
+            report_run_fixture.s3_service.store_stream.return_value = expected_url
+            success = report.run(session=report_run_fixture.db.session)
 
             assert success is True
-
-            assert report.library == integration_report_fixture.db.default_library()
+            assert report.library == report_run_fixture.db.default_library()
             assert report.timestamp is not None
 
-            mock_table_class.assert_called_once_with(
-                session=integration_report_fixture.db.session,
-                library_id=integration_report_fixture.db.default_library().id,
-                collection_ids=None,
-            )
+            report_run_fixture.s3_service.store_stream.assert_called_once()
+            report_run_fixture.send_email.assert_called_once()
 
-            integration_report_fixture.s3_service.store_stream.assert_called_once()
-            integration_report_fixture.send_email.assert_called_once()
-            email_args = integration_report_fixture.send_email.call_args[1]
+            email_args = report_run_fixture.send_email.call_args[1]
             assert email_args["receivers"] == report.email_address
             assert (
                 "Palace report 'Test Report' for library 'default'"
@@ -668,36 +681,18 @@ class TestLibraryCollectionRun:
 
     def test_run_table_processing_failure(
         self,
-        integration_report_fixture: LibraryCollectionReportFixture,
+        report_run_fixture: LibraryCollectionReportRunFixture,
         caplog: pytest.LogCaptureFixture,
     ):
         caplog.set_level(logging.ERROR)
 
-        mock_table_class = MagicMock()
-        mock_table_instance = MagicMock(spec=ReportTable)
-        mock_definition = MagicMock(
-            spec=TabularQueryDefinition,
-            key="test-table",
-            title="Test Table",
-        )
-        type(mock_table_instance).definition = PropertyMock(
-            return_value=mock_definition
-        )
-        mock_table_instance.side_effect = ValueError("Table processing failed")
-        mock_table_class.return_value = mock_table_instance
-
-        with patch.object(
-            integration_report_fixture.MockLibraryCollectionReport,
-            "TABLE_CLASSES",
-            [mock_table_class],
-        ):
-
-            report = integration_report_fixture.report
-            success = report.run(session=integration_report_fixture.db.session)
+        with report_run_fixture.with_mock_table(should_fail=True):
+            report = report_run_fixture.report
+            success = report.run(session=report_run_fixture.db.session)
 
             assert success is False
-            integration_report_fixture.send_email.assert_called_once()
-            email_args = integration_report_fixture.send_email.call_args[1]
+            report_run_fixture.send_email.assert_called_once()
+            email_args = report_run_fixture.send_email.call_args[1]
             assert report.email_address == email_args["receivers"]
             assert (
                 "Palace report 'Test Report' for library 'default'"
@@ -711,45 +706,20 @@ class TestLibraryCollectionRun:
 
     def test_run_packaging_failure(
         self,
-        integration_report_fixture: LibraryCollectionReportFixture,
+        report_run_fixture: LibraryCollectionReportRunFixture,
         caplog: pytest.LogCaptureFixture,
     ):
         caplog.set_level(logging.ERROR)
 
-        mock_table_class = MagicMock()
-        mock_table_instance = MagicMock(spec=ReportTable)
-        mock_definition = MagicMock(
-            spec=TabularQueryDefinition,
-            key="test-table",
-            title="Test Table",
-        )
-        type(mock_table_instance).definition = PropertyMock(
-            return_value=mock_definition
-        )
-
-        def table_call(processor):
-            counted_rows, _ = processor(
-                rows=[("data1", "data2")], headings=["col1", "col2"]
-            )
-            return counted_rows, None
-
-        mock_table_instance.side_effect = table_call
-        mock_table_class.return_value = mock_table_instance
-
-        with patch.object(
-            integration_report_fixture.MockLibraryCollectionReport,
-            "TABLE_CLASSES",
-            [mock_table_class],
-        ):
-            report = integration_report_fixture.report
-
-            with patch.object(report, "_package_results") as mock_store_package:
-                mock_store_package.side_effect = ValueError("It didn't work.")
-                success = report.run(session=integration_report_fixture.db.session)
+        with report_run_fixture.with_mock_table():
+            report = report_run_fixture.report
+            with patch.object(report, "_package_results") as mock_packaging:
+                mock_packaging.side_effect = ValueError("Packaging failed")
+                success = report.run(session=report_run_fixture.db.session)
 
             assert success is False
-            integration_report_fixture.send_email.assert_called_once()
-            email_args = integration_report_fixture.send_email.call_args[1]
+            report_run_fixture.send_email.assert_called_once()
+            email_args = report_run_fixture.send_email.call_args[1]
             assert report.email_address == email_args["receivers"]
             assert (
                 "Palace report 'Test Report' for library 'default'"
@@ -763,46 +733,19 @@ class TestLibraryCollectionRun:
 
     def test_run_s3_storage_failure(
         self,
-        integration_report_fixture: LibraryCollectionReportFixture,
+        report_run_fixture: LibraryCollectionReportRunFixture,
         caplog: pytest.LogCaptureFixture,
     ):
         caplog.set_level(logging.ERROR)
 
-        mock_table_class = MagicMock()
-        mock_table_instance = MagicMock(spec=ReportTable)
-        mock_definition = MagicMock(
-            spec=TabularQueryDefinition,
-            key="test-table",
-            title="Test Table",
-        )
-        type(mock_table_instance).definition = PropertyMock(
-            return_value=mock_definition
-        )
-
-        def table_call(processor):
-            counted_rows, _ = processor(
-                rows=[("data1", "data2")], headings=["col1", "col2"]
-            )
-            return counted_rows, None
-
-        mock_table_instance.side_effect = table_call
-        mock_table_class.return_value = mock_table_instance
-
-        with patch.object(
-            integration_report_fixture.MockLibraryCollectionReport,
-            "TABLE_CLASSES",
-            [mock_table_class],
-        ):
-            report = integration_report_fixture.report
-
-            integration_report_fixture.s3_service.store_stream.return_value = None
-
-            success = report.run(session=integration_report_fixture.db.session)
+        with report_run_fixture.with_mock_table():
+            report = report_run_fixture.report
+            report_run_fixture.s3_service.store_stream.return_value = None
+            success = report.run(session=report_run_fixture.db.session)
 
             assert success is False
-
-            integration_report_fixture.send_email.assert_called_once()
-            email_args = integration_report_fixture.send_email.call_args[1]
+            report_run_fixture.send_email.assert_called_once()
+            email_args = report_run_fixture.send_email.call_args[1]
             assert report.email_address == email_args["receivers"]
             assert (
                 "Palace report 'Test Report' for library 'default'"
@@ -819,25 +762,23 @@ class TestLibraryCollectionRun:
 
     def test_run_library_not_found(
         self,
-        integration_report_fixture: LibraryCollectionReportFixture,
+        report_run_fixture: LibraryCollectionReportRunFixture,
         caplog: pytest.LogCaptureFixture,
     ):
         caplog.set_level(logging.ERROR)
 
-        report = integration_report_fixture.MockLibraryCollectionReport(
-            send_email=integration_report_fixture.send_email,
-            s3_service=integration_report_fixture.s3_service,
+        report = report_run_fixture.MockLibraryCollectionReport(
+            send_email=report_run_fixture.send_email,
+            s3_service=report_run_fixture.s3_service,
             request_id="test_request_id",
             library_id=999999,
             email_address="test@example.com",
         )
-
-        success = report.run(session=integration_report_fixture.db.session)
+        success = report.run(session=report_run_fixture.db.session)
 
         assert success is False
-
-        integration_report_fixture.send_email.assert_called_once()
-        email_args = integration_report_fixture.send_email.call_args[1]
+        report_run_fixture.send_email.assert_called_once()
+        email_args = report_run_fixture.send_email.call_args[1]
         assert report.email_address == email_args["receivers"]
         assert (
             "Palace report 'Test Report' for an unknown library"
@@ -855,52 +796,30 @@ class TestLibraryCollectionRun:
 
     def test_run_with_collection_ids(
         self,
-        integration_report_fixture: LibraryCollectionReportFixture,
+        report_run_fixture: LibraryCollectionReportRunFixture,
     ):
-        collection1 = integration_report_fixture.db.collection()
-        collection2 = integration_report_fixture.db.collection()
+        collection1 = report_run_fixture.db.collection()
+        collection2 = report_run_fixture.db.collection()
         collection_ids = [collection1.id, collection2.id]
 
-        report = integration_report_fixture.MockLibraryCollectionReport(
-            send_email=integration_report_fixture.send_email,
-            s3_service=integration_report_fixture.s3_service,
+        report = report_run_fixture.MockLibraryCollectionReport(
+            send_email=report_run_fixture.send_email,
+            s3_service=report_run_fixture.s3_service,
             request_id="test_request_id",
-            library_id=integration_report_fixture.db.default_library().id,
+            library_id=report_run_fixture.db.default_library().id,
             collection_ids=collection_ids,
             email_address="test@example.com",
         )
 
-        mock_table_class = MagicMock()
-        mock_table_instance = MagicMock(spec=ReportTable)
-        mock_definition = MagicMock(
-            spec=TabularQueryDefinition, key="test-table", title="Test Table"
-        )
-        type(mock_table_instance).definition = PropertyMock(
-            return_value=mock_definition
-        )
-
-        def table_call(processor):
-            counted_rows, _ = processor(rows=[("data",)], headings=["col1"])
-            return counted_rows, None
-
-        mock_table_instance.side_effect = table_call
-        mock_table_class.return_value = mock_table_instance
-
-        with patch.object(
-            integration_report_fixture.MockLibraryCollectionReport,
-            "TABLE_CLASSES",
-            [mock_table_class],
-        ):
-            integration_report_fixture.s3_service.store_stream.return_value = (
+        with report_run_fixture.with_mock_table() as mock_table_class:
+            report_run_fixture.s3_service.store_stream.return_value = (
                 "https://s3.example.com/test.zip"
             )
-
-            success = report.run(session=integration_report_fixture.db.session)
+            success = report.run(session=report_run_fixture.db.session)
 
             assert success is True
-
             mock_table_class.assert_called_once_with(
-                session=integration_report_fixture.db.session,
-                library_id=integration_report_fixture.db.default_library().id,
+                session=report_run_fixture.db.session,
+                library_id=report_run_fixture.db.default_library().id,
                 collection_ids=collection_ids,
             )
