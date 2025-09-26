@@ -1,14 +1,19 @@
 from __future__ import annotations
 
+import asyncio
 import datetime
 import json
+from collections import defaultdict, deque
 from collections.abc import Generator, Iterable
+from dataclasses import dataclass
 from functools import partial
 from threading import RLock
 from typing import Any, NamedTuple, Unpack, cast, overload
 from urllib.parse import urlsplit
 
 import flask
+import httpx
+from httpx import URL, HTTPStatusError, Limits, RequestError, Timeout
 from pydantic import ValidationError
 from requests import Response
 from requests.structures import CaseInsensitiveDict
@@ -112,6 +117,7 @@ from palace.manager.sqlalchemy.model.resource import Representation
 from palace.manager.sqlalchemy.util import get_one
 from palace.manager.util import base64
 from palace.manager.util.datetime_helpers import utc_now
+from palace.manager.util.http.async_http import AsyncClient
 from palace.manager.util.http.exception import BadResponseException
 from palace.manager.util.http.http import HTTP, RequestKwargs
 
@@ -119,6 +125,11 @@ from palace.manager.util.http.http import HTTP, RequestKwargs
 class OverdriveToken(NamedTuple):
     token: str
     expires: datetime.datetime
+
+
+@dataclass
+class BookInfoEndpoint:
+    url: str
 
 
 class OverdriveAPI(
@@ -193,18 +204,30 @@ class OverdriveAPI(
     TOKEN_ENDPOINT = "%(oauth_host)s/token"
     PATRON_TOKEN_ENDPOINT = "%(oauth_patron_host)s/patrontoken"
 
+    HOST_ENDPOINT_BASE = "%(host)s"
     LIBRARY_ENDPOINT = "%(host)s/v1/libraries/%(library_id)s"
     ADVANTAGE_LIBRARY_ENDPOINT = (
         "%(host)s/v1/libraries/%(parent_library_id)s/advantageAccounts/%(library_id)s"
     )
-    ALL_PRODUCTS_ENDPOINT = (
-        "%(host)s/v1/collections/%(collection_token)s/products?sort=%(sort)s"
-    )
+    ALL_PRODUCTS_ENDPOINT = f"{HOST_ENDPOINT_BASE}/v1/collections/%(collection_token)s/products?sort=%(sort)s"
+
+    METADATA_ENDPOINT_BASE = "/v1/collections/%(collection_token)s/products"
+
     METADATA_ENDPOINT = (
-        "%(host)s/v1/collections/%(collection_token)s/products/%(item_id)s/metadata"
+        f"{HOST_ENDPOINT_BASE}{METADATA_ENDPOINT_BASE}/%(item_id)s/metadata"
     )
-    EVENTS_ENDPOINT = "%(host)s/v1/collections/%(collection_token)s/products?lastUpdateTime=%(lastupdatetime)s&limit=%(limit)s"
-    AVAILABILITY_ENDPOINT = "%(host)s/v2/collections/%(collection_token)s/products/%(product_id)s/availability"
+
+    EVENTS_ENDPOINT_BASE = "/v1/collections/%(collection_token)s/products"
+    EVENTS_ENDPOINT = (
+        "%(host)s"
+        + EVENTS_ENDPOINT_BASE
+        + "?lastUpdateTime=%(lastupdatetime)s&limit=%(limit)s"
+    )
+
+    AVAILABILITY_ENDPOINT_BASE = "/v2/collections/%(collection_token)s/products"
+    AVAILABILITY_ENDPOINT = (
+        f"{HOST_ENDPOINT_BASE}{AVAILABILITY_ENDPOINT_BASE}/%(product_id)s/availability"
+    )
 
     PATRON_INFORMATION_ENDPOINT = "%(patron_host)s/v1/patrons/me"
     CHECKOUTS_ENDPOINT = "%(patron_host)s/v1/patrons/me/checkouts"
@@ -412,7 +435,7 @@ class OverdriveAPI(
         exception_on_401: bool = False,
     ) -> tuple[int, CaseInsensitiveDict[str], bytes]:
         """Make an HTTP GET request using the active Bearer Token."""
-        request_headers = dict(Authorization="Bearer %s" % self._client_oauth_token)
+        request_headers = self._get_headers(self._client_oauth_token)
         if extra_headers:
             request_headers.update(extra_headers)
 
@@ -589,6 +612,180 @@ class OverdriveAPI(
         availability_queue = extractor_class.availability_link_list(content_dict)
         return availability_queue, next_link
 
+    def _get_headers(self, auth_token: str) -> dict[str, str]:
+        return {"Authorization": f"Bearer {auth_token}", "User-Agent": "Palace"}
+
+    def book_info_initial_endpoint(
+        self,
+        start: datetime.datetime | None = None,
+        page_size: int = PAGE_SIZE_LIMIT,
+    ) -> BookInfoEndpoint:
+        """Create an initial book info url."""
+
+        # if no start date specified, assume effect beginning of time.
+        if not start:
+            start = datetime.datetime(1970, 1, 1, 0, 0, 0, tzinfo=datetime.timezone.utc)
+        last_update_time = start - self.EVENT_DELAY
+        self.log.info("Creating url for circulation changes since %s", last_update_time)
+        last_update = last_update_time.strftime(self.TIME_FORMAT)
+
+        book_info_initial_endpoint = self.endpoint(
+            self.EVENTS_ENDPOINT,
+            # From https://developer.overdrive.com/apis/search:
+            # "**Note: When you search using the lastTitleUpdateTime or
+            # lastUpdateTime parameters, your results will be automatically
+            # sorted in ascending order (and all other sort options will be ignored)."
+            lastupdatetime=last_update,
+            limit=str(min(page_size, self.PAGE_SIZE_LIMIT)),
+            collection_token=self.collection_token,
+        )
+        endpoint: str | None = _make_link_safe(book_info_initial_endpoint)
+
+        return BookInfoEndpoint(endpoint)
+
+    async def fetch_book_info_list(
+        self,
+        endpoint: BookInfoEndpoint,
+        rel_to_follow: str = "next",
+        fetch_metadata: bool = False,
+        fetch_availability: bool = False,
+        connections: int = 5,
+        extractor_class: type[OverdriveRepresentationExtractor] | None = None,
+    ) -> tuple[list[dict[str, Any]], BookInfoEndpoint | None]:
+        """
+        This method is used to fetch a "page" of book data. Users can optionally fetch metadata and availability info
+        by using the fetch_metadata and fetch_availability parameters.  Internally an async http client is used to
+        parallelize the retrieval of the metadata and availability.  A list of book data is returned which can be
+        parsed or converted according to the needs of the client.  Additionally, we return the link to the next page
+        of book data. In this way, "page" retrievals are accelerated while allowing the client to retrieve chunks
+        in a deterministic and therefore retriable manner.
+        """
+
+        async with self.create_async_client(connections) as client:
+
+            base_url = self.endpoint(self.HOST_ENDPOINT_BASE)
+            client.headers.update(self._get_headers(self._client_oauth_token))
+            client.base_url = URL(base_url)
+            urls: deque[str] = deque()
+            pending_requests: list[asyncio.Task[Response]] = []
+            books: dict[str, Any] = {}
+            retried_requests: defaultdict[str, int] = defaultdict(int)
+            extractor_class = extractor_class or OverdriveRepresentationExtractor
+            urls.append(endpoint.url)
+            events_path = self.endpoint(
+                self.EVENTS_ENDPOINT_BASE, **{"collection_token": self.collection_token}
+            )
+            self._make_request(client, urls, pending_requests)
+
+            next: BookInfoEndpoint | None = None
+
+            while pending_requests:
+                done, pending = await asyncio.wait(
+                    pending_requests, return_when=asyncio.FIRST_COMPLETED
+                )
+                pending_requests = list(pending)
+
+                for req in done:
+                    try:
+                        response = await req
+
+                        if not next:
+                            next_url = extractor_class.link(
+                                response.raise_for_status().json(), rel_to_follow
+                            )
+                            next = BookInfoEndpoint(next_url)
+
+                        self._process_request(
+                            response,
+                            fetch_metadata,
+                            fetch_availability,
+                            base_url,
+                            events_path,
+                            books,
+                            urls,
+                        )
+                    except (RequestError, HTTPStatusError) as e:
+                        self.log.error(f"Request error: {e}")
+                        self.log.error(f"URL: {e.request.url}")
+                        request_url = str(e.request.url)
+                        retried_requests[request_url] += 1
+
+                        if retried_requests[request_url] > 3:
+                            response.raise_for_status()
+                        else:
+                            if "404 Not Found" in str(e):
+                                self.log.warning(
+                                    f'url "{e.request.url}" NOT FOUND. Skipping...'
+                                )
+                            else:
+                                self.log.warning(
+                                    f"Retrying request (attempt {retried_requests[request_url]}/3)"
+                                )
+                                urls.appendleft(request_url)
+                    if urls:
+                        self._make_request(client, urls, pending_requests)
+
+            return list(books.values()), next
+
+    def create_async_client(self, connections):
+        return httpx.AsyncClient(
+            timeout=Timeout(20.0, pool=None),
+            limits=Limits(
+                max_connections=connections,
+                max_keepalive_connections=connections,
+                keepalive_expiry=5,
+            ),
+        )
+
+    def _make_request(
+        self,
+        client: AsyncClient,
+        urls: deque[str] | str,
+        pending_requests: list[asyncio.Task[Response]],
+    ) -> None:
+        if isinstance(urls, str):
+            url = urls
+        else:
+            url = urls.pop()
+        req = client.get(url)
+        task = asyncio.create_task(req)
+        pending_requests.append(task)
+
+    def _process_request(
+        self,
+        response: Response,
+        request_metadata: bool,
+        request_availability: bool,
+        base_url: str,
+        events_path: str,
+        books: dict[str, Any],
+        urls: deque[str],
+    ) -> None:
+
+        data = response.raise_for_status().json()
+        path = response.url.path
+        if path == events_path:
+            response_products = data["products"]
+            for product in response_products:
+                if request_metadata:
+                    urls.append(
+                        product["links"]["metadata"]["href"].removeprefix(base_url)
+                    )
+                if request_availability:
+                    urls.append(
+                        product["links"]["availabilityV2"]["href"].removeprefix(
+                            base_url
+                        )
+                    )
+                id = product["id"].lower()
+                books[id] = product
+        elif path.endswith("availability") and path.startswith("/v2/"):
+            books[data["reserveId"].lower()]["availabilityV2"] = data
+        elif path.endswith("metadata") and path.startswith("/v1/"):
+            books[data["id"].lower()]["metadata"] = data
+        else:
+            raise RuntimeError(f"Unknown URL: {response.url}")
+
     def recently_changed_ids(
         self, start: datetime.datetime, cutoff: datetime.datetime | None
     ) -> Generator[dict[str, str]]:
@@ -747,7 +944,7 @@ class OverdriveAPI(
         permissions.
         """
         patron_credential = self._get_patron_oauth_credential(patron, pin)
-        headers = dict(Authorization="Bearer %s" % patron_credential.credential)
+        headers = self._get_headers(patron_credential.credential)
         if extra_headers:
             headers.update(extra_headers)
         if method and method.lower() in ("get", "post", "put", "delete"):
