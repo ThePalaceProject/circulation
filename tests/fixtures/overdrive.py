@@ -5,6 +5,7 @@ from functools import partial
 from typing import Any
 
 import pytest
+from fixtures.http import MockAsyncClientFixture
 
 from palace.manager.api.circulation.dispatcher import CirculationApiDispatcher
 from palace.manager.api.config import Configuration
@@ -30,6 +31,7 @@ class OverdriveAPIFixture:
         http_client: MockHttpClientFixture,
         data: OverdriveFilesFixture,
         monkeypatch: pytest.MonkeyPatch,
+        async_client: MockAsyncClientFixture,
     ):
         self.db = db
         self.data = data
@@ -44,6 +46,7 @@ class OverdriveAPIFixture:
             "TestingSecret",
         )
         self.mock_http = http_client
+        self.mock_async_client = async_client
         self.api = MockOverdriveAPI(db.session, self.collection)
         self.circulation = CirculationApiDispatcher(
             db.session,
@@ -121,6 +124,7 @@ class OverdriveAPIFixture:
 def overdrive_api_fixture(
     db: DatabaseTransactionFixture,
     http_client: MockHttpClientFixture,
+    async_http_client: MockAsyncClientFixture,
     overdrive_files_fixture: OverdriveFilesFixture,
     monkeypatch: pytest.MonkeyPatch,
 ) -> OverdriveAPIFixture:
@@ -129,4 +133,5 @@ def overdrive_api_fixture(
         http_client,
         overdrive_files_fixture,
         monkeypatch,
+        async_http_client,
     )

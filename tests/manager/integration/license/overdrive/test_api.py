@@ -2748,3 +2748,33 @@ class TestSyncBookshelf:
         overdrive_api_fixture.sync_patron_activity(patron)
         assert len(patron.holds) == 5
         assert overdrive_hold in patron.holds
+
+    async def test_fetch_book_info_list(
+        self,
+        overdrive_api_fixture: OverdriveAPIFixture,
+    ):
+        collection = overdrive_api_fixture.collection
+        availability_data, availability_json = overdrive_api_fixture.sample_json(
+            "overdrive_availability_information.json"
+        )
+        (
+            overdrive_book_list_with_next_link_data,
+            overdrive_book_list_with_next_link_json,
+        ) = overdrive_api_fixture.sample_json("overdrive_book_list_with_next_link.json")
+        api = overdrive_api_fixture.api
+
+        mock_async_client = overdrive_api_fixture.mock_async_client
+
+        mock_async_client.queue_response(
+            200, content=overdrive_book_list_with_next_link_data
+        )
+        mock_async_client.queue_response(200, content=availability_data)
+
+        initial_endpoint = api.book_info_initial_endpoint(start=None, page_size=1)
+
+        book_info_list, next_endpoint = await api.fetch_book_info_list(
+            initial_endpoint, fetch_metadata=False, fetch_availability=True
+        )
+        assert next_endpoint
+        assert book_info_list
+        assert len(book_info_list) == 1

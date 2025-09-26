@@ -1,0 +1,87 @@
+{
+    "id": "v1L1BCgAAAA2C",
+    "limit": 1,
+    "links": {
+        "first": {
+            "href": "http://api.overdrive.com/v1/collections/collection-id/products?limit=1&offset=0&lastupdatetime=2014-04-28%2009:25:09&sort=popularity:desc&formats=ebook-epub-open,ebook-epub-adobe,ebook-pdf-adobe,ebook-pdf-open",
+            "type": "application/vnd.overdrive.api+json"
+        },
+        "last": {
+            "href": "http://api.overdrive.com/v1/collections/collection-id/products?limit=1&offset=0&lastupdatetime=2014-04-28%2009:25:09&sort=popularity:desc&formats=ebook-epub-open,ebook-epub-adobe,ebook-pdf-adobe,ebook-pdf-open",
+            "type": "application/vnd.overdrive.api+json"
+        },
+        "next": {
+            "href": "http://api.overdrive.com/v1/collections/collection-id/products?limit=1&offset=1&lastupdatetime=2014-04-28%2009:25:09&sort=popularity:desc&formats=ebook-epub-open,ebook-epub-adobe,ebook-pdf-adobe,ebook-pdf-open",
+            "type": "application/vnd.overdrive.api+json"
+        },
+        "self": {
+            "href": "http://api.overdrive.com/v1/collections/collection-id/products?limit=1&offset=0&lastupdatetime=2014-04-28%2009:25:09&sort=popularity:desc&formats=ebook-epub-open,ebook-epub-adobe,ebook-pdf-adobe,ebook-pdf-open",
+            "type": "application/vnd.overdrive.api+json"
+        }
+    },
+    "offset": 0,
+    "products": [
+        {
+            "contentDetails": [
+                {
+                    "account": {
+                        "id": 100,
+                        "name": "New York Public Library (NY)"
+                    },
+                    "href": "http://ebooks.nypl.org/ContentDetails.htm?ID=210bdcad-29b7-445f-8d05-cdbb40abc03a",
+                    "type": "text/html"
+                }
+            ],
+            "dateAdded": "2013-11-12T14:13:00-05:00",
+            "formats": [
+                {
+                    "id": "ebook-epub-adobe",
+                    "name": "Adobe EPUB eBook"
+                },
+                {
+                    "id": "ebook-kindle",
+                    "name": "Kindle Book"
+                },
+                {
+                    "id": "ebook-overdrive",
+                    "name": "OverDrive Read"
+                }
+            ],
+            "id": "2a005d55-a417-4053-b90d-7a38ca6d2065",
+            "images": {
+                "thumbnail": {
+                    "href": "http://images.contentreserve.com/ImageType-200/0017-1/{2A005D55-A417-4053-B90D-7A38CA6D2065}Img200.jpg",
+                    "type": "image/jpeg"
+                }
+            },
+            "links": {
+                "availability": {
+                    "href": "http://api.overdrive.com/v1/collections/collection-id/products/2a005d55-a417-4053-b90d-7a38ca6d2065/availability",
+                    "type": "application/vnd.overdrive.api+json"
+                },
+                "availabilityV2": {
+                    "href": "http://api.overdrive.com/v2/collections/collection-id/products/2a005d55-a417-4053-b90d-7a38ca6d2065/availability",
+                    "type": "application/vnd.overdrive.api+json"
+                },
+                "metadata": {
+                    "href": "http://api.overdrive.com/v1/collections/collection-id/products/2a005d55-a417-4053-b90d-7a38ca6d2065/metadata",
+                    "type": "application/vnd.overdrive.api+json"
+                },
+                "self": {
+                    "href": "http://api.overdrive.com/v1/collections/collection-id/products/2a005d55-a417-4053-b90d-7a38ca6d2065",
+                    "type": "application/vnd.overdrive.api+json"
+                }
+            },
+            "mediaType": "eBook",
+            "primaryCreator": {
+                "name": "David Baldacci",
+                "role": "Author"
+            },
+            "series": "Sean King and Michelle Maxwell",
+            "sortTitle": "King and Maxwell Sean King and Michelle Maxwell Series Book 06",
+            "starRating": 0.0,
+            "subtitle": "Sean King and Michelle Maxwell Series, Book 6",
+            "title": "King and Maxwell"
+        }
+    ]
+}
