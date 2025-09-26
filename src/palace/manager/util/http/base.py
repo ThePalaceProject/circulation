@@ -42,6 +42,20 @@ def get_series(status_code: int) -> ResponseCodesStringLiterals:
     return f"{int(status_code) // 100}xx"  # type: ignore[return-value]
 
 
+def status_code_matches(status_code: int, code_collection: ResponseCodesTypes) -> bool:
+    """Check if a status code matches any value in a collection.
+
+    :param status_code: The HTTP status code to check
+    :param code_collection: Collection of status codes or series (e.g., "4xx")
+    :return: True if the status code matches any value in the collection
+    """
+    code_str = str(status_code)
+    series = get_series(status_code)
+    collection_str = list(map(str, code_collection))
+
+    return code_str in collection_str or series in collection_str
+
+
 T = TypeVar("T", requests.Response, httpx.Response)
 
 
@@ -64,37 +78,31 @@ def raise_for_bad_response(
     :param disallowed_response_codes The values passed are added to 5xx, as
         http status codes that would generate BadResponseExceptions.
     """
-    allowed_response_codes_str = list(map(str, allowed_response_codes))
-    disallowed_response_codes_str = list(map(str, disallowed_response_codes))
-
-    series = get_series(response.status_code)
-    code = str(response.status_code)
-
-    if code in allowed_response_codes_str or series in allowed_response_codes_str:
+    if status_code_matches(response.status_code, allowed_response_codes):
         # The code or series has been explicitly allowed. Allow
         # the request to be processed.
         return response
 
     error_message = None
-    if (
-        series == "5xx"
-        or code in disallowed_response_codes_str
-        or series in disallowed_response_codes_str
+    series = get_series(response.status_code)
+
+    if series == "5xx" or status_code_matches(
+        response.status_code, disallowed_response_codes
     ):
         # Unless explicitly allowed, the 5xx series always results in an exception.
         error_message = BadResponseException.BAD_STATUS_CODE_MESSAGE
-    elif allowed_response_codes_str and not (
-        code in allowed_response_codes_str or series in allowed_response_codes_str
+    elif allowed_response_codes and not status_code_matches(
+        response.status_code, allowed_response_codes
     ):
         error_message = (
             "Got status code %%s from external server, but can only continue on: %s."
-            % (", ".join(sorted(allowed_response_codes_str)),)
+            % (", ".join(sorted(list(map(str, allowed_response_codes)))),)
         )
 
     if error_message:
         raise BadResponseException(
             str(url),
-            error_message % code,
+            error_message % response.status_code,
             debug_message=f"Response content: {response.text}",
             response=response,
         )

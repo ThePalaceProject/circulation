@@ -85,11 +85,17 @@ class BadResponseException(RemoteIntegrationException, Generic[T]):
         message: str,
         response: T,
         debug_message: str | None = None,
+        retry_count: int | None = None,
     ):
         """Indicate that a remote integration has failed.
 
-        `param url_or_service` The name of the service that failed
+        :param url_or_service: The name of the service that failed
            (e.g. "Overdrive"), or the specific URL that had the problem.
+        :param message: The error message
+        :param response: The HTTP response object
+        :param debug_message: Optional debug message
+        :param retry_count: Number of times the request was retried before failing,
+            or None if retry tracking is not available
         """
         if debug_message is None:
             debug_message = (
@@ -98,6 +104,7 @@ class BadResponseException(RemoteIntegrationException, Generic[T]):
 
         super().__init__(url_or_service, message, debug_message)
         self.response: T = response
+        self.retry_count: int | None = retry_count
 
     @classmethod
     def bad_status_code(cls, url: str, response: T) -> Self:
@@ -128,3 +135,22 @@ class RequestTimedOut(RequestNetworkException):
     title = _("Timeout")
     detail = _("The server made a request to %(service)s, and that request timed out.")
     internal_message = "Timeout accessing %s: %s"
+
+    def __init__(
+        self,
+        url_or_service: str,
+        message: str,
+        debug_message: str | None = None,
+        retry_count: int | None = None,
+    ) -> None:
+        """Indicate that a request timed out.
+
+        :param url_or_service: The name of the service that failed
+           (e.g. "Overdrive"), or the specific URL that had the problem.
+        :param message: The error message
+        :param debug_message: Optional debug message
+        :param retry_count: Number of times the request was retried before failing,
+            or None if retry tracking is not available
+        """
+        super().__init__(url_or_service, message, debug_message)
+        self.retry_count: int | None = retry_count

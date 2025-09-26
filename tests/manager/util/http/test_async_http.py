@@ -159,6 +159,226 @@ class TestAsyncClient:
         assert response.text == "error1"
         assert len(mock_web_server.requests()) == 1
 
+    async def test_no_retry_status_codes(
+        self, async_client_fixture: AsyncClientFixture, mock_web_server: MockAPIServer
+    ) -> None:
+        # Test that specific status codes can be configured to not trigger retries
+        # First, test with a 404 that would normally retry when disallowed
+        mock_web_server.enqueue_response(
+            "get", "/test", MockAPIServerResponse(404, "not found")
+        )
+        mock_web_server.enqueue_response(
+            "get", "/test", MockAPIServerResponse(404, "not found 2")
+        )
+        mock_web_server.enqueue_response(
+            "get", "/test", MockAPIServerResponse(404, "not found 3")
+        )
+        mock_web_server.enqueue_response(
+            "get", "/test", MockAPIServerResponse(404, "not found 4")
+        )
+        mock_web_server.enqueue_response(
+            "get", "/test", MockAPIServerResponse(404, "not found 5")
+        )
+
+        # Without no_retry_status_codes, 404 should retry when disallowed
+        with pytest.raises(BadResponseException) as excinfo:
+            await async_client_fixture.client.get(
+                mock_web_server.url("/test"), disallowed_response_codes=[404]
+            )
+
+        # Should have retried max_retries times (4) + 1 initial = 5 requests
+        assert len(mock_web_server.requests()) == 5
+        assert excinfo.value.response.status_code == 404
+
+        # Now test with no_retry_status_codes set to 404
+        mock_web_server.reset_mock()
+        mock_web_server.enqueue_response(
+            "get", "/test", MockAPIServerResponse(404, "not found")
+        )
+
+        with pytest.raises(BadResponseException) as excinfo:
+            await async_client_fixture.client.get(
+                mock_web_server.url("/test"),
+                disallowed_response_codes=[404],
+                no_retry_status_codes=[404],
+            )
+
+        assert excinfo.value.response.status_code == 404
+        assert len(mock_web_server.requests()) == 1  # No retry attempted
+
+        # Test that 500 errors still retry when not in no_retry_status_codes
+        mock_web_server.reset_mock()
+        mock_web_server.enqueue_response(
+            "get", "/test", MockAPIServerResponse(500, "error1")
+        )
+        mock_web_server.enqueue_response(
+            "get", "/test", MockAPIServerResponse(500, "error2")
+        )
+        mock_web_server.enqueue_response(
+            "get", "/test", MockAPIServerResponse(200, "success")
+        )
+
+        response = await async_client_fixture.client.get(
+            mock_web_server.url("/test"),
+            no_retry_status_codes=[404],  # Only 404 is no-retry
+        )
+        assert response.status_code == 200
+        assert len(mock_web_server.requests()) == 3  # Retried twice
+
+        # Test with series notation (5xx)
+        mock_web_server.reset_mock()
+        mock_web_server.enqueue_response(
+            "get", "/test", MockAPIServerResponse(503, "service unavailable")
+        )
+
+        with pytest.raises(BadResponseException) as excinfo:
+            await async_client_fixture.client.get(
+                mock_web_server.url("/test"), no_retry_status_codes=["5xx"]
+            )
+
+        assert excinfo.value.response.status_code == 503
+        assert len(mock_web_server.requests()) == 1  # No retry attempted
+
+    async def test_no_retry_status_codes_client_level(
+        self, mock_web_server: MockAPIServer
+    ) -> None:
+        # Test that no_retry_status_codes can be set at the client level
+        mock_web_server.enqueue_response(
+            "get", "/test", MockAPIServerResponse(429, "too many requests")
+        )
+
+        async with AsyncClient.for_worker(
+            disallowed_response_codes=[429], no_retry_status_codes=[429]
+        ) as client:
+            # Set up client with retries but 429 shouldn't retry
+            client._max_retries = 3
+            client._backoff_factor = 0
+
+            with pytest.raises(BadResponseException) as excinfo:
+                await client.get(mock_web_server.url("/test"))
+
+            assert excinfo.value.response.status_code == 429
+            assert len(mock_web_server.requests()) == 1  # No retry attempted
+
+    async def test_retry_count_in_exceptions(
+        self, async_client_fixture: AsyncClientFixture, mock_web_server: MockAPIServer
+    ) -> None:
+        """Test that exceptions include the correct retry count information."""
+        # Test BadResponseException with retries
+        # Client has max_retries=4, so we need 5 responses (1 initial + 4 retries)
+        for i in range(5):
+            mock_web_server.enqueue_response(
+                "get", "/test", MockAPIServerResponse(500, f"error{i + 1}")
+            )
+
+        with pytest.raises(BadResponseException) as excinfo:
+            await async_client_fixture.client.get(mock_web_server.url("/test"))
+
+        assert excinfo.value.retry_count == 4  # 4 retries were made (max_retries)
+        assert excinfo.value.response.status_code == 500
+        assert len(mock_web_server.requests()) == 5  # 1 initial + 4 retries
+
+        # Test with no retries (immediate failure)
+        mock_web_server.reset_mock()
+        mock_web_server.enqueue_response(
+            "get", "/test", MockAPIServerResponse(404, "not found")
+        )
+
+        with pytest.raises(BadResponseException) as excinfo:
+            await async_client_fixture.client.get(
+                mock_web_server.url("/test"),
+                disallowed_response_codes=["4xx"],
+                no_retry_status_codes=[404],  # Don't retry 404
+            )
+
+        assert excinfo.value.retry_count == 0  # No retries were made
+        assert excinfo.value.response.status_code == 404
+        assert len(mock_web_server.requests()) == 1
+
+    async def test_retry_count_with_timeout(
+        self, async_http_client: MockAsyncClientFixture
+    ) -> None:
+        """Test that timeout exceptions include the correct retry count."""
+        # Queue timeout exceptions
+        async_http_client.queue_exception(httpx.TimeoutException("Timeout 1"))
+        async_http_client.queue_exception(httpx.TimeoutException("Timeout 2"))
+        async_http_client.queue_exception(httpx.TimeoutException("Timeout 3"))
+
+        async with AsyncClient.for_worker() as client:
+            # Set up client with retries
+            client._max_retries = 2
+            client._backoff_factor = 0
+
+            with pytest.raises(RequestTimedOut) as excinfo:
+                await client.get("https://example.com/test")
+
+            assert excinfo.value.retry_count == 2  # 2 retries were made
+            assert "Timeout 3" in str(excinfo.value)
+            assert len(async_http_client.requests) == 3
+
+        # Test timeout with no retries
+        async_http_client.reset_mock()
+        async_http_client.queue_exception(httpx.TimeoutException("Immediate timeout"))
+
+        async with AsyncClient.for_web() as client:
+            # Web client has no retries by default
+            with pytest.raises(RequestTimedOut) as excinfo:
+                await client.get("https://example.com/test")
+
+            assert excinfo.value.retry_count == 0  # No retries were made
+            assert "Immediate timeout" in str(excinfo.value)
+            assert len(async_http_client.requests) == 1
+
+    async def test_no_retry_status_codes_with_timeout(
+        self, async_http_client: MockAsyncClientFixture
+    ) -> None:
+        """Test that timeout exceptions are not affected by no_retry_status_codes.
+
+        Timeouts should always retry (up to max_retries) regardless of
+        no_retry_status_codes since they don't have a status code.
+        """
+        # Queue timeout exceptions followed by a success
+        async_http_client.queue_exception(httpx.TimeoutException("Timeout 1"))
+        async_http_client.queue_exception(httpx.TimeoutException("Timeout 2"))
+        async_http_client.queue_response(200, content="success")
+
+        async with AsyncClient.for_worker(
+            no_retry_status_codes=[500, "5xx"],  # These should not affect timeouts
+        ) as client:
+            # Set up client with retries
+            client._max_retries = 3
+            client._backoff_factor = 0
+
+            # Should retry timeouts and eventually succeed
+            response = await client.get("https://example.com/test")
+            assert response.status_code == 200
+            assert response.text == "success"
+
+            # Verify that we made 3 requests (2 retries + 1 success)
+            assert len(async_http_client.requests) == 3
+
+        # Now test that timeouts still fail after max retries
+        async_http_client.reset_mock()
+        async_http_client.queue_exception(httpx.TimeoutException("Timeout 1"))
+        async_http_client.queue_exception(httpx.TimeoutException("Timeout 2"))
+        async_http_client.queue_exception(httpx.TimeoutException("Timeout 3"))
+        async_http_client.queue_exception(httpx.TimeoutException("Timeout 4"))
+
+        async with AsyncClient.for_worker(
+            no_retry_status_codes=["5xx"],  # Should not affect timeouts
+        ) as client:
+            # Set up client with retries
+            client._max_retries = 3
+            client._backoff_factor = 0
+
+            # Should fail after max retries
+            with pytest.raises(RequestTimedOut) as excinfo:
+                await client.get("https://example.com/test")
+
+            assert "Timeout 4" in str(excinfo.value)
+            # Verify that we made 4 requests (3 retries + 1 initial)
+            assert len(async_http_client.requests) == 4
+
     async def test_client_default_headers(
         self, async_http_client: MockAsyncClientFixture
     ) -> None:
