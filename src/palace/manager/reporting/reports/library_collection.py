@@ -16,6 +16,7 @@ from typing_extensions import Unpack
 from palace.manager.celery.task import Task
 from palace.manager.core.exceptions import IntegrationException
 from palace.manager.reporting.model import ReportTable, TTabularDataProcessor
+from palace.manager.reporting.tables.library_all_title import LibraryAllTitleReportTable
 from palace.manager.reporting.util import (
     RequestIdLoggerAdapter,
     TimestampFormat,
@@ -402,3 +403,9 @@ class LibraryCollectionReport(LoggerMixin):
             )
             self.send_error_notification()
             return False
+
+
+class LibraryTitleLevelReport(LibraryCollectionReport):
+    KEY = "title-level-report"
+    TITLE = "Title-Level Report"
+    TABLE_CLASSES = [LibraryAllTitleReportTable]
