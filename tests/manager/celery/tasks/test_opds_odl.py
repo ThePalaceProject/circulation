@@ -104,10 +104,15 @@ class OpdsTaskFixture:
     def holds(
         self, collection: Collection, pool: LicensePool | None = None
     ) -> tuple[set[int], set[int]]:
+        # IMPORTANT: Each hold must have a unique start time to ensure deterministic ordering.
+        # The get_active_holds() method orders holds by start time, and if multiple holds
+        # have the same start time, the database may return them in any order, causing
+        # flaky test failures when positions are recalculated.
+        # We offset expired holds by 1 hour to avoid collision with ready holds at day 0.
         expired_holds = {
             self.hold(
                 collection,
-                start=self.two_weeks_ago,
+                start=self.two_weeks_ago - timedelta(hours=1) + timedelta(seconds=idx),
                 end=self.yesterday,
                 position=0,
                 pool=pool,
@@ -127,7 +132,7 @@ class OpdsTaskFixture:
         not_ready_non_expired_holds = {
             self.hold(
                 collection,
-                start=self.yesterday,
+                start=self.yesterday + timedelta(seconds=idx),
                 end=self.tomorrow,
                 position=idx,
                 pool=pool,
