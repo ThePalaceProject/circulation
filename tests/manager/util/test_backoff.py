@@ -4,6 +4,12 @@ from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.util.backoff import exponential_backoff
 
 
+def assert_within_jitter(value: float, expected: float, jitter: float) -> None:
+    min_jitter = 1 - jitter
+    max_jitter = 1 + jitter
+    assert expected * min_jitter <= value <= expected * max_jitter
+
+
 @pytest.mark.parametrize(
     "retries, expected",
     [
@@ -27,11 +33,6 @@ def test_exponential_backoff_max_backoff_time() -> None:
 
 @pytest.mark.parametrize("jitter", [0.0, 0.3, 0.5, 1.0])
 def test_exponential_backoff_jitter(jitter: float) -> None:
-    def assert_within_jitter(value: float, expected: float, jitter: float) -> None:
-        min_jitter = 1 - jitter
-        max_jitter = 1 + jitter
-        assert expected * min_jitter <= value <= expected * max_jitter
-
     for attempt in range(5):
         expected = exponential_backoff(attempt, jitter=0)
         backoff = exponential_backoff(attempt, jitter=jitter)
@@ -59,12 +60,12 @@ def test_exponential_backoff_invalid_factor(factor: float) -> None:
 @pytest.mark.parametrize(
     "factor, retries, expected",
     [
-        (2.0, 0, 6),
-        (2.0, 1, 18),
-        (2.0, 2, 54),
-        (0.5, 0, 1.5),
-        (0.5, 1, 4.5),
-        (0.5, 2, 13.5),
+        (2.0, 0, 2.0),
+        (2.0, 1, 6.0),
+        (2.0, 2, 18.0),
+        (0.5, 0, 0.5),
+        (0.5, 1, 1.5),
+        (0.5, 2, 4.5),
     ],
 )
 def test_exponential_backoff_custom_factor(
@@ -99,16 +100,16 @@ def test_exponential_backoff_edge_cases() -> None:
 @pytest.mark.parametrize(
     "base, retries, expected",
     [
-        (2.0, 0, 2.0),
-        (2.0, 1, 4.0),
-        (2.0, 2, 8.0),
-        (2.0, 3, 16.0),
-        (4.0, 0, 4.0),
-        (4.0, 1, 16.0),
-        (4.0, 2, 64.0),
-        (1.5, 0, 1.5),
-        (1.5, 1, 2.25),
-        (1.5, 2, 3.375),
+        (2.0, 0, 1.0),
+        (2.0, 1, 2.0),
+        (2.0, 2, 4.0),
+        (2.0, 3, 8.0),
+        (4.0, 0, 1.0),
+        (4.0, 1, 4.0),
+        (4.0, 2, 16.0),
+        (1.5, 0, 1.0),
+        (1.5, 1, 1.5),
+        (1.5, 2, 2.25),
     ],
 )
 def test_exponential_backoff_custom_base(
@@ -121,18 +122,17 @@ def test_exponential_backoff_custom_base(
 def test_exponential_backoff_combined_with_base() -> None:
     # Test base with factor
     result = exponential_backoff(retries=2, factor=2.0, base=2.0, jitter=0)
-    assert result == 16.0  # 2.0 * (2.0 ** 3) = 2.0 * 8 = 16
+    assert result == 8.0  # 2.0 * (2.0 ** 2) = 2.0 * 4 = 8
 
     # Test base with max_time
-    result = exponential_backoff(retries=5, factor=1.0, base=2.0, max_time=50, jitter=0)
-    assert result == 50.0  # Would be 64 (2^6) but capped at 50
+    result = exponential_backoff(retries=5, factor=1.0, base=2.0, max_time=20, jitter=0)
+    assert result == 20.0  # 1.0 * (2.0 ** 5) = 32.0, but capped at 20
 
     # Test base with jitter
     for _ in range(10):
         result = exponential_backoff(retries=1, factor=1.0, base=4.0, jitter=0.5)
-        expected_base = 16.0  # 4.0 ** 2
-        assert result >= expected_base * 0.5
-        assert result <= expected_base * 1.5
+        expected_base = 4.0  # 1.0 * (4.0 ** 1) = 4.0
+        assert_within_jitter(result, expected_base, 0.5)
 
 
 @pytest.mark.parametrize("base", [-1.0, 0.0, 0.5, 1.0])

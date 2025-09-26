@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterable, Iterable, Mapping, Sequence
+import functools
+from collections.abc import AsyncIterable, Callable, Iterable, Mapping, Sequence
 from types import TracebackType
 from typing import IO, Any, TypedDict, Union, cast
 
@@ -134,14 +135,12 @@ class RequestNoBodyKwargs(TypedDict, total=False):
     bad response code or a timeout.
     """
 
-    backoff_factor: float
+    backoff: Callable[[int], float] | None
     """
-    The factor to use when calculating the backoff time between retries.
-    """
-
-    max_backoff: float
-    """
-    The maximum backoff time, in seconds.
+    The function used to calculate the backoff time between retries. This function
+    takes the current retry attempt (0 for the first retry, 1 for the second, etc.)
+    and returns the number of seconds to wait before the next retry. If None, no
+    backoff is applied.
     """
 
 
@@ -197,14 +196,14 @@ class ClientKwargs(TypedDict, total=False):
 WEB_DEFAULT_TIMEOUT = httpx.Timeout(5.0, pool=None)
 WEB_DEFAULT_MAX_REDIRECTS = 2
 WEB_DEFAULT_MAX_RETRIES = 0
-WEB_DEFAULT_BACKOFF_FACTOR = 0
-WEB_DEFAULT_MAX_BACKOFF = 0
+WEB_DEFAULT_BACKOFF = None
 
 WORKER_DEFAULT_TIMEOUT = httpx.Timeout(20.0, pool=None)
 WORKER_DEFAULT_MAX_REDIRECTS = 20
 WORKER_DEFAULT_MAX_RETRIES = 3
-WORKER_DEFAULT_BACKOFF_FACTOR = 1
-WORKER_DEFAULT_MAX_BACKOFF = 45
+WORKER_DEFAULT_BACKOFF = functools.partial(
+    exponential_backoff, max_time=45, jitter=0.5, factor=3, base=2
+)
 
 DEFAULT_LIMITS = httpx.Limits(max_connections=10, max_keepalive_connections=None)
 
@@ -226,8 +225,7 @@ class AsyncClient(LoggerMixin):
         disallowed_response_codes: ResponseCodesTypes | None = None,
         no_retry_status_codes: ResponseCodesTypes | None = None,
         max_retries: int = 0,
-        backoff_factor: float = 0,
-        max_backoff: float = 0,
+        backoff: Callable[[int], float] | None = None,
     ) -> None:
         """
         Initialize the AsyncClient.
@@ -247,12 +245,9 @@ class AsyncClient(LoggerMixin):
         :param max_retries:
             The default value for max_retries for requests made with this client. This will be
             used if the max_retries parameter is not provided to the request method.
-        :param backoff_factor:
-            The default value for backoff_factor for requests made with this client. This will be
-            used if the backoff_factor parameter is not provided to the request method.
-        :param max_backoff:
-            The default value for max_backoff for requests made with this client. This will be
-            used if the max_backoff parameter is not provided to the request method.
+        :param backoff:
+            The default value for backoff for requests made with this client. This will be
+            used if the backoff parameter is not provided to the request method.
         """
 
         self._httpx_client = client
@@ -261,8 +256,7 @@ class AsyncClient(LoggerMixin):
         self._disallowed_response_codes = disallowed_response_codes or []
         self._no_retry_status_codes = no_retry_status_codes or []
         self._max_retries = max_retries
-        self._backoff_factor = backoff_factor
-        self._max_backoff = max_backoff
+        self._backoff = backoff
 
     @staticmethod
     def _defaults(kwargs: ClientKwargs) -> None:
@@ -290,6 +284,8 @@ class AsyncClient(LoggerMixin):
         allowed_response_codes: ResponseCodesTypes | None = None,
         disallowed_response_codes: ResponseCodesTypes | None = None,
         no_retry_status_codes: ResponseCodesTypes | None = None,
+        max_retries: int = WEB_DEFAULT_MAX_RETRIES,
+        backoff: Callable[[int], float] | None = WEB_DEFAULT_BACKOFF,
         **kwargs: Unpack[ClientKwargs],
     ) -> Self:
         """
@@ -306,9 +302,8 @@ class AsyncClient(LoggerMixin):
             allowed_response_codes=allowed_response_codes,
             disallowed_response_codes=disallowed_response_codes,
             no_retry_status_codes=no_retry_status_codes,
-            max_retries=WEB_DEFAULT_MAX_RETRIES,
-            backoff_factor=WEB_DEFAULT_BACKOFF_FACTOR,
-            max_backoff=WEB_DEFAULT_MAX_BACKOFF,
+            max_retries=max_retries,
+            backoff=backoff,
         )
 
     @classmethod
@@ -318,6 +313,8 @@ class AsyncClient(LoggerMixin):
         allowed_response_codes: ResponseCodesTypes | None = None,
         disallowed_response_codes: ResponseCodesTypes | None = None,
         no_retry_status_codes: ResponseCodesTypes | None = None,
+        max_retries: int = WORKER_DEFAULT_MAX_RETRIES,
+        backoff: Callable[[int], float] | None = WORKER_DEFAULT_BACKOFF,
         **kwargs: Unpack[ClientKwargs],
     ) -> Self:
         """
@@ -334,9 +331,8 @@ class AsyncClient(LoggerMixin):
             allowed_response_codes=allowed_response_codes,
             disallowed_response_codes=disallowed_response_codes,
             no_retry_status_codes=no_retry_status_codes,
-            max_retries=WORKER_DEFAULT_MAX_RETRIES,
-            backoff_factor=WORKER_DEFAULT_BACKOFF_FACTOR,
-            max_backoff=WORKER_DEFAULT_MAX_BACKOFF,
+            max_retries=max_retries,
+            backoff=backoff,
         )
 
     async def _perform_request(
@@ -388,8 +384,7 @@ class AsyncClient(LoggerMixin):
             "no_retry_status_codes", self._no_retry_status_codes
         )
         max_retries = kwargs.pop("max_retries", self._max_retries)
-        backoff_factor = kwargs.pop("backoff_factor", self._backoff_factor)
-        max_backoff = kwargs.pop("max_backoff", self._max_backoff)
+        backoff = kwargs.pop("backoff", self._backoff)
 
         attempt = 0
         while True:
@@ -412,6 +407,10 @@ class AsyncClient(LoggerMixin):
                         e.response.status_code, no_retry_status_codes
                     ):
                         should_retry = False
+                        self.log.info(
+                            f"Not retrying {url} - status code {e.response.status_code} "
+                            f"in no_retry_status_codes list"
+                        )
 
                 if not should_retry or attempt >= max_retries:
                     # Update the retry count before re-raising
@@ -419,9 +418,7 @@ class AsyncClient(LoggerMixin):
                     raise e
 
                 # Calculate backoff time
-                delay = exponential_backoff(
-                    attempt, factor=backoff_factor, max_time=max_backoff
-                )
+                delay = backoff(attempt) if backoff is not None else 0
                 attempt += 1
                 self.log.warning(
                     f"Request to {url} failed ({e}). "
