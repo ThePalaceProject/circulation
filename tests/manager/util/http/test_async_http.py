@@ -372,6 +372,58 @@ class TestAsyncClient:
             # Verify that we made 4 requests (3 retries + 1 initial)
             assert len(async_http_client.requests) == 4
 
+    async def test_retry_count_tracking_in_response(
+        self, async_http_client: MockAsyncClientFixture
+    ) -> None:
+        """Test that retry count is tracked in response extensions."""
+
+        # Queue multiple failure responses before success
+        async_http_client.queue_response(503)
+        async_http_client.queue_response(503)
+        async_http_client.queue_response(200, content="Success")
+
+        async with AsyncClient.for_worker(max_retries=3, backoff=None) as client:
+            response = await client.get("http://example.com/test")
+
+        assert response.status_code == 200
+        assert response.text == "Success"
+        # Should have retried twice (0-based counting: 0 for initial, 1 for first retry, 2 for second retry)
+        assert response.extensions.get("retry_count") == 2
+
+    async def test_retry_count_tracking_on_failure(
+        self, async_http_client: MockAsyncClientFixture
+    ) -> None:
+        """Test that retry count is tracked when request ultimately fails."""
+
+        # Queue only failure responses
+        for _ in range(4):
+            async_http_client.queue_response(503)
+
+        async with AsyncClient.for_worker(max_retries=3, backoff=None) as client:
+            with pytest.raises(BadResponseException) as exc_info:
+                await client.get("http://example.com/test")
+
+        # Check the exception has the retry count
+        assert exc_info.value.retry_count == 3
+
+        # Check the response also has the retry count in extensions
+        assert exc_info.value.response.extensions.get("retry_count") == 3
+
+    async def test_retry_count_zero_on_immediate_success(
+        self, async_http_client: MockAsyncClientFixture
+    ) -> None:
+        """Test that retry count is 0 when request succeeds immediately."""
+
+        async_http_client.queue_response(200, content="Success")
+
+        async with AsyncClient.for_worker() as client:
+            response = await client.get("http://example.com/test")
+
+        assert response.status_code == 200
+        assert response.text == "Success"
+        # Should have 0 retries since it succeeded on first attempt
+        assert response.extensions.get("retry_count") == 0
+
     async def test_client_default_headers(
         self, async_http_client: MockAsyncClientFixture
     ) -> None:
