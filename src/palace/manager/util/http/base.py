@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Collection
+from email.utils import parsedate_to_datetime
 from typing import Literal, TypeVar
 
 import httpx
 import requests
 
 from palace import manager
+from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.http.exception import BadResponseException
 
 # In case an app version is not present, we can use this version as a fallback
@@ -107,3 +110,38 @@ def raise_for_bad_response(
             response=response,
         )
     return response
+
+
+log = logging.getLogger(__name__)
+
+
+def parse_retry_after(header_value: str | None) -> float | None:
+    """
+    Parse the Retry-After header value and return the delay in seconds.
+
+    The Retry-After header can be in two formats:
+    1. A delay in seconds (e.g., "120")
+    2. An HTTP-date (e.g., "Fri, 31 Dec 1999 23:59:59 GMT")
+
+    :param header_value: The Retry-After header value
+    :return: The delay in seconds, or None if the header is invalid or missing
+    """
+    if not header_value:
+        return None
+
+    # First, try to parse as an integer (delay-seconds)
+    try:
+        return float(header_value)
+    except ValueError:
+        pass
+
+    # Try to parse as HTTP-date
+    try:
+        retry_date = parsedate_to_datetime(header_value)
+        delay = (retry_date - utc_now()).total_seconds()
+        # Return delay only if it's positive (future date)
+        return max(0, delay)
+    except (TypeError, ValueError, AttributeError):
+        # Invalid date format
+        log.warning(f"Invalid Retry-After header format: {header_value}")
+        return None
