@@ -342,6 +342,7 @@ class AsyncClient(LoggerMixin):
         *,
         allowed_response_codes: ResponseCodesTypes,
         disallowed_response_codes: ResponseCodesTypes,
+        retry_count: int,
         **kwargs: Any,
     ) -> httpx.Response:
         """
@@ -352,6 +353,10 @@ class AsyncClient(LoggerMixin):
             self.log.info(
                 f"Request time for {url} took {response.elapsed.total_seconds():.2f} seconds"
             )
+
+            # Attach the retry count to the response as an extension, so that callers
+            # have an indication of how many retries were attempted.
+            response.extensions["retry_count"] = retry_count
 
         except httpx.TimeoutException as e:
             # Wrap the httpx-specific Timeout exception in a generic RequestTimedOut exception.
@@ -394,6 +399,7 @@ class AsyncClient(LoggerMixin):
                     url,
                     allowed_response_codes=allowed_response_codes,
                     disallowed_response_codes=disallowed_response_codes,
+                    retry_count=attempt,
                     # Mypy doesn't understand that we're popping known keys from kwargs
                     # and that the rest are valid httpx request parameters, so we need
                     # to do a cast here.
