@@ -1,9 +1,8 @@
 import logging
 import zipfile
-from contextlib import closing, contextmanager
+from contextlib import ExitStack, contextmanager
 from datetime import datetime, timedelta
 from io import BytesIO
-from pathlib import Path
 from unittest.mock import MagicMock, PropertyMock, create_autospec, patch
 
 import freezegun
@@ -318,7 +317,10 @@ class TestLibraryCollectionReport:
 
         mock_table = MagicMock(spec=ReportTable)
         mock_definition = MagicMock(
-            spec=TabularQueryDefinition, key="test-table", headings=["col1"]
+            spec=TabularQueryDefinition,
+            key="test-table",
+            title="Test Table",
+            headings=["col1"],
         )
         type(mock_table).definition = PropertyMock(return_value=mock_definition)
 
@@ -336,17 +338,18 @@ class TestLibraryCollectionReport:
         report._library = report_fixture.db.default_library()
         report._timestamp = datetime(2024, 1, 1, 12, 0, 0)
 
-        result = report._process_table(mock_table)
+        with ExitStack() as stack:
+            result = report._process_table(mock_table, stack=stack)
 
-        assert result.table_key == "test-table"
-        assert result.filename == "palace-test-table-default-2024-01-01T12-00-00.csv"
-        assert result.row_count == 2
-        assert hasattr(result.content_stream, "read")
+            assert result.key == "test-table"
+            assert (
+                result.filename == "palace-test-table-default-2024-01-01T12-00-00.csv"
+            )
+            assert result.row_count == 2
+            assert hasattr(result.content_stream, "read")
 
-        content = result.content_stream.read().decode("utf-8")
-        assert content == expected_csv_content
-
-        result.cleanup()
+            content = result.content_stream.read().decode("utf-8")
+            assert content == expected_csv_content
 
     def test_process_table_error(
         self,
@@ -362,8 +365,11 @@ class TestLibraryCollectionReport:
         report._library = report_fixture.db.default_library()
         report._timestamp = datetime(2024, 1, 1, 12, 0, 0)
 
-        with pytest.raises(ValueError, match="Failed to generate table data"):
-            report._process_table(mock_table)
+        with (
+            ExitStack() as stack,
+            pytest.raises(ValueError, match="Failed to generate table data"),
+        ):
+            report._process_table(mock_table, stack=stack)
 
     def test_package_results(
         self,
@@ -374,13 +380,15 @@ class TestLibraryCollectionReport:
         result2_content = b"colA,colB\r\nvalA,valB\r\n"
 
         result1 = TableProcessingResult(
-            table_key="table1",
+            key="table1",
+            title="Table 1",
             filename="table1.csv",
             row_count=1,
             content_stream=BytesIO(result1_content),
         )
         result2 = TableProcessingResult(
-            table_key="table2",
+            key="table2",
+            title="Table 2",
             filename="table2.csv",
             row_count=1,
             content_stream=BytesIO(result2_content),
@@ -389,19 +397,19 @@ class TestLibraryCollectionReport:
 
         report = report_fixture.report
 
-        with (
-            closing(report._package_results(results)) as package,
-            zipfile.ZipFile(package, "r") as archive,
-        ):
-            # Both files are included...
-            assert "table1.csv" in archive.namelist()
-            assert "table2.csv" in archive.namelist()
+        with ExitStack() as stack:
+            package = report._package_results(results, stack=stack)
 
-            # ... and the contents match.
-            with archive.open("table1.csv") as f:
-                assert f.read() == result1_content
-            with archive.open("table2.csv") as f:
-                assert f.read() == result2_content
+            with zipfile.ZipFile(package, "r") as archive:
+                # Both files are included...
+                assert "table1.csv" in archive.namelist()
+                assert "table2.csv" in archive.namelist()
+
+                # ... and the contents match.
+                with archive.open("table1.csv") as f:
+                    assert f.read() == result1_content
+                with archive.open("table2.csv") as f:
+                    assert f.read() == result2_content
 
     def test_package_results_empty(
         self,
@@ -410,13 +418,11 @@ class TestLibraryCollectionReport:
         results: list[TableProcessingResult] = []
         report = report_fixture.report
 
-        with (
-            closing(report._package_results(results)) as package,
-            zipfile.ZipFile(package, "r") as archive,
-        ):
-            assert len(archive.namelist()) == 0
+        with ExitStack() as stack:
+            package = report._package_results(results, stack=stack)
 
-        package.close()
+            with zipfile.ZipFile(package, "r") as archive:
+                assert len(archive.namelist()) == 0
 
     def test_package_results_rollover(
         self,
@@ -428,12 +434,13 @@ class TestLibraryCollectionReport:
         behaves correctly when it "rolls over" to on-disk storage.
         TODO: This is probably amply tested in Python 3.11+, so we can probably
          remove once we drop support for Python 3.10. Though there's no harm in
-         in keeping this test around, either.
+         keeping this test around, either.
         """
         content = b"header1,header2\r\ndata1,data2\r\n"
 
         result = TableProcessingResult(
-            table_key="test-table",
+            key="test-table",
+            title="Test Table",
             filename="test-table.csv",
             row_count=1,
             content_stream=BytesIO(content),
@@ -441,20 +448,19 @@ class TestLibraryCollectionReport:
         results = [result]
 
         report = report_fixture.report
-        package = report._package_results(results)
+        with ExitStack() as stack:
+            package = report._package_results(results, stack=stack)
 
-        # Force rollover to disk...
-        package.rollover()  # type: ignore[attr-defined]
+            # Force rollover to disk...
+            package.rollover()  # type: ignore[attr-defined]
 
-        # ... and verify that we are allowed to seek.
-        package.seek(0)
-        with zipfile.ZipFile(package, "r") as archive:
-            assert "test-table.csv" in archive.namelist()
+            # ... and verify that we are allowed to seek.
+            package.seek(0)
+            with zipfile.ZipFile(package, "r") as archive:
+                assert "test-table.csv" in archive.namelist()
 
-            with archive.open("test-table.csv") as f:
-                assert f.read() == content
-
-        package.close()
+                with archive.open("test-table.csv") as f:
+                    assert f.read() == content
 
     def test_store_package(
         self,
@@ -497,39 +503,6 @@ class TestLibraryCollectionReport:
             match=r"Failed to store report 'test-report' for library 'default' \(default\) to S3.",
         ):
             report._store_package(package)
-
-    def test_cleanup_results(self):
-        import tempfile
-
-        temp_file1 = tempfile.NamedTemporaryFile(delete=False)
-        temp_file2 = tempfile.NamedTemporaryFile(delete=False)
-
-        temp_file1.write(b"test content 1")
-        temp_file2.write(b"test content 2")
-        temp_file1.close()
-        temp_file2.close()
-
-        # Simulate reopening in binary mode.
-        stream1 = open(temp_file1.name, "rb")
-        stream2 = open(temp_file2.name, "rb")
-
-        results = [
-            TableProcessingResult("t1", "f1.csv", 1, stream1),
-            TableProcessingResult("t2", "f2.csv", 1, stream2),
-        ]
-
-        # Verify files exist before cleanup...
-        assert Path(temp_file1.name).exists()
-        assert Path(temp_file2.name).exists()
-
-        # ... then do the clean up ...
-        LibraryCollectionReport._cleanup_results(results)
-
-        # ... and verify that clean up occurred.
-        assert not Path(temp_file1.name).exists()
-        assert not Path(temp_file2.name).exists()
-        assert stream1.closed
-        assert stream2.closed
 
     def test_get_table_processor(
         self,

@@ -4,10 +4,11 @@ import sys
 import tempfile
 import zipfile
 from collections.abc import Sequence
+from contextlib import ExitStack
 from dataclasses import dataclass
 from datetime import datetime
 from functools import cached_property, partial
-from pathlib import Path
+from io import TextIOWrapper
 from typing import IO, ClassVar, TypedDict, TypeVar
 
 from sqlalchemy.orm import Session
@@ -43,17 +44,11 @@ class LibraryReportKwargs(TypedDict, total=False):
 class TableProcessingResult:
     """Result of processing a single table."""
 
-    table_key: str
+    key: str
+    title: str
     filename: str
     row_count: int
     content_stream: IO[bytes]
-
-    def cleanup(self) -> None:
-        """Clean up the content stream and its associated temporary file."""
-        if hasattr(self.content_stream, "close"):
-            self.content_stream.close()
-        if hasattr(self.content_stream, "name"):
-            Path(self.content_stream.name).unlink(missing_ok=True)
 
 
 T = TypeVar("T", bound="LibraryCollectionReport")
@@ -203,43 +198,68 @@ class LibraryCollectionReport(LoggerMixin):
         delimiter = kwargs.pop("delimiter", ",")
         return partial(write_csv, delimiter=delimiter, **kwargs)
 
-    def _process_table(self, table: ReportTable) -> TableProcessingResult:
-        """Process a single table and return the result with metadata."""
+    def _process_table(
+        self, table: ReportTable, *, stack: ExitStack
+    ) -> TableProcessingResult:
+        """A simple wrapper around _process_table that handles exceptions and logs them properly."""
+        try:
+            result = self._process_table_base(table, stack=stack)
+        except Exception as e:
+            self.log.exception(f"Failed to process table '{table.definition.key}': {e}")
+            raise
+
+        self.log.debug(
+            f"Processed table '{table.definition.title}' ({table.definition.key}) "
+            f"({result.row_count} rows) "
+            f"to '{result.filename}' for report '{self.title}' ({self.key})"
+        )
+
+        return result
+
+    def _process_table_base(
+        self, table: ReportTable, *, stack: ExitStack
+    ) -> TableProcessingResult:
+        """Process a single table and return the result with metadata.
+
+        :param table: A ReportTable instance.
+        :param stack: A `contextlib.ExitStack`.
+        :return: A TableProcessingResult object with table metadata and output stream.
+        :raises: Any exception raised during table processing.
+        """
         filename = f"{self.get_filename(key=table.definition.key)}.csv"
 
         # Create a single temporary file opened in text mode
-        temp_file = tempfile.NamedTemporaryFile(
-            "w+", encoding="utf-8", newline="", delete=False
+        binary_file = stack.enter_context(tempfile.NamedTemporaryFile("w+b"))
+
+        # Get a text mode file object to write the table output into.
+        output_file = TextIOWrapper(binary_file, encoding="utf-8", newline="")
+
+        # Get the table processor bound to the output file.
+        processor_func = self.get_table_processor(table, file=output_file)
+        counting_processor = row_counter_wrapper(processor_func)
+
+        # Process the table
+        counted_rows, _ = table(counting_processor)
+
+        # Flush the output file to ensure all data is written.
+        output_file.flush()
+        output_file.detach()
+
+        # Rewind the file so that it's ready for reading.
+        binary_file.seek(0)
+
+        # Return table processing result metadata and content stream.
+        return TableProcessingResult(
+            key=table.definition.key,
+            title=table.definition.title,
+            filename=filename,
+            row_count=counted_rows.get_count(),
+            content_stream=binary_file,
         )
 
-        try:
-            # Get the table processor bound to the output file.
-            processor_func = self.get_table_processor(table, file=temp_file)
-            counting_processor = row_counter_wrapper(processor_func)
-
-            # Process the table
-            counted_rows, _ = table(counting_processor)
-
-            temp_file.flush()
-            temp_file.close()
-
-            # Reopen in binary mode for reading
-            binary_file = open(temp_file.name, "rb")
-
-            row_count = counted_rows.get_count()
-
-            return TableProcessingResult(
-                table_key=table.definition.key,
-                filename=filename,
-                row_count=row_count,
-                content_stream=binary_file,
-            )
-        except:
-            # Clean up on error
-            Path(temp_file.name).unlink(missing_ok=True)
-            raise
-
-    def _package_results(self, results: list[TableProcessingResult]) -> IO[bytes]:
+    def _package_results(
+        self, results: list[TableProcessingResult], *, stack: ExitStack
+    ) -> IO[bytes]:
         """Package processing results into a ZIP archive.
 
         Override in subclasses, depending on the packaging approach.
@@ -247,10 +267,13 @@ class LibraryCollectionReport(LoggerMixin):
         This is a good place to apply a consistent process to each table's results.
 
         :param results: List of table processing results to package.
+        :param stack: A `contextlib.ExitStack`.
         :return: A stream containing the packaged results.
         :raises: Any exception raised during packaging.
         """
-        zip_buffer = tempfile.SpooledTemporaryFile(max_size=10 * 1024 * 1024)
+        zip_buffer = stack.enter_context(
+            tempfile.SpooledTemporaryFile(max_size=10 * 1024 * 1024)
+        )
 
         # Before Python 3.11, SpooledTemporaryFile is missing the `seekable` attribute.
         # See https://stackoverflow.com/questions/47160211/why-doesnt-tempfile-spooledtemporaryfile-implement-readable-writable-seekable
@@ -270,12 +293,6 @@ class LibraryCollectionReport(LoggerMixin):
 
         zip_buffer.seek(0)
         return zip_buffer
-
-    @staticmethod
-    def _cleanup_results(results: list[TableProcessingResult]) -> None:
-        """Clean up all processing results."""
-        for result in results:
-            result.cleanup()
 
     def _store_package(self, package: IO[bytes]) -> str:
         """Store the packaged results to S3.
@@ -332,48 +349,29 @@ class LibraryCollectionReport(LoggerMixin):
         # Set up the tables.
         tables = self._initialize_tables(session=session)
 
-        # We need to track the results so that we can clean them up later.
-        processing_results: list[TableProcessingResult] = []
-        try:
-            # Process each table.
-            for table in tables:
-                try:
-                    result = self._process_table(table)
-                    processing_results.append(result)
-                except Exception as e:
-                    self.log.error(
-                        f"Failed to process table '{table.definition.key}': {e}"
-                    )
-                    raise
-                self.log.debug(
-                    f"Processed table '{table.definition.title}' ({table.definition.key}) ({result.row_count} rows) "
-                    f"to '{result.filename}' for report '{self.title}' ({self.key})"
-                )
+        with ExitStack() as stack:
+            # Process each table and capture the results.
+            processing_results = [
+                self._process_table(table, stack=stack) for table in tables
+            ]
 
             # Package up the results.
             try:
-                package = self._package_results(processing_results)
+                package = self._package_results(processing_results, stack=stack)
             except Exception as e:
-                self.log.error(f"Failed to package results: {e}")
+                self.log.exception(f"Failed to package results: {e}")
                 raise
 
             # Store the package.
-            try:
-                location = self._store_package(package)
-            finally:
-                package.close()
+            location = self._store_package(package)
 
-            # Send success notification.
-            self.send_success_notification(access_url=location)
-            self.log.info(
-                f"Emailed notification for report '{self.title}' ({self.key}) for "
-                f"library {library.name} ({library.short_name}) to {self.email_address}."
-            )
-            return True
-
-        finally:
-            # Always clean up processing results, regardless of success or failure
-            self._cleanup_results(processing_results)
+        # Send success notification.
+        self.send_success_notification(access_url=location)
+        self.log.info(
+            f"Emailed notification for report '{self.title}' ({self.key}) for "
+            f"library {library.name} ({library.short_name}) to {self.email_address}."
+        )
+        return True
 
     def run(self, *, session: Session) -> bool:
         """Set up and run the report.
@@ -397,7 +395,7 @@ class LibraryCollectionReport(LoggerMixin):
         try:
             return self._run_report(session=session)
         except Exception as e:
-            self.log.error(
+            self.log.exception(
                 f"Unable to generate report '{self.title}' ({self.key}) for library '{library.name}': {e}"
             )
             self.send_error_notification()
