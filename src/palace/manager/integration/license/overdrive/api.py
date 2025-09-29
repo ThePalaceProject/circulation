@@ -611,11 +611,8 @@ class OverdriveAPI(
         availability_queue = extractor_class.availability_link_list(content_dict)
         return availability_queue, next_link
 
-    def _get_headers(self, auth_token: str | None) -> dict[str, str]:
-        if auth_token:
-            return {"Authorization": f"Bearer {auth_token}", "User-Agent": "Palace"}
-        else:
-            return {}
+    def _get_headers(self, auth_token: str) -> dict[str, str]:
+        return {"Authorization": f"Bearer {auth_token}", "User-Agent": "Palace"}
 
     def book_info_initial_endpoint(
         self,
@@ -742,13 +739,10 @@ class OverdriveAPI(
     def _make_request(
         self,
         client: httpx.AsyncClient,
-        urls: deque[str] | str,
+        urls: deque[str],
         pending_requests: list[asyncio.Task[httpx._models.Response]],
     ) -> None:
-        if isinstance(urls, str):
-            url = urls
-        else:
-            url = urls.pop()
+        url = urls.pop()
         req = client.get(url)
         task = asyncio.create_task(req)
         pending_requests.append(task)
@@ -786,6 +780,7 @@ class OverdriveAPI(
         elif path.endswith("metadata") and path.startswith("/v1/"):
             books[data["id"].lower()]["metadata"] = data
         else:
+            # this should never happen
             raise RuntimeError(f"Unknown URL: {response.url}")
 
     def recently_changed_ids(
@@ -946,6 +941,7 @@ class OverdriveAPI(
         permissions.
         """
         patron_credential = self._get_patron_oauth_credential(patron, pin)
+        assert patron_credential.credential
         headers = self._get_headers(patron_credential.credential)
         if extra_headers:
             headers.update(extra_headers)
