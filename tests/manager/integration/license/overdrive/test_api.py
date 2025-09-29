@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, create_autospec, patch
 
 import pytest
+from httpx import HTTPStatusError
 
 from palace.manager.api.circulation.data import HoldInfo, LoanInfo
 from palace.manager.api.circulation.exceptions import (
@@ -2757,6 +2758,9 @@ class TestSyncBookshelf:
         availability_data, availability_json = overdrive_api_fixture.sample_json(
             "overdrive_availability_information.json"
         )
+        metadata_data, metadata_json = overdrive_api_fixture.sample_json(
+            "bibliographic_information_book_list_test.json"
+        )
         (
             overdrive_book_list_with_next_link_data,
             overdrive_book_list_with_next_link_json,
@@ -2769,12 +2773,47 @@ class TestSyncBookshelf:
             200, content=overdrive_book_list_with_next_link_data
         )
         mock_async_client.queue_response(200, content=availability_data)
+        mock_async_client.queue_response(200, content=metadata_data)
 
         initial_endpoint = api.book_info_initial_endpoint(start=None, page_size=1)
 
         book_info_list, next_endpoint = await api.fetch_book_info_list(
-            initial_endpoint, fetch_metadata=False, fetch_availability=True
+            initial_endpoint, fetch_metadata=True, fetch_availability=True
         )
         assert next_endpoint
         assert book_info_list
         assert len(book_info_list) == 1
+        assert book_info_list[0]["metadata"]
+        assert book_info_list[0]["availabilityV2"]
+
+    async def test_fetch_book_info_list_retry_and_error(
+        self,
+        overdrive_api_fixture: OverdriveAPIFixture,
+    ):
+        (
+            overdrive_book_list_with_next_link_data,
+            overdrive_book_list_with_next_link_json,
+        ) = overdrive_api_fixture.sample_json("overdrive_book_list_with_next_link.json")
+        api = overdrive_api_fixture.api
+        mock_async_client = overdrive_api_fixture.mock_async_client
+
+        # test recovery after failure with book list page
+        mock_async_client.queue_response(
+            502,
+            content="error",
+        )
+
+        mock_async_client.queue_response(
+            200, content=overdrive_book_list_with_next_link_data
+        )
+
+        # test retry and failure with metadata and availabililty
+        for x in range(8):
+            # error for 4 attempts for availability and metadata
+            mock_async_client.queue_response(500, content="500 Internal Server Error")
+
+        with pytest.raises(HTTPStatusError, match="500 Internal Server Error") as e:
+            initial_endpoint = api.book_info_initial_endpoint(start=None, page_size=1)
+            await api.fetch_book_info_list(
+                initial_endpoint, fetch_metadata=True, fetch_availability=True
+            )
