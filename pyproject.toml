@@ -349,6 +349,8 @@ asyncio_mode = "auto"
 filterwarnings = [
     "error::pydantic.PydanticDeprecatedSince20",
     "error::pytest.PytestWarning",
+    "error::sqlalchemy.exc.SADeprecationWarning",
+    "error::sqlalchemy.exc.SAWarning",
 ]
 markers = [
     "minio: mark test as requiring minio",

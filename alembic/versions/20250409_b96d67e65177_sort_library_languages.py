@@ -49,8 +49,7 @@ def upgrade() -> None:
                 WHERE id = :library_id
                 """
             ),
-            settings_dict=json_serializer(settings_dict),
-            library_id=library_id,
+            {"settings_dict": json_serializer(settings_dict), "library_id": library_id},
         )
 
 

@@ -157,13 +157,13 @@ class TestDeviceTokens:
             "token_type": DeviceTokenTypes.FCM_IOS,
         }
 
-        assert db.session.query(DeviceToken).get(device.id) is not None
+        assert db.session.get(DeviceToken, device.id) is not None
 
         with flask_app_fixture.test_request_context(json=json_data, patron=patron):
             response = controller.delete_patron_device()
 
         assert response.status_code == 204
-        assert db.session.query(DeviceToken).get(device.id) is None
+        assert db.session.get(DeviceToken, device.id) is None
 
     def test_delete_no_token(
         self,

@@ -33,31 +33,39 @@ def upgrade() -> None:
 
     # update existing playtime entries with associated data source name where available.
     conn.execute(
-        "update playtime_entries pe set data_source_name = ic.settings->>'data_source' "
-        "from collections c, integration_configurations ic "
-        "where pe.collection_id = c.id and  c.integration_configuration_id = ic.id and "
-        "ic.settings->'data_source' is not null"
+        sa.text(
+            "update playtime_entries pe set data_source_name = ic.settings->>'data_source' "
+            "from collections c, integration_configurations ic "
+            "where pe.collection_id = c.id and  c.integration_configuration_id = ic.id and "
+            "ic.settings->'data_source' is not null"
+        )
     )
 
     # Add default value where data_source_name could not be determined.
     conn.execute(
-        f"update playtime_entries set data_source_name = '{unknown_data_source_name}' "
-        f"where data_source_name is null"
+        sa.text(
+            f"update playtime_entries set data_source_name = '{unknown_data_source_name}' "
+            f"where data_source_name is null"
+        )
     )
 
     # update existing playtime summaries with associated data source name where available.
 
     conn.execute(
-        "update playtime_summaries ps set data_source_name = ic.settings->>'data_source' "
-        "from collections c, integration_configurations ic "
-        "where ps.collection_id = c.id and  c.integration_configuration_id = ic.id and "
-        "ic.settings->'data_source' is not null"
+        sa.text(
+            "update playtime_summaries ps set data_source_name = ic.settings->>'data_source' "
+            "from collections c, integration_configurations ic "
+            "where ps.collection_id = c.id and  c.integration_configuration_id = ic.id and "
+            "ic.settings->'data_source' is not null"
+        )
     )
 
     # Add default value where data_source_name could not be determined.
     conn.execute(
-        f"update playtime_summaries set data_source_name = '{unknown_data_source_name}' "
-        f"where data_source_name is null"
+        sa.text(
+            f"update playtime_summaries set data_source_name = '{unknown_data_source_name}' "
+            f"where data_source_name is null"
+        )
     )
 
     # make both columns non-nullable

@@ -53,6 +53,7 @@ class SessionManager(LoggerMixin):
             json_serializer=json_serializer,
             pool_pre_ping=True,
             poolclass=poolclass,
+            future=True,
         )
 
     @classmethod
@@ -70,10 +71,9 @@ class SessionManager(LoggerMixin):
         return session_factory
 
     @classmethod
-    def initialize_schema(cls, engine):
+    def initialize_schema(cls, connection: Connection):
         """Initialize the database schema."""
-        # Use SQLAlchemy to create all the tables.
-        Base.metadata.create_all(engine)
+        Base.metadata.create_all(connection)
 
     @classmethod
     def session(cls, url: str | None = None, application_name: str | None = None):
@@ -83,7 +83,7 @@ class SessionManager(LoggerMixin):
 
     @classmethod
     def session_from_connection(cls, connection: Connection) -> Session:
-        session = Session(connection)
+        session = Session(connection, future=True)
         cls.setup_event_listener(session)
         return session
 
@@ -91,7 +91,7 @@ class SessionManager(LoggerMixin):
     def initialize_data(cls, session: Session):
         # Check if the recursive equivalents function exists already.
         query = (
-            select([literal_column("proname")])
+            select(literal_column("proname"))
             .select_from(table("pg_proc"))
             .where(literal_column("proname") == "fn_recursive_equivalents")
         )

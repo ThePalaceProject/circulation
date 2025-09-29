@@ -28,7 +28,8 @@ class AnnotationFixture(CirculationControllerFixture):
 def annotation_fixture(
     db: DatabaseTransactionFixture, services_fixture: ServicesFixture
 ):
-    return AnnotationFixture(db, services_fixture)
+    with AnnotationFixture.fixture(db, services_fixture) as fixture:
+        yield fixture
 
 
 class TestAnnotationController:

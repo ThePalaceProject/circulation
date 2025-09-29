@@ -536,7 +536,7 @@ class Loan(Base, LoanAndHoldMixin):
     # Some distributors (e.g. Feedbooks) may have an identifier that can
     # be used to check the status of a specific Loan.
     external_identifier = Column(Unicode, unique=True, nullable=True)
-    patron_last_notified = Column(DateTime, nullable=True)
+    patron_last_notified = Column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (UniqueConstraint("patron_id", "license_pool_id"),)
 
@@ -582,7 +582,7 @@ class Hold(Base, LoanAndHoldMixin):
     start = Column(DateTime(timezone=True), index=True)
     end = Column(DateTime(timezone=True), index=True)
     position = Column(Integer, index=True)
-    patron_last_notified = Column(DateTime, nullable=True)
+    patron_last_notified = Column(DateTime(timezone=True), nullable=True)
 
     def __lt__(self, other: Any) -> bool:
         if not isinstance(other, Hold) or self.id is None or other.id is None:

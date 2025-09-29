@@ -26,15 +26,17 @@ def upgrade() -> None:
     )
 
     conn = op.get_bind()
-    rows = conn.execute("SELECT id from patrons").all()
+    rows = conn.execute(sa.text("SELECT id from patrons")).all()
 
     for row in rows:
         uid = uuid.uuid4()
         conn.execute(
-            """
-            UPDATE patrons SET uuid = %s
-            WHERE id = %s
-            """,
+            sa.text(
+                """
+                UPDATE patrons SET uuid = %s
+                WHERE id = %s
+                """
+            ),
             (
                 uid,
                 row.id,

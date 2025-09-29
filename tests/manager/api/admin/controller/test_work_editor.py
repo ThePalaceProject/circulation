@@ -993,25 +993,12 @@ class TestWorkController:
                 identifier.identifier,
             )
 
-    def test_custom_lists_post(
+    def test_custom_lists_post_error_non_existant(
         self, work_fixture: WorkFixture, db: DatabaseTransactionFixture
     ) -> None:
         staff_data_source = DataSource.lookup(db.session, DataSource.LIBRARY_STAFF)
-        custom_list, _ = create(
-            db.session,
-            CustomList,
-            name=db.fresh_str(),
-            library=db.default_library(),
-            data_source=staff_data_source,
-        )
         work = db.work(with_license_pool=True)
         identifier = work.presentation_edition.primary_identifier
-
-        # Create a Lane that depends on this CustomList for its membership.
-        lane = db.lane()
-        lane.customlists.append(custom_list)
-        lane.size = 300
-
         # Try adding the work to a list that doesn't exist.
         deleted_custom_list, _ = create(
             db.session,
@@ -1044,6 +1031,12 @@ class TestWorkController:
                 identifier.type, identifier.identifier
             )
 
+    def test_custom_lists_post_error_bad_data(
+        self, work_fixture: WorkFixture, db: DatabaseTransactionFixture
+    ) -> None:
+        work = db.work(with_license_pool=True)
+        identifier = work.presentation_edition.primary_identifier
+
         # Try sending bad data
         with (
             work_fixture.request_context_with_library_and_admin("/", method="POST"),
@@ -1055,6 +1048,13 @@ class TestWorkController:
             work_fixture.manager.admin_work_controller.custom_lists(
                 identifier.type, identifier.identifier
             )
+
+    def test_custom_lists_post_error_no_access(
+        self, work_fixture: WorkFixture, db: DatabaseTransactionFixture
+    ) -> None:
+        staff_data_source = DataSource.lookup(db.session, DataSource.LIBRARY_STAFF)
+        work = db.work(with_license_pool=True)
+        identifier = work.presentation_edition.primary_identifier
 
         # Try adding work to a list that the library doesn't have access to.
         other_libraries_list, _ = create(
@@ -1090,6 +1090,25 @@ class TestWorkController:
             work_fixture.manager.admin_work_controller.custom_lists(
                 identifier.type, identifier.identifier
             )
+
+    def test_custom_lists_post(
+        self, work_fixture: WorkFixture, db: DatabaseTransactionFixture
+    ) -> None:
+        staff_data_source = DataSource.lookup(db.session, DataSource.LIBRARY_STAFF)
+        custom_list, _ = create(
+            db.session,
+            CustomList,
+            name=db.fresh_str(),
+            library=db.default_library(),
+            data_source=staff_data_source,
+        )
+        work = db.work(with_license_pool=True)
+        identifier = work.presentation_edition.primary_identifier
+
+        # Create a Lane that depends on this CustomList for its membership.
+        lane = db.lane()
+        lane.customlists.append(custom_list)
+        lane.size = 300
 
         # Add the list to the work.
         with work_fixture.request_context_with_library_and_admin("/", method="POST"):

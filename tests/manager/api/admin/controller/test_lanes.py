@@ -284,7 +284,9 @@ class TestLanesController:
             # The sibling's priority has been shifted down to put the new lane at the top.
             assert 1 == sibling.priority
 
-    def test_lanes_create_shared_list(self, alm_fixture: AdminLibraryManagerFixture):
+    def test_lanes_create_shared_list_not_found(
+        self, alm_fixture: AdminLibraryManagerFixture
+    ):
         list, ignore = alm_fixture.ctrl.db.customlist(
             data_source_name=DataSource.LIBRARY_STAFF, num_entries=0
         )
@@ -305,10 +307,20 @@ class TestLanesController:
             response = alm_fixture.manager.admin_lanes_controller.lanes()
             assert 404 == response.status_code
 
+    def test_lanes_create_shared_list_success(
+        self, alm_fixture: AdminLibraryManagerFixture
+    ):
+        list, ignore = alm_fixture.ctrl.db.customlist(
+            data_source_name=DataSource.LIBRARY_STAFF, num_entries=0
+        )
+        list.library = alm_fixture.ctrl.db.default_library()
+        library = alm_fixture.ctrl.db.library()
+        alm_fixture.admin.add_role(AdminRole.LIBRARY_MANAGER, library=library)
+
         success = CustomListQueries.share_locally_with_library(
             alm_fixture.ctrl.db.session, list, library
         )
-        assert success == True
+        assert success is True
 
         with alm_fixture.request_context_with_library_and_admin(
             "/", method="POST", library=library

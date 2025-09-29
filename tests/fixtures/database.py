@@ -19,7 +19,7 @@ import pytest
 import sqlalchemy
 from Crypto.PublicKey.RSA import import_key
 from pydantic_settings import SettingsConfigDict
-from sqlalchemy import MetaData, create_engine, text
+from sqlalchemy import MetaData, create_engine, event, text
 from sqlalchemy.engine import Connection, Engine, Transaction, make_url
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.orm.attributes import flag_modified
@@ -229,7 +229,9 @@ class DatabaseCreationFixture:
         wrapped in a transaction.
         """
 
-        engine = create_engine(self._config_url, isolation_level="AUTOCOMMIT")
+        engine = create_engine(
+            self._config_url, isolation_level="AUTOCOMMIT", future=True
+        )
         connection = engine.connect()
         try:
             yield connection
@@ -241,7 +243,7 @@ class DatabaseCreationFixture:
         if not self.create_database:
             return
 
-        with self._db_connection() as connection:
+        with self._db_connection() as connection, connection.begin():
             user = self._config_url.username
             connection.execute(text(f"CREATE DATABASE {self.database_name}"))
             connection.execute(
@@ -252,7 +254,7 @@ class DatabaseCreationFixture:
         if not self.create_database:
             return
 
-        with self._db_connection() as connection:
+        with self._db_connection() as connection, connection.begin():
             connection.execute(text(f"DROP DATABASE {self.database_name}"))
 
     @contextmanager
@@ -307,14 +309,13 @@ def function_database_creation(
 
 class DatabaseFixture:
     """
-    The DatabaseFixture initializes the database schema and creates a connection to the database
+    The DatabaseFixture initializes the database schema and creates an engine
     that should be used in the tests.
     """
 
     def __init__(self, database_name: DatabaseCreationFixture) -> None:
         self.database_name = database_name
         self.engine = self.engine_factory()
-        self.connection = self.engine.connect()
 
     def engine_factory(self) -> Engine:
         return SessionManager.engine(self.database_name.url, application_name="test")
@@ -326,10 +327,11 @@ class DatabaseFixture:
         metadata_obj.clear()
 
     def _initialize_database(self) -> None:
-        SessionManager.initialize_schema(self.connection)
-        with Session(self.connection) as session:
-            # Initialize the database with default data
-            SessionManager.initialize_data(session)
+        with self.engine.begin() as connection:
+            SessionManager.initialize_schema(connection)
+            with Session(connection) as session:
+                # Initialize the database with default data
+                SessionManager.initialize_data(session)
 
     @staticmethod
     def _load_model_classes():
@@ -343,7 +345,6 @@ class DatabaseFixture:
 
     def _close(self):
         # Destroy the database connection and engine.
-        self.connection.close()
         self.engine.dispose()
 
     @contextmanager
@@ -355,8 +356,9 @@ class DatabaseFixture:
         to use the engine provided by this fixture and patches the engine so that code that calls
         dispose() on the engine does not actually dispose it, since it is used by this fixture.
         """
-        with patch.object(self.engine, "dispose"), patch.object(
-            SessionManager, "engine", return_value=self.engine
+        with (
+            patch.object(self.engine, "dispose"),
+            patch.object(SessionManager, "engine", return_value=self.engine),
         ):
             yield
 
@@ -429,8 +431,15 @@ class DatabaseTransactionFixture:
             "9780316075978",
         ]
         self._services = services
-        self._session = SessionManager.session_from_connection(database.connection)
-        self._transaction = database.connection.begin_nested()
+        self._connection = database.engine.connect()
+        self._transaction = self._connection.begin()
+        self._session = SessionManager.session_from_connection(self._connection)
+        self._nested = self._connection.begin_nested()
+
+        @event.listens_for(self._session, "after_transaction_end")
+        def end_savepoint(session, transaction):
+            if not self._nested.is_active:
+                self._nested = self._connection.begin_nested()
 
         self._goal_registry_mapping: Mapping[Goals, IntegrationRegistry[Any]] = {
             Goals.CATALOG_GOAL: self._services.services.integration_registry.catalog_services(),
@@ -480,11 +489,12 @@ class DatabaseTransactionFixture:
         # Close the session.
         self._session.close()
 
-        # Roll back all database changes that happened during this
-        # test, whether in the session that was just closed or some
-        # other session.
+        # Roll back all database changes that happened during this test.
         if self._transaction.is_active:
             self._transaction.rollback()
+
+        # return connection to the Engine
+        self._connection.close()
 
         Configuration.SITE_CONFIGURATION_LAST_UPDATE = None
         Configuration.LAST_CHECKED_FOR_SITE_CONFIGURATION_UPDATE = None
@@ -500,6 +510,10 @@ class DatabaseTransactionFixture:
     @property
     def session(self) -> Session:
         return self._session
+
+    @property
+    def connection(self) -> Connection:
+        return self._connection
 
     def default_collection(self) -> Collection:
         """A Collection that will only be created once throughout

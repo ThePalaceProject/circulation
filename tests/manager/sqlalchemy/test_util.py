@@ -3,7 +3,8 @@ from unittest.mock import MagicMock, call, patch
 
 import pytest
 from psycopg2.extras import NumericRange
-from sqlalchemy import not_
+from sqlalchemy import not_, text
+from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.exc import MultipleResultsFound
 
@@ -19,7 +20,7 @@ from palace.manager.sqlalchemy.util import (
     pg_advisory_lock,
     tuple_to_numericrange,
 )
-from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.database import DatabaseFixture, DatabaseTransactionFixture
 
 
 class TestDatabaseInterface:
@@ -191,26 +192,31 @@ class TestNumericRangeConversion:
 class TestAdvisoryLock:
     TEST_LOCK_ID = 999999
 
-    def _lock_exists(self, session, lock_id):
-        result = list(session.execute(f"SELECT * from pg_locks where objid={lock_id}"))
+    def _lock_exists(self, connection: Connection, lock_id: int) -> bool:
+        result = list(
+            connection.execute(text(f"SELECT * from pg_locks where objid={lock_id}"))
+        )
         return len(result) != 0
 
-    def test_lock_unlock(self, db: DatabaseTransactionFixture):
-        with pg_advisory_lock(db.session, self.TEST_LOCK_ID):
-            assert self._lock_exists(db.session, self.TEST_LOCK_ID) is True
-        assert self._lock_exists(db.session, self.TEST_LOCK_ID) is False
+    def test_lock_unlock(self, function_database: DatabaseFixture):
+        with function_database.engine.connect() as connection:
+            with pg_advisory_lock(connection, self.TEST_LOCK_ID):
+                assert self._lock_exists(connection, self.TEST_LOCK_ID) is True
+            assert self._lock_exists(connection, self.TEST_LOCK_ID) is False
 
-    def test_exception_case(self, db: DatabaseTransactionFixture):
-        try:
-            with pg_advisory_lock(db.session, self.TEST_LOCK_ID):
-                assert self._lock_exists(db.session, self.TEST_LOCK_ID) is True
-                raise Exception("Lock should open!!")
-        except:
-            assert self._lock_exists(db.session, self.TEST_LOCK_ID) is False
+    def test_exception_case(self, function_database: DatabaseFixture):
+        with function_database.engine.connect() as connection:
+            try:
+                with pg_advisory_lock(connection, self.TEST_LOCK_ID):
+                    assert self._lock_exists(connection, self.TEST_LOCK_ID) is True
+                    raise Exception("Lock should open!!")
+            except:
+                assert self._lock_exists(connection, self.TEST_LOCK_ID) is False
 
-    def test_no_lock_id(self, db: DatabaseTransactionFixture):
-        with pg_advisory_lock(db.session, None):
-            assert self._lock_exists(db.session, self.TEST_LOCK_ID) is False
+    def test_no_lock_id(self, function_database: DatabaseFixture):
+        with function_database.engine.connect() as connection:
+            with pg_advisory_lock(connection, None):
+                assert self._lock_exists(connection, self.TEST_LOCK_ID) is False
 
 
 class TestNumericRangeToString:
