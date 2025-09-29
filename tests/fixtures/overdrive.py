@@ -5,7 +5,6 @@ from functools import partial
 from typing import Any
 
 import pytest
-from fixtures.http import MockAsyncClientFixture
 
 from palace.manager.api.circulation.dispatcher import CirculationApiDispatcher
 from palace.manager.api.config import Configuration
@@ -20,7 +19,7 @@ from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.patron import Patron
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import OverdriveFilesFixture
-from tests.fixtures.http import MockHttpClientFixture
+from tests.fixtures.http import MockAsyncClientFixture, MockHttpClientFixture
 from tests.mocks.overdrive import MockOverdriveAPI
 
 
