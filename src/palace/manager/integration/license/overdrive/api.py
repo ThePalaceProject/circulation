@@ -117,7 +117,6 @@ from palace.manager.sqlalchemy.model.resource import Representation
 from palace.manager.sqlalchemy.util import get_one
 from palace.manager.util import base64
 from palace.manager.util.datetime_helpers import utc_now
-from palace.manager.util.http.async_http import AsyncClient
 from palace.manager.util.http.exception import BadResponseException
 from palace.manager.util.http.http import HTTP, RequestKwargs
 
@@ -612,8 +611,11 @@ class OverdriveAPI(
         availability_queue = extractor_class.availability_link_list(content_dict)
         return availability_queue, next_link
 
-    def _get_headers(self, auth_token: str) -> dict[str, str]:
-        return {"Authorization": f"Bearer {auth_token}", "User-Agent": "Palace"}
+    def _get_headers(self, auth_token: str | None) -> dict[str, str]:
+        if auth_token:
+            return {"Authorization": f"Bearer {auth_token}", "User-Agent": "Palace"}
+        else:
+            return {}
 
     def book_info_initial_endpoint(
         self,
@@ -639,7 +641,7 @@ class OverdriveAPI(
             limit=str(min(page_size, self.PAGE_SIZE_LIMIT)),
             collection_token=self.collection_token,
         )
-        endpoint: str | None = _make_link_safe(book_info_initial_endpoint)
+        endpoint: str = _make_link_safe(book_info_initial_endpoint)
 
         return BookInfoEndpoint(endpoint)
 
@@ -662,12 +664,11 @@ class OverdriveAPI(
         """
 
         async with self.create_async_client(connections) as client:
-
             base_url = self.endpoint(self.HOST_ENDPOINT_BASE)
             client.headers.update(self._get_headers(self._client_oauth_token))
             client.base_url = URL(base_url)
             urls: deque[str] = deque()
-            pending_requests: list[asyncio.Task[Response]] = []
+            pending_requests: list[asyncio.Task[httpx._models.Response]] = []
             books: dict[str, Any] = {}
             retried_requests: defaultdict[str, int] = defaultdict(int)
             extractor_class = extractor_class or OverdriveRepresentationExtractor
@@ -688,12 +689,13 @@ class OverdriveAPI(
                 for req in done:
                     try:
                         response = await req
+                        response.raise_for_status()
 
                         if not next:
                             next_url = extractor_class.link(
-                                response.raise_for_status().json(), rel_to_follow
+                                response.json(), rel_to_follow
                             )
-                            next = BookInfoEndpoint(next_url)
+                            next = BookInfoEndpoint(next_url) if next_url else None
 
                         self._process_request(
                             response,
@@ -727,7 +729,7 @@ class OverdriveAPI(
 
             return list(books.values()), next
 
-    def create_async_client(self, connections):
+    def create_async_client(self, connections: int = 5) -> httpx.AsyncClient:
         return httpx.AsyncClient(
             timeout=Timeout(20.0, pool=None),
             limits=Limits(
@@ -739,9 +741,9 @@ class OverdriveAPI(
 
     def _make_request(
         self,
-        client: AsyncClient,
+        client: httpx.AsyncClient,
         urls: deque[str] | str,
-        pending_requests: list[asyncio.Task[Response]],
+        pending_requests: list[asyncio.Task[httpx._models.Response]],
     ) -> None:
         if isinstance(urls, str):
             url = urls
@@ -753,7 +755,7 @@ class OverdriveAPI(
 
     def _process_request(
         self,
-        response: Response,
+        response: httpx._models.Response,
         request_metadata: bool,
         request_availability: bool,
         base_url: str,
