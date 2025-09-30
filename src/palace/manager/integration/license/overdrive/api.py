@@ -737,7 +737,7 @@ class OverdriveAPI(
         pending_requests: list[asyncio.Task[httpx._models.Response]],
     ) -> None:
         url = urls.pop()
-        req = client.get(url)
+        req = client.get(url, allowed_response_codes=[200, 404])
         task = asyncio.create_task(req)
         pending_requests.append(task)
 
