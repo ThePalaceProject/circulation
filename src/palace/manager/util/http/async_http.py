@@ -7,6 +7,7 @@ from types import TracebackType
 from typing import IO, Any, TypedDict, Union, cast
 
 import httpx
+from httpx import URL
 from typing_extensions import Self, Unpack
 
 from palace.manager.util.backoff import exponential_backoff
@@ -368,6 +369,14 @@ class AsyncClient(LoggerMixin):
     @property
     def headers(self) -> httpx.Headers:
         return self._httpx_client.headers
+
+    @property
+    def base_url(self) -> URL:
+        return self._httpx_client.base_url
+
+    @base_url.setter
+    def base_url(self, base_url: URL | str) -> None:
+        self._httpx_client.base_url = base_url
 
     async def _perform_request(
         self,
