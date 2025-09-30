@@ -13,7 +13,7 @@ from urllib.parse import urlsplit
 
 import flask
 import httpx
-from httpx import URL, HTTPStatusError, Limits, RequestError, Timeout
+from httpx import URL, Limits, Timeout
 from pydantic import ValidationError
 from requests import Response
 from requests.structures import CaseInsensitiveDict
@@ -117,6 +117,8 @@ from palace.manager.sqlalchemy.model.resource import Representation
 from palace.manager.sqlalchemy.util import get_one
 from palace.manager.util import base64
 from palace.manager.util.datetime_helpers import utc_now
+from palace.manager.util.http.async_http import AsyncClient
+from palace.manager.util.http.base import ResponseCodesTypes
 from palace.manager.util.http.exception import BadResponseException
 from palace.manager.util.http.http import HTTP, RequestKwargs
 
@@ -703,32 +705,24 @@ class OverdriveAPI(
                             books,
                             urls,
                         )
-                    except (RequestError, HTTPStatusError) as e:
-                        self.log.error(f"Request error: {e}")
-                        self.log.error(f"URL: {e.request.url}")
-                        request_url = str(e.request.url)
-                        retried_requests[request_url] += 1
-
-                        if retried_requests[request_url] > 3:
-                            response.raise_for_status()
+                    except BadResponseException as e:
+                        if e.response.status_code == 404:
+                            self.log.warning(
+                                f"404 returned: {e.response.url}: ignoring..."
+                            )
                         else:
-                            if "404 Not Found" in str(e):
-                                self.log.warning(
-                                    f'url "{e.request.url}" NOT FOUND. Skipping...'
-                                )
-                            else:
-                                self.log.warning(
-                                    f"Retrying request (attempt {retried_requests[request_url]}/3)"
-                                )
-                                urls.appendleft(request_url)
+                            self.log.error(f"Request error: {e}")
+                            e.response.raise_for_status()
                     if urls:
                         self._make_request(client, urls, pending_requests)
 
             return list(books.values()), next
 
-    def create_async_client(self, connections: int = 5) -> httpx.AsyncClient:
-        return httpx.AsyncClient(
+    def create_async_client(self, connections: int = 5) -> AsyncClient:
+        return AsyncClient.for_web(
+            max_retries=3,
             timeout=Timeout(20.0, pool=None),
+            allowed_response_codes=ResponseCodesTypes,
             limits=Limits(
                 max_connections=connections,
                 max_keepalive_connections=connections,
@@ -738,7 +732,7 @@ class OverdriveAPI(
 
     def _make_request(
         self,
-        client: httpx.AsyncClient,
+        client: AsyncClient,
         urls: deque[str],
         pending_requests: list[asyncio.Task[httpx._models.Response]],
     ) -> None:

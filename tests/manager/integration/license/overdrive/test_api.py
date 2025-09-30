@@ -2812,8 +2812,10 @@ class TestSyncBookshelf:
             # error for 4 attempts for availability and metadata
             mock_async_client.queue_response(500, content="500 Internal Server Error")
 
-        with pytest.raises(HTTPStatusError, match="500 Internal Server Error") as e:
+        with pytest.raises(HTTPStatusError) as e:
             initial_endpoint = api.book_info_initial_endpoint(start=None, page_size=1)
             await api.fetch_book_info_list(
                 initial_endpoint, fetch_metadata=True, fetch_availability=True
             )
+
+            assert e.value.response.status_code == 500
