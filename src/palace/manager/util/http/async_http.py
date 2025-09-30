@@ -364,6 +364,10 @@ class AsyncClient(LoggerMixin):
             backoff=backoff,
         )
 
+    @property
+    def headers(self) -> httpx.Headers:
+        return self._httpx_client.headers
+
     async def _perform_request(
         self,
         method: str,
