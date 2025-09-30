@@ -118,7 +118,6 @@ from palace.manager.sqlalchemy.util import get_one
 from palace.manager.util import base64
 from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.http.async_http import AsyncClient
-from palace.manager.util.http.base import ResponseCodesTypes
 from palace.manager.util.http.exception import BadResponseException
 from palace.manager.util.http.http import HTTP, RequestKwargs
 
@@ -722,7 +721,7 @@ class OverdriveAPI(
         return AsyncClient.for_web(
             max_retries=3,
             timeout=Timeout(20.0, pool=None),
-            allowed_response_codes=ResponseCodesTypes,
+            allowed_response_codes=[200, 404],
             limits=Limits(
                 max_connections=connections,
                 max_keepalive_connections=connections,
@@ -737,7 +736,7 @@ class OverdriveAPI(
         pending_requests: list[asyncio.Task[httpx._models.Response]],
     ) -> None:
         url = urls.pop()
-        req = client.get(url, allowed_response_codes=[200, 404])
+        req = client.get(url)
         task = asyncio.create_task(req)
         pending_requests.append(task)
 
