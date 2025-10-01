@@ -20,16 +20,15 @@ REPORT_KEY_MAPPING: dict[str, type[LibraryCollectionReport]] = {
 
 
 @shared_task(queue=QueueNames.high, bind=True)
-def generate_report(
-    task: Task, *, key: str, **kwargs: Unpack[LibraryReportKwargs]
-) -> bool:
+def generate_report(task: Task, *, key: str, **kwargs: Unpack[LibraryReportKwargs]):
+    report_class = REPORT_KEY_MAPPING[key]
+    report = report_class.from_task(task, **kwargs)
+
     with task.session() as session:
-        report_class = REPORT_KEY_MAPPING[key]
-        report = report_class.from_task(task, **kwargs)
         success = report.run(session=session)
         if not success:
             task.log.error(
                 f"Report task failed: '{report.title}' ({report.key}) for <{report.email_address}>. "
-                f"(request ID: {report.request_id}, task ID: {task.id})"
+                f"(request ID: {report.request_id})"
             )
         return success
