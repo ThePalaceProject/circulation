@@ -17,6 +17,7 @@ from typing_extensions import Unpack
 from palace.manager.celery.task import Task
 from palace.manager.core.exceptions import IntegrationException
 from palace.manager.reporting.model import ReportTable, TTabularDataProcessor
+from palace.manager.reporting.tables.library_all_title import LibraryAllTitleReportTable
 from palace.manager.reporting.util import (
     RequestIdLoggerAdapter,
     TimestampFormat,
@@ -368,8 +369,7 @@ class LibraryCollectionReport(LoggerMixin):
         # Send success notification.
         self.send_success_notification(access_url=location)
         self.log.info(
-            f"Emailed notification for report '{self.title}' ({self.key}) for "
-            f"library {library.name} ({library.short_name}) to {self.email_address}."
+            f"Completed report '{self.key}' for {library.name} ({library.short_name})."
         )
         return True
 
@@ -400,3 +400,9 @@ class LibraryCollectionReport(LoggerMixin):
             )
             self.send_error_notification()
             return False
+
+
+class LibraryTitleLevelReport(LibraryCollectionReport):
+    KEY = "title-level-report"
+    TITLE = "Title-Level Report"
+    TABLE_CLASSES = [LibraryAllTitleReportTable]
