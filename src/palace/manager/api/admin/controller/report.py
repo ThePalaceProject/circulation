@@ -94,7 +94,6 @@ class ReportController(LoggerMixin):
         except Exception as e:
             msg = f"Failed to generate report '{report_title}' ({report_key}). (request ID: {request_id})"
             self.log.error(msg=msg, exc_info=e)
-            self._db.rollback()
             raise ProblemDetailException(
                 INTERNAL_SERVER_ERROR.detailed(detail=msg)
             ) from e

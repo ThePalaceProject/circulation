@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from celery import shared_task
+from frozendict import frozendict
 from typing_extensions import Unpack
 
 from palace.manager.celery.task import Task
@@ -11,12 +12,9 @@ from palace.manager.reporting.reports.library_collection import (
 )
 from palace.manager.service.celery.celery import QueueNames
 
-REPORT_KEY_MAPPING: dict[str, type[LibraryCollectionReport]] = {
-    report.KEY: report
-    for report in [
-        LibraryTitleLevelReport,
-    ]
-}
+REPORT_KEY_MAPPING: frozendict[str, type[LibraryCollectionReport]] = frozendict(
+    {report.KEY: report for report in [LibraryTitleLevelReport]}
+)
 
 
 @shared_task(queue=QueueNames.high, bind=True)

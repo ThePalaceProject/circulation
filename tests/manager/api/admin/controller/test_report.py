@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from flask import Response
 
-from palace.manager.api.admin.controller import ReportController
+from palace.manager.api.admin.controller import ReportController, report
 from palace.manager.api.admin.model.inventory_report import (
     InventoryReportCollectionInfo,
     InventoryReportInfo,
@@ -49,9 +49,7 @@ def report_fixture(
 
 
 class TestReportController:
-    @patch(
-        "palace.manager.api.admin.controller.report.generate_inventory_and_hold_reports"
-    )
+    @patch.object(report, "generate_inventory_and_hold_reports")
     def test_generate_inventory_and_hold_reports(
         self,
         mock_generate_reports: MagicMock,
@@ -78,10 +76,8 @@ class TestReportController:
             email_address=email_address, library_id=library_id
         )
 
-    @patch("palace.manager.api.admin.controller.report.generate_report")
-    @patch(
-        "palace.manager.api.admin.controller.report.generate_inventory_and_hold_reports"
-    )
+    @patch.object(report, "generate_report")
+    @patch.object(report, "generate_inventory_and_hold_reports")
     def test_generate_report_authorization(
         self,
         mock_generate_inventory_reports: MagicMock,
@@ -373,8 +369,8 @@ class TestReportController:
         assert response.status_code == 200
         assert response.json == success_payload_dict
 
-    @patch("palace.manager.api.admin.controller.report.generate_report")
-    @patch("palace.manager.api.admin.controller.report.uuid_encode")
+    @patch.object(report, "generate_report")
+    @patch.object(report, "uuid_encode")
     def test_generate_report_celery_task(
         self,
         mock_uuid_encode: MagicMock,
@@ -409,8 +405,8 @@ class TestReportController:
             library_id=library_id,
         )
 
-    @patch("palace.manager.api.admin.controller.report.generate_report")
-    @patch("palace.manager.api.admin.controller.report.uuid_encode")
+    @patch.object(report, "generate_report")
+    @patch.object(report, "uuid_encode")
     def test_generate_report(
         self,
         mock_uuid_encode: MagicMock,
@@ -484,7 +480,7 @@ class TestReportController:
                 f"No currently defined report is associated with the specified key (key='{invalid_key}')."
             )
 
-    @patch("palace.manager.api.admin.controller.report.generate_report")
+    @patch.object(report, "generate_report")
     def test_generate_report_exception(
         self,
         mock_generate_report: MagicMock,

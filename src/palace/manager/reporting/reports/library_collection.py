@@ -369,7 +369,7 @@ class LibraryCollectionReport(LoggerMixin):
         # Send success notification.
         self.send_success_notification(access_url=location)
         self.log.info(
-            f"Creating report '{self.key}' for {library.name} ({library.short_name})."
+            f"Completed report '{self.key}' for {library.name} ({library.short_name})."
         )
         return True
 
