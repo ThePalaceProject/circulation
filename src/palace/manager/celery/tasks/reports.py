@@ -20,7 +20,9 @@ REPORT_KEY_MAPPING: dict[str, type[LibraryCollectionReport]] = {
 
 
 @shared_task(queue=QueueNames.high, bind=True)
-def generate_report(task: Task, *, key: str, **kwargs: Unpack[LibraryReportKwargs]):
+def generate_report(
+    task: Task, *, key: str, **kwargs: Unpack[LibraryReportKwargs]
+) -> bool:
     report_class = REPORT_KEY_MAPPING[key]
     report = report_class.from_task(task, **kwargs)
 
