@@ -110,7 +110,6 @@ class BoundlessImporter(LoggerMixin):
         self,
         active_title_ids: list[str],
         apply_bibliographic: ApplyBibliographicCallable,
-        apply_circulation: ApplyCirculationCallable,
     ) -> None:
         policy = ReplacementPolicy(
             identifiers=False,
@@ -121,7 +120,6 @@ class BoundlessImporter(LoggerMixin):
         )
 
         bibliographic_updated = 0
-        circulation_updated = 0
         no_changes = 0
 
         for chunk in chunks(
@@ -136,9 +134,6 @@ class BoundlessImporter(LoggerMixin):
                         bibliographic, collection_id=self._collection.id, replace=policy
                     )
                     bibliographic_updated += 1
-                elif circulation.has_changed(self._db, collection=self._collection):
-                    apply_circulation(circulation, collection_id=self._collection.id)
-                    circulation_updated += 1
                 else:
                     no_changes += 1
 
@@ -146,7 +141,6 @@ class BoundlessImporter(LoggerMixin):
             self.log.info(
                 f"Processed {len(active_title_ids)} active titles: "
                 f"{bibliographic_updated} bibliographic updates, "
-                f"{circulation_updated} circulation updates, "
                 f"{no_changes} unchanged."
             )
 
@@ -169,8 +163,7 @@ class BoundlessImporter(LoggerMixin):
         :param apply_bibliographic: Callable to queue bibliographic data for processing.
             Called for each active title that has changed or when import_all is True.
         :param apply_circulation: Callable to queue circulation data for processing.
-            Called for each active title whose circulation has changed and for all
-            inactive titles to mark them as unavailable.
+            Called for inactive titles to mark them as unavailable.
         :param page: The page number to fetch from the API (1-indexed).
         :param modified_since: Only fetch titles modified after this datetime.
         :return: FeedImportResult containing pagination info, counts of titles processed,
@@ -189,9 +182,7 @@ class BoundlessImporter(LoggerMixin):
         active_title_ids = [
             title.title_id for title in title_response.titles if title.active is True
         ]
-        self._import_active_titles(
-            active_title_ids, apply_bibliographic, apply_circulation
-        )
+        self._import_active_titles(active_title_ids, apply_bibliographic)
 
         inactive_title_ids = [
             title.title_id for title in title_response.titles if title.active is False
