@@ -1,3 +1,4 @@
+from typing import Any
 from unittest.mock import call, create_autospec, patch
 
 import pytest
@@ -19,6 +20,7 @@ from palace.manager.integration.license.boundless.model.json import (
 from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.service.redis.models.lock import LockNotAcquired
 from palace.manager.sqlalchemy.model.coverage import Timestamp
+from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.util import get_one
 from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.http.exception import BadResponseException, RequestTimedOut
@@ -81,9 +83,6 @@ class TestImportCollection:
             boundless, "BoundlessImporter", autospec=BoundlessImporter
         ) as mock_importer:
             mock_importer.return_value.import_collection.return_value = mock_result
-            mock_importer.return_value.get_timestamp.return_value = (
-                db.session.query(Timestamp).first() or Timestamp()
-            )
 
             boundless.import_collection.delay(
                 collection_id=collection.id,
@@ -130,13 +129,10 @@ class TestImportCollection:
         )
 
         # Run the import
-        result = boundless.import_collection.delay(
+        boundless.import_collection.delay(
             collection_id=collection.id,
             import_all=True,
         ).wait()
-
-        # The task returns None
-        assert result is None
 
         # Check that we would have queued up the expected apply tasks.
         assert len(apply_task_fixture.apply_queue) == 1
@@ -146,7 +142,7 @@ class TestImportCollection:
         # book are available, and what formats it's available in.
         [pool] = apply_task_fixture.get_pools()
 
-        assert pool.identifier.type == "Axis 360 ID"
+        assert pool.identifier.type == Identifier.AXIS_360_ID
         assert pool.identifier.identifier == "0003642860"
 
         assert pool.licenses_owned == 9
@@ -219,9 +215,6 @@ class TestImportCollection:
         ):
             mock_importer = create_autospec(BoundlessImporter)
             mock_create_importer.return_value = mock_importer
-            mock_importer.get_timestamp.return_value = (
-                db.session.query(Timestamp).first() or Timestamp()
-            )
             mock_importer.import_collection.side_effect = [
                 BadResponseException(
                     "http://test.com",
@@ -235,21 +228,36 @@ class TestImportCollection:
                 successful_result,
             ]
 
-            result = boundless.import_collection.delay(
+            boundless.import_collection.delay(
                 collection_id=collection.id,
             ).wait()
-
-            # The task returns None
-            assert result is None
 
         assert retries.retry_count == 2
         assert mock_importer.import_collection.call_count == 3
 
+    @pytest.mark.parametrize(
+        "kwargs",
+        [
+            pytest.param(
+                {"page": 2, "start_time": utc_now()},
+                id="page > 1, missing modified_since",
+            ),
+            pytest.param(
+                {"page": 2, "modified_since": utc_now()},
+                id="page > 1, missing start_time",
+            ),
+            pytest.param(
+                {"page": 2},
+                id="page > 1, missing both",
+            ),
+        ],
+    )
     def test_parameter_validation_error(
         self,
         db: DatabaseTransactionFixture,
         celery_fixture: CeleryFixture,
         redis_fixture: RedisFixture,
+        kwargs: dict[str, Any],
     ) -> None:
         """
         Test that import_collection raises PalaceValueError when page > 1 but
@@ -257,33 +265,12 @@ class TestImportCollection:
         """
         collection = db.collection(name="test_collection", protocol=BoundlessApi)
 
-        # Test with page > 1 but missing modified_since
         with pytest.raises(
             PalaceValueError, match="modified_since and start_time are required"
         ):
             boundless.import_collection.delay(
                 collection_id=collection.id,
-                page=2,
-                start_time=utc_now(),
-            ).wait()
-
-        # Test with page > 1 but missing start_time
-        with pytest.raises(
-            PalaceValueError, match="modified_since and start_time are required"
-        ):
-            boundless.import_collection.delay(
-                collection_id=collection.id,
-                page=2,
-                modified_since=utc_now(),
-            ).wait()
-
-        # Test with page > 1 but missing both
-        with pytest.raises(
-            PalaceValueError, match="modified_since and start_time are required"
-        ):
-            boundless.import_collection.delay(
-                collection_id=collection.id,
-                page=2,
+                **kwargs,
             ).wait()
 
     def test_multipage_import(
