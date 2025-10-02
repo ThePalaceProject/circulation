@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import base64
 import datetime
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from functools import cached_property, partial
 from typing import TYPE_CHECKING, Any, Literal, TypeVar
 
@@ -30,6 +30,7 @@ from palace.manager.integration.license.boundless.model.json import (
     FulfillmentInfoResponse,
     FulfillmentInfoResponseT,
     LicenseServerStatus,
+    TitleLicenseResponse,
 )
 from palace.manager.integration.license.boundless.model.xml import (
     AddHoldResponse,
@@ -173,7 +174,7 @@ class BoundlessRequests(LoggerMixin):
         self,
         patron_id: str | None | None = None,
         since: datetime.datetime | None = None,
-        title_ids: list[str] | None = None,
+        title_ids: Sequence[str] | None = None,
         timeout: int | None | Literal[SentinelType.NotGiven] = SentinelType.NotGiven,
     ) -> AvailabilityResponse:
         url = self._base_url + "availability/v2"
@@ -306,6 +307,33 @@ class BoundlessRequests(LoggerMixin):
             raise
 
         return response.json()  # type: ignore[no-any-return]
+
+    def title_license(
+        self,
+        modified_since: datetime.datetime,
+        page: int = 1,
+        timeout: int | None | Literal[SentinelType.NotGiven] = SentinelType.NotGiven,
+    ) -> TitleLicenseResponse:
+        """
+        Make a call to the Title License API to retrieve title license information.
+
+        This returns title license information based on the modified date, allowing
+        retrieval of updated content since the last retrieval date.
+        """
+        url = self._base_url + "titleLicense/v3"
+        modified_since_str = modified_since.strftime(self.DATE_FORMAT)
+        params = {
+            "modifiedSince": modified_since_str,
+            "page": str(page),
+        }
+        response = self._request(
+            "GET",
+            url,
+            TitleLicenseResponse.model_validate_json,
+            params=params,
+            timeout=timeout,
+        )
+        return response
 
     def encrypted_content_url(
         self,

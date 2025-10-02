@@ -14,6 +14,7 @@ from palace.manager.api.circulation.exceptions import (
     PatronAuthorizationFailedException,
     RemoteInitiatedServerError,
 )
+from palace.manager.core.exceptions import IntegrationException
 from palace.manager.integration.license.boundless.constants import (
     API_BASE_URLS,
     LICENSE_SERVER_BASE_URLS,
@@ -508,3 +509,180 @@ class TestBoundlessRequests:
         boundless_requests.client.queue_response(500, content=data)
         with pytest.raises(BoundlessLicenseError, match="Invalid ISBN"):
             license_request()
+
+    def test_title_license_single_item(
+        self,
+        boundless_files_fixture: BoundlessFilesFixture,
+        boundless_requests: BoundlessRequestsFixture,
+    ) -> None:
+        """Test retrieving a title license response with a single item."""
+        data = boundless_files_fixture.sample_data("title_license_single_item.json")
+        modified_since = datetime_utc(2024, 1, 1)
+
+        # Queue the response
+        boundless_requests.client.queue_response(200, content=data)
+
+        # Make the request
+        response = boundless_requests.requests.title_license(
+            modified_since=modified_since,
+            page=1,
+        )
+
+        # Verify request was made with correct parameters (index 1 because token request is 0)
+        assert boundless_requests.client.requests_methods[1] == "GET"
+        assert (
+            boundless_requests.client.requests[1]
+            == API_BASE_URLS[ServerNickname.production] + "titleLicense/v3"
+        )
+        assert boundless_requests.client.requests_args[1]["params"] == {
+            "modifiedSince": "01-01-2024 00:00:00",
+            "page": "1",
+        }
+
+        # Verify response parsing
+        assert response.status.code == 0
+        assert response.status.message == "Titles Retrieved Successfully."
+        assert response.pagination.current_page == 1
+        assert response.pagination.page_size == 500
+        assert response.pagination.total_count == 1
+        assert response.pagination.total_page == 1
+        assert len(response.titles) == 1
+        assert response.titles[0].title_id == "0009067251"
+        assert response.titles[0].active is True
+
+    def test_title_license_full_response(
+        self,
+        boundless_files_fixture: BoundlessFilesFixture,
+        boundless_requests: BoundlessRequestsFixture,
+    ) -> None:
+        """Test retrieving a full title license response with multiple items."""
+        data = boundless_files_fixture.sample_data("title_license_full.json")
+        modified_since = datetime_utc(2023, 6, 15, 14, 30, 0)
+
+        # Queue the response
+        boundless_requests.client.queue_response(200, content=data)
+
+        # Make the request with custom page
+        response = boundless_requests.requests.title_license(
+            modified_since=modified_since,
+            page=2,
+        )
+
+        # Verify request was made with correct parameters (index 1 because token request is 0)
+        assert boundless_requests.client.requests_methods[1] == "GET"
+        assert (
+            boundless_requests.client.requests[1]
+            == API_BASE_URLS[ServerNickname.production] + "titleLicense/v3"
+        )
+        assert boundless_requests.client.requests_args[1]["params"] == {
+            "modifiedSince": "06-15-2023 14:30:00",
+            "page": "2",
+        }
+
+        # Verify response parsing
+        assert response.status.code == 0
+        assert response.status.message == "Titles Retrieved Successfully."
+        assert response.pagination.current_page == 2
+        assert response.pagination.page_size == 500
+        assert response.pagination.total_count == 133634
+        assert response.pagination.total_page == 268
+        assert len(response.titles) == 500
+
+        # Verify titles contain both active and inactive
+        active_titles = [t for t in response.titles if t.active]
+        inactive_titles = [t for t in response.titles if not t.active]
+        assert len(active_titles) == 499
+        assert len(inactive_titles) == 1
+
+    def test_title_license_no_results(
+        self,
+        boundless_files_fixture: BoundlessFilesFixture,
+        boundless_requests: BoundlessRequestsFixture,
+    ) -> None:
+        """Test retrieving a title license response with no results."""
+        data = boundless_files_fixture.sample_data("title_license_no_results.json")
+        modified_since = datetime_utc(2024, 12, 31, 23, 59, 59)
+
+        # Queue the response
+        boundless_requests.client.queue_response(200, content=data)
+
+        # Make the request
+        response = boundless_requests.requests.title_license(
+            modified_since=modified_since,
+        )
+
+        # Verify request was made with correct parameters (index 1 because token request is 0)
+        assert boundless_requests.client.requests_methods[1] == "GET"
+        assert (
+            boundless_requests.client.requests[1]
+            == API_BASE_URLS[ServerNickname.production] + "titleLicense/v3"
+        )
+        assert boundless_requests.client.requests_args[1]["params"] == {
+            "modifiedSince": "12-31-2024 23:59:59",
+            "page": "1",
+        }
+
+        # Verify response parsing
+        assert response.status.code == 0
+        assert response.status.message == "Titles Retrieved Successfully."
+        assert response.pagination.current_page == 1
+        assert response.pagination.page_size == 500
+        assert response.pagination.total_count == 0
+        assert response.pagination.total_page == 0
+        assert len(response.titles) == 0  # Should be empty list, not None
+
+    @pytest.mark.parametrize(
+        "filename, message",
+        [
+            ("title_license_error_response_pagination.json", "Invalid page number"),
+            (
+                "title_license_error_response_datetime.json",
+                "Invalid inventory delta update datetime format",
+            ),
+            (
+                "title_license_error_response_internal_server.json",
+                "Internal Server Error",
+            ),
+        ],
+    )
+    def test_title_license_error(
+        self,
+        boundless_files_fixture: BoundlessFilesFixture,
+        boundless_requests: BoundlessRequestsFixture,
+        filename: str,
+        message: str,
+    ) -> None:
+        """Test retrieving a title license response with an error."""
+        data = boundless_files_fixture.sample_data(filename)
+        boundless_requests.client.queue_response(200, content=data)
+
+        with pytest.raises(IntegrationException, match=message):
+            boundless_requests.requests.title_license(
+                modified_since=(datetime_utc(2024, 1, 1)),
+            )
+
+    def test_title_license_with_custom_timeout(
+        self,
+        boundless_files_fixture: BoundlessFilesFixture,
+        boundless_requests: BoundlessRequestsFixture,
+    ) -> None:
+        """Test retrieving a title license response with a custom timeout."""
+        data = boundless_files_fixture.sample_data("title_license_single_item.json")
+        modified_since = datetime_utc(2024, 1, 1)
+
+        # Queue the response
+        boundless_requests.client.queue_response(200, content=data)
+
+        # Make the request with custom timeout
+        response = boundless_requests.requests.title_license(
+            modified_since=modified_since,
+            page=1,
+            timeout=30,
+        )
+
+        # Verify the timeout was used in the request (index 1 because token request is 0)
+        assert boundless_requests.client.requests_args[1]["timeout"] == 30
+
+        # Verify response
+        assert response.status.code == 0
+        assert len(response.titles) == 1

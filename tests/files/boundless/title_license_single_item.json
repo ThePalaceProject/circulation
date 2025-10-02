@@ -1,0 +1,100 @@
+{
+  "pagination": {
+    "currentPage": 1,
+    "pageSize": 500,
+    "totalCount": 1,
+    "totalPage": 1
+  },
+  "status": {
+    "Code": "0000",
+    "Message": "Titles Retrieved Successfully."
+  },
+  "titles": [
+    {
+      "TitleID": "0009067251",
+      "active": true,
+      "fields": [
+        {
+          "name": "title",
+          "values": [
+            "Seducing an Angel"
+          ]
+        },
+        {
+          "name": "author",
+          "values": [
+            "Balogh, Mary"
+          ]
+        },
+        {
+          "name": "cover image url",
+          "values": [
+            "https://fde-contentcafecloud-dwgjf8dvedfedjc2.a01.azurefd.net/Jacket.svc/D65D0665-050A-487B-9908-16E6D8FF5C3E/9780440338567/Medium/Logo"
+          ]
+        },
+        {
+          "name": "subject",
+          "values": [
+            "FICTION / Romance / General; FICTION / Romance / Historical / Regency"
+          ]
+        },
+        {
+          "name": "subtitle",
+          "values": [
+            ""
+          ]
+        },
+        {
+          "name": "isbn",
+          "values": [
+            "9780440338567"
+          ]
+        },
+        {
+          "name": "description",
+          "values": [
+            "BONUS: This edition contains an excerpt from Mary Balogh's The Secret Mistress. In a time unlike any other, a family you'll never forget . . . Meet the Huxtables'three  headstrong sisters and their dashing brother'each searching for love that's always  a shocking indiscretion away. . . . In her magnificent new novel, New York Times bestselling author Mary Balogh sweeps us into a world of scandal and intrigue'glittering  Regency England'and introduces the youngest Huxtable: Stephen, the only son. Here  Stephen will risk his reputation and his heart as he enters a scandalous liaison  with the infamous beauty intent on seduction. But when passion turns the tables on  them both, who can say who has seduced whom?   He must be wealthy, wellborn, and  want her more than he wants any other woman. Those are the conditions that must be  met by the man Cassandra Belmont chooses for her lover. Marriage is out of the question  for the destitute widow who stands accused of murdering her husband and must now  barter her beauty in order to survive. With seduction in mind, she sets her sights  on Stephen Huxtable, the irresistibly attractive Earl of Merton and London's most  eligible bachelor. But Stephen's first intriguing glimpse of the mysterious, alluring  Lady Paget convinces him that he has found the ideal woman to share his bed. There  is only one caveat. This relationship fueled by mutual pleasure must be on his terms.    As the two warily circle each other in a sensual dance of attack and retreat, a  single night of passion alters all the rules. Cassandra, whose reputation is already  in tatters, is now in danger of losing the one thing she vowed never to give. And  Stephen, who wants Cassandra more than he has ever wanted any woman, won't rest until  she has surrendered everything'not as his mistress'but as his lover and wife. . .  ."
+          ]
+        },
+        {
+          "name": "language",
+          "values": [
+            "ENGLISH"
+          ]
+        },
+        {
+          "name": "publisher",
+          "values": [
+            "Random House Digital"
+          ]
+        },
+        {
+          "name": "grade level",
+          "values": [
+            "General Adult"
+          ]
+        },
+        {
+          "name": "audience",
+          "values": [
+            "General Adult"
+          ]
+        },
+        {
+          "name": "genre",
+          "values": [
+            "FICTION",
+            "FICTION"
+          ]
+        }
+      ],
+      "formatType": "eBook",
+      "formats": [
+        "BLIO",
+        "EPUB",
+        "AXISNOW"
+      ],
+      "releaseDate": "2009-19-05"
+    }
+  ]
+}
