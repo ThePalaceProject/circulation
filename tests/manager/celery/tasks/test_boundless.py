@@ -398,6 +398,52 @@ class TestImportCollection:
         assert timestamp.finish is not None
         assert timestamp.start <= timestamp.finish
 
+    def test_empty_title_license_response(
+        self,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        redis_fixture: RedisFixture,
+        apply_task_fixture: ApplyTaskFixture,
+        boundless_files_fixture: FilesFixture,
+        http_client: MockHttpClientFixture,
+    ) -> None:
+        """
+        Test that the task correctly handles an empty title license response
+        with no titles to import.
+        """
+        collection = db.collection(name="test_collection", protocol=BoundlessApi)
+
+        # Queue responses: token, title_license (empty)
+        http_client.queue_response(
+            200,
+            content=boundless_files_fixture.sample_text("token.json"),
+        )
+        http_client.queue_response(
+            200,
+            content=boundless_files_fixture.sample_text(
+                "title_license_no_results.json"
+            ),
+        )
+
+        # Run the import
+        result = boundless.import_collection.delay(
+            collection_id=collection.id,
+            import_all=True,
+        ).wait()
+
+        # The task returns None
+        assert result is None
+
+        # No apply tasks should have been queued since there are no titles
+        assert len(apply_task_fixture.apply_queue) == 0
+
+        # The timestamp should still be created and updated
+        timestamp = get_one(db.session, Timestamp, collection=collection)
+        assert timestamp is not None
+        assert timestamp.start is not None
+        assert timestamp.finish is not None
+        assert timestamp.start <= timestamp.finish
+
 
 @pytest.mark.parametrize(
     "import_all",

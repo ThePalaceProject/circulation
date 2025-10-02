@@ -200,7 +200,7 @@ class BoundlessImporter(LoggerMixin):
 
         current_page = title_response.pagination.current_page
         total_pages = title_response.pagination.total_page
-        complete = current_page == total_pages
+        complete = current_page >= total_pages
         next_page = current_page + 1 if not complete else None
 
         return FeedImportResult(
