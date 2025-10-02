@@ -21,15 +21,12 @@ class TestBoundlessImporter:
         boundless.http_client.queue_response(200, content=data)
         importer = boundless.create_importer()
 
-        # Mock the apply callables
+        # Mock the apply callable
         apply_bibliographic = MagicMock()
-        apply_circulation = MagicMock()
 
         # Import two active titles
         active_title_ids = ["0003642860", "0012164897"]
-        importer._import_active_titles(
-            active_title_ids, apply_bibliographic, apply_circulation
-        )
+        importer._import_active_titles(active_title_ids, apply_bibliographic)
 
         # We made a request to the correct URL.
         assert "/availability/v2" in boundless.http_client.requests[1]
@@ -54,15 +51,12 @@ class TestBoundlessImporter:
 
         importer = boundless.create_importer()
         apply_bibliographic = MagicMock()
-        apply_circulation = MagicMock()
 
         # Create a list of title IDs that exceeds the chunk size
         chunk_size = importer._AVAILABILITY_CALL_MAXIMUM_IDENTIFIERS
         active_title_ids = [f"{i:010d}" for i in range(chunk_size + 10)]
 
-        importer._import_active_titles(
-            active_title_ids, apply_bibliographic, apply_circulation
-        )
+        importer._import_active_titles(active_title_ids, apply_bibliographic)
 
         # We should have made two requests (one for each chunk)
         # Request 0 is the token request, requests 1 and 2 are the availability calls
