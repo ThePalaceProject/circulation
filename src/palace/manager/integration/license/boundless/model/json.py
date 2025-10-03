@@ -8,6 +8,7 @@ from pydantic import (
     ConfigDict,
     Discriminator,
     Field,
+    NonNegativeInt,
     Tag,
     TypeAdapter,
     field_validator,
@@ -151,6 +152,67 @@ class AudiobookMetadataResponse(BaseBoundlessJsonResponse):
     reading_order: list[AudiobookMetadataReadingOrder] = Field(
         ..., alias="readingOrder"
     )
+
+
+class Title(BaseBoundlessJsonModel):
+    """
+    A title record in the Title License response.
+
+    This is based on the `Boundless Vendor API- TitlelicenseV3.docx` document.
+
+    There is more data in this record that isn't being parsed, as we don't need
+    it currently, and the data is messy and not well-documented. Refer to the
+    documentation for more details of the data that is available.
+    """
+
+    title_id: str = Field(..., alias="TitleID")
+    active: bool
+
+
+class Pagination(BaseBoundlessJsonModel):
+    """
+    Pagination information for the Title License response.
+    """
+
+    current_page: NonNegativeInt = Field(..., alias="currentPage")
+    page_size: NonNegativeInt = Field(..., alias="pageSize")
+    total_count: NonNegativeInt = Field(..., alias="totalCount")
+    total_page: NonNegativeInt = Field(..., alias="totalPage")
+
+
+class TitleLicenseResponse(BaseBoundlessJsonResponse):
+    """
+    The Title License API response.
+
+    This returns title license information based on a modified date,
+    allowing retrieval of updated content since the last retrieval.
+    """
+
+    pagination: Pagination
+    titles: list[Title]
+
+    # A pre-validation step to ensure that titles is always a list, even if the API
+    # returns a null.
+    @field_validator("titles", mode="before")
+    @classmethod
+    def _ensure_titles_list(cls, value: Any) -> Any:
+        if value is None:
+            return []
+        return value
+
+    # A pre-validation step to ensure that we always have a pagination object,
+    # even if the API returns a null.
+    @field_validator("pagination", mode="before")
+    @classmethod
+    def _ensure_pagination_object(cls, value: Any) -> Any:
+        if value is None:
+            return Pagination(
+                current_page=0,
+                page_size=0,
+                total_count=0,
+                total_page=0,
+            )
+        return value
 
 
 class LicenseServerStatus(BaseBoundlessJsonModel):

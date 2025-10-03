@@ -1,14 +1,16 @@
 import datetime
-from collections.abc import Generator
+from dataclasses import dataclass
+from functools import partial
 
 from sqlalchemy.orm import Session
 
 from palace.manager.celery.tasks.apply import (
     ApplyBibliographicCallable,
+    ApplyCirculationCallable,
 )
 from palace.manager.core.exceptions import PalaceValueError
-from palace.manager.data_layer.bibliographic import BibliographicData
 from palace.manager.data_layer.circulation import CirculationData
+from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.data_layer.policy.replacement import ReplacementPolicy
 from palace.manager.integration.base import integration_settings_load
 from palace.manager.integration.license.boundless.api import BoundlessApi
@@ -17,17 +19,33 @@ from palace.manager.integration.license.boundless.requests import BoundlessReque
 from palace.manager.service.integration_registry.license_providers import (
     LicenseProvidersRegistry,
 )
-from palace.manager.service.redis.models.set import IdentifierSet
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.coverage import Timestamp
+from palace.manager.sqlalchemy.model.datasource import DataSource
+from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.util import get_one_or_create
+from palace.manager.util import chunks
 from palace.manager.util.datetime_helpers import datetime_utc
-from palace.manager.util.http.exception import BadResponseException
 from palace.manager.util.log import LoggerMixin
 
 
+@dataclass(frozen=True)
+class FeedImportResult:
+    complete: bool
+    active_processed: int
+    inactive_processed: int
+    current_page: int
+    total_pages: int
+    next_page: int | None = None
+
+
 class BoundlessImporter(LoggerMixin):
-    _DEFAULT_START_TIME = datetime_utc(1970, 1, 1)
+    DEFAULT_START_TIME = datetime_utc(1970, 1, 1)
+
+    # Because of URL length limitations, we can only request availability for a certain number
+    # of titles at a time. My testing shows that 125 works reliably. The default page size is
+    # 500, so 125 seemed like a good value, so we would make 4 availability calls per page of titles.
+    _AVAILABILITY_CALL_MAXIMUM_IDENTIFIERS = 125
 
     def __init__(
         self,
@@ -35,13 +53,11 @@ class BoundlessImporter(LoggerMixin):
         collection: Collection,
         registry: LicenseProvidersRegistry,
         import_all: bool = False,
-        identifier_set: IdentifierSet | None = None,
         api_requests: BoundlessRequests | None = None,
     ) -> None:
         self._db = db
         self._collection = collection
         self._import_all = import_all
-        self._identifier_set = identifier_set
 
         if not registry.equivalent(collection.protocol, BoundlessApi):
             raise PalaceValueError(
@@ -56,69 +72,45 @@ class BoundlessImporter(LoggerMixin):
             BoundlessRequests(self._settings) if api_requests is None else api_requests
         )
 
-    def _get_timestamp(self) -> Timestamp:
+    @classmethod
+    def get_timestamp(cls, db: Session, collection: Collection) -> Timestamp:
         timestamp, _ = get_one_or_create(
-            self._db,
+            db,
             Timestamp,
             service="Boundless Import",
             service_type=Timestamp.TASK_TYPE,
-            collection=self._collection,
+            collection=collection,
         )
         return timestamp
 
-    def _get_start_time(self, timestamp: Timestamp) -> datetime.datetime:
-        """Determine the start time for fetching new data."""
-        if (
-            self._import_all
-            or self._identifier_set is not None
-            or timestamp.start is None
-        ):
-            return self._DEFAULT_START_TIME
-        return timestamp.start
-
-    def _recent_activity(
-        self, since: datetime.datetime
-    ) -> Generator[tuple[BibliographicData, CirculationData]]:
-        """Find books that have had recent activity.
-
-        :yield: A sequence of (BibliographicData, CirculationData) 2-tuples
-        """
-        # If we are fetching all activity, it can take a very long time, since the Boundless API
-        # provides no way to page through results. We don't want to hang in the case the server
-        # never gives us a response though, so we set the timeout to 10 (!) minutes, so that we do
-        # eventually give up and let the task be retried. I chose 10 minutes based on querying our
-        # logs to get an idea the maximum time we've seen for a full feed response in the past.
-        availability_response = self._api_requests.availability(
-            since=since, timeout=10 * 60
-        )
-        yield from BibliographicParser.parse(availability_response)
-
-    def _check_api_credentials(self) -> bool:
-        # Try to get a bearer token, to make sure the collection is configured correctly.
-        try:
-            self._api_requests.refresh_bearer_token()
-            return True
-        except BadResponseException as e:
-            if e.response.status_code == 401:
-                self.log.error(
-                    f"Failed to authenticate with Boundless API for collection {self._collection.name} "
-                    f"(id={self._collection.id}). Please check the collection configuration."
-                )
-                return False
-            raise
-
-    def import_collection(
+    def _mark_inactive_titles(
         self,
-        *,
+        inactive_title_ids: list[str],
+        apply_circulation: ApplyCirculationCallable,
+    ) -> None:
+        create_circulation = partial(
+            CirculationData,
+            data_source_name=DataSource.BOUNDLESS,
+            licenses_owned=0,
+            licenses_available=0,
+        )
+
+        for title_id in inactive_title_ids:
+            identifier = IdentifierData(
+                type=Identifier.AXIS_360_ID,
+                identifier=title_id,
+            )
+            circulation = create_circulation(primary_identifier_data=identifier)
+            apply_circulation(circulation, collection_id=self._collection.id)
+
+        if inactive_title_ids:
+            self.log.info(f"Marked {len(inactive_title_ids)} titles as inactive.")
+
+    def _import_active_titles(
+        self,
+        active_title_ids: list[str],
         apply_bibliographic: ApplyBibliographicCallable,
-    ) -> IdentifierSet | None:
-        if not self._check_api_credentials():
-            return None
-
-        timestamp = self._get_timestamp()
-        start_time = self._get_start_time(timestamp)
-
-        identifiers = []
+    ) -> None:
         policy = ReplacementPolicy(
             identifiers=False,
             subjects=True,
@@ -127,33 +119,86 @@ class BoundlessImporter(LoggerMixin):
             links=True,
         )
 
-        self.log.info(
-            f"Starting process of queuing items in collection {self._collection.name} (id={self._collection.id} "
-            f"for import that have changed since {start_time}. "
-        )
+        bibliographic_updated = 0
+        no_changes = 0
 
-        with timestamp.recording():
-            for bibliographic, circulation in self._recent_activity(start_time):
-                if bibliographic.primary_identifier_data is not None:
-                    identifiers.append(bibliographic.primary_identifier_data)
-
+        for chunk in chunks(
+            active_title_ids, self._AVAILABILITY_CALL_MAXIMUM_IDENTIFIERS
+        ):
+            availability_response = self._api_requests.availability(title_ids=chunk)
+            for bibliographic, circulation in BibliographicParser.parse(
+                availability_response
+            ):
                 if self._import_all or bibliographic.has_changed(self._db):
                     apply_bibliographic(
                         bibliographic, collection_id=self._collection.id, replace=policy
                     )
+                    bibliographic_updated += 1
+                else:
+                    no_changes += 1
 
-        achievements = [f"Total items queued for import:  {len(identifiers)}."]
-        if (elapsed_time := timestamp.elapsed_seconds) is not None:
-            achievements.append(f"Elapsed time: {elapsed_time:.2f} seconds.")
+        if active_title_ids:
+            self.log.info(
+                f"Processed {len(active_title_ids)} active titles: "
+                f"{bibliographic_updated} bibliographic updates, "
+                f"{no_changes} unchanged."
+            )
 
-        if self._identifier_set is not None:
-            self._identifier_set.add(*identifiers)
+    def import_collection(
+        self,
+        *,
+        apply_bibliographic: ApplyBibliographicCallable,
+        apply_circulation: ApplyCirculationCallable,
+        page: int,
+        modified_since: datetime.datetime,
+    ) -> FeedImportResult:
+        """
+        Import a single page of titles from the Boundless Title License API.
 
-        timestamp.achievements = "\n".join(achievements)
+        This method fetches one page of titles that have been modified since the given
+        datetime, processes active titles by fetching their detailed availability data
+        and queueing bibliographic/circulation updates, and marks inactive titles as
+        having zero licenses.
 
-        self.log.info(
-            f"Finished import for collection {self._collection.name} (id={self._collection.id}. "
-            f"{' '.join(achievements)}"
+        :param apply_bibliographic: Callable to queue bibliographic data for processing.
+            Called for each active title that has changed or when import_all is True.
+        :param apply_circulation: Callable to queue circulation data for processing.
+            Called for inactive titles to mark them as unavailable.
+        :param page: The page number to fetch from the API (1-indexed).
+        :param modified_since: Only fetch titles modified after this datetime.
+        :return: FeedImportResult containing pagination info, counts of titles processed,
+            and the next page number if more pages remain.
+        """
+        # The timeouts for the title_license call need to be set to a higher value
+        # than the default because of performance issues on Boundless' end. In my testing
+        # with large accounts, it seems like 60 seconds is enough to get the call to succeed.
+        # We should be able to monitor this in cloudwatch and lower the timeout / remove it
+        # entirely when Boundless fixes the performance issue.
+        # TODO: Remove this timeout when boundless fixes the performance issue.
+        title_response = self._api_requests.title_license(
+            modified_since=modified_since, page=page, timeout=60
         )
 
-        return self._identifier_set
+        active_title_ids = [
+            title.title_id for title in title_response.titles if title.active is True
+        ]
+        self._import_active_titles(active_title_ids, apply_bibliographic)
+
+        inactive_title_ids = [
+            title.title_id for title in title_response.titles if title.active is False
+        ]
+        self._mark_inactive_titles(inactive_title_ids, apply_circulation)
+
+        current_page = title_response.pagination.current_page
+        total_pages = title_response.pagination.total_page
+        complete = current_page >= total_pages
+        next_page = current_page + 1 if not complete else None
+
+        return FeedImportResult(
+            complete=complete,
+            active_processed=len(active_title_ids),
+            inactive_processed=len(inactive_title_ids),
+            current_page=current_page,
+            total_pages=total_pages,
+            next_page=next_page,
+        )

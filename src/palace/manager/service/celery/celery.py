@@ -125,14 +125,6 @@ def beat_schedule() -> dict[str, Any]:
             "task": boundless.import_all_collections.name,
             "schedule": crontab(minute="*/15"),  # Run every 15 minutes
         },
-        "boundless_reap_all_collections": {
-            "task": boundless.reap_all_collections.name,
-            "schedule": crontab(
-                day_of_week="6",
-                minute="8",
-                hour="4",
-            ),  # Every Saturday at 4:08 AM
-        },
         "credential_reaper": {
             "task": reaper.credential_reaper.name,
             "schedule": crontab(
