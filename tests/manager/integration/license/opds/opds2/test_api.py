@@ -59,8 +59,7 @@ def opds2_api_fixture(
     db: DatabaseTransactionFixture,
     http_client: MockHttpClientFixture,
 ) -> Generator[Opds2ApiFixture, None, None]:
-    fixture = Opds2ApiFixture(db, http_client)
-    yield fixture
+    yield Opds2ApiFixture(db, http_client)
 
 
 class TestOpds2Api:
