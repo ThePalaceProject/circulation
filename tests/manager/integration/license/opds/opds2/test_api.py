@@ -259,6 +259,23 @@ class TestOpds2Api:
                 ["saml_person_scoped_affiliation"],
                 id="has_entity_id_only_requires_both",
             ),
+            pytest.param(
+                "http://example.org/token?aff={saml_person_scoped_affiliation}",
+                SAMLSubject(
+                    idp="https://idp.example.org/shibboleth",
+                    name_id=None,
+                    attribute_statement=SAMLAttributeStatement(
+                        [
+                            SAMLAttribute(
+                                name=SAMLAttributeType.givenName.name,
+                                values=["John"],
+                            )
+                        ]
+                    ),
+                ),
+                ["saml_person_scoped_affiliation"],
+                id="has_other_attributes_but_missing_affiliation",
+            ),
         ],
     )
     def test_get_authentication_token_missing_saml_credentials(

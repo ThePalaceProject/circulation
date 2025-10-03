@@ -94,9 +94,6 @@ class OPDS2API(BaseOPDSAPI):
 
         saml_subject = self.saml_credential_manager.extract_saml_token(saml_credential)
 
-        if not saml_subject:
-            return None, None
-
         entity_id = saml_subject.idp
         person_scoped_affiliation = None
 
