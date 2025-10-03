@@ -44,9 +44,7 @@ class TemplateVariable(StrEnum):
 SAML_TEMPLATE_VARIABLES: frozenset[str] = frozenset(
     var for var in TemplateVariable if var.startswith("saml_")
 )
-SUPPORTED_TEMPLATE_VARIABLES: frozenset[str] = frozenset(
-    var for var in TemplateVariable
-)
+SUPPORTED_TEMPLATE_VARIABLES: frozenset[str] = frozenset(TemplateVariable)
 
 
 class OPDS2API(BaseOPDSAPI):
