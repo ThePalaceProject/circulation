@@ -2,12 +2,10 @@ from collections.abc import Generator
 from unittest.mock import MagicMock, patch
 
 import pytest
-from requests import Response
 
 from palace.manager.api.circulation.exceptions import CannotFulfill
 from palace.manager.api.circulation.fulfillment import Fulfillment, RedirectFulfillment
 from palace.manager.celery.tasks import opds2 as opds2_celery
-from palace.manager.integration.license.opds.opds2 import api
 from palace.manager.integration.license.opds.opds2.api import OPDS2API
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.datasource import DataSource
@@ -16,10 +14,13 @@ from palace.manager.sqlalchemy.model.licensing import (
     LicensePoolDeliveryMechanism,
 )
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.http import MockHttpClientFixture
 
 
 class Opds2ApiFixture:
-    def __init__(self, db: DatabaseTransactionFixture, mock_http: MagicMock):
+    def __init__(
+        self, db: DatabaseTransactionFixture, http_client: MockHttpClientFixture
+    ):
         self.patron = db.patron()
         self.collection: Collection = db.collection(
             protocol=OPDS2API,
@@ -32,13 +33,7 @@ class Opds2ApiFixture:
             OPDS2API.TOKEN_AUTH_CONFIG_KEY: "http://example.org/token?userName={patron_id}"
         }
 
-        self.mock_response = MagicMock(spec=Response)
-        self.mock_response.status_code = 200
-        self.mock_response.text = "plaintext-auth-token"
-
-        self.mock_http = mock_http
-        self.mock_http.get_with_timeout.return_value = self.mock_response
-
+        self.http_client = http_client
         self.data_source = DataSource.lookup(db.session, "test", autocreate=True)
 
         self.pool = MagicMock(spec=LicensePool)
@@ -51,6 +46,10 @@ class Opds2ApiFixture:
 
         self.api = OPDS2API(db.session, self.collection)
 
+    def queue_default_auth_token_response(self) -> None:
+        """Queue a successful authentication token response."""
+        self.http_client.queue_response(200, content="plaintext-auth-token")
+
     def fulfill(self) -> Fulfillment:
         return self.api.fulfill(self.patron, "", self.pool, self.mechanism)
 
@@ -58,14 +57,14 @@ class Opds2ApiFixture:
 @pytest.fixture
 def opds2_api_fixture(
     db: DatabaseTransactionFixture,
+    http_client: MockHttpClientFixture,
 ) -> Generator[Opds2ApiFixture, None, None]:
-    with patch.object(api, "HTTP") as mock_http:
-        fixture = Opds2ApiFixture(db, mock_http)
-        yield fixture
+    yield Opds2ApiFixture(db, http_client)
 
 
 class TestOpds2Api:
     def test_token_fulfill(self, opds2_api_fixture: Opds2ApiFixture):
+        opds2_api_fixture.queue_default_auth_token_response()
         fulfillment = opds2_api_fixture.fulfill()
         assert isinstance(fulfillment, RedirectFulfillment)
 
@@ -73,9 +72,9 @@ class TestOpds2Api:
             opds2_api_fixture.data_source
         )
 
-        assert opds2_api_fixture.mock_http.get_with_timeout.call_count == 1
+        assert len(opds2_api_fixture.http_client.requests) == 1
         assert (
-            opds2_api_fixture.mock_http.get_with_timeout.call_args[0][0]
+            opds2_api_fixture.http_client.requests[0]
             == f"http://example.org/token?userName={patron_id}"
         )
 
@@ -86,6 +85,7 @@ class TestOpds2Api:
 
     def test_token_fulfill_alternate_template(self, opds2_api_fixture: Opds2ApiFixture):
         # Alternative templating
+        opds2_api_fixture.queue_default_auth_token_response()
         opds2_api_fixture.mechanism.resource.representation.public_url = (
             "http://example.org/11234/fulfill{?authentication_token}"
         )
@@ -99,7 +99,7 @@ class TestOpds2Api:
 
     def test_token_fulfill_400_response(self, opds2_api_fixture: Opds2ApiFixture):
         # non-200 response
-        opds2_api_fixture.mock_response.status_code = 400
+        opds2_api_fixture.http_client.queue_response(400, content="error")
         with pytest.raises(CannotFulfill):
             opds2_api_fixture.fulfill()
 
@@ -125,17 +125,18 @@ class TestOpds2Api:
         assert mock.call_count == 0
 
     def test_get_authentication_token(self, opds2_api_fixture: Opds2ApiFixture):
+        opds2_api_fixture.queue_default_auth_token_response()
         token = OPDS2API.get_authentication_token(
             opds2_api_fixture.patron, opds2_api_fixture.data_source, ""
         )
 
         assert token == "plaintext-auth-token"
-        assert opds2_api_fixture.mock_http.get_with_timeout.call_count == 1
+        assert len(opds2_api_fixture.http_client.requests) == 1
 
     def test_get_authentication_token_400_response(
         self, opds2_api_fixture: Opds2ApiFixture
     ):
-        opds2_api_fixture.mock_response.status_code = 400
+        opds2_api_fixture.http_client.queue_response(400, content="error")
         with pytest.raises(CannotFulfill):
             OPDS2API.get_authentication_token(
                 opds2_api_fixture.patron, opds2_api_fixture.data_source, ""
@@ -144,7 +145,7 @@ class TestOpds2Api:
     def test_get_authentication_token_bad_response(
         self, opds2_api_fixture: Opds2ApiFixture
     ):
-        opds2_api_fixture.mock_response.text = None
+        opds2_api_fixture.http_client.queue_response(200, content="")
         with pytest.raises(CannotFulfill):
             OPDS2API.get_authentication_token(
                 opds2_api_fixture.patron, opds2_api_fixture.data_source, ""
