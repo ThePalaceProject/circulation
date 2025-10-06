@@ -40,7 +40,6 @@ class DataSourceConstants:
     INTERNAL_PROCESSING = "Library Simplified Internal Process"
     FEEDBOOKS = "FeedBooks"
     BIBBLIO = "Bibblio"
-    ENKI = "Enki"
     PROQUEST = "ProQuest"
 
     DEPRECATED_NAMES: frozenbidict[str, str] = frozenbidict({})
@@ -161,7 +160,6 @@ class IdentifierConstants:
     DOI = "DOI"
     UPC = "UPC"
     BIBBLIO_CONTENT_ITEM_ID = "Bibblio Content Item ID"
-    ENKI_ID = "Enki ID"
     SUDOC_CALL_NUMBER = "SuDoc Call Number"
     PROQUEST_ID = "ProQuest Doc ID"
 
@@ -206,7 +204,6 @@ class IdentifierType(Enum):
     DOI = IdentifierConstants.DOI
     UPC = IdentifierConstants.UPC
     BIBBLIO_CONTENT_ITEM_ID = IdentifierConstants.BIBBLIO_CONTENT_ITEM_ID
-    ENKI_ID = IdentifierConstants.ENKI_ID
     SUDOC_CALL_NUMBER = IdentifierConstants.SUDOC_CALL_NUMBER
     PROQUEST_ID = IdentifierConstants.PROQUEST_ID
 

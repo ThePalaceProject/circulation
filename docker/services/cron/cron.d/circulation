@@ -31,11 +31,6 @@ HOME=/var/www/circulation
 */15 * * * * root bin/run overdrive_reaper >> /var/log/cron.log 2>&1
 0 4 * * * root bin/run overdrive_format_sweep >> /var/log/cron.log 2>&1
 
-# Enki
-#
-0 0 1 * * root bin/run enki_reaper >> /var/log/cron.log 2>&1
-0 */6 * * * root bin/run enki_import >> /var/log/cron.log 2>&1
-
 # Auto update lists
 # Every hour between 7AM - 1AM
 5 0,1,7-23 * * * root bin/run custom_list_update_new_entries >> /var/log/cron.log 2>&1

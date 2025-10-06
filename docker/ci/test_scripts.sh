@@ -33,7 +33,4 @@ check_service_status "$container" /etc/service/celery-cloudwatch
 # Ensure the installed crontab has no problems
 check_crontab "$container"
 
-# Run a single script to ensure basic settings are correct
-# The opds import script will only test the DB configuration
-run_script "$container" "source ../env/bin/activate && ./enki_import"
 exit 0
