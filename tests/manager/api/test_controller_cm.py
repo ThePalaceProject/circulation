@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock, create_autospec
 
-from pytest import MonkeyPatch
+from pytest import LogCaptureFixture, MonkeyPatch
 
 from palace.manager.api.authenticator import LibraryAuthenticator
 from palace.manager.api.circulation_manager import CirculationManager
@@ -260,7 +260,9 @@ class TestCirculationManager:
             assert NO_SUCH_LANE.uri == facets.uri
 
     def test_load_settings_logs_warning_for_unknown_protocol(
-        self, circulation_fixture: CirculationControllerFixture, caplog
+        self,
+        circulation_fixture: CirculationControllerFixture,
+        caplog: LogCaptureFixture,
     ):
         """Test that a warning is logged when a collection has an unknown protocol."""
         # Create a new library without the default collection to avoid issues
@@ -271,17 +273,10 @@ class TestCirculationManager:
         collection.associated_libraries.append(library)
 
         # Load settings and verify the warning is logged
-        # Note: This will raise a KeyError because the collection API won't be created
-        # for unknown protocols, but we're only interested in the warning being logged
-        try:
-            circulation_fixture.manager.load_settings()
-        except KeyError:
-            pass
+        circulation_fixture.manager.load_settings()
 
         # Check that the warning was logged
-        assert any(
-            record.levelname == "WARNING"
-            and f"Collection '{collection.name}' has unknown protocol '{collection.protocol}'. Skipping."
-            in record.message
-            for record in caplog.records
+        assert (
+            f"Collection '{collection.name}' has unknown protocol '{collection.protocol}'. Skipping."
+            in caplog.text
         )

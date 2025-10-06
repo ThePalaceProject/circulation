@@ -308,6 +308,7 @@ class CirculationManager(LoggerMixin):
                 library_collection_apis = {
                     collection.id: collection_apis[collection.id]
                     for collection in libraries_collections[library.id]
+                    if collection.id in collection_apis
                 }
                 new_circulation_apis[library.id] = (
                     self.setup_circulation_api_dispatcher(
