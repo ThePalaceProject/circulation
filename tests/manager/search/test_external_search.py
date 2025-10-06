@@ -3683,10 +3683,10 @@ class TestFilter:
 
         # Only the active collections for a library will be included in
         # the search filter.
-        assert library.associated_collections == [
+        assert set(library.associated_collections) == {
             active_collection,
             inactive_collection,
-        ]
+        }
         assert library.active_collections == [active_collection]
 
         filter = Filter.from_worklist(session, inherits, facets)
