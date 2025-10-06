@@ -35,5 +35,5 @@ check_crontab "$container"
 
 # Run a single script to ensure basic settings are correct
 # The opds import script will only test the DB configuration
-run_script "$container" "source ../env/bin/activate && ./enki_import"
+run_script "$container" "source ../env/bin/activate && ./opds_import"
 exit 0

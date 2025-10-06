@@ -324,7 +324,6 @@ class DataSource(Base, HasSessionCache, DataSourceConstants):
                 IdentifierConstants.BIBBLIO_CONTENT_ITEM_ID,
                 None,
             ),
-            (cls.ENKI, True, False, IdentifierConstants.ENKI_ID, None),
             (cls.PROQUEST, True, False, IdentifierConstants.PROQUEST_ID, None),
         ):
             obj = DataSource.lookup(

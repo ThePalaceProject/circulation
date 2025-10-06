@@ -1,8 +1,0 @@
-#!/usr/bin/env python
-"""monitor the Enki collection by asking about recently changed books."""
-
-
-from palace.manager.integration.license.enki import EnkiImport
-from palace.manager.scripts.monitor import RunCollectionMonitorScript
-
-RunCollectionMonitorScript(EnkiImport).run()

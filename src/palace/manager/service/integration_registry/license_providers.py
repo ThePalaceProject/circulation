@@ -18,7 +18,6 @@ class LicenseProvidersRegistry(IntegrationRegistry["CirculationApiType"]):
 
         from palace.manager.integration.license.bibliotheca import BibliothecaAPI
         from palace.manager.integration.license.boundless.api import BoundlessApi
-        from palace.manager.integration.license.enki import EnkiAPI
         from palace.manager.integration.license.opds.for_distributors.api import (
             OPDSForDistributorsAPI,
         )
@@ -30,7 +29,6 @@ class LicenseProvidersRegistry(IntegrationRegistry["CirculationApiType"]):
         self.register(OverdriveAPI, canonical=OverdriveAPI.label())
         self.register(BibliothecaAPI, canonical=BibliothecaAPI.label())
         self.register(BoundlessApi, canonical=BoundlessApi.label())
-        self.register(EnkiAPI, canonical=EnkiAPI.label())
         self.register(OPDSForDistributorsAPI, canonical=OPDSForDistributorsAPI.label())
         self.register(OPDS2WithODLApi, canonical=OPDS2WithODLApi.label())
         self.register(OPDSAPI, canonical=OPDSAPI.label())
