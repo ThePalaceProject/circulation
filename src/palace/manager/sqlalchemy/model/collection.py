@@ -155,7 +155,7 @@ class Collection(Base, HasSessionCache, RedisKeyMixin):
     # Most data sources offer different catalogs to different
     # libraries.  Data sources in this list offer the same catalog to
     # every library.
-    GLOBAL_COLLECTION_DATA_SOURCES: list[str] = []
+    GLOBAL_COLLECTION_DATA_SOURCES = [DataSource.ENKI]
 
     def __repr__(self) -> str:
         return f'<Collection "{self.name}"/"{self.protocol}" ID={self.id}>'
