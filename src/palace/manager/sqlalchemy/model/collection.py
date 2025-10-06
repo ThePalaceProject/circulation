@@ -152,11 +152,6 @@ class Collection(Base, HasSessionCache, RedisKeyMixin):
 
     export_marc_records: Mapped[bool] = Column(Boolean, default=False, nullable=False)
 
-    # Most data sources offer different catalogs to different
-    # libraries.  Data sources in this list offer the same catalog to
-    # every library.
-    GLOBAL_COLLECTION_DATA_SOURCES = [DataSource.ENKI]
-
     def __repr__(self) -> str:
         return f'<Collection "{self.name}"/"{self.protocol}" ID={self.id}>'
 
