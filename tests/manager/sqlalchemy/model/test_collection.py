@@ -15,6 +15,7 @@ from palace.manager.integration.license.overdrive.settings import (
     OverdriveLibrarySettings,
 )
 from palace.manager.search.external_search import ExternalSearchIndex
+from palace.manager.service.integration_registry.base import LookupException
 from palace.manager.service.integration_registry.license_providers import (
     LicenseProvidersRegistry,
 )
@@ -762,3 +763,32 @@ class TestCollection:
         collection = example_collection_fixture.collection
         api = collection.circulation_api()
         assert isinstance(api, OverdriveAPI)
+
+    def test_circulation_api_unknown_protocol(
+        self,
+        example_collection_fixture: ExampleCollectionFixture,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Test that a collection with an unknown protocol logs a warning and raises LookupException."""
+        collection = example_collection_fixture.collection
+
+        # Mock the registry to raise LookupException
+        registry = create_autospec(LicenseProvidersRegistry)
+        registry.from_collection.side_effect = LookupException(
+            f"Integration {collection.protocol} not found"
+        )
+
+        # The exception should be raised
+        with pytest.raises(LookupException):
+            collection.circulation_api(registry=registry)
+
+        # Check that a warning was logged
+        assert (
+            f"Collection '{collection.name}' (id: {collection.id}) has unknown protocol"
+        ) in caplog.text
+        assert "Cannot create circulation API" in caplog.text
+
+        # Verify from_collection was called
+        registry.from_collection.assert_called_once_with(
+            example_collection_fixture.database_fixture.session, collection
+        )

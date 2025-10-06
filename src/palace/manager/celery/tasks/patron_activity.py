@@ -5,6 +5,7 @@ from palace.manager.api.circulation.base import PatronActivityCirculationAPI
 from palace.manager.api.circulation.exceptions import PatronAuthorizationFailedException
 from palace.manager.celery.task import Task
 from palace.manager.service.celery.celery import QueueNames
+from palace.manager.service.integration_registry.base import LookupException
 from palace.manager.service.integration_registry.license_providers import (
     LicenseProvidersRegistry,
 )
@@ -62,7 +63,15 @@ def sync_patron_activity(
             registry: LicenseProvidersRegistry = (
                 task.services.integration_registry.license_providers()
             )
-            api = registry.from_collection(session, collection)
+            try:
+                api = registry.from_collection(session, collection)
+            except LookupException:
+                patron_activity_status.not_supported()
+                task.log.warning(
+                    f"Collection '{collection.name}' (id: {collection_id}) has unknown protocol '{collection.protocol}'. "
+                    f"Patron activity sync not supported."
+                )
+                return
 
             if not isinstance(api, PatronActivityCirculationAPI):
                 # Set the status to not supported, and log that we can't sync patron activity.

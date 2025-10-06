@@ -44,6 +44,7 @@ from palace.manager.feed.annotator.circulation import (
 from palace.manager.integration.patron_auth.saml.controller import SAMLController
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.service.container import Services
+from palace.manager.service.integration_registry.base import LookupException
 from palace.manager.service.integration_registry.license_providers import (
     LicenseProvidersRegistry,
 )
@@ -277,9 +278,9 @@ class CirculationManager(LoggerMixin):
                             collection.name, str(exception)
                         )
                     )
-                except KeyError:
-                    self.log.exception(
-                        f"Unable to load protocol {collection.protocol} for collection {collection.name}"
+                except LookupException:
+                    self.log.warning(
+                        f"Collection '{collection.name}' has unknown protocol '{collection.protocol}'. Skipping."
                     )
 
         self.auth = Authenticator(self._db, libraries, self.analytics)
@@ -307,6 +308,7 @@ class CirculationManager(LoggerMixin):
                 library_collection_apis = {
                     collection.id: collection_apis[collection.id]
                     for collection in libraries_collections[library.id]
+                    if collection.id in collection_apis
                 }
                 new_circulation_apis[library.id] = (
                     self.setup_circulation_api_dispatcher(

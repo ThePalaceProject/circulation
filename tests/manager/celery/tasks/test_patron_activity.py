@@ -8,6 +8,7 @@ from palace.manager.api.circulation.data import HoldInfo, LoanInfo
 from palace.manager.api.circulation.exceptions import PatronAuthorizationFailedException
 from palace.manager.celery.task import Task
 from palace.manager.celery.tasks.patron_activity import sync_patron_activity
+from palace.manager.service.integration_registry.base import LookupException
 from palace.manager.service.integration_registry.license_providers import (
     LicenseProvidersRegistry,
 )
@@ -234,6 +235,38 @@ class TestSyncPatronActivity:
         assert task_status.state == PatronActivityStatus.State.NOT_SUPPORTED
 
         assert "does not support patron activity sync" in caplog.text
+        sync_task_fixture.mock_registry.from_collection.assert_called_once_with(
+            sync_task_fixture.db.session, sync_task_fixture.collection
+        )
+
+    def test_unknown_protocol(
+        self, sync_task_fixture: SyncTaskFixture, caplog: pytest.LogCaptureFixture
+    ):
+        """Test that a collection with an unknown protocol is handled gracefully."""
+        caplog.set_level(LogLevel.warning)
+
+        # Mock the registry to raise LookupException for unknown protocol
+        sync_task_fixture.mock_registry.from_collection.side_effect = LookupException(
+            f"Integration {sync_task_fixture.collection.protocol} not found"
+        )
+
+        sync_patron_activity.apply_async(
+            (sync_task_fixture.collection.id, sync_task_fixture.patron.id, "pin")
+        ).wait()
+
+        # The task should mark the sync as not supported
+        task_status = sync_task_fixture.redis_record.status()
+        assert task_status is not None
+        assert task_status.state == PatronActivityStatus.State.NOT_SUPPORTED
+
+        # Check the warning message
+        assert (
+            f"Collection '{sync_task_fixture.collection.name}' "
+            f"(id: {sync_task_fixture.collection.id}) has unknown protocol"
+        ) in caplog.text
+        assert "Patron activity sync not supported" in caplog.text
+
+        # Verify from_collection was called
         sync_task_fixture.mock_registry.from_collection.assert_called_once_with(
             sync_task_fixture.db.session, sync_task_fixture.collection
         )

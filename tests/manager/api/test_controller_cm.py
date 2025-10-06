@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock, create_autospec
 
-from pytest import MonkeyPatch
+from pytest import LogCaptureFixture, MonkeyPatch
 
 from palace.manager.api.authenticator import LibraryAuthenticator
 from palace.manager.api.circulation_manager import CirculationManager
@@ -258,3 +258,25 @@ class TestCirculationManager:
             # respond that the lane doesn't exist rather than saying
             # they've been denied access to age-inappropriate content.
             assert NO_SUCH_LANE.uri == facets.uri
+
+    def test_load_settings_logs_warning_for_unknown_protocol(
+        self,
+        circulation_fixture: CirculationControllerFixture,
+        caplog: LogCaptureFixture,
+    ):
+        """Test that a warning is logged when a collection has an unknown protocol."""
+        # Create a new library without the default collection to avoid issues
+        library = circulation_fixture.db.library()
+        collection = circulation_fixture.db.collection(
+            name="Test Collection", protocol="unknown_protocol"
+        )
+        collection.associated_libraries.append(library)
+
+        # Load settings and verify the warning is logged
+        circulation_fixture.manager.load_settings()
+
+        # Check that the warning was logged
+        assert (
+            f"Collection '{collection.name}' has unknown protocol '{collection.protocol}'. Skipping."
+            in caplog.text
+        )
