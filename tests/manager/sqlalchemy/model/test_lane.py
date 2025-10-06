@@ -2891,10 +2891,10 @@ class TestDatabaseBackedWorkList:
         # from the library's active collections.
         wl = DatabaseBackedWorkList()
         wl.initialize(default_library)
-        assert default_library.associated_collections == [
+        assert set(default_library.associated_collections) == {
             active_collection,
             inactive_collection,
-        ]
+        }
         assert default_library.active_collections == [active_collection]
         assert 2 == wl.works_from_database(db.session).count()
 
