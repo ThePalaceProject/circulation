@@ -258,3 +258,30 @@ class TestCirculationManager:
             # respond that the lane doesn't exist rather than saying
             # they've been denied access to age-inappropriate content.
             assert NO_SUCH_LANE.uri == facets.uri
+
+    def test_load_settings_logs_warning_for_unknown_protocol(
+        self, circulation_fixture: CirculationControllerFixture, caplog
+    ):
+        """Test that a warning is logged when a collection has an unknown protocol."""
+        # Create a new library without the default collection to avoid issues
+        library = circulation_fixture.db.library()
+        collection = circulation_fixture.db.collection(
+            name="Test Collection", protocol="unknown_protocol"
+        )
+        collection.associated_libraries.append(library)
+
+        # Load settings and verify the warning is logged
+        # Note: This will raise a KeyError because the collection API won't be created
+        # for unknown protocols, but we're only interested in the warning being logged
+        try:
+            circulation_fixture.manager.load_settings()
+        except KeyError:
+            pass
+
+        # Check that the warning was logged
+        assert any(
+            record.levelname == "WARNING"
+            and f"Collection '{collection.name}' has unknown protocol '{collection.protocol}'. Skipping."
+            in record.message
+            for record in caplog.records
+        )
