@@ -1756,10 +1756,10 @@ class TestWorkList:
 
         # Only the library's active collections are associated
         # with the WorkList.
-        assert default_library.associated_collections == [
+        assert set(default_library.associated_collections) == {
             active_collection,
             inactive_collection,
-        ]
+        }
         assert default_library.active_collections == [active_collection]
         assert set(wl.collection_ids) == {
             x.id for x in default_library.active_collections
