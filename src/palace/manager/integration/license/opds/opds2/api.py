@@ -77,6 +77,10 @@ class OPDS2API(BaseOPDSAPI):
     ) -> tuple[str | None, list[str] | None]:
         """Get the SAML token arguments for a patron
 
+        This method extracts values for the SAML-related members of TemplateVariable
+        (SAML_ENTITY_ID and SAML_PERSON_SCOPED_AFFILIATION). If / when we need to
+        support additional SAML attributes, they can be added here.
+
         :param patron: The patron to get parameters for
 
         :return: A tuple containing the SAML entity ID and a list of person scoped affiliations,
