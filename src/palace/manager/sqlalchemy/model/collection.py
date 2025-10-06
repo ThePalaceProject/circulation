@@ -155,7 +155,7 @@ class Collection(Base, HasSessionCache, RedisKeyMixin):
     # Most data sources offer different catalogs to different
     # libraries.  Data sources in this list offer the same catalog to
     # every library.
-    GLOBAL_COLLECTION_DATA_SOURCES = [DataSource.ENKI]
+    GLOBAL_COLLECTION_DATA_SOURCES: list[str] = []
 
     def __repr__(self) -> str:
         return f'<Collection "{self.name}"/"{self.protocol}" ID={self.id}>'
@@ -325,12 +325,22 @@ class Collection(Base, HasSessionCache, RedisKeyMixin):
         save references to the session, so they are only valid for the lifetime of
         the session.
         """
+        # Import here to avoid circular import
+        from palace.manager.service.integration_registry.base import LookupException
+
         session = Session.object_session(self)
         if self._CIRCULATION_API_CACHE_KEY not in session.info:
             session.info[self._CIRCULATION_API_CACHE_KEY] = {}
         cache = session.info[self._CIRCULATION_API_CACHE_KEY]
         if self.id not in cache:
-            cache[self.id] = registry.from_collection(session, self)
+            try:
+                cache[self.id] = registry.from_collection(session, self)
+            except LookupException:
+                self.log.warning(
+                    f"Collection '{self.name}' (id: {self.id}) has unknown protocol '{self.protocol}'. "
+                    f"Cannot create circulation API."
+                )
+                raise
         return cache[self.id]  # type: ignore[no-any-return]
 
     @property
