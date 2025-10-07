@@ -9,8 +9,8 @@ from collections.abc import Sequence
 
 from attr import define
 from flask_babel import lazy_gettext as _
-from opensearch_dsl import SF
-from opensearch_dsl.query import (
+from opensearchpy import SF
+from opensearchpy.helpers.query import (
     Bool,
     DisMax,
     Exists,
@@ -1151,7 +1151,7 @@ class JSONQuery(Query):
 
         return es_query
 
-    def _parse_json_leaf(self, query: dict) -> dict:
+    def _parse_json_leaf(self, query: dict) -> BaseQuery:
         """We have a leaf query, which means this becomes a keyword.term query"""
         op = query.get(self.QueryLeaf.OP, self.Operators.EQ)
 
@@ -1189,7 +1189,7 @@ class JSONQuery(Query):
                 detail=f"Operator '{op}' is not allowed for '{old_key}'. Only use {allowed_ops}"
             )
 
-        es_query = None
+        es_query: BaseQuery | None = None
 
         if op == self.Operators.EQ:
             es_query = Term(**{key: value})
@@ -1218,7 +1218,7 @@ class JSONQuery(Query):
 
         return es_query
 
-    def _parse_json_join(self, query: dict) -> dict:
+    def _parse_json_join(self, query: dict) -> Bool:
         if len(query.keys()) != 1:
             raise QueryParseException(
                 detail="A conjunction cannot have multiple parts in the same sub-query"

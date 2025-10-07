@@ -199,7 +199,6 @@ module = [
     "multipledispatch",
     "nameparser",
     "onelogin.saml2.*",
-    "opensearch_dsl.*",
     # This is ignored because the file is created when building a container
     # so it typically doesn't exist when running mypy, but since it only
     # contains a couple version strings it can be safely ignored
@@ -256,8 +255,7 @@ levenshtein = "^0.27"
 lxml = {extras = ["html-clean"], version = "^6.0.0"}
 multipledispatch = "^1.0"
 nameparser = "^1.1"  # nameparser is for author name manipulations
-opensearch-dsl = "~1.0"
-opensearch-py = "~1.1"
+opensearch-py = "^3.0"
 pillow = "^11.2.1"
 pycountry = "^24.6.1"
 pycryptodome = "^3.18"

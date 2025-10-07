@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, create_autospec
 
 import feedparser
 from flask import url_for
-from opensearch_dsl.response.hit import Hit
+from opensearchpy.helpers.response.hit import Hit
 
 from palace.manager.api.lanes import (
     CrawlableCollectionBasedLane,

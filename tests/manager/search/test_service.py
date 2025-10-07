@@ -81,7 +81,7 @@ class TestService:
         indices = external_search_fixture.client.indices.client.indices
         assert indices is not None
         assert indices.exists(
-            revision.name_for_index(external_search_fixture.index_prefix)
+            index=revision.name_for_index(external_search_fixture.index_prefix)
         )
 
     def test_read_pointer_none(self, external_search_fixture: ExternalSearchFixture):
@@ -160,10 +160,10 @@ class TestService:
         indices = external_search_fixture.client.indices.client.indices
         assert indices is not None
         assert indices.exists(
-            revision.name_for_index(external_search_fixture.index_prefix)
+            index=revision.name_for_index(external_search_fixture.index_prefix)
         )
         assert indices.get(
-            revision.name_for_index(external_search_fixture.index_prefix)
+            index=revision.name_for_index(external_search_fixture.index_prefix)
         )[f"{external_search_fixture.index_prefix}-v23"]["mappings"] == {
             "properties": mappings.serialize_properties()
         }
