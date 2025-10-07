@@ -10,13 +10,15 @@ from sqlalchemy import (
     Index,
     Integer,
     Unicode,
+    cast,
     select,
+    update,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.associationproxy import association_proxy
 from sqlalchemy.orm import Mapped, Query, Session, relationship
-from sqlalchemy.orm.attributes import flag_modified
 
+from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.integration.goals import Goals
 from palace.manager.sqlalchemy.model.base import Base
 
@@ -69,9 +71,37 @@ class IntegrationConfiguration(Base):
     )
 
     def context_update(self, new_context: dict[str, Any]) -> None:
-        """Update the context for this integration"""
-        self.context.update(new_context)
-        flag_modified(self, "context")
+        """
+        Update the context for this integration using an atomic database operation.
+
+        This method uses PostgreSQL's JSONB concatenation operator to atomically
+        merge new_context into the existing context at the database level,
+        preventing race conditions when multiple processes update the context
+        simultaneously.
+
+        :param new_context: Dictionary of key-value pairs to merge into the context
+        :raises PalaceValueError: If the object is not bound to a database session
+        """
+        db = Session.object_session(self)
+        if db is None:
+            raise PalaceValueError("Object is not bound to a session")
+
+        # Use PostgreSQL's JSONB concatenation operator (||) for atomic update.
+        # This performs the merge at the database level, preventing lost updates
+        # when multiple processes modify different keys concurrently.
+        stmt = (
+            update(IntegrationConfiguration)
+            .where(IntegrationConfiguration.id == self.id)
+            .values(
+                context=IntegrationConfiguration.context.op("||")(
+                    cast(new_context, JSONB)
+                )
+            )
+        )
+        db.execute(stmt)
+
+        # Refresh the object to get the updated context from the database
+        db.refresh(self)
 
     # Self test results, stored as json.
     self_test_results: Mapped[dict[str, Any]] = Column(
