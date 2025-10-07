@@ -65,7 +65,7 @@ def mark_identifiers_unavailable(
     existing_and_active_identifier_sets: list[RedisSetKwargs | None],
     *,
     collection_id: int,
-) -> None:
+) -> bool:
     """
     Takes a list of two RedisSetKwargs elements as the first positional argument. These are used to create
     two IdentifierSets: the first represents existing identifiers that are available in the collection, and
@@ -80,6 +80,8 @@ def mark_identifiers_unavailable(
     licenses_owned to 0 for each identifier in the collection.
 
     This function is designed to be used as the body of a chord created by `create_mark_unavailable_chord`.
+
+    :return: True if identifiers were successfully marked as unavailable, False if the operation was skipped.
     """
     redis_client = task.services.redis().client()
 
@@ -96,7 +98,7 @@ def mark_identifiers_unavailable(
         for cleanup_kwargs in [existing_identifier_kwargs, active_identifier_kwargs]:
             if cleanup_kwargs is not None:
                 IdentifierSet(redis_client, **cleanup_kwargs).delete()
-        return None
+        return False
 
     existing_identifiers = IdentifierSet(redis_client, **existing_identifier_kwargs)
     active_identifiers = IdentifierSet(redis_client, **active_identifier_kwargs)
@@ -106,7 +108,7 @@ def mark_identifiers_unavailable(
             task.log.warning(
                 "Existing identifiers set does not exist in Redis. No identifiers to mark as unavailable."
             )
-            return
+            return False
 
         if not active_identifiers.exists():
             task.log.error(
@@ -141,6 +143,7 @@ def mark_identifiers_unavailable(
         task.log.info(
             f"Sent tasks to mark {len(identifiers_to_mark)} identifiers as unavailable"
         )
+        return True
     finally:
         existing_identifiers.delete()
         active_identifiers.delete()
