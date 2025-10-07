@@ -79,7 +79,12 @@ class TestLibraryAllTitleReportTable:
                     mock_execute.return_value = iter([])
                     # This is the actual call we're testing.
                     list(table.rows)
-                    mock_params.assert_called_once_with(integration_ids=integration_ids)
+                    mock_params.assert_called_once()
+                    # Check that the integration_ids match, regardless of order.
+                    actual_integration_ids = mock_params.call_args.kwargs[
+                        "integration_ids"
+                    ]
+                    assert set(actual_integration_ids) == set(integration_ids)
 
                     mock_execute.assert_called_once_with(mock_statement)
 
