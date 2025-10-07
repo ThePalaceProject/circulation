@@ -6,16 +6,19 @@ from functools import partial
 from unittest.mock import MagicMock, call, patch
 
 import pytest
+from freezegun import freeze_time
 from sqlalchemy import select
 
 from palace.manager.api.circulation.dispatcher import CirculationApiDispatcher
 from palace.manager.api.circulation.fulfillment import RedirectFulfillment
 from palace.manager.celery.tasks import identifiers, opds2
 from palace.manager.core.exceptions import PalaceValueError
+from palace.manager.data_layer.circulation import CirculationData
 from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.integration.license.opds.opds2.api import OPDS2API
 from palace.manager.integration.license.opds.opds2.settings import OPDS2ImporterSettings
 from palace.manager.integration.license.overdrive.api import OverdriveAPI
+from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.service.redis.models.set import IdentifierSet
 from palace.manager.sqlalchemy.constants import (
     EditionConstants,
@@ -106,16 +109,203 @@ class TestImportAll:
             opds2.import_all.delay(force=force).wait()
 
         # We queued up tasks for all OPDS2 collections, but not for Overdrive
-        mock_import_collection.s.assert_called_once_with(
-            force=force,
-        )
-        mock_import_collection.s.return_value.delay.assert_has_calls(
+        mock_import_collection.delay.assert_has_calls(
             [
-                call(collection_id=collection1.id),
-                call(collection_id=collection2.id),
+                call(collection_id=collection1.id, force=force),
+                call(collection_id=collection2.id, force=force),
             ],
             any_order=True,
         )
+
+    def test_import_all_with_reap_schedule_not_due(
+        self, db: DatabaseTransactionFixture, celery_fixture: CeleryFixture
+    ) -> None:
+        """Test that import_all queues normal import when reap is not due."""
+        collection = db.collection(
+            protocol=OPDS2API,
+            settings=db.opds2_settings(
+                reap_schedule="0 0 * * 1",  # Midnight every Monday
+            ),
+        )
+
+        # Set last_reap_time to 1 minute ago (so next reap is not due yet)
+        one_minute_ago = utc_now() - datetime.timedelta(minutes=1)
+        collection.integration_configuration.context_update(
+            {OPDS2API.LAST_REAP_TIME_KEY: one_minute_ago.isoformat()}
+        )
+
+        with patch.object(opds2, "import_collection") as mock_import_collection:
+            opds2.import_all.delay(force=False).wait()
+
+        # Should queue normal import
+        mock_import_collection.delay.assert_called_once_with(
+            collection_id=collection.id, force=False
+        )
+
+    def test_import_all_with_reap_schedule_due(
+        self, db: DatabaseTransactionFixture, celery_fixture: CeleryFixture
+    ) -> None:
+        """Test that import_all queues reap task when scheduled time has passed."""
+        collection = db.collection(
+            protocol=OPDS2API,
+            settings=db.opds2_settings(
+                reap_schedule="0 0 * * *",  # Daily at midnight
+            ),
+        )
+
+        # Set last_reap_time to 2 days ago (so reap is due)
+        two_days_ago = utc_now() - datetime.timedelta(days=2)
+        collection.integration_configuration.context_update(
+            {OPDS2API.LAST_REAP_TIME_KEY: two_days_ago.isoformat()}
+        )
+
+        with patch.object(opds2, "import_and_reap_not_found_chord") as mock_reap_chord:
+            opds2.import_all.delay(force=False).wait()
+
+        # Should queue reap task
+        mock_reap_chord.assert_called_once_with(collection.id, False)
+        mock_reap_chord.return_value.delay.assert_called_once()
+
+        # Note: last_reap_time is updated by a callback after the reap chord completes.
+        # Since we're mocking the chord, the callback doesn't run in this test.
+
+    def test_import_all_with_reap_schedule_never_reaped(
+        self, db: DatabaseTransactionFixture, celery_fixture: CeleryFixture
+    ) -> None:
+        """Test that import_all queues reap task when never reaped before."""
+        collection = db.collection(
+            protocol=OPDS2API,
+            settings=db.opds2_settings(
+                reap_schedule="0 0 * * 1",  # Midnight every Monday
+            ),
+        )
+
+        # No last_reap_time set
+        assert (
+            collection.integration_configuration.context.get(
+                OPDS2API.LAST_REAP_TIME_KEY
+            )
+            is None
+        )
+
+        with patch.object(opds2, "import_and_reap_not_found_chord") as mock_reap_chord:
+            opds2.import_all.delay(force=False).wait()
+
+        # Should queue reap task since never reaped
+        mock_reap_chord.assert_called_once_with(collection.id, False)
+        mock_reap_chord.return_value.delay.assert_called_once()
+
+        # Note: last_reap_time is updated by a callback after the reap chord completes.
+        # Since we're mocking the chord, the callback doesn't run in this test.
+
+    def test_import_all_mixed_collections(
+        self, db: DatabaseTransactionFixture, celery_fixture: CeleryFixture
+    ) -> None:
+        """Test import_all with mix of reaping and non-reaping collections."""
+        # Collection with no reap schedule
+        collection1 = db.collection(
+            protocol=OPDS2API,
+            settings=db.opds2_settings(),
+        )
+
+        # Collection with reap schedule that's due
+        collection2 = db.collection(
+            protocol=OPDS2API,
+            settings=db.opds2_settings(
+                reap_schedule="0 0 * * *",  # Daily
+            ),
+        )
+        two_days_ago = utc_now() - datetime.timedelta(days=2)
+        collection2.integration_configuration.context_update(
+            {OPDS2API.LAST_REAP_TIME_KEY: two_days_ago.isoformat()}
+        )
+
+        with (
+            patch.object(opds2, "import_collection") as mock_import,
+            patch.object(opds2, "import_and_reap_not_found_chord") as mock_reap,
+        ):
+            opds2.import_all.delay(force=False).wait()
+
+        # Collection1 should get normal import
+        mock_import.delay.assert_called_once_with(
+            collection_id=collection1.id, force=False
+        )
+
+        # Collection2 should get reap
+        mock_reap.assert_called_once_with(collection2.id, False)
+        mock_reap.return_value.delay.assert_called_once()
+
+
+class TestUpdateLastReapTime:
+    def test_update_last_reap_time_callback(
+        self, db: DatabaseTransactionFixture, celery_fixture: CeleryFixture
+    ) -> None:
+        """Test that update_last_reap_time task updates the context correctly."""
+        collection = db.collection(
+            protocol=OPDS2API,
+            settings=db.opds2_settings(
+                reap_schedule="0 0 * * *",  # Daily
+            ),
+        )
+
+        # No last_reap_time initially
+        assert (
+            collection.integration_configuration.context.get(
+                OPDS2API.LAST_REAP_TIME_KEY
+            )
+            is None
+        )
+
+        # Call the callback task directly with True to indicate success
+        update_time = utc_now()
+        with freeze_time(update_time):
+            opds2.update_last_reap_time.delay(True, collection_id=collection.id).wait()
+
+        # Verify last_reap_time was updated
+        db.session.refresh(collection)
+        updated_time_str = collection.integration_configuration.context.get(
+            OPDS2API.LAST_REAP_TIME_KEY
+        )
+        assert updated_time_str is not None
+
+        updated_time = datetime.datetime.fromisoformat(updated_time_str)
+        assert updated_time == update_time
+
+    def test_update_last_reap_time_callback_failure(
+        self,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Test that update_last_reap_time does not update context when result is False."""
+        caplog.set_level(LogLevel.warning)
+        collection = db.collection(
+            protocol=OPDS2API,
+            settings=db.opds2_settings(
+                reap_schedule="0 0 * * *",  # Daily
+            ),
+        )
+
+        # Set an initial last_reap_time
+        initial_time = utc_now() - datetime.timedelta(days=7)
+        collection.integration_configuration.context_update(
+            {OPDS2API.LAST_REAP_TIME_KEY: initial_time.isoformat()}
+        )
+
+        # Call the callback task with False to indicate failure
+        opds2.update_last_reap_time.delay(False, collection_id=collection.id).wait()
+
+        # Verify last_reap_time was NOT updated
+        db.session.refresh(collection)
+        updated_time_str = collection.integration_configuration.context.get(
+            OPDS2API.LAST_REAP_TIME_KEY
+        )
+        assert updated_time_str == initial_time.isoformat()
+
+        # Verify warning was logged
+        assert "did not complete successfully" in caplog.text
+        assert "last_reap_time not updated" in caplog.text
+        assert f"id={collection.id}" in caplog.text
 
 
 class TestImportCollection:
@@ -787,3 +977,133 @@ class TestImportAndReapNotFoundChord:
             collection_id=collection_id, force=force, return_identifiers=True
         )
         mock_chord.assert_called_once_with(collection_id, mock_import.s.return_value)
+
+    def test_import_and_reap_not_found_chord_success(
+        self,
+        db: DatabaseTransactionFixture,
+        redis_fixture: RedisFixture,
+        celery_fixture: CeleryFixture,
+        opds2_files_fixture: OPDS2FilesFixture,
+    ) -> None:
+        collection = db.collection(
+            protocol=OPDS2API,
+        )
+
+        test_lp_1 = db.licensepool(edition=None, collection=collection)
+        test_lp_2 = db.licensepool(edition=None, collection=collection)
+
+        assert (
+            collection.integration_configuration.context.get(
+                OPDS2API.LAST_REAP_TIME_KEY
+            )
+            is None
+        )
+
+        identifier_set = IdentifierSet(redis_fixture.client)
+        identifier_set.add(test_lp_1.identifier)
+
+        import_time = utc_now()
+        with (
+            patch.object(opds2, "opds_import_task") as mock_import,
+            patch.object(identifiers, "circulation_apply") as circ_apply_task,
+            freeze_time(import_time),
+        ):
+            mock_import.return_value = identifier_set
+            opds2.import_and_reap_not_found_chord(collection.id).apply_async().wait()
+
+        db.session.refresh(collection)
+        last_reap_time_str = collection.integration_configuration.context.get(
+            OPDS2API.LAST_REAP_TIME_KEY
+        )
+        assert last_reap_time_str is not None
+        last_reap_time = datetime.datetime.fromisoformat(last_reap_time_str)
+        assert last_reap_time == import_time
+
+        # Make sure we marked the correct identifier as unavailable
+        circ_apply_task.delay.assert_called_once()
+        assert (
+            circ_apply_task.delay.call_args.kwargs.get("collection_id") == collection.id
+        )
+        circulation_data: CirculationData | None = (
+            circ_apply_task.delay.call_args.kwargs.get("circulation")
+        )
+        assert circulation_data is not None
+        assert (
+            circulation_data.primary_identifier_data
+            == IdentifierData.from_identifier(test_lp_2.identifier)
+        )
+
+    def test_import_and_reap_not_found_chord_importer_returns_none(
+        self,
+        db: DatabaseTransactionFixture,
+        redis_fixture: RedisFixture,
+        celery_fixture: CeleryFixture,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """
+        Test that import_and_reap_not_found_chord handles the case where the importer returns None.
+        In this case the callback should be called, but the last_reap_time should not be updated.
+
+        This simulates the case where the import fails and returns None.
+        """
+        caplog.set_level(LogLevel.info)
+
+        collection = db.collection(
+            protocol=OPDS2API,
+        )
+
+        assert (
+            collection.integration_configuration.context.get(
+                OPDS2API.LAST_REAP_TIME_KEY
+            )
+            is None
+        )
+
+        with patch.object(opds2, "importer_from_collection") as mock_importer:
+            mock_importer.return_value.import_feed.return_value = None
+            opds2.import_and_reap_not_found_chord(collection.id).apply_async().wait()
+
+        assert "last_reap_time not updated" in caplog.text
+
+        db.session.refresh(collection)
+        assert (
+            collection.integration_configuration.context.get(
+                OPDS2API.LAST_REAP_TIME_KEY
+            )
+            is None
+        )
+
+    def test_import_and_reap_not_found_chord_importer_exception(
+        self,
+        db: DatabaseTransactionFixture,
+        redis_fixture: RedisFixture,
+        celery_fixture: CeleryFixture,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        collection = db.collection(
+            protocol=OPDS2API,
+        )
+
+        assert (
+            collection.integration_configuration.context.get(
+                OPDS2API.LAST_REAP_TIME_KEY
+            )
+            is None
+        )
+
+        with patch.object(opds2, "importer_from_collection") as mock_importer:
+            mock_importer.return_value.import_feed.side_effect = PalaceValueError(
+                "OH NO!"
+            )
+            with pytest.raises(PalaceValueError):
+                opds2.import_and_reap_not_found_chord(
+                    collection.id
+                ).apply_async().wait()
+
+        db.session.refresh(collection)
+        assert (
+            collection.integration_configuration.context.get(
+                OPDS2API.LAST_REAP_TIME_KEY
+            )
+            is None
+        )

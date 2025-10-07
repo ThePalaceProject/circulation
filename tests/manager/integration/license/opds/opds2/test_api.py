@@ -1,4 +1,5 @@
 from collections.abc import Generator
+from datetime import timedelta
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -19,6 +20,7 @@ from palace.manager.sqlalchemy.model.licensing import (
     LicensePool,
     LicensePoolDeliveryMechanism,
 )
+from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.http import MockHttpClientFixture
 
@@ -335,3 +337,67 @@ class TestOpds2Api:
         # Verify the URL was called without patron_id
         called_url = opds2_api_fixture.http_client.requests[0]
         assert called_url == "http://example.org/token?key=value"
+
+    def test_should_reap_no_reap_schedule(self, db: DatabaseTransactionFixture) -> None:
+        """Test that should_reap returns False when reap_schedule is None."""
+        collection = db.collection(
+            protocol=OPDS2API,
+            settings=db.opds2_settings(),
+        )
+
+        # No reap_schedule set (default is None)
+        assert OPDS2API.should_reap(collection) is False
+
+    def test_should_reap_reap_schedule_never_reaped(
+        self, db: DatabaseTransactionFixture
+    ) -> None:
+        """Test that should_reap returns True when schedule is set but never reaped."""
+        collection = db.collection(
+            protocol=OPDS2API,
+            settings=db.opds2_settings(
+                reap_schedule="0 0 * * 1",  # Midnight every Monday
+            ),
+        )
+
+        # No last_reap_time set, so should reap
+        assert OPDS2API.should_reap(collection) is True
+
+    def test_should_reap_reap_schedule_time_passed(
+        self, db: DatabaseTransactionFixture
+    ) -> None:
+        """Test that should_reap returns True when scheduled time has passed."""
+        collection = db.collection(
+            protocol=OPDS2API,
+            settings=db.opds2_settings(
+                reap_schedule="0 0 * * *",  # Daily at midnight
+            ),
+        )
+
+        # Set last_reap_time to 2 days ago
+        two_days_ago = utc_now() - timedelta(days=2)
+        collection.integration_configuration.context_update(
+            {OPDS2API.LAST_REAP_TIME_KEY: two_days_ago.isoformat()}
+        )
+
+        # Should reap since we're past the scheduled time
+        assert OPDS2API.should_reap(collection) is True
+
+    def test_should_reap_reap_schedule_time_not_passed(
+        self, db: DatabaseTransactionFixture
+    ) -> None:
+        """Test that should_reap returns False when scheduled time has not passed."""
+        collection = db.collection(
+            protocol=OPDS2API,
+            settings=db.opds2_settings(
+                reap_schedule="0 0 * * 1",  # Midnight every Monday
+            ),
+        )
+
+        # Set last_reap_time to 1 minute ago
+        one_minute_ago = utc_now() - timedelta(minutes=1)
+        collection.integration_configuration.context_update(
+            {OPDS2API.LAST_REAP_TIME_KEY: one_minute_ago.isoformat()}
+        )
+
+        # Should not reap since next Monday hasn't occurred yet
+        assert OPDS2API.should_reap(collection) is False

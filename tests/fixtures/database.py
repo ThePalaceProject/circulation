@@ -65,6 +65,7 @@ from palace.manager.integration.license.opds.odl.settings import OPDS2WithODLSet
 from palace.manager.integration.license.opds.opds1.api import OPDSAPI
 from palace.manager.integration.license.opds.opds1.settings import OPDSImporterSettings
 from palace.manager.integration.license.opds.opds2.api import OPDS2API
+from palace.manager.integration.license.opds.opds2.settings import OPDS2ImporterSettings
 from palace.manager.integration.license.overdrive.api import OverdriveAPI
 from palace.manager.integration.license.overdrive.settings import OverdriveSettings
 from palace.manager.integration.patron_auth.simple_authentication import (
@@ -611,6 +612,12 @@ class DatabaseTransactionFixture:
         data_source="OPDS",
     )
 
+    opds2_settings = functools.partial(
+        OPDS2ImporterSettings,
+        external_account_id="http://opds.example.com/feed",
+        data_source="OPDS",
+    )
+
     overdrive_settings = functools.partial(
         OverdriveSettings,
         external_account_id="library_id",
@@ -653,8 +660,10 @@ class DatabaseTransactionFixture:
     def collection_settings(
         self, protocol: type[BaseCirculationAPI[TCirculationSettings, Any]]
     ) -> TCirculationSettings | None:
-        if protocol in [OPDSAPI, OPDS2API]:
+        if protocol == OPDSAPI:
             return self.opds_settings()  # type: ignore[return-value]
+        elif protocol == OPDS2API:
+            return self.opds2_settings()  # type: ignore[return-value]
         elif protocol == OPDSForDistributorsAPI:
             return self.opds_for_distributors_settings()  # type: ignore[return-value]
         elif protocol == BibliothecaAPI:
