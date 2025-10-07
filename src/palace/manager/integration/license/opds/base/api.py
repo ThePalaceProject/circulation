@@ -4,7 +4,7 @@ import urllib
 from abc import ABC
 
 from sqlalchemy.orm import Session
-from typing_extensions import Unpack
+from typing_extensions import TypeVar, Unpack
 
 from palace.manager.api.circulation.base import BaseCirculationAPI
 from palace.manager.api.circulation.data import HoldInfo, LoanInfo
@@ -34,9 +34,14 @@ from palace.manager.sqlalchemy.model.licensing import (
 )
 from palace.manager.sqlalchemy.model.patron import Patron
 
+BaseOPDSApiSettingsT = TypeVar("BaseOPDSApiSettingsT", bound=OPDSImporterSettings)
+BaseOPDSLibrarySettingsT = TypeVar(
+    "BaseOPDSLibrarySettingsT", bound=OPDSImporterLibrarySettings
+)
+
 
 class BaseOPDSAPI(
-    BaseCirculationAPI[OPDSImporterSettings, OPDSImporterLibrarySettings], ABC
+    BaseCirculationAPI[BaseOPDSApiSettingsT, BaseOPDSLibrarySettingsT], ABC
 ):
     def __init__(self, _db: Session, collection: Collection):
         super().__init__(_db, collection)

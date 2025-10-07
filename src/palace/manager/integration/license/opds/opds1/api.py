@@ -9,7 +9,7 @@ from palace.manager.integration.license.opds.opds1.settings import (
 )
 
 
-class OPDSAPI(BaseOPDSAPI):
+class OPDSAPI(BaseOPDSAPI[OPDSImporterSettings, OPDSImporterLibrarySettings]):
     @classmethod
     def settings_class(cls) -> type[OPDSImporterSettings]:
         return OPDSImporterSettings

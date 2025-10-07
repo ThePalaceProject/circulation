@@ -47,7 +47,7 @@ SAML_TEMPLATE_VARIABLES: frozenset[str] = frozenset(
 SUPPORTED_TEMPLATE_VARIABLES: frozenset[str] = frozenset(TemplateVariable)
 
 
-class OPDS2API(BaseOPDSAPI):
+class OPDS2API(BaseOPDSAPI[OPDS2ImporterSettings, OPDS2ImporterLibrarySettings]):
     TOKEN_AUTH_CONFIG_KEY = "token_auth_endpoint"
 
     @classmethod
