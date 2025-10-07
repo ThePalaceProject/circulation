@@ -139,11 +139,12 @@ class TestMarkIdentifiersUnavailable:
         expected_marked = existing_set - active_set
 
         with patch.object(identifiers, "circulation_apply") as mock_apply:
-            identifiers.mark_identifiers_unavailable.delay(
+            result = identifiers.mark_identifiers_unavailable.delay(
                 [existing_set, active_set],
                 collection_id=collection.id,
             ).wait()
 
+        assert result is True
         assert mock_apply.delay.call_count == 5
         assert (
             identifier_tasks_fixture.identifiers_from_mock_calls(mock_apply.delay)
@@ -168,10 +169,11 @@ class TestMarkIdentifiersUnavailable:
 
         # If the existing set doesn't exist, or doesn't contain any identifiers
         # (which are treated the same in redis), we exit early and log a message.
-        identifiers.mark_identifiers_unavailable.delay(
+        result = identifiers.mark_identifiers_unavailable.delay(
             [existing_set, active_set],
             collection_id=collection.id,
         ).wait()
+        assert result is False
         assert "Existing identifiers set does not exist in Redis" in caplog.text
 
         # Add an identifier to the existing set, so it now exists
@@ -217,10 +219,11 @@ class TestMarkIdentifiersUnavailable:
         existing_set = create_set() if existing else None
         active_set = create_set() if active else None
 
-        identifiers.mark_identifiers_unavailable.delay(
+        result = identifiers.mark_identifiers_unavailable.delay(
             [existing_set, active_set],
             collection_id=collection.id,
         ).wait()
+        assert result is False
         assert "Aborting without marking any identifiers as unavailable" in caplog.text
 
         # Any non-None set should be cleaned up
