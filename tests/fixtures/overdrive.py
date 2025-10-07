@@ -19,7 +19,7 @@ from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.patron import Patron
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import OverdriveFilesFixture
-from tests.fixtures.http import MockHttpClientFixture
+from tests.fixtures.http import MockAsyncClientFixture, MockHttpClientFixture
 from tests.fixtures.work import (
     WorkIdPolicyQueuePresentationRecalculationFixture,
 )
@@ -34,6 +34,7 @@ class OverdriveAPIFixture:
         data: OverdriveFilesFixture,
         monkeypatch: pytest.MonkeyPatch,
         work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
+        async_client: MockAsyncClientFixture,
     ):
         self.db = db
         self.data = data
@@ -48,6 +49,7 @@ class OverdriveAPIFixture:
             "TestingSecret",
         )
         self.mock_http = http_client
+        self.mock_async_client = async_client
         self.api = MockOverdriveAPI(db.session, self.collection)
         self.circulation = CirculationApiDispatcher(
             db.session,
@@ -127,6 +129,7 @@ class OverdriveAPIFixture:
 def overdrive_api_fixture(
     db: DatabaseTransactionFixture,
     http_client: MockHttpClientFixture,
+    async_http_client: MockAsyncClientFixture,
     overdrive_files_fixture: OverdriveFilesFixture,
     monkeypatch: pytest.MonkeyPatch,
     work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
@@ -137,4 +140,5 @@ def overdrive_api_fixture(
         overdrive_files_fixture,
         monkeypatch,
         work_policy_recalc_fixture,
+        async_http_client,
     )
