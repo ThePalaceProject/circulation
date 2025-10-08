@@ -1318,7 +1318,7 @@ class SAMLSubjectPatronIDExtractor:
 
         self._logger = logging.getLogger(__name__)
 
-    def _extract_patron_id(self, patron_id_candidate):
+    def _extract_patron_id(self, patron_id_candidate: str) -> str | None:
         """Extract a unique patron ID from the string.
 
         :param patron_id_candidate: String containing a value that potentially may be a unique patron ID
@@ -1339,17 +1339,11 @@ class SAMLSubjectPatronIDExtractor:
 
         return patron_id
 
-    def extract(self, subject):
+    def extract(self, subject: SAMLSubject) -> str | None:
         """Extract a unique patron ID from the SAML subject.
 
         :param subject: SAML subject
-        :type subject: SAMLSubject
-
-        :return: Unique ID
-        :rtype: string
-
-        :return: Unique patron ID if any
-        :rtype: Optional[str]
+        :return: Patron ID, if found; else None.
         """
         self._logger.info(f"Trying to extract a unique patron ID from {repr(subject)}")
 
@@ -1363,22 +1357,33 @@ class SAMLSubjectPatronIDExtractor:
                     ]
 
                     # NOTE: It takes the first value.
+                    # TODO: Any reason not to handle multiple values here?
                     patron_id_candidate = patron_id_attribute.values[0]
                     patron_id = self._extract_patron_id(patron_id_candidate)
 
                     if patron_id is not None:
                         break
 
-        if patron_id is None and self._use_name_id:
-            if subject.name_id and subject.name_id.name_id:
-                patron_id_candidate = subject.name_id.name_id
-                patron_id = self._extract_patron_id(patron_id_candidate)
+        # If we haven't found a patron id in the other attributes,
+        # maybe we can try the NameID.
+        if (
+            patron_id is None
+            and self._use_name_id
+            and subject.name_id
+            and subject.name_id.name_id
+        ):
+            patron_id_candidate = subject.name_id.name_id
+            patron_id = self._extract_patron_id(patron_id_candidate)
 
-        self._logger.info(
-            "Extracted a unique patron ID from {}: {}".format(
-                repr(subject),
-                patron_id if patron_id else "",
+        # Log an appropriate message, depending on the outcome.
+        attribute_origin = f"from {repr(subject)}"
+        if patron_id is None:
+            self._logger.error(
+                f"Failed to extract a unique patron ID {attribute_origin}"
             )
-        )
+        else:
+            self._logger.info(
+                f"Extracted a unique patron ID '{patron_id}' {attribute_origin}"
+            )
 
         return patron_id

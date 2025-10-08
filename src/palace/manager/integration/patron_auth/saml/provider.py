@@ -19,7 +19,12 @@ from palace.manager.integration.patron_auth.saml.metadata.model import (
     SAMLSubjectPatronIDExtractor,
 )
 from palace.manager.service.analytics.analytics import Analytics
-from palace.manager.util.problem_detail import ProblemDetail, ProblemDetail as pd
+from palace.manager.sqlalchemy.model.credential import Credential
+from palace.manager.sqlalchemy.model.patron import Patron
+from palace.manager.util.problem_detail import (
+    ProblemDetail as pd,
+    ProblemDetailException,
+)
 
 SAML_INVALID_SUBJECT = pd(
     "http://librarysimplified.org/terms/problem/saml/invalid-subject",
@@ -308,66 +313,63 @@ class SAMLWebSSOAuthenticationProvider(
 
         return authentication_manager
 
-    def remote_patron_lookup(self, subject):
+    def remote_patron_lookup(self, subject: SAMLSubject) -> PatronData:
         """Creates a PatronData object based on Subject object containing SAML Subject and AttributeStatement
 
         :param subject: Subject object containing SAML Subject and AttributeStatement
-        :type subject: api.saml.metadata.Subject
 
         :return: PatronData object containing information about the authenticated SAML subject or
             ProblemDetail object in the case of any errors
-        :rtype: Union[PatronData, ProblemDetail]
+
+        :raises: ProblemDetailException, if there's a problem.
         """
         if not subject:
-            return SAML_INVALID_SUBJECT.detailed("Subject is empty")
-
-        if isinstance(subject, PatronData):
-            return subject
+            raise ProblemDetailException(
+                problem_detail=SAML_INVALID_SUBJECT.detailed("Subject is empty")
+            )
 
         if not isinstance(subject, SAMLSubject):
-            return SAML_INVALID_SUBJECT.detailed("Incorrect subject type")
+            raise ProblemDetailException(
+                problem_detail=SAML_INVALID_SUBJECT.detailed("Incorrect subject type")
+            )
 
         extractor = SAMLSubjectPatronIDExtractor(
             self._patron_id_use_name_id,
             self._patron_id_attributes,
             self._patron_id_regular_expression,
         )
-        uid = extractor.extract(subject)
+        extracted_id = extractor.extract(subject)
 
-        if uid is None:
-            return SAML_INVALID_SUBJECT.detailed("Subject does not have a unique ID")
+        if extracted_id is None:
+            raise ProblemDetailException(
+                problem_detail=SAML_INVALID_SUBJECT.detailed(
+                    "Subject does not have a unique ID"
+                )
+            )
 
-        patron_data = PatronData(
-            permanent_id=uid,
-            authorization_identifier=uid,
+        return PatronData(
+            permanent_id=extracted_id,
+            authorization_identifier=extracted_id,
             external_type="A",
             complete=True,
         )
 
-        return patron_data
-
-    def saml_callback(self, db, subject):
+    def saml_callback(
+        self, db: Session, subject: SAMLSubject
+    ) -> tuple[Credential, Patron, PatronData]:
         """Verifies the SAML subject, generates a Bearer token in the case of successful authentication and returns it
 
         :param db: Database session
-        :type db: sqlalchemy.orm.session.Session
-
         :param subject: Subject object containing SAML Subject and AttributeStatement
-        :type subject: api.saml.metadata.Subject
-
-        :return: A ProblemDetail if there's a problem. Otherwise, a
-            3-tuple (Credential, Patron, PatronData). The Credential
+        :return: A 3-tuple (Credential, Patron, PatronData). The Credential
             contains the access token provided by the SAML provider. The
             Patron object represents the authenticated Patron, and the
             PatronData object includes information about the patron
             obtained from the OAuth provider which cannot be stored in the
             circulation manager's database, but which should be passed on
             to the client.
-        :rtype: Union[Tuple[Credential, Patron, PatronData], ProblemDetail]
         """
         patron_data = self.remote_patron_lookup(subject)
-        if isinstance(patron_data, ProblemDetail):
-            return patron_data
 
         # Convert the PatronData into a Patron object
         patron, is_new = patron_data.get_or_create_patron(

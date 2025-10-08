@@ -1,3 +1,6 @@
+import logging
+import re
+
 import pytest
 
 from palace.manager.integration.patron_auth.saml.metadata.model import (
@@ -415,31 +418,31 @@ class TestSAMLSubjectPatronIDExtractor:
     )
     def test(
         self,
-        subject,
-        expected_patron_id,
-        use_name_id,
-        patron_id_attributes,
-        patron_id_regular_expression,
+        subject: SAMLSubject,
+        expected_patron_id: str | None,
+        use_name_id: bool,
+        patron_id_attributes: list[str] | None,
+        patron_id_regular_expression: re.Pattern | None,
+        caplog: pytest.LogCaptureFixture,
     ):
         """Make sure that SAMLSubjectUIDExtractor correctly extracts a unique patron ID from the SAML subject.
 
-        :param _: Name of the test case
-        :type _: str
-
         :param expected_patron_id: Expected patron ID
-        :type expected_patron_id: str
-
         :param use_name_id: Boolean value indicating whether SAMLSubjectUIDExtractor
             is allowed to search for patron IDs in NameID
-        :type use_name_id: bool
-
-        :param patron_id_attributes: List of SAML attributes used by SAMLSubjectUIDExtractor to search for a patron ID
-        :type patron_id_attributes: List[SAMLAttributeType]
-
+        :param patron_id_attributes: List of SAML attribute names that are used by
+            SAMLSubjectUIDExtractor to search for a patron ID
         :param patron_id_regular_expression: Regular expression used to extract a patron ID from SAML attributes
-        :type patron_id_regular_expression: str
         """
+        expected_message = (
+            f"Extracted a unique patron ID '{expected_patron_id}'"
+            if expected_patron_id
+            else "Failed to extract a unique patron ID"
+        )
+        expect_log_level = logging.INFO if expected_patron_id else logging.ERROR
+
         # Arrange
+        caplog.set_level(expect_log_level)
         extractor = SAMLSubjectPatronIDExtractor(
             use_name_id, patron_id_attributes, patron_id_regular_expression
         )
@@ -449,3 +452,4 @@ class TestSAMLSubjectPatronIDExtractor:
 
         # Assert
         assert expected_patron_id == patron_id
+        assert expected_message in caplog.text
