@@ -32,6 +32,10 @@ def run(url=None):
     # Required for subdomain support.
     app.config["SERVER_NAME"] = netloc
 
+    # Allow non-HTTPS cookies in local development
+    if debug:
+        app.config["SESSION_COOKIE_SECURE"] = False
+
     logging.info("Starting app on %s:%s", host, port)
 
     sslContext = "adhoc" if scheme == "https" else None

@@ -113,14 +113,17 @@ class TestViewController:
             match = html_csrf_re.search(html)
             assert match is not None
             csrf = match.groups(0)[0]
-            assert csrf in response.headers.get("Set-Cookie")
-            assert "HttpOnly" in response.headers.get("Set-Cookie")
+            set_cookie = response.headers.get("Set-Cookie")
+            assert csrf in set_cookie
+            assert "HttpOnly" in set_cookie
+            assert "SameSite=Lax" in set_cookie
+            # In test mode (debug=False by default), secure flag should be set
+            assert "Secure" in set_cookie
 
         admin_ctrl_fixture.admin.password = "password"
-        # If there's a CSRF token in the request cookie, the response
-        # should keep that same token.
-        token = admin_ctrl_fixture.ctrl.db.fresh_str()
-        cookie = dump_cookie("csrf_token", token)
+        # If there's an invalid CSRF token in the request cookie, a new one should be generated
+        invalid_token = admin_ctrl_fixture.ctrl.db.fresh_str()
+        cookie = dump_cookie("csrf_token", invalid_token)
         with admin_ctrl_fixture.ctrl.app.test_request_context(
             "/admin", environ_base={"HTTP_COOKIE": cookie}
         ):
@@ -131,8 +134,65 @@ class TestViewController:
             )
             assert 200 == response.status_code
             html = response.get_data(as_text=True)
-            assert 'csrfToken: "%s"' % token in html
-            assert token in response.headers.get("Set-Cookie")
+            # The invalid token should NOT be in the HTML
+            assert 'csrfToken: "%s"' % invalid_token not in html
+            # A new token should be set in the cookie
+            assert response.headers.get("Set-Cookie") is not None
+            assert "csrf_token" in response.headers.get("Set-Cookie")
+
+        # If there's a valid CSRF token in the request cookie, the response
+        # should use that same token in the HTML but NOT set it again
+        # (to prevent echoing user-controlled values back as cookies).
+        valid_token = (
+            admin_ctrl_fixture.manager.admin_view_controller.generate_csrf_token()
+        )
+        cookie = dump_cookie("csrf_token", valid_token)
+        with admin_ctrl_fixture.ctrl.app.test_request_context(
+            "/admin", environ_base={"HTTP_COOKIE": cookie}
+        ):
+            flask.session["admin_email"] = admin_ctrl_fixture.admin.email
+            flask.session["auth_type"] = PasswordAdminAuthenticationProvider.NAME
+            response = admin_ctrl_fixture.manager.admin_view_controller(
+                "collection", "book"
+            )
+            assert 200 == response.status_code
+            html = response.get_data(as_text=True)
+            # The valid token should be in the HTML
+            assert 'csrfToken: "%s"' % valid_token in html
+            # But should NOT be set again in the cookie header
+            # (only new tokens are set, not echoed back from requests)
+            assert response.headers.get("Set-Cookie") is None
+
+    @pytest.mark.parametrize(
+        "debug_mode,expect_secure",
+        [
+            pytest.param(True, False, id="debug-mode-no-secure"),
+            pytest.param(False, True, id="production-mode-with-secure"),
+        ],
+    )
+    def test_csrf_token_debug_mode(
+        self,
+        admin_ctrl_fixture: AdminControllerFixture,
+        debug_mode: bool,
+        expect_secure: bool,
+    ):
+        """Test that CSRF cookie security settings respect debug mode."""
+        admin_ctrl_fixture.admin.password_hashed = None
+        admin_ctrl_fixture.ctrl.app.config["DEBUG"] = debug_mode
+
+        with admin_ctrl_fixture.ctrl.app.test_request_context("/admin"):
+            response = admin_ctrl_fixture.manager.admin_view_controller(None, None)
+            assert 200 == response.status_code
+            set_cookie = response.headers.get("Set-Cookie")
+            assert set_cookie is not None
+            assert "csrf_token" in set_cookie
+            assert "HttpOnly" in set_cookie
+            assert "SameSite=Lax" in set_cookie
+
+            if expect_secure:
+                assert "Secure" in set_cookie
+            else:
+                assert "Secure" not in set_cookie
 
     def test_show_circ_events_download(
         self, admin_ctrl_fixture: AdminControllerFixture

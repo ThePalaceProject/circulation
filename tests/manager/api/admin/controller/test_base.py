@@ -1,6 +1,9 @@
 import pytest
 
-from palace.manager.api.admin.controller.base import AdminPermissionsControllerMixin
+from palace.manager.api.admin.controller.base import (
+    AdminController,
+    AdminPermissionsControllerMixin,
+)
 from palace.manager.api.admin.exceptions import AdminNotAuthorized
 from palace.manager.sqlalchemy.model.admin import AdminRole
 from tests.fixtures.database import DatabaseTransactionFixture
@@ -81,3 +84,35 @@ class TestAdminPermissionsControllerMixin:
         )
         with flask_app_fixture.test_request_context("/admin", admin=librarian):
             controller.require_librarian(db.default_library())
+
+
+class TestAdminController:
+    @pytest.mark.parametrize(
+        "token",
+        [
+            pytest.param("", id="empty-string"),
+            pytest.param("short", id="too-short"),
+            pytest.param("a" * 100, id="too-long"),
+            pytest.param(
+                "YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXo=",
+                id="valid-base64-wrong-decoded-length",
+            ),
+            pytest.param(
+                "!!!!invalid-base64-chars-here!!!",
+                id="32-chars-invalid-base64-exception",
+            ),
+            pytest.param(
+                "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+                id="32-chars-incorrect-padding-exception",
+            ),
+        ],
+    )
+    def test_validate_csrf_token_invalid(self, token: str) -> None:
+        """Test that invalid CSRF tokens are rejected."""
+        assert AdminController.validate_csrf_token(token) is False
+
+    def test_validate_csrf_token_valid(self) -> None:
+        """Test that valid CSRF tokens are accepted."""
+        valid_token = AdminController.generate_csrf_token()
+        assert AdminController.validate_csrf_token(valid_token)
+        assert len(valid_token) == 32

@@ -60,9 +60,17 @@ class ViewController(AdminController):
                 else:
                     roles.append({"role": role.role})
 
-        csrf_token = (
-            flask.request.cookies.get("csrf_token") or self.generate_csrf_token()
+        # Check if CSRF token already exists and is valid, only generate if needed
+        existing_csrf_token = flask.request.cookies.get("csrf_token")
+        has_valid_token = existing_csrf_token and self.validate_csrf_token(
+            existing_csrf_token
         )
+
+        if has_valid_token:
+            csrf_token = existing_csrf_token
+        else:
+            csrf_token = self.generate_csrf_token()
+
         admin_js = AdminClientConfig.lookup_asset_url(key="admin_js")
         admin_css = AdminClientConfig.lookup_asset_url(key="admin_css")
 
@@ -91,5 +99,13 @@ class ViewController(AdminController):
         # because if your session expires and you log in again, you should
         # be able to submit a form you already had open. The CSRF token lasts
         # until the user closes the browser window.
-        response.set_cookie("csrf_token", csrf_token, httponly=True)
+        # Only set the cookie if we generated a new token (not from user input).
+        if not has_valid_token:
+            response.set_cookie(
+                "csrf_token",
+                csrf_token,
+                httponly=True,
+                secure=not flask.current_app.debug,
+                samesite="Lax",
+            )
         return response

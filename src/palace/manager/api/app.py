@@ -42,6 +42,14 @@ app.config["BABEL_TRANSLATION_DIRECTORIES"] = "../translations"
 #  Sometimes custom list form data was too large, resulting in 413 response.
 #  The value here is chosen to roughly match the Docker nginx config.
 app.config["MAX_FORM_MEMORY_SIZE"] = 75 * 1024 * 1024
+
+# Configure session cookie security settings
+# SESSION_COOKIE_SECURE is set to True by default for production security.
+# Local development (app.py) overrides this to False when debug=True.
+app.config["SESSION_COOKIE_SECURE"] = True
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+
 babel = Babel(app, locale_selector=get_locale)
 
 # We use URIs as identifiers throughout the application, meaning that

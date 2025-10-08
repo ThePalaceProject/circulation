@@ -133,7 +133,15 @@ class SignInController(AdminController):
             redirect=url_for("admin_view", _external=True),
             _external=True,
         )
-        return SanitizedRedirections.redirect(redirect_url)
+        response = SanitizedRedirections.redirect(redirect_url)
+        # Clear the CSRF token cookie on sign out
+        # Must match the parameters used when setting the cookie for proper deletion
+        response.delete_cookie(
+            "csrf_token",
+            secure=not flask.current_app.debug,
+            samesite="Lax",
+        )
+        return response
 
     def error_response(self, problem_detail):
         """Returns a problem detail as an HTML response"""
