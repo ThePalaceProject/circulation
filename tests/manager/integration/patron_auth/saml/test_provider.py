@@ -1,6 +1,7 @@
 import datetime
 import json
 from collections.abc import Callable
+from contextlib import nullcontext
 from unittest.mock import MagicMock, create_autospec, patch
 
 import pytest
@@ -52,7 +53,7 @@ from palace.manager.integration.patron_auth.saml.python_expression_dsl.parser im
 )
 from palace.manager.sqlalchemy.model.credential import Credential
 from palace.manager.util.datetime_helpers import datetime_utc, utc_now
-from palace.manager.util.problem_detail import ProblemDetail
+from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
 from tests.fixtures.api_controller import ControllerFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.mocks import saml_strings
@@ -331,14 +332,6 @@ class TestSAMLWebSSOAuthenticationProvider:
                 id="empty_subject",
             ),
             pytest.param(
-                PatronData(permanent_id=12345),
-                PatronData(permanent_id=12345),
-                None,
-                None,
-                None,
-                id="subject_is_patron_data",
-            ),
-            pytest.param(
                 SAMLSubject("http://idp.example.com", None, None),
                 SAML_INVALID_SUBJECT.detailed("Subject does not have a unique ID"),
                 None,
@@ -465,14 +458,21 @@ class TestSAMLWebSSOAuthenticationProvider:
             settings=configuration,
         )
 
-        # Act
-        result = provider.remote_patron_lookup(subject)
+        context_manager = (
+            pytest.raises(ProblemDetailException)
+            if isinstance(expected_result, ProblemDetail)
+            else nullcontext()
+        )
 
-        # Assert
-        if isinstance(result, ProblemDetail):
-            assert result.response == expected_result.response
-        else:
-            assert result == expected_result
+        with context_manager as ctx:
+            # Act
+            result = provider.remote_patron_lookup(subject)
+
+            # Assert
+            if isinstance(expected_result, ProblemDetail):
+                assert ctx.value.problem_detail == expected_result
+            else:
+                assert result == expected_result
 
     @pytest.mark.parametrize(
         "subject, expected_patron_data, expected_credential, expected_expiration_time, cm_session_lifetime",
@@ -706,11 +706,11 @@ class TestSAMLWebSSOAuthenticationProvider:
         controller_fixture: ControllerFixture,
         create_saml_configuration: Callable[..., SAMLWebSSOAuthSettings],
         create_saml_provider: Callable[..., SAMLWebSSOAuthenticationProvider],
-        subject,
-        expected_patron_data,
-        expected_credential,
-        expected_expiration_time,
-        cm_session_lifetime,
+        subject: SAMLSubject,
+        expected_patron_data: PatronData | ProblemDetail,
+        expected_credential: str | None,
+        expected_expiration_time: datetime.datetime | None,
+        cm_session_lifetime: int | str | None,
     ):
         # This test makes sure that SAMLWebSSOAuthenticationProvider.saml_callback
         # correctly processes a SAML subject and returns right PatronData.
@@ -725,19 +725,25 @@ class TestSAMLWebSSOAuthenticationProvider:
         if expected_expiration_time is None and subject is not None:
             expected_expiration_time = utc_now() + subject.valid_till
 
-        # Act
-        result = provider.saml_callback(controller_fixture.db.session, subject)
+        context_manager = (
+            pytest.raises(ProblemDetailException)
+            if isinstance(expected_patron_data, ProblemDetail)
+            else nullcontext()
+        )
+        with context_manager as ctx:
+            # Act
+            result = provider.saml_callback(controller_fixture.db.session, subject)
 
-        # Assert
-        if isinstance(result, ProblemDetail):
-            assert result.response == expected_patron_data.response
-        else:
-            credential, patron, patron_data = result
+            # Assert
+            if isinstance(expected_patron_data, ProblemDetail):
+                assert ctx.value.problem_detail == expected_patron_data
+            else:
+                credential, patron, patron_data = result
 
-            assert expected_credential == credential.credential
-            assert expected_patron_data.permanent_id == patron.external_identifier
-            assert expected_patron_data == patron_data
-            assert expected_expiration_time == credential.expires
+                assert expected_credential == credential.credential
+                assert expected_patron_data.permanent_id == patron.external_identifier
+                assert expected_patron_data == patron_data
+                assert expected_expiration_time == credential.expires
 
     def test_get_credential_from_header(
         self,

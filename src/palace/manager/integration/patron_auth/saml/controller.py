@@ -15,6 +15,7 @@ from flask_babel import lazy_gettext as _
 from palace.manager.util.problem_detail import (
     ProblemDetail,
     ProblemDetail as pd,
+    ProblemDetailException,
     json as pd_json,
 )
 
@@ -336,9 +337,10 @@ class SAMLController:
         if isinstance(subject, ProblemDetail):
             return self._redirect_with_error(redirect_uri, subject)
 
-        response = provider.saml_callback(db, subject)
-        if isinstance(response, ProblemDetail):
-            return self._redirect_with_error(redirect_uri, response)
+        try:
+            response = provider.saml_callback(db, subject)
+        except ProblemDetailException as e:
+            return self._redirect_with_error(redirect_uri, e.problem_detail)
 
         provider_token, patron, patron_data = response
 

@@ -31,7 +31,7 @@ from palace.manager.integration.patron_auth.saml.provider import (
 from palace.manager.sqlalchemy.model.credential import Credential
 from palace.manager.sqlalchemy.model.integration import IntegrationConfiguration
 from palace.manager.sqlalchemy.model.library import Library
-from palace.manager.util.problem_detail import ProblemDetail
+from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
 from tests.fixtures.api_controller import ControllerFixture
 from tests.mocks import saml_strings
 
@@ -383,11 +383,11 @@ class TestSAMLController:
         self,
         controller_fixture: ControllerFixture,
         data,
-        finish_authentication_result,
-        saml_callback_result,
-        bearer_token,
-        expected_authentication_redirect_uri,
-        expected_problem,
+        finish_authentication_result: ProblemDetail | None,
+        saml_callback_result: tuple[Credential, object, PatronData] | None,
+        bearer_token: str | None,
+        expected_authentication_redirect_uri: str | None,
+        expected_problem: ProblemDetail | None,
     ):
         # Arrange
         authentication_manager = create_autospec(spec=SAMLAuthenticationManager)
@@ -404,7 +404,13 @@ class TestSAMLController:
         provider.library = MagicMock(
             return_value=controller_fixture.db.default_library()
         )
-        provider.saml_callback = MagicMock(return_value=saml_callback_result)
+        provider.saml_callback = (
+            MagicMock(
+                side_effect=ProblemDetailException(problem_detail=saml_callback_result)
+            )
+            if isinstance(saml_callback_result, ProblemDetail)
+            else MagicMock(return_value=saml_callback_result)
+        )
         authenticator = Authenticator(
             controller_fixture.db.session,
             libraries=controller_fixture.db.session.query(Library),
