@@ -174,6 +174,8 @@ class TestViewController:
             "a" * 100,  # too long
             "not-base64-!@#$%^&*()",  # invalid base64
             "YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXo=",  # valid base64 but wrong length when decoded
+            "!!!invalid-base64-chars-here!!",  # 32 chars, invalid base64 (triggers exception)
+            "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",  # 32 chars, incorrect padding (triggers exception)
             None,  # None value
         ]
 
