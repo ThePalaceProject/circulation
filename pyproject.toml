@@ -287,7 +287,7 @@ types-pyyaml = "^6.0.12.9"
 typing_extensions = {version = "^4.5.0", python = "<3.11"}
 unicodecsv = "0.14.1"  # this is used, but can probably be removed on py3
 uritemplate = "4.2.0"
-urllib3 = "^1.26.17"
+urllib3 = "^2.5.0"
 uWSGI = "~2.0.21"
 watchtower = "3.4.0"  # watchtower is for Cloudwatch logging integration
 wcag-contrast-ratio = "0.9"
