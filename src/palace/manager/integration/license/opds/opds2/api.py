@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import sys
 from collections.abc import MutableSet
+from datetime import datetime
 
 from celery.canvas import Signature
+from croniter import croniter
 from sqlalchemy.orm import Session
 from typing_extensions import Unpack
 from uritemplate import URITemplate
@@ -24,6 +26,7 @@ from palace.manager.sqlalchemy.model.licensing import (
     LicensePoolDeliveryMechanism,
 )
 from palace.manager.sqlalchemy.model.patron import Patron
+from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.http.exception import BadResponseException
 from palace.manager.util.http.http import HTTP
 
@@ -49,6 +52,7 @@ SUPPORTED_TEMPLATE_VARIABLES: frozenset[str] = frozenset(TemplateVariable)
 
 class OPDS2API(BaseOPDSAPI[OPDS2ImporterSettings, OPDS2ImporterLibrarySettings]):
     TOKEN_AUTH_CONFIG_KEY = "token_auth_endpoint"
+    LAST_REAP_TIME_KEY = "last_reap_time"
 
     @classmethod
     def settings_class(cls) -> type[OPDS2ImporterSettings]:
@@ -293,3 +297,45 @@ class OPDS2API(BaseOPDSAPI[OPDS2ImporterSettings, OPDS2ImporterLibrarySettings])
 
         integration.context_update({cls.TOKEN_AUTH_CONFIG_KEY: url})
         return True
+
+    @classmethod
+    def should_reap(cls, collection: Collection) -> bool:
+        """
+        Determine if collection should be reaped based on cron schedule.
+
+        Checks the reap_schedule setting and last_reap_time context to
+        determine if enough time has passed according to the cron expression.
+        All cron schedules are evaluated in UTC timezone.
+
+        :param collection: The collection to check.
+        :return: True if the collection should be reaped, False otherwise.
+        """
+        # Get the reap schedule from settings
+        settings = cls.settings_load(collection.integration_configuration)
+        reap_schedule = settings.reap_schedule
+
+        # If no schedule is configured, don't reap
+        if not reap_schedule:
+            return False
+
+        # Get the last reap time from context
+        last_reap_time_str = collection.integration_configuration.context.get(
+            cls.LAST_REAP_TIME_KEY
+        )
+
+        # If we've never reaped before, we should reap now
+        if not last_reap_time_str:
+            return True
+
+        # Parse the last reap time (stored as UTC ISO format string)
+        last_reap_time = datetime.fromisoformat(last_reap_time_str)
+
+        # Calculate when the next reap should occur after last_reap_time
+        # croniter will use the timezone of the datetime passed to it
+        cron = croniter(reap_schedule, last_reap_time)
+        next_reap_time_dt: datetime = cron.get_next(datetime)
+
+        # Check if current time is past the next scheduled reap time
+        # Both times are in UTC
+        current_time = utc_now()
+        return current_time >= next_reap_time_dt
