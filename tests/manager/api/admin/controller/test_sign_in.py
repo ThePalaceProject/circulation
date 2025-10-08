@@ -294,3 +294,14 @@ class TestSignInController:
             # The admin's credentials have been removed from the session.
             assert None == flask.session.get("admin_email")
             assert None == flask.session.get("auth_type")
+
+            # The CSRF token cookie should be deleted with proper parameters
+            set_cookie = response.headers.get("Set-Cookie")
+            assert set_cookie is not None
+            assert "csrf_token=" in set_cookie
+            # Cookie deletion sets Max-Age=0 or Expires to a past date
+            assert "Max-Age=0" in set_cookie or "Expires=" in set_cookie
+            # Security parameters should match those used when setting
+            assert "SameSite=Lax" in set_cookie
+            # In test mode (debug=False by default), secure flag should be set
+            assert "Secure" in set_cookie

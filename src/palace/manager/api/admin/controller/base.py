@@ -115,6 +115,28 @@ class AdminController(LoggerMixin):
         """Generate a random CSRF token."""
         return base64.b64encode(os.urandom(24)).decode("utf-8")
 
+    @staticmethod
+    def validate_csrf_token(token: str) -> bool:
+        """Validate that a CSRF token has the expected format.
+
+        :param token: The token to validate
+        :return: True if the token is valid, False otherwise
+        """
+        if not token or not isinstance(token, str):
+            return False
+
+        # Token should be base64 encoded 24 random bytes (32 chars when encoded)
+        if len(token) != 32:
+            return False
+
+        # Verify it's valid base64
+        try:
+            decoded = base64.b64decode(token, validate=True)
+            # Should decode to exactly 24 bytes
+            return len(decoded) == 24
+        except Exception:
+            return False
+
 
 class AdminPermissionsControllerMixin:
     """Mixin that provides methods for verifying an admin's roles."""
