@@ -6,9 +6,9 @@ from datetime import datetime
 from typing import Any
 
 import pytest
-from opensearch_dsl import Q
-from opensearch_dsl.function import FieldValueFactor, RandomScore, ScriptScore
-from opensearch_dsl.query import (
+from opensearchpy import Q
+from opensearchpy.helpers.function import FieldValueFactor, RandomScore, ScriptScore
+from opensearchpy.helpers.query import (
     Bool,
     DisMax,
     Match,

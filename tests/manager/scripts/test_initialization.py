@@ -213,7 +213,7 @@ class TestInstanceInitializationScript:
 
         # The new_revision_index_name does not exist yet
         with pytest.raises(OpenSearchException) as raised:
-            client.indices.get(new_revision_index_name)
+            client.indices.get(index=new_revision_index_name)
         assert "index_not_found" in str(raised.value)
 
         # The client can work without issue in this state
@@ -237,7 +237,7 @@ class TestInstanceInitializationScript:
         script.migrate_search.assert_called_once()
 
         # The new index should exist
-        assert client.indices.get(new_revision_index_name)
+        assert client.indices.get(index=new_revision_index_name)
 
         # The write pointer should point to the new revision
         write_pointer = service.write_pointer()

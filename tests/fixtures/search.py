@@ -63,7 +63,7 @@ class ExternalSearchFixture(LoggerMixin):
 
     def close(self):
         # Delete our index prefix
-        self.client.indices.delete(f"{self.index_prefix}*")
+        self.client.indices.delete(index=f"{self.index_prefix}*")
         return None
 
     def default_work(self, *args, **kwargs):

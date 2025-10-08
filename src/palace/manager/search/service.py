@@ -7,8 +7,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import opensearchpy.helpers
-from opensearch_dsl import MultiSearch, Search
-from opensearchpy import NotFoundError, OpenSearch, RequestError
+from opensearchpy import MultiSearch, NotFoundError, OpenSearch, RequestError, Search
 from typing_extensions import Self
 
 from palace.manager.core.exceptions import BasePalaceException
@@ -240,7 +239,7 @@ class SearchServiceOpensearch1(SearchService, LoggerMixin):
             script = dict(script=dict(lang="painless", source=body))
             if not name.startswith("simplified"):
                 name = revision.script_name(name)
-            self._client.put_script(name, body=script)
+            self._client.put_script(id=name, body=script)
 
     def index_submit_document(
         self, document: dict[str, Any], refresh: bool = False
@@ -320,10 +319,12 @@ class SearchServiceOpensearch1(SearchService, LoggerMixin):
         return self._get_pointer(self.read_pointer_name())
 
     def read_search_client(self) -> Search:
-        return self._search.index(self.read_pointer_name())
+        return self._search.index(self.read_pointer_name())  # type: ignore[no-any-return]
+        # opensearchpy Search.index() is not properly typed
 
     def read_search_multi_client(self) -> MultiSearch:
-        return self._multi_search.index(self.read_pointer_name())
+        return self._multi_search.index(self.read_pointer_name())  # type: ignore[no-any-return]
+        # opensearchpy MultiSearch.index() is not properly typed
 
     def read_pointer_name(self) -> str:
         return f"{self.base_revision_name}-search-read"
@@ -332,4 +333,4 @@ class SearchServiceOpensearch1(SearchService, LoggerMixin):
         return f"{self.base_revision_name}-search-write"
 
     def index_remove_document(self, doc_id: int) -> None:
-        self._client.delete(index=self.write_pointer_name(), id=doc_id, doc_type="_doc")
+        self._client.delete(index=self.write_pointer_name(), id=doc_id)

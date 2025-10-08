@@ -6,9 +6,8 @@ from enum import Enum
 from typing import Any
 from unittest.mock import MagicMock
 
-from opensearch_dsl import MultiSearch, Search
-from opensearch_dsl.response.hit import Hit
-from opensearchpy import OpenSearchException
+from opensearchpy import MultiSearch, OpenSearchException, Search
+from opensearchpy.helpers.response.hit import Hit
 
 from palace.manager.search.document import SearchMappingDocument
 from palace.manager.search.external_search import ExternalSearchIndex
