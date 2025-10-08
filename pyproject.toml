@@ -252,14 +252,14 @@ itsdangerous = "^2.1.2"
 jsonschema = "^4.22.0"
 jwcrypto = "^1.4.2"
 levenshtein = "^0.27"
-lxml = {extras = ["html-clean"], version = "^6.0.0"}
+lxml = {extras = ["html-clean"], version = "6.0.0"}
 multipledispatch = "^1.0"
 nameparser = "^1.1"  # nameparser is for author name manipulations
 opensearch-py = "^3.0"
 pillow = "^11.2.1"
 pycountry = "^24.6.1"
 pycryptodome = "^3.18"
-pydantic = {version = "^2.9.2", extras = ["email"]}
+pydantic = {version = "2.11.10", extras = ["email"]}
 pydantic-settings = "^2.5.2"
 pydantic-xml = "^2.17.0"
 pyinstrument = "^5.0"
@@ -321,7 +321,7 @@ pytest-cov = "^7.0.0"
 pytest-timeout = "*"
 pytest-xdist = "^3.5.0"
 requests-mock = "1.12.1"
-types-aws-xray-sdk = "^2.11.0.13"
+types-aws-xray-sdk = "2.14.0.20250516"
 types-Flask-Cors = "^6.0.0"
 types-psycopg2 = "^2.9.21"
 types-python-dateutil = "^2.8.19"
