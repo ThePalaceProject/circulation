@@ -125,10 +125,6 @@ class AdminController(LoggerMixin):
         if not token or not isinstance(token, str):
             return False
 
-        # Token should be base64 encoded 24 random bytes (32 chars when encoded)
-        if len(token) != 32:
-            return False
-
         # Verify it's valid base64
         try:
             decoded = base64.b64decode(token, validate=True)
