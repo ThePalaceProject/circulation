@@ -324,6 +324,27 @@ a working SMTP server and must set the following environment variables:
 - `PALACE_MAIL_PASSWORD`: The password to use when connecting to the SMTP server (optional).
 - `PALACE_MAIL_SENDER`: The email address to use as the sender of emails (optional).
 
+#### SAML
+
+SAML Service Provider (SP) metadata and/or private key values may be defined via environment variables by either:
+- (1) indirectly, by providing the name of a file containing the value (variables ending in `_FILE`); or
+- (2) directly, by providing the value (variables NOT ending in `_FILE`);
+but not both. It is an error to set both a file-based *and* a value-based variable for the same property.
+
+These values are optional, as they currently may be set per SAML patron authentication integration via the
+Administrative Interface. When both an environment variable setting and an Administrative Interface setting
+are present for either or both of these properties, the Administrative Interface value will be used.
+
+NOTE: You are strongly encouraged to move to environment-based configuration for both the SP metadata and its
+associated private key, as we intend to remove the Administrative Interface configuration option for these
+settings in the future.
+
+- `PALACE_SAML_SP_PRIVATE_KEY_FILE`: Path to SP private key file
+- `PALACE_SAML_SP_PRIVATE_KEY`: Inline SP private key content
+-
+- `PALACE_SAML_SP_METADATA_FILE`: Path to SP metadata XML file
+- `PALACE_SAML_SP_METADATA`: Inline SP metadata XML content
+
 ## Running the Application
 
 As mentioned in the [pyenv](#pyenv) section, the `poetry` tool should be executed within a virtual environment

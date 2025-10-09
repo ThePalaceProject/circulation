@@ -9,6 +9,7 @@ from onelogin.saml2.settings import OneLogin_Saml2_Settings
 from pydantic import PositiveInt, field_validator
 from sqlalchemy.orm import Session
 
+from palace.manager.api.admin.problem_details import INCOMPLETE_CONFIGURATION
 from palace.manager.api.authentication.base import (
     AuthProviderLibrarySettings,
     AuthProviderSettings,
@@ -19,6 +20,10 @@ from palace.manager.integration.patron_auth.saml.configuration.problem_details i
     SAML_INCORRECT_FILTRATION_EXPRESSION,
     SAML_INCORRECT_METADATA,
     SAML_INCORRECT_PATRON_ID_REGULAR_EXPRESSION,
+    SAML_INCORRECT_PRIVATE_KEY,
+)
+from palace.manager.integration.patron_auth.saml.configuration.service_provider import (
+    SamlServiceProviderConfiguration,
 )
 from palace.manager.integration.patron_auth.saml.metadata.federations import incommon
 from palace.manager.integration.patron_auth.saml.metadata.filter import (
@@ -110,24 +115,26 @@ class FederatedIdentityProviderOptions:
 class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
     """SAML Web SSO Authentication settings"""
 
-    service_provider_xml_metadata: str = FormField(
-        ...,
+    service_provider_xml_metadata: str | None = FormField(
+        None,
         form=ConfigurationFormItem(
             label="Service Provider's XML Metadata",
             description=(
                 "SAML metadata of the Circulation Manager's Service Provider in an XML format. "
                 "MUST contain exactly one SPSSODescriptor tag with at least one "
                 "AssertionConsumerService tag with Binding attribute set to "
-                "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST."
+                "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST. "
+                "Leave empty to use environment configuration (PALACE_SAML_SP_METADATA or PALACE_SAML_SP_METADATA_FILE)."
             ),
             type=ConfigurationFormItemType.TEXTAREA,
         ),
     )
-    service_provider_private_key: str = FormField(
-        "",
+    service_provider_private_key: str | None = FormField(
+        None,
         form=ConfigurationFormItem(
             label="Service Provider's Private Key",
-            description="Private key used for encrypting SAML requests.",
+            description="Private key used for encrypting SAML requests. "
+            "Leave empty to use environment configuration (PALACE_SAML_SP_PRIVATE_KEY or PALACE_SAML_SP_PRIVATE_KEY_FILE).",
             type=ConfigurationFormItemType.TEXTAREA,
         ),
     )
@@ -315,13 +322,78 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
 
     @field_validator("service_provider_xml_metadata")
     @classmethod
-    def validate_sp_xml_metadata(cls, v: str):
-        providers = cls.validate_xml_metadata(v, "Service Provider")
-        if len(providers) != 1:
-            message = "Service Provider's XML metadata must contain exactly one declaration of SPSSODescriptor"
+    def validate_sp_xml_metadata(cls, v: str | None) -> str | None:
+        """Ensure that either this setting or the environment provides a value.
+
+        NOTE: The value of this setting (i.e., NOT the one from the environment)
+        is always the one returned, even if is not the one that will eventually
+        be used for configuration. That is because the returned value is what
+        will be stored in the settings.
+
+        The setting value has priority over that of the environment. The
+        selected value must be valid (i.e., parse successfully).
+        """
+        xml_metadata: str | None
+        if v:
+            value_from = "this setting"
+            xml_metadata = v
+        else:
+            value_from = "environment"
+            xml_metadata = SamlServiceProviderConfiguration().get_metadata()
+
+        if not xml_metadata:
             raise SettingsValidationError(
-                problem_detail=SAML_INCORRECT_METADATA.detailed(message)
+                problem_detail=INCOMPLETE_CONFIGURATION.detailed(
+                    "Service Provider's XML Metadata is required. "
+                    "Provide it here or set PALACE_SAML_SP_METADATA or PALACE_SAML_SP_METADATA_FILE in the environment."
+                )
             )
+
+        providers = cls.validate_xml_metadata(xml_metadata, "Service Provider")
+        if len(providers) != 1:
+            raise SettingsValidationError(
+                problem_detail=SAML_INCORRECT_METADATA.detailed(
+                    f"Service Provider's XML metadata (from {value_from}) must contain exactly one declaration of SPSSODescriptor"
+                )
+            )
+
+        return v
+
+    @field_validator("service_provider_private_key")
+    @classmethod
+    def validate_sp_private_key(cls, v: str | None) -> str | None:
+        """Ensure that either this setting or the environment provides a value.
+
+        NOTE: The value of this setting (i.e., NOT the one from the environment)
+        is always the one returned, even if is not the one that will eventually
+        be used for configuration. That is because the returned value is what
+        will be stored in the settings.
+
+        The setting value has priority over that of the environment.
+        """
+        private_key: str | None
+        if v:
+            value_from = "this setting"
+            private_key = v
+        else:
+            value_from = "environment"
+            private_key = SamlServiceProviderConfiguration().get_private_key()
+
+        if not private_key or not (key := private_key.strip()):
+            raise SettingsValidationError(
+                problem_detail=INCOMPLETE_CONFIGURATION.detailed(
+                    "Service Provider's Private Key is required. "
+                    "Provide it here or set PALACE_SAML_SP_PRIVATE_KEY or PALACE_SAML_SP_PRIVATE_KEY_FILE in the environment."
+                )
+            )
+
+        if not (key.startswith("-----BEGIN") and key.endswith("PRIVATE KEY-----")):
+            raise SettingsValidationError(
+                problem_detail=SAML_INCORRECT_PRIVATE_KEY.detailed(
+                    f"Service Provider's Private Key (from {value_from}) is not in a valid format."
+                )
+            )
+
         return v
 
     @field_validator("non_federated_identity_provider_xml_metadata")
@@ -376,7 +448,7 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
 class SAMLWebSSOAuthLibrarySettings(AuthProviderLibrarySettings): ...
 
 
-class SAMLOneLoginConfiguration:
+class SAMLOneLoginConfiguration(LoggerMixin):
     """Converts metadata objects to the OneLogin's SAML Toolkit format"""
 
     DEBUG = "debug"
@@ -401,12 +473,18 @@ class SAMLOneLoginConfiguration:
     SECURITY = "security"
     AUTHN_REQUESTS_SIGNED = "authnRequestsSigned"
 
-    def __init__(self, configuration: SAMLWebSSOAuthSettings):
+    def __init__(
+        self,
+        configuration: SAMLWebSSOAuthSettings,
+        sp_configuration: SamlServiceProviderConfiguration | None = None,
+    ):
         """Initializes a new instance of SAMLOneLoginConfiguration class
 
         :param configuration: Configuration object containing SAML metadata
+        :param sp_configuration: Optional SP configuration from environment variables
         """
         self._configuration = configuration
+        self._sp_configuration = sp_configuration or SamlServiceProviderConfiguration()
         self._service_provider_loaded: SAMLServiceProviderMetadata | None = None
         self._service_provider_settings: dict[str, Any] | None = None
         self._identity_providers_loaded: None | (list[SAMLIdentityProviderMetadata]) = (
@@ -472,15 +550,42 @@ class SAMLOneLoginConfiguration:
         return identity_providers
 
     def _load_service_provider(self) -> SAMLServiceProviderMetadata:
-        """Loads SP settings from the library's configuration settings
+        """Loads SP settings from integration configuration or environment.
+
+        Integration settings take precedence over environment configuration.
+        This allows per-integration overrides during the migration period.
 
         :return: SAMLServiceProviderMetadata object
 
         :raise: SAMLParsingError
         """
-        parsing_results = self._metadata_parser.parse(
-            self._configuration.service_provider_xml_metadata
-        )
+        # Try integration settings first (takes precedence)
+        metadata: str | None = self._configuration.service_provider_xml_metadata
+        private_key: str | None = self._configuration.service_provider_private_key
+
+        # Fall back to environment if settings not present and log source.
+        if metadata:
+            self.log.debug("Using SAML SP metadata from integration settings.")
+        else:
+            self.log.debug("Using SAML SP metadata from environment.")
+            metadata = self._sp_configuration.get_metadata()
+
+        if private_key:
+            self.log.debug("Using SAML SP private key from integration settings.")
+        else:
+            self.log.debug("Using SAML SP private key from environment.")
+            private_key = self._sp_configuration.get_private_key()
+
+        # Validate that we have the required metadata configuration
+        if not metadata:
+            raise SAMLConfigurationError(
+                _(
+                    "SAML SP metadata not configured. Set either in integration settings or via "
+                    "PALACE_SAML_SP_METADATA_FILE/PALACE_SAML_SP_METADATA environment variables."
+                )
+            )
+
+        parsing_results = self._metadata_parser.parse(metadata)
 
         if not isinstance(parsing_results, list) or len(parsing_results) != 1:
             raise SAMLConfigurationError(
@@ -495,7 +600,9 @@ class SAMLOneLoginConfiguration:
                 _("SAML Service Provider's configuration is not correct")
             )
 
-        service_provider.private_key = self._configuration.service_provider_private_key
+        # Set private key if available
+        if private_key:
+            service_provider.private_key = private_key
 
         return service_provider
 
