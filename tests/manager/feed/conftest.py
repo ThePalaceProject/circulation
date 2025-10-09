@@ -43,6 +43,8 @@ def patch_url_for():
     """Patch the url_for method for annotators"""
     with patch(
         "palace.manager.feed.annotator.circulation.CirculationManagerAnnotator.url_for",
-        new=partial(_patched_url_for, _original=CirculationManagerAnnotator.url_for),
+        new=staticmethod(
+            partial(_patched_url_for, _original=CirculationManagerAnnotator.url_for)
+        ),
     ) as patched:
         yield PatchedUrlFor(patched)
