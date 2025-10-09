@@ -605,55 +605,69 @@ class DatabaseTransactionFixture:
         )
         return library
 
-    opds_settings = functools.partial(
-        OPDSImporterSettings,
-        external_account_id="http://opds.example.com/feed",
-        data_source="OPDS",
+    opds_settings = staticmethod(
+        functools.partial(
+            OPDSImporterSettings,
+            external_account_id="http://opds.example.com/feed",
+            data_source="OPDS",
+        )
     )
 
-    opds2_settings = functools.partial(
-        OPDS2ImporterSettings,
-        external_account_id="http://opds.example.com/feed",
-        data_source="OPDS",
+    opds2_settings = staticmethod(
+        functools.partial(
+            OPDS2ImporterSettings,
+            external_account_id="http://opds.example.com/feed",
+            data_source="OPDS",
+        )
     )
 
-    overdrive_settings = functools.partial(
-        OverdriveSettings,
-        external_account_id="library_id",
-        overdrive_website_id="website_id",
-        overdrive_client_key="client_key",
-        overdrive_client_secret="client_secret",
-        overdrive_server_nickname="production",
+    overdrive_settings = staticmethod(
+        functools.partial(
+            OverdriveSettings,
+            external_account_id="library_id",
+            overdrive_website_id="website_id",
+            overdrive_client_key="client_key",
+            overdrive_client_secret="client_secret",
+            overdrive_server_nickname="production",
+        )
     )
 
-    opds2_odl_settings = functools.partial(
-        OPDS2WithODLSettings,
-        username="username",
-        password="password",
-        external_account_id="http://example.com/feed",
-        data_source=DataSource.FEEDBOOKS,
+    opds2_odl_settings = staticmethod(
+        functools.partial(
+            OPDS2WithODLSettings,
+            username="username",
+            password="password",
+            external_account_id="http://example.com/feed",
+            data_source=DataSource.FEEDBOOKS,
+        )
     )
 
-    boundless_settings = functools.partial(
-        BoundlessSettings,
-        username="a",
-        password="b",
-        external_account_id="c",
+    boundless_settings = staticmethod(
+        functools.partial(
+            BoundlessSettings,
+            username="a",
+            password="b",
+            external_account_id="c",
+        )
     )
 
-    opds_for_distributors_settings = functools.partial(
-        OPDSForDistributorsSettings,
-        username="username",
-        password="password",
-        external_account_id="http://example.com/feed",
-        data_source=DataSource.FEEDBOOKS,
+    opds_for_distributors_settings = staticmethod(
+        functools.partial(
+            OPDSForDistributorsSettings,
+            username="username",
+            password="password",
+            external_account_id="http://example.com/feed",
+            data_source=DataSource.FEEDBOOKS,
+        )
     )
 
-    bibliotheca_settings = functools.partial(
-        BibliothecaSettings,
-        username="username",
-        password="password",
-        external_account_id="account_id",
+    bibliotheca_settings = staticmethod(
+        functools.partial(
+            BibliothecaSettings,
+            username="username",
+            password="password",
+            external_account_id="account_id",
+        )
     )
 
     def collection_settings(
