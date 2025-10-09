@@ -1,5 +1,5 @@
 import json
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from pydantic import ValidationError
@@ -62,6 +62,62 @@ def test_publication_feed(
     for publication, identifier in zip(feed.publications, publication_identifiers):
         assert isinstance(publication, Publication)
         assert publication.metadata.identifier == identifier
+
+
+def test_publication_feed_tf(
+    opds2_files_fixture: OPDS2FilesFixture,
+) -> None:
+    """Test Taylor and Francis feed parsing, especially ISO 8601 date handling."""
+    feed = PublicationFeed.model_validate_json(
+        opds2_files_fixture.sample_data("tf.json")
+    )
+    assert len(feed.publications) == 4
+
+    # Test first publication - full date format
+    pub1 = feed.publications[0]
+    assert pub1.metadata.identifier == "urn:isbn:9780203992104"
+    assert pub1.metadata.title == "The Economic Consequences of the Gulf War"
+    assert pub1.metadata.published == datetime(2005, 10, 26, tzinfo=timezone.utc)
+    assert pub1.metadata.modified == datetime(
+        2025, 9, 23, 16, 46, 28, tzinfo=timezone.utc
+    )
+    assert pub1.metadata.publisher == "Routledge"
+    assert pub1.metadata.author == ("Kamran Mofid",)
+
+    # Test second publication - year-only date (critical test case for PP-2997)
+    # This was being parsed as Unix timestamp before the fix
+    pub2 = feed.publications[1]
+    assert pub2.metadata.identifier == "urn:isbn:9780429198069"
+    assert pub2.metadata.title == "Hunger and Famine in the Long Nineteenth Century"
+    # Year-only "2022" should parse as 2022-01-01T00:00:00Z, NOT as Unix timestamp
+    assert pub2.metadata.published == datetime(2022, 1, 1, tzinfo=timezone.utc)
+    assert pub2.metadata.modified == datetime(
+        2025, 9, 23, 16, 46, 28, tzinfo=timezone.utc
+    )
+    assert pub2.metadata.publisher == "Routledge"
+    assert pub2.metadata.editor == ("Gail Turley Houston",)
+
+    # Test third publication - full date format
+    pub3 = feed.publications[2]
+    assert pub3.metadata.identifier == "urn:isbn:9780429169779"
+    assert pub3.metadata.title == "Handbook of Surface and Colloid Chemistry"
+    assert pub3.metadata.published == datetime(2015, 6, 25, tzinfo=timezone.utc)
+    assert pub3.metadata.modified == datetime(
+        2025, 9, 23, 16, 46, 28, tzinfo=timezone.utc
+    )
+    assert pub3.metadata.publisher == "CRC Press"
+    assert pub3.metadata.editor == ("K. S. Birdi",)
+
+    # Test fourth publication - full date format
+    pub4 = feed.publications[3]
+    assert pub4.metadata.identifier == "urn:isbn:9781315629889"
+    assert pub4.metadata.title == "Radical Sensibility"
+    assert pub4.metadata.published == datetime(2016, 4, 6, tzinfo=timezone.utc)
+    assert pub4.metadata.modified == datetime(
+        2025, 9, 23, 16, 46, 28, tzinfo=timezone.utc
+    )
+    assert pub4.metadata.publisher == "Routledge"
+    assert pub4.metadata.author == ("Chris Jones",)
 
 
 def test_publication_feed_no_publications(
