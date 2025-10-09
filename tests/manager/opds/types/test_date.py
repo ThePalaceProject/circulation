@@ -176,6 +176,21 @@ class TestIso8601DateOrAwareDatetime:
                 id="compact_date_invalid_month",
             ),
             pytest.param(
+                "2001-13-01",
+                "Invalid ISO 8601 date.",
+                id="extended_date_invalid_month",
+            ),
+            pytest.param(
+                "2001-02-30",
+                "Invalid ISO 8601 date.",
+                id="extended_date_invalid_day",
+            ),
+            pytest.param(
+                "2023-02-29",
+                "Invalid ISO 8601 date.",
+                id="extended_date_non_leap_year",
+            ),
+            pytest.param(
                 "43",
                 "Invalid ISO 8601 date.",
                 id="numeric_string_too_short",
