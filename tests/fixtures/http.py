@@ -3,13 +3,13 @@ from __future__ import annotations
 from collections import deque
 from collections.abc import AsyncGenerator, Callable, Generator, Mapping
 from contextlib import asynccontextmanager, contextmanager
-from typing import Any
+from typing import Any, Self, overload
 from unittest.mock import AsyncMock, patch
 
 import httpx
 import pytest
 from requests import Response
-from typing_extensions import Self, Unpack, overload
+from typing_extensions import Unpack
 
 from palace.manager.util.http.http import HTTP, GetRequestKwargs, RequestKwargs
 from tests.mocks.mock import MockRequestsResponse

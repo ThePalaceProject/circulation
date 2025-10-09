@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import json
 from collections.abc import Generator
+from typing import Self
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-from typing_extensions import Self
 
 from palace.manager.integration.base import integration_settings_update
 from palace.manager.integration.goals import Goals

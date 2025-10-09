@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-import sys
 from collections.abc import MutableSet
 from datetime import datetime
+from enum import StrEnum
 
 from celery.canvas import Signature
 from croniter import croniter
@@ -29,11 +29,6 @@ from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.http.exception import BadResponseException
 from palace.manager.util.http.http import HTTP
-
-if sys.version_info >= (3, 11):
-    from enum import StrEnum
-else:
-    from backports.strenum import StrEnum
 
 
 class TemplateVariable(StrEnum):

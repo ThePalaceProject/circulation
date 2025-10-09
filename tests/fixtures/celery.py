@@ -4,7 +4,7 @@ import os
 from collections.abc import Generator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Self
 from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
@@ -13,7 +13,6 @@ from celery.app import autoretry
 from celery.worker import WorkController
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-from typing_extensions import Self
 
 from palace.manager.celery.task import Task
 from palace.manager.celery.tasks import apply

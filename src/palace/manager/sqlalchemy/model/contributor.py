@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 import re
-import sys
+from enum import StrEnum
 from typing import TYPE_CHECKING
 
 from sqlalchemy import Column, ForeignKey, Integer, Unicode, UniqueConstraint
@@ -17,12 +17,6 @@ from palace.manager.sqlalchemy.hybrid import hybrid_property
 from palace.manager.sqlalchemy.model.base import Base
 from palace.manager.sqlalchemy.util import flush, get_one, get_one_or_create
 from palace.manager.util.personal_names import display_name_to_sort_name
-
-# TODO: Remove this when we drop support for Python 3.10
-if sys.version_info >= (3, 11):
-    from enum import StrEnum
-else:
-    from backports.strenum import StrEnum
 
 if TYPE_CHECKING:
     from palace.manager.sqlalchemy.model.edition import Edition

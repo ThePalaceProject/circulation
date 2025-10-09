@@ -1,17 +1,10 @@
-import sys
-from enum import auto
+from enum import StrEnum, auto
 from typing import Any
 
 from celery.schedules import crontab
 from kombu import Exchange, Queue
 
 from palace.manager.celery.celery import Celery
-
-# TODO: Remove this when we drop support for Python 3.10
-if sys.version_info >= (3, 11):
-    from enum import StrEnum
-else:
-    from backports.strenum import StrEnum
 
 
 class QueueNames(StrEnum):

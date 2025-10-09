@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 from functools import cached_property
-from typing import Annotated
+from typing import Annotated, Self
 
 from frozendict import frozendict
 from pydantic import Field, constr, field_validator, model_validator
-from typing_extensions import Self
 
 from palace.manager.data_layer.base.frozen import BaseFrozenData
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation

@@ -1,10 +1,9 @@
 import datetime
 import uuid
 from types import TracebackType
-from typing import IO, Literal
+from typing import IO, Literal, Self
 
 from pydantic import BaseModel
-from typing_extensions import Self
 
 from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.service.storage.s3 import MultipartS3UploadPart, S3Service
@@ -69,7 +68,7 @@ class MarcUploadManager(LoggerMixin):
         and date range."""
 
         def date_to_string(date: datetime.datetime) -> str:
-            return date.astimezone(datetime.timezone.utc).strftime("%Y-%m-%d")
+            return date.astimezone(datetime.UTC).strftime("%Y-%m-%d")
 
         root = "marc"
         creation = date_to_string(creation_time)

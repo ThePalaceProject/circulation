@@ -4,7 +4,7 @@ from __future__ import annotations
 import datetime
 from collections.abc import Generator
 from contextlib import contextmanager
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, Self
 
 from sqlalchemy import (
     Column,
@@ -20,7 +20,6 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, relationship
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import and_, literal, literal_column, or_
-from typing_extensions import Self
 
 from palace.manager.sqlalchemy.bulk_operation import SessionBulkOperation
 from palace.manager.sqlalchemy.model.base import Base

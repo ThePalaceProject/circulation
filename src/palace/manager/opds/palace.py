@@ -1,15 +1,9 @@
-import sys
+from enum import StrEnum
 
 from pydantic import Field, field_validator
 
 from palace.manager.opds.base import BaseOpdsModel
 from palace.manager.util.log import LoggerMixin
-
-# TODO: Remove this when we drop support for Python 3.10
-if sys.version_info >= (3, 11):
-    from enum import StrEnum
-else:
-    from backports.strenum import StrEnum
 
 
 class PublicationTypes(StrEnum):

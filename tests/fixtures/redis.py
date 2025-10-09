@@ -1,9 +1,9 @@
 from collections.abc import Generator
 from contextlib import contextmanager
+from typing import Self
 
 import pytest
 from pydantic_settings import SettingsConfigDict
-from typing_extensions import Self
 
 from palace.manager.service.redis.container import RedisContainer
 from palace.manager.service.redis.redis import Redis

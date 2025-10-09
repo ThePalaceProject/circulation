@@ -4,11 +4,10 @@ import re
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Self
 
 import opensearchpy.helpers
 from opensearchpy import MultiSearch, NotFoundError, OpenSearch, RequestError, Search
-from typing_extensions import Self
 
 from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.search.revision import SearchSchemaRevision

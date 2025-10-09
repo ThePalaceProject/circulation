@@ -1,16 +1,10 @@
 from __future__ import annotations
 
-import sys
-from typing import Any
+from typing import Any, Self
 
 from pydantic import Field, NonNegativeInt
 
 from palace.manager.util.flask_util import CustomBaseModel
-
-if sys.version_info >= (3, 11):
-    from typing import Self
-else:
-    from typing_extensions import Self
 
 
 class StatisticsBaseModel(CustomBaseModel):

@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 import functools
-import sys
 import uuid
 from collections.abc import Generator
 from dataclasses import dataclass, field
-from typing import IO, TYPE_CHECKING, NamedTuple, Protocol
+from typing import IO, TYPE_CHECKING, NamedTuple, Protocol, Self
 from unittest.mock import MagicMock
 from uuid import uuid4
 
@@ -20,12 +19,6 @@ from palace.manager.service.storage.s3 import (
 )
 from palace.manager.util.pydantic import HttpUrl
 from tests.fixtures.config import FixtureTestUrlConfiguration
-
-if sys.version_info >= (3, 11):
-    from typing import Self
-else:
-    from typing_extensions import Self
-
 
 if TYPE_CHECKING:
     from mypy_boto3_s3.client import S3Client

@@ -3,9 +3,9 @@ from __future__ import annotations
 import enum
 import json
 import logging
-import sys
 from abc import ABC
 from collections.abc import Iterable
+from typing import Self
 
 import flask
 import jwt
@@ -48,11 +48,6 @@ from palace.manager.util.http.exception import RemoteIntegrationException
 from palace.manager.util.log import LoggerMixin, elapsed_time_logging
 from palace.manager.util.opds_writer import OPDSFeed
 from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
-
-if sys.version_info >= (3, 11):
-    from typing import Self
-else:
-    from typing_extensions import Self
 
 
 class CirculationPatronProfileStorage(PatronProfileStorage):

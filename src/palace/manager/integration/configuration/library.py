@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import IntEnum
-from typing import Annotated, Any, cast
+from typing import Annotated, Any, Self, cast
 
 import wcag_contrast_ratio
 from pydantic import (
@@ -14,7 +14,6 @@ from pydantic import (
     model_validator,
 )
 from sqlalchemy.orm import Session
-from typing_extensions import Self
 
 from palace.manager.api.admin.problem_details import (
     INCOMPLETE_CONFIGURATION,

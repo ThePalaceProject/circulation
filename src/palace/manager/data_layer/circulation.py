@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 import datetime
-from typing import Literal, overload
+from typing import Literal, Self, overload
 
 from pydantic import model_validator
 from sqlalchemy.orm import Session
-from typing_extensions import Self
 
 from palace.manager.data_layer.base.mutable import BaseMutableData
 from palace.manager.data_layer.format import FormatData

@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Literal, Self, overload
 
 from pydantic import Field
 from sqlalchemy.orm import Session
-from typing_extensions import Self, overload
 
 from palace.manager.data_layer.base.frozen import BaseFrozenData
 from palace.manager.service.redis.key import RedisKeyGenerator

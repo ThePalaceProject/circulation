@@ -1,12 +1,11 @@
 from abc import ABC
 from functools import cached_property
-from typing import Any, Literal
+from typing import Any, Literal, Self
 
 from lxml import etree
 from pydantic import ConfigDict, NonNegativeInt, PositiveInt
 from pydantic.alias_generators import to_camel, to_pascal
 from pydantic_xml import BaseXmlModel, ParsingError, element, wrapped
-from typing_extensions import Self
 
 from palace.manager.api.circulation.exceptions import AlreadyOnHold
 from palace.manager.integration.license.boundless.constants import BoundlessFormat

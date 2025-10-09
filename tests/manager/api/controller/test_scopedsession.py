@@ -1,11 +1,11 @@
 from collections.abc import Generator
 from contextlib import contextmanager
+from typing import Self
 from unittest.mock import create_autospec
 
 import pytest
 from flask.ctx import RequestContext
 from sqlalchemy.orm import Session
-from typing_extensions import Self
 
 from palace.manager.api.app import app, initialize_database
 from palace.manager.sqlalchemy.flask_sqlalchemy_session import current_session
