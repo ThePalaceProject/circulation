@@ -1,24 +1,17 @@
 from __future__ import annotations
 
 # HasSessionCache
-import sys
 from abc import abstractmethod
 from collections import namedtuple
 from collections.abc import Callable, Hashable
 from types import SimpleNamespace
-from typing import TypeVar, cast
+from typing import Self, TypeVar, cast
 
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Mapped, Session
 
 from palace.manager.sqlalchemy.util import get_one
 from palace.manager.util.log import LoggerMixin
-
-if sys.version_info >= (3, 11):
-    from typing import Self
-else:
-    from typing_extensions import Self
-
 
 CacheTuple = namedtuple("CacheTuple", ["id", "key", "stats"])
 

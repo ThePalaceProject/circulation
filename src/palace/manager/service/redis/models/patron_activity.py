@@ -1,10 +1,8 @@
 import datetime
-import sys
+from enum import StrEnum
 from functools import cached_property
 from types import TracebackType
-from typing import Any, Literal, NamedTuple
-
-from typing_extensions import Self
+from typing import Any, Literal, NamedTuple, Self
 
 from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.service.redis.redis import Redis
@@ -12,12 +10,6 @@ from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.log import LoggerMixin
-
-# TODO: Remove this when we drop support for Python 3.10
-if sys.version_info >= (3, 11):
-    from enum import StrEnum
-else:
-    from backports.strenum import StrEnum
 
 
 class PatronActivityError(BasePalaceException, RuntimeError): ...
@@ -122,7 +114,7 @@ class PatronActivityStatus:
         state = data[cls.STATE_OFFSET.slice]
         timestamp = data[cls.TIMESTAMP_OFFSET.slice]
         aware_timestamp = datetime.datetime.fromisoformat(timestamp).replace(
-            tzinfo=datetime.timezone.utc
+            tzinfo=datetime.UTC
         )
         task_id = data[cls.TASK_ID_OFFSET.slice]
 
@@ -140,9 +132,7 @@ class PatronActivityStatus:
             )
 
         # Convert the timestamp to UTC before converting to a string.
-        utc_local = self.timestamp.astimezone(datetime.timezone.utc).replace(
-            tzinfo=None
-        )
+        utc_local = self.timestamp.astimezone(datetime.UTC).replace(tzinfo=None)
         timestamp_str = utc_local.isoformat(timespec="seconds")
         if len(timestamp_str) != self.TIMESTAMP_FIELD_LEN:
             raise ValueError(

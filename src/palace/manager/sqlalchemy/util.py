@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Generator, Mapping
-from typing import Any, Literal, TypeVar
+from typing import Any, Literal, Self, TypeVar
 
 from contextlib2 import contextmanager
 from frozendict import frozendict
@@ -12,7 +12,6 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext import mutable
 from sqlalchemy.orm import Session
-from typing_extensions import Self
 
 # This is the lock ID used to ensure that only one circulation manager
 # initializes or migrates the database at a time.

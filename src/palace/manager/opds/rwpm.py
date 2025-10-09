@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-import sys
 from collections.abc import Sequence
 from datetime import date
-from enum import auto
+from enum import StrEnum, auto
 from functools import cached_property
 from typing import Literal, TypeVar
 
@@ -18,12 +17,6 @@ from palace.manager.opds.util import (
     StrOrTuple,
     obj_or_tuple_to_tuple,
 )
-
-# TODO: Remove this when we drop support for Python 3.10
-if sys.version_info >= (3, 11):
-    from enum import StrEnum
-else:
-    from backports.strenum import StrEnum
 
 
 class Encryption(BaseOpdsModel):

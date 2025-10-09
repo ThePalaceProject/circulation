@@ -2,12 +2,11 @@ from __future__ import annotations
 
 from datetime import datetime
 from functools import cached_property
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Self
 from uuid import UUID
 
 import flask
 from pydantic import AwareDatetime, BaseModel, ConfigDict, computed_field
-from typing_extensions import Self
 
 from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.log import LoggerMixin

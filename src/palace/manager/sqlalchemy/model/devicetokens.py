@@ -1,4 +1,4 @@
-import sys
+from typing import Self
 
 from sqlalchemy import Column, Enum, ForeignKey, Index, Integer, Unicode
 from sqlalchemy.exc import IntegrityError
@@ -7,11 +7,6 @@ from sqlalchemy.orm import Mapped, relationship
 from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.sqlalchemy.model.base import Base
 from palace.manager.sqlalchemy.model.patron import Patron
-
-if sys.version_info >= (3, 11):
-    from typing import Self
-else:
-    from typing_extensions import Self
 
 
 class DeviceTokenTypes:

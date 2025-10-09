@@ -1,17 +1,10 @@
-import sys
-from enum import auto
+from enum import StrEnum, auto
 from functools import cached_property
 
 from pydantic import AwareDatetime, Field
 
 from palace.manager.opds.base import BaseOpdsModel
 from palace.manager.opds.types.link import BaseLink, CompactCollection
-
-# TODO: Remove this when we drop support for Python 3.10
-if sys.version_info >= (3, 11):
-    from enum import StrEnum
-else:
-    from backports.strenum import StrEnum
 
 
 class Link(BaseLink):

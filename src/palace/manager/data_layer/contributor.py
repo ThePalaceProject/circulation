@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 from itertools import chain
-from typing import Any, Literal
+from typing import Any, Literal, Self
 
 from frozendict import frozendict
 from sqlalchemy import Boolean, or_
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import ColumnElement
-from typing_extensions import Self
 
 from palace.manager.data_layer.base.frozen import BaseFrozenData
 from palace.manager.sqlalchemy.model.contributor import Contribution, Contributor

@@ -2,7 +2,7 @@ import json
 import re
 import typing
 from functools import cached_property
-from typing import Protocol, overload
+from typing import Protocol, Self, overload
 from urllib.parse import quote_plus
 
 from pydantic import (
@@ -15,7 +15,6 @@ from pydantic import (
 )
 from pydantic.alias_generators import to_camel
 from requests import Response
-from typing_extensions import Self
 
 from palace.manager.api.circulation.exceptions import (
     AlreadyCheckedOut,

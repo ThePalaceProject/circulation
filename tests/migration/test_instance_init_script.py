@@ -5,13 +5,13 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from io import StringIO
 from pathlib import Path
+from typing import Self
 from unittest.mock import MagicMock, Mock
 
 import pytest
 from pytest_alembic import MigrationContext
 from sqlalchemy import inspect
 from sqlalchemy.engine import Engine
-from typing_extensions import Self
 
 from palace.manager.scripts.initialization import InstanceInitializationScript
 from palace.manager.sqlalchemy.session import SessionManager

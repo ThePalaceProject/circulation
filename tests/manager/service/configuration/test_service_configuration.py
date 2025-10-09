@@ -2,13 +2,12 @@ from __future__ import annotations
 
 import json
 from functools import partial
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Self
 
 import pytest
 from pydantic import Field, ValidationError, field_validator, model_validator
 from pydantic_settings import SettingsConfigDict
 from pyfakefs.fake_filesystem import FakeFilesystem
-from typing_extensions import Self
 
 from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.service.configuration.service_configuration import (

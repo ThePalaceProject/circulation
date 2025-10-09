@@ -1,6 +1,7 @@
+from typing import Self
+
 from sqlalchemy import and_, false
 from sqlalchemy.orm import Session
-from typing_extensions import Self
 
 from palace.manager.feed.acquisition import OPDSAcquisitionFeed
 from palace.manager.feed.annotator.admin import AdminAnnotator

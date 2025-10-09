@@ -3,10 +3,9 @@ from __future__ import annotations
 from collections.abc import Generator
 from dataclasses import dataclass, field
 from datetime import date, datetime
-from typing import Any, cast
+from typing import Any, Self, cast
 
 from pydantic import ConfigDict
-from typing_extensions import Self
 
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier

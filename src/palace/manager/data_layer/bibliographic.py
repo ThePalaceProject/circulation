@@ -2,12 +2,11 @@ from __future__ import annotations
 
 import datetime
 from collections import defaultdict
-from typing import Any, Literal, overload
+from typing import Any, Literal, Self, overload
 
 from pydantic import AwareDatetime, Field, field_validator, model_validator
 from sqlalchemy import and_
 from sqlalchemy.orm import Query, Session
-from typing_extensions import Self
 
 from palace.manager.core.classifier import NO_NUMBER, NO_VALUE
 from palace.manager.core.exceptions import PalaceValueError

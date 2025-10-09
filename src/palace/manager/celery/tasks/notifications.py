@@ -1,7 +1,7 @@
 import datetime
 import logging
 import math
-import sys
+from enum import StrEnum
 from operator import and_
 
 from celery import shared_task
@@ -17,12 +17,6 @@ from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.licensing import LicensePool
 from palace.manager.sqlalchemy.model.patron import Hold, Loan
 from palace.manager.util.datetime_helpers import utc_now
-
-# TODO: Remove this when we drop support for Python 3.10
-if sys.version_info >= (3, 11):
-    from enum import StrEnum
-else:
-    from backports.strenum import StrEnum
 
 log = logging.getLogger(__name__)
 

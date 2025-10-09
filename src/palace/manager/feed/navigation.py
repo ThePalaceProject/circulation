@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Self
 
 from sqlalchemy.orm import Session
-from typing_extensions import Self
 from werkzeug.datastructures import MIMEAccept
 
 from palace.manager.feed.annotator.circulation import CirculationManagerAnnotator

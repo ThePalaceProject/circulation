@@ -2,9 +2,8 @@ from __future__ import annotations
 
 import base64
 import json
-import sys
 from collections.abc import Callable
-from typing import Any, Literal, overload
+from typing import Any, Literal, Self, overload
 
 from Crypto.Cipher.PKCS1_OAEP import PKCS1OAEP_Cipher
 from flask_babel import lazy_gettext as _
@@ -38,11 +37,6 @@ from palace.manager.sqlalchemy.util import get_one, get_one_or_create
 from palace.manager.util.http.http import HTTP, RequestKwargs
 from palace.manager.util.problem_detail import ProblemDetailException
 from palace.manager.util.pydantic import HttpUrl
-
-if sys.version_info >= (3, 11):
-    from typing import Self
-else:
-    from typing_extensions import Self
 
 
 class OpdsRegistrationServiceSettings(BaseSettings):

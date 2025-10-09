@@ -4,13 +4,12 @@ import logging
 import os
 import re
 from collections.abc import Iterable
-from typing import IO, Any
+from typing import IO, Any, Self
 from urllib.parse import unquote
 
 import feedparser
 import jsonschema
 import requests
-from typing_extensions import Self
 
 from palace.manager.util.resources import resources_dir
 

@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-import sys
 from collections.abc import Sequence
-from enum import auto
+from enum import StrEnum, auto
 from functools import cached_property
-from typing import Annotated, Any, Generic, TypeVar
+from typing import Annotated, Any, Generic, Self, TypeVar
 
 from pydantic import (
     AwareDatetime,
@@ -16,7 +15,6 @@ from pydantic import (
     field_validator,
     model_validator,
 )
-from typing_extensions import Self
 
 from palace.manager.opds import rwpm
 from palace.manager.opds.base import BaseOpdsModel
@@ -26,12 +24,6 @@ from palace.manager.opds.types.language import LanguageMap
 from palace.manager.opds.types.link import CompactCollection, LinkT
 from palace.manager.opds.util import StrOrTuple, obj_or_tuple_to_tuple
 from palace.manager.util.datetime_helpers import utc_now
-
-# TODO: Remove this when we drop support for Python 3.10
-if sys.version_info >= (3, 11):
-    from enum import StrEnum
-else:
-    from backports.strenum import StrEnum
 
 
 def validate_self_link(value: CompactCollection[LinkT]) -> CompactCollection[LinkT]:

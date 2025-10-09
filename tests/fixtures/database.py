@@ -12,7 +12,7 @@ from collections.abc import Generator, Iterable, Mapping
 from contextlib import contextmanager
 from functools import cached_property
 from textwrap import dedent
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Self
 from unittest.mock import patch
 
 import pytest
@@ -23,7 +23,6 @@ from sqlalchemy import MetaData, create_engine, event, text
 from sqlalchemy.engine import Connection, Engine, Transaction, make_url
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.orm.attributes import flag_modified
-from typing_extensions import Self
 
 from palace.manager.api.authentication.base import (
     AuthenticationProvider,

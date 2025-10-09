@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from typing import Self
+
 from pydantic import Field
 from sqlalchemy.orm import Session
-from typing_extensions import Self, TypedDict, Unpack
+from typing_extensions import TypedDict, Unpack
 
 from palace.manager.data_layer.base.frozen import BaseFrozenData
 from palace.manager.data_layer.policy.presentation import (

@@ -1,5 +1,6 @@
+from typing import Self
+
 from requests import Response
-from typing_extensions import Self
 
 from palace.manager.util.http.exception import BadResponseException
 from palace.manager.util.problem_detail import ProblemDetail

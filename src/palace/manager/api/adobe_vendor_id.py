@@ -2,9 +2,8 @@ from __future__ import annotations
 
 import base64
 import datetime
-import sys
 import uuid
-from typing import Any
+from typing import Any, Self
 
 import jwt
 from jwt.algorithms import HMACAlgorithm
@@ -30,11 +29,6 @@ from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.util.datetime_helpers import datetime_utc, utc_now
 from palace.manager.util.log import LoggerMixin
-
-if sys.version_info >= (3, 11):
-    from typing import Self
-else:
-    from typing_extensions import Self
 
 
 class AuthdataUtility(LoggerMixin):
