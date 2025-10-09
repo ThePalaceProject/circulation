@@ -84,8 +84,7 @@ def test_publication_feed_tf(
     assert pub1.metadata.publisher == "Routledge"
     assert pub1.metadata.author == ("Kamran Mofid",)
 
-    # Test second publication - year-only date (critical test case for PP-2997)
-    # This was being parsed as Unix timestamp before the fix
+    # Test second publication - year-only date
     pub2 = feed.publications[1]
     assert pub2.metadata.identifier == "urn:isbn:9780429198069"
     assert pub2.metadata.title == "Hunger and Famine in the Long Nineteenth Century"
