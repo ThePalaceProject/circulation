@@ -1,5 +1,4 @@
 from pydantic import (
-    AwareDatetime,
     Base64Bytes,
     Field,
     NonNegativeInt,
@@ -9,6 +8,7 @@ from pydantic import (
 
 from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.opds.base import BaseOpdsModel
+from palace.manager.opds.types.date import Iso8601AwareDatetime
 from palace.manager.opds.types.link import BaseLink, CompactCollection
 
 
@@ -65,8 +65,8 @@ class Rights(BaseOpdsModel):
     # number of characters/pages allowed to be copied/printed.
     allow_copy: NonNegativeInt | None = Field(None, alias="copy")
     allow_print: NonNegativeInt | None = Field(None, alias="print")
-    start: AwareDatetime | None = None
-    end: AwareDatetime | None = None
+    start: Iso8601AwareDatetime | None = None
+    end: Iso8601AwareDatetime | None = None
 
 
 class User(BaseOpdsModel):
@@ -103,9 +103,9 @@ class LicenseDocument(BaseOpdsModel):
         return "application/vnd.readium.lcp.license.v1.0+json"
 
     id: str
-    issued: AwareDatetime
+    issued: Iso8601AwareDatetime
     provider: str
-    updated: AwareDatetime | None = None
+    updated: Iso8601AwareDatetime | None = None
     encryption: Encryption
     links: CompactCollection[Link]
     rights: Rights | None = None

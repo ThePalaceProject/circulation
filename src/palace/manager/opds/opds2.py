@@ -2,26 +2,27 @@ from __future__ import annotations
 
 import sys
 from collections.abc import Sequence
+from datetime import datetime
 from enum import auto
 from functools import cached_property
 from typing import Annotated, Any, Generic, TypeVar
 
 from pydantic import (
-    AwareDatetime,
     Field,
     NonNegativeFloat,
     NonNegativeInt,
-    PastDatetime,
     PositiveInt,
     field_validator,
     model_validator,
 )
+from pydantic_core import PydanticCustomError
 from typing_extensions import Self
 
 from palace.manager.opds import rwpm
 from palace.manager.opds.base import BaseOpdsModel
 from palace.manager.opds.palace import PalacePublicationMetadata
 from palace.manager.opds.types.currency import CurrencyCode
+from palace.manager.opds.types.date import Iso8601AwareDatetime
 from palace.manager.opds.types.language import LanguageMap
 from palace.manager.opds.types.link import CompactCollection, LinkT
 from palace.manager.opds.util import StrOrTuple, obj_or_tuple_to_tuple
@@ -116,8 +117,8 @@ class Availability(BaseOpdsModel):
     """
 
     state: AvailabilityState = AvailabilityState.available
-    since: Annotated[AwareDatetime, PastDatetime] | None = None
-    until: AwareDatetime | None = None
+    since: Iso8601AwareDatetime | None = None
+    until: Iso8601AwareDatetime | None = None
 
     @property
     def available(self) -> bool:
@@ -136,6 +137,17 @@ class Availability(BaseOpdsModel):
         return self.state == AvailabilityState.available or (
             self.until is not None and self.until < utc_now()
         )
+
+    @field_validator("since", mode="after")
+    @classmethod
+    def _check_past_datetime(cls, value: datetime | None) -> datetime | None:
+        """Validate that the datetime is in the past."""
+        if value is not None and value > utc_now():
+            raise PydanticCustomError(
+                "past_datetime",
+                "Datetime must be in the past",
+            )
+        return value
 
 
 class LinkProperties(rwpm.LinkProperties):
@@ -202,7 +214,7 @@ class FeedMetadata(BaseOpdsModel):
     title: LanguageMap
     type: str | None = Field(None, alias="@type")
     subtitle: LanguageMap | None = None
-    modified: AwareDatetime | None = None
+    modified: Iso8601AwareDatetime | None = None
     description: str | None = None
 
     items_per_page: PositiveInt | None = Field(None, alias="itemsPerPage")
