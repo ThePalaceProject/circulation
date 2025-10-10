@@ -7,7 +7,7 @@ source env/bin/activate
 
 # Make sure the log directory exists and is writable
 mkdir -p /var/log/celery
-chown 1000:adm /var/log/celery
+chown simplified:adm /var/log/celery
 
 # Start the celery worker
-exec env/bin/celery -A "palace.manager.celery.app" worker --uid 1000 --gid 1000 --concurrency 2 --hostname high@%h -Q high --logfile /var/log/celery/high.log
+exec env/bin/celery -A "palace.manager.celery.app" worker --uid simplified --gid simplified --concurrency 2 --hostname high@%h -Q high --logfile /var/log/celery/high.log

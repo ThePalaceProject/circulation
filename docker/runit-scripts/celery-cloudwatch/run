@@ -6,4 +6,4 @@ cd /var/www/circulation
 source env/bin/activate
 
 # Start the cloudwatch celery process
-exec env/bin/celery -A "palace.manager.celery.app" events -c "palace.manager.celery.monitoring.Cloudwatch" -F 60 --uid 1000 --gid 1000  --logfile /var/log/celery/cloudwatch.log
+exec env/bin/celery -A "palace.manager.celery.app" events -c "palace.manager.celery.monitoring.Cloudwatch" -F 60 --uid simplified --gid simplified  --logfile /var/log/celery/cloudwatch.log
