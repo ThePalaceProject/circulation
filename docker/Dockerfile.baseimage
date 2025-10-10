@@ -50,14 +50,14 @@ RUN install_clean \
     /bd_build/cleanup.sh
 
 # Create user and app folder
-RUN useradd -ms /bin/bash -U simplified && \
+RUN useradd -ms /bin/bash -U palace && \
     mkdir -p /var/www/circulation && \
-    su - simplified -c "ln -s /var/www/circulation /home/simplified/circulation" && \
-    chown -RHh simplified:simplified /home/simplified/circulation && \
+    su - palace -c "ln -s /var/www/circulation /home/palace/circulation" && \
+    chown -RHh palace:palace /home/palace/circulation && \
     mkdir /var/log/simplified
 
 WORKDIR /var/www/circulation
-COPY --chown=simplified:simplified poetry.lock pyproject.toml /var/www/circulation/
+COPY --chown=palace:palace poetry.lock pyproject.toml /var/www/circulation/
 
 # Setup virtualenv and install our python dependencies.
 # What we install is based on the poetry.lock file in the repo at the time this

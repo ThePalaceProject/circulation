@@ -11,7 +11,7 @@ CORE_BINDIR=$WORKDIR/core/bin
 initialization_task="${BINDIR}/util/initialize_instance"
 migration_logfile="/var/log/migrate.log"
 
-su simplified <<EOF 2>&1 | tee -a ${migration_logfile}
+su palace <<EOF 2>&1 | tee -a ${migration_logfile}
 # Default value 'ignore' does nothing.
 
 echo "-- Begin Migrate --"

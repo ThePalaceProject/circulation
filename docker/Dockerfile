@@ -17,11 +17,11 @@ COPY docker/startup /etc/my_init.d/
 COPY --chmod=644 docker/services/logrotate /etc/
 
 # Copy our poetry files into the image and install our dependencies.
-COPY --chown=simplified:simplified poetry.lock pyproject.toml /var/www/circulation/
+COPY --chown=palace:palace poetry.lock pyproject.toml /var/www/circulation/
 RUN . env/bin/activate && \
     poetry sync --only main,pg --no-root
 
-COPY --chown=simplified:simplified . /var/www/circulation
+COPY --chown=palace:palace . /var/www/circulation
 
 RUN . env/bin/activate && \
     poetry install --only-root
@@ -35,7 +35,7 @@ FROM common AS exec
 ENV SIMPLIFIED_SCRIPT_NAME=""
 
 VOLUME /var/log
-WORKDIR /home/simplified/circulation/bin
+WORKDIR /home/palace/circulation/bin
 CMD ["/sbin/my_init", "--skip-runit", "--quiet", "--", \
      "/bin/bash", "-c", \
      "source ../env/bin/activate && ./${SIMPLIFIED_SCRIPT_NAME}"]
@@ -58,7 +58,7 @@ COPY docker/services/cron /etc/
 COPY docker/runit-scripts /etc/service/
 
 VOLUME /var/log
-WORKDIR /home/simplified/circulation/bin
+WORKDIR /home/palace/circulation/bin
 
 CMD ["/sbin/my_init"]
 
@@ -74,13 +74,13 @@ COPY docker/services/nginx /etc/nginx/
 # Setup uwsgi
 COPY docker/services/uwsgi /etc/
 RUN mkdir /var/run/uwsgi && \
-    chown simplified:simplified /var/run/uwsgi
+    chown palace:palace /var/run/uwsgi
 
 # Setup runit
 COPY docker/runit-web /etc/service/
 
 VOLUME /var/log
-WORKDIR /home/simplified/circulation
+WORKDIR /home/palace/circulation
 EXPOSE 80
 
 CMD ["/sbin/my_init"]

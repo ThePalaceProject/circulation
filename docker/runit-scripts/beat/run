@@ -7,11 +7,11 @@ source env/bin/activate
 
 # Make sure the log directory exists and is writable
 mkdir -p /var/log/celery
-chown simplified:adm /var/log/celery
+chown palace:adm /var/log/celery
 
 # Make sure the run directory exists and is writable
 mkdir -p /var/run/celery
-chown simplified:simplified /var/run/celery
+chown palace:palace /var/run/celery
 
 # Start the celery beat process
-exec env/bin/celery -A "palace.manager.celery.app" beat --uid simplified --gid simplified --logfile /var/log/celery/beat.log -s /var/run/celery/beat-schedule
+exec env/bin/celery -A "palace.manager.celery.app" beat --uid palace --gid palace --logfile /var/log/celery/beat.log -s /var/run/celery/beat-schedule

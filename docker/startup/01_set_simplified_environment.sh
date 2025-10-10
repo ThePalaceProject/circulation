@@ -19,4 +19,4 @@ for var in $(printenv | grep -e SIMPLIFIED -e LIBSIMPLE -e PALACE | sed -e 's/^\
 } done > $SIMPLIFIED_ENVIRONMENT
 
 # Give it to the appropriate user.
-chown simplified:simplified $SIMPLIFIED_ENVIRONMENT
+chown palace:palace $SIMPLIFIED_ENVIRONMENT

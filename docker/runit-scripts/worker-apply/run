@@ -7,7 +7,7 @@ source env/bin/activate
 
 # Make sure the log directory exists and is writable
 mkdir -p /var/log/celery
-chown simplified:adm /var/log/celery
+chown palace:adm /var/log/celery
 
 # Tune the configuration for this worker, since it handles high volume
 # short running tasks, its configuration needs to be different from the
@@ -18,4 +18,4 @@ export PALACE_CELERY_WORKER_MAX_TASKS_PER_CHILD="${PALACE_CELERY_WORKER_APPLY_MA
 export PALACE_CELERY_WORKER_PREFETCH_MULTIPLIER="${PALACE_CELERY_WORKER_APPLY_PREFETCH_MULTIPLIER:-32}"
 
 # Start the celery worker
-exec env/bin/celery -A "palace.manager.celery.app" worker --uid simplified --gid simplified --concurrency 6 --hostname apply@%h -Q apply --logfile /var/log/celery/apply.log
+exec env/bin/celery -A "palace.manager.celery.app" worker --uid palace --gid palace --concurrency 6 --hostname apply@%h -Q apply --logfile /var/log/celery/apply.log
