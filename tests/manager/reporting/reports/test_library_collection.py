@@ -424,44 +424,6 @@ class TestLibraryCollectionReport:
             with zipfile.ZipFile(package, "r") as archive:
                 assert len(archive.namelist()) == 0
 
-    def test_package_results_rollover(
-        self,
-        report_fixture: LibraryCollectionReportFixture,
-    ):
-        """Test that SpooledTemporaryFile rollover works correctly with zipfile.
-
-        I added this test to ensure that the pre-Python 3.11, SpooledTemporaryFile
-        behaves correctly when it "rolls over" to on-disk storage.
-        TODO: This is probably amply tested in Python 3.11+, so we can probably
-         remove once we drop support for Python 3.10. Though there's no harm in
-         keeping this test around, either.
-        """
-        content = b"header1,header2\r\ndata1,data2\r\n"
-
-        result = TableProcessingResult(
-            key="test-table",
-            title="Test Table",
-            filename="test-table.csv",
-            row_count=1,
-            content_stream=BytesIO(content),
-        )
-        results = [result]
-
-        report = report_fixture.report
-        with ExitStack() as stack:
-            package = report._package_results(results, stack=stack)
-
-            # Force rollover to disk...
-            package.rollover()  # type: ignore[attr-defined]
-
-            # ... and verify that we are allowed to seek.
-            package.seek(0)
-            with zipfile.ZipFile(package, "r") as archive:
-                assert "test-table.csv" in archive.namelist()
-
-                with archive.open("test-table.csv") as f:
-                    assert f.read() == content
-
     def test_store_package(
         self,
         report_fixture: LibraryCollectionReportFixture,
