@@ -3,12 +3,11 @@ from __future__ import annotations
 import datetime
 import logging
 from collections.abc import Mapping
-from typing import Literal
+from typing import Literal, Unpack
 
 import flask
 from flask_babel import lazy_gettext as _
 from sqlalchemy.orm import Session
-from typing_extensions import Unpack
 
 from palace.manager.api.circulation.base import (
     BaseCirculationAPI,

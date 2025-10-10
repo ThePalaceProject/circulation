@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import urllib
 from abc import ABC
+from typing import Unpack
 
 from sqlalchemy.orm import Session
-from typing_extensions import TypeVar, Unpack
+from typing_extensions import TypeVar
 
 from palace.manager.api.circulation.base import BaseCirculationAPI
 from palace.manager.api.circulation.data import HoldInfo, LoanInfo

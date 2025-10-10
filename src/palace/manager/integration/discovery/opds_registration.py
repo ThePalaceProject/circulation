@@ -3,7 +3,7 @@ from __future__ import annotations
 import base64
 import json
 from collections.abc import Callable
-from typing import Any, Literal, Self, overload
+from typing import Any, Literal, Self, Unpack, overload
 
 from Crypto.Cipher.PKCS1_OAEP import PKCS1OAEP_Cipher
 from flask_babel import lazy_gettext as _
@@ -11,7 +11,6 @@ from html_sanitizer import Sanitizer
 from requests import Response
 from sqlalchemy import select
 from sqlalchemy.orm.session import Session
-from typing_extensions import Unpack
 
 from palace.manager.api.config import Configuration
 from palace.manager.api.problem_details import (

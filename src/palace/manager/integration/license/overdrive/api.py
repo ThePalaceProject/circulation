@@ -5,7 +5,7 @@ import json
 from collections.abc import Generator, Iterable
 from functools import partial
 from threading import RLock
-from typing import Any, NamedTuple, TypeVar, cast, overload
+from typing import Any, NamedTuple, TypeVar, Unpack, cast, overload
 from urllib.parse import urlsplit
 
 import flask
@@ -13,7 +13,6 @@ from pydantic import ValidationError
 from requests import Response
 from requests.structures import CaseInsensitiveDict
 from sqlalchemy.orm import Session
-from typing_extensions import Unpack
 
 from palace.manager.api.circulation.base import (
     BaseCirculationAPI,

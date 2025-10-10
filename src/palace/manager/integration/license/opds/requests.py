@@ -4,12 +4,11 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable
 from enum import Enum
 from functools import partial
-from typing import TypeVar, overload
+from typing import TypeVar, Unpack, overload
 
 import feedparser
 from pydantic import ValidationError
 from requests import Response
-from typing_extensions import Unpack
 
 from palace.manager.api.model.token import OAuthTokenResponse
 from palace.manager.core.exceptions import IntegrationException, PalaceValueError

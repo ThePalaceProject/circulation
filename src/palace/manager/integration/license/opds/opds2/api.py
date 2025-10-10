@@ -3,11 +3,11 @@ from __future__ import annotations
 from collections.abc import MutableSet
 from datetime import datetime
 from enum import StrEnum
+from typing import Unpack
 
 from celery.canvas import Signature
 from croniter import croniter
 from sqlalchemy.orm import Session
-from typing_extensions import Unpack
 from uritemplate import URITemplate
 
 from palace.manager.api.circulation.base import BaseCirculationAPI

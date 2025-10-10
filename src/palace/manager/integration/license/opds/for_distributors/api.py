@@ -3,10 +3,10 @@ from __future__ import annotations
 import datetime
 import json
 from collections.abc import Generator
+from typing import Unpack
 
 from celery.canvas import Signature
 from sqlalchemy.orm import Session
-from typing_extensions import Unpack
 
 from palace.manager.api.circulation.base import BaseCirculationAPI
 from palace.manager.api.circulation.data import HoldInfo, LoanInfo
