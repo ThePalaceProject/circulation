@@ -8,8 +8,7 @@
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/pre-commit/pre-commit)
 ![Python: 3.12,3.13](https://img.shields.io/badge/Python-3.12%20|%203.13-blue)
 
-This is a [The Palace Project](https://thepalaceproject.org) maintained fork of the NYPL
-[Library Simplified](http://www.librarysimplified.org/) Circulation Manager.
+Palace Manager is a backend service for digital library systems, maintained by [The Palace Project](https://thepalaceproject.org).
 
 ## Installation
 
@@ -25,23 +24,20 @@ Docker images are the preferred way to deploy this code in a production environm
 
 | Branch   | Python Version |
 | -------- | -------------- |
-| main     | Python 3       |
-| python2  | Python 2       |
+| main     | Python 3.12+   |
+| python2  | Python 2 (deprecated) |
 
-The default branch is `main` and that's the working branch that should be used when branching off for bug fixes or new
-features.
+The default branch is `main`. All bug fixes and new features should branch off from `main`.
 
-Python 2 stopped being supported after January 1st, 2020 but there is still a `python2` branch which can be used. As of
-August 2021, development will be done in the `main` branch and the `python2` branch will not be updated unless
-absolutely necessary.
+**Note:** Python 2 support ended January 1, 2020. The `python2` branch is deprecated and no longer maintained.
 
 ## Set Up
 
 ### Docker Compose
 
 In order to help quickly set up a development environment, we include a [docker-compose.yml](./docker-compose.yml)
-file. This docker-compose file, will build the webapp and scripts containers from your local repository, and start
-those containers as well as all the necessary service containers.
+file. This docker-compose file will build the webapp and scripts containers from your local repository and start
+those containers along with all the necessary service containers.
 
 You can give this a try by running the following command:
 
@@ -72,7 +68,7 @@ pacman -S python
 
 #### pyenv
 
-[pyenv](https://github.com/pyenv/pyenv) pyenv lets you easily switch between multiple versions of Python. It can be
+[pyenv](https://github.com/pyenv/pyenv) lets you easily switch between multiple versions of Python. It can be
 [installed](https://github.com/pyenv/pyenv-installer) using the command `curl https://pyenv.run | bash`. You can then
 install the version of Python you want to work with.
 
@@ -103,14 +99,13 @@ Poetry can be installed using the command `curl -sSL https://install.python-poet
 More information about installation options can be found in the
 [poetry documentation](https://python-poetry.org/docs/master/#installation).
 
-### Opensearch
+### OpenSearch
 
-Palace now supports Opensearch: please use it instead of Elasticsearch.
-Elasticsearch is no longer supported.
+Palace now uses OpenSearch for search functionality. Elasticsearch is no longer supported.
 
 #### Docker
 
-We recommend that you run Opensearch with docker using the following docker commands:
+We recommend that you run OpenSearch with Docker using the following commands:
 
 ```sh
 docker run --name opensearch -d --rm -p 9200:9200 -e "discovery.type=single-node" -e "plugins.security.disabled=true" "opensearchproject/opensearch:1"
@@ -162,16 +157,16 @@ To let the application know which database to use, set the `SIMPLIFIED_PRODUCTIO
 export SIMPLIFIED_PRODUCTION_DATABASE="postgresql://palace:test@localhost:5432/circ"
 ```
 
-#### Opensearch
+#### OpenSearch
 
-To let the application know which Opensearch instance to use, you can set the following environment variables:
+To let the application know which OpenSearch instance to use, you can set the following environment variables:
 
-- `PALACE_SEARCH_URL`: The url of the Opensearch instance (**required**).
-- `PALACE_SEARCH_INDEX_PREFIX`: The prefix to use for the Opensearch indices. The default is `circulation-works`.
-    This is useful if you want to use the same Opensearch instance for multiple CM (optional).
-- `PALACE_SEARCH_TIMEOUT`: The timeout in seconds to use when connecting to the Opensearch instance. The default is `20`
+- `PALACE_SEARCH_URL`: The URL of the OpenSearch instance (**required**).
+- `PALACE_SEARCH_INDEX_PREFIX`: The prefix to use for the OpenSearch indices. The default is `circulation-works`.
+    This is useful if you want to use the same OpenSearch instance for multiple Circulation Manager instances (optional).
+- `PALACE_SEARCH_TIMEOUT`: The timeout in seconds to use when connecting to the OpenSearch instance. The default is `20`
   (optional).
-- `PALACE_SEARCH_MAXSIZE`: The maximum size of the connection pool to use when connecting to the Opensearch instance.
+- `PALACE_SEARCH_MAXSIZE`: The maximum size of the connection pool to use when connecting to the OpenSearch instance
   (optional).
 
 ```sh
@@ -181,19 +176,17 @@ export PALACE_SEARCH_URL="http://localhost:9200"
 #### Celery
 
 We use [Celery](https://docs.celeryproject.org/en/stable/) to run background tasks. To configure Celery, you need to
-pass a broker URL and a result backend url to the application.
+pass a broker URL and a result backend URL to the application.
 
-- `PALACE_CELERY_BROKER_URL`: The URL of the broker to use for Celery. (**required**).
-    - for example:
+- `PALACE_CELERY_BROKER_URL`: The URL of the broker to use for Celery (**required**).
+    - For example:
         ```sh
-          export PALACE_CELERY_BROKER_URL="redis://localhost:6379/0"`
-
+        export PALACE_CELERY_BROKER_URL="redis://localhost:6379/0"
         ```
-- `PALACE_CELERY_RESULT_BACKEND`: The url of the result backend to use for Celery. (**required**).
-    - for example:
+- `PALACE_CELERY_RESULT_BACKEND`: The URL of the result backend to use for Celery (**required**).
+    - For example:
         ```sh
-          export PALACE_CELERY_RESULT_BACKEND="redis://localhost:6379/2"`
-
+        export PALACE_CELERY_RESULT_BACKEND="redis://localhost:6379/2"
         ```
 
 We support overriding a number of other Celery settings via environment variables, but in most cases
@@ -202,28 +195,28 @@ the defaults should be sufficient. The full list of settings can be found in
 
 #### Redis
 
-We use Redis as the caching layer for the application. Although you can use the same redis database for both
+We use Redis as the caching layer for the application. Although you can use the same Redis database for both
 Celery and caching, we recommend that you use a separate database for each purpose to avoid conflicts.
 
-- `PALACE_REDIS_URL`: The URL of the Redis instance to use for caching. (**required**).
-    - for example:
+- `PALACE_REDIS_URL`: The URL of the Redis instance to use for caching (**required**).
+    - For example:
         ```sh
-          export PALACE_REDIS_URL="redis://localhost:6379/1"
+        export PALACE_REDIS_URL="redis://localhost:6379/1"
         ```
 - `PALACE_REDIS_KEY_PREFIX`: The prefix to use for keys stored in the Redis instance. The default is `palace`.
-    This is useful if you want to use the same Redis database for multiple CM (optional).
+    This is useful if you want to use the same Redis database for multiple Circulation Manager instances (optional).
 
 #### General
 
 - `PALACE_BASE_URL`: The base URL of the application. Used to create absolute links. (optional)
-- `PALACE_PATRON_WEB_HOSTNAMES`: Only web applications from these hosts can access this circulation manager. This can
+- `PALACE_PATRON_WEB_HOSTNAMES`: Only web applications from these hosts can access this Circulation Manager. This can
    be a single hostname (`http://catalog.library.org`) or a pipe-separated list of hostnames
    (`http://catalog.library.org|https://beta.library.org`). You can also set this to `*` to allow access from any host,
-   but you must not do this in a production environment -- only during development. (optional)
+   but you must not do this in a production environment—only during development (optional).
 
 #### Storage Service
 
-The application optionally uses a s3 compatible storage service to store files. To configure the application to use
+The application optionally uses an S3-compatible storage service to store files. To configure the application to use
 a storage service, you can set the following environment variables:
 
 - `PALACE_STORAGE_PUBLIC_ACCESS_BUCKET`: Required if you want to use the storage service to serve files directly to
@@ -236,9 +229,9 @@ a storage service, you can set the following environment variables:
       [documentation](https://boto3.amazonaws.com/v1/documentation/api/latest/guide/credentials.html#configuring-credentials).
 - `PALACE_STORAGE_SECRET_KEY`: The secret key (optional).
 - `PALACE_STORAGE_REGION`: The AWS region of the storage service (optional).
-- `PALACE_STORAGE_ENDPOINT_URL`: The endpoint of the storage service (optional). This is used if you are using a
-  s3 compatible storage service like [minio](https://min.io/).
-- `PALACE_STORAGE_URL_TEMPLATE`: The url template to use when generating urls for files stored in the storage service
+- `PALACE_STORAGE_ENDPOINT_URL`: The endpoint of the storage service (optional). This is used if you are using an
+  S3-compatible storage service like [minio](https://min.io/).
+- `PALACE_STORAGE_URL_TEMPLATE`: The URL template to use when generating URLs for files stored in the storage service
   (optional).
     - The default value is `https://{bucket}.s3.{region}.amazonaws.com/{key}`.
     - The following variables can be used in the template:
@@ -248,12 +241,12 @@ a storage service, you can set the following environment variables:
 
 #### Reporting
 
-- `PALACE_REPORTING_NAME`: (Optional) A name used to identify the CM instance associated with generated reports.
-- `PALACE_GOOGLE_DRIVE_SERVICE_INFO_JSON`: (Optional) A JSON string containing a Google Drive service account configuration.
-  - c.f. [Creating service account credentials](https://developers.google.com/workspace/guides/create-credentials#service-account)
-- `PALACE_GOOGLE_DRIVE_PARENT_FOLDER_ID`: (Optional) The ID for a Google Drive Parent Folder/Shared Drive.
-  - e.g. Given the google drive folder at : `https://drive.google.com/drive/u/1/folders/0AGtlKYStJaC3Uk9PVZ`,
-  `0AGtlKYStJaC3Uk9PVZ` (not a real folder ID) is the value that should be assigned environment variable.
+- `PALACE_REPORTING_NAME`: A name used to identify the Circulation Manager instance associated with generated reports (optional).
+- `PALACE_GOOGLE_DRIVE_SERVICE_INFO_JSON`: A JSON string containing a Google Drive service account configuration (optional).
+  - See [Creating service account credentials](https://developers.google.com/workspace/guides/create-credentials#service-account)
+- `PALACE_GOOGLE_DRIVE_PARENT_FOLDER_ID`: The ID for a Google Drive Parent Folder/Shared Drive (optional).
+  - For example, given the Google Drive folder at `https://drive.google.com/drive/u/1/folders/0AGtlKYStJaC3Uk9PVZ`,
+  `0AGtlKYStJaC3Uk9PVZ` (not a real folder ID) is the value that should be assigned to this environment variable.
 
 #### Logging
 
@@ -297,13 +290,14 @@ export PALACE_FCM_CREDENTIALS_FILE="/opt/credentials/fcm_credentials.json"
 The FCM credentials can be downloaded once a Google Service account has been created.
 More details in the [FCM documentation](https://firebase.google.com/docs/admin/setup#set-up-project-and-service-account)
 
-#### Quicksight Dashboards
+#### QuickSight Dashboards
 
-For generating quicksight dashboard links the following environment variable is required
-`PALACE_QUICKSIGHT_AUTHORIZED_ARNS` - A dictionary of the format `"<dashboard name>": ["arn:aws:quicksight:...",...]`
-where each quicksight dashboard gets treated with an arbitrary "name", and a list of "authorized arns".
-The first the "authorized arns" is always considered as the `InitialDashboardID` when creating an embed URL
-for the respective "dashboard name".
+For generating QuickSight dashboard links, the following environment variable is required:
+
+- `PALACE_QUICKSIGHT_AUTHORIZED_ARNS` - A dictionary of the format `"<dashboard name>": ["arn:aws:quicksight:...",...]`
+  where each QuickSight dashboard gets assigned an arbitrary "name" and a list of "authorized ARNs".
+  The first of the "authorized ARNs" is always considered as the `InitialDashboardID` when creating an embed URL
+  for the respective "dashboard name".
 
 #### Support Contact URL
 
@@ -315,27 +309,26 @@ export PALACE_ADMINUI_SUPPORT_CONTACT_URL=mailto:helpdesk@example.com
 
 #### Analytics
 
-Local analytics are enabled by default. S3 analytics can be enabled via the following environment variable:
+Local analytics are enabled by default. S3 analytics can be enabled using the following environment variable:
 
-- PALACE_S3_ANALYTICS_ENABLED: A boolean value to disable or enable s3 analytics. The default is false.
+- `PALACE_S3_ANALYTICS_ENABLED`: A boolean value to enable or disable S3 analytics. The default is `false`.
 
 #### Email
 
-To use the features that require sending emails, for example to reset the password for logged-out users, you will need
-to have a working SMTP server and set some environment variables:
+To use features that require sending emails (for example, to reset passwords for logged-out users), you will need
+a working SMTP server and must set the following environment variables:
 
-- `PALACE_MAIL_SERVER` - The SMTP server to use. Required if you want to send emails.
-- `PALACE_MAIL_PORT` - The port of the SMTP server. Default: 25. (optional)
-- `PALACE_MAIL_USERNAME` - The username to use when connecting to the SMTP server. (optional)
-- `PALACE_MAIL_PASSWORD` - The password to use when connecting to the SMTP server. (optional)
-- `PALACE_MAIL_SENDER` - The email address to use as the sender of the emails. (optional)
+- `PALACE_MAIL_SERVER`: The SMTP server to use. Required if you want to send emails.
+- `PALACE_MAIL_PORT`: The port of the SMTP server. Default: `25` (optional).
+- `PALACE_MAIL_USERNAME`: The username to use when connecting to the SMTP server (optional).
+- `PALACE_MAIL_PASSWORD`: The password to use when connecting to the SMTP server (optional).
+- `PALACE_MAIL_SENDER`: The email address to use as the sender of emails (optional).
 
 ## Running the Application
 
-As mentioned in the [pyenv](#pyenv) section, the `poetry` tool should be executed under a virtual environment
-in order to guarantee that it will use the Python version you expect. To use a particular Python version,
-you should create a local virtual environment in the cloned `circulation` repository directory. Assuming that
-you want to use, for example, Python 3.12.1:
+As mentioned in the [pyenv](#pyenv) section, the `poetry` tool should be executed within a virtual environment
+to ensure it uses the expected Python version. To use a particular Python version,
+create a local virtual environment in the cloned `circulation` repository directory. For example, to use Python 3.12.1:
 
 ```sh
 pyenv virtualenv 3.12.1 circ
@@ -467,9 +460,9 @@ service has been configured.
 #### Configuring Search
 
 Navigate to `System Configuration → Search` and add a new search configuration. The required URL is
-the URL of the [Opensearch instance configured earlier](#opensearch):
+the URL of the [OpenSearch instance configured earlier](#opensearch):
 
-![Opensearch](.github/readme/search.png)
+![OpenSearch](.github/readme/search.png)
 
 #### Generating Search Indices
 
@@ -529,31 +522,31 @@ These can be found at `/admin/web/config/SitewideSettings` in the admin interfac
 
 #### Push Notification Status
 
-This setting is a toggle that may be used to turn on or off the ability for the the system
-to send the Loan and Hold reminders to the mobile applications.
+This setting is a toggle that may be used to turn on or off the ability for the system
+to send Loan and Hold reminders to the mobile applications.
 
 ## Scheduled Jobs
 
 The Palace Manager has a number of background jobs that are scheduled to run at regular intervals. This
-includes all the import and reaper jobs, as well as other necessary background tasks, such as maintaining
+includes all import and reaper jobs, as well as other necessary background tasks such as maintaining
 the search index and feed caches.
 
 Jobs are scheduled via a combination of `cron` and `celery`. All new jobs should use `celery` for scheduling,
 and existing jobs are being migrated to `celery` as they are updated.
 
 The `cron` jobs are defined in the `docker/services/simplified_crontab` file. The `celery` jobs are defined
-in the `core/celery/tasks/` module.
+in the `src/palace/manager/celery/tasks/` module.
 
 ## Code Style
 
-Code style on this project is linted using [pre-commit](https://pre-commit.com/). This python application is included
-in our `pyproject.toml` file, so if you have the applications requirements installed it should be available. pre-commit
-is run automatically on each push and PR by our [CI System](#continuous-integration).
+Code style on this project is linted using [pre-commit](https://pre-commit.com/). This Python application is included
+in our `pyproject.toml` file, so if you have the application's requirements installed it should be available. pre-commit
+runs automatically on each push and PR via our [CI system](#continuous-integration).
 
 You can run it manually on all files with the command: `pre-commit run --all-files`.
 
-You can also set it up, so that it runs automatically for you on each commit. Running the command `pre-commit install`
-will install the pre-commit script in your local repositories git hooks folder, so that pre-commit is run automatically
+You can also set it up so that it runs automatically for you on each commit. Running the command `pre-commit install`
+will install the pre-commit script in your local repository's git hooks folder, so that pre-commit runs automatically
 on each commit.
 
 ### Configuration
@@ -661,9 +654,9 @@ Test with Python 3.12 using docker containers for the services.
 tox -e "py312-docker"
 ```
 
-### Local services
+### Local Services
 
-If you already have elastic search or postgres running locally, you can run them instead by setting the
+If you already have OpenSearch or PostgreSQL running locally, you can use them instead by setting the
 following environment variables:
 
 - `PALACE_TEST_DATABASE_URL`
@@ -685,12 +678,10 @@ provided database URL and create a new database for each test run. If the user d
 to create and drop databases, the tests will fail. You can disable this behavior by setting the
 `PALACE_TEST_DATABASE_CREATE_DATABASE` environment variable to `false`.
 
-```sh
+### Override `pytest` Arguments
 
-### Override `pytest` arguments
-
-If you wish to pass additional arguments to `pytest` you can do so through `tox`. Every argument passed after a `--` to
-the `tox` command line will the passed to `pytest`, overriding the default.
+If you wish to pass additional arguments to `pytest`, you can do so through `tox`. Every argument passed after a `--` to
+the `tox` command line will be passed to `pytest`, overriding the default.
 
 Only run the `service` tests with Python 3.12 using docker.
 
@@ -712,7 +703,7 @@ export PALACE_TEST_CELERY_WORKER_SHUTDOWN_TIMEOUT=""
 ### Coverage Reports
 
 Code coverage is automatically tracked with [`pytest-cov`](https://pypi.org/project/pytest-cov/) when tests are run.
-When the tests are run with github actions, the coverage report is automatically uploaded to
+When the tests are run with GitHub Actions, the coverage report is automatically uploaded to
 [codecov](https://about.codecov.io/) and the results are added to the relevant pull request.
 
 When running locally, the results from each individual run can be collected and combined into an HTML report using
@@ -720,7 +711,7 @@ the `report` tox environment. This can be run on its own after running the tests
 selection.
 
 ```shell
-# Run core and api tests under Python 3.12, using docker
+# Run core and api tests under Python 3.12, using Docker
 # containers for dependencies, and generate code coverage report
 tox -e "py312-{core,api}-docker,report"
 ```
@@ -741,13 +732,13 @@ enabled by setting environment variables while starting the application.
 #### Environment Variables
 
 - `PALACE_XRAY`: Set to enable X-Ray tracing on the application.
-- `PALACE_XRAY_NAME`: The name of the service shown in x-ray for these traces.
-- `PALACE_XRAY_ANNOTATE_`: Any environment variable starting with this prefix will be added to to the trace as an
+- `PALACE_XRAY_NAME`: The name of the service shown in X-Ray for these traces.
+- `PALACE_XRAY_ANNOTATE_`: Any environment variable starting with this prefix will be added to the trace as an
   annotation.
-    - For example setting `PALACE_XRAY_ANNOTATE_KEY=value` will set the annotation `key=value` on all xray traces sent
+    - For example, setting `PALACE_XRAY_ANNOTATE_KEY=value` will set the annotation `key=value` on all X-Ray traces sent
     from the application.
-- `PALACE_XRAY_INCLUDE_BARCODE`: If this environment variable is set to `true` then the tracing code will try to include
-  the patrons barcode in the user parameter of the trace, if a barcode is available.
+- `PALACE_XRAY_INCLUDE_BARCODE`: If this environment variable is set to `true`, the tracing code will try to include
+  the patron's barcode in the user parameter of the trace, if a barcode is available.
 
 Additional environment variables are provided by the
 [X-Ray Python SDK](https://docs.aws.amazon.com/xray/latest/devguide/xray-sdk-python-configuration.html#xray-sdk-python-configuration-envvars).
@@ -762,7 +753,7 @@ module under the hood to do the profiling.
 
 #### Environment Variables
 
-- `PALACE_CPROFILE`: Profiling will the enabled if this variable is set. The saved profile data will be available at
+- `PALACE_CPROFILE`: Profiling will be enabled if this variable is set. The saved profile data will be available at the
   path specified in the environment variable.
 - The profile data will have the extension `.prof`.
 - The data can be accessed using the
@@ -797,7 +788,7 @@ pyinstrument -m pytest --no-cov -n 0 tests
 
 #### Environment Variables
 
-- `PALACE_PYINSTRUMENT`: Profiling will the enabled if this variable is set. The saved profile data will be available at
+- `PALACE_PYINSTRUMENT`: Profiling will be enabled if this variable is set. The saved profile data will be available at the
   path specified in the environment variable.
     - The profile data will have the extension `.pyisession`.
     - The data can be accessed with the
@@ -820,3 +811,7 @@ pyinstrument -m pytest --no-cov -n 0 tests
 ### Other Environment Variables
 
 - `SIMPLIFIED_SIRSI_DYNIX_APP_ID`: The Application ID for the SirsiDynix Authentication API (optional)
+
+## Acknowledgments
+
+Palace Manager is based on the NYPL [Library Simplified](http://www.librarysimplified.org/) Circulation Manager project
