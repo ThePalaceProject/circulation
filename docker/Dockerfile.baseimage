@@ -13,6 +13,10 @@
 # https://github.com/phusion/baseimage-docker
 FROM phusion/baseimage:noble-1.0.2 AS baseimage
 
+# Remove the ubuntu user that comes with the base image, we will later create
+# a different user.
+RUN userdel -r ubuntu
+
 # Make sure base system is up to date
 RUN apt-get update && \
     apt-get upgrade -y --no-install-recommends -o Dpkg::Options::="--force-confold" && \
