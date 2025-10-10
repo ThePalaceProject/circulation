@@ -2,7 +2,7 @@ from collections.abc import Sequence
 from functools import cached_property
 from typing import Annotated, Any
 
-from pydantic import AwareDatetime, Discriminator, Field, Tag, field_validator
+from pydantic import Discriminator, Field, Tag, field_validator
 
 from palace.manager.opds import opds2, rwpm
 from palace.manager.opds.base import BaseOpdsModel
@@ -10,6 +10,7 @@ from palace.manager.opds.lcp.status import LoanStatus
 from palace.manager.opds.odl.info import LicenseInfo
 from palace.manager.opds.odl.protection import Protection
 from palace.manager.opds.odl.terms import Terms
+from palace.manager.opds.types.date import Iso8601AwareDatetime
 from palace.manager.opds.types.link import CompactCollection
 from palace.manager.opds.util import StrOrTuple, obj_or_tuple_to_tuple
 
@@ -26,7 +27,7 @@ class LicenseMetadata(BaseOpdsModel):
     def formats(self) -> Sequence[str]:
         return obj_or_tuple_to_tuple(self.format)
 
-    created: AwareDatetime
+    created: Iso8601AwareDatetime
     terms: Terms = Field(default_factory=Terms)
     protection: Protection = Field(default_factory=Protection)
     price: opds2.Price | None = None

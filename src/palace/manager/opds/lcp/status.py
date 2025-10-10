@@ -2,9 +2,10 @@ import sys
 from enum import auto
 from functools import cached_property
 
-from pydantic import AwareDatetime, Field
+from pydantic import Field
 
 from palace.manager.opds.base import BaseOpdsModel
+from palace.manager.opds.types.date import Iso8601AwareDatetime
 from palace.manager.opds.types.link import BaseLink, CompactCollection
 
 # TODO: Remove this when we drop support for Python 3.10
@@ -41,8 +42,8 @@ class Updated(BaseOpdsModel):
     https://readium.org/lcp-specs/releases/lsd/latest#24-timestamps
     """
 
-    license: AwareDatetime
-    status: AwareDatetime
+    license: Iso8601AwareDatetime
+    status: Iso8601AwareDatetime
 
 
 class PotentialRights(BaseOpdsModel):
@@ -50,7 +51,7 @@ class PotentialRights(BaseOpdsModel):
     https://readium.org/lcp-specs/releases/lsd/latest#26-potential-rights
     """
 
-    end: AwareDatetime | None = None
+    end: Iso8601AwareDatetime | None = None
 
 
 class EventType(StrEnum):
@@ -72,7 +73,7 @@ class Event(BaseOpdsModel):
 
     type: EventType
     name: str
-    timestamp: AwareDatetime
+    timestamp: Iso8601AwareDatetime
 
     # The spec isn't clear if these fields are required, but DeMarque does not
     # provide id in their event data.

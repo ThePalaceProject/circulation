@@ -440,14 +440,11 @@ class OPDS2WithODLExtractor(
 
         status = license_info_document.status
 
-        if (
-            license_info_document.terms.expires_datetime
-            != odl_license.metadata.terms.expires_datetime
-        ):
+        if license_info_document.terms.expires != odl_license.metadata.terms.expires:
             cls.logger().error(
                 f"License identifier {odl_license.metadata.identifier}. Mismatch between license "
-                f"expiry in the feed ({odl_license.metadata.terms.expires_datetime}) and the expiry in the license "
-                f"info document ({license_info_document.terms.expires_datetime}) setting license status "
+                f"expiry in the feed ({odl_license.metadata.terms.expires}) and the expiry in the license "
+                f"info document ({license_info_document.terms.expires}) setting license status "
                 f"to unavailable."
             )
             status = LicenseStatus.unavailable
@@ -469,7 +466,7 @@ class OPDS2WithODLExtractor(
             identifier=license_info_document.identifier,
             checkout_url=checkout_link,
             status_url=license_info_document_link,
-            expires=license_info_document.terms.expires_datetime,
+            expires=license_info_document.terms.expires,
             checkouts_left=license_info_document.checkouts.left,
             checkouts_available=license_info_document.checkouts.available,
             status=status,

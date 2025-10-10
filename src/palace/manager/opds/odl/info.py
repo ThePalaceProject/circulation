@@ -4,12 +4,13 @@ from collections.abc import Sequence
 from enum import Enum
 from functools import cached_property
 
-from pydantic import AwareDatetime, Field, NonNegativeInt
+from pydantic import Field, NonNegativeInt
 
 from palace.manager.opds.base import BaseOpdsModel
 from palace.manager.opds.odl.protection import Protection
 from palace.manager.opds.odl.terms import Terms
 from palace.manager.opds.opds2 import Price
+from palace.manager.opds.types.date import Iso8601AwareDatetime
 from palace.manager.opds.util import StrOrTuple, obj_or_tuple_to_tuple
 
 
@@ -34,7 +35,7 @@ class Loan(BaseOpdsModel):
     # requires the field to be named `patron_id` but
     # DeMarque returns a field named `patron`.
     patron_id: str = Field(validation_alias="patron")
-    expires: AwareDatetime
+    expires: Iso8601AwareDatetime
 
 
 class Checkouts(BaseOpdsModel):
@@ -66,7 +67,7 @@ class LicenseInfo(BaseOpdsModel):
     def formats(self) -> Sequence[str]:
         return obj_or_tuple_to_tuple(self.format)
 
-    created: AwareDatetime | None = None
+    created: Iso8601AwareDatetime | None = None
     terms: Terms = Field(default_factory=Terms)
     protection: Protection = Field(default_factory=Protection)
     price: Price | None = None

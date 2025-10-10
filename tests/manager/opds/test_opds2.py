@@ -1,13 +1,16 @@
 import json
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from pydantic import ValidationError
 
 from palace.manager.opds.opds2 import (
+    Availability,
     Publication,
     PublicationFeed,
     PublicationFeedNoValidation,
 )
+from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.files import OPDS2FilesFixture
 
 
@@ -59,6 +62,61 @@ def test_publication_feed(
     for publication, identifier in zip(feed.publications, publication_identifiers):
         assert isinstance(publication, Publication)
         assert publication.metadata.identifier == identifier
+
+
+def test_publication_feed_tf(
+    opds2_files_fixture: OPDS2FilesFixture,
+) -> None:
+    """Test Taylor and Francis feed parsing, especially ISO 8601 date handling."""
+    feed = PublicationFeed.model_validate_json(
+        opds2_files_fixture.sample_data("tf.json")
+    )
+    assert len(feed.publications) == 4
+
+    # Test first publication - full date format
+    pub1 = feed.publications[0]
+    assert pub1.metadata.identifier == "urn:isbn:9780203992104"
+    assert pub1.metadata.title == "The Economic Consequences of the Gulf War"
+    assert pub1.metadata.published == datetime(2005, 10, 26, tzinfo=timezone.utc)
+    assert pub1.metadata.modified == datetime(
+        2025, 9, 23, 16, 46, 28, tzinfo=timezone.utc
+    )
+    assert pub1.metadata.publisher == "Routledge"
+    assert pub1.metadata.author == ("Kamran Mofid",)
+
+    # Test second publication - year-only date
+    pub2 = feed.publications[1]
+    assert pub2.metadata.identifier == "urn:isbn:9780429198069"
+    assert pub2.metadata.title == "Hunger and Famine in the Long Nineteenth Century"
+    # Year-only "2022" should parse as 2022-01-01T00:00:00Z, NOT as Unix timestamp
+    assert pub2.metadata.published == datetime(2022, 1, 1, tzinfo=timezone.utc)
+    assert pub2.metadata.modified == datetime(
+        2025, 9, 23, 16, 46, 28, tzinfo=timezone.utc
+    )
+    assert pub2.metadata.publisher == "Routledge"
+    assert pub2.metadata.editor == ("Gail Turley Houston",)
+
+    # Test third publication - full date format
+    pub3 = feed.publications[2]
+    assert pub3.metadata.identifier == "urn:isbn:9780429169779"
+    assert pub3.metadata.title == "Handbook of Surface and Colloid Chemistry"
+    assert pub3.metadata.published == datetime(2015, 6, 25, tzinfo=timezone.utc)
+    assert pub3.metadata.modified == datetime(
+        2025, 9, 23, 16, 46, 28, tzinfo=timezone.utc
+    )
+    assert pub3.metadata.publisher == "CRC Press"
+    assert pub3.metadata.editor == ("K. S. Birdi",)
+
+    # Test fourth publication - full date format
+    pub4 = feed.publications[3]
+    assert pub4.metadata.identifier == "urn:isbn:9781315629889"
+    assert pub4.metadata.title == "Radical Sensibility"
+    assert pub4.metadata.published == datetime(2016, 4, 6, tzinfo=timezone.utc)
+    assert pub4.metadata.modified == datetime(
+        2025, 9, 23, 16, 46, 28, tzinfo=timezone.utc
+    )
+    assert pub4.metadata.publisher == "Routledge"
+    assert pub4.metadata.author == ("Chris Jones",)
 
 
 def test_publication_feed_no_publications(
@@ -145,3 +203,62 @@ def test_publication_feed_no_validation(
     for publication_dict in feed_parsed.publications:
         with pytest.raises(ValidationError):
             Publication.model_validate(publication_dict)
+
+
+class TestAvailability:
+    """Test the Availability model and its fields."""
+
+    @pytest.mark.parametrize(
+        "since_value",
+        [
+            pytest.param("2023-01-15T10:30:00Z", id="datetime_with_Z"),
+            pytest.param("2023-01-15T10:30:00+00:00", id="datetime_with_offset_zero"),
+            pytest.param(
+                "2023-01-15T10:30:00.123456Z", id="datetime_with_microseconds"
+            ),
+            pytest.param(
+                "2023-12-25T23:59:59.999999+05:30", id="datetime_with_positive_offset"
+            ),
+            pytest.param(
+                "2023-12-25T23:59:59-08:00", id="datetime_with_negative_offset"
+            ),
+        ],
+    )
+    def test_since_parsing(self, since_value: str) -> None:
+        """Test that the since field is parsed correctly with various datetime formats."""
+        availability = Availability.model_validate({"since": since_value})
+        assert availability.since is not None
+        assert availability.since.tzinfo is not None
+
+    def test_since_optional(self) -> None:
+        """Test that the since field is optional."""
+        availability = Availability.model_validate({})
+        assert availability.since is None
+
+    def test_since_cannot_be_future(self) -> None:
+        """Test that the since field cannot be in the future."""
+        future_date = (utc_now() + timedelta(days=1)).isoformat()
+        with pytest.raises(ValidationError, match="Datetime must be in the past"):
+            Availability.model_validate({"since": future_date})
+
+    @pytest.mark.parametrize(
+        ("invalid_since", "error_pattern"),
+        [
+            pytest.param(
+                "2023-01-15T10:30:00",
+                "Input should have timezone info",
+                id="datetime_missing_timezone",
+            ),
+            pytest.param(
+                "not-a-datetime",
+                "Input should be a valid datetime",
+                id="invalid_string",
+            ),
+        ],
+    )
+    def test_since_invalid_formats(
+        self, invalid_since: str, error_pattern: str
+    ) -> None:
+        """Test that invalid datetime formats raise ValidationError."""
+        with pytest.raises(ValidationError, match=error_pattern):
+            Availability.model_validate({"since": invalid_since})

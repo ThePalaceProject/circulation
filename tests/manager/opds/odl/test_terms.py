@@ -1,4 +1,4 @@
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 
 import pytest
 from pydantic import ValidationError
@@ -17,11 +17,7 @@ class TestTerms:
                 "expires": "2022-01-01",
             }
         )
-        assert isinstance(terms.expires, date)
-        assert terms.expires == date(2022, 1, 1)
-        assert terms.expires_datetime == datetime(
-            2022, 1, 1, 0, 0, 0, tzinfo=timezone.utc
-        )
+        assert terms.expires == datetime(2022, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
 
         terms = Terms.model_validate(
             {
@@ -30,7 +26,6 @@ class TestTerms:
         )
         assert isinstance(terms.expires, datetime)
         assert terms.expires == datetime(2022, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
-        assert terms.expires_datetime == terms.expires
 
         with pytest.raises(ValidationError):
             Terms.model_validate(

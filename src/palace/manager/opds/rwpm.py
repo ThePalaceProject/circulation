@@ -2,14 +2,17 @@ from __future__ import annotations
 
 import sys
 from collections.abc import Sequence
-from datetime import date
 from enum import auto
 from functools import cached_property
 from typing import Literal, TypeVar
 
-from pydantic import AwareDatetime, Field, NonNegativeInt, PositiveFloat, PositiveInt
+from pydantic import Field, NonNegativeInt, PositiveFloat, PositiveInt
 
 from palace.manager.opds.base import BaseOpdsModel
+from palace.manager.opds.types.date import (
+    Iso8601AwareDatetime,
+    Iso8601DateOrAwareDatetime,
+)
 from palace.manager.opds.types.language import LanguageMap, LanguageTag
 from palace.manager.opds.types.link import BaseLink, CompactCollection
 from palace.manager.opds.util import (
@@ -269,8 +272,8 @@ class Metadata(BaseOpdsModel):
             for alt_id in self.alt_identifier
         ]
 
-    modified: AwareDatetime | None = None
-    published: AwareDatetime | date | None = None
+    modified: Iso8601AwareDatetime | None = None
+    published: Iso8601DateOrAwareDatetime | None = None
     language: StrOrTuple[LanguageTag] | None = None
 
     @cached_property
