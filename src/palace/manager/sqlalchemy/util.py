@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Generator, Mapping
+from contextlib import contextmanager
 from typing import Any, Literal, Self, TypeVar
 
-from contextlib2 import contextmanager
 from frozendict import frozendict
 from psycopg2._range import NumericRange
 from sqlalchemy import text
