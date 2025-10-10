@@ -6,7 +6,7 @@
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![Imports: isort](https://img.shields.io/badge/%20imports-isort-%231674b1?style=flat&labelColor=ef8336)](https://pycqa.github.io/isort/)
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/pre-commit/pre-commit)
-![Python: 3.10,3.11,3.12](https://img.shields.io/badge/Python-3.10%20|%203.11%20|%203.12-blue)
+![Python: 3.11,3.12](https://img.shields.io/badge/Python-3.11%20|%203.12-blue)
 
 This is a [The Palace Project](https://thepalaceproject.org) maintained fork of the NYPL
 [Library Simplified](http://www.librarysimplified.org/) Circulation Manager.
@@ -348,12 +348,12 @@ pyenv local circ
 ```
 
 On most systems, using `pyenv` will adjust your shell prompt to indicate which virtual environment you
-are now in. For example, the version of Python installed in your operating system might be `3.10.1`, but
+are now in. For example, the version of Python installed in your operating system might be `3.10.0`, but
 using a virtual environment can substitute, for example, `3.11.1`:
 
 ```sh
 $ python --version
-Python 3.10.1
+Python 3.10.0
 
 $ pyenv local circ
 (circ) $ python --version
@@ -610,7 +610,7 @@ poetry install --only ci
 
 ## Testing
 
-The Github Actions CI service runs the unit tests against Python 3.10, and 3.11 automatically using
+The Github Actions CI service runs the unit tests against Python 3.11, and 3.12 automatically using
 [tox](https://tox.readthedocs.io/en/latest/).
 
 Tox has an environment for each python version, the module being tested, and an optional `-docker` factor that will
@@ -626,17 +626,16 @@ with service dependencies running in docker containers.
 
 | Factor | Python Version |
 |--------|----------------|
-| py310  | Python 3.10    |
 | py311  | Python 3.11    |
 | py312  | Python 3.12    |
 
 All of these environments are tested by default when running tox. To test one specific environment you can use the `-e`
 flag.
 
-Test Python 3.10
+Test Python 3.11
 
 ```sh
-tox -e py310
+tox -e py311
 ```
 
 You need to have the Python versions you are testing against installed on your local system. `tox` searches the system
@@ -656,10 +655,10 @@ on the Github Actions CI server. `tox-docker` is automatically included when ins
 The docker functionality is included in a `docker` factor that can be added to the environment. To run an environment
 with a particular factor you add it to the end of the environment.
 
-Test with Python 3.10 using docker containers for the services.
+Test with Python 3.11 using docker containers for the services.
 
 ```sh
-tox -e "py310-docker"
+tox -e "py311-docker"
 ```
 
 ### Local services
@@ -678,7 +677,7 @@ export PALACE_TEST_DATABASE_URL="postgresql://simplified_test:test@localhost:900
 export PALACE_TEST_SEARCH_URL="http://localhost:9200"
 
 # Run tox
-tox -e "py310"
+tox -e "py311"
 ```
 
 The tests assume that they have permission to create and drop databases. They connect to the

@@ -1123,9 +1123,7 @@ class TestBibliographicData:
     ):
         # Test that data_source_last_updated updates the timestamp
         # when a BibliographicData object is applied.
-        last_updated = datetime.datetime(
-            2023, 1, 1, 12, 0, 0, tzinfo=datetime.timezone.utc
-        )
+        last_updated = datetime.datetime(2023, 1, 1, 12, 0, 0, tzinfo=datetime.UTC)
         past = last_updated - datetime.timedelta(days=5)
 
         # Create an edition with a created and updated timestamp in the past.

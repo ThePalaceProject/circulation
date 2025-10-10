@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import sys
 import tempfile
 import zipfile
 from collections.abc import Sequence
@@ -275,12 +274,6 @@ class LibraryCollectionReport(LoggerMixin):
         zip_buffer = stack.enter_context(
             tempfile.SpooledTemporaryFile(max_size=10 * 1024 * 1024)
         )
-
-        # Before Python 3.11, SpooledTemporaryFile is missing the `seekable` attribute.
-        # See https://stackoverflow.com/questions/47160211/why-doesnt-tempfile-spooledtemporaryfile-implement-readable-writable-seekable
-        # TODO: Remove this once we drop support for Python 3.10.
-        if not hasattr(zip_buffer, "seekable") and sys.version_info < (3, 11):
-            zip_buffer.seekable = lambda: True  # type: ignore[method-assign]
 
         with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_STORED) as archive:
             for result in results:

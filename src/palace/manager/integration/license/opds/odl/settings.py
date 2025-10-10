@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from typing import Self
+
 from flask_babel import lazy_gettext as _
 from pydantic import NonNegativeInt, PositiveInt, model_validator
-from typing_extensions import Self
 
 from palace.manager.api.admin.problem_details import INCOMPLETE_CONFIGURATION
 from palace.manager.api.circulation.settings import BaseCirculationEbookLoanSettings

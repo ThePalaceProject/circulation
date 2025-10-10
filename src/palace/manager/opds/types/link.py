@@ -3,11 +3,10 @@ from __future__ import annotations
 from collections import defaultdict
 from collections.abc import Iterable, Sequence
 from functools import cached_property
-from typing import Any, Literal, TypeVar, cast, get_args, overload
+from typing import Any, Literal, Self, TypeVar, cast, get_args, overload
 
 from pydantic import GetCoreSchemaHandler
 from pydantic_core import core_schema
-from typing_extensions import Self
 from uritemplate import URITemplate, variable
 
 from palace.manager.core.exceptions import PalaceValueError

@@ -2,13 +2,12 @@ from __future__ import annotations
 
 from collections.abc import Generator
 from contextlib import contextmanager
-from typing import Any
+from typing import Any, Self
 from unittest.mock import MagicMock, Mock, create_autospec
 
 import boto3
 import pytest
 from opensearchpy import OpenSearch
-from typing_extensions import Self
 
 from palace.manager.search.external_search import ExternalSearchIndex
 from palace.manager.search.revision_directory import SearchRevisionDirectory

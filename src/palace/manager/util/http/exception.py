@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from typing import Generic, TypeVar
+from typing import Generic, Self, TypeVar
 from urllib.parse import urlparse
 
 import httpx
 import requests
 from flask_babel import lazy_gettext as _
-from typing_extensions import Self
 
 from palace.manager.core.exceptions import IntegrationException
 from palace.manager.core.problem_details import INTEGRATION_ERROR

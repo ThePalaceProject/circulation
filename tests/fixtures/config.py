@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import dataclasses
 import os
+from typing import Self
 
 from pydantic_settings import SettingsConfigDict
-from typing_extensions import Self
 
 from palace.manager.service.configuration.service_configuration import (
     ServiceConfiguration,

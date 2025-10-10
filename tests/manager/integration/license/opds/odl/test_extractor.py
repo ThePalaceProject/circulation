@@ -127,7 +127,7 @@ class TestOPDS2WithODLExtractor:
         "published,expected",
         [
             pytest.param(
-                datetime.datetime(2015, 9, 29, 17, 0, tzinfo=datetime.timezone.utc),
+                datetime.datetime(2015, 9, 29, 17, 0, tzinfo=datetime.UTC),
                 datetime.date(2015, 9, 29),
                 id="datetime with time info",
             ),

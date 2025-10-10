@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import sys
+from enum import StrEnum
 
 from bidict import frozenbidict
 from frozendict import frozendict
@@ -10,12 +10,6 @@ from palace.manager.sqlalchemy.model.licensing import (
     DeliveryMechanismTuple,
 )
 from palace.manager.sqlalchemy.model.resource import Representation
-
-# TODO: Remove this when we drop support for Python 3.10
-if sys.version_info >= (3, 11):
-    from enum import StrEnum
-else:
-    from backports.strenum import StrEnum
 
 
 class BoundlessFormat(StrEnum):

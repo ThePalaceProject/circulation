@@ -1,12 +1,5 @@
-import sys
 from collections.abc import Iterable
-from typing import Generic, TypeVar
-
-if sys.version_info >= (3, 11):
-    from typing import Self
-else:
-    from typing_extensions import Self
-
+from typing import Generic, Self, TypeVar
 
 I = TypeVar("I")
 

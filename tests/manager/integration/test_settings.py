@@ -1,11 +1,11 @@
 import logging
 from functools import partial
+from typing import Self
 from unittest.mock import MagicMock
 
 import pytest
 from pydantic import PositiveInt, ValidationError, field_validator, model_validator
 from sqlalchemy.orm import Session
-from typing_extensions import Self
 
 from palace.manager.integration.settings import (
     BaseSettings,

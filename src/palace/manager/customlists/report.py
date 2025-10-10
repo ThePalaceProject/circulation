@@ -1,10 +1,9 @@
 import json
 import logging
 from collections.abc import Iterable
-from typing import Any
+from typing import Any, Self
 
 import jsonschema
-from typing_extensions import Self
 
 from palace.manager.util.resources import resources_dir
 

@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import re
-import sys
 from collections import Counter
 from collections.abc import Sequence
 from datetime import date, datetime
 from decimal import Decimal
 from functools import cache
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Self, cast
 
 import opensearchpy
 import pytz
@@ -70,11 +69,6 @@ from palace.manager.sqlalchemy.util import (
 from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.languages import LanguageCodes
 from palace.manager.util.log import LoggerMixin
-
-if sys.version_info >= (3, 11):
-    from typing import Self
-else:
-    from typing_extensions import Self
 
 if TYPE_CHECKING:
     from palace.manager.search.external_search import ExternalSearchIndex

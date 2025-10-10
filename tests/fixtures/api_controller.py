@@ -4,11 +4,10 @@ import datetime
 import logging
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
-from typing import Any
+from typing import Any, Self
 
 import pytest
 from sqlalchemy.orm import Session
-from typing_extensions import Self
 from werkzeug.datastructures import Authorization
 
 from palace.manager.api.adobe_vendor_id import AuthdataUtility

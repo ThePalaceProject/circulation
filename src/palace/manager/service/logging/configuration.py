@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 import logging
-import sys
-from enum import auto
+from enum import StrEnum, auto
 
 import boto3
 from pydantic import NonNegativeInt, PositiveInt, field_validator
@@ -13,12 +12,6 @@ from watchtower import DEFAULT_LOG_STREAM_NAME
 from palace.manager.service.configuration.service_configuration import (
     ServiceConfiguration,
 )
-
-# TODO: Remove this when we drop support for Python 3.10
-if sys.version_info >= (3, 11):
-    from enum import StrEnum
-else:
-    from backports.strenum import StrEnum
 
 
 class LogLevel(StrEnum):

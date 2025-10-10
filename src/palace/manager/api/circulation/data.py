@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import dataclasses
 import datetime
+from typing import Self
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-from typing_extensions import Self
 
 from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.data_layer.format import FormatData

@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-import sys
 from functools import cached_property
 from io import BytesIO
 from string import Formatter
 from types import TracebackType
-from typing import IO, TYPE_CHECKING
+from typing import IO, TYPE_CHECKING, Self
 from urllib.parse import quote
 
 from botocore.exceptions import BotoCoreError, ClientError
@@ -13,11 +12,6 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.util.log import LoggerMixin
-
-if sys.version_info >= (3, 11):
-    from typing import Self
-else:
-    from typing_extensions import Self
 
 if TYPE_CHECKING:
     from mypy_boto3_s3 import S3Client
