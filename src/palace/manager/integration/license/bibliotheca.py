@@ -14,7 +14,7 @@ from argparse import ArgumentParser, Namespace
 from collections.abc import Collection as CollectionT, Generator, Iterable
 from datetime import datetime, timedelta
 from io import BytesIO
-from typing import Any, Literal, Optional, TypeVar, overload
+from typing import Any, Literal, Optional, TypeVar, Unpack, overload
 
 import dateutil.parser
 from flask_babel import lazy_gettext as _
@@ -23,7 +23,6 @@ from lxml.etree import Error, _Element
 from pymarc import Record, parse_xml_to_array
 from requests import Response
 from sqlalchemy.orm import Session
-from typing_extensions import Unpack
 
 from palace.manager.api.circulation.base import (
     BaseCirculationAPI,

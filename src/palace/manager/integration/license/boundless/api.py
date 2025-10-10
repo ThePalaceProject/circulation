@@ -4,13 +4,12 @@ import html
 import re
 from collections.abc import Callable, Generator, Sequence
 from datetime import timedelta
-from typing import Annotated, cast
+from typing import Annotated, Unpack, cast
 
 from celery.canvas import Signature
 from flask_babel import lazy_gettext as _
 from pydantic import StringConstraints, TypeAdapter, ValidationError
 from sqlalchemy.orm import Session
-from typing_extensions import Unpack
 
 from palace.manager.api.circulation.base import (
     BaseCirculationAPI,

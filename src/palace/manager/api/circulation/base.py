@@ -5,13 +5,12 @@ import datetime
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Mapping
 from functools import cached_property
-from typing import TypedDict, TypeVar
+from typing import TypedDict, TypeVar, Unpack
 
 from celery.canvas import Signature
 from flask_babel import lazy_gettext as _
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-from typing_extensions import Unpack
 
 from palace.manager.api.circulation.data import HoldInfo, LoanInfo
 from palace.manager.api.circulation.exceptions import DeliveryMechanismError

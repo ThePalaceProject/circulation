@@ -4,10 +4,9 @@ import asyncio
 import functools
 from collections.abc import AsyncIterable, Callable, Iterable, Mapping, Sequence
 from types import TracebackType
-from typing import IO, Any, Self, TypedDict, Union, cast
+from typing import IO, Any, Self, TypedDict, Union, Unpack, cast
 
 import httpx
-from typing_extensions import Unpack
 
 from palace.manager.util.backoff import exponential_backoff
 from palace.manager.util.http.base import (

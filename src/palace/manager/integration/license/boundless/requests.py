@@ -4,13 +4,12 @@ import base64
 import datetime
 from collections.abc import Callable, Mapping, Sequence
 from functools import cached_property, partial
-from typing import TYPE_CHECKING, Any, Literal, TypeVar
+from typing import TYPE_CHECKING, Any, Literal, TypeVar, Unpack
 
 from lxml.etree import XMLSyntaxError
 from pydantic import ValidationError
 from pydantic_xml import ParsingError
 from requests import Response as RequestsResponse
-from typing_extensions import Unpack
 
 from palace.manager.api.model.token import OAuthTokenResponse
 from palace.manager.integration.license.boundless.constants import (

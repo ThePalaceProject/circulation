@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from typing import Unpack
+
 from celery import shared_task
 from frozendict import frozendict
-from typing_extensions import Unpack
 
 from palace.manager.celery.task import Task
 from palace.manager.reporting.reports.library_collection import (

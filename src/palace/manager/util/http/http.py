@@ -5,13 +5,12 @@ import time
 from collections.abc import Callable, Iterable, Mapping
 from io import BytesIO, StringIO
 from json import JSONDecodeError
-from typing import Any, Literal, Protocol, TypedDict
+from typing import Any, Literal, Protocol, TypedDict, Unpack
 
 import requests
 from requests import PreparedRequest, Session as RequestsSession
 from requests.adapters import HTTPAdapter, Response
 from requests.auth import AuthBase
-from typing_extensions import Unpack
 from urllib3 import Retry
 
 from palace.manager.core.exceptions import PalaceValueError

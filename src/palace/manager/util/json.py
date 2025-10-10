@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 import json
-from typing import Any, TypedDict
+from typing import Any, TypedDict, Unpack
 
 from pydantic_core import to_jsonable_python
-from typing_extensions import Unpack
 
 
 def json_encoder(obj: Any) -> Any:

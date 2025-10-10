@@ -8,10 +8,9 @@ from dataclasses import dataclass
 from datetime import datetime
 from functools import cached_property, partial
 from io import TextIOWrapper
-from typing import IO, ClassVar, TypedDict, TypeVar
+from typing import IO, ClassVar, TypedDict, TypeVar, Unpack
 
 from sqlalchemy.orm import Session
-from typing_extensions import Unpack
 
 from palace.manager.celery.task import Task
 from palace.manager.core.exceptions import IntegrationException

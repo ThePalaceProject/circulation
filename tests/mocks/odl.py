@@ -1,5 +1,6 @@
+from typing import override
+
 from sqlalchemy.orm import Session
-from typing_extensions import override
 
 from palace.manager.integration.license.opds.odl.api import OPDS2WithODLApi
 from palace.manager.sqlalchemy.model.collection import Collection

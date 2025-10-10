@@ -6,12 +6,12 @@ import json
 import uuid
 from collections.abc import Callable
 from functools import partial
+from typing import Unpack
 
 from celery.canvas import Signature
 from flask import url_for
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
-from typing_extensions import Unpack
 from uritemplate import URITemplate
 
 from palace.manager.api.circulation.base import BaseCirculationAPI
