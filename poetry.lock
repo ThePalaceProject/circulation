@@ -1150,18 +1150,6 @@ files = [
 markers = {main = "platform_system == \"Windows\"", dev = "platform_system == \"Windows\" or sys_platform == \"win32\""}
 
 [[package]]
-name = "contextlib2"
-version = "21.6.0"
-description = "Backports and enhancements for the contextlib module"
-optional = false
-python-versions = ">=3.6"
-groups = ["main"]
-files = [
-    {file = "contextlib2-21.6.0-py2.py3-none-any.whl", hash = "sha256:3fbdb64466afd23abaf6c977627b75b6139a5a3e8ce38405c5b413aed7a0471f"},
-    {file = "contextlib2-21.6.0.tar.gz", hash = "sha256:ab1e2bfe1d01d968e1b7e8d9023bc51ef3509bba217bb730cee3827e1ee82869"},
-]
-
-[[package]]
 name = "coverage"
 version = "7.10.7"
 description = "Code coverage measurement for Python"
@@ -5690,4 +5678,4 @@ lxml = ">=3.8"
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12,<4"
-content-hash = "0722eb12048d476c8c994bbf132540d99f7f8b7189545d8656c1aa1a630ea78c"
+content-hash = "a92ef67b0188162453c4bfa642563599aad7a8294386346e2253b54f12bf59af"
