@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import datetime
 import json
-from collections import defaultdict, deque
+from collections import deque
 from collections.abc import Generator, Iterable
 from dataclasses import dataclass
 from functools import partial
@@ -668,7 +668,6 @@ class OverdriveAPI(
             urls: deque[str] = deque()
             pending_requests: list[asyncio.Task[httpx._models.Response]] = []
             books: dict[str, Any] = {}
-            retried_requests: defaultdict[str, int] = defaultdict(int)
             extractor_class = extractor_class or OverdriveRepresentationExtractor
             urls.append(endpoint.url)
             events_path = self.endpoint(
