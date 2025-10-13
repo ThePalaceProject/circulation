@@ -624,7 +624,7 @@ class OverdriveAPI(
 
         # if no start date specified, assume effect beginning of time.
         if not start:
-            start = datetime.datetime(1970, 1, 1, 0, 0, 0, tzinfo=datetime.timezone.utc)
+            start = datetime.datetime(1970, 1, 1, 0, 0, 0, tzinfo=datetime.UTC)
         last_update_time = start - self.EVENT_DELAY
         self.log.info("Creating url for circulation changes since %s", last_update_time)
         last_update = last_update_time.strftime(self.TIME_FORMAT)
