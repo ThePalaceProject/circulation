@@ -8,7 +8,6 @@ from typing import IO, Any, Self, TypedDict, Union, Unpack, cast
 
 import httpx
 from httpx import URL
-from typing_extensions import Self, Unpack
 
 from palace.manager.util.backoff import exponential_backoff
 from palace.manager.util.http.base import (
