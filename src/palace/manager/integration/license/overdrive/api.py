@@ -613,7 +613,7 @@ class OverdriveAPI(
         return availability_queue, next_link
 
     def _get_headers(self, auth_token: str) -> dict[str, str]:
-        return {"Authorization": f"Bearer {auth_token}", "User-Agent": "Palace"}
+        return {"Authorization": f"Bearer {auth_token}"}
 
     def book_info_initial_endpoint(
         self,
