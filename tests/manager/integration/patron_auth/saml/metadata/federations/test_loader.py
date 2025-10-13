@@ -23,7 +23,7 @@ class TestSAMLMetadataLoader:
     def test_load_idp_metadata_raises_error_when_xml_is_incorrect(self, urlopen_mock):
         # Arrange
         url = "http://md.incommon.org/InCommon/metadata.xml"
-        incorrect_xml = saml_strings.INCORRECT_XML
+        incorrect_xml = saml_strings.EMPTY_XML
         urlopen_response_mock = MagicMock()
         urlopen_response_mock.read = MagicMock(return_value=incorrect_xml)
         urlopen_mock.return_value = urlopen_response_mock

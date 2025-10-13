@@ -54,8 +54,8 @@ class TestSAMLSettingsValidator:
             ),
             pytest.param(
                 None,
-                saml_strings.INCORRECT_XML,
-                saml_strings.INCORRECT_XML,
+                saml_strings.EMPTY_XML,
+                saml_strings.EMPTY_XML,
                 None,
                 INCOMPLETE_CONFIGURATION,
                 id="empty_sp_metadata_and_empty_idp_metadata",

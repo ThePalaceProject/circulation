@@ -309,7 +309,7 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
             )
             raise SettingsValidationError(
                 problem_detail=SAML_INCORRECT_METADATA.detailed(message)
-            )
+            ) from exception
         except Exception as exception:
             cls.logger().exception(
                 "An unexpected exception occurred during parsing of SAML metadata"
@@ -317,7 +317,7 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
             message = str(exception)
             raise SettingsValidationError(
                 problem_detail=SAML_GENERIC_PARSING_ERROR.detailed(message)
-            )
+            ) from exception
         return providers
 
     @field_validator("service_provider_xml_metadata")

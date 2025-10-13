@@ -23,13 +23,13 @@ class TestSAMLFederatedMetadataExpirationValidator:
         [
             pytest.param(
                 utc_now(),
-                fixtures.INCORRECT_XML,
+                fixtures.EMPTY_XML,
                 SAMLFederatedMetadataValidationError,
                 id="incorrect_xml_str_type",
             ),
             pytest.param(
                 utc_now(),
-                fixtures.INCORRECT_XML.encode(),
+                fixtures.EMPTY_XML.encode(),
                 SAMLFederatedMetadataValidationError,
                 id="incorrect_xml_bytes_type",
             ),
