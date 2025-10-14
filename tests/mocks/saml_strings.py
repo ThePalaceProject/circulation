@@ -126,7 +126,9 @@ kF7xgXphcsIlNUxJyp79q30fpwUCCwwTcfimCWBzRCAf
 -----END RSA PRIVATE KEY-----
 """
 
-INCORRECT_XML = ""
+EMPTY_XML = ""
+INVALID_XML = "<EntityDescriptor> Incorrect>> XML </EntityDescriptor>"
+INVALID_PRIVATE_KEY = "Incorrect SAML private key"
 
 INCORRECT_XML_WITH_ONE_IDP_METADATA_WITHOUT_SSO_SERVICE = """<?xml version="1.0" encoding="UTF-8"?>
 <!--

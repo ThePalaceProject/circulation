@@ -32,9 +32,9 @@ class TestSAMLMetadataParser:
     @pytest.mark.parametrize(
         "incorrect_xml",
         [
-            pytest.param(saml_strings.INCORRECT_XML, id="incorrect_xml_str_type"),
+            pytest.param(saml_strings.EMPTY_XML, id="incorrect_xml_str_type"),
             pytest.param(
-                saml_strings.INCORRECT_XML.encode(), id="incorrect_xml_bytes_type"
+                saml_strings.EMPTY_XML.encode(), id="incorrect_xml_bytes_type"
             ),
         ],
     )

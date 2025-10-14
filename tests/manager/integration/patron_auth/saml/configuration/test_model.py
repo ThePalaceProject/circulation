@@ -5,9 +5,14 @@ from unittest.mock import MagicMock, call, create_autospec
 import pytest
 import sqlalchemy
 
+from palace.manager.api.admin.problem_details import INCOMPLETE_CONFIGURATION
 from palace.manager.integration.patron_auth.saml.configuration.model import (
     SAMLOneLoginConfiguration,
     SAMLWebSSOAuthSettings,
+)
+from palace.manager.integration.patron_auth.saml.configuration.problem_details import (
+    SAML_INCORRECT_METADATA,
+    SAML_INCORRECT_PRIVATE_KEY,
 )
 from palace.manager.integration.patron_auth.saml.metadata.federations import incommon
 from palace.manager.integration.patron_auth.saml.metadata.model import (
@@ -25,7 +30,9 @@ from palace.manager.sqlalchemy.model.saml import (
     SAMLFederatedIdentityProvider,
     SAMLFederation,
 )
+from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.test_utils import MonkeyPatchEnvFixture
 from tests.mocks import saml_strings
 
 SERVICE_PROVIDER_WITHOUT_CERTIFICATE = SAMLServiceProviderMetadata(
@@ -64,31 +71,7 @@ IDENTITY_PROVIDERS = [
 ]
 
 
-class TestSAMLConfiguration:
-    def test_get_service_provider_returns_correct_value(
-        self, create_saml_configuration: Callable[..., SAMLWebSSOAuthSettings]
-    ):
-        # Arrange
-        metadata_parser = SAMLMetadataParser()
-        metadata_parser.parse = MagicMock(side_effect=metadata_parser.parse)
-
-        configuration = create_saml_configuration(
-            service_provider_xml_metadata=saml_strings.CORRECT_XML_WITH_ONE_SP
-        )
-        onelogin_configuration = SAMLOneLoginConfiguration(configuration)
-        onelogin_configuration._metadata_parser = metadata_parser
-
-        # Act
-        service_provider = onelogin_configuration.get_service_provider()
-
-        # Assert
-        assert isinstance(service_provider, SAMLServiceProviderMetadata) is True
-        assert saml_strings.SP_ENTITY_ID == service_provider.entity_id
-
-        metadata_parser.parse.assert_called_once_with(
-            configuration.service_provider_xml_metadata
-        )
-
+class TestSamlIdpConfiguration:
     def test_get_identity_providers_returns_non_federated_idps(
         self,
         db: DatabaseTransactionFixture,
@@ -230,6 +213,342 @@ class TestSAMLConfiguration:
                 call(federated_idp_2.xml_metadata),
             ]
         )
+
+
+class TestSamlSpConfiguration:
+
+    @pytest.mark.parametrize(
+        "env_metadata,settings_metadata,env_key,settings_key",
+        (
+            pytest.param(
+                None,
+                saml_strings.CORRECT_XML_WITH_ONE_SP,
+                None,
+                saml_strings.PRIVATE_KEY,
+                id="metadata-from-settings-key-from-settings",
+            ),
+            pytest.param(
+                None,
+                saml_strings.CORRECT_XML_WITH_ONE_SP,
+                saml_strings.PRIVATE_KEY,
+                None,
+                id="metadata-from-settings-key-from-env",
+            ),
+            pytest.param(
+                saml_strings.CORRECT_XML_WITH_ONE_SP,
+                None,
+                None,
+                saml_strings.PRIVATE_KEY,
+                id="metadata-from-env-key-from-settings",
+            ),
+            pytest.param(
+                saml_strings.CORRECT_XML_WITH_ONE_SP,
+                None,
+                saml_strings.PRIVATE_KEY,
+                None,
+                id="metadata-from-env-key-from-env",
+            ),
+            pytest.param(
+                None,
+                saml_strings.CORRECT_XML_WITH_ONE_SP,
+                saml_strings.INVALID_PRIVATE_KEY,
+                saml_strings.PRIVATE_KEY,
+                id="metadata-from-settings-key-from-both",
+            ),
+            pytest.param(
+                saml_strings.CORRECT_XML_WITH_ONE_SP,
+                None,
+                saml_strings.INVALID_PRIVATE_KEY,
+                saml_strings.PRIVATE_KEY,
+                id="metadata-from-env-key-from-both",
+            ),
+            pytest.param(
+                saml_strings.INVALID_XML,
+                saml_strings.CORRECT_XML_WITH_ONE_SP,
+                None,
+                saml_strings.PRIVATE_KEY,
+                id="metadata-from-both-key-from-settings",
+            ),
+            pytest.param(
+                saml_strings.INVALID_XML,
+                saml_strings.CORRECT_XML_WITH_ONE_SP,
+                saml_strings.PRIVATE_KEY,
+                None,
+                id="metadata-from-both-key-from-env",
+            ),
+            pytest.param(
+                saml_strings.INVALID_XML,
+                saml_strings.CORRECT_XML_WITH_ONE_SP,
+                saml_strings.INVALID_PRIVATE_KEY,
+                saml_strings.PRIVATE_KEY,
+                id="metadata-from-both-key-from-both",
+            ),
+        ),
+    )
+    def test_get_service_provider_returns_correct_value(
+        self,
+        monkeypatch_env: MonkeyPatchEnvFixture,
+        create_saml_configuration: Callable[..., SAMLWebSSOAuthSettings],
+        env_metadata: str | None,
+        settings_metadata: str | None,
+        env_key: str | None,
+        settings_key: str | None,
+    ):
+        """Test permutations of SP metadata and private key from settings vs environment.
+
+        This test validates that:
+        - SP XML metadata can come from integration settings, environment, or both
+        - Private key is correctly loaded by either or both sources
+        - When both sources present, integration settings take precedence
+        - get_service_provider() returns correct SP metadata regardless of source
+        """
+        # Set/unset environment variables
+        monkeypatch_env("PALACE_SAML_SP_METADATA", env_metadata)
+        monkeypatch_env("PALACE_SAML_SP_PRIVATE_KEY", env_key)
+
+        # Create configuration with integration settings.
+        # This will fail if the selected data is invalid.
+        configuration = create_saml_configuration(
+            service_provider_xml_metadata=settings_metadata or "",
+            service_provider_private_key=settings_key or "",
+        )
+        onelogin_configuration = SAMLOneLoginConfiguration(configuration)
+
+        # Get service provider and validate
+        service_provider = onelogin_configuration.get_service_provider()
+
+        assert isinstance(service_provider, SAMLServiceProviderMetadata)
+        assert service_provider.entity_id == saml_strings.SP_ENTITY_ID
+
+        # Verify private key is set (from either source)
+        assert service_provider.private_key is not None
+        assert service_provider.private_key.replace(
+            "\n", ""
+        ) == saml_strings.PRIVATE_KEY.replace("\n", "")
+
+    @pytest.mark.parametrize(
+        "env_metadata,settings_metadata,env_key,settings_key,expected_problem_detail",
+        (
+            pytest.param(
+                None,
+                saml_strings.CORRECT_XML_WITH_ONE_SP,
+                saml_strings.PRIVATE_KEY,
+                saml_strings.INVALID_PRIVATE_KEY,
+                SAML_INCORRECT_PRIVATE_KEY,
+                id="metadata-from-settings-key-from-both",
+            ),
+            pytest.param(
+                saml_strings.CORRECT_XML_WITH_ONE_SP,
+                None,
+                saml_strings.PRIVATE_KEY,
+                saml_strings.INVALID_PRIVATE_KEY,
+                SAML_INCORRECT_PRIVATE_KEY,
+                id="metadata-from-env-key-from-both",
+            ),
+            pytest.param(
+                saml_strings.CORRECT_XML_WITH_ONE_SP,
+                saml_strings.INVALID_XML,
+                None,
+                saml_strings.PRIVATE_KEY,
+                SAML_INCORRECT_METADATA,
+                id="metadata-from-both-key-from-settings",
+            ),
+            pytest.param(
+                saml_strings.CORRECT_XML_WITH_ONE_SP,
+                saml_strings.INVALID_XML,
+                saml_strings.PRIVATE_KEY,
+                None,
+                SAML_INCORRECT_METADATA,
+                id="metadata-from-both-key-from-env",
+            ),
+        ),
+    )
+    def test_create_saml_configuration_fails_when_superseding_value_invalid(
+        self,
+        monkeypatch_env: MonkeyPatchEnvFixture,
+        create_saml_configuration: Callable[..., SAMLWebSSOAuthSettings],
+        env_metadata: str | None,
+        settings_metadata: str | None,
+        env_key: str | None,
+        settings_key: str | None,
+        expected_problem_detail: ProblemDetail,
+    ):
+        """Verify that superseding config is used, even if it's invalid."""
+
+        # Set/unset environment variables
+        monkeypatch_env("PALACE_SAML_SP_METADATA", env_metadata)
+        monkeypatch_env("PALACE_SAML_SP_PRIVATE_KEY", env_key)
+
+        # Create configuration with integration settings should fail.
+        with pytest.raises(ProblemDetailException) as exc:
+            create_saml_configuration(
+                service_provider_xml_metadata=settings_metadata or "",
+                service_provider_private_key=settings_key or "",
+            )
+
+        assert exc.value.problem_detail.uri, expected_problem_detail.uri
+
+    def test_no_settings_without_sp_xml(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        # Set a private key, but no SP XML metadata
+        monkeypatch.setenv("PALACE_SAML_SP_PRIVATE_KEY", saml_strings.PRIVATE_KEY)
+        monkeypatch.delenv("PALACE_SAML_SP_METADATA", raising=False)
+        monkeypatch.delenv("PALACE_SAML_SP_METADATA_FILE", raising=False)
+
+        # We cannot even create integration settings
+        with pytest.raises(ProblemDetailException) as exc:
+            SAMLWebSSOAuthSettings(
+                service_provider_xml_metadata="",
+                service_provider_private_key="",
+            )
+
+        problem_detail = exc.value.problem_detail
+
+        assert problem_detail.uri == INCOMPLETE_CONFIGURATION.uri
+        assert problem_detail.title == INCOMPLETE_CONFIGURATION.title
+        assert problem_detail.status_code == INCOMPLETE_CONFIGURATION.status_code
+        assert problem_detail.detail is not None
+        assert problem_detail.detail.startswith(
+            "Service Provider's XML Metadata is required."
+        )
+
+    def test_no_settings_with_invalid_sp_xml(
+        self,
+    ):
+        with pytest.raises(ProblemDetailException) as exc:
+            SAMLWebSSOAuthSettings(
+                service_provider_xml_metadata=saml_strings.INVALID_XML,
+                service_provider_private_key=saml_strings.PRIVATE_KEY,
+            )
+
+        assert exc.value.problem_detail == SAML_INCORRECT_METADATA.detailed(
+            "Service Provider's XML metadata (from this setting) must contain exactly one declaration of SPSSODescriptor"
+        )
+
+    def test_no_settings_without_sp_private_key(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        # Set SP XML metadata, but no private key
+        monkeypatch.setenv(
+            "PALACE_SAML_SP_METADATA", saml_strings.CORRECT_XML_WITH_ONE_SP
+        )
+        monkeypatch.delenv("PALACE_SAML_SP_PRIVATE_KEY", raising=False)
+        monkeypatch.delenv("PALACE_SAML_SP_PRIVATE_KEY_FILE", raising=False)
+
+        # We cannot even create integration settings
+        with pytest.raises(ProblemDetailException) as exc:
+            SAMLWebSSOAuthSettings(
+                service_provider_xml_metadata="",
+                service_provider_private_key="",
+            )
+
+        problem_detail = exc.value.problem_detail
+
+        assert problem_detail.uri == INCOMPLETE_CONFIGURATION.uri
+        assert problem_detail.title == INCOMPLETE_CONFIGURATION.title
+        assert problem_detail.status_code == INCOMPLETE_CONFIGURATION.status_code
+        assert problem_detail.detail is not None
+        assert problem_detail.detail.startswith(
+            "Service Provider's Private Key is required."
+        )
+
+    def test_no_settings_with_invalid_sp_private_key(
+        self,
+    ):
+        with pytest.raises(ProblemDetailException) as exc:
+            SAMLWebSSOAuthSettings(
+                service_provider_xml_metadata=saml_strings.CORRECT_XML_WITH_ONE_SP,
+                service_provider_private_key="wrong-key",
+            )
+
+        assert exc.value.problem_detail == SAML_INCORRECT_PRIVATE_KEY.detailed(
+            "Service Provider's Private Key (from this setting) is not in a valid format. "
+            "The value must include the '-----BEGIN ...-----' header and '-----END ...-----' footer text."
+        )
+
+    def test_environment_sp_config_fallback(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        """Test that SP config falls back to environment variables when not in integration settings."""
+        # Arrange - set environment variables
+        monkeypatch.setenv(
+            "PALACE_SAML_SP_METADATA", saml_strings.CORRECT_XML_WITH_ONE_SP
+        )
+        monkeypatch.setenv("PALACE_SAML_SP_PRIVATE_KEY", saml_strings.PRIVATE_KEY)
+
+        # Create configuration WITHOUT SP metadata (should fall back to environment)
+        # Use defaults for SP fields (empty strings).
+        configuration = SAMLWebSSOAuthSettings(
+            service_provider_xml_metadata="",
+            service_provider_private_key="",
+        )
+        onelogin_configuration = SAMLOneLoginConfiguration(configuration)
+
+        # Act
+        service_provider = onelogin_configuration.get_service_provider()
+
+        # Assert
+        assert isinstance(service_provider, SAMLServiceProviderMetadata)
+        assert service_provider.entity_id == saml_strings.SP_ENTITY_ID
+        assert service_provider.private_key.replace(
+            "\n", ""
+        ) == saml_strings.PRIVATE_KEY.replace("\n", "")
+
+    def test_integration_settings_override_environment(
+        self,
+        create_saml_configuration: Callable[..., SAMLWebSSOAuthSettings],
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        """Test that integration settings take precedence over environment variables."""
+        # Arrange - set environment variables (these should be ignored)
+        monkeypatch.setenv("PALACE_SAML_SP_METADATA", "<invalid>xml</invalid>")
+        monkeypatch.setenv("PALACE_SAML_SP_PRIVATE_KEY", "wrong-key")
+
+        # Create configuration WITH SP metadata (should override environment)
+        configuration = create_saml_configuration(
+            service_provider_xml_metadata=saml_strings.CORRECT_XML_WITH_ONE_SP,
+            service_provider_private_key=saml_strings.PRIVATE_KEY,
+        )
+        onelogin_configuration = SAMLOneLoginConfiguration(configuration)
+
+        # Act
+        service_provider = onelogin_configuration.get_service_provider()
+
+        # Assert - should use integration settings, not environment
+        assert isinstance(service_provider, SAMLServiceProviderMetadata)
+        assert service_provider.entity_id == saml_strings.SP_ENTITY_ID
+        assert service_provider.private_key.replace(
+            "\n", ""
+        ) == saml_strings.PRIVATE_KEY.replace("\n", "")
+
+    def test_mixed_configuration(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        """Test mixed configuration: metadata from integration, private key from environment."""
+        # Arrange - set private key in environment
+        monkeypatch.setenv("PALACE_SAML_SP_PRIVATE_KEY", saml_strings.PRIVATE_KEY)
+
+        # Create configuration with metadata but no private key
+        configuration = SAMLWebSSOAuthSettings(
+            service_provider_xml_metadata=saml_strings.CORRECT_XML_WITH_ONE_SP,
+            service_provider_private_key="",
+        )
+        onelogin_configuration = SAMLOneLoginConfiguration(configuration)
+
+        # Act
+        service_provider = onelogin_configuration.get_service_provider()
+
+        # Assert
+        assert isinstance(service_provider, SAMLServiceProviderMetadata)
+        assert service_provider.entity_id == saml_strings.SP_ENTITY_ID
+        assert service_provider.private_key.replace(
+            "\n", ""
+        ) == saml_strings.PRIVATE_KEY.replace("\n", "")
 
 
 class TestSAMLSettings:

@@ -9,6 +9,13 @@ SAML_INCORRECT_METADATA = pd(
     detail=_("SAML metadata has an incorrect format."),
 )
 
+SAML_INCORRECT_PRIVATE_KEY = pd(
+    "http://palaceproject.io/terms/problem/saml/incorrect-private-key-format",
+    status_code=400,
+    title=_("SAML private key has an incorrect format."),
+    detail=_("SAML private key has an incorrect format."),
+)
+
 SAML_GENERIC_PARSING_ERROR = pd(
     "http://librarysimplified.org/terms/problem/saml/generic-parsing-error",
     status_code=500,

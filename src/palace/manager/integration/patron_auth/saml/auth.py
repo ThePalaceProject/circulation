@@ -12,6 +12,9 @@ from onelogin.saml2.errors import OneLogin_Saml2_Error
 from palace.manager.integration.patron_auth.saml.configuration.model import (
     SAMLOneLoginConfiguration,
 )
+from palace.manager.integration.patron_auth.saml.configuration.service_provider import (
+    SamlServiceProviderConfiguration,
+)
 from palace.manager.integration.patron_auth.saml.metadata.filter import (
     SAMLSubjectFilter,
     SAMLSubjectFilterError,
@@ -316,7 +319,11 @@ class SAMLAuthenticationManagerFactory:
 
         :return: SAML authentication manager
         """
-        onelogin_configuration = SAMLOneLoginConfiguration(configuration)
+        # Load SP configuration from environment variables
+        sp_config = SamlServiceProviderConfiguration()
+
+        # Pass both configs to SAMLOneLoginConfiguration
+        onelogin_configuration = SAMLOneLoginConfiguration(configuration, sp_config)
         subject_parser = SAMLSubjectParser()
         parser = DSLParser()
         visitor = DSLEvaluationVisitor()
