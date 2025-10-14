@@ -12,7 +12,7 @@ from typing import Any, NamedTuple, Unpack, cast, overload
 from urllib.parse import urlsplit
 
 import flask
-from httpx import Limits, Timeout
+from httpx import Limits
 from pydantic import ValidationError
 from requests import Response
 from requests.structures import CaseInsensitiveDict
@@ -734,7 +734,6 @@ class OverdriveAPI(
         return AsyncClient.for_worker(
             base_url=base_url,
             headers=self._get_headers(self._client_oauth_token),
-            timeout=Timeout(20.0, pool=None),
             allowed_response_codes=[200, 404],
             limits=Limits(
                 max_connections=connections,
