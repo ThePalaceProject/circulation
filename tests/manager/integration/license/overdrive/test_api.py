@@ -5,7 +5,6 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, create_autospec, patch
 
 import pytest
-from httpx import HTTPStatusError
 
 from palace.manager.api.circulation.data import HoldInfo, LoanInfo
 from palace.manager.api.circulation.exceptions import (
@@ -2786,7 +2785,7 @@ class TestSyncBookshelf:
         assert book_info_list[0]["metadata"]
         assert book_info_list[0]["availabilityV2"]
 
-    async def test_fetch_book_info_list_retry_and_error(
+    async def test_fetch_book_info_list_retry_and_unrecoverable_error(
         self,
         overdrive_api_fixture: OverdriveAPIFixture,
     ):
@@ -2812,10 +2811,48 @@ class TestSyncBookshelf:
             # error for 4 attempts for availability and metadata
             mock_async_client.queue_response(500, content="500 Internal Server Error")
 
-        with pytest.raises(HTTPStatusError) as e:
-            initial_endpoint = api.book_info_initial_endpoint(start=None, page_size=1)
-            await api.fetch_book_info_list(
-                initial_endpoint, fetch_metadata=True, fetch_availability=True
-            )
+        # use no backoff since we want the tests to execute quickly
+        with patch(
+            "palace.manager.integration.license.overdrive.api.WORKER_DEFAULT_BACKOFF",
+            None,
+        ):
+            with pytest.raises(BadResponseException) as e:
+                initial_endpoint = api.book_info_initial_endpoint(
+                    start=None, page_size=1
+                )
+                await api.fetch_book_info_list(
+                    initial_endpoint, fetch_metadata=True, fetch_availability=True
+                )
 
             assert e.value.response.status_code == 500
+
+    async def test_fetch_book_info_list_with_404_error(
+        self,
+        overdrive_api_fixture: OverdriveAPIFixture,
+    ):
+        (
+            overdrive_book_list_with_next_link_data,
+            overdrive_book_list_with_next_link_json,
+        ) = overdrive_api_fixture.sample_json("overdrive_book_list_with_next_link.json")
+        api = overdrive_api_fixture.api
+        mock_async_client = overdrive_api_fixture.mock_async_client
+
+        mock_async_client.queue_response(
+            200, content=overdrive_book_list_with_next_link_data
+        )
+
+        # test retry and failure with metadata and availabililty
+        for x in range(2):
+            # error for 4 attempts for availability and metadata
+            mock_async_client.queue_response(404, content="Not Found")
+
+        initial_endpoint = api.book_info_initial_endpoint(start=None, page_size=1)
+        data, next_endpoint = await api.fetch_book_info_list(
+            initial_endpoint, fetch_metadata=True, fetch_availability=True
+        )
+
+        assert len(data) == 1
+        assert next_endpoint
+        assert data[0]["id"]
+        assert data[0].get("metadata", None) is None
+        assert data[0].get("availabilityV2", None) is None

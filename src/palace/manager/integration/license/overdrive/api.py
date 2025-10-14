@@ -12,8 +12,7 @@ from typing import Any, NamedTuple, Unpack, cast, overload
 from urllib.parse import urlsplit
 
 import flask
-import httpx
-from httpx import URL, Limits, Timeout
+from httpx import Limits, Timeout
 from pydantic import ValidationError
 from requests import Response
 from requests.structures import CaseInsensitiveDict
@@ -117,7 +116,7 @@ from palace.manager.sqlalchemy.model.resource import Representation
 from palace.manager.sqlalchemy.util import get_one
 from palace.manager.util import base64
 from palace.manager.util.datetime_helpers import utc_now
-from palace.manager.util.http.async_http import AsyncClient
+from palace.manager.util.http.async_http import WORKER_DEFAULT_BACKOFF, AsyncClient
 from palace.manager.util.http.exception import BadResponseException
 from palace.manager.util.http.http import HTTP, RequestKwargs
 
@@ -660,65 +659,81 @@ class OverdriveAPI(
         of book data. In this way, "page" retrievals are accelerated while allowing the client to retrieve chunks
         in a deterministic and therefore retriable manner.
         """
-
-        async with self.create_async_client(connections) as client:
-            base_url = self.endpoint(self.HOST_ENDPOINT_BASE)
-            client.headers.update(self._get_headers(self._client_oauth_token))
-            client.base_url = URL(base_url)
+        base_url = self.endpoint(self.HOST_ENDPOINT_BASE)
+        async with self.create_async_client(
+            connections=connections, base_url=base_url
+        ) as client:
             urls: deque[str] = deque()
-            pending_requests: list[asyncio.Task[httpx._models.Response]] = []
             books: dict[str, Any] = {}
             extractor_class = extractor_class or OverdriveRepresentationExtractor
             urls.append(endpoint.url)
-            events_path = self.endpoint(
-                self.EVENTS_ENDPOINT_BASE, **{"collection_token": self.collection_token}
+            req = client.get(endpoint.url)
+            response = await req
+            data = response.json()
+            next_url = extractor_class.link(data, rel_to_follow)
+            next_endpoint: BookInfoEndpoint | None = (
+                BookInfoEndpoint(next_url) if next_url else None
             )
-            self._make_request(client, urls, pending_requests)
+            async_task_list = list()
+            response_products = data["products"]
+            for product in response_products:
+                identifier = product["id"].lower()
+                books[identifier] = product
+                if fetch_metadata:
+                    async_task_list.append(
+                        self._get_metadata_async(base_url, product, client)
+                    )
 
-            next: BookInfoEndpoint | None = None
-
-            while pending_requests:
-                done, pending = await asyncio.wait(
-                    pending_requests, return_when=asyncio.FIRST_COMPLETED
-                )
-                pending_requests = list(pending)
-
-                for req in done:
-                    try:
-                        response = await req
-                        response.raise_for_status()
-
-                        if not next:
-                            next_url = extractor_class.link(
-                                response.json(), rel_to_follow
-                            )
-                            next = BookInfoEndpoint(next_url) if next_url else None
-
-                        self._process_request(
-                            response,
-                            fetch_metadata,
-                            fetch_availability,
+                if fetch_availability:
+                    async_task_list.append(
+                        self._get_availability_async(
                             base_url,
-                            events_path,
-                            books,
-                            urls,
+                            product,
+                            client,
                         )
-                    except BadResponseException as e:
-                        if e.response.status_code == 404:
-                            self.log.warning(
-                                f"404 returned: {e.response.url}: ignoring..."
-                            )
-                        else:
-                            self.log.error(f"Request error: {e}")
-                            e.response.raise_for_status()
-                    if urls:
-                        self._make_request(client, urls, pending_requests)
+                    )
 
-            return list(books.values()), next
+            await asyncio.gather(*async_task_list)
 
-    def create_async_client(self, connections: int = 5) -> AsyncClient:
-        return AsyncClient.for_web(
-            max_retries=3,
+            return list(books.values()), next_endpoint
+
+    async def _get_availability_async(
+        self, base_url: str, book_info: dict[str, Any], client: AsyncClient
+    ) -> None:
+        url = book_info["links"]["availabilityV2"]["href"].removeprefix(base_url)
+        data = await self._get_product_relation(client, url)
+        if data:
+            book_info["availabilityV2"] = data
+
+    async def _get_metadata_async(
+        self, base_url: str, book_info: dict[str, Any], client: AsyncClient
+    ) -> None:
+        url = book_info["links"]["metadata"]["href"].removeprefix(base_url)
+        data = await self._get_product_relation(client, url)
+        if data:
+            book_info["metadata"] = data
+
+    async def _get_product_relation(
+        self, client: AsyncClient, url: str
+    ) -> dict[str, Any] | None:
+        req = client.get(url)
+        response = await req
+        # We allow a 404 response code for availability or metadata since those links may not exist for a given
+        # identifier.
+        if response.status_code == 404:
+            return None
+        else:
+            data: dict[str, Any] = response.json()
+            return data
+
+    def create_async_client(
+        self,
+        base_url: str,
+        connections: int = 5,
+    ) -> AsyncClient:
+        return AsyncClient.for_worker(
+            base_url=base_url,
+            headers=self._get_headers(self._client_oauth_token),
             timeout=Timeout(20.0, pool=None),
             allowed_response_codes=[200, 404],
             limits=Limits(
@@ -726,54 +741,8 @@ class OverdriveAPI(
                 max_keepalive_connections=connections,
                 keepalive_expiry=5,
             ),
+            backoff=WORKER_DEFAULT_BACKOFF,
         )
-
-    def _make_request(
-        self,
-        client: AsyncClient,
-        urls: deque[str],
-        pending_requests: list[asyncio.Task[httpx._models.Response]],
-    ) -> None:
-        url = urls.pop()
-        req = client.get(url)
-        task = asyncio.create_task(req)
-        pending_requests.append(task)
-
-    def _process_request(
-        self,
-        response: httpx._models.Response,
-        request_metadata: bool,
-        request_availability: bool,
-        base_url: str,
-        events_path: str,
-        books: dict[str, Any],
-        urls: deque[str],
-    ) -> None:
-
-        data = response.raise_for_status().json()
-        path = response.url.path
-        if path == events_path:
-            response_products = data["products"]
-            for product in response_products:
-                if request_metadata:
-                    urls.append(
-                        product["links"]["metadata"]["href"].removeprefix(base_url)
-                    )
-                if request_availability:
-                    urls.append(
-                        product["links"]["availabilityV2"]["href"].removeprefix(
-                            base_url
-                        )
-                    )
-                id = product["id"].lower()
-                books[id] = product
-        elif path.endswith("availability") and path.startswith("/v2/"):
-            books[data["reserveId"].lower()]["availabilityV2"] = data
-        elif path.endswith("metadata") and path.startswith("/v1/"):
-            books[data["id"].lower()]["metadata"] = data
-        else:
-            # this should never happen
-            raise RuntimeError(f"Unknown URL: {response.url}")
 
     def recently_changed_ids(
         self, start: datetime.datetime, cutoff: datetime.datetime | None
