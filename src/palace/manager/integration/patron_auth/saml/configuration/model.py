@@ -1,4 +1,5 @@
 import html
+import re
 from datetime import datetime
 from re import Pattern
 from threading import Lock
@@ -331,7 +332,10 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
         will be stored in the settings.
 
         The setting value has priority over that of the environment. The
-        selected value must be valid (i.e., parse successfully).
+        selected value must be valid (i.e., parse successfully).  The reason
+        we validate the value from the environment, if it is selected, is to be
+        able to report to the Admin UI user that the config is broken while
+        they have an opportunity to override it with a valid value.
         """
         xml_metadata: str | None
         if v:
@@ -387,10 +391,18 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
                 )
             )
 
-        if not (key.startswith("-----BEGIN") and key.endswith("PRIVATE KEY-----")):
+        # Ensure that the key has the required header and footer text. Some
+        # keys encode their algorithm in their body. Other do not and, thus,
+        # must hint it in their header/footer.
+        if not re.fullmatch(
+            r"\s*-----BEGIN.*PRIVATE KEY-----.+-----END.*PRIVATE KEY-----\s*",
+            key,
+            re.DOTALL,
+        ):
             raise SettingsValidationError(
                 problem_detail=SAML_INCORRECT_PRIVATE_KEY.detailed(
-                    f"Service Provider's Private Key (from {value_from}) is not in a valid format."
+                    f"Service Provider's Private Key (from {value_from}) is not in a valid format. "
+                    "The value must include the '-----BEGIN ...-----' header and '-----END ...-----' footer text."
                 )
             )
 

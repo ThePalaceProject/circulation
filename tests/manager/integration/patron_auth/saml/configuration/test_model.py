@@ -419,8 +419,8 @@ class TestSamlSpConfiguration:
     ):
         with pytest.raises(ProblemDetailException) as exc:
             SAMLWebSSOAuthSettings(
-                service_provider_xml_metadata="<invalid>xml</invalid>",
-                service_provider_private_key="saml_strings.PRIVATE_KEY",
+                service_provider_xml_metadata=saml_strings.INVALID_XML,
+                service_provider_private_key=saml_strings.PRIVATE_KEY,
             )
 
         assert exc.value.problem_detail == SAML_INCORRECT_METADATA.detailed(
@@ -465,7 +465,8 @@ class TestSamlSpConfiguration:
             )
 
         assert exc.value.problem_detail == SAML_INCORRECT_PRIVATE_KEY.detailed(
-            "Service Provider's Private Key (from this setting) is not in a valid format."
+            "Service Provider's Private Key (from this setting) is not in a valid format. "
+            "The value must include the '-----BEGIN ...-----' header and '-----END ...-----' footer text."
         )
 
     def test_environment_sp_config_fallback(

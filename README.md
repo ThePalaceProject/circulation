@@ -341,7 +341,7 @@ settings in the future.
 
 - `PALACE_SAML_SP_PRIVATE_KEY_FILE`: Path to SP private key file
 - `PALACE_SAML_SP_PRIVATE_KEY`: Inline SP private key content
--
+
 - `PALACE_SAML_SP_METADATA_FILE`: Path to SP metadata XML file
 - `PALACE_SAML_SP_METADATA`: Inline SP metadata XML content
 

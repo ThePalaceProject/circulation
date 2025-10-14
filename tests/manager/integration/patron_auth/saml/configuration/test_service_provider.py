@@ -33,8 +33,8 @@ def sample_metadata() -> str:
 </EntityDescriptor>"""
 
 
-class TestSAMLServiceProviderConfiguration:
-    """Tests for SAMLServiceProviderConfiguration class."""
+class TestSamlServiceProviderConfiguration:
+    """Tests for SamlServiceProviderConfiguration class."""
 
     def test_no_configuration(self, monkeypatch: MonkeyPatch) -> None:
         """Test configuration with no environment variables set."""
