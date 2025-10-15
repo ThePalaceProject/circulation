@@ -1,23 +1,13 @@
 import datetime
 from collections.abc import Callable
 from functools import wraps
-from typing import ParamSpec, TypeVar, overload
+from typing import overload
 
 import pytz
 from dateutil.relativedelta import relativedelta
 
-# datetime helpers
-# As part of the python 3 conversion, the datetime object went through a
-# subtle update that changed how UTC works. Find more information here:
-# https://blog.ganssle.io/articles/2019/11/utcnow.html
-# https://docs.python.org/3/library/datetime.html#aware-and-naive-objects
 
-
-P = ParamSpec("P")
-T = TypeVar("T")
-
-
-def _wrapper(func: Callable[P, T]) -> Callable[P, T]:
+def _wrapper[T, **P](func: Callable[P, T]) -> Callable[P, T]:
     @wraps(func)
     def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
         kwargs["tzinfo"] = pytz.UTC

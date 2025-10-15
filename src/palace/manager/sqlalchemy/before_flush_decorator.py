@@ -4,15 +4,13 @@ from collections.abc import Callable
 from copy import copy
 from dataclasses import dataclass
 from enum import Enum
-from typing import TYPE_CHECKING, ParamSpec
+from typing import TYPE_CHECKING
 
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.unitofwork import UOWTransaction
 
 if TYPE_CHECKING:
     from palace.manager.sqlalchemy.model.base import Base
-
-P = ParamSpec("P")
 
 
 class ListenerState(Enum):
@@ -46,7 +44,7 @@ class BeforeFlushListener:
     def __init__(self):
         self._listeners: list[BeforeFlushListener.Listeners] = []
 
-    def before_flush(
+    def before_flush[**P](
         self,
         model: type[Base] | tuple[type[Base], ...],
         state: ListenerState = ListenerState.any,

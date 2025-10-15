@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Generator
 from enum import Enum
 from re import Pattern
-from typing import Any, TypeVar, cast
+from typing import Any, cast
 
 from flask import url_for
 from pydantic import PositiveInt, field_validator
@@ -269,15 +269,10 @@ class BasicAuthProviderLibrarySettings(AuthProviderLibrarySettings):
         return restriction_criteria
 
 
-SettingsType = TypeVar("SettingsType", bound=BasicAuthProviderSettings, covariant=True)
-LibrarySettingsType = TypeVar(
-    "LibrarySettingsType", bound=BasicAuthProviderLibrarySettings, covariant=True
-)
-
-
-class BasicAuthenticationProvider(
-    AuthenticationProvider[SettingsType, LibrarySettingsType], ABC
-):
+class BasicAuthenticationProvider[
+    SettingsType: BasicAuthProviderSettings,
+    LibrarySettingsType: BasicAuthProviderLibrarySettings,
+](AuthenticationProvider[SettingsType, LibrarySettingsType], ABC):
     """Verify a username/password, obtained through HTTP Basic Auth, with
     a remote source of truth.
     """

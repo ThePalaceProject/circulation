@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, TypeVar
+from typing import Any
 
 from werkzeug.datastructures import ImmutableMultiDict
 
@@ -9,8 +9,6 @@ from palace.manager.integration.settings import (
     ConfigurationFormItemType,
     FormFieldInfo,
 )
-
-T = TypeVar("T", bound=BaseSettings)
 
 
 class ProcessFormData:
@@ -56,7 +54,7 @@ class ProcessFormData:
         return return_data
 
     @classmethod
-    def get_settings(
+    def get_settings[T: BaseSettings](
         cls, settings_class: type[T], form_data: ImmutableMultiDict[str, str]
     ) -> T:
         return settings_class.model_validate(

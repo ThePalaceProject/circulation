@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from functools import cached_property, partial
 from io import TextIOWrapper
-from typing import IO, ClassVar, TypedDict, TypeVar, Unpack
+from typing import IO, ClassVar, TypedDict, Unpack
 
 from sqlalchemy.orm import Session
 
@@ -50,9 +50,6 @@ class TableProcessingResult:
     content_stream: IO[bytes]
 
 
-T = TypeVar("T", bound="LibraryCollectionReport")
-
-
 class LibraryCollectionReport(LoggerMixin):
     # The following must be defined in subclasses:
     #   A unique key for this report.
@@ -80,7 +77,9 @@ class LibraryCollectionReport(LoggerMixin):
         return self.TABLE_CLASSES
 
     @classmethod
-    def from_task(cls: type[T], task: Task, **kwargs: Unpack[LibraryReportKwargs]) -> T:
+    def from_task[T: LibraryCollectionReport](
+        cls: type[T], task: Task, **kwargs: Unpack[LibraryReportKwargs]
+    ) -> T:
         return cls(
             send_email=task.services.email.send_email,
             s3_service=task.services.storage.public(),

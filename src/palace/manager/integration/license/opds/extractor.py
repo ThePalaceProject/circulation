@@ -1,6 +1,5 @@
 from abc import ABC, abstractmethod
 from collections.abc import Iterable
-from typing import Generic, TypeVar
 
 from palace.manager.data_layer.bibliographic import BibliographicData
 from palace.manager.data_layer.identifier import IdentifierData
@@ -9,11 +8,8 @@ from palace.manager.opds.odl.info import LicenseInfo
 from palace.manager.opds.odl.odl import License
 from palace.manager.util.log import LoggerMixin
 
-FeedType = TypeVar("FeedType")
-PublicationType = TypeVar("PublicationType")
 
-
-class OpdsExtractor(Generic[FeedType, PublicationType], LoggerMixin, ABC):
+class OpdsExtractor[FeedType, PublicationType](LoggerMixin, ABC):
     """
     Base class for OPDS extractors.
 

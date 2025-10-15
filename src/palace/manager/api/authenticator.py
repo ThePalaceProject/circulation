@@ -18,8 +18,8 @@ from palace.manager.api.adobe_vendor_id import AuthdataUtility
 from palace.manager.api.annotations import AnnotationWriter
 from palace.manager.api.authentication.base import (
     AuthenticationProvider,
-    LibrarySettingsType,
-    SettingsType,
+    AuthProviderLibrarySettings,
+    AuthProviderSettings,
 )
 from palace.manager.api.authentication.basic import BasicAuthenticationProvider
 from palace.manager.api.authentication.basic_token import (
@@ -784,9 +784,9 @@ class LibraryAuthenticator(LoggerMixin):
         return headers
 
 
-class BaseSAMLAuthenticationProvider(
-    AuthenticationProvider[SettingsType, LibrarySettingsType], ABC
-):
+class BaseSAMLAuthenticationProvider[
+    SettingsType: AuthProviderSettings, LibrarySettingsType: AuthProviderLibrarySettings
+](AuthenticationProvider[SettingsType, LibrarySettingsType], ABC):
     """
     Base class for SAML authentication providers
     """

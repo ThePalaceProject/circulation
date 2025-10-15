@@ -6,7 +6,7 @@ import traceback
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Generator
 from datetime import datetime
-from typing import Any, ParamSpec, Self, TypeVar
+from typing import Any, Self
 
 from sqlalchemy.orm import Session
 
@@ -124,10 +124,6 @@ class SelfTestResult:
         return getattr(self.exception, "debug_message", None)
 
 
-T = TypeVar("T")
-P = ParamSpec("P")
-
-
 class HasSelfTests(LoggerMixin, ABC):
     """An object capable of verifying its own setup by running a
     series of self-tests.
@@ -207,7 +203,7 @@ class HasSelfTests(LoggerMixin, ABC):
         return value, results
 
     @staticmethod
-    def run_test(
+    def run_test[T, **P](
         name: str, method: Callable[P, T], *args: P.args, **kwargs: P.kwargs
     ) -> SelfTestResult:
         """Run a test method, record any exception that happens, and keep

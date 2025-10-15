@@ -1,13 +1,12 @@
 from abc import ABC, abstractmethod
-from typing import Generic, TypeVar
 
 from palace.manager.feed.types import FeedData, WorkEntryData
 from palace.manager.util.opds_writer import OPDSMessage
 
-T = TypeVar("T")
 
-
-class SerializerInterface(ABC, Generic[T]):
+class SerializerInterface[T](
+    ABC,
+):
     @classmethod
     @abstractmethod
     def to_string(cls, data: T) -> str: ...

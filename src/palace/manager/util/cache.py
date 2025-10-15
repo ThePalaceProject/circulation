@@ -4,17 +4,14 @@ import time
 from collections.abc import Callable
 from functools import wraps
 from threading import Lock
-from typing import Any, ParamSpec, TypeVar, cast
+from typing import Any, cast
 
 from sqlalchemy.orm import Session
 
 from palace.manager.sqlalchemy.model.datasource import DataSource
 
-P = ParamSpec("P")
-T = TypeVar("T")
 
-
-def _signature(func: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> str:
+def _signature[T, **P](func: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> str:
     """Create a hashable function signature
     by stringifying and joining all arguments"""
     strargs = ";".join([str(a) for a in args])
@@ -22,7 +19,7 @@ def _signature(func: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> str:
     return str(func) + "::" + strargs + "::" + strkwargs
 
 
-def memoize(ttls: int = 3600) -> Callable[[Callable[P, T]], Callable[P, T]]:
+def memoize[T, **P](ttls: int = 3600) -> Callable[[Callable[P, T]], Callable[P, T]]:
     """An in-memory cache based off the function and arguments
     Usage:
     @memoize(ttls=<seconds>)

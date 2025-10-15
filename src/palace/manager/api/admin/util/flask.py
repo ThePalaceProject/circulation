@@ -1,10 +1,8 @@
-from typing import Literal, TypeVar, overload
+from typing import Literal, overload
 
 from palace.manager.api.util.flask import get_request_var
 from palace.manager.sqlalchemy.model.admin import Admin
 from palace.manager.util.sentinel import SentinelType
-
-TDefault = TypeVar("TDefault")
 
 
 @overload
@@ -12,10 +10,10 @@ def get_request_admin() -> Admin: ...
 
 
 @overload
-def get_request_admin(*, default: TDefault) -> Admin | TDefault: ...
+def get_request_admin[TDefault](*, default: TDefault) -> Admin | TDefault: ...
 
 
-def get_request_admin(
+def get_request_admin[TDefault](
     *, default: TDefault | Literal[SentinelType.NotGiven] = SentinelType.NotGiven
 ) -> Admin | TDefault:
     """

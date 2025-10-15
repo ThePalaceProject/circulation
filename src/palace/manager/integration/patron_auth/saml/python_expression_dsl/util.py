@@ -1,5 +1,3 @@
-from typing import TypeVar
-
 from pyparsing import ParseResults
 
 from palace.manager.integration.patron_auth.saml.python_expression_dsl.ast import (
@@ -19,9 +17,6 @@ from palace.manager.integration.patron_auth.saml.python_expression_dsl.ast impor
     UnaryExpression,
 )
 from palace.manager.util import chunks
-
-UE = TypeVar("UE", bound=UnaryExpression)
-BE = TypeVar("BE", bound=BinaryExpression)
 
 
 def _parse_identifier(tokens: ParseResults) -> Identifier:
@@ -54,7 +49,7 @@ def _parse_number(tokens: ParseResults) -> Number:
     return Number(tokens[0])
 
 
-def _parse_unary_expression(
+def _parse_unary_expression[UE: UnaryExpression](
     expression_type: type[UE], tokens: ParseResults
 ) -> UE | None:
     """Transform the token into an unary expression.
@@ -102,7 +97,7 @@ def _parse_unary_boolean_expression(
     return _parse_unary_expression(UnaryBooleanExpression, tokens)
 
 
-def _parse_binary_expression(
+def _parse_binary_expression[BE: BinaryExpression](
     expression_type: type[BE], tokens: ParseResults
 ) -> BE | None:
     """Transform the token into a BinaryExpression node.

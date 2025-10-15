@@ -6,7 +6,6 @@ import gzip
 from collections.abc import Callable
 from functools import wraps
 from io import BytesIO
-from typing import ParamSpec, TypeVar
 
 import flask
 from flask import Response, make_response, url_for
@@ -90,11 +89,7 @@ def returns_problem_detail(f):
     return decorated
 
 
-P = ParamSpec("P")
-T = TypeVar("T")
-
-
-def raises_problem_detail(f: Callable[P, T]) -> Callable[P, T | Response]:
+def raises_problem_detail[T, **P](f: Callable[P, T]) -> Callable[P, T | Response]:
     @wraps(f)
     def decorated(*args: P.args, **kwargs: P.kwargs) -> T | Response:
         try:
@@ -132,7 +127,7 @@ def _parse_cache_control(cache_control_header: str | None) -> dict[str, int | No
     return directives
 
 
-def cache_control_headers(
+def cache_control_headers[**P](
     default_max_age: int | None = None,
 ) -> Callable[[Callable[P, Response]], Callable[P, Response]]:
     """

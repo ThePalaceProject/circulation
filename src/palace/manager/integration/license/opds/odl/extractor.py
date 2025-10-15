@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from collections.abc import Callable, Generator, Iterable, Sequence
 from datetime import date, datetime
-from typing import Any, TypeVar
+from typing import Any
 from urllib.parse import urljoin
 
 from frozendict import frozendict
@@ -46,10 +46,8 @@ from palace.manager.sqlalchemy.model.licensing import (
 from palace.manager.sqlalchemy.model.resource import Hyperlink
 from palace.manager.util import first_or_default
 
-PublicationType = TypeVar("PublicationType", bound=opds2.BasePublication)
 
-
-class OPDS2WithODLExtractor(
+class OPDS2WithODLExtractor[PublicationType: opds2.BasePublication](
     OpdsExtractor[PublicationFeedNoValidation, PublicationType], BearerTokenDrmMixin
 ):
 

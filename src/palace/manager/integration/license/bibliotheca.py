@@ -14,7 +14,7 @@ from argparse import ArgumentParser, Namespace
 from collections.abc import Collection as CollectionT, Generator, Iterable
 from datetime import datetime, timedelta
 from io import BytesIO
-from typing import Any, Literal, Optional, TypeVar, Unpack, overload
+from typing import Any, Literal, Optional, Unpack, overload
 
 import dateutil.parser
 from flask_babel import lazy_gettext as _
@@ -876,10 +876,7 @@ class ItemListParser(XMLProcessor[BibliographicData], LoggerMixin):
         return medium, [format]
 
 
-T = TypeVar("T")
-
-
-class BibliothecaParser(XMLProcessor[T], ABC):
+class BibliothecaParser[T](XMLProcessor[T], ABC):
     INPUT_TIME_FORMAT = "%Y-%m-%dT%H:%M:%S"
 
     @classmethod
@@ -1070,7 +1067,7 @@ class PatronCirculationParser(XMLParser):
             hold_info.hold_position = 0
         return hold_info
 
-    def process_one(
+    def process_one[T](
         self, tag: _Element, namespaces: dict[str, str], source_class: type[T]
     ) -> T | None:
         if not tag.xpath("ItemId"):

@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from enum import StrEnum, auto
 from functools import cached_property
-from typing import Literal, TypeVar
+from typing import Literal
 
 from pydantic import Field, NonNegativeInt, PositiveFloat, PositiveInt
 
@@ -229,10 +229,7 @@ class BelongsTo(BaseOpdsModel):
         return _named_or_sequence_to_sequence(self.collection, Contributor)
 
 
-NamedT = TypeVar("NamedT", bound=Named)
-
-
-def _named_or_sequence_to_sequence(
+def _named_or_sequence_to_sequence[NamedT: Named](
     value: str | NamedT | tuple[str | NamedT, ...] | None, cls: type[NamedT]
 ) -> Sequence[NamedT]:
     return tuple(

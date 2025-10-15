@@ -9,17 +9,18 @@ from typing import IO, Any
 
 from palace.manager.reporting.model import (
     TTabularDataProcessor,
-    TTabularDataProcessorReturn,
     TTabularHeadings,
     TTabularRows,
 )
 from palace.manager.util.iteration_helpers import CountingIterator
 from palace.manager.util.log import ExtraDataLoggerAdapter
 
-TCounterWrappedResult = tuple[CountingIterator, TTabularDataProcessorReturn]
+type TCounterWrappedResult[TTabularDataProcessorReturn] = tuple[
+    CountingIterator, TTabularDataProcessorReturn
+]
 
 
-def row_counter_wrapper(
+def row_counter_wrapper[TTabularDataProcessorReturn](
     func: TTabularDataProcessor[TTabularDataProcessorReturn],
 ) -> TTabularDataProcessor[TCounterWrappedResult]:
     """

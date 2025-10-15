@@ -5,7 +5,7 @@ import json
 from collections.abc import Generator, Iterable
 from functools import partial
 from threading import RLock
-from typing import Any, NamedTuple, TypeVar, Unpack, cast, overload
+from typing import Any, NamedTuple, Unpack, cast, overload
 from urllib.parse import urlsplit
 
 import flask
@@ -701,8 +701,6 @@ class OverdriveAPI(
             )
             yield self.run_test(task, self._get_patron_oauth_credential, patron, pin)
 
-    TOverdriveModel = TypeVar("TOverdriveModel", bound=BaseOverdriveModel)
-
     @overload
     def patron_request(
         self,
@@ -717,7 +715,7 @@ class OverdriveAPI(
     ) -> Response: ...
 
     @overload
-    def patron_request(
+    def patron_request[TOverdriveModel: BaseOverdriveModel](
         self,
         patron: Patron,
         pin: str | None,
@@ -729,7 +727,7 @@ class OverdriveAPI(
         exception_on_401: bool = ...,
     ) -> TOverdriveModel: ...
 
-    def patron_request(
+    def patron_request[TOverdriveModel: BaseOverdriveModel](
         self,
         patron: Patron,
         pin: str | None,

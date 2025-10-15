@@ -1,4 +1,4 @@
-from typing import Annotated, Any, TypeVar, get_args
+from typing import Annotated, Any, get_args
 
 from frozendict import frozendict
 from pydantic import (
@@ -94,9 +94,7 @@ class _PydanticFrozenDictAnnotation:
         )
 
 
-K = TypeVar("K")
-V = TypeVar("V")
-FrozenDict = Annotated[frozendict[K, V], _PydanticFrozenDictAnnotation]
+type FrozenDict[K, V] = Annotated[frozendict[K, V], _PydanticFrozenDictAnnotation]
 """
 A type annotation for a frozendict that Pydantic can validate and serialize.
 """

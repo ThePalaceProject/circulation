@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal, TypeVar, overload
+from typing import TYPE_CHECKING, Any, Literal, overload
 
 import flask
 from sqlalchemy.orm import Session
@@ -14,23 +14,19 @@ if TYPE_CHECKING:
     from palace.manager.api.circulation_manager import CirculationManager
 
 
-TVar = TypeVar("TVar")
-TDefault = TypeVar("TDefault")
-
-
 @overload
-def get_request_var(
+def get_request_var[TVar](
     name: str, var_cls: type[TVar], *, default: Literal[SentinelType.NotGiven] = ...
 ) -> TVar: ...
 
 
 @overload
-def get_request_var(
+def get_request_var[TVar, TDefault](
     name: str, var_cls: type[TVar], *, default: TDefault
 ) -> TVar | TDefault: ...
 
 
-def get_request_var(
+def get_request_var[TVar, TDefault](
     name: str,
     var_cls: type[TVar],
     *,
@@ -80,10 +76,10 @@ def get_request_library() -> Library: ...
 
 
 @overload
-def get_request_library(*, default: TDefault) -> Library | TDefault: ...
+def get_request_library[TDefault](*, default: TDefault) -> Library | TDefault: ...
 
 
-def get_request_library(
+def get_request_library[TDefault](
     *, default: TDefault | Literal[SentinelType.NotGiven] = SentinelType.NotGiven
 ) -> Library | TDefault:
     """
@@ -110,10 +106,10 @@ def get_request_patron() -> Patron: ...
 
 
 @overload
-def get_request_patron(*, default: TDefault) -> Patron | TDefault: ...
+def get_request_patron[TDefault](*, default: TDefault) -> Patron | TDefault: ...
 
 
-def get_request_patron(
+def get_request_patron[TDefault](
     *, default: TDefault | Literal[SentinelType.NotGiven] = SentinelType.NotGiven
 ) -> Patron | TDefault:
     """

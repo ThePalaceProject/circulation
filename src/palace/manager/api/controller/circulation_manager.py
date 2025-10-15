@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import TypeVar
-
 from flask_babel import lazy_gettext as _
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
@@ -39,11 +37,12 @@ from palace.manager.sqlalchemy.util import get_one
 from palace.manager.util import first_or_default
 from palace.manager.util.problem_detail import ProblemDetail
 
-T = TypeVar("T", Loan, Hold)
-
 
 class CirculationManagerController(BaseCirculationManagerController):
-    def get_patron_circ_objects(
+    def get_patron_circ_objects[T: (
+        Loan,
+        Hold,
+    )](
         self,
         object_class: type[T],
         patron: Patron | None,

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, Generic, Protocol, TypeVar
+from typing import TYPE_CHECKING, Any, Protocol
 
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
@@ -20,10 +20,7 @@ class IntegrationConfigurationProtocol(Protocol):
     settings_dict: dict[str, Any]
 
 
-T = TypeVar("T", bound=BaseSettings)
-
-
-def integration_settings_load(
+def integration_settings_load[T: BaseSettings](
     settings_cls: type[T],
     integration: IntegrationConfigurationProtocol | dict[str, Any],
 ) -> T:
@@ -79,12 +76,7 @@ def integration_settings_update(
     flag_modified(integration, "settings_dict")
 
 
-SettingsType = TypeVar("SettingsType", bound=BaseSettings, covariant=True)
-LibrarySettingsType = TypeVar("LibrarySettingsType", bound=BaseSettings, covariant=True)
-ChildSettingsType = TypeVar("ChildSettingsType", bound=BaseSettings, covariant=True)
-
-
-class HasIntegrationConfiguration(Generic[SettingsType], ABC):
+class HasIntegrationConfiguration[SettingsType: BaseSettings](ABC):
     @classmethod
     @abstractmethod
     def label(cls) -> str:
@@ -141,8 +133,9 @@ class HasIntegrationConfiguration(Generic[SettingsType], ABC):
         return {}
 
 
-class HasLibraryIntegrationConfiguration(
-    Generic[SettingsType, LibrarySettingsType],
+class HasLibraryIntegrationConfiguration[
+    SettingsType: BaseSettings, LibrarySettingsType: BaseSettings
+](
     HasIntegrationConfiguration[SettingsType],
     ABC,
 ):
@@ -180,8 +173,9 @@ class HasLibraryIntegrationConfiguration(
         )
 
 
-class HasChildIntegrationConfiguration(
-    Generic[SettingsType, ChildSettingsType],
+class HasChildIntegrationConfiguration[
+    SettingsType: BaseSettings, ChildSettingsType: BaseSettings
+](
     HasIntegrationConfiguration[SettingsType],
     ABC,
 ):

@@ -7,7 +7,7 @@ import string
 from collections import Counter
 from collections.abc import Generator, Iterable, Sequence
 from decimal import Decimal, InvalidOperation
-from typing import TypeVar, overload
+from typing import overload
 
 import sqlalchemy
 
@@ -499,18 +499,15 @@ def is_session(value: object) -> bool:
     )
 
 
-T = TypeVar("T")
+@overload
+def first_or_default[T](collection: Iterable[T], default: T) -> T: ...
 
 
 @overload
-def first_or_default(collection: Iterable[T], default: T) -> T: ...
+def first_or_default[T](collection: Iterable[T], default: None = ...) -> T | None: ...
 
 
-@overload
-def first_or_default(collection: Iterable[T], default: None = ...) -> T | None: ...
-
-
-def first_or_default(collection: Iterable[T], default: T | None = None) -> T | None:
+def first_or_default[T](collection: Iterable[T], default: T | None = None) -> T | None:
     """Return first element of the specified collection or the default value if the collection is empty.
 
     :param collection: Collection
@@ -524,7 +521,7 @@ def first_or_default(collection: Iterable[T], default: T | None = None) -> T | N
     return element
 
 
-def chunks(
+def chunks[T](
     lst: Sequence[T], chunk_size: int, start_index: int = 0
 ) -> Generator[Sequence[T]]:
     """Yield successive n-sized chunks from lst."""

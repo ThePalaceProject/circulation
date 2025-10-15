@@ -4,7 +4,7 @@ import asyncio
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from functools import cached_property
-from typing import Generic, Literal, TypeVar
+from typing import Literal
 from urllib.parse import urljoin
 
 from pydantic import ValidationError
@@ -30,11 +30,8 @@ from palace.manager.util.http.async_http import AsyncClient
 from palace.manager.util.http.exception import BadResponseException
 from palace.manager.util.log import LoggerMixin, elapsed_time_logging
 
-FeedType = TypeVar("FeedType")
-PublicationType = TypeVar("PublicationType")
 
-
-class OpdsImporter(Generic[FeedType, PublicationType], LoggerMixin):
+class OpdsImporter[FeedType, PublicationType](LoggerMixin):
     """
     An importer for OPDS or OPDS+ODL feeds.
     """
@@ -430,7 +427,7 @@ class PublicationImportResult:
 
 
 @dataclass(frozen=True)
-class FeedImportResult(Generic[FeedType], LoggerMixin):
+class FeedImportResult[FeedType](LoggerMixin):
     next_url: str | None
     feed: FeedType
     results: dict[IdentifierData, PublicationImportResult]

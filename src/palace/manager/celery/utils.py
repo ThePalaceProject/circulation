@@ -2,14 +2,10 @@
 Helper functions for use in Celery tasks
 """
 
-from typing import TypeVar
-
 from sqlalchemy.orm import Session
 
 from palace.manager.core.exceptions import PalaceTypeError, PalaceValueError
 from palace.manager.sqlalchemy.util import get_one
-
-T = TypeVar("T")
 
 
 class ModelNotFoundError(PalaceValueError):
@@ -18,7 +14,7 @@ class ModelNotFoundError(PalaceValueError):
     """
 
 
-def load_from_id(db: Session, model: type[T], id: int) -> T:
+def load_from_id[T](db: Session, model: type[T], id: int) -> T:
     """
     Load an instance of a model from the database using its ID.
 
@@ -38,7 +34,7 @@ def load_from_id(db: Session, model: type[T], id: int) -> T:
         raise ModelNotFoundError(e.message)
 
 
-def validate_not_none(value: T | None, message: str) -> T:
+def validate_not_none[T](value: T | None, message: str) -> T:
     """
     Validate that a value is not None.
 

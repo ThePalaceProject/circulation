@@ -3,14 +3,12 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Generator
 from io import BytesIO
-from typing import TYPE_CHECKING, Generic, TypeVar
+from typing import TYPE_CHECKING
 
 from lxml import etree
 
 if TYPE_CHECKING:
     from lxml.etree import _Element, _ElementTree
-
-T = TypeVar("T")
 
 
 class XMLParser:
@@ -95,7 +93,7 @@ class XMLParser:
             return xml
 
     @staticmethod
-    def _process_all(
+    def _process_all[T](
         xml: _ElementTree,
         xpath_expression: str,
         namespaces: dict[str, str],
@@ -112,7 +110,7 @@ class XMLParser:
                 yield data
 
 
-class XMLProcessor(XMLParser, Generic[T], ABC):
+class XMLProcessor[T](XMLParser, ABC):
     """
     A class that simplifies making a class that processes XML documents.
     It loads the XML document, runs an XPath expression to find all matching

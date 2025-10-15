@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Generic, Self, TypeVar
+from typing import Self
 from urllib.parse import urlparse
 
 import httpx
@@ -62,10 +62,9 @@ class RemoteIntegrationException(IntegrationException, BaseProblemDetailExceptio
         return str(self)
 
 
-T = TypeVar("T", requests.Response, httpx.Response)
-
-
-class BadResponseException(RemoteIntegrationException, Generic[T]):
+class BadResponseException[T: (requests.Response, httpx.Response)](
+    RemoteIntegrationException,
+):
     """The request seemingly went okay, but we got a bad response."""
 
     title = _("Bad response")

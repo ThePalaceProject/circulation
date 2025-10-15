@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Collection
 from email.utils import parsedate_to_datetime
-from typing import Literal, TypeVar
+from typing import Literal
 
 import httpx
 import requests
@@ -59,10 +59,10 @@ def status_code_matches(status_code: int, code_collection: ResponseCodesTypes) -
     return code_str in collection_str or series in collection_str
 
 
-T = TypeVar("T", requests.Response, httpx.Response)
-
-
-def raise_for_bad_response(
+def raise_for_bad_response[T: (
+    requests.Response,
+    httpx.Response,
+)](
     url: str | httpx.URL,
     response: T,
     allowed_response_codes: ResponseCodesTypes,

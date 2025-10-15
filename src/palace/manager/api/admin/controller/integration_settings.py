@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from abc import ABC, abstractmethod
-from typing import Any, Generic, NamedTuple, TypeVar
+from typing import Any, NamedTuple
 
 import flask
 from flask import Response
@@ -40,8 +40,6 @@ from palace.manager.util.json import json_serializer
 from palace.manager.util.log import LoggerMixin
 from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
 
-T = TypeVar("T", bound=HasIntegrationConfiguration[BaseSettings])
-
 
 class UpdatedLibrarySettingsTuple(NamedTuple):
     integration: IntegrationLibraryConfiguration
@@ -54,7 +52,9 @@ class ChangedLibrariesTuple(NamedTuple):
     removed: list[IntegrationLibraryConfiguration]
 
 
-class IntegrationSettingsController(ABC, Generic[T], LoggerMixin):
+class IntegrationSettingsController[T: HasIntegrationConfiguration[BaseSettings]](
+    ABC, LoggerMixin
+):
     def __init__(
         self,
         db: Session,
@@ -438,7 +438,9 @@ class IntegrationSettingsController(ABC, Generic[T], LoggerMixin):
         return Response("Deleted", 200)
 
 
-class IntegrationSettingsSelfTestsController(IntegrationSettingsController[T], ABC):
+class IntegrationSettingsSelfTestsController[
+    T: HasIntegrationConfiguration[BaseSettings]
+](IntegrationSettingsController[T], ABC):
     @abstractmethod
     def run_self_tests(
         self, integration: IntegrationConfiguration
