@@ -12,7 +12,7 @@ from typing import Any, Protocol
 
 import pytz
 from celery import shared_task
-from sqlalchemy import and_, distinct, false, select, true
+from sqlalchemy import and_, distinct, false, select, true, union
 from sqlalchemy.orm import Query, Session, joinedload
 from sqlalchemy.sql.functions import coalesce, count, max as sql_max, sum
 
@@ -261,24 +261,26 @@ def _fetch_distinct_eligible_data_source_names(
     :param registry: The license providers registry for protocol lookups.
     :return: A sorted list of distinct data source names.
     """
-    # Get all protocol names (canonical + aliases) for eligible integrations
-    opds2_protocols = registry.get_protocols(OPDS2API, default=False)
-    opds_for_distributors_protocols = registry.get_protocols(
-        OPDSForDistributorsAPI, default=False
-    )
-    eligible_collection_protocols = opds2_protocols + opds_for_distributors_protocols
+    # Get IntegrationConfiguration IDs for both eligible integration types
+    eligible_protocols = [OPDS2API, OPDSForDistributorsAPI]
 
-    # Data sources for eligible collections...
+    # Get IDs for all IntegrationConfiguration (canonical + aliases) for eligible integrations.
+    eligible_config_ids_query = union(
+        *[
+            registry.configurations_query(protocol).with_only_columns(
+                IntegrationConfiguration.id
+            )
+            for protocol in eligible_protocols
+        ]
+    )
+    # Query collections with those configuration IDs
     eligible_collections_query = (
         select(Collection)
-        .join(
-            IntegrationConfiguration,
-            Collection.integration_configuration_id == IntegrationConfiguration.id,
-        )
-        .where(IntegrationConfiguration.protocol.in_(eligible_collection_protocols))
+        .where(Collection.integration_configuration_id.in_(eligible_config_ids_query))
         .options(joinedload(Collection.integration_configuration))
     )
     eligible_collections = session.scalars(eligible_collections_query).all()
+    # And get their data source names.
     collection_ds_names = {
         c.data_source.name
         for c in eligible_collections
