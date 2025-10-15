@@ -21,7 +21,7 @@ from palace.manager.celery.task import Task
 from palace.manager.integration.license.opds.for_distributors.api import (
     OPDSForDistributorsAPI,
 )
-from palace.manager.integration.license.opds.odl.api import OPDS2WithODLApi
+from palace.manager.integration.license.opds.opds2.api import OPDS2API
 from palace.manager.service.celery.celery import QueueNames
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.identifier import Identifier
@@ -242,30 +242,48 @@ def generate_playtime_report(
 def _fetch_distinct_eligible_data_source_names(
     session: Session,
 ) -> list[str]:
-    query = (
+    """
+    Fetches a sorted list of distinct data source names for which to produce a playback time report.
+
+    We gather data source names from two sources:
+    1. Collections with eligible protocols.
+    2. Data sources that appear in PlaytimeSummary records.
+
+    The names collected from both sources are combined, deduplicated, and then
+    returned as a sorted list.
+
+    :param session: The SQLAlchemy database session.
+    :return: A sorted list of distinct data source names.
+    """
+    eligible_collection_protocols = [
+        OPDS2API.label(),
+        OPDSForDistributorsAPI.label(),
+    ]
+
+    # Data sources for eligible collections...
+    eligible_collections_query = (
         select(Collection)
         .join(
             IntegrationConfiguration,
             Collection.integration_configuration_id == IntegrationConfiguration.id,
         )
-        .where(
-            IntegrationConfiguration.protocol.in_(
-                [OPDS2WithODLApi.label(), OPDSForDistributorsAPI.label()]
-            )
-        )
+        .where(IntegrationConfiguration.protocol.in_(eligible_collection_protocols))
         .options(joinedload(Collection.integration_configuration))
     )
-    ds_names = {c[0].data_source.name for c in session.execute(query).all()}
+    eligible_collections = session.scalars(eligible_collections_query).all()
+    collection_ds_names = {
+        c.data_source.name
+        for c in eligible_collections
+        if c.data_source and c.data_source.name is not None
+    }
 
-    for ds_name in session.execute(
-        select(
-            distinct(PlaytimeSummary.data_source_name),
-        )
-    ).all():
-        ds_names.add(ds_name[0])
-    ds_names_list = list(ds_names)
-    ds_names_list.sort()
-    return ds_names_list
+    # Data sources that appear in existing playback time summary records...
+    playtime_summary_query = select(distinct(PlaytimeSummary.data_source_name))
+    playtime_summary_result = session.scalars(playtime_summary_query).all()
+    playtime_summary_ds_names = set(playtime_summary_result)
+
+    all_ds_names = collection_ds_names.union(playtime_summary_ds_names)
+    return sorted(list(all_ds_names))
 
 
 def _fetch_report_records(
