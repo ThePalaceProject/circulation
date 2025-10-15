@@ -9,6 +9,7 @@ from palace.manager.feed.annotator.circulation import (
     CirculationManagerAnnotator,
     LibraryAnnotator,
 )
+from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.sqlalchemy.model.discovery_service_registration import (
     DiscoveryServiceRegistration,
 )
@@ -265,6 +266,9 @@ class TestCirculationManager:
         caplog: LogCaptureFixture,
     ):
         """Test that a warning is logged when a collection has an unknown protocol."""
+        # Set the log level to capture warnings
+        caplog.set_level(LogLevel.warning)
+
         # Create a new library without the default collection to avoid issues
         library = circulation_fixture.db.library()
         collection = circulation_fixture.db.collection(
