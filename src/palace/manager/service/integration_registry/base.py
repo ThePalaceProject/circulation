@@ -8,7 +8,7 @@ from typing import Generic, Literal, TypeVar, cast, overload
 from sqlalchemy import select
 from sqlalchemy.sql import Select
 
-from palace.manager.core.exceptions import BasePalaceException
+from palace.manager.core.exceptions import BasePalaceException, PalaceValueError
 from palace.manager.integration.goals import Goals
 from palace.manager.sqlalchemy.model.integration import IntegrationConfiguration
 
@@ -158,22 +158,42 @@ class IntegrationRegistry(Generic[T]):
 
         return protocol1 is protocol2
 
-    def configurations_query(self, protocol_or_integration: str | type[T]) -> Select:
+    def configurations_query(self, *protocols_or_integrations: str | type[T]) -> Select:
         """
         Create a SQLAlchemy query to select IntegrationConfiguration records.
 
         This function builds a query to find all integration configurations matching
-        a specific protocol or integration class, filtering by the registry's goal.
+        one or more protocols or integration classes, filtering by the registry's goal.
 
         It takes care to make sure that protocol aliases are looked up correctly,
         so that the query can be used if the integration is saved in the database
         using an alias or the canonical name.
+
+        :param protocols_or_integrations: One or more protocol names (str) or integration classes
+        :raises PalaceValueError: If no protocols or integrations are provided
+        :return: A SQLAlchemy Select query
         """
-        if isinstance(protocol_or_integration, str):
-            integration = self[protocol_or_integration]
-        else:
-            integration = protocol_or_integration
-        protocols = self.get_protocols(integration, default=False)
+        if not protocols_or_integrations:
+            raise PalaceValueError(
+                "At least one protocol or integration must be provided"
+            )
+
+        integrations = {
+            (
+                self[protocol_or_integration]
+                if isinstance(protocol_or_integration, str)
+                else protocol_or_integration
+            )
+            for protocol_or_integration in protocols_or_integrations
+        }
+
+        protocols = set(
+            chain.from_iterable(
+                self.get_protocols(integration, default=False)
+                for integration in integrations
+            )
+        )
+
         configurations_query = select(IntegrationConfiguration).where(
             IntegrationConfiguration.goal == self.goal,
         )
@@ -184,7 +204,7 @@ class IntegrationRegistry(Generic[T]):
 
         if len(protocols) == 1:
             configurations_query = configurations_query.where(
-                IntegrationConfiguration.protocol == protocols[0]
+                IntegrationConfiguration.protocol == next(iter(protocols))
             )
         else:
             configurations_query = configurations_query.where(

@@ -4,6 +4,7 @@ from unittest.mock import MagicMock
 import pytest
 from sqlalchemy.sql.operators import eq, in_op
 
+from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.integration.goals import Goals
 from palace.manager.service.integration_registry.base import (
     IntegrationRegistry,
@@ -278,4 +279,97 @@ def test_registry_configurations_query() -> None:
         assert goal_clause.right.value == Goals.PATRON_AUTH_GOAL
         assert protocol_clause.left.name == "protocol"
         assert protocol_clause.operator == in_op
-        assert protocol_clause.right.value == ["MockIntegration", "test", "test2"]
+        assert set(protocol_clause.right.value) == {"MockIntegration", "test", "test2"}
+
+
+def test_registry_configurations_query_multiple_protocols() -> None:
+    """Test configurations_query with multiple protocols."""
+
+    class MockIntegration1: ...
+
+    class MockIntegration2: ...
+
+    registry: IntegrationRegistry[MockIntegration1 | MockIntegration2] = (
+        IntegrationRegistry(Goals.PATRON_AUTH_GOAL)
+    )
+    registry.register(MockIntegration1)
+    registry.register(MockIntegration2, aliases=["test"])
+
+    # Query with multiple protocols
+    selected = registry.configurations_query(MockIntegration1, MockIntegration2)
+    assert len(selected.get_final_froms()) == 1
+    assert selected.get_final_froms()[0] == IntegrationConfiguration.__table__
+    assert len(selected.whereclause.clauses) == 2
+    goal_clause, protocol_clause = selected.whereclause.clauses
+    assert goal_clause.left.name == "goal"
+    assert goal_clause.operator == eq
+    assert goal_clause.right.value == Goals.PATRON_AUTH_GOAL
+    assert protocol_clause.left.name == "protocol"
+    assert protocol_clause.operator == in_op
+    # Should include both protocols and the alias
+    assert set(protocol_clause.right.value) == {
+        "MockIntegration1",
+        "MockIntegration2",
+        "test",
+    }
+
+
+def test_registry_configurations_query_mixed_arguments() -> None:
+    """Test configurations_query with mixed string and type arguments."""
+
+    class MockIntegration1: ...
+
+    class MockIntegration2: ...
+
+    registry: IntegrationRegistry[MockIntegration1 | MockIntegration2] = (
+        IntegrationRegistry(Goals.PATRON_AUTH_GOAL)
+    )
+    registry.register(MockIntegration1, aliases=["alias1"])
+    registry.register(MockIntegration2, aliases=["alias2"])
+
+    # Query with mix of type and string (using alias)
+    selected = registry.configurations_query(MockIntegration1, "alias2")
+    assert len(selected.get_final_froms()) == 1
+    assert selected.get_final_froms()[0] == IntegrationConfiguration.__table__
+    assert len(selected.whereclause.clauses) == 2
+    goal_clause, protocol_clause = selected.whereclause.clauses
+    assert goal_clause.left.name == "goal"
+    assert goal_clause.operator == eq
+    assert goal_clause.right.value == Goals.PATRON_AUTH_GOAL
+    assert protocol_clause.left.name == "protocol"
+    assert protocol_clause.operator == in_op
+    # Should resolve both to their protocols and aliases
+    assert set(protocol_clause.right.value) == {
+        "MockIntegration1",
+        "alias1",
+        "MockIntegration2",
+        "alias2",
+    }
+
+    # Repeating a protocol or alias should not change the query
+    selected = registry.configurations_query(
+        MockIntegration1, "alias1", MockIntegration2, MockIntegration2
+    )
+    assert set(protocol_clause.right.value) == {
+        "MockIntegration1",
+        "alias1",
+        "MockIntegration2",
+        "alias2",
+    }
+
+
+def test_registry_configurations_query_no_arguments() -> None:
+    """Test that configurations_query raises error with no arguments."""
+
+    class MockIntegration: ...
+
+    registry: IntegrationRegistry[MockIntegration] = IntegrationRegistry(
+        Goals.PATRON_AUTH_GOAL
+    )
+    registry.register(MockIntegration)
+
+    # Should raise PalaceValueError when called with no arguments
+    with pytest.raises(
+        PalaceValueError, match="At least one protocol or integration must be provided"
+    ):
+        registry.configurations_query()
