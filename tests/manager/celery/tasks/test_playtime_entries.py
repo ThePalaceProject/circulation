@@ -29,6 +29,9 @@ from palace.manager.integration.license.opds.for_distributors.api import (
 from palace.manager.integration.license.opds.odl.api import OPDS2WithODLApi
 from palace.manager.integration.license.opds.opds2.api import OPDS2API
 from palace.manager.service.google_drive.google_drive import GoogleDriveService
+from palace.manager.service.integration_registry.license_providers import (
+    LicenseProvidersRegistry,
+)
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.identifier import Equivalency, Identifier
 from palace.manager.sqlalchemy.model.library import Library
@@ -1102,7 +1105,8 @@ class TestGeneratePlaytimeReport:
             db.session.delete(temp_ds)
             db.session.flush()
 
-        result = _fetch_distinct_eligible_data_source_names(db.session)
+        registry = LicenseProvidersRegistry()
+        result = _fetch_distinct_eligible_data_source_names(db.session, registry)
 
         assert result == expected_ds_names
 
@@ -1130,7 +1134,8 @@ class TestGeneratePlaytimeReport:
         )
 
         # Verify that the data source is returned before the collection is deleted.
-        result = _fetch_distinct_eligible_data_source_names(db.session)
+        registry = LicenseProvidersRegistry()
+        result = _fetch_distinct_eligible_data_source_names(db.session, registry)
         assert result == ["ds_deleted"]
 
         # Delete the collection and its data source.
@@ -1140,5 +1145,5 @@ class TestGeneratePlaytimeReport:
         db.session.flush()
 
         # Verify that the data source is returned after the collection is deleted.
-        result = _fetch_distinct_eligible_data_source_names(db.session)
+        result = _fetch_distinct_eligible_data_source_names(db.session, registry)
         assert result == ["ds_deleted"]

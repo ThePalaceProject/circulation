@@ -23,6 +23,9 @@ from palace.manager.integration.license.opds.for_distributors.api import (
 )
 from palace.manager.integration.license.opds.opds2.api import OPDS2API
 from palace.manager.service.celery.celery import QueueNames
+from palace.manager.service.integration_registry.license_providers import (
+    LicenseProvidersRegistry,
+)
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.integration import IntegrationConfiguration
@@ -185,6 +188,7 @@ def generate_playtime_report(
         # get list of collections
         data_source_names = _fetch_distinct_eligible_data_source_names(
             session=session,
+            registry=task.services.integration_registry.license_providers(),
         )
         for data_source_name in data_source_names:
             reporting_name_with_no_spaces = (
@@ -241,6 +245,7 @@ def generate_playtime_report(
 
 def _fetch_distinct_eligible_data_source_names(
     session: Session,
+    registry: LicenseProvidersRegistry,
 ) -> list[str]:
     """
     Fetches a sorted list of distinct data source names for which to produce a playback time report.
@@ -253,12 +258,15 @@ def _fetch_distinct_eligible_data_source_names(
     returned as a sorted list.
 
     :param session: The SQLAlchemy database session.
+    :param registry: The license providers registry for protocol lookups.
     :return: A sorted list of distinct data source names.
     """
-    eligible_collection_protocols = [
-        OPDS2API.label(),
-        OPDSForDistributorsAPI.label(),
-    ]
+    # Get all protocol names (canonical + aliases) for eligible integrations
+    opds2_protocols = registry.get_protocols(OPDS2API, default=False)
+    opds_for_distributors_protocols = registry.get_protocols(
+        OPDSForDistributorsAPI, default=False
+    )
+    eligible_collection_protocols = opds2_protocols + opds_for_distributors_protocols
 
     # Data sources for eligible collections...
     eligible_collections_query = (
