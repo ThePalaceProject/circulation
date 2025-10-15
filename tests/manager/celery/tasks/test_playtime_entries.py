@@ -10,9 +10,11 @@ import pytest
 import pytz
 from sqlalchemy.sql.expression import and_, null
 
+from palace.manager.api.circulation.settings import BaseCirculationApiSettings
 from palace.manager.api.model.time_tracking import PlaytimeTimeEntry
 from palace.manager.celery.tasks.playtime_entries import (
     REPORT_DATE_FORMAT,
+    _fetch_distinct_eligible_data_source_names,
     generate_playtime_report,
     sum_playtime_entries,
 )
@@ -20,11 +22,16 @@ from palace.manager.core.config import Configuration
 from palace.manager.core.equivalents_coverage import (
     EquivalentIdentifiersCoverageProvider,
 )
+from palace.manager.integration.license.bibliotheca import BibliothecaAPI
 from palace.manager.integration.license.opds.for_distributors.api import (
     OPDSForDistributorsAPI,
 )
 from palace.manager.integration.license.opds.odl.api import OPDS2WithODLApi
+from palace.manager.integration.license.opds.opds2.api import OPDS2API
 from palace.manager.service.google_drive.google_drive import GoogleDriveService
+from palace.manager.service.integration_registry.license_providers import (
+    LicenseProvidersRegistry,
+)
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.identifier import Equivalency, Identifier
 from palace.manager.sqlalchemy.model.library import Library
@@ -573,23 +580,23 @@ class TestGeneratePlaytimeReport:
         identifier2 = edition.primary_identifier
         collection2 = db.collection(
             "collection a",
-            protocol=OPDS2WithODLApi,
-            settings=db.opds2_odl_settings(data_source="ds_a"),
+            protocol=OPDS2API,
+            settings=db.opds2_settings(data_source="ds_a"),
         )
 
         # a data source with no playtime data - we expect an empty report for ds_c
         collection3 = db.collection(
             "collection c",
-            protocol=OPDS2WithODLApi,
-            settings=db.opds2_odl_settings(data_source="ds_c"),
+            protocol=OPDS2API,
+            settings=db.opds2_settings(data_source="ds_c"),
         )
 
         # A collection and datasource that will be removed after the playtime is recorded, but before the report
         # is generated.
         collection4 = db.collection(
             "collection d",
-            protocol=OPDS2WithODLApi,
-            settings=db.opds2_odl_settings(data_source="ds_d"),
+            protocol=OPDS2API,
+            settings=db.opds2_settings(data_source="ds_d"),
         )
 
         library2 = db.library()
@@ -949,3 +956,194 @@ class TestGeneratePlaytimeReport:
                 "2025",
             ],
         }
+
+    @pytest.mark.parametrize(
+        "eligible_collections,playtime_summaries,expected_ds_names",
+        (
+            pytest.param(
+                [],
+                [],
+                [],
+                id="no-collections-no-summaries",
+            ),
+            pytest.param(
+                [(OPDS2API, "ds_opds2")],
+                [],
+                ["ds_opds2"],
+                id="eligible-collection-only-opds2",
+            ),
+            pytest.param(
+                [(OPDSForDistributorsAPI, "ds_ofd")],
+                [],
+                ["ds_ofd"],
+                id="eligible-collection-only-opds-for-distributors",
+            ),
+            pytest.param(
+                [
+                    (OPDS2API, "ds_opds2"),
+                    (OPDSForDistributorsAPI, "ds_ofd"),
+                ],
+                [],
+                ["ds_ofd", "ds_opds2"],
+                id="multiple-eligible-collections",
+            ),
+            pytest.param(
+                [
+                    (BibliothecaAPI, "ds_bibliotheca"),
+                    (OPDS2WithODLApi, "ds_opds2odl"),
+                ],
+                [],
+                [],
+                id="ineligible-collections-only",
+            ),
+            pytest.param(
+                [],
+                ["ds_from_summary"],
+                ["ds_from_summary"],
+                id="playtime-summary-only",
+            ),
+            pytest.param(
+                [(OPDS2API, "ds_shared")],
+                ["ds_shared"],
+                ["ds_shared"],
+                id="collection-and-summary-same-ds",
+            ),
+            pytest.param(
+                [(OPDS2API, "ds_collection")],
+                ["ds_summary"],
+                ["ds_collection", "ds_summary"],
+                id="collection-and-summary-different-ds",
+            ),
+            pytest.param(
+                [],
+                ["ds_dup", "ds_dup", "ds_dup"],
+                ["ds_dup"],
+                id="multiple-summaries-same-ds",
+            ),
+            pytest.param(
+                [
+                    (OPDS2API, "ds_z"),
+                    (OPDSForDistributorsAPI, "ds_a"),
+                    (BibliothecaAPI, "ds_ineligible"),
+                ],
+                ["ds_m", "ds_b"],
+                ["ds_a", "ds_b", "ds_m", "ds_z"],
+                id="mixed-eligible-ineligible-with-summaries-sorting",
+            ),
+        ),
+    )
+    def test_fetch_distinct_eligible_data_source_names(
+        self,
+        db: DatabaseTransactionFixture,
+        eligible_collections: list[tuple[type, str | None]],
+        playtime_summaries: list[str],
+        expected_ds_names: list[str],
+    ):
+        """Test fetching distinct eligible data source names from collections and summaries.
+
+        Verifies that:
+        - Only collections with eligible protocols are included
+        - All PlaytimeSummary data sources are included
+        - Results are deduplicated
+        - Results are sorted alphabetically
+        - Mixed scenarios with both eligible and ineligible collections work correctly
+        """
+        # Create collections with specified protocols and data sources.
+        for protocol, ds_name in eligible_collections:
+            settings: BaseCirculationApiSettings
+            if protocol == OPDS2API:
+                settings = db.opds2_settings(data_source=ds_name)
+            elif protocol == OPDS2WithODLApi:
+                settings = db.opds2_odl_settings(data_source=ds_name)
+            elif protocol == OPDSForDistributorsAPI:
+                settings = db.opds_for_distributors_settings(data_source=ds_name)
+            elif protocol == BibliothecaAPI:
+                settings = db.bibliotheca_settings(data_source=ds_name)
+            else:
+                raise ValueError(f"Unhandled protocol: {protocol}")
+
+            db.collection(
+                name=f"collection_{ds_name or 'none'}",
+                protocol=protocol,
+                settings=settings,
+            )
+
+        if playtime_summaries:
+            identifier = db.identifier()
+            # We'll delete this collection after creating summaries so that
+            # only the summary data sources are counted.
+            temp_collection = db.collection(
+                protocol=OPDS2API,
+                settings=db.opds2_settings(data_source="temp_ds_to_delete"),
+            )
+            library = db.default_library()
+
+            for idx, ds_name in enumerate(playtime_summaries):
+                # Create summaries and assign data sources.
+                playtime(
+                    db.session,
+                    identifier=identifier,
+                    collection=temp_collection,
+                    library=library,
+                    timestamp=dt1m(3),
+                    total_seconds=10,
+                    loan_identifier=f"loan_{idx}",
+                )
+                summary = (
+                    db.session.query(PlaytimeSummary)
+                    .order_by(PlaytimeSummary.id.desc())
+                    .first()
+                )
+                assert summary is not None
+                summary.data_source_name = ds_name
+
+            db.session.flush()
+
+            # Delete the temporary collection and its data source so they don't affect the result.
+            temp_ds = temp_collection.data_source
+            db.session.delete(temp_collection)
+            db.session.delete(temp_ds)
+            db.session.flush()
+
+        registry = LicenseProvidersRegistry()
+        result = _fetch_distinct_eligible_data_source_names(db.session, registry)
+
+        assert result == expected_ds_names
+
+    def test_fetch_distinct_eligible_data_source_names_deleted_collection(
+        self,
+        db: DatabaseTransactionFixture,
+    ):
+        """Test that data sources from deleted collections still appear via PlaytimeSummary."""
+        collection = db.collection(
+            name="collection_to_delete",
+            protocol=OPDS2API,
+            settings=db.opds2_settings(data_source="ds_deleted"),
+        )
+
+        identifier = db.identifier()
+        library = db.default_library()
+        playtime(
+            db.session,
+            identifier=identifier,
+            collection=collection,
+            library=library,
+            timestamp=dt1m(3),
+            total_seconds=100,
+            loan_identifier="loan_1",
+        )
+
+        # Verify that the data source is returned before the collection is deleted.
+        registry = LicenseProvidersRegistry()
+        result = _fetch_distinct_eligible_data_source_names(db.session, registry)
+        assert result == ["ds_deleted"]
+
+        # Delete the collection and its data source.
+        data_source = collection.data_source
+        db.session.delete(collection)
+        db.session.delete(data_source)
+        db.session.flush()
+
+        # Verify that the data source is returned after the collection is deleted.
+        result = _fetch_distinct_eligible_data_source_names(db.session, registry)
+        assert result == ["ds_deleted"]

@@ -12,7 +12,7 @@ from typing import Any, Protocol
 
 import pytz
 from celery import shared_task
-from sqlalchemy import and_, distinct, false, select, true
+from sqlalchemy import and_, distinct, false, select, true, union
 from sqlalchemy.orm import Query, Session, joinedload
 from sqlalchemy.sql.functions import coalesce, count, max as sql_max, sum
 
@@ -21,8 +21,11 @@ from palace.manager.celery.task import Task
 from palace.manager.integration.license.opds.for_distributors.api import (
     OPDSForDistributorsAPI,
 )
-from palace.manager.integration.license.opds.odl.api import OPDS2WithODLApi
+from palace.manager.integration.license.opds.opds2.api import OPDS2API
 from palace.manager.service.celery.celery import QueueNames
+from palace.manager.service.integration_registry.license_providers import (
+    LicenseProvidersRegistry,
+)
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.integration import IntegrationConfiguration
@@ -185,6 +188,7 @@ def generate_playtime_report(
         # get list of collections
         data_source_names = _fetch_distinct_eligible_data_source_names(
             session=session,
+            registry=task.services.integration_registry.license_providers(),
         )
         for data_source_name in data_source_names:
             reporting_name_with_no_spaces = (
@@ -241,31 +245,54 @@ def generate_playtime_report(
 
 def _fetch_distinct_eligible_data_source_names(
     session: Session,
+    registry: LicenseProvidersRegistry,
 ) -> list[str]:
-    query = (
-        select(Collection)
-        .join(
-            IntegrationConfiguration,
-            Collection.integration_configuration_id == IntegrationConfiguration.id,
-        )
-        .where(
-            IntegrationConfiguration.protocol.in_(
-                [OPDS2WithODLApi.label(), OPDSForDistributorsAPI.label()]
+    """
+    Fetches a sorted list of distinct data source names for which to produce a playback time report.
+
+    We gather data source names from two sources:
+    1. Collections with eligible protocols.
+    2. Data sources that appear in PlaytimeSummary records.
+
+    The names collected from both sources are combined, deduplicated, and then
+    returned as a sorted list.
+
+    :param session: The SQLAlchemy database session.
+    :param registry: The license providers registry for protocol lookups.
+    :return: A sorted list of distinct data source names.
+    """
+    eligible_protocols = [OPDS2API, OPDSForDistributorsAPI]
+
+    # Get IDs for all IntegrationConfiguration (canonical + aliases) for eligible integrations.
+    eligible_config_ids_query = union(
+        *[
+            registry.configurations_query(protocol).with_only_columns(
+                IntegrationConfiguration.id
             )
-        )
+            for protocol in eligible_protocols
+        ]
+    )
+    # Query collections with those configuration IDs.
+    eligible_collections_query = (
+        select(Collection)
+        .where(Collection.integration_configuration_id.in_(eligible_config_ids_query))
         .options(joinedload(Collection.integration_configuration))
     )
-    ds_names = {c[0].data_source.name for c in session.execute(query).all()}
+    eligible_collections = session.scalars(eligible_collections_query).all()
+    # And get their data source names.
+    collection_ds_names = {
+        c.data_source.name
+        for c in eligible_collections
+        if c.data_source and c.data_source.name is not None
+    }
 
-    for ds_name in session.execute(
-        select(
-            distinct(PlaytimeSummary.data_source_name),
-        )
-    ).all():
-        ds_names.add(ds_name[0])
-    ds_names_list = list(ds_names)
-    ds_names_list.sort()
-    return ds_names_list
+    # Data sources that appear in existing playback time summary records...
+    playtime_summary_query = select(distinct(PlaytimeSummary.data_source_name))
+    playtime_summary_result = session.scalars(playtime_summary_query).all()
+    playtime_summary_ds_names = set(playtime_summary_result)
+
+    all_ds_names = collection_ds_names.union(playtime_summary_ds_names)
+    return sorted(list(all_ds_names))
 
 
 def _fetch_report_records(
