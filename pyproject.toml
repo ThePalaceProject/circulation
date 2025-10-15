@@ -256,7 +256,7 @@ opensearch-py = "^3.0"
 pillow = "^11.2.1"
 pycountry = "^24.6.1"
 pycryptodome = "^3.18"
-pydantic = {version = "2.11.10", extras = ["email"]}
+pydantic = {version = "2.12.2", extras = ["email"]}
 pydantic-settings = "^2.5.2"
 pydantic-xml = "^2.17.0"
 pyinstrument = "^5.0"
