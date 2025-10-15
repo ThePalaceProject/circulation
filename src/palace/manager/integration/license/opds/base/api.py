@@ -5,7 +5,6 @@ from abc import ABC
 from typing import Unpack
 
 from sqlalchemy.orm import Session
-from typing_extensions import TypeVar
 
 from palace.manager.api.circulation.base import BaseCirculationAPI
 from palace.manager.api.circulation.data import HoldInfo, LoanInfo
@@ -35,15 +34,11 @@ from palace.manager.sqlalchemy.model.licensing import (
 )
 from palace.manager.sqlalchemy.model.patron import Patron
 
-BaseOPDSApiSettingsT = TypeVar("BaseOPDSApiSettingsT", bound=OPDSImporterSettings)
-BaseOPDSLibrarySettingsT = TypeVar(
-    "BaseOPDSLibrarySettingsT", bound=OPDSImporterLibrarySettings
-)
 
-
-class BaseOPDSAPI(
-    BaseCirculationAPI[BaseOPDSApiSettingsT, BaseOPDSLibrarySettingsT], ABC
-):
+class BaseOPDSAPI[
+    BaseOPDSApiSettingsT: OPDSImporterSettings,
+    BaseOPDSLibrarySettingsT: OPDSImporterLibrarySettings,
+](BaseCirculationAPI[BaseOPDSApiSettingsT, BaseOPDSLibrarySettingsT], ABC):
     def __init__(self, _db: Session, collection: Collection):
         super().__init__(_db, collection)
         self.saml_wayfless_url_template = self.settings.saml_wayfless_url_template

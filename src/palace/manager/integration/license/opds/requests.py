@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable
 from enum import Enum
 from functools import partial
-from typing import TypeVar, Unpack, overload
+from typing import Unpack, overload
 
 import feedparser
 from pydantic import ValidationError
@@ -25,8 +25,6 @@ from palace.manager.util.http.http import (
     RequestKwargs,
 )
 from palace.manager.util.sentinel import SentinelType
-
-T = TypeVar("T")
 
 
 class BaseOpdsHttpRequest(ABC):
@@ -59,7 +57,7 @@ class BaseOpdsHttpRequest(ABC):
         ...
 
     @overload
-    def __call__(
+    def __call__[T](
         self,
         http_method: str,
         url: str,
@@ -76,7 +74,7 @@ class BaseOpdsHttpRequest(ABC):
         **kwargs: Unpack[RequestKwargs],
     ) -> Response: ...
 
-    def __call__(
+    def __call__[T](
         self,
         http_method: str,
         url: str,

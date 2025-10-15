@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any, TypeVar
+from typing import Any
 
 from sqlalchemy.orm import Session
 from werkzeug.datastructures import Authorization
@@ -29,13 +29,9 @@ class AuthProviderSettings(BaseSettings): ...
 class AuthProviderLibrarySettings(BaseSettings): ...
 
 
-SettingsType = TypeVar("SettingsType", bound=AuthProviderSettings, covariant=True)
-LibrarySettingsType = TypeVar(
-    "LibrarySettingsType", bound=AuthProviderLibrarySettings, covariant=True
-)
-
-
-class AuthenticationProvider(
+class AuthenticationProvider[
+    SettingsType: AuthProviderSettings, LibrarySettingsType: AuthProviderLibrarySettings
+](
     OPDSAuthenticationFlow,
     HasLibraryIntegrationConfiguration[SettingsType, LibrarySettingsType],
     HasSelfTests,
@@ -109,7 +105,7 @@ class AuthenticationProvider(
         ...
 
 
-AuthenticationProviderType = AuthenticationProvider[
+type AuthenticationProviderType = AuthenticationProvider[
     AuthProviderSettings, AuthProviderLibrarySettings
 ]
 

@@ -29,7 +29,6 @@ from palace.manager.api.admin.problem_details import (
     NO_SUCH_LIBRARY,
     UNKNOWN_PROTOCOL,
 )
-from palace.manager.api.authentication.base import AuthenticationProviderType
 from palace.manager.api.authentication.basic import (
     BarcodeFormats,
     Keyboards,
@@ -86,7 +85,9 @@ class ControllerFixture:
         self.registry = services_fixture.services.integration_registry.patron_auth()
         self.controller = PatronAuthServicesController(db.session, self.registry)
 
-    def get_protocol(self, provider: type[AuthenticationProviderType]) -> str:
+    def get_protocol[AuthenticationProviderType](
+        self, provider: type[AuthenticationProviderType]
+    ) -> str:
         result = self.registry.get_protocol(provider)
         if result is None:
             raise ValueError(f"Protocol not found for {provider}")

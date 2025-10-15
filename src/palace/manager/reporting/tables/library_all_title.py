@@ -1,5 +1,4 @@
 from collections.abc import Sequence, Set
-from typing import TypeVar
 
 import sqlalchemy as sa
 from sqlalchemy import bindparam, case, func, lateral, select, true
@@ -106,9 +105,6 @@ def collections_all_titles_query() -> Select:
     )
 
 
-TReturn = TypeVar("TReturn")
-
-
 class LibraryAllTitleReportTable(ReportTable):
     """A report table with all titles in a library's collections."""
 
@@ -127,7 +123,7 @@ class LibraryAllTitleReportTable(ReportTable):
     def headings(self) -> TTabularHeadings:
         return self.DEFINITION.headings
 
-    def __call__(
+    def __call__[TReturn](
         self,
         processor: TTabularDataProcessor[TReturn],
     ) -> TReturn:

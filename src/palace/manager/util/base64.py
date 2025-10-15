@@ -3,11 +3,7 @@ from __future__ import annotations
 import base64 as stdlib_base64
 from collections.abc import Callable
 from functools import wraps
-from typing import Concatenate, ParamSpec, TypeVar
-
-P = ParamSpec("P")
-T = TypeVar("T")
-
+from typing import Concatenate
 
 _ENCODING = "utf8"
 
@@ -24,7 +20,7 @@ def _ensure_string(s: str | bytes, encoding: str) -> str:
     return s
 
 
-def _wrap_func_bytes_string(
+def _wrap_func_bytes_string[**P](
     func: Callable[Concatenate[bytes, P], bytes | str], encoding: str
 ) -> Callable[Concatenate[str | bytes, P], str]:
     """

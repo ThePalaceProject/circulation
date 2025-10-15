@@ -3,9 +3,7 @@ import logging
 import time
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
-from typing import TYPE_CHECKING, Any, TypeVar
-
-from typing_extensions import ParamSpec
+from typing import TYPE_CHECKING, Any
 
 from palace.manager.service.logging.configuration import LogLevel
 
@@ -14,11 +12,8 @@ if TYPE_CHECKING:
 else:
     LoggerAdapterType = logging.LoggerAdapter
 
-P = ParamSpec("P")
-T = TypeVar("T")
 
-
-def log_elapsed_time(
+def log_elapsed_time[T, **P](
     *,
     log_level: LogLevel,
     message_prefix: str | None = None,

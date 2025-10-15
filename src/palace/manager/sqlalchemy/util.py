@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Generator, Mapping
 from contextlib import contextmanager
-from typing import Any, Literal, Self, TypeVar
+from typing import Any, Literal, Self
 
 from frozendict import frozendict
 from psycopg2._range import NumericRange
@@ -59,10 +59,7 @@ def flush(db: Session) -> None:
         db.flush()
 
 
-T = TypeVar("T")
-
-
-def create(
+def create[T](
     db: Session,
     model: type[T],
     create_method: str = "",
@@ -76,7 +73,7 @@ def create(
     return created, True
 
 
-def get_one(
+def get_one[T](
     db: Session,
     model: type[T],
     on_multiple: Literal["interchangeable"] | Literal["error"] = "error",
@@ -107,7 +104,7 @@ def get_one(
 log = logging.getLogger(__name__)
 
 
-def get_one_or_create(
+def get_one_or_create[T](
     db: Session,
     model: type[T],
     create_method: str = "",

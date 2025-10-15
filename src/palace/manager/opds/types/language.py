@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterator, Mapping
-from typing import Any, TypeVar, cast, overload
+from typing import Any, cast, overload
 
 import pycountry
 from pydantic import GetCoreSchemaHandler
@@ -149,9 +149,6 @@ class LanguageTag(str, LoggerMixin):
         return f"<{self.__class__.__name__}: {self._original}>"
 
 
-T = TypeVar("T")
-
-
 class LanguageMap(Mapping[str, str]):
     """
     A string or map of strings that provides values in multiple languages.
@@ -246,9 +243,9 @@ class LanguageMap(Mapping[str, str]):
     def get(self, language: str | None) -> str | None: ...
 
     @overload
-    def get(self, language: str | None, default: str | T) -> str | T: ...
+    def get[T](self, language: str | None, default: str | T) -> str | T: ...
 
-    def get(
+    def get[T](
         self, language: str | None = None, default: str | T | None = None
     ) -> str | T | None:
         """

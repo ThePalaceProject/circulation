@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import datetime
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import TYPE_CHECKING, Any
 
 from dependency_injector.wiring import Provide, inject
 from sqlalchemy import (
@@ -53,8 +53,6 @@ if TYPE_CHECKING:
     from palace.manager.search.external_search import ExternalSearchIndex
     from palace.manager.sqlalchemy.model.credential import Credential
     from palace.manager.sqlalchemy.model.customlist import CustomList
-
-T = TypeVar("T")
 
 
 class Collection(Base, HasSessionCache, RedisKeyMixin):
@@ -597,7 +595,7 @@ class Collection(Base, HasSessionCache, RedisKeyMixin):
         return lines
 
     @classmethod
-    def restrict_to_ready_deliverable_works(
+    def restrict_to_ready_deliverable_works[T](
         cls,
         query: Query[T],
         collection_ids: list[int] | None = None,

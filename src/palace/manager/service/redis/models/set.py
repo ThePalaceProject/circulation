@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Generator, Sequence
 from datetime import timedelta
 from functools import partial
-from typing import Any, Generic, TypedDict, TypeVar, cast
+from typing import Any, TypedDict, cast
 from uuid import uuid4
 
 from pydantic import BaseModel
@@ -22,10 +22,7 @@ class RedisSetKwargs(TypedDict):
     expire_time: int
 
 
-T = TypeVar("T", bound=BaseModel)
-
-
-class RedisSet(Generic[T], LoggerMixin):
+class RedisSet[T: BaseModel](LoggerMixin):
     """
     A set of Pydantic models stored in Redis.
 
@@ -214,10 +211,7 @@ class RedisSet(Generic[T], LoggerMixin):
         return other - self.get()
 
 
-U = TypeVar("U")
-
-
-class TypeConversionRedisSet(ABC, Generic[T, U], RedisSet[T]):
+class TypeConversionRedisSet[T: BaseModel, U](ABC, RedisSet[T]):
     @abstractmethod
     def _convert(
         self,

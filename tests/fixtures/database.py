@@ -26,11 +26,10 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from palace.manager.api.authentication.base import (
     AuthenticationProvider,
-    SettingsType as TAuthProviderSettings,
+    AuthProviderSettings,
 )
 from palace.manager.api.circulation.base import (
     BaseCirculationAPI,
-    SettingsType as TCirculationSettings,
 )
 from palace.manager.api.circulation.settings import BaseCirculationApiSettings
 from palace.manager.core.classifier import Classifier
@@ -39,7 +38,6 @@ from palace.manager.core.exceptions import BasePalaceException, PalaceValueError
 from palace.manager.integration.base import (
     HasIntegrationConfiguration,
     HasLibraryIntegrationConfiguration,
-    SettingsType as TIntegrationSettings,
 )
 from palace.manager.integration.configuration.library import LibrarySettings
 from palace.manager.integration.discovery.opds_registration import (
@@ -670,7 +668,7 @@ class DatabaseTransactionFixture:
         )
     )
 
-    def collection_settings(
+    def collection_settings[TCirculationSettings: BaseCirculationApiSettings](
         self, protocol: type[BaseCirculationAPI[TCirculationSettings, Any]]
     ) -> TCirculationSettings | None:
         if protocol == OPDSAPI:
@@ -1111,7 +1109,7 @@ class DatabaseTransactionFixture:
     ) -> str:
         return self._goal_registry_mapping[goal].get_protocol(protocol, False)
 
-    def integration_configuration(
+    def integration_configuration[TIntegrationSettings: BaseSettings](
         self,
         protocol: type[HasIntegrationConfiguration[TIntegrationSettings]] | str,
         goal: Goals,
@@ -1195,7 +1193,7 @@ class DatabaseTransactionFixture:
             settings=OpdsRegistrationServiceSettings(url=url or self.fresh_url()),
         )
 
-    def auth_integration(
+    def auth_integration[TAuthProviderSettings: AuthProviderSettings](
         self,
         protocol: type[AuthenticationProvider[TAuthProviderSettings, Any]],
         library: Library | None = None,

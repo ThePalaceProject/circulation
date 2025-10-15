@@ -4,7 +4,7 @@ import base64
 import datetime
 from collections.abc import Callable, Mapping, Sequence
 from functools import cached_property, partial
-from typing import TYPE_CHECKING, Any, Literal, TypeVar, Unpack
+from typing import TYPE_CHECKING, Any, Literal, Unpack
 
 from lxml.etree import XMLSyntaxError
 from pydantic import ValidationError
@@ -103,16 +103,14 @@ class BoundlessRequests(LoggerMixin):
 
         return f"{token.token_type} {token.access_token}"
 
-    _TBoundlessResponse = TypeVar("_TBoundlessResponse", bound=BaseBoundlessResponse)
-
-    def _request(
+    def _request[TBoundlessResponse: BaseBoundlessResponse](
         self,
         http_method: str,
         url: str,
-        response_parser: Callable[[bytes], _TBoundlessResponse],
+        response_parser: Callable[[bytes], TBoundlessResponse],
         params: Mapping[str, Any] | None = None,
         timeout: int | None | Literal[SentinelType.NotGiven] = SentinelType.NotGiven,
-    ) -> _TBoundlessResponse:
+    ) -> TBoundlessResponse:
         """
         Make an HTTP request, acquiring/refreshing a bearer token if necessary.
         """

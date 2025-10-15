@@ -1,5 +1,5 @@
 from collections.abc import Callable
-from typing import Any, TypeVar
+from typing import Any
 
 from palace.manager.celery.importer import import_key, import_lock
 from palace.manager.celery.task import Task
@@ -11,10 +11,8 @@ from palace.manager.integration.license.opds.importer import (
 from palace.manager.service.redis.models.set import IdentifierSet
 from palace.manager.sqlalchemy.model.collection import Collection
 
-FeedType = TypeVar("FeedType")
 
-
-def opds_import_task(
+def opds_import_task[FeedType](
     task: Task,
     collection: Collection,
     importer: OpdsImporter[FeedType, Any],

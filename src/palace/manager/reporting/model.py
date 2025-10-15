@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Generator, Iterable, Sequence
 from dataclasses import dataclass, field
 from functools import cached_property
-from typing import Any, Protocol, TypeVar
+from typing import Any, Protocol
 
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import Select
@@ -45,11 +45,7 @@ class TabularQueryDefinition:
             yield tuple(row)
 
 
-T = TypeVar("T")
-TTabularDataProcessorReturn = TypeVar("TTabularDataProcessorReturn", covariant=True)
-
-
-class TTabularDataProcessor(Protocol[TTabularDataProcessorReturn]):
+class TTabularDataProcessor[TTabularDataProcessorReturn](Protocol):
     """A tabular data processor."""
 
     def __call__(
@@ -69,5 +65,5 @@ class ReportTable(Protocol):
     def definition(self) -> TabularQueryDefinition:
         """Get the tabular data definition."""
 
-    def __call__(self, processor: TTabularDataProcessor[T]) -> T:
+    def __call__[T](self, processor: TTabularDataProcessor[T]) -> T:
         """Process the tabular data."""

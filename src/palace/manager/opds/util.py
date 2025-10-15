@@ -7,10 +7,8 @@ from pydantic import Discriminator, Tag
 
 from palace.manager.opds.base import BaseOpdsModel
 
-T = TypeVar("T")
 
-
-def obj_or_tuple_to_tuple(value: T | list[T] | tuple[T, ...] | None) -> Sequence[T]:
+def obj_or_tuple_to_tuple[T](value: T | list[T] | tuple[T, ...] | None) -> Sequence[T]:
     """
     Convert object or sequence (list or tuple) of objects to a tuple of objects.
     """

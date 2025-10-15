@@ -5,7 +5,7 @@ from abc import abstractmethod
 from collections import namedtuple
 from collections.abc import Callable, Hashable
 from types import SimpleNamespace
-from typing import Self, TypeVar, cast
+from typing import Self, cast
 
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Mapped, Session
@@ -14,8 +14,6 @@ from palace.manager.sqlalchemy.util import get_one
 from palace.manager.util.log import LoggerMixin
 
 CacheTuple = namedtuple("CacheTuple", ["id", "key", "stats"])
-
-T = TypeVar("T")
 
 
 class HasSessionCache(LoggerMixin):
@@ -78,7 +76,7 @@ class HasSessionCache(LoggerMixin):
             cache.key.clear()
 
     @classmethod
-    def _cache_lookup(
+    def _cache_lookup[T](
         cls,
         db: Session,
         cache: CacheTuple,
@@ -142,7 +140,7 @@ class HasSessionCache(LoggerMixin):
         return get_one(db, cls, id=id), False
 
     @classmethod
-    def by_cache_key(
+    def by_cache_key[T](
         cls,
         db: Session,
         cache_key: Hashable,

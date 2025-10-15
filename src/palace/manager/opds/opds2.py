@@ -4,7 +4,7 @@ from collections.abc import Sequence
 from datetime import datetime
 from enum import StrEnum, auto
 from functools import cached_property
-from typing import Annotated, Any, Generic, Self, TypeVar
+from typing import Annotated, Any, Self
 
 from pydantic import (
     Field,
@@ -22,12 +22,14 @@ from palace.manager.opds.palace import PalacePublicationMetadata
 from palace.manager.opds.types.currency import CurrencyCode
 from palace.manager.opds.types.date import Iso8601AwareDatetime
 from palace.manager.opds.types.language import LanguageMap
-from palace.manager.opds.types.link import CompactCollection, LinkT
+from palace.manager.opds.types.link import BaseLink, CompactCollection
 from palace.manager.opds.util import StrOrTuple, obj_or_tuple_to_tuple
 from palace.manager.util.datetime_helpers import utc_now
 
 
-def validate_self_link(value: CompactCollection[LinkT]) -> CompactCollection[LinkT]:
+def validate_self_link[LinkT: BaseLink](
+    value: CompactCollection[LinkT],
+) -> CompactCollection[LinkT]:
     """
     Must have a self link.
     """
@@ -35,7 +37,9 @@ def validate_self_link(value: CompactCollection[LinkT]) -> CompactCollection[Lin
     return value
 
 
-def validate_images(value: CompactCollection[LinkT]) -> CompactCollection[LinkT]:
+def validate_images[LinkT: BaseLink](
+    value: CompactCollection[LinkT],
+) -> CompactCollection[LinkT]:
     """
     Must have at least one image link. This is not mentioned in the spec,
     but is enforced in the json schema, so we enforce it here as well.
@@ -367,10 +371,9 @@ class Feed(BaseOpdsModel):
         return self
 
 
-T = TypeVar("T")
-
-
-class BasePublicationFeed(BaseOpdsModel, Generic[T]):
+class BasePublicationFeed[T](
+    BaseOpdsModel,
+):
     """
     Base for OPDS2 and ODL publications feed.
 

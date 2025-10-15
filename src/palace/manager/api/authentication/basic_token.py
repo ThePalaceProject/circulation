@@ -15,7 +15,6 @@ from palace.manager.api.authentication.base import (
 )
 from palace.manager.api.authentication.basic import BasicAuthenticationProvider
 from palace.manager.core.selftest import SelfTestResult
-from palace.manager.integration.base import LibrarySettingsType, SettingsType
 from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.sqlalchemy.util import get_one
 from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
@@ -32,11 +31,11 @@ class BasicTokenAuthenticationProvider(
     """
 
     @classmethod
-    def library_settings_class(cls) -> type[LibrarySettingsType]:
+    def library_settings_class(cls) -> type[AuthProviderLibrarySettings]:
         raise NotImplementedError()
 
     @classmethod
-    def settings_class(cls) -> type[SettingsType]:
+    def settings_class(cls) -> type[AuthProviderSettings]:
         raise NotImplementedError()
 
     FLOW_TYPE = "http://thepalaceproject.org/authtype/basic-token"

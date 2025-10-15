@@ -5,7 +5,7 @@ import datetime
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Mapping
 from functools import cached_property
-from typing import TypedDict, TypeVar, Unpack
+from typing import TypedDict, Unpack
 
 from celery.canvas import Signature
 from flask_babel import lazy_gettext as _
@@ -64,12 +64,9 @@ class CirculationInternalFormatsMixin:
         return internal_format
 
 
-SettingsType = TypeVar("SettingsType", bound=BaseCirculationApiSettings, covariant=True)
-LibrarySettingsType = TypeVar("LibrarySettingsType", bound=BaseSettings, covariant=True)
-LoanOrHoldT = TypeVar("LoanOrHoldT", Loan, Hold)
-
-
-class BaseCirculationAPI(
+class BaseCirculationAPI[
+    SettingsType: BaseCirculationApiSettings, LibrarySettingsType: BaseSettings
+](
     HasLibraryIntegrationConfiguration[SettingsType, LibrarySettingsType],
     LoggerMixin,
     ABC,
@@ -270,9 +267,9 @@ class BaseCirculationAPI(
         ...
 
 
-class PatronActivityCirculationAPI(
-    BaseCirculationAPI[SettingsType, LibrarySettingsType], ABC
-):
+class PatronActivityCirculationAPI[
+    SettingsType: BaseCirculationApiSettings, LibrarySettingsType: BaseSettings
+](BaseCirculationAPI[SettingsType, LibrarySettingsType], ABC):
     """
     A CirculationAPI that can return a patron's current checkouts and holds, that
     were made outside the Palace platform.
@@ -304,9 +301,14 @@ class PatronActivityCirculationAPI(
 
         return remote_loans, remote_holds
 
-    def local_loans_or_holds(
-        self, patron: Patron, item_cls: type[LoanOrHoldT]
-    ) -> dict[IdentifierKey, LoanOrHoldT]:
+    def local_loans_or_holds[
+        LoanOrHoldT: (
+            Loan,
+            Hold,
+        )
+    ](self, patron: Patron, item_cls: type[LoanOrHoldT]) -> dict[
+        IdentifierKey, LoanOrHoldT
+    ]:
         items = self._db.scalars(
             select(item_cls)
             .join(LicensePool)
@@ -341,7 +343,12 @@ class PatronActivityCirculationAPI(
             patron, Hold
         )
 
-    def delete_loans_or_holds(self, loans_or_holds: Iterable[LoanOrHoldT]) -> None:
+    def delete_loans_or_holds[
+        LoanOrHoldT: (
+            Loan,
+            Hold,
+        )
+    ](self, loans_or_holds: Iterable[LoanOrHoldT]) -> None:
         one_minute_ago = utc_now() - datetime.timedelta(minutes=1)
         for item in loans_or_holds:
             if item.start is not None and item.start > one_minute_ago:

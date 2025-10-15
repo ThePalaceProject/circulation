@@ -1,6 +1,6 @@
 import functools
 from abc import ABC, abstractmethod
-from typing import Any, TypeVar
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -14,10 +14,7 @@ from palace.manager.integration.settings import BaseSettings
 class MetadataServiceSettings(BaseSettings): ...
 
 
-SettingsType = TypeVar("SettingsType", bound=MetadataServiceSettings, covariant=True)
-
-
-class MetadataService(
+class MetadataService[SettingsType: MetadataServiceSettings](
     HasIntegrationConfiguration[SettingsType],
     ABC,
 ):

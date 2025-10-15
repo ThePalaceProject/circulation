@@ -1,10 +1,8 @@
 from collections.abc import Iterable
-from typing import Generic, Self, TypeVar
-
-I = TypeVar("I")
+from typing import Self
 
 
-class CountingIterator(Generic[I]):
+class CountingIterator[I]():
     """An iterator that counts the number of rows yielded."""
 
     def __init__(self, iterable: Iterable[I]) -> None:

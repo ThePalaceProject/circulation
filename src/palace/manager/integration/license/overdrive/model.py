@@ -188,10 +188,9 @@ class ActionField(BaseOverdriveModel):
     optional: bool = False
 
 
-T = typing.TypeVar("T", covariant=True)
-
-
-class PatronRequestCallable(Protocol, typing.Generic[T]):
+class PatronRequestCallable[T](
+    Protocol,
+):
     def __call__(
         self,
         *,
@@ -202,7 +201,7 @@ class PatronRequestCallable(Protocol, typing.Generic[T]):
     ) -> T: ...
 
 
-def _overdrive_field_request(
+def _overdrive_field_request[T](
     make_request: PatronRequestCallable[T],
     url: str,
     fields: typing.Mapping[str, str | bool | int],
@@ -261,7 +260,7 @@ class Action(BaseOverdriveModel):
             raise NotFoundError(camel_name, "field", {f.name for f in self.fields})
         return None
 
-    def request(self, make_request: PatronRequestCallable[T], **kwargs: str) -> T:
+    def request[T](self, make_request: PatronRequestCallable[T], **kwargs: str) -> T:
         """
         Make a HTTP request with the parameters and method specified in the action.
 
@@ -409,7 +408,7 @@ class Checkout(BaseOverdriveModel):
 
         return formats
 
-    def action(
+    def action[T](
         self, name: str, make_request: PatronRequestCallable[T], **kwargs: str
     ) -> T:
         """
