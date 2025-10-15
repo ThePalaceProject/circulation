@@ -301,10 +301,12 @@ class PatronActivityCirculationAPI[
 
         return remote_loans, remote_holds
 
-    def local_loans_or_holds[LoanOrHoldT: (
-        Loan,
-        Hold,
-    )](self, patron: Patron, item_cls: type[LoanOrHoldT]) -> dict[
+    def local_loans_or_holds[
+        LoanOrHoldT: (
+            Loan,
+            Hold,
+        )
+    ](self, patron: Patron, item_cls: type[LoanOrHoldT]) -> dict[
         IdentifierKey, LoanOrHoldT
     ]:
         items = self._db.scalars(
@@ -341,10 +343,12 @@ class PatronActivityCirculationAPI[
             patron, Hold
         )
 
-    def delete_loans_or_holds[LoanOrHoldT: (
-        Loan,
-        Hold,
-    )](self, loans_or_holds: Iterable[LoanOrHoldT]) -> None:
+    def delete_loans_or_holds[
+        LoanOrHoldT: (
+            Loan,
+            Hold,
+        )
+    ](self, loans_or_holds: Iterable[LoanOrHoldT]) -> None:
         one_minute_ago = utc_now() - datetime.timedelta(minutes=1)
         for item in loans_or_holds:
             if item.start is not None and item.start > one_minute_ago:

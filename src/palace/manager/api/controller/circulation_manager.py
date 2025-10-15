@@ -39,10 +39,12 @@ from palace.manager.util.problem_detail import ProblemDetail
 
 
 class CirculationManagerController(BaseCirculationManagerController):
-    def get_patron_circ_objects[T: (
-        Loan,
-        Hold,
-    )](
+    def get_patron_circ_objects[
+        T: (
+            Loan,
+            Hold,
+        )
+    ](
         self,
         object_class: type[T],
         patron: Patron | None,
