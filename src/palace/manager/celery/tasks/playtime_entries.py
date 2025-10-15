@@ -261,7 +261,6 @@ def _fetch_distinct_eligible_data_source_names(
     :param registry: The license providers registry for protocol lookups.
     :return: A sorted list of distinct data source names.
     """
-    # Get IntegrationConfiguration IDs for both eligible integration types
     eligible_protocols = [OPDS2API, OPDSForDistributorsAPI]
 
     # Get IDs for all IntegrationConfiguration (canonical + aliases) for eligible integrations.
@@ -273,7 +272,7 @@ def _fetch_distinct_eligible_data_source_names(
             for protocol in eligible_protocols
         ]
     )
-    # Query collections with those configuration IDs
+    # Query collections with those configuration IDs.
     eligible_collections_query = (
         select(Collection)
         .where(Collection.integration_configuration_id.in_(eligible_config_ids_query))
