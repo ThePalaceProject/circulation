@@ -894,11 +894,19 @@ class TestImportCollection:
         apply_task_fixture: ApplyTaskFixture,
         opds2_import_fixture: OPDS2ImportFixture,
         opds2_files_fixture: OPDS2FilesFixture,
+        caplog: pytest.LogCaptureFixture,
     ):
-        # If a feed has a next link, we will import it, and then requeue to import the next page.
-        # This will continue until there are no more pages.
-        # feed2 has a next link, and feed has no next link. So we will import feed2 first,
-        # then feed, and then stop because there are no more pages.
+        """
+        Test multi-page feed imports with different scenarios:
+        1. Initial import successfully processes all pages
+        2. Re-import without force stops at first unchanged publication
+        3. Re-import with force continues through all pages despite unchanged publications
+        """
+        caplog.set_level(LogLevel.info)
+
+        # First import: Import both pages successfully
+        # feed2 has a next link to feed, which has no next link.
+        # So we import feed2 first, then feed, then stop.
         opds2_import_fixture.client.queue_response(
             200, content=opds2_files_fixture.sample_text("feed2.json")
         )
@@ -906,11 +914,44 @@ class TestImportCollection:
             200, content=opds2_files_fixture.sample_text("feed.json")
         )
         opds2.import_collection.delay(opds2_import_fixture.collection.id).wait()
-
-        # There are tasks queued up for each identifier, 3 from each feed.
-        # So we should have 6 tasks in total.
-        assert len(apply_task_fixture.apply_queue) == 6
         apply_task_fixture.process_apply_queue()
+
+        # There are tasks queued up for each identifier, 3 from each feed (6 total)
+        assert len(apply_task_fixture.get_editions()) == 6
+        apply_task_fixture.apply_queue.clear()
+
+        # Second import without force: Should stop when finding unchanged publications
+        caplog.clear()
+        opds2_import_fixture.client.queue_response(
+            200, content=opds2_files_fixture.sample_text("feed2.json")
+        )
+        # Note: We don't queue feed.json because import should stop at feed2.json
+        # when it finds unchanged publications
+        opds2.import_collection.delay(opds2_import_fixture.collection.id).wait()
+
+        # Should see the log message about stopping due to unchanged publications
+        assert "Found unchanged publications in feed" in caplog.text
+        # Should have no new tasks queued since all publications were unchanged
+        assert len(apply_task_fixture.apply_queue) == 0
+
+        # Third import with force: Should continue through all pages despite unchanged publications
+        caplog.clear()
+        opds2_import_fixture.client.queue_response(
+            200, content=opds2_files_fixture.sample_text("feed2.json")
+        )
+        opds2_import_fixture.client.queue_response(
+            200, content=opds2_files_fixture.sample_text("feed.json")
+        )
+        opds2.import_collection.delay(
+            opds2_import_fixture.collection.id, force=True
+        ).wait()
+
+        # Should NOT see the log message about stopping due to unchanged publications
+        assert "Found unchanged publications in feed" not in caplog.text
+        # Should see the log message about completing the import
+        assert "Import complete." in caplog.text
+        # Should have 6 tasks queued (3 from each page) even though publications are unchanged
+        assert len(apply_task_fixture.apply_queue) == 6
 
     def test_import_wrong_collection(
         self,
