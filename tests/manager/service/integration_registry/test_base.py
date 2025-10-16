@@ -113,13 +113,17 @@ def test_registry_register_multiple_classes(registry: IntegrationRegistry):
 def test_registry_get_returns_default_if_name_not_registered(
     registry: IntegrationRegistry,
 ):
+    # no default raises exception
+    with pytest.raises(LookupException):
+        registry.get("test_class")
+
     # default is none
-    assert registry.get("test_class") is None
+    assert registry.get("test_class", None) is None
 
     # default is not none
     assert registry.get("test_class", "default") == "default"
 
-    # __get__ throws LookupException
+    # __getitem__ throws LookupException
     with pytest.raises(LookupException):
         _ = registry["test_class"]
 
@@ -127,8 +131,12 @@ def test_registry_get_returns_default_if_name_not_registered(
 def test_registry_get_protocol_returns_default_if_integration_not_registered(
     registry: IntegrationRegistry,
 ):
+    # no default raises exception
+    with pytest.raises(LookupException):
+        registry.get_protocol(object)
+
     # default is none
-    assert registry.get_protocol(object) is None
+    assert registry.get_protocol(object, None) is None
 
     # default is not none
     assert registry.get_protocol(object, "default") == "default"
@@ -136,9 +144,25 @@ def test_registry_get_protocol_returns_default_if_integration_not_registered(
     # default is a list
     assert registry.get_protocol(object, ["default"]) == ["default"]
 
-    # If default is False, raises exception
+    # default is False
+    assert registry.get_protocol(object, False) is False
+
+
+def test_registry_get_protocols_returns_default_if_integration_not_registered(
+    registry: IntegrationRegistry,
+):
+    # no default raises exception
     with pytest.raises(LookupException):
-        registry.get_protocol(object, False)
+        registry.get_protocols(object)
+
+    # default is none
+    assert registry.get_protocols(object, None) is None
+
+    # default is not none
+    assert registry.get_protocols(object, ["default"]) == ["default"]
+
+    # default is False
+    assert registry.get_protocols(object, False) is False
 
 
 def test_registry_canonicalize(registry: IntegrationRegistry):
