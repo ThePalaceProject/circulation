@@ -16,6 +16,7 @@ from palace.manager.celery.tasks.apply import (
 )
 from palace.manager.data_layer.bibliographic import BibliographicData
 from palace.manager.data_layer.identifier import IdentifierData
+from palace.manager.data_layer.policy.replacement import ReplacementPolicy
 from palace.manager.integration.license.opds.data import FailedPublication
 from palace.manager.integration.license.opds.extractor import (
     OpdsExtractor,
@@ -366,6 +367,10 @@ class OpdsImporter[FeedType, PublicationType](LoggerMixin):
         next_url = self._extractor.feed_next_url(feed)
         results = {}
 
+        replacement_policy = ReplacementPolicy(
+            even_if_not_apparently_updated=import_even_if_unchanged
+        )
+
         for identifier, bibliographic in feed_bibliographic.items():
             has_changed = bibliographic.has_changed(session)
             called_bibliographic_apply = False
@@ -375,6 +380,7 @@ class OpdsImporter[FeedType, PublicationType](LoggerMixin):
                 apply_bibliographic(
                     bibliographic,
                     collection_id=collection.id,
+                    replace=replacement_policy,
                 )
                 called_bibliographic_apply = True
             elif (
