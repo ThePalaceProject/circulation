@@ -66,7 +66,7 @@ def opds_import_task[FeedType](
 
     unchanged_publication = import_result.found_unchanged_publication
     next_link = import_result.next_url
-    should_continue = not unchanged_publication or return_identifiers
+    should_continue = not unchanged_publication or return_identifiers or force
     if next_link is not None and should_continue:
         # This page is complete, but there are more pages to import, so we requeue ourselves with the
         # next page URL.
