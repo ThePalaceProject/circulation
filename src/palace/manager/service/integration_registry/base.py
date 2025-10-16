@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections import defaultdict
 from collections.abc import Iterable, Iterator
 from itertools import chain
-from typing import Generic, Literal, TypeVar, cast, overload
+from typing import Generic, Literal, TypeVar, overload
 
 from sqlalchemy import select
 from sqlalchemy.sql import Select
@@ -11,6 +11,7 @@ from sqlalchemy.sql import Select
 from palace.manager.core.exceptions import BasePalaceException, PalaceValueError
 from palace.manager.integration.goals import Goals
 from palace.manager.sqlalchemy.model.integration import IntegrationConfiguration
+from palace.manager.util.sentinel import SentinelType
 
 T = TypeVar("T", covariant=True)
 V = TypeVar("V")
@@ -26,7 +27,12 @@ class LookupException(BasePalaceException, LookupError):
 
 class IntegrationRegistry(Generic[T]):
     def __init__(self, goal: Goals, integrations: dict[str, type[T]] | None = None):
-        """Initialize a new IntegrationRegistry."""
+        """
+        Initialize a new IntegrationRegistry.
+
+        :param goal: The integration goal this registry manages (e.g., LICENSE_GOAL, METADATA_GOAL)
+        :param integrations: Optional dictionary mapping protocol names to integration classes to register
+        """
         self._lookup: dict[str, type[T]] = {}
         self._reverse_lookup: dict[type[T], list[str]] = defaultdict(list)
         self.goal = goal
@@ -50,6 +56,12 @@ class IntegrationRegistry(Generic[T]):
 
         Aliases are additional names that can be used to look up the integration
         class.
+
+        :param integration: The integration class to register
+        :param canonical: The canonical protocol name (defaults to integration.__name__)
+        :param aliases: Additional protocol names that can be used to look up the integration
+        :return: The registered integration class
+        :raises RegistrationException: If a protocol name is already registered to a different integration
         """
 
         if canonical is None:
@@ -67,68 +79,101 @@ class IntegrationRegistry(Generic[T]):
         return integration
 
     @overload
-    def get(self, protocol: str, default: None = ...) -> type[T] | None: ...
+    def get(self, protocol: str) -> type[T]: ...
 
     @overload
     def get(self, protocol: str, default: V) -> type[T] | V: ...
 
-    def get(self, protocol: str, default: V | None = None) -> type[T] | V | None:
-        """Look up an integration class by protocol."""
+    def get(
+        self,
+        protocol: str,
+        default: V | Literal[SentinelType.NotGiven] = SentinelType.NotGiven,
+    ) -> type[T] | V:
+        """
+        Look up an integration class by protocol.
+
+        :param protocol: Protocol name (canonical or alias) to look up
+        :param default: Value to return if protocol is not found. If not provided,
+                       raises LookupException when protocol is not found.
+        :return: The integration class if found, otherwise the default value
+        :raises LookupException: If protocol is not found and no default is provided
+        """
         if protocol not in self._lookup:
+            if default is SentinelType.NotGiven:
+                raise LookupException(f"Integration {protocol} not found")
             return default
         return self[protocol]
 
     @overload
-    def get_protocol(self, integration: type[T], default: None = ...) -> str | None: ...
-
-    @overload
-    def get_protocol(self, integration: type[T], default: Literal[False]) -> str: ...
+    def get_protocol(self, integration: type[T]) -> str: ...
 
     @overload
     def get_protocol(self, integration: type[T], default: V) -> str | V: ...
 
     def get_protocol(
-        self, integration: type[T], default: V | None | Literal[False] = None
-    ) -> str | V | None:
-        """Look up the canonical protocol for an integration class."""
-        names = self.get_protocols(integration, default)
-        # We have to cast here because mypy doesn't understand that
-        # if default is False, names is a list[str] due to the overload
-        # for get_protocols.
-        if names is default:
-            return cast(V | None, names)
-        return cast(list[str], names)[0]
+        self,
+        integration: type[T],
+        default: V | Literal[SentinelType.NotGiven] = SentinelType.NotGiven,
+    ) -> str | V:
+        """
+        Look up the canonical protocol for an integration class.
+
+        :param integration: The integration class to look up
+        :param default: Value to return if integration is not found. If not provided,
+                       raises LookupException when integration is not found.
+        :return: The canonical protocol name if found, otherwise the default value
+        :raises LookupException: If integration is not found and no default is provided
+        """
+        if integration not in self._reverse_lookup:
+            if default is SentinelType.NotGiven:
+                raise LookupException(f"Integration {integration} not found")
+            return default
+        return self._reverse_lookup[integration][0]
 
     @overload
-    def get_protocols(
-        self, integration: type[T], default: None = ...
-    ) -> list[str] | None: ...
-
-    @overload
-    def get_protocols(
-        self, integration: type[T], default: Literal[False]
-    ) -> list[str]: ...
+    def get_protocols(self, integration: type[T]) -> list[str]: ...
 
     @overload
     def get_protocols(self, integration: type[T], default: V) -> list[str] | V: ...
 
     def get_protocols(
-        self, integration: type[T], default: V | None | Literal[False] = None
-    ) -> list[str] | V | None:
-        """Look up all protocols for an integration class."""
+        self,
+        integration: type[T],
+        default: V | Literal[SentinelType.NotGiven] = SentinelType.NotGiven,
+    ) -> list[str] | V:
+        """
+        Look up all protocols for an integration class.
+
+        Returns all protocol names (canonical and aliases) associated with the
+        integration class. The canonical name is always first in the list.
+
+        :param integration: The integration class to look up
+        :param default: Value to return if integration is not found. If not provided,
+                       raises LookupException when integration is not found.
+        :return: List of protocol names (canonical first, then aliases) if found, otherwise the default value
+        :raises LookupException: If integration is not found and no default is provided
+        """
         if integration not in self._reverse_lookup:
-            if default is False:
+            if default is SentinelType.NotGiven:
                 raise LookupException(f"Integration {integration} not found")
             return default
         return self._reverse_lookup[integration]
 
     @property
     def integrations(self) -> set[type[T]]:
-        """Return a set of all registered canonical protocols."""
+        """Return a set of all registered integration classes."""
         return set(self._reverse_lookup.keys())
 
     def update(self, other: IntegrationRegistry[T]) -> None:
-        """Update registry to include integrations in other."""
+        """
+        Update this registry to include all integrations from another registry.
+
+        All integration classes from the other registry are registered into this
+        registry with their canonical names and aliases preserved.
+
+        :param other: Another IntegrationRegistry with the same goal
+        :raises RegistrationException: If registries have different goals or if registration conflicts occur
+        """
         if self.goal != other.goal:
             raise RegistrationException(
                 f"IntegrationRegistry's goals must be the same. (Self: {self.goal}, Other: {other.goal})"
@@ -136,22 +181,36 @@ class IntegrationRegistry(Generic[T]):
 
         for integration in other.integrations:
             names = other.get_protocols(integration)
-            assert isinstance(names, list)
             self.register(integration, canonical=names[0], aliases=names[1:])
 
     def canonicalize(self, protocol: str) -> str:
-        """Return the canonical protocol name for a given protocol."""
-        return self.get_protocol(self[protocol], default=False)
+        """
+        Return the canonical protocol name for a given protocol.
+
+        :param protocol: A protocol name (canonical or alias)
+        :return: The canonical protocol name
+        :raises LookupException: If the protocol is not registered
+        """
+        return self.get_protocol(self[protocol])
 
     def equivalent(
         self, protocol1: str | type[T] | None, protocol2: str | type[T] | None
     ) -> bool:
-        """Return whether two protocols are equivalent."""
+        """
+        Check whether two protocols or integration classes are equivalent.
+
+        Two protocols are considered equivalent if they resolve to the same
+        integration class. Protocol names can be canonical names or aliases.
+
+        :param protocol1: A protocol name, integration class, or None
+        :param protocol2: A protocol name, integration class, or None
+        :return: True if both resolve to the same integration class, False otherwise
+        """
         if isinstance(protocol1, str):
-            protocol1 = self.get(protocol1)
+            protocol1 = self.get(protocol1, None)
 
         if isinstance(protocol2, str):
-            protocol2 = self.get(protocol2)
+            protocol2 = self.get(protocol2, None)
 
         if protocol1 is None or protocol2 is None:
             return False
@@ -189,18 +248,13 @@ class IntegrationRegistry(Generic[T]):
 
         protocols = set(
             chain.from_iterable(
-                self.get_protocols(integration, default=False)
-                for integration in integrations
+                self.get_protocols(integration) for integration in integrations
             )
         )
 
         configurations_query = select(IntegrationConfiguration).where(
             IntegrationConfiguration.goal == self.goal,
         )
-        # This should never happen, because get_protocols raises an exception
-        # if the integration is not found, but we check so that we fail fast
-        # if for some reason this doesn't hold true.
-        assert len(protocols) > 0
 
         if len(protocols) == 1:
             configurations_query = configurations_query.where(
@@ -213,11 +267,22 @@ class IntegrationRegistry(Generic[T]):
         return configurations_query
 
     def __iter__(self) -> Iterator[tuple[str, type[T]]]:
+        """
+        Iterate over registered integrations.
+
+        :return: Iterator of (canonical_protocol, integration_class) tuples
+        """
         for integration, names in self._reverse_lookup.items():
             yield names[0], integration
 
     def __getitem__(self, protocol: str) -> type[T]:
-        """Look up an integration class by protocol, using the [] operator."""
+        """
+        Look up an integration class by protocol name using the [] operator.
+
+        :param protocol: Protocol name (canonical or alias)
+        :return: The integration class registered under the given protocol
+        :raises LookupException: If the protocol is not registered
+        """
         try:
             return self._lookup[protocol]
         except KeyError as e:
@@ -228,13 +293,32 @@ class IntegrationRegistry(Generic[T]):
         return len(self._reverse_lookup)
 
     def __contains__(self, name: str) -> bool:
-        """Return whether an integration class is registered under the given name."""
+        """
+        Check if a protocol name is registered (supports 'in' operator).
+
+        :param name: Protocol name to check (canonical or alias)
+        :return: True if the protocol name is registered, False otherwise
+        """
         return name in self._lookup
 
     def __repr__(self) -> str:
+        """
+        Return a string representation of the registry.
+        """
         return f"<IntegrationRegistry: {self._lookup}>"
 
     def __add__(self, other: IntegrationRegistry[V]) -> IntegrationRegistry[T | V]:
+        """
+        Combine two registries using the + operator.
+
+        Creates a new registry containing all integrations from both registries.
+        Both registries must have the same goal.
+
+        :param other: Another IntegrationRegistry to combine with this one
+        :return: A new IntegrationRegistry containing integrations from both registries
+        :raises TypeError: If other is not an IntegrationRegistry
+        :raises RegistrationException: If registries have different goals
+        """
         if not isinstance(other, IntegrationRegistry):
             raise TypeError(
                 f"unsupported operand type(s) for +: 'IntegrationRegistry' and '{type(other).__name__}'"

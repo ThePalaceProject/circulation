@@ -323,7 +323,7 @@ class LibraryAuthenticator(LoggerMixin):
             )
 
         impl_cls = (
-            self.integration_registry.get(integration.parent.protocol)
+            self.integration_registry.get(integration.parent.protocol, None)
             if integration.parent.protocol
             else None
         )

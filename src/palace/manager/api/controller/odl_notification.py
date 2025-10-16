@@ -86,7 +86,7 @@ class ODLNotificationController(LoggerMixin):
             integration = loan.license_pool.collection.integration_configuration
             if (
                 not integration.protocol
-                or self.registry.get(integration.protocol) != OPDS2WithODLApi
+                or self.registry.get(integration.protocol, None) != OPDS2WithODLApi
             ):
                 raise ProblemDetailException(INVALID_LOAN_FOR_ODL_NOTIFICATION)
 

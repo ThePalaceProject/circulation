@@ -1107,7 +1107,7 @@ class DatabaseTransactionFixture:
     def protocol_string(
         self, goal: Goals, protocol: type[BaseCirculationAPI[Any, Any]]
     ) -> str:
-        return self._goal_registry_mapping[goal].get_protocol(protocol, False)
+        return self._goal_registry_mapping[goal].get_protocol(protocol)
 
     def integration_configuration[TIntegrationSettings: BaseSettings](
         self,
