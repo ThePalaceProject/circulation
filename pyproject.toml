@@ -253,7 +253,7 @@ lxml = {extras = ["html-clean"], version = "6.0.0"}
 multipledispatch = "^1.0"
 nameparser = "^1.1"  # nameparser is for author name manipulations
 opensearch-py = "^3.0"
-pillow = "^11.2.1"
+pillow = "^12.0.0"
 pycountry = "^24.6.1"
 pycryptodome = "^3.18"
 pydantic = {version = "2.11.10", extras = ["email"]}
