@@ -18,6 +18,7 @@ from palace.manager.api.problem_details import (
     PATRON_AUTH_ACCESS_TOKEN_EXPIRED,
     PATRON_AUTH_ACCESS_TOKEN_INVALID,
 )
+from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.sqlalchemy.model.key import Key, KeyType
 from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.problem_detail import ProblemDetailException
@@ -99,6 +100,8 @@ class TestJWEProvider:
         assert isinstance(jwk_key, jwk.JWK)
 
     def test_get_key(self, db: DatabaseTransactionFixture, caplog: LogCaptureFixture):
+        caplog.set_level(LogLevel.warning)
+
         # Remove any existing keys before running tests
         db.session.execute(delete(Key).where(Key.type == KeyType.AUTH_TOKEN_JWE))
 
