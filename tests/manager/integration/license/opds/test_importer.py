@@ -7,7 +7,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from palace.manager.data_layer.bibliographic import BibliographicData
 from palace.manager.data_layer.identifier import IdentifierData
+from palace.manager.data_layer.policy.replacement import ReplacementPolicy
 from palace.manager.integration.license.opds.odl.api import OPDS2WithODLApi
 from palace.manager.integration.license.opds.odl.importer import (
     importer_from_collection,
@@ -469,3 +471,60 @@ class TestOpdsImporter:
 
             # After the exception, the other tasks should have been cancelled
             assert len(cancelled_tasks) == 2
+
+    @pytest.mark.parametrize("import_even_if_unchanged", [True, False])
+    def test_import_feed_replacement_policy(
+        self,
+        db: DatabaseTransactionFixture,
+        services_fixture: ServicesFixture,
+        opds2_files_fixture: OPDS2FilesFixture,
+        import_even_if_unchanged: bool,
+    ) -> None:
+        """Test that import_feed creates and passes the correct ReplacementPolicy to apply_bibliographic."""
+        collection = db.collection(
+            protocol=OPDS2WithODLApi,
+            settings=db.opds2_odl_settings(data_source="test collection"),
+        )
+        registry = services_fixture.services.integration_registry().license_providers()
+        importer = importer_from_collection(collection, registry)
+
+        # Create mock feed data
+        opds2_feed = json.loads(opds2_files_fixture.sample_text("feed.json"))
+        opds2_feed["publications"] = [opds2_feed["publications"][0]]
+        feed = PublicationFeedNoValidation.model_validate(opds2_feed)
+
+        # Create mock bibliographic data
+        mock_identifier = IdentifierData(
+            type=Identifier.ISBN, identifier="978-3-16-148410-0"
+        )
+        mock_bibliographic = MagicMock(spec=BibliographicData)
+        mock_bibliographic.has_changed.return_value = True
+        mock_bibliographic.circulation = None
+
+        # Mock the feed fetching and extraction
+        with (
+            patch.object(importer, "_fetch_feed", return_value=feed),
+            patch.object(
+                importer,
+                "_extract_publications_from_feed",
+                return_value=({mock_identifier: mock_bibliographic}, []),
+            ),
+        ):
+            mock_apply_bibliographic = MagicMock()
+            importer.import_feed(
+                collection,
+                apply_bibliographic=mock_apply_bibliographic,
+                import_even_if_unchanged=import_even_if_unchanged,
+            )
+
+        # Verify apply_bibliographic was called with the correct ReplacementPolicy
+        assert mock_apply_bibliographic.call_count == 1
+        call_args = mock_apply_bibliographic.call_args
+        assert call_args is not None
+        assert "replace" in call_args.kwargs
+        replacement_policy = call_args.kwargs["replace"]
+        assert isinstance(replacement_policy, ReplacementPolicy)
+        assert (
+            replacement_policy.even_if_not_apparently_updated
+            is import_even_if_unchanged
+        )
