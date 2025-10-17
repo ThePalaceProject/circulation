@@ -350,19 +350,30 @@ class BibliographicData(BaseMutableData):
         disable_async_calculation: bool = False,
         create_coverage_record: bool = True,
     ) -> tuple[Edition, bool]:
-        """Apply this BibliographicData to the given edition.
-        NOTE: disable_async_calculation is a stop-gap measure to prevent the code from falling into an infinite loop now
-        that we are moving away from the use of coverage records.  The value must be set to True when this method
-        is invoked within the context of work.calculate_work_presentation celery task. Otherwise some works will
-        queue and requeue calculation tasks indefinitely. This solution is a little ugly but it works.
-        I'm not sure how best to refactor the code to accomplish this end more elegantly.  So in the meantime,
-        endure the code-stench so that we get asynchronous presentation calculations going again.
+        """Apply bibliographic metadata to an edition and update related resources.
 
-        :return: (edition, made_core_changes), where edition is the newly-updated object, and made_core_changes
-            answers the question: were any edition core fields harmed in the making of this update?
-            So, if title changed, return True.
-            New: If contributors changed, this is now considered a core change,
-            so work.simple_opds_feed refresh can be triggered.
+        Updates edition fields, contributors, identifiers, subjects, links, and measurements
+        from this BibliographicData object. Queues work presentation recalculation if changes
+        require it, and optionally applies circulation data.
+
+        :param db: Database session for queries and persistence.
+        :param edition: The Edition object to update with bibliographic data.
+        :param collection: Optional Collection for applying circulation data.
+        :param replace: Policy controlling which fields to replace. Defaults to ReplacementPolicy().
+        :param disable_async_calculation: If True, prevents queueing of work presentation recalculation
+            tasks. This is a stop-gap measure to prevent the code from falling into an infinite loop
+            as we move away from the use of coverage records. Must be set to True when this method
+            is invoked within the work.calculate_work_presentation celery task, otherwise some works
+            will queue and requeue calculation tasks indefinitely. This solution is a little ugly but
+            it works. It's unclear how best to refactor the code to accomplish this more elegantly.
+            In the meantime, endure the code-stench so that we can keep asynchronous presentation
+            calculations working.
+        :param create_coverage_record: If True, creates/updates a CoverageRecord for this edition.
+            Will be removed once coverage records are fully deprecated.
+        :return: Tuple of (updated_edition, requires_presentation_update) where the boolean indicates
+            whether the edition or its work requires presentation recalculation due to changes in
+            core fields (title, contributors, images, descriptions, etc.).
+        :raises: PalaceValueError if primary identifiers don't match between data and edition.
         """
         # If summary, subjects, or measurements change, then any Work
         # associated with this edition will need a full presentation
