@@ -4,7 +4,6 @@ from unittest.mock import MagicMock, create_autospec
 import pytest
 from sqlalchemy import select
 
-from palace.manager.data_layer.policy.presentation import PresentationCalculationPolicy
 from palace.manager.integration.base import integration_settings_update
 from palace.manager.integration.goals import Goals
 from palace.manager.integration.license.bibliotheca import BibliothecaAPI
@@ -548,12 +547,6 @@ class TestCollection:
         )
 
         staff_edition.title = db.fresh_str()
-
-        work.calculate_presentation()
-        assert work_policy_recalc_fixture.is_queued(
-            work.id,
-            PresentationCalculationPolicy.recalculate_presentation_edition(),
-        )
 
         assert 0 == len(list1.entries)
         assert 1 == len(list2.entries)

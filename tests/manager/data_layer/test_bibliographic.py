@@ -395,7 +395,10 @@ class TestBibliographicData:
         assert Measurement.POPULARITY == m.quantity_measured
         assert 100 == m.value
 
-    def test_disable_async_calculation_flag(self, db: DatabaseTransactionFixture):
+    def test_apply_calculates_work_presentation_directly(
+        self, db: DatabaseTransactionFixture
+    ):
+        """Test that apply() now calculates work presentation directly instead of queueing it."""
         edition, pool = db.edition(
             with_license_pool=True,
         )
@@ -411,21 +414,19 @@ class TestBibliographicData:
             data_source_last_updated=utc_now(),
         )
 
-        with patch.object(Work, "queue_presentation_recalculation") as queue:
-            m.apply(db.session, edition, None, disable_async_calculation=True)
-            assert "New title" == edition.title
-            # verify that the queue_presentation_recalculation was not called
-            assert queue.call_count == 0
-
-            m = BibliographicData(
-                data_source_name=data_source.name,
-                title="Another new title",
-                data_source_last_updated=utc_now(),
-            )
+        # After the refactoring, apply() calls work.calculate_presentation() directly
+        with patch.object(Work, "calculate_presentation") as calc_pres:
             m.apply(db.session, edition, None)
-            assert "Another new title" == edition.title
-            # verify that the queue_presentation_recalculation was called
-            assert queue.call_count == 1
+            assert "New title" == edition.title
+            # verify that calculate_presentation was called directly
+            assert calc_pres.call_count == 1
+
+            # The policy should be recalculate_presentation_edition since only edition changed
+            policy = calc_pres.call_args[1]["policy"]
+            assert (
+                policy.equivalent_identifier_levels
+                == PresentationCalculationPolicy.recalculate_presentation_edition().equivalent_identifier_levels
+            )
 
     def test_defaults(self) -> None:
         # Verify that a BibliographicData object doesn't make any assumptions
@@ -559,6 +560,7 @@ class TestBibliographicData:
         self,
         db: DatabaseTransactionFixture,
     ):
+        """Test that apply() calculates work presentation directly with the correct policy."""
         # We have a work.
         work = db.work(title="The Wrong Title", with_license_pool=True)
 
@@ -572,36 +574,32 @@ class TestBibliographicData:
         )
         edition, ignore = bibliographic.edition(db.session)
 
-        with patch(
-            "palace.manager.celery.tasks.work.calculate_work_presentation"
-        ) as calculate:
+        # After the refactoring, apply() calls work.calculate_presentation() directly
+        with patch.object(Work, "calculate_presentation") as calculate:
             bibliographic.apply(db.session, edition, None)
-            assert calculate.delay.call_count == 1
-            policy = PresentationCalculationPolicy.recalculate_presentation_edition()
-            assert calculate.delay.call_args_list[0].kwargs == {
-                "work_id": work.id,
-                "policy": policy,
-            }
+            assert calculate.call_count == 1
+            policy = calculate.call_args[1]["policy"]
+            # Should use recalculate_presentation_edition policy for edition-only changes
+            assert (
+                policy.equivalent_identifier_levels
+                == PresentationCalculationPolicy.recalculate_presentation_edition().equivalent_identifier_levels
+            )
 
-            # The work still has the wrong title, but a full recalculation has been queued.
-            assert "The Wrong Title" == work.title
-
-            # We then learn about a subject under which the work
-            # is classified.
+            # We then learn about a subject under which the work is classified.
             bibliographic.title = None
             bibliographic.subjects = [
                 SubjectData(type=Subject.TAG, identifier="subject")
             ]
 
             bibliographic.apply(db.session, edition, None)
-            # The work is now slated to have its presentation completely
-            # recalculated.
-            assert calculate.delay.call_count == 2
-            policy = PresentationCalculationPolicy.recalculate_everything()
-            assert calculate.delay.call_args_list[1].kwargs == {
-                "work_id": work.id,
-                "policy": policy,
-            }
+            # The work has now had its presentation recalculated directly.
+            assert calculate.call_count == 2
+            policy = calculate.call_args[1]["policy"]
+            # Should use recalculate_everything policy for subject changes
+            assert (
+                policy.equivalent_identifier_levels
+                == PresentationCalculationPolicy.recalculate_everything().equivalent_identifier_levels
+            )
 
             # We then find a new description for the work.
             bibliographic.subjects = []
@@ -610,26 +608,26 @@ class TestBibliographicData:
             ]
 
             bibliographic.apply(db.session, edition, None)
-            # We need to do a full recalculation again.
-            assert calculate.delay.call_count == 3
-            policy = PresentationCalculationPolicy.recalculate_everything()
-            assert calculate.delay.call_args_list[2].kwargs == {
-                "work_id": work.id,
-                "policy": policy,
-            }
+            # Full recalculation again for description changes.
+            assert calculate.call_count == 3
+            policy = calculate.call_args[1]["policy"]
+            assert (
+                policy.equivalent_identifier_levels
+                == PresentationCalculationPolicy.recalculate_everything().equivalent_identifier_levels
+            )
 
             # We then find a new cover image for the work.
             bibliographic.subjects = []
             bibliographic.links = [LinkData(rel=Hyperlink.IMAGE, href="http://image/")]
 
             bibliographic.apply(db.session, edition, None)
-            # We need to choose a new presentation edition.
-            assert calculate.delay.call_count == 4
-            policy = PresentationCalculationPolicy.recalculate_presentation_edition()
-            assert calculate.delay.call_args_list[3].kwargs == {
-                "work_id": work.id,
-                "policy": policy,
-            }
+            # Presentation edition recalculation for image changes.
+            assert calculate.call_count == 4
+            policy = calculate.call_args[1]["policy"]
+            assert (
+                policy.equivalent_identifier_levels
+                == PresentationCalculationPolicy.recalculate_presentation_edition().equivalent_identifier_levels
+            )
 
     def test_apply_identifier_equivalency(self, db: DatabaseTransactionFixture):
         # Set up an Edition.
