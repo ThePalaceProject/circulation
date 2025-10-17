@@ -672,6 +672,58 @@ class BibliographicData(BaseMutableData):
         if edition.updated_at is None or edition.updated_at < updated_at:
             edition.updated_at = updated_at
 
+    def _update_edition_fields(
+        self,
+        db: Session,
+        edition: Edition,
+        collection: Collection | None,
+        replace: ReplacementPolicy,
+    ) -> bool:
+        """Update edition-level fields (not identifier-level data).
+
+        This is the shared logic between apply() and apply_edition_only() that handles
+        updating the edition's basic fields, contributions, circulation data, and
+        presentation calculation.
+
+        :param db: Database session for queries and persistence.
+        :param edition: The Edition object to update with bibliographic data.
+        :param collection: Optional Collection for applying circulation data.
+        :param replace: Policy controlling which fields to replace.
+        :return: Boolean indicating whether any edition fields were modified.
+        """
+        changed = False
+
+        # Update basic edition fields
+        if self._update_basic_fields(edition):
+            changed = True
+
+        # Update contributions
+        contributors_changed = self.update_contributions(
+            db, edition, replace.contributions
+        )
+        if contributors_changed:
+            changed = True
+
+        # Set sort_author if missing
+        if self._set_missing_sort_author(edition):
+            changed = True
+
+        # Apply circulation data
+        if self.circulation:
+            self.circulation.apply(db, collection, replace)
+
+        # Calculate presentation
+        made_changes = edition.calculate_presentation(
+            policy=replace.presentation_calculation_policy
+        )
+        if made_changes:
+            changed = True
+
+        # Update edition timestamp
+        self._update_edition_timestamp(edition)
+
+        return changed
+
     def apply_edition_only(
         self,
         db: Session,
@@ -714,36 +766,8 @@ class BibliographicData(BaseMutableData):
                 self.circulation.apply(db, collection, replace)
             return edition, False
 
-        changed = False
-
-        # Update basic edition fields
-        if self._update_basic_fields(edition):
-            changed = True
-
-        # Update contributions
-        contributors_changed = self.update_contributions(
-            db, edition, replace.contributions
-        )
-        if contributors_changed:
-            changed = True
-
-        # Set sort_author if missing
-        if self._set_missing_sort_author(edition):
-            changed = True
-
-        # Apply circulation data
-        if self.circulation:
-            self.circulation.apply(db, collection, replace)
-
-        # Calculate presentation
-        made_changes = edition.calculate_presentation(
-            policy=replace.presentation_calculation_policy
-        )
-        if made_changes:
-            changed = True
-
-        # Update edition timestamp
-        self._update_edition_timestamp(edition)
+        # Delegate to helper method for edition field updates
+        changed = self._update_edition_fields(db, edition, collection, replace)
 
         return edition, changed
 
@@ -800,21 +824,9 @@ class BibliographicData(BaseMutableData):
 
         # Track whether work requires recalculation
         work_requires_full_recalculation = False
-        work_requires_new_presentation_edition = False
 
-        # Apply updates
+        # Apply identifier-level updates
         self.log.info("APPLYING BIBLIOGRAPHIC DATA TO EDITION: %s", self.title)
-
-        # Update basic edition fields
-        if self._update_basic_fields(edition):
-            work_requires_new_presentation_edition = True
-
-        # Update contributions
-        contributors_changed = self.update_contributions(
-            db, edition, replace.contributions
-        )
-        if contributors_changed:
-            work_requires_new_presentation_edition = True
 
         # Handle identifier equivalencies
         self._handle_identifier_equivalencies(db, identifier, data_source)
@@ -827,32 +839,18 @@ class BibliographicData(BaseMutableData):
         link_objects, links_need_presentation, links_need_full_recalc = (
             self._update_links(db, identifier, data_source, replace.links)
         )
-        if links_need_presentation:
-            work_requires_new_presentation_edition = True
-        if links_need_full_recalc:
+        if links_need_presentation or links_need_full_recalc:
             work_requires_full_recalculation = True
 
         # Update measurements
         if self._update_measurements(identifier, data_source):
             work_requires_full_recalculation = True
 
-        # Set sort_author if missing
-        if self._set_missing_sort_author(edition):
-            work_requires_new_presentation_edition = True
-
-        # Apply circulation data
-        if self.circulation:
-            self.circulation.apply(db, collection, replace)
-
         # Process thumbnails
         self._process_thumbnails(db, data_source, link_objects)
 
-        # Calculate presentation
-        made_changes = edition.calculate_presentation(
-            policy=replace.presentation_calculation_policy
-        )
-        if made_changes:
-            work_requires_new_presentation_edition = True
+        # Apply edition-level updates by delegating to helper method
+        edition_changed = self._update_edition_fields(db, edition, collection, replace)
 
         # Create coverage record
         if create_coverage_record:
@@ -864,7 +862,7 @@ class BibliographicData(BaseMutableData):
             )
 
         # Calculate work presentation directly if needed
-        if work_requires_full_recalculation or work_requires_new_presentation_edition:
+        if work_requires_full_recalculation or edition_changed:
             pool = get_one(
                 db,
                 LicensePool,
@@ -879,10 +877,7 @@ class BibliographicData(BaseMutableData):
                 )
                 pool.work.calculate_presentation(policy=policy)
 
-        # Update edition timestamp
-        self._update_edition_timestamp(edition)
-
-        return edition, work_requires_new_presentation_edition
+        return edition, work_requires_full_recalculation or edition_changed
 
     def make_thumbnail(
         self, _db: Session, data_source: DataSource, link: LinkData, link_obj: Hyperlink
