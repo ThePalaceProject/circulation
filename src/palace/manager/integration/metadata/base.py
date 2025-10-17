@@ -32,7 +32,7 @@ class MetadataService[SettingsType: MetadataServiceSettings](
         )
 
         registry = MetadataRegistry()
-        protocols = registry.get_protocols(cls)
+        protocols = registry.get_protocols(cls, [])
 
         if not protocols:
             raise RuntimeError(f"No protocols found for {cls.__name__}")
