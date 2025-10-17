@@ -301,7 +301,7 @@ class TestBibliographicData:
         This could happen in edge cases or future code changes.
         """
         edition = db.edition()
-        data_source = DataSource.lookup(db.session, DataSource.GUTENBERG)
+        data_source = edition.data_source
 
         # Create some links
         image_link = LinkData(
