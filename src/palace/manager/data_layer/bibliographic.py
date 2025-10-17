@@ -676,7 +676,6 @@ class BibliographicData(BaseMutableData):
         self,
         db: Session,
         edition: Edition,
-        collection: Collection | None,
         replace: ReplacementPolicy,
     ) -> bool:
         """Update edition-level fields (not identifier-level data).
@@ -687,7 +686,6 @@ class BibliographicData(BaseMutableData):
 
         :param db: Database session for queries and persistence.
         :param edition: The Edition object to update with bibliographic data.
-        :param collection: Optional Collection for applying circulation data.
         :param replace: Policy controlling which fields to replace.
         :return: Boolean indicating whether any edition fields were modified.
         """
@@ -708,10 +706,6 @@ class BibliographicData(BaseMutableData):
         if self._set_missing_sort_author(edition):
             changed = True
 
-        # Apply circulation data
-        if self.circulation:
-            self.circulation.apply(db, collection, replace)
-
         # Calculate presentation
         made_changes = edition.calculate_presentation(
             policy=replace.presentation_calculation_policy
@@ -728,8 +722,7 @@ class BibliographicData(BaseMutableData):
         self,
         db: Session,
         edition: Edition,
-        collection: Collection | None,
-        replace: ReplacementPolicy | None = None,
+        replace: ReplacementPolicy,
     ) -> tuple[Edition, bool]:
         """Apply bibliographic metadata to edition fields only (not identifier).
 
@@ -743,16 +736,11 @@ class BibliographicData(BaseMutableData):
 
         :param db: Database session for queries and persistence.
         :param edition: The Edition object to update with bibliographic data.
-        :param collection: Optional Collection for applying circulation data.
-        :param replace: Policy controlling which fields to replace. Defaults to ReplacementPolicy().
+        :param replace: Policy controlling which fields to replace.
         :return: Tuple of (updated_edition, changed) where the boolean indicates whether
             any edition fields were modified.
         :raises: PalaceValueError if primary identifiers don't match between data and edition.
         """
-        # Initialize replacement policy
-        if replace is None:
-            replace = ReplacementPolicy()
-
         # Validate primary identifier matches
         self._validate_primary_identifier(edition)
 
@@ -760,14 +748,10 @@ class BibliographicData(BaseMutableData):
         if not replace.even_if_not_apparently_updated and not self.has_changed(
             db, edition
         ):
-            # No need to update the bibliographic data, but we might have fresh
-            # circulation data that we should apply.
-            if self.circulation:
-                self.circulation.apply(db, collection, replace)
             return edition, False
 
         # Delegate to helper method for edition field updates
-        changed = self._update_edition_fields(db, edition, collection, replace)
+        changed = self._update_edition_fields(db, edition, replace)
 
         return edition, changed
 
@@ -853,9 +837,13 @@ class BibliographicData(BaseMutableData):
         self._process_thumbnails(db, data_source, link_objects)
 
         # Apply edition-level updates by delegating to helper method
-        edition_changed = self._update_edition_fields(db, edition, collection, replace)
+        edition_changed = self._update_edition_fields(db, edition, replace)
         if edition_changed:
             work_requires_new_presentation_edition = True
+
+        # Apply circulation data
+        if self.circulation:
+            self.circulation.apply(db, collection, replace)
 
         # Create coverage record
         if create_coverage_record:
