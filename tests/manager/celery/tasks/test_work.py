@@ -1,7 +1,6 @@
 from unittest.mock import patch
 
 from palace.manager.celery.tasks import work as work_tasks
-from palace.manager.data_layer.policy.presentation import PresentationCalculationPolicy
 from palace.manager.sqlalchemy.model.classification import Subject
 from palace.manager.sqlalchemy.model.work import Work
 from tests.fixtures.celery import CeleryFixture
@@ -79,10 +78,8 @@ def test_subject_checked(
         # Should use recalculate_classification policy
         for call_obj in calc_pres.call_args_list:
             policy = call_obj[1]["policy"]
-            assert (
-                policy.equivalent_identifier_levels
-                == PresentationCalculationPolicy.recalculate_classification().equivalent_identifier_levels
-            )
+            assert policy.classify is True
+            assert policy.choose_edition is False
 
     # now verify that no recalculation occurs when the subject.checked property is true.
     subject.checked = True
