@@ -20,9 +20,6 @@ from palace.manager.sqlalchemy.model.patron import Patron
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import OverdriveFilesFixture
 from tests.fixtures.http import MockHttpClientFixture
-from tests.fixtures.work import (
-    WorkIdPolicyQueuePresentationRecalculationFixture,
-)
 from tests.mocks.overdrive import MockOverdriveAPI
 
 
@@ -33,7 +30,6 @@ class OverdriveAPIFixture:
         http_client: MockHttpClientFixture,
         data: OverdriveFilesFixture,
         monkeypatch: pytest.MonkeyPatch,
-        work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
     ):
         self.db = db
         self.data = data
@@ -55,8 +51,6 @@ class OverdriveAPIFixture:
             {self.collection.id: self.api},
         )
         self.create_mock_api = partial(MockOverdriveAPI, db.session)
-
-        self.work_policy_recalc_fixture = work_policy_recalc_fixture
 
     def error_message(
         self, error_code: str, message: str | None = None, token: str | None = None
@@ -129,12 +123,10 @@ def overdrive_api_fixture(
     http_client: MockHttpClientFixture,
     overdrive_files_fixture: OverdriveFilesFixture,
     monkeypatch: pytest.MonkeyPatch,
-    work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
 ) -> OverdriveAPIFixture:
     return OverdriveAPIFixture(
         db,
         http_client,
         overdrive_files_fixture,
         monkeypatch,
-        work_policy_recalc_fixture,
     )

@@ -11,7 +11,6 @@ from palace.manager.sqlalchemy.model.work import Work
 from tests.fixtures.celery import CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.redis import RedisFixture
-from tests.fixtures.work import WorkIdPolicyQueuePresentationRecalculationFixture
 
 
 def test_calculate_work_presentation(
@@ -129,7 +128,6 @@ def test_paginate(db: DatabaseTransactionFixture):
 def test_subject_checked(
     db: DatabaseTransactionFixture,
     celery_fixture: CeleryFixture,
-    work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
 ):
     subject = db.subject(Subject.AXIS_360_AUDIENCE, "Any")
     assert subject.checked == False

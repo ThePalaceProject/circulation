@@ -32,9 +32,6 @@ from palace.manager.sqlalchemy.util import get_one_or_create
 from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.services import ServicesFixture
-from tests.fixtures.work import (
-    WorkIdPolicyQueuePresentationRecalculationFixture,
-)
 
 
 class ExampleCollectionFixture:
@@ -517,7 +514,6 @@ class TestCollection:
     def test_custom_lists(
         self,
         example_collection_fixture: ExampleCollectionFixture,
-        work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
     ):
         db = example_collection_fixture.database_fixture
         test_collection = example_collection_fixture.collection
