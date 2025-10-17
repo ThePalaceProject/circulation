@@ -192,7 +192,6 @@ class ApplyBibliographicCall:
             edition,
             collection,
             replace=self.replace,
-            disable_async_calculation=True,
             create_coverage_record=False,
         )
 

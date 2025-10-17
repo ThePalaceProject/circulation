@@ -45,9 +45,6 @@ from tests.fixtures.search import (
     ExternalSearchFixtureFake,
     WorkQueueIndexingFixture,
 )
-from tests.fixtures.work import (
-    WorkIdPolicyQueuePresentationRecalculationFixture,
-)
 
 
 class TestWork:
@@ -2849,7 +2846,6 @@ class TestWorkConsolidation:
     def test_licensepool_without_presentation_edition_gets_no_work(
         self,
         db: DatabaseTransactionFixture,
-        work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
     ):
         data_source = DataSource.lookup(db.session, DataSource.OVERDRIVE)
         # Test the method that adds a work to a redis set to wait for indexing

@@ -18,7 +18,6 @@ from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import BoundlessFilesFixture
 from tests.fixtures.http import MockHttpClientFixture
 from tests.fixtures.services import ServicesFixture
-from tests.fixtures.work import WorkIdPolicyQueuePresentationRecalculationFixture
 
 
 class BoundlessFixture:
@@ -67,7 +66,6 @@ class BoundlessFixture:
         http_client: MockHttpClientFixture,
         files: BoundlessFilesFixture,
         services_fixture: ServicesFixture,
-        work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
     ):
         self.db = db
         self.files = files
@@ -76,7 +74,6 @@ class BoundlessFixture:
         )
         self.http_client = http_client
         self.api = BoundlessApi(db.session, self.collection)
-        self.work_policy_recalc_fixture = work_policy_recalc_fixture
         registry = services_fixture.services.integration_registry().license_providers()
         self.create_importer = partial(
             BoundlessImporter,
@@ -92,7 +89,6 @@ def boundless(
     http_client: MockHttpClientFixture,
     boundless_files_fixture: BoundlessFilesFixture,
     services_fixture: ServicesFixture,
-    work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
 ) -> BoundlessFixture:
     # Typically the first request to the api will trigger a token refresh, so we queue
     # up a response for that.
@@ -106,5 +102,4 @@ def boundless(
         http_client,
         boundless_files_fixture,
         services_fixture,
-        work_policy_recalc_fixture,
     )

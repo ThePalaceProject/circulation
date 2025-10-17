@@ -67,9 +67,6 @@ from palace.manager.util.http.exception import (
     RemoteIntegrationException,
 )
 from palace.manager.util.web_publication_manifest import AudiobookManifest
-from tests.fixtures.work import (
-    WorkIdPolicyQueuePresentationRecalculationFixture,
-)
 from tests.mocks.bibliotheca import MockBibliothecaAPI
 
 if TYPE_CHECKING:
@@ -83,7 +80,6 @@ class BibliothecaAPITestFixture:
         self,
         db: DatabaseTransactionFixture,
         files: BibliothecaFilesFixture,
-        work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
     ):
         self.files = files
         self.db = db
@@ -91,18 +87,14 @@ class BibliothecaAPITestFixture:
             db.session, db.default_library()
         )
         self.api = MockBibliothecaAPI(db.session, self.collection)
-        self.work_policy_recalc_fixture = work_policy_recalc_fixture
 
 
 @pytest.fixture(scope="function")
 def bibliotheca_fixture(
     db: DatabaseTransactionFixture,
     bibliotheca_files_fixture: BibliothecaFilesFixture,
-    work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
 ) -> BibliothecaAPITestFixture:
-    return BibliothecaAPITestFixture(
-        db, bibliotheca_files_fixture, work_policy_recalc_fixture
-    )
+    return BibliothecaAPITestFixture(db, bibliotheca_files_fixture)
 
 
 class TestBibliothecaAPI:
