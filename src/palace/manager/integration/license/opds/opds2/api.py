@@ -18,6 +18,10 @@ from palace.manager.integration.license.opds.opds2.settings import (
     OPDS2ImporterLibrarySettings,
     OPDS2ImporterSettings,
 )
+from palace.manager.integration.license.opds.requests import (
+    OpdsAuthType,
+    get_opds_requests,
+)
 from palace.manager.integration.patron_auth.saml.metadata.model import SAMLAttributeType
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.datasource import DataSource
@@ -28,7 +32,6 @@ from palace.manager.sqlalchemy.model.licensing import (
 from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.http.exception import BadResponseException
-from palace.manager.util.http.http import HTTP
 
 
 class TemplateVariable(StrEnum):
@@ -69,6 +72,16 @@ class OPDS2API(BaseOPDSAPI[OPDS2ImporterSettings, OPDS2ImporterLibrarySettings])
         super().__init__(_db, collection)
         self.token_auth_configuration: str | None = (
             collection.integration_configuration.context.get(self.TOKEN_AUTH_CONFIG_KEY)
+        )
+        self._request = get_opds_requests(
+            (
+                OpdsAuthType.BASIC
+                if self.settings.username and self.settings.password
+                else OpdsAuthType.NONE
+            ),
+            self.settings.username,
+            self.settings.password,
+            self.settings.external_account_id,
         )
 
     def _get_saml_token_template_parameters(
@@ -200,7 +213,7 @@ class OPDS2API(BaseOPDSAPI[OPDS2ImporterSettings, OPDS2ImporterLibrarySettings])
         # See: https://github.com/python-hyper/uritemplate/pull/130
         url = template.expand(parameters)  # type: ignore[arg-type]
         try:
-            response = HTTP.get_with_timeout(url, allowed_response_codes=["2xx"])
+            response = self._request("GET", url, allowed_response_codes=["2xx"])
         except BadResponseException as e:
             response = e.response
             self.log.error(
