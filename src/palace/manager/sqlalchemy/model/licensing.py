@@ -660,7 +660,6 @@ class LicensePool(Base):
                 bibliographic.apply_edition_only(
                     _db,
                     edition,
-                    collection=self.collection,
                     replace=policy,
                 )
             )
