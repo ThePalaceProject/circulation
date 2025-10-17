@@ -340,57 +340,12 @@ class BibliographicData(BaseMutableData):
                     success = True
         return success
 
-    def apply(
-        self,
-        db: Session,
-        edition: Edition,
-        collection: Collection | None,
-        replace: ReplacementPolicy | None = None,
-        *,
-        disable_async_calculation: bool = False,
-        create_coverage_record: bool = True,
-    ) -> tuple[Edition, bool]:
-        """Apply bibliographic metadata to an edition and update related resources.
+    def _validate_primary_identifier(self, edition: Edition) -> None:
+        """Validate that primary identifier matches between data and edition.
 
-        Updates edition fields, contributors, identifiers, subjects, links, and measurements
-        from this BibliographicData object. Queues work presentation recalculation if changes
-        require it, and optionally applies circulation data.
-
-        :param db: Database session for queries and persistence.
-        :param edition: The Edition object to update with bibliographic data.
-        :param collection: Optional Collection for applying circulation data.
-        :param replace: Policy controlling which fields to replace. Defaults to ReplacementPolicy().
-        :param disable_async_calculation: If True, prevents queueing of work presentation recalculation
-            tasks. This is a stop-gap measure to prevent the code from falling into an infinite loop
-            as we move away from the use of coverage records. Must be set to True when this method
-            is invoked within the work.calculate_work_presentation celery task, otherwise some works
-            will queue and requeue calculation tasks indefinitely. This solution is a little ugly but
-            it works. It's unclear how best to refactor the code to accomplish this more elegantly.
-            In the meantime, endure the code-stench so that we can keep asynchronous presentation
-            calculations working.
-        :param create_coverage_record: If True, creates/updates a CoverageRecord for this edition.
-            Will be removed once coverage records are fully deprecated.
-        :return: Tuple of (updated_edition, requires_presentation_update) where the boolean indicates
-            whether the edition or its work requires presentation recalculation due to changes in
-            core fields (title, contributors, images, descriptions, etc.).
-        :raises: PalaceValueError if primary identifiers don't match between data and edition.
+        :param edition: Edition to validate against.
+        :raises: PalaceValueError if identifiers don't match.
         """
-        # If summary, subjects, or measurements change, then any Work
-        # associated with this edition will need a full presentation
-        # recalculation.
-        work_requires_full_recalculation = False
-
-        # If any other data changes, then any Work associated with
-        # this edition will need to have its presentation edition
-        # regenerated, but we can do it on the cheap.
-        work_requires_new_presentation_edition = False
-
-        if replace is None:
-            replace = ReplacementPolicy()
-
-        # We were given an Edition, so either this BibliographicData's
-        # primary_identifier must be missing or it must match the
-        # Edition's primary identifier.
         if self.primary_identifier_data:
             if (
                 Identifier.get_active_type(self.primary_identifier_data.type)
@@ -402,20 +357,13 @@ class BibliographicData(BaseMutableData):
                     f"BibliographicData's primary identifier ({self.primary_identifier_data.type}/{self.primary_identifier_data.identifier}) does not match edition's primary identifier ({edition.primary_identifier!r})"
                 )
 
-        # Check whether we should do any work at all.
-        if not replace.even_if_not_apparently_updated and not self.has_changed(
-            db, edition
-        ):
-            # No need to update the bibliographic data, but we might have fresh
-            # circulation data, that we should apply.
-            if self.circulation:
-                self.circulation.apply(db, collection, replace)
-            return edition, False
+    def _update_basic_fields(self, edition: Edition) -> bool:
+        """Update basic edition fields from bibliographic data.
 
-        data_source = self.load_data_source(db)
-        identifier = edition.primary_identifier
-
-        self.log.info("APPLYING BIBLIOGRAPHIC DATA TO EDITION: %s", self.title)
+        :param edition: Edition to update.
+        :return: True if any fields were changed.
+        """
+        fields_changed = False
         fields = _BASIC_EDITION_FIELDS + ["permanent_work_id"]
         for field in fields:
             old_edition_value = getattr(edition, field)
@@ -428,17 +376,21 @@ class BibliographicData(BaseMutableData):
                 if new_bibliographic_value in [NO_VALUE, NO_NUMBER]:
                     new_bibliographic_value = None
                 setattr(edition, field, new_bibliographic_value)
-                work_requires_new_presentation_edition = True
+                fields_changed = True
+        return fields_changed
 
-        # Create equivalencies between all given identifiers and
-        # the edition's primary identifier.
-        contributors_changed = self.update_contributions(
-            db, edition, replace.contributions
-        )
-        if contributors_changed:
-            work_requires_new_presentation_edition = True
+    def _handle_identifier_equivalencies(
+        self,
+        db: Session,
+        identifier: Identifier,
+        data_source: DataSource,
+    ) -> None:
+        """Create equivalencies between given identifiers and primary identifier.
 
-        # TODO: remove equivalencies when replace.identifiers is True.
+        :param db: Database session.
+        :param identifier: Primary identifier.
+        :param data_source: Data source for equivalencies.
+        """
         if self.identifiers is not None:
             for identifier_data in self.identifiers:
                 if not identifier_data.identifier:
@@ -456,15 +408,30 @@ class BibliographicData(BaseMutableData):
                     data_source, new_identifier, identifier_data.weight
                 )
 
+    def _update_subjects(
+        self,
+        db: Session,
+        identifier: Identifier,
+        data_source: DataSource,
+        replace_subjects: bool,
+    ) -> bool:
+        """Update subjects and classifications for the identifier.
+
+        :param db: Database session.
+        :param identifier: Identifier to update.
+        :param data_source: Data source for classifications.
+        :param replace_subjects: Whether to replace existing subjects.
+        :return: True if changes require full recalculation.
+        """
+        requires_full_recalculation = False
         new_subjects = set(self.subjects if self.subjects else [])
-        if replace.subjects:
+
+        if replace_subjects:
             # Remove any old Subjects from this data source, unless they
             # are also in the list of new subjects.
             surviving_classifications = []
 
-            def _key(
-                classification: Classification,
-            ) -> SubjectData:
+            def _key(classification: Classification) -> SubjectData:
                 s = classification.subject
                 return SubjectData(
                     type=s.type,
@@ -480,7 +447,7 @@ class BibliographicData(BaseMutableData):
                         # The data source has stopped claiming that
                         # this classification should exist.
                         db.delete(classification)
-                        work_requires_full_recalculation = True
+                        requires_full_recalculation = True
                     else:
                         # The data source maintains that this
                         # classification is a good idea. We don't have
@@ -503,17 +470,36 @@ class BibliographicData(BaseMutableData):
                     subject.name,
                     weight=subject.weight,
                 )
-                work_requires_full_recalculation = True
+                requires_full_recalculation = True
             except ValueError as e:
                 self.log.error(
                     f"Error classifying subject: {subject} for identifier {identifier}: {e}"
                 )
 
-        # update links
+        return requires_full_recalculation
+
+    def _update_links(
+        self,
+        db: Session,
+        identifier: Identifier,
+        data_source: DataSource,
+        replace_links: bool,
+    ) -> tuple[dict[LinkData, Hyperlink], bool, bool]:
+        """Update links for the identifier.
+
+        :param db: Database session.
+        :param identifier: Identifier to update.
+        :param data_source: Data source for links.
+        :param replace_links: Whether to replace existing links.
+        :return: Tuple of (link_objects dict, requires_new_presentation, requires_full_recalc).
+        """
+        requires_new_presentation = False
+        requires_full_recalculation = False
         old_links = set()
         new_links = set()
+
         # Associate all links with the primary identifier.
-        if replace.links and self.links is not None:
+        if replace_links and self.links is not None:
             for hyperlink in identifier.links:
                 if hyperlink.data_source == data_source:
                     old_links.add(hyperlink)
@@ -559,9 +545,9 @@ class BibliographicData(BaseMutableData):
                 new_links.add(link_obj)
 
                 if link.rel in _REL_REQUIRES_NEW_PRESENTATION_EDITION:
-                    work_requires_new_presentation_edition = True
+                    requires_new_presentation = True
                 elif link.rel in _REL_REQUIRES_FULL_RECALCULATION:
-                    work_requires_full_recalculation = True
+                    requires_full_recalculation = True
 
                 link_objects[link] = link_obj
                 if link.thumbnail:
@@ -574,7 +560,7 @@ class BibliographicData(BaseMutableData):
                         content=thumbnail.content,
                     )
                     new_links.add(thumbnail_obj)
-                    work_requires_new_presentation_edition = True
+                    requires_new_presentation = True
                     if (
                         thumbnail_obj.resource
                         and thumbnail_obj.resource.representation
@@ -596,9 +582,23 @@ class BibliographicData(BaseMutableData):
                 db.delete(link_to_delete)
                 identifier.links.remove(link_to_delete)
 
-        # Apply all measurements to the primary identifier
+        return link_objects, requires_new_presentation, requires_full_recalculation
+
+    def _update_measurements(
+        self,
+        identifier: Identifier,
+        data_source: DataSource,
+    ) -> bool:
+        """Update measurements for the identifier.
+
+        :param identifier: Identifier to update.
+        :param data_source: Data source for measurements.
+        :return: True if measurements were added (requires full recalculation).
+        """
+        if not self.measurements:
+            return False
+
         for measurement in self.measurements:
-            work_requires_full_recalculation = True
             identifier.add_measurement(
                 data_source,
                 measurement.quantity_measured,
@@ -606,7 +606,14 @@ class BibliographicData(BaseMutableData):
                 measurement.weight,
                 measurement.taken_at,
             )
+        return True
 
+    def _set_missing_sort_author(self, edition: Edition) -> bool:
+        """Set edition sort_author if missing and we have primary author data.
+
+        :param edition: Edition to update.
+        :return: True if sort_author was set.
+        """
         if not edition.sort_author:
             # This may be a situation like the NYT best-seller list where
             # we know the display name of the author but weren't able
@@ -619,20 +626,26 @@ class BibliographicData(BaseMutableData):
                     primary_author.display_name,
                 )
                 edition.sort_author = primary_author.sort_name
-                work_requires_new_presentation_edition = True
+                return True
+        return False
 
-        # The BibliographicData object may include a CirculationData object which
-        # contains information about availability such as open-access
-        # links. Make sure
-        # that that Collection has a LicensePool for this book and that
-        # its information is up-to-date.
-        if self.circulation:
-            self.circulation.apply(db, collection, replace)
+    def _process_thumbnails(
+        self,
+        db: Session,
+        data_source: DataSource,
+        link_objects: dict[LinkData, Hyperlink],
+    ) -> None:
+        """Process thumbnails for images.
 
-        # obtains a presentation_edition for the title
+        :param db: Database session.
+        :param data_source: Data source for thumbnails.
+        :param link_objects: Mapping of LinkData to Hyperlink objects.
+        """
         has_image = any(link.rel == Hyperlink.IMAGE for link in self.links)
         for link in self.links:
-            link_obj = link_objects[link]
+            link_obj = link_objects.get(link)
+            if not link_obj:
+                continue
 
             if link_obj.rel == Hyperlink.THUMBNAIL_IMAGE and has_image:
                 # This is a thumbnail but we also have a full-sized image link
@@ -643,50 +656,51 @@ class BibliographicData(BaseMutableData):
                 # is associated with the original image.
                 self.make_thumbnail(db, data_source, link, link_obj)
 
-        # Make sure the work we just did shows up.
-        made_changes = edition.calculate_presentation(
-            policy=replace.presentation_calculation_policy
+    def _queue_work_recalculation(
+        self,
+        db: Session,
+        edition: Edition,
+        requires_full_recalculation: bool,
+        requires_new_presentation: bool,
+        disable_async: bool,
+    ) -> None:
+        """Queue work presentation recalculation if needed.
+
+        :param db: Database session.
+        :param edition: Edition that was updated.
+        :param requires_full_recalculation: Whether full recalculation is needed.
+        :param requires_new_presentation: Whether presentation edition recalculation is needed.
+        :param disable_async: If True, skip queueing calculation tasks.
+        """
+        if not (requires_full_recalculation or requires_new_presentation):
+            return
+
+        # Any LicensePool will do here, since all LicensePools for
+        # a given Identifier have the same Work.
+        pool = get_one(
+            db,
+            LicensePool,
+            identifier=edition.primary_identifier,
+            on_multiple="interchangeable",
         )
-        if made_changes:
-            work_requires_new_presentation_edition = True
+        if pool and pool.work and not disable_async:
+            work = pool.work
+            if requires_full_recalculation:
+                Work.queue_presentation_recalculation(
+                    work_id=work.id,
+                    policy=PresentationCalculationPolicy.recalculate_everything(),
+                )
+            else:
+                Work.queue_presentation_recalculation(
+                    work_id=work.id,
+                    policy=PresentationCalculationPolicy.recalculate_presentation_edition(),
+                )
 
-        # Update the coverage record for this edition and data
-        # source. We omit the collection information, even if we know
-        # which collection this is, because we only changed bibliographic data.
-        # TODO: Remove this once we have done away with coverage records
-        if create_coverage_record:
-            CoverageRecord.add_for(
-                edition,
-                data_source,
-                timestamp=self.data_source_last_updated,
-                collection=None,
-            )
+    def _update_edition_timestamp(self, edition: Edition) -> None:
+        """Update edition timestamp based on data source last updated time.
 
-        if work_requires_full_recalculation or work_requires_new_presentation_edition:
-            # If there is a Work associated with the Edition's primary
-            # identifier, mark it for recalculation.
-
-            # Any LicensePool will do here, since all LicensePools for
-            # a given Identifier have the same Work.
-            pool = get_one(
-                db,
-                LicensePool,
-                identifier=edition.primary_identifier,
-                on_multiple="interchangeable",
-            )
-            if pool and pool.work and not disable_async_calculation:
-                work = pool.work
-                if work_requires_full_recalculation:
-                    Work.queue_presentation_recalculation(
-                        work_id=work.id,
-                        policy=PresentationCalculationPolicy.recalculate_everything(),
-                    )
-                else:
-                    Work.queue_presentation_recalculation(
-                        work_id=work.id,
-                        policy=PresentationCalculationPolicy.recalculate_presentation_edition(),
-                    )
-
+        :param edition: Edition to update.
+        """
         # If we don't have a last updated timestamp, we use the current time.
         updated_at = (
             utc_now()
@@ -698,6 +712,139 @@ class BibliographicData(BaseMutableData):
         # we set the edition's updated_at to the data source's last updated time.
         if edition.updated_at is None or edition.updated_at < updated_at:
             edition.updated_at = updated_at
+
+    def apply(
+        self,
+        db: Session,
+        edition: Edition,
+        collection: Collection | None,
+        replace: ReplacementPolicy | None = None,
+        *,
+        disable_async_calculation: bool = False,
+        create_coverage_record: bool = True,
+    ) -> tuple[Edition, bool]:
+        """Apply bibliographic metadata to an edition and update related resources.
+
+        Updates edition fields, contributors, identifiers, subjects, links, and measurements
+        from this BibliographicData object. Queues work presentation recalculation if changes
+        require it, and optionally applies circulation data.
+
+        :param db: Database session for queries and persistence.
+        :param edition: The Edition object to update with bibliographic data.
+        :param collection: Optional Collection for applying circulation data.
+        :param replace: Policy controlling which fields to replace. Defaults to ReplacementPolicy().
+        :param disable_async_calculation: If True, prevents queueing of work presentation recalculation
+            tasks. This is a stop-gap measure to prevent the code from falling into an infinite loop
+            as we move away from the use of coverage records. Must be set to True when this method
+            is invoked within the work.calculate_work_presentation celery task, otherwise some works
+            will queue and requeue calculation tasks indefinitely. This solution is a little ugly but
+            it works. It's unclear how best to refactor the code to accomplish this more elegantly.
+            In the meantime, endure the code-stench so that we can keep asynchronous presentation
+            calculations working.
+        :param create_coverage_record: If True, creates/updates a CoverageRecord for this edition.
+            Will be removed once coverage records are fully deprecated.
+        :return: Tuple of (updated_edition, requires_presentation_update) where the boolean indicates
+            whether the edition or its work requires presentation recalculation due to changes in
+            core fields (title, contributors, images, descriptions, etc.).
+        :raises: PalaceValueError if primary identifiers don't match between data and edition.
+        """
+        # Initialize replacement policy
+        if replace is None:
+            replace = ReplacementPolicy()
+
+        # Validate primary identifier matches
+        self._validate_primary_identifier(edition)
+
+        # Check whether we should do any work at all
+        if not replace.even_if_not_apparently_updated and not self.has_changed(
+            db, edition
+        ):
+            # No need to update the bibliographic data, but we might have fresh
+            # circulation data that we should apply.
+            if self.circulation:
+                self.circulation.apply(db, collection, replace)
+            return edition, False
+
+        # Load data source and identifier
+        data_source = self.load_data_source(db)
+        identifier = edition.primary_identifier
+
+        # Track whether work requires recalculation
+        work_requires_full_recalculation = False
+        work_requires_new_presentation_edition = False
+
+        # Apply updates
+        self.log.info("APPLYING BIBLIOGRAPHIC DATA TO EDITION: %s", self.title)
+
+        # Update basic edition fields
+        if self._update_basic_fields(edition):
+            work_requires_new_presentation_edition = True
+
+        # Update contributions
+        contributors_changed = self.update_contributions(
+            db, edition, replace.contributions
+        )
+        if contributors_changed:
+            work_requires_new_presentation_edition = True
+
+        # Handle identifier equivalencies
+        self._handle_identifier_equivalencies(db, identifier, data_source)
+
+        # Update subjects and classifications
+        if self._update_subjects(db, identifier, data_source, replace.subjects):
+            work_requires_full_recalculation = True
+
+        # Update links
+        link_objects, links_need_presentation, links_need_full_recalc = (
+            self._update_links(db, identifier, data_source, replace.links)
+        )
+        if links_need_presentation:
+            work_requires_new_presentation_edition = True
+        if links_need_full_recalc:
+            work_requires_full_recalculation = True
+
+        # Update measurements
+        if self._update_measurements(identifier, data_source):
+            work_requires_full_recalculation = True
+
+        # Set sort_author if missing
+        if self._set_missing_sort_author(edition):
+            work_requires_new_presentation_edition = True
+
+        # Apply circulation data
+        if self.circulation:
+            self.circulation.apply(db, collection, replace)
+
+        # Process thumbnails
+        self._process_thumbnails(db, data_source, link_objects)
+
+        # Calculate presentation
+        made_changes = edition.calculate_presentation(
+            policy=replace.presentation_calculation_policy
+        )
+        if made_changes:
+            work_requires_new_presentation_edition = True
+
+        # Create coverage record
+        if create_coverage_record:
+            CoverageRecord.add_for(
+                edition,
+                data_source,
+                timestamp=self.data_source_last_updated,
+                collection=None,
+            )
+
+        # Queue work recalculation if needed
+        self._queue_work_recalculation(
+            db,
+            edition,
+            work_requires_full_recalculation,
+            work_requires_new_presentation_edition,
+            disable_async_calculation,
+        )
+
+        # Update edition timestamp
+        self._update_edition_timestamp(edition)
 
         return edition, work_requires_new_presentation_edition
 
