@@ -174,7 +174,7 @@ class BibliographicData(BaseMutableData):
         fields = _BASIC_EDITION_FIELDS
         for field in fields:
             new_value = getattr(bibliographic, field)
-            if new_value != None and new_value != "":
+            if new_value is not None and new_value != "":
                 setattr(self, field, new_value)
 
         new_value = getattr(bibliographic, "contributors")
@@ -388,12 +388,7 @@ class BibliographicData(BaseMutableData):
                 != edition.primary_identifier.identifier
             ):
                 raise PalaceValueError(
-                    "BibliographicData's primary identifier (%s/%s) does not match edition's primary identifier (%r)"
-                    % (
-                        self.primary_identifier_data.type,
-                        self.primary_identifier_data.identifier,
-                        edition.primary_identifier,
-                    )
+                    f"BibliographicData's primary identifier ({self.primary_identifier_data.type}/{self.primary_identifier_data.identifier}) does not match edition's primary identifier ({edition.primary_identifier!r})"
                 )
 
         # Check whether we should do any work at all.
@@ -415,7 +410,7 @@ class BibliographicData(BaseMutableData):
             old_edition_value = getattr(edition, field)
             new_bibliographic_value = getattr(self, field)
             if (
-                new_bibliographic_value != None
+                new_bibliographic_value is not None
                 and new_bibliographic_value != ""
                 and (new_bibliographic_value != old_edition_value)
             ):
@@ -443,7 +438,7 @@ class BibliographicData(BaseMutableData):
                 ):
                     # These are the same identifier.
                     continue
-                new_identifier, ignore = Identifier.for_foreign_id(
+                new_identifier, _ = Identifier.for_foreign_id(
                     db, identifier_data.type, identifier_data.identifier
                 )
                 identifier.equivalent_to(
@@ -470,7 +465,7 @@ class BibliographicData(BaseMutableData):
             for classification in identifier.classifications:
                 if classification.data_source == data_source:
                     key = _key(classification)
-                    if not key in new_subjects:
+                    if key not in new_subjects:
                         # The data source has stopped claiming that
                         # this classification should exist.
                         db.delete(classification)
@@ -519,7 +514,7 @@ class BibliographicData(BaseMutableData):
                 original_resource = None
                 if link.original:
                     rights_status = RightsStatus.lookup(db, link.original.rights_uri)
-                    original_resource, ignore = get_one_or_create(
+                    original_resource, _ = get_one_or_create(
                         db,
                         Resource,
                         url=link.original.href,
@@ -537,7 +532,7 @@ class BibliographicData(BaseMutableData):
                             None,
                         )
 
-                link_obj, ignore = identifier.add_link(
+                link_obj, _ = identifier.add_link(
                     rel=link.rel,
                     href=link.href,
                     data_source=data_source,
@@ -560,7 +555,7 @@ class BibliographicData(BaseMutableData):
                 link_objects[link] = link_obj
                 if link.thumbnail:
                     thumbnail = link.thumbnail
-                    thumbnail_obj, ignore = identifier.add_link(
+                    thumbnail_obj, _ = identifier.add_link(
                         rel=thumbnail.rel,
                         href=thumbnail.href,
                         data_source=data_source,
@@ -624,7 +619,7 @@ class BibliographicData(BaseMutableData):
             self.circulation.apply(db, collection, replace)
 
         # obtains a presentation_edition for the title
-        has_image = any([link.rel == Hyperlink.IMAGE for link in self.links])
+        has_image = any(link.rel == Hyperlink.IMAGE for link in self.links)
         for link in self.links:
             link_obj = link_objects[link]
 
@@ -716,7 +711,7 @@ class BibliographicData(BaseMutableData):
 
         # The thumbnail and image are different. Make sure there's a
         # separate link to the thumbnail.
-        thumbnail_obj, ignore = link_obj.identifier.add_link(
+        thumbnail_obj, _ = link_obj.identifier.add_link(
             rel=thumbnail.rel,
             href=thumbnail.href,
             data_source=data_source,
