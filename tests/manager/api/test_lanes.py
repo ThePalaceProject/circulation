@@ -50,6 +50,7 @@ from palace.manager.sqlalchemy.model.lane import (
     WorkList,
 )
 from palace.manager.sqlalchemy.model.library import Library
+from palace.manager.sqlalchemy.util import numericrange_to_tuple
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.library import LibraryFixture
 from tests.fixtures.search import ExternalSearchFixtureFake
@@ -308,9 +309,10 @@ class TestLaneCreation:
         [children_and_middle_grade_lane] = [
             x for x in lanes if x.display_name == "Children and Middle Grade"
         ]
-        target_age = children_and_middle_grade_lane.target_age
-        assert 0 == target_age.lower
-        assert 13 == target_age.upper
+        assert numericrange_to_tuple(children_and_middle_grade_lane.target_age) == (
+            0,
+            13,
+        )
         # and that the audience is set to children
         audiences = children_and_middle_grade_lane.audiences
         assert 1 == len(audiences)
