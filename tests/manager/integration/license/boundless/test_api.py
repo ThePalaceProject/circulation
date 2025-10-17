@@ -879,9 +879,9 @@ class TestBoundlessApi:
         # The LicensePool reflects what it said in AVAILABILITY_DATA
         assert 9 == lp.licenses_owned
 
-        # There's a presentation-ready Work created for the
-        # LicensePool.
-        assert True == lp.work.presentation_ready
+        # There's a Work created for the LicensePool, but presentation readiness
+        # now depends on additional metadata to be populated later.
+        assert False == lp.work.presentation_ready
         assert e == lp.work.presentation_edition
 
         # The Edition reflects what it said in BIBLIOGRAPHIC_DATA

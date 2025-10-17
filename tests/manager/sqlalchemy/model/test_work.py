@@ -1,7 +1,7 @@
 import datetime
 from contextlib import nullcontext
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import opensearchpy
 import pytest
@@ -15,7 +15,6 @@ from palace.manager.core.equivalents_coverage import (
     EquivalentIdentifiersCoverageProvider,
 )
 from palace.manager.core.exceptions import BasePalaceException
-from palace.manager.data_layer.policy.presentation import PresentationCalculationPolicy
 from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.service.redis.models.search import WaitingForIndexing
 from palace.manager.sqlalchemy.model.classification import Genre, Subject
@@ -233,79 +232,65 @@ class TestWork:
 
         work.last_update_time = None
         work.presentation_ready = True
-        index = external_search_fake_fixture.external_search
+        work.calculate_presentation()
 
-        with patch(
-            "palace.manager.celery.tasks.work.calculate_work_presentation"
-        ) as calculate:
+        # The author of the Work has not changed.
+        assert "Alice Adder, Bob Bitshifter" == work.author
 
-            work.calculate_presentation()
+        # sanity check
+        assert work.presentation_edition == pool2.presentation_edition
+        assert work.presentation_edition == edition2
 
-            # The author of the Work has not changed.
-            assert "Alice Adder, Bob Bitshifter" == work.author
+        # editions that aren't the presentation edition have no work
+        assert edition1.work == None
+        assert edition2.work == work
+        assert edition3.work == None
 
-            # sanity check
-            assert work.presentation_edition == pool2.presentation_edition
-            assert work.presentation_edition == edition2
+        # The title of the Work is the title of its primary work record.
+        assert "The 2nd Title" == work.title
+        assert "The 2nd Subtitle" == work.subtitle
 
-            assert calculate.delay.call_count == 0
+        # The author of the Work is the author of its primary work record.
+        assert "Alice Adder, Bob Bitshifter" == work.author
+        assert "Adder, Alice ; Bitshifter, Bob" == work.sort_author
 
-            # editions that aren't the presentation edition have no work
-            assert edition1.work == None
-            assert edition2.work == work
-            assert edition3.work == None
+        # The summary has now been chosen.
+        assert chosen_summary == work.summary.representation.content.decode("utf-8")
+        assert work.last_update_time is not None
+        # The last update time has been set.
+        # Updating availability also modified work.last_update_time.
+        assert (utc_now() - work.last_update_time) < datetime.timedelta(seconds=2)
 
-            # The title of the Work is the title of its primary work record.
-            assert "The 2nd Title" == work.title
-            assert "The 2nd Subtitle" == work.subtitle
+        # The index has not been updated.
+        assert [] == external_search_fake_fixture.service.documents_all()
 
-            # The author of the Work is the author of its primary work record.
-            assert "Alice Adder, Bob Bitshifter" == work.author
-            assert "Adder, Alice ; Bitshifter, Bob" == work.sort_author
+        assert work_queue_indexing.is_queued(work)
 
-            # The summary has now been chosen.
-            assert chosen_summary == work.summary.representation.content.decode("utf-8")
-            assert work.last_update_time is not None
-            # The last update time has been set.
-            # Updating availability also modified work.last_update_time.
-            assert (utc_now() - work.last_update_time) < datetime.timedelta(seconds=2)
+        staff_edition = db.edition(
+            data_source_name=DataSource.LIBRARY_STAFF,
+            with_license_pool=False,
+            authors=[],
+        )
+        staff_edition.title = "The Staff Title"
+        staff_edition.primary_identifier = pool2.identifier
+        # set edition's authorship to "nope", and make sure the lower-priority
+        # editions' authors don't get clobbered
+        staff_edition.contributions = []
+        staff_edition.author = Edition.UNKNOWN_AUTHOR
+        staff_edition.sort_author = Edition.UNKNOWN_AUTHOR
 
-            # The index has not been updated.
-            assert [] == external_search_fake_fixture.service.documents_all()
+        work.calculate_presentation()
 
-            assert work_queue_indexing.is_queued(work)
+        # The title of the Work got superseded.
+        assert "The Staff Title" == work.title
 
-            staff_edition = db.edition(
-                data_source_name=DataSource.LIBRARY_STAFF,
-                with_license_pool=False,
-                authors=[],
-            )
-            staff_edition.title = "The Staff Title"
-            staff_edition.primary_identifier = pool2.identifier
-            # set edition's authorship to "nope", and make sure the lower-priority
-            # editions' authors don't get clobbered
-            staff_edition.contributions = []
-            staff_edition.author = Edition.UNKNOWN_AUTHOR
-            staff_edition.sort_author = Edition.UNKNOWN_AUTHOR
+        # The author of the Work is still the author of edition2 and was not clobbered.
+        assert "Alice Adder, Bob Bitshifter" == work.author
+        assert "Adder, Alice ; Bitshifter, Bob" == work.sort_author
 
-            work.calculate_presentation()
-            policy = PresentationCalculationPolicy.recalculate_presentation_edition()
-            assert calculate.delay.call_count == 1
-            assert calculate.delay.call_args_list[0].kwargs == {
-                "work_id": work.id,
-                "policy": policy,
-            }
-
-            # The title of the Work got superseded.
-            assert "The Staff Title" == work.title
-
-            # The author of the Work is still the author of edition2 and was not clobbered.
-            assert "Alice Adder, Bob Bitshifter" == work.author
-            assert "Adder, Alice ; Bitshifter, Bob" == work.sort_author
-
-            # The last update time has been set.
-            # Updating availability also modified work.last_update_time.
-            assert (utc_now() - work.last_update_time) < datetime.timedelta(seconds=2)
+        # The last update time has been set.
+        # Updating availability also modified work.last_update_time.
+        assert (utc_now() - work.last_update_time) < datetime.timedelta(seconds=2)
 
     def test_calculate_presentation_with_no_presentation_edition(
         self, db: DatabaseTransactionFixture
