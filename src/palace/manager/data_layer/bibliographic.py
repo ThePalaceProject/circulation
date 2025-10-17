@@ -29,7 +29,6 @@ from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import LicensePool, RightsStatus
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Resource
-from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.sqlalchemy.util import get_one, get_one_or_create
 from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.languages import LanguageCodes
@@ -656,46 +655,6 @@ class BibliographicData(BaseMutableData):
                 # is associated with the original image.
                 self.make_thumbnail(db, data_source, link, link_obj)
 
-    def _queue_work_recalculation(
-        self,
-        db: Session,
-        edition: Edition,
-        requires_full_recalculation: bool,
-        requires_new_presentation: bool,
-        disable_async: bool,
-    ) -> None:
-        """Queue work presentation recalculation if needed.
-
-        :param db: Database session.
-        :param edition: Edition that was updated.
-        :param requires_full_recalculation: Whether full recalculation is needed.
-        :param requires_new_presentation: Whether presentation edition recalculation is needed.
-        :param disable_async: If True, skip queueing calculation tasks.
-        """
-        if not (requires_full_recalculation or requires_new_presentation):
-            return
-
-        # Any LicensePool will do here, since all LicensePools for
-        # a given Identifier have the same Work.
-        pool = get_one(
-            db,
-            LicensePool,
-            identifier=edition.primary_identifier,
-            on_multiple="interchangeable",
-        )
-        if pool and pool.work and not disable_async:
-            work = pool.work
-            if requires_full_recalculation:
-                Work.queue_presentation_recalculation(
-                    work_id=work.id,
-                    policy=PresentationCalculationPolicy.recalculate_everything(),
-                )
-            else:
-                Work.queue_presentation_recalculation(
-                    work_id=work.id,
-                    policy=PresentationCalculationPolicy.recalculate_presentation_edition(),
-                )
-
     def _update_edition_timestamp(self, edition: Edition) -> None:
         """Update edition timestamp based on data source last updated time.
 
@@ -713,6 +672,81 @@ class BibliographicData(BaseMutableData):
         if edition.updated_at is None or edition.updated_at < updated_at:
             edition.updated_at = updated_at
 
+    def apply_edition_only(
+        self,
+        db: Session,
+        edition: Edition,
+        collection: Collection | None,
+        replace: ReplacementPolicy | None = None,
+    ) -> tuple[Edition, bool]:
+        """Apply bibliographic metadata to edition fields only (not identifier).
+
+        Used when merging editions during presentation calculation. Does NOT update
+        identifier-level data (subjects, links, measurements) or trigger work recalculation.
+
+        This method is designed for use in LicensePool.set_presentation_edition() where
+        multiple editions sharing the same identifier are being merged. Since the identifier
+        already has the subjects, links, and measurements from previous imports, we only
+        need to update edition-specific fields.
+
+        :param db: Database session for queries and persistence.
+        :param edition: The Edition object to update with bibliographic data.
+        :param collection: Optional Collection for applying circulation data.
+        :param replace: Policy controlling which fields to replace. Defaults to ReplacementPolicy().
+        :return: Tuple of (updated_edition, changed) where the boolean indicates whether
+            any edition fields were modified.
+        :raises: PalaceValueError if primary identifiers don't match between data and edition.
+        """
+        # Initialize replacement policy
+        if replace is None:
+            replace = ReplacementPolicy()
+
+        # Validate primary identifier matches
+        self._validate_primary_identifier(edition)
+
+        # Check whether we should do any work at all
+        if not replace.even_if_not_apparently_updated and not self.has_changed(
+            db, edition
+        ):
+            # No need to update the bibliographic data, but we might have fresh
+            # circulation data that we should apply.
+            if self.circulation:
+                self.circulation.apply(db, collection, replace)
+            return edition, False
+
+        changed = False
+
+        # Update basic edition fields
+        if self._update_basic_fields(edition):
+            changed = True
+
+        # Update contributions
+        contributors_changed = self.update_contributions(
+            db, edition, replace.contributions
+        )
+        if contributors_changed:
+            changed = True
+
+        # Set sort_author if missing
+        if self._set_missing_sort_author(edition):
+            changed = True
+
+        # Apply circulation data
+        if self.circulation:
+            self.circulation.apply(db, collection, replace)
+
+        # Calculate presentation
+        made_changes = edition.calculate_presentation(
+            policy=replace.presentation_calculation_policy
+        )
+        if made_changes:
+            changed = True
+
+        # Update edition timestamp
+        self._update_edition_timestamp(edition)
+
+        return edition, changed
+
     def apply(
         self,
         db: Session,
@@ -720,27 +754,22 @@ class BibliographicData(BaseMutableData):
         collection: Collection | None,
         replace: ReplacementPolicy | None = None,
         *,
-        disable_async_calculation: bool = False,
         create_coverage_record: bool = True,
     ) -> tuple[Edition, bool]:
-        """Apply bibliographic metadata to an edition and update related resources.
+        """Apply full bibliographic metadata (identifier + edition) and calculate work presentation.
 
-        Updates edition fields, contributors, identifiers, subjects, links, and measurements
-        from this BibliographicData object. Queues work presentation recalculation if changes
-        require it, and optionally applies circulation data.
+        Updates both identifier-level data (subjects, links, measurements) and edition-level
+        data (title, author, etc), then triggers work presentation calculation directly if needed.
+
+        This method performs the complete bibliographic import process, including updating the
+        identifier's associated metadata and calculating work presentation. For merging editions
+        during presentation calculation (where the identifier is already up-to-date), use
+        apply_edition_only() instead.
 
         :param db: Database session for queries and persistence.
         :param edition: The Edition object to update with bibliographic data.
         :param collection: Optional Collection for applying circulation data.
         :param replace: Policy controlling which fields to replace. Defaults to ReplacementPolicy().
-        :param disable_async_calculation: If True, prevents queueing of work presentation recalculation
-            tasks. This is a stop-gap measure to prevent the code from falling into an infinite loop
-            as we move away from the use of coverage records. Must be set to True when this method
-            is invoked within the work.calculate_work_presentation celery task, otherwise some works
-            will queue and requeue calculation tasks indefinitely. This solution is a little ugly but
-            it works. It's unclear how best to refactor the code to accomplish this more elegantly.
-            In the meantime, endure the code-stench so that we can keep asynchronous presentation
-            calculations working.
         :param create_coverage_record: If True, creates/updates a CoverageRecord for this edition.
             Will be removed once coverage records are fully deprecated.
         :return: Tuple of (updated_edition, requires_presentation_update) where the boolean indicates
@@ -834,14 +863,21 @@ class BibliographicData(BaseMutableData):
                 collection=None,
             )
 
-        # Queue work recalculation if needed
-        self._queue_work_recalculation(
-            db,
-            edition,
-            work_requires_full_recalculation,
-            work_requires_new_presentation_edition,
-            disable_async_calculation,
-        )
+        # Calculate work presentation directly if needed
+        if work_requires_full_recalculation or work_requires_new_presentation_edition:
+            pool = get_one(
+                db,
+                LicensePool,
+                identifier=identifier,
+                on_multiple="interchangeable",
+            )
+            if pool and pool.work:
+                policy = (
+                    PresentationCalculationPolicy.recalculate_everything()
+                    if work_requires_full_recalculation
+                    else PresentationCalculationPolicy.recalculate_presentation_edition()
+                )
+                pool.work.calculate_presentation(policy=policy)
 
         # Update edition timestamp
         self._update_edition_timestamp(edition)
