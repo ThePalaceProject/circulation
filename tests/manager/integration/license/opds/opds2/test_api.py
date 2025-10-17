@@ -8,6 +8,10 @@ from palace.manager.api.circulation.exceptions import CannotFulfill
 from palace.manager.api.circulation.fulfillment import Fulfillment, RedirectFulfillment
 from palace.manager.celery.tasks import opds2 as opds2_celery
 from palace.manager.integration.license.opds.opds2.api import OPDS2API
+from palace.manager.integration.license.opds.requests import (
+    BasicAuthOpdsRequest,
+    NoAuthOpdsRequest,
+)
 from palace.manager.integration.patron_auth.saml.metadata.model import (
     SAMLAttribute,
     SAMLAttributeStatement,
@@ -132,14 +136,49 @@ class TestOpds2Api:
         # we never call the token auth function
         assert mock.call_count == 0
 
-    def test_get_authentication_token(self, opds2_api_fixture: Opds2ApiFixture):
-        opds2_api_fixture.queue_default_auth_token_response()
-        token = opds2_api_fixture.api.get_authentication_token(
-            opds2_api_fixture.patron, opds2_api_fixture.data_source, ""
+    @pytest.mark.parametrize(
+        "username,password,expect_auth",
+        [
+            pytest.param(None, None, False, id="no_auth"),
+            pytest.param("test_user", "test_pass", True, id="with_basic_auth"),
+        ],
+    )
+    def test_get_authentication_token(
+        self,
+        db: DatabaseTransactionFixture,
+        http_client: MockHttpClientFixture,
+        username: str | None,
+        password: str | None,
+        expect_auth: bool,
+    ):
+        # Create collection with or without credentials based on parameters
+        collection = db.collection(
+            protocol=OPDS2API,
+            settings=db.opds_settings(
+                external_account_id="http://opds2.example.org/feed",
+                data_source="test",
+                username=username,
+                password=password,
+            ),
+        )
+        api = OPDS2API(db.session, collection)
+        patron = db.patron()
+        data_source = DataSource.lookup(db.session, "test", autocreate=True)
+
+        http_client.queue_response(200, content="plaintext-auth-token")
+        token = api.get_authentication_token(
+            patron, data_source, "http://example.org/token"
         )
 
         assert token == "plaintext-auth-token"
-        assert len(opds2_api_fixture.http_client.requests) == 1
+        assert http_client.requests == ["http://example.org/token"]
+
+        # Verify authentication was sent or not based on configuration
+        request_kwargs = http_client.requests_args[0]
+        if expect_auth:
+            assert request_kwargs.get("auth") == (username, password)
+        else:
+            assert "auth" not in request_kwargs
 
     def test_get_authentication_token_400_response(
         self, opds2_api_fixture: Opds2ApiFixture, caplog: pytest.LogCaptureFixture
@@ -401,3 +440,30 @@ class TestOpds2Api:
 
         # Should not reap since next Monday hasn't occurred yet
         assert OPDS2API.should_reap(collection) is False
+
+    def test_init_no_auth(self, db: DatabaseTransactionFixture) -> None:
+        """Test that OPDS2API initializes with NoAuthOpdsRequest when no credentials."""
+        collection = db.collection(
+            protocol=OPDS2API,
+            settings=db.opds2_settings(),
+        )
+
+        api = OPDS2API(db.session, collection)
+
+        # Verify that _request is an instance of NoAuthOpdsRequest
+        assert isinstance(api._request, NoAuthOpdsRequest)
+
+    def test_init_basic_auth(self, db: DatabaseTransactionFixture) -> None:
+        """Test that OPDS2API initializes with BasicAuthOpdsRequest when credentials provided."""
+        collection = db.collection(
+            protocol=OPDS2API,
+            settings=db.opds2_settings(
+                username="test_user",
+                password="test_pass",
+            ),
+        )
+
+        api = OPDS2API(db.session, collection)
+
+        # Verify that _request is an instance of BasicAuthOpdsRequest
+        assert isinstance(api._request, BasicAuthOpdsRequest)
