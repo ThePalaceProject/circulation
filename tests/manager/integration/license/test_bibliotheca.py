@@ -31,7 +31,6 @@ from palace.manager.api.circulation.exceptions import (
 from palace.manager.api.circulation.fulfillment import Fulfillment
 from palace.manager.api.web_publication_manifest import FindawayManifest
 from palace.manager.core.monitor import TimestampData
-from palace.manager.data_layer.policy.presentation import PresentationCalculationPolicy
 from palace.manager.integration.license.bibliotheca import (
     BibliothecaAPI,
     BibliothecaBibliographicCoverageProvider,
@@ -358,10 +357,6 @@ class TestBibliothecaAPI:
         bibliotheca_fixture.api.queue_response(200, content=data)
 
         bibliotheca_fixture.api.update_availability(pool)
-        assert bibliotheca_fixture.work_policy_recalc_fixture.is_queued(
-            work.id,
-            PresentationCalculationPolicy.recalculate_everything(),
-        )
         # The availability information has been updated, as has the
         # date the availability information was last checked.
         assert 1 == pool.licenses_owned
@@ -701,10 +696,6 @@ class TestBibliothecaCirculationSweep:
         )
 
         monitor.process_items([identifier])
-        assert bibliotheca_fixture.work_policy_recalc_fixture.is_queued(
-            identifier.work.id,
-            PresentationCalculationPolicy.recalculate_everything(),
-        )
 
         # Validate that the HTTP request went to the /items endpoint.
         request = bibliotheca_fixture.api.requests.pop()
@@ -1908,10 +1899,6 @@ class TestBibliographicCoverageProvider(TestBibliothecaAPI):
         api.queue_response(200, content=data)
         [result] = provider.process_batch([identifier])
         assert identifier == result
-        bibliotheca_fixture.work_policy_recalc_fixture.is_queued(
-            identifier.work.id,
-            PresentationCalculationPolicy.recalculate_everything(),
-        )
         # A LicensePool was created and populated with format and availability
         # information.
         [pool] = identifier.licensed_through

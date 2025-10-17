@@ -26,7 +26,6 @@ from palace.manager.api.circulation.fulfillment import (
 from palace.manager.api.config import Configuration
 from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.core.exceptions import BasePalaceException, IntegrationException
-from palace.manager.data_layer.policy.presentation import PresentationCalculationPolicy
 from palace.manager.integration.license.overdrive.api import OverdriveAPI
 from palace.manager.integration.license.overdrive.constants import OverdriveConstants
 from palace.manager.integration.license.overdrive.exception import (
@@ -1403,10 +1402,6 @@ class TestOverdriveAPI:
         http.queue_response(200, content=bibliographic)
 
         overdrive_api_fixture.api.update_formats(pool)
-        assert overdrive_api_fixture.work_policy_recalc_fixture.is_queued(
-            edition.work.id,
-            PresentationCalculationPolicy.recalculate_everything(),
-        )
 
         # The delivery mechanisms have been updated.
         assert len(pool.delivery_mechanisms) == 4
@@ -1465,7 +1460,6 @@ class TestOverdriveAPI:
         http.queue_response(200, content=bibliographic)
 
         overdrive_api_fixture.api.update_formats(pool)
-        assert overdrive_api_fixture.work_policy_recalc_fixture.queue_size() == 1
 
         assert len(pool.delivery_mechanisms) == 4
         assert {

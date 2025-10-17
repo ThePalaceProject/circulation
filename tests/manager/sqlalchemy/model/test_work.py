@@ -1790,14 +1790,6 @@ class TestWork:
         Work.queue_indexing(None)
         assert waiting.pop(1) == []
 
-    def test_queue_presentation_recalculation(self):
-        with patch(
-            "palace.manager.celery.tasks.work.calculate_work_presentation"
-        ) as calculate:
-            policy = PresentationCalculationPolicy.recalculate_everything()
-            Work.queue_presentation_recalculation(555, policy=policy)
-            calculate.delay.assert_called_once_with(work_id=555, policy=policy)
-
 
 class TestWorkConsolidation:
     def test_calculate_work_success(self, db: DatabaseTransactionFixture):
@@ -2863,5 +2855,3 @@ class TestWorkConsolidation:
         # Even if the LicensePool had a work before, it gets removed.
         assert lp.calculate_work() == (None, False)
         assert lp.work is None
-        policy = PresentationCalculationPolicy.recalculate_presentation_edition()
-        assert work_policy_recalc_fixture.is_queued(work.id, policy)
