@@ -291,6 +291,58 @@ class TestBibliographicData:
         assert "http://largeimage.com/" == edition.cover_full_url
         assert None == edition.cover_thumbnail_url
 
+    def test_process_thumbnails_skips_missing_links(
+        self, db: DatabaseTransactionFixture
+    ):
+        """Test that _process_thumbnails gracefully handles links not in link_objects.
+
+        This tests the defensive code path where a link in self.links might not
+        be present in the link_objects dictionary passed to _process_thumbnails.
+        This could happen in edge cases or future code changes.
+        """
+        edition = db.edition()
+        data_source = DataSource.lookup(db.session, DataSource.GUTENBERG)
+
+        # Create some links
+        image_link = LinkData(
+            rel=Hyperlink.IMAGE,
+            href="http://example.com/image.jpg",
+            media_type=Representation.JPEG_MEDIA_TYPE,
+        )
+
+        description_link = LinkData(
+            rel=Hyperlink.DESCRIPTION,
+            content="A description",
+            media_type=Representation.TEXT_PLAIN,
+        )
+
+        # Create BibliographicData with both links
+        bibliographic = BibliographicData(
+            links=[image_link, description_link], data_source_name=data_source.name
+        )
+
+        # Apply to create the Hyperlink objects
+        bibliographic.apply(db.session, edition, None)
+
+        # Get the created hyperlink for image
+        image_hyperlink = next(
+            (l for l in edition.primary_identifier.links if l.rel == Hyperlink.IMAGE),
+            None,
+        )
+        assert image_hyperlink is not None
+
+        # Create a partial link_objects dict that only includes the image link
+        # This simulates a scenario where description_link is in self.links
+        # but not in link_objects
+        partial_link_objects = {image_link: image_hyperlink}
+
+        # Directly call _process_thumbnails with the partial dict
+        # This should not raise a KeyError when it encounters description_link
+        # which is in self.links but not in partial_link_objects
+        bibliographic._process_thumbnails(db.session, data_source, partial_link_objects)
+
+        # The method should complete without error, having skipped description_link
+
     def test_links_are_are_inserted_and_deleted_when_in_replace_mode_when_change_occurs(
         self, db: DatabaseTransactionFixture
     ):
