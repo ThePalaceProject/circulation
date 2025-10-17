@@ -19,7 +19,6 @@ from palace.manager.data_layer.contributor import ContributorData
 from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.data_layer.link import LinkData
 from palace.manager.data_layer.measurement import MeasurementData
-from palace.manager.data_layer.policy.presentation import PresentationCalculationPolicy
 from palace.manager.data_layer.policy.replacement import ReplacementPolicy
 from palace.manager.data_layer.subject import SubjectData
 from palace.manager.sqlalchemy.model.classification import Subject
@@ -423,10 +422,8 @@ class TestBibliographicData:
 
             # The policy should be recalculate_presentation_edition since only edition changed
             policy = calc_pres.call_args[1]["policy"]
-            assert (
-                policy.equivalent_identifier_levels
-                == PresentationCalculationPolicy.recalculate_presentation_edition().equivalent_identifier_levels
-            )
+            assert policy.classify is False
+            assert policy.choose_summary is False
 
     def test_defaults(self) -> None:
         # Verify that a BibliographicData object doesn't make any assumptions
@@ -580,10 +577,8 @@ class TestBibliographicData:
             assert calculate.call_count == 1
             policy = calculate.call_args[1]["policy"]
             # Should use recalculate_presentation_edition policy for edition-only changes
-            assert (
-                policy.equivalent_identifier_levels
-                == PresentationCalculationPolicy.recalculate_presentation_edition().equivalent_identifier_levels
-            )
+            assert policy.classify is False
+            assert policy.choose_summary is False
 
             # We then learn about a subject under which the work is classified.
             bibliographic.title = None
@@ -596,10 +591,8 @@ class TestBibliographicData:
             assert calculate.call_count == 2
             policy = calculate.call_args[1]["policy"]
             # Should use recalculate_everything policy for subject changes
-            assert (
-                policy.equivalent_identifier_levels
-                == PresentationCalculationPolicy.recalculate_everything().equivalent_identifier_levels
-            )
+            assert policy.classify is True
+            assert policy.choose_summary is True
 
             # We then find a new description for the work.
             bibliographic.subjects = []
@@ -611,10 +604,8 @@ class TestBibliographicData:
             # Full recalculation again for description changes.
             assert calculate.call_count == 3
             policy = calculate.call_args[1]["policy"]
-            assert (
-                policy.equivalent_identifier_levels
-                == PresentationCalculationPolicy.recalculate_everything().equivalent_identifier_levels
-            )
+            assert policy.classify is True
+            assert policy.choose_summary is True
 
             # We then find a new cover image for the work.
             bibliographic.subjects = []
@@ -624,10 +615,8 @@ class TestBibliographicData:
             # Presentation edition recalculation for image changes.
             assert calculate.call_count == 4
             policy = calculate.call_args[1]["policy"]
-            assert (
-                policy.equivalent_identifier_levels
-                == PresentationCalculationPolicy.recalculate_presentation_edition().equivalent_identifier_levels
-            )
+            assert policy.classify is False
+            assert policy.choose_summary is False
 
     def test_apply_identifier_equivalency(self, db: DatabaseTransactionFixture):
         # Set up an Edition.

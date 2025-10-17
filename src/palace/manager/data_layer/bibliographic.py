@@ -824,6 +824,7 @@ class BibliographicData(BaseMutableData):
 
         # Track whether work requires recalculation
         work_requires_full_recalculation = False
+        work_requires_new_presentation_edition = False
 
         # Apply identifier-level updates
         self.log.info("APPLYING BIBLIOGRAPHIC DATA TO EDITION: %s", self.title)
@@ -839,8 +840,10 @@ class BibliographicData(BaseMutableData):
         link_objects, links_need_presentation, links_need_full_recalc = (
             self._update_links(db, identifier, data_source, replace.links)
         )
-        if links_need_presentation or links_need_full_recalc:
+        if links_need_full_recalc:
             work_requires_full_recalculation = True
+        if links_need_presentation:
+            work_requires_new_presentation_edition = True
 
         # Update measurements
         if self._update_measurements(identifier, data_source):
@@ -851,6 +854,8 @@ class BibliographicData(BaseMutableData):
 
         # Apply edition-level updates by delegating to helper method
         edition_changed = self._update_edition_fields(db, edition, collection, replace)
+        if edition_changed:
+            work_requires_new_presentation_edition = True
 
         # Create coverage record
         if create_coverage_record:
@@ -862,7 +867,7 @@ class BibliographicData(BaseMutableData):
             )
 
         # Calculate work presentation directly if needed
-        if work_requires_full_recalculation or edition_changed:
+        if work_requires_full_recalculation or work_requires_new_presentation_edition:
             pool = get_one(
                 db,
                 LicensePool,
@@ -877,7 +882,10 @@ class BibliographicData(BaseMutableData):
                 )
                 pool.work.calculate_presentation(policy=policy)
 
-        return edition, work_requires_full_recalculation or edition_changed
+        return (
+            edition,
+            work_requires_full_recalculation or work_requires_new_presentation_edition,
+        )
 
     def make_thumbnail(
         self, _db: Session, data_source: DataSource, link: LinkData, link_obj: Hyperlink
