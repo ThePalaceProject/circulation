@@ -1,0 +1,6 @@
+#!/usr/bin/env python
+"""Import a OverDrive Collection by name"""
+
+from palace.manager.integration.license.overdrive.script import ImportCollection
+
+ImportCollection().run()
