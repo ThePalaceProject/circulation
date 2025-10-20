@@ -7,6 +7,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from palace.manager.celery.tasks import overdrive
 from palace.manager.integration.license.overdrive.advantage import (
     OverdriveAdvantageAccount,
 )
@@ -174,3 +175,74 @@ class OverdriveAdvantageAccountListScript(Script):
             print(" ", book["title"])
             if i > 10:
                 break
+
+
+class ImportCollection(Script):
+    """A convenient script for manually kicking off an OverDrive collection import"""
+
+    @classmethod
+    def arg_parser(cls) -> argparse.ArgumentParser:
+        parser = argparse.ArgumentParser()
+        parser.add_argument(
+            "--collection-name",
+            type=str,
+            help="Collection Name",
+        ),
+        parser.add_argument(
+            "--import-all",
+            action="store_true",
+            help="Import all identifiers rather not just recently changed ones.",
+        ),
+        return parser
+
+    def do_run(self, cmd_args: list[str] | None = None) -> None:
+        parsed = self.parse_command_line(self._db, cmd_args=cmd_args)
+        collection_name = parsed.collection_name
+
+        collection = Collection.by_name(self._db, collection_name)
+        if not collection:
+            raise ValueError(f'No collection found named "{collection_name}".')
+
+        overdrive.import_collection.delay(
+            collection_id=collection.id,
+            import_all=parsed.import_all,
+        )
+
+
+class ImportCollectionGroup(Script):
+    """A convenient script for manually kicking off an OverDrive main collection import followed by
+    an import for each of the child OverDrive Advantage collections in parallel."""
+
+    @classmethod
+    def arg_parser(cls) -> argparse.ArgumentParser:
+        parser = argparse.ArgumentParser()
+        parser.add_argument(
+            "--collection-name",
+            type=str,
+            help="Collection Name",
+        ),
+        parser.add_argument(
+            "--import-all",
+            action="store_true",
+            help="Import all identifiers rather not just recently changed ones.",
+        ),
+        return parser
+
+    def do_run(self, cmd_args: list[str] | None = None) -> None:
+        parsed = self.parse_command_line(self._db, cmd_args=cmd_args)
+        collection_name = parsed.collection_name
+
+        collection = Collection.by_name(self._db, collection_name)
+        if not collection:
+            raise ValueError(f'No collection found named "{collection_name}".')
+
+        if collection.parent:
+            raise ValueError(
+                f'This collection, "{collection_name}", is an advantage collection. The main collection'
+                f'associated with this advantage collection is "{collection.parent.name}".'
+            )
+
+        overdrive.import_collection_group.delay(
+            collection_id=collection.id,
+            import_all=parsed.import_all,
+        )
