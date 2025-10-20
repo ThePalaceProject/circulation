@@ -73,17 +73,18 @@ def test_subject_checked(
 
     with patch.object(Work, "calculate_presentation") as calc_pres:
         work_tasks.classify_unchecked_subjects.delay().wait()
-        # Should have been called once for each work
-        assert calc_pres.call_count == 10
-        # Should use recalculate_classification policy
-        for call_obj in calc_pres.call_args_list:
-            policy = call_obj[1]["policy"]
-            assert policy.classify is True
-            assert policy.choose_edition is False
+
+    # Should have been called once for each work
+    assert calc_pres.call_count == 10
+    # Should use recalculate_classification policy
+    for call_obj in calc_pres.call_args_list:
+        policy = call_obj[1]["policy"]
+        assert policy.classify is True
+        assert policy.choose_edition is False
 
     # now verify that no recalculation occurs when the subject.checked property is true.
     subject.checked = True
     db.session.commit()
     with patch.object(Work, "calculate_presentation") as calc_pres:
         work_tasks.classify_unchecked_subjects.delay().wait()
-        assert calc_pres.call_count == 0
+    assert calc_pres.call_count == 0

@@ -846,7 +846,6 @@ class Work(Base, LoggerMixin):
         old_presentation_edition = self.presentation_edition
         new_presentation_edition = None
 
-        pool: LicensePool
         for pool in self.license_pools:
             # Note:  making the assumption here that we won't have a situation
             # where we marked all of the work's pools as suppressed.

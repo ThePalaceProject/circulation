@@ -353,7 +353,9 @@ class BibliographicData(BaseMutableData):
                 != edition.primary_identifier.identifier
             ):
                 raise PalaceValueError(
-                    f"BibliographicData's primary identifier ({self.primary_identifier_data.type}/{self.primary_identifier_data.identifier}) does not match edition's primary identifier ({edition.primary_identifier!r})"
+                    f"BibliographicData's primary identifier "
+                    f"({self.primary_identifier_data.type}/{self.primary_identifier_data.identifier}) does not "
+                    f"match edition's primary identifier ({edition.primary_identifier!r})"
                 )
 
     def _update_basic_fields(self, edition: Edition) -> bool:
@@ -390,6 +392,8 @@ class BibliographicData(BaseMutableData):
         :param identifier: Primary identifier.
         :param data_source: Data source for equivalencies.
         """
+
+        # TODO: remove equivalencies when replace.identifiers is True.
         if self.identifiers is not None:
             for identifier_data in self.identifiers:
                 if not identifier_data.identifier:
@@ -845,7 +849,10 @@ class BibliographicData(BaseMutableData):
         if self.circulation:
             self.circulation.apply(db, collection, replace)
 
-        # Create coverage record
+        # Update the coverage record for this edition and data
+        # source. We omit the collection information, even if we know
+        # which collection this is, because we only changed bibliographic data.
+        # TODO: Remove this once we have done away with coverage records
         if create_coverage_record:
             CoverageRecord.add_for(
                 edition,

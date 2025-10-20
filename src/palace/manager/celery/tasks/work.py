@@ -33,7 +33,7 @@ def classify_unchecked_subjects(task: Task) -> None:
                 break
             for work in works:
                 work.calculate_presentation(policy=policy)
-            session.commit()
+                session.commit()
 
 
 def _unchecked_subjects(_db: Session) -> Generator[Subject]:
