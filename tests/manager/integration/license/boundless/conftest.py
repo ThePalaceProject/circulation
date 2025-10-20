@@ -12,6 +12,7 @@ from palace.manager.integration.license.boundless.importer import BoundlessImpor
 from palace.manager.sqlalchemy.model.classification import Subject
 from palace.manager.sqlalchemy.model.contributor import Contributor
 from palace.manager.sqlalchemy.model.datasource import DataSource
+from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.util.datetime_helpers import datetime_utc
 from tests.fixtures.database import DatabaseTransactionFixture
@@ -42,6 +43,7 @@ class BoundlessFixture:
         language="eng",
         title="Faith of My Fathers : A Family Memoir",
         imprint="Random House Inc2",
+        medium=Edition.BOOK_MEDIUM,
         published=datetime_utc(2000, 3, 7, 0, 0),
         primary_identifier_data=CIRCULATION_DATA.primary_identifier_data,
         identifiers=[IdentifierData(type=Identifier.ISBN, identifier="9780375504587")],
