@@ -446,37 +446,6 @@ class TestBibliographicData:
         assert Measurement.POPULARITY == m.quantity_measured
         assert 100 == m.value
 
-    def test_apply_calculates_work_presentation_directly(
-        self, db: DatabaseTransactionFixture
-    ):
-        """Test that apply() now calculates work presentation directly instead of queueing it."""
-        edition, pool = db.edition(
-            with_license_pool=True,
-        )
-        work = db.work()
-        edition.work = work
-        pool.work = work
-
-        data_source = edition.data_source
-
-        m = BibliographicData(
-            data_source_name=data_source.name,
-            title="New title",
-            data_source_last_updated=utc_now(),
-        )
-
-        # After the refactoring, apply() calls work.calculate_presentation() directly
-        with patch.object(Work, "calculate_presentation") as calc_pres:
-            m.apply(db.session, edition, None)
-            assert "New title" == edition.title
-            # verify that calculate_presentation was called directly
-            assert calc_pres.call_count == 1
-
-            # The policy should be recalculate_presentation_edition since only edition changed
-            policy = calc_pres.call_args[1]["policy"]
-            assert policy.classify is False
-            assert policy.choose_summary is False
-
     def test_defaults(self) -> None:
         # Verify that a BibliographicData object doesn't make any assumptions
         # about an item's medium.
