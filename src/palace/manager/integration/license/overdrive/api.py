@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import asyncio
 import datetime
 import json
 from collections.abc import Generator, Iterable
+from dataclasses import dataclass
 from functools import partial
 from threading import RLock
 from typing import Any, NamedTuple, Unpack, cast, overload
@@ -112,6 +114,7 @@ from palace.manager.sqlalchemy.model.resource import Representation
 from palace.manager.sqlalchemy.util import get_one
 from palace.manager.util import base64
 from palace.manager.util.datetime_helpers import utc_now
+from palace.manager.util.http.async_http import WORKER_DEFAULT_BACKOFF, AsyncClient
 from palace.manager.util.http.exception import BadResponseException
 from palace.manager.util.http.http import HTTP, RequestKwargs
 
@@ -119,6 +122,11 @@ from palace.manager.util.http.http import HTTP, RequestKwargs
 class OverdriveToken(NamedTuple):
     token: str
     expires: datetime.datetime
+
+
+@dataclass
+class BookInfoEndpoint:
+    url: str
 
 
 class OverdriveAPI(
@@ -193,18 +201,30 @@ class OverdriveAPI(
     TOKEN_ENDPOINT = "%(oauth_host)s/token"
     PATRON_TOKEN_ENDPOINT = "%(oauth_patron_host)s/patrontoken"
 
+    HOST_ENDPOINT_BASE = "%(host)s"
     LIBRARY_ENDPOINT = "%(host)s/v1/libraries/%(library_id)s"
     ADVANTAGE_LIBRARY_ENDPOINT = (
         "%(host)s/v1/libraries/%(parent_library_id)s/advantageAccounts/%(library_id)s"
     )
-    ALL_PRODUCTS_ENDPOINT = (
-        "%(host)s/v1/collections/%(collection_token)s/products?sort=%(sort)s"
-    )
+    ALL_PRODUCTS_ENDPOINT = f"{HOST_ENDPOINT_BASE}/v1/collections/%(collection_token)s/products?sort=%(sort)s"
+
+    METADATA_ENDPOINT_BASE = "/v1/collections/%(collection_token)s/products"
+
     METADATA_ENDPOINT = (
-        "%(host)s/v1/collections/%(collection_token)s/products/%(item_id)s/metadata"
+        f"{HOST_ENDPOINT_BASE}{METADATA_ENDPOINT_BASE}/%(item_id)s/metadata"
     )
-    EVENTS_ENDPOINT = "%(host)s/v1/collections/%(collection_token)s/products?lastUpdateTime=%(lastupdatetime)s&limit=%(limit)s"
-    AVAILABILITY_ENDPOINT = "%(host)s/v2/collections/%(collection_token)s/products/%(product_id)s/availability"
+
+    EVENTS_ENDPOINT_BASE = "/v1/collections/%(collection_token)s/products"
+    EVENTS_ENDPOINT = (
+        "%(host)s"
+        + EVENTS_ENDPOINT_BASE
+        + "?lastUpdateTime=%(lastupdatetime)s&limit=%(limit)s"
+    )
+
+    AVAILABILITY_ENDPOINT_BASE = "/v2/collections/%(collection_token)s/products"
+    AVAILABILITY_ENDPOINT = (
+        f"{HOST_ENDPOINT_BASE}{AVAILABILITY_ENDPOINT_BASE}/%(product_id)s/availability"
+    )
 
     PATRON_INFORMATION_ENDPOINT = "%(patron_host)s/v1/patrons/me"
     CHECKOUTS_ENDPOINT = "%(patron_host)s/v1/patrons/me/checkouts"
@@ -220,6 +240,8 @@ class OverdriveAPI(
     EVENT_DELAY = datetime.timedelta(minutes=120)
 
     TIME_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
+
+    NEXT_REL = "next"
 
     @classmethod
     def settings_class(cls) -> type[OverdriveSettings]:
@@ -412,7 +434,7 @@ class OverdriveAPI(
         exception_on_401: bool = False,
     ) -> tuple[int, CaseInsensitiveDict[str], bytes]:
         """Make an HTTP GET request using the active Bearer Token."""
-        request_headers = dict(Authorization="Bearer %s" % self._client_oauth_token)
+        request_headers = self._get_headers(self._client_oauth_token)
         if extra_headers:
             request_headers.update(extra_headers)
 
@@ -549,7 +571,7 @@ class OverdriveAPI(
         """
         next_link: str | None = self._all_products_link
         while next_link:
-            page_inventory, next_link = self._get_book_list_page(next_link, "next")
+            page_inventory, next_link = self._get_book_list_page(next_link)
 
             yield from page_inventory
 
@@ -565,7 +587,7 @@ class OverdriveAPI(
     def _get_book_list_page(
         self,
         link: str,
-        rel_to_follow: str = "next",
+        rel_to_follow: str = NEXT_REL,
         extractor_class: type[OverdriveRepresentationExtractor] | None = None,
     ) -> tuple[list[dict[str, str]], str | None]:
         """Process a page of inventory whose circulation we need to check.
@@ -588,6 +610,130 @@ class OverdriveAPI(
         # this page.
         availability_queue = extractor_class.availability_link_list(content_dict)
         return availability_queue, next_link
+
+    def _get_headers(self, auth_token: str) -> dict[str, str]:
+        return {"Authorization": f"Bearer {auth_token}"}
+
+    def book_info_initial_endpoint(
+        self,
+        start: datetime.datetime | None = None,
+        page_size: int = PAGE_SIZE_LIMIT,
+    ) -> BookInfoEndpoint:
+        """Create an initial book info url."""
+
+        # if no start date specified, assume effect beginning of time.
+        if not start:
+            start = datetime.datetime(1970, 1, 1, 0, 0, 0, tzinfo=datetime.UTC)
+        last_update_time = start - self.EVENT_DELAY
+        self.log.info("Creating url for circulation changes since %s", last_update_time)
+        last_update = last_update_time.strftime(self.TIME_FORMAT)
+
+        book_info_initial_endpoint = self.endpoint(
+            self.EVENTS_ENDPOINT,
+            # From https://developer.overdrive.com/apis/search:
+            # "**Note: When you search using the lastTitleUpdateTime or
+            # lastUpdateTime parameters, your results will be automatically
+            # sorted in ascending order (and all other sort options will be ignored)."
+            lastupdatetime=last_update,
+            limit=str(min(page_size, self.PAGE_SIZE_LIMIT)),
+            collection_token=self.collection_token,
+        )
+        endpoint: str = _make_link_safe(book_info_initial_endpoint)
+
+        return BookInfoEndpoint(endpoint)
+
+    async def fetch_book_info_list(
+        self,
+        endpoint: BookInfoEndpoint,
+        fetch_metadata: bool = False,
+        fetch_availability: bool = False,
+        extractor_class: type[OverdriveRepresentationExtractor] | None = None,
+    ) -> tuple[list[dict[str, Any]], BookInfoEndpoint | None]:
+        """
+        This method is used to fetch a "page" of book data. Users can optionally fetch metadata and availability info
+        by using the fetch_metadata and fetch_availability parameters. Internally, an async http client is used to
+        parallelize the retrieval of the metadata and availability.  A list of book data is returned which can be
+        parsed or converted according to the needs of the client.  Additionally, we return the link to the next page
+        of book data. In this way, "page" retrievals are accelerated while allowing the client to retrieve chunks
+        in a deterministic and therefore retriable manner.
+        """
+        base_url = self.endpoint(self.HOST_ENDPOINT_BASE)
+        async with self._create_configured_async_client(base_url=base_url) as client:
+            books: dict[str, Any] = {}
+            extractor_class = extractor_class or OverdriveRepresentationExtractor
+            req = client.get(endpoint.url)
+            response = await req
+            data = response.json()
+            next_url = extractor_class.link(data, self.NEXT_REL)
+            next_endpoint: BookInfoEndpoint | None = (
+                BookInfoEndpoint(next_url) if next_url else None
+            )
+            async_task_list = list()
+            response_products = data["products"]
+            for product in response_products:
+                identifier = product["id"].lower()
+                books[identifier] = product
+                if fetch_metadata:
+                    async_task_list.append(
+                        self._get_metadata_async(base_url, product, client)
+                    )
+
+                if fetch_availability:
+                    async_task_list.append(
+                        self._get_availability_async(
+                            base_url,
+                            product,
+                            client,
+                        )
+                    )
+
+            await asyncio.gather(*async_task_list)
+
+            return list(books.values()), next_endpoint
+
+    async def _get_availability_async(
+        self, base_url: str, book_info: dict[str, Any], client: AsyncClient
+    ) -> None:
+        url = book_info["links"]["availabilityV2"]["href"].removeprefix(base_url)
+        data = await self._get_product_relation(client, url)
+        if data:
+            book_info["availabilityV2"] = data
+
+    async def _get_metadata_async(
+        self, base_url: str, book_info: dict[str, Any], client: AsyncClient
+    ) -> None:
+        url = book_info["links"]["metadata"]["href"].removeprefix(base_url)
+        data = await self._get_product_relation(client, url)
+        if data:
+            book_info["metadata"] = data
+
+    async def _get_product_relation(
+        self, client: AsyncClient, url: str
+    ) -> dict[str, Any] | None:
+        req = client.get(url)
+        response = await req
+        # We allow a 404 response code for availability or metadata since those links may not exist for a given
+        # identifier.
+        if response.status_code == 404:
+            self.log.warn(
+                f"The following URL unexpectedly returned a 404: {url}. "
+                f'Response text: "{response.text}" -> Skipping...'
+            )
+            return None
+        else:
+            data: dict[str, Any] = response.json()
+            return data
+
+    def _create_configured_async_client(
+        self,
+        base_url: str,
+    ) -> AsyncClient:
+        return AsyncClient.for_worker(
+            base_url=base_url,
+            headers=self._get_headers(self._client_oauth_token),
+            allowed_response_codes=[200, 404],
+            backoff=WORKER_DEFAULT_BACKOFF,
+        )
 
     def recently_changed_ids(
         self, start: datetime.datetime, cutoff: datetime.datetime | None
@@ -747,7 +893,8 @@ class OverdriveAPI(
         permissions.
         """
         patron_credential = self._get_patron_oauth_credential(patron, pin)
-        headers = dict(Authorization="Bearer %s" % patron_credential.credential)
+        assert patron_credential.credential
+        headers = self._get_headers(patron_credential.credential)
         if extra_headers:
             headers.update(extra_headers)
         if method and method.lower() in ("get", "post", "put", "delete"):
