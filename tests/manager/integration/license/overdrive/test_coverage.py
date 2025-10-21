@@ -5,7 +5,6 @@ from dataclasses import dataclass
 import pytest
 
 from palace.manager.core.coverage import CoverageFailure
-from palace.manager.data_layer.policy.presentation import PresentationCalculationPolicy
 from palace.manager.integration.license.overdrive.coverage import (
     OverdriveBibliographicCoverageProvider,
 )
@@ -15,9 +14,6 @@ from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism
 from palace.manager.sqlalchemy.model.resource import Representation
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.overdrive import OverdriveAPIFixture
-from tests.fixtures.work import (
-    WorkIdPolicyQueuePresentationRecalculationFixture,
-)
 from tests.mocks.overdrive import MockOverdriveAPI
 
 
@@ -26,14 +22,12 @@ class OverdriveBibliographicCoverageProviderFixture:
     overdrive: OverdriveAPIFixture
     provider: OverdriveBibliographicCoverageProvider
     api: MockOverdriveAPI
-    work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture
 
 
 @pytest.fixture
 def overdrive_biblio_provider_fixture(
     db: DatabaseTransactionFixture,
     overdrive_api_fixture: OverdriveAPIFixture,
-    work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
 ) -> OverdriveBibliographicCoverageProviderFixture:
     overdrive = overdrive_api_fixture
     api = overdrive_api_fixture.api
@@ -44,7 +38,6 @@ def overdrive_biblio_provider_fixture(
         overdrive,
         provider,
         api,
-        work_policy_recalc_fixture,
     )
 
 
@@ -128,10 +121,6 @@ class TestOverdriveBibliographicCoverageProvider:
 
         assert result == identifier
 
-        assert fixture.work_policy_recalc_fixture.is_queued(
-            identifier.work.id,
-            PresentationCalculationPolicy.recalculate_everything(),
-        )
         # A LicensePool was created, not because we know anything
         # about how we've licensed this book, but to have a place to
         # store the information about what formats the book is

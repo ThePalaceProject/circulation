@@ -828,9 +828,7 @@ class Work(Base, LoggerMixin):
         if trigger_customlists_update:
             add_work_to_customlists_for_collection(self)
 
-    def calculate_presentation_edition(
-        self, policy=None, disable_async_calculation: bool = False
-    ):
+    def calculate_presentation_edition(self, policy=None):
         """Which of this Work's Editions should be used as the default?
         First, every LicensePool associated with this work must have
         its presentation edition set.
@@ -856,9 +854,7 @@ class Work(Base, LoggerMixin):
 
             # make sure the pool has most up-to-date idea of its presentation edition,
             # and then ask what it is.
-            pool_edition_changed = pool.set_presentation_edition(
-                disable_async_calculation=disable_async_calculation
-            )
+            pool_edition_changed = pool.set_presentation_edition()
             edition_metadata_changed = edition_metadata_changed or pool_edition_changed
             potential_presentation_edition = pool.presentation_edition
 
@@ -909,7 +905,6 @@ class Work(Base, LoggerMixin):
         exclude_search=False,
         default_fiction=None,
         default_audience=None,
-        disable_async_calculation=False,
     ):
         """Make a Work ready to show to patrons.
         Call calculate_presentation_edition() to find the best-quality presentation edition
@@ -932,9 +927,7 @@ class Work(Base, LoggerMixin):
 
         policy = policy or PresentationCalculationPolicy()
 
-        edition_changed = self.calculate_presentation_edition(
-            policy, disable_async_calculation=disable_async_calculation
-        )
+        edition_changed = self.calculate_presentation_edition(policy)
 
         if not self.presentation_edition:
             # Without a presentation edition, we can't calculate presentation
@@ -1195,17 +1188,6 @@ class Work(Base, LoggerMixin):
         waiting = WaitingForIndexing(redis_client)
         if work_id is not None:
             waiting.add(work_id)
-
-    @staticmethod
-    def queue_presentation_recalculation(
-        work_id: int | None,
-        policy: PresentationCalculationPolicy,
-    ):
-        """Queue an async background task to have this work's presentation  recalculated"""
-        from palace.manager.celery.tasks.work import calculate_work_presentation
-
-        if work_id is not None:
-            calculate_work_presentation.delay(work_id=work_id, policy=policy)
 
     def set_presentation_ready(self, as_of=None, exclude_search=False):
         """Set this work as presentation-ready, no matter what.

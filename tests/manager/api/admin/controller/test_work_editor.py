@@ -43,9 +43,6 @@ from tests.fixtures.api_admin import AdminControllerFixture
 from tests.fixtures.api_controller import ControllerFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.problem_detail import raises_problem_detail
-from tests.fixtures.work import (
-    WorkIdPolicyQueuePresentationRecalculationFixture,
-)
 from tests.mocks.mock import (
     AlwaysSuccessfulCoverageProvider,
     NeverSuccessfulCoverageProvider,
@@ -56,7 +53,6 @@ class WorkFixture(AdminControllerFixture):
     def __init__(
         self,
         controller_fixture: ControllerFixture,
-        work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
     ):
         super().__init__(controller_fixture)
 
@@ -73,15 +69,13 @@ class WorkFixture(AdminControllerFixture):
         self.manager.external_search.mock_query_works(self.works)
 
         self.admin.add_role(AdminRole.LIBRARIAN, self.ctrl.db.default_library())
-        self.work_policy_recalc_fixture = work_policy_recalc_fixture
 
 
 @pytest.fixture(scope="function")
 def work_fixture(
     controller_fixture: ControllerFixture,
-    work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
 ) -> WorkFixture:
-    return WorkFixture(controller_fixture, work_policy_recalc_fixture)
+    return WorkFixture(controller_fixture)
 
 
 class TestWorkController:

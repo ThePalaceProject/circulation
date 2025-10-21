@@ -19,7 +19,6 @@ from palace.manager.data_layer.contributor import ContributorData
 from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.data_layer.link import LinkData
 from palace.manager.data_layer.measurement import MeasurementData
-from palace.manager.data_layer.policy.presentation import PresentationCalculationPolicy
 from palace.manager.data_layer.policy.replacement import ReplacementPolicy
 from palace.manager.data_layer.subject import SubjectData
 from palace.manager.sqlalchemy.model.classification import Subject
@@ -292,6 +291,58 @@ class TestBibliographicData:
         assert "http://largeimage.com/" == edition.cover_full_url
         assert None == edition.cover_thumbnail_url
 
+    def test_process_thumbnails_skips_missing_links(
+        self, db: DatabaseTransactionFixture
+    ):
+        """Test that _process_thumbnails gracefully handles links not in link_objects.
+
+        This tests the defensive code path where a link in self.links might not
+        be present in the link_objects dictionary passed to _process_thumbnails.
+        This could happen in edge cases or future code changes.
+        """
+        edition = db.edition()
+        data_source = edition.data_source
+
+        # Create some links
+        image_link = LinkData(
+            rel=Hyperlink.IMAGE,
+            href="http://example.com/image.jpg",
+            media_type=Representation.JPEG_MEDIA_TYPE,
+        )
+
+        description_link = LinkData(
+            rel=Hyperlink.DESCRIPTION,
+            content="A description",
+            media_type=Representation.TEXT_PLAIN,
+        )
+
+        # Create BibliographicData with both links
+        bibliographic = BibliographicData(
+            links=[image_link, description_link], data_source_name=data_source.name
+        )
+
+        # Apply to create the Hyperlink objects
+        bibliographic.apply(db.session, edition, None)
+
+        # Get the created hyperlink for image
+        image_hyperlink = next(
+            (l for l in edition.primary_identifier.links if l.rel == Hyperlink.IMAGE),
+            None,
+        )
+        assert image_hyperlink is not None
+
+        # Create a partial link_objects dict that only includes the image link
+        # This simulates a scenario where description_link is in self.links
+        # but not in link_objects
+        partial_link_objects = {image_link: image_hyperlink}
+
+        # Directly call _process_thumbnails with the partial dict
+        # This should not raise a KeyError when it encounters description_link
+        # which is in self.links but not in partial_link_objects
+        bibliographic._process_thumbnails(db.session, data_source, partial_link_objects)
+
+        # The method should complete without error, having skipped description_link
+
     def test_links_are_are_inserted_and_deleted_when_in_replace_mode_when_change_occurs(
         self, db: DatabaseTransactionFixture
     ):
@@ -394,38 +445,6 @@ class TestBibliographicData:
         [m] = edition.primary_identifier.measurements
         assert Measurement.POPULARITY == m.quantity_measured
         assert 100 == m.value
-
-    def test_disable_async_calculation_flag(self, db: DatabaseTransactionFixture):
-        edition, pool = db.edition(
-            with_license_pool=True,
-        )
-        work = db.work()
-        edition.work = work
-        pool.work = work
-
-        data_source = edition.data_source
-
-        m = BibliographicData(
-            data_source_name=data_source.name,
-            title="New title",
-            data_source_last_updated=utc_now(),
-        )
-
-        with patch.object(Work, "queue_presentation_recalculation") as queue:
-            m.apply(db.session, edition, None, disable_async_calculation=True)
-            assert "New title" == edition.title
-            # verify that the queue_presentation_recalculation was not called
-            assert queue.call_count == 0
-
-            m = BibliographicData(
-                data_source_name=data_source.name,
-                title="Another new title",
-                data_source_last_updated=utc_now(),
-            )
-            m.apply(db.session, edition, None)
-            assert "Another new title" == edition.title
-            # verify that the queue_presentation_recalculation was called
-            assert queue.call_count == 1
 
     def test_defaults(self) -> None:
         # Verify that a BibliographicData object doesn't make any assumptions
@@ -559,6 +578,7 @@ class TestBibliographicData:
         self,
         db: DatabaseTransactionFixture,
     ):
+        """Test that apply() calculates work presentation directly with the correct policy."""
         # We have a work.
         work = db.work(title="The Wrong Title", with_license_pool=True)
 
@@ -572,36 +592,28 @@ class TestBibliographicData:
         )
         edition, ignore = bibliographic.edition(db.session)
 
-        with patch(
-            "palace.manager.celery.tasks.work.calculate_work_presentation"
-        ) as calculate:
+        # After the refactoring, apply() calls work.calculate_presentation() directly
+        with patch.object(Work, "calculate_presentation") as calculate:
             bibliographic.apply(db.session, edition, None)
-            assert calculate.delay.call_count == 1
-            policy = PresentationCalculationPolicy.recalculate_presentation_edition()
-            assert calculate.delay.call_args_list[0].kwargs == {
-                "work_id": work.id,
-                "policy": policy,
-            }
+            assert calculate.call_count == 1
+            policy = calculate.call_args[1]["policy"]
+            # Should use recalculate_presentation_edition policy for edition-only changes
+            assert policy.classify is False
+            assert policy.choose_summary is False
 
-            # The work still has the wrong title, but a full recalculation has been queued.
-            assert "The Wrong Title" == work.title
-
-            # We then learn about a subject under which the work
-            # is classified.
+            # We then learn about a subject under which the work is classified.
             bibliographic.title = None
             bibliographic.subjects = [
                 SubjectData(type=Subject.TAG, identifier="subject")
             ]
 
             bibliographic.apply(db.session, edition, None)
-            # The work is now slated to have its presentation completely
-            # recalculated.
-            assert calculate.delay.call_count == 2
-            policy = PresentationCalculationPolicy.recalculate_everything()
-            assert calculate.delay.call_args_list[1].kwargs == {
-                "work_id": work.id,
-                "policy": policy,
-            }
+            # The work has now had its presentation recalculated directly.
+            assert calculate.call_count == 2
+            policy = calculate.call_args[1]["policy"]
+            # Should use recalculate_everything policy for subject changes
+            assert policy.classify is True
+            assert policy.choose_summary is True
 
             # We then find a new description for the work.
             bibliographic.subjects = []
@@ -610,26 +622,22 @@ class TestBibliographicData:
             ]
 
             bibliographic.apply(db.session, edition, None)
-            # We need to do a full recalculation again.
-            assert calculate.delay.call_count == 3
-            policy = PresentationCalculationPolicy.recalculate_everything()
-            assert calculate.delay.call_args_list[2].kwargs == {
-                "work_id": work.id,
-                "policy": policy,
-            }
+            # Full recalculation again for description changes.
+            assert calculate.call_count == 3
+            policy = calculate.call_args[1]["policy"]
+            assert policy.classify is True
+            assert policy.choose_summary is True
 
             # We then find a new cover image for the work.
             bibliographic.subjects = []
             bibliographic.links = [LinkData(rel=Hyperlink.IMAGE, href="http://image/")]
 
             bibliographic.apply(db.session, edition, None)
-            # We need to choose a new presentation edition.
-            assert calculate.delay.call_count == 4
-            policy = PresentationCalculationPolicy.recalculate_presentation_edition()
-            assert calculate.delay.call_args_list[3].kwargs == {
-                "work_id": work.id,
-                "policy": policy,
-            }
+            # Presentation edition recalculation for image changes.
+            assert calculate.call_count == 4
+            policy = calculate.call_args[1]["policy"]
+            assert policy.classify is False
+            assert policy.choose_summary is False
 
     def test_apply_identifier_equivalency(self, db: DatabaseTransactionFixture):
         # Set up an Edition.

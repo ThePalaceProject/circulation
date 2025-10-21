@@ -1,83 +1,10 @@
-from unittest.mock import call, patch
+from unittest.mock import patch
 
-import pytest
-
-from palace.manager.celery.tasks import apply, work as work_tasks
-from palace.manager.celery.utils import ModelNotFoundError
-from palace.manager.data_layer.policy.presentation import PresentationCalculationPolicy
-from palace.manager.service.logging.configuration import LogLevel
+from palace.manager.celery.tasks import work as work_tasks
 from palace.manager.sqlalchemy.model.classification import Subject
 from palace.manager.sqlalchemy.model.work import Work
 from tests.fixtures.celery import CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
-from tests.fixtures.redis import RedisFixture
-from tests.fixtures.work import WorkIdPolicyQueuePresentationRecalculationFixture
-
-
-def test_calculate_work_presentation(
-    db: DatabaseTransactionFixture,
-    celery_fixture: CeleryFixture,
-    redis_fixture: RedisFixture,
-    caplog: pytest.LogCaptureFixture,
-):
-    work = db.work()
-    policy = PresentationCalculationPolicy.recalculate_everything()
-    caplog.set_level(LogLevel.warning)
-
-    # A work with no license pool does have its presentation calculated,
-    # but we log a warning and don't attempt to acquire a lock.
-    with (
-        patch.object(Work, "calculate_presentation") as calc_presentation,
-        patch.object(
-            work_tasks, "apply_task_lock", wraps=apply.apply_task_lock
-        ) as apply_lock,
-    ):
-        work_tasks.calculate_work_presentation.delay(
-            work_id=work.id, policy=policy
-        ).wait()
-    calc_presentation.assert_called_once_with(
-        policy=policy, disable_async_calculation=True
-    )
-    apply_lock.assert_not_called()
-    assert "has no LicensePool" in caplog.text
-
-    # If we have a license pool, we attempt to acquire a lock.
-    work = db.work(with_license_pool=True)
-    with (
-        patch.object(Work, "calculate_presentation") as calc_presentation,
-        patch.object(
-            work_tasks, "apply_task_lock", wraps=apply.apply_task_lock
-        ) as apply_lock,
-    ):
-        work_tasks.calculate_work_presentation.delay(
-            work_id=work.id, policy=policy
-        ).wait()
-    calc_presentation.assert_called_once_with(
-        policy=policy, disable_async_calculation=True
-    )
-    apply_lock.assert_called_once()
-
-
-def test_calculate_work_presentation_retry(
-    db: DatabaseTransactionFixture,
-    celery_fixture: CeleryFixture,
-    redis_fixture: RedisFixture,
-):
-    work = db.work()
-    policy = PresentationCalculationPolicy.recalculate_everything()
-
-    with (
-        patch.object(Work, "calculate_presentation") as calc_presentation,
-        celery_fixture.patch_retry_backoff(),
-    ):
-        calc_presentation.side_effect = [ModelNotFoundError(), None]
-        work_tasks.calculate_work_presentation.delay(
-            work_id=work.id, policy=policy
-        ).wait()
-    assert calc_presentation.call_count == 2
-    calc_presentation.assert_has_calls(
-        [call(policy=policy, disable_async_calculation=True)] * 2
-    )
 
 
 def test_paginate(db: DatabaseTransactionFixture):
@@ -129,8 +56,8 @@ def test_paginate(db: DatabaseTransactionFixture):
 def test_subject_checked(
     db: DatabaseTransactionFixture,
     celery_fixture: CeleryFixture,
-    work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
 ):
+    """Test that classify_unchecked_subjects recalculates works with unchecked subjects."""
     subject = db.subject(Subject.AXIS_360_AUDIENCE, "Any")
     assert subject.checked == False
 
@@ -144,15 +71,20 @@ def test_subject_checked(
         )
         works.append(work)
 
-    work_tasks.classify_unchecked_subjects.delay().wait()
-    for work in works:
-        assert work_policy_recalc_fixture.is_queued(
-            work_id=work.id,
-            policy=PresentationCalculationPolicy.recalculate_classification(),
-        )
+    with patch.object(Work, "calculate_presentation") as calc_pres:
+        work_tasks.classify_unchecked_subjects.delay().wait()
+
+    # Should have been called once for each work
+    assert calc_pres.call_count == 10
+    # Should use recalculate_classification policy
+    for call_obj in calc_pres.call_args_list:
+        policy = call_obj[1]["policy"]
+        assert policy.classify is True
+        assert policy.choose_edition is False
 
     # now verify that no recalculation occurs when the subject.checked property is true.
-    work_policy_recalc_fixture.clear()
     subject.checked = True
-    work_tasks.classify_unchecked_subjects.delay().wait()
-    assert work_policy_recalc_fixture.queue_size() == 0
+    db.session.commit()
+    with patch.object(Work, "calculate_presentation") as calc_pres:
+        work_tasks.classify_unchecked_subjects.delay().wait()
+    assert calc_pres.call_count == 0

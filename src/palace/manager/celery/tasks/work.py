@@ -1,66 +1,18 @@
 from __future__ import annotations
 
 from collections.abc import Generator
-from contextlib import AbstractContextManager, nullcontext
-from typing import Any
 
 from celery import shared_task
 from sqlalchemy import tuple_
 from sqlalchemy.orm import Session, defer
 
 from palace.manager.celery.task import Task
-from palace.manager.celery.tasks.apply import apply_task_lock
-from palace.manager.celery.utils import ModelNotFoundError, load_from_id
-from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.data_layer.policy.presentation import PresentationCalculationPolicy
 from palace.manager.service.celery.celery import QueueNames
-from palace.manager.service.redis.models.lock import LockNotAcquired
 from palace.manager.sqlalchemy.model.classification import Classification, Subject
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import LicensePool
 from palace.manager.sqlalchemy.model.work import Work
-from palace.manager.util import first_or_default
-from palace.manager.util.log import elapsed_time_logging
-
-
-@shared_task(
-    queue=QueueNames.apply,
-    bind=True,
-    autoretry_for=(
-        LockNotAcquired,  # Lock held by another task, we want to wait for it to finish and retry.
-        ModelNotFoundError,  # Often this means the transaction creating the work hasn't committed yet.
-    ),
-    max_retries=4,
-    retry_backoff=60,
-    retry_backoff_max=15 * 60,
-)
-def calculate_work_presentation(
-    task: Task,
-    work_id: int,
-    policy: PresentationCalculationPolicy,
-) -> None:
-    redis_client = task.services.redis().client()
-    with task.transaction() as tx:
-        work = load_from_id(tx, Work, work_id)
-        pool = first_or_default(work.license_pools)
-        lock_ctx_manager: AbstractContextManager[Any]
-        if pool is None:
-            task.log.warning(
-                f"Work {work.id} has no LicensePool. Continuing without lock."
-            )
-            lock_ctx_manager = nullcontext()
-        else:
-            identifier = IdentifierData.from_identifier(pool.identifier)
-            lock_ctx_manager = apply_task_lock(redis_client, identifier).lock()
-        with (
-            lock_ctx_manager,
-            elapsed_time_logging(
-                log_method=task.log.info,
-                message_prefix=f"Presentation calculated for work: work_id={work_id}, policy={policy}",
-                skip_start=True,
-            ),
-        ):
-            work.calculate_presentation(policy=policy, disable_async_calculation=True)
 
 
 @shared_task(queue=QueueNames.default, bind=True)
@@ -80,7 +32,8 @@ def classify_unchecked_subjects(task: Task) -> None:
             if not works:
                 break
             for work in works:
-                Work.queue_presentation_recalculation(work_id=work.id, policy=policy)
+                work.calculate_presentation(policy=policy)
+                session.commit()
 
 
 def _unchecked_subjects(_db: Session) -> Generator[Subject]:
