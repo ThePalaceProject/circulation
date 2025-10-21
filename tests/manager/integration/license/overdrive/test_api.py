@@ -2806,7 +2806,7 @@ class TestSyncBookshelf:
             200, content=overdrive_book_list_with_next_link_data
         )
 
-        # test retry and failure with metadata and availabililty
+        # test retry and failure with metadata and availability
         for x in range(8):
             # error for 4 attempts for availability and metadata
             mock_async_client.queue_response(500, content="500 Internal Server Error")
@@ -2841,7 +2841,7 @@ class TestSyncBookshelf:
             200, content=overdrive_book_list_with_next_link_data
         )
 
-        # test retry and failure with metadata and availabililty
+        # test retry and failure with metadata and availability
         for x in range(2):
             # error for 4 attempts for availability and metadata
             mock_async_client.queue_response(404, content="Not Found")

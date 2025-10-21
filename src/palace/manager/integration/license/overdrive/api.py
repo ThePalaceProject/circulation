@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import datetime
 import json
-from collections import deque
 from collections.abc import Generator, Iterable
 from dataclasses import dataclass
 from functools import partial
@@ -12,7 +11,6 @@ from typing import Any, NamedTuple, Unpack, cast, overload
 from urllib.parse import urlsplit
 
 import flask
-from httpx import Limits
 from pydantic import ValidationError
 from requests import Response
 from requests.structures import CaseInsensitiveDict
@@ -242,6 +240,8 @@ class OverdriveAPI(
     EVENT_DELAY = datetime.timedelta(minutes=120)
 
     TIME_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
+
+    NEXT_REL = "next"
 
     @classmethod
     def settings_class(cls) -> type[OverdriveSettings]:
@@ -571,7 +571,7 @@ class OverdriveAPI(
         """
         next_link: str | None = self._all_products_link
         while next_link:
-            page_inventory, next_link = self._get_book_list_page(next_link, "next")
+            page_inventory, next_link = self._get_book_list_page(next_link)
 
             yield from page_inventory
 
@@ -587,7 +587,7 @@ class OverdriveAPI(
     def _get_book_list_page(
         self,
         link: str,
-        rel_to_follow: str = "next",
+        rel_to_follow: str = NEXT_REL,
         extractor_class: type[OverdriveRepresentationExtractor] | None = None,
     ) -> tuple[list[dict[str, str]], str | None]:
         """Process a page of inventory whose circulation we need to check.
@@ -645,32 +645,26 @@ class OverdriveAPI(
     async def fetch_book_info_list(
         self,
         endpoint: BookInfoEndpoint,
-        rel_to_follow: str = "next",
         fetch_metadata: bool = False,
         fetch_availability: bool = False,
-        connections: int = 5,
         extractor_class: type[OverdriveRepresentationExtractor] | None = None,
     ) -> tuple[list[dict[str, Any]], BookInfoEndpoint | None]:
         """
         This method is used to fetch a "page" of book data. Users can optionally fetch metadata and availability info
-        by using the fetch_metadata and fetch_availability parameters.  Internally an async http client is used to
+        by using the fetch_metadata and fetch_availability parameters. Internally, an async http client is used to
         parallelize the retrieval of the metadata and availability.  A list of book data is returned which can be
         parsed or converted according to the needs of the client.  Additionally, we return the link to the next page
         of book data. In this way, "page" retrievals are accelerated while allowing the client to retrieve chunks
         in a deterministic and therefore retriable manner.
         """
         base_url = self.endpoint(self.HOST_ENDPOINT_BASE)
-        async with self.create_async_client(
-            connections=connections, base_url=base_url
-        ) as client:
-            urls: deque[str] = deque()
+        async with self._create_configured_async_client(base_url=base_url) as client:
             books: dict[str, Any] = {}
             extractor_class = extractor_class or OverdriveRepresentationExtractor
-            urls.append(endpoint.url)
             req = client.get(endpoint.url)
             response = await req
             data = response.json()
-            next_url = extractor_class.link(data, rel_to_follow)
+            next_url = extractor_class.link(data, self.NEXT_REL)
             next_endpoint: BookInfoEndpoint | None = (
                 BookInfoEndpoint(next_url) if next_url else None
             )
@@ -721,25 +715,23 @@ class OverdriveAPI(
         # We allow a 404 response code for availability or metadata since those links may not exist for a given
         # identifier.
         if response.status_code == 404:
+            self.log.warn(
+                f"The following URL unexpectedly returned a 404: {url}. "
+                f'Response text: "{response.text}" -> Skipping...'
+            )
             return None
         else:
             data: dict[str, Any] = response.json()
             return data
 
-    def create_async_client(
+    def _create_configured_async_client(
         self,
         base_url: str,
-        connections: int = 5,
     ) -> AsyncClient:
         return AsyncClient.for_worker(
             base_url=base_url,
             headers=self._get_headers(self._client_oauth_token),
             allowed_response_codes=[200, 404],
-            limits=Limits(
-                max_connections=connections,
-                max_keepalive_connections=connections,
-                keepalive_expiry=5,
-            ),
             backoff=WORKER_DEFAULT_BACKOFF,
         )
 
