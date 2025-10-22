@@ -11,8 +11,8 @@ from palace.manager.integration.license.opds.opds1.settings import (
     OPDSImporterSettings,
 )
 from palace.manager.integration.settings import (
-    ConfigurationFormItem,
-    ConfigurationFormItemType,
+    FormFieldType,
+    FormMetadata,
 )
 from palace.manager.opds import opds2
 from palace.manager.sqlalchemy.constants import IdentifierType
@@ -21,12 +21,12 @@ from palace.manager.sqlalchemy.constants import IdentifierType
 class OPDS2ImporterSettings(OPDSImporterSettings):
     custom_accept_header: Annotated[
         str,
-        ConfigurationFormItem(
+        FormMetadata(
             label=_("Custom accept header"),
             description=_(
                 "Some servers expect an accept header to decide which file to send. You can use */* if the server doesn't expect anything."
             ),
-            type=ConfigurationFormItemType.TEXT,
+            type=FormFieldType.TEXT,
             required=False,
         ),
     ] = Field(
@@ -37,12 +37,12 @@ class OPDS2ImporterSettings(OPDSImporterSettings):
 
     ignored_identifier_types: Annotated[
         list[str],
-        ConfigurationFormItem(
+        FormMetadata(
             label=_("List of identifiers that will be skipped"),
             description=_(
                 "Circulation Manager will not be importing publications with identifiers having one of the selected types."
             ),
-            type=ConfigurationFormItemType.MENU,
+            type=FormFieldType.MENU,
             required=False,
             options={
                 identifier_type.value: identifier_type.value
@@ -54,7 +54,7 @@ class OPDS2ImporterSettings(OPDSImporterSettings):
 
     reap_schedule: Annotated[
         str | None,
-        ConfigurationFormItem(
+        FormMetadata(
             label=_("Reap schedule (cron expression)"),
             description=_(
                 "Cron expression for when to perform full import with reaping of identifiers not found in the feed. "
@@ -63,7 +63,7 @@ class OPDS2ImporterSettings(OPDSImporterSettings):
                 "<br/> Examples: "
                 "'0 0 * * 1' (midnight UTC every Monday), '0 5 3 * *' (5am on the on the 3rd day of the month)."
             ),
-            type=ConfigurationFormItemType.TEXT,
+            type=FormFieldType.TEXT,
             required=False,
         ),
     ] = None

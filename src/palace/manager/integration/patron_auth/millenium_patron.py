@@ -15,8 +15,8 @@ from palace.manager.api.authentication.basic import (
 )
 from palace.manager.api.authenticator import BasicAuthenticationProvider
 from palace.manager.integration.settings import (
-    ConfigurationFormItem,
-    ConfigurationFormItemType,
+    FormFieldType,
+    FormMetadata,
 )
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.sqlalchemy.model.patron import Patron
@@ -34,7 +34,7 @@ class AuthenticationMode(Enum):
 class MilleniumPatronSettings(BasicAuthProviderSettings):
     url: Annotated[
         HttpUrl,
-        ConfigurationFormItem(
+        FormMetadata(
             label="URL",
         ),
     ]
@@ -42,9 +42,9 @@ class MilleniumPatronSettings(BasicAuthProviderSettings):
     # of the Millenium Patron API server.
     verify_certificate: Annotated[
         bool,
-        ConfigurationFormItem(
+        FormMetadata(
             label="Certificate Verification",
-            type=ConfigurationFormItemType.SELECT,
+            type=FormFieldType.SELECT,
             options={
                 True: "Verify Certificate Normally (Required for production)",
                 False: "Ignore Certificate Problems (For temporary testing only)",
@@ -55,7 +55,7 @@ class MilleniumPatronSettings(BasicAuthProviderSettings):
     # is blocked. By default, any value other than '-' indicates a block.
     block_types: Annotated[
         str | None,
-        ConfigurationFormItem(
+        FormMetadata(
             label="Block Types",
             description="Values of MBLOCK[p56] which mean a patron is blocked. By default, any value other "
             "than '-' indicates a block.",
@@ -66,22 +66,22 @@ class MilleniumPatronSettings(BasicAuthProviderSettings):
     # it means they end up with no identifier at all.
     identifier_blacklist: Annotated[
         list[str],
-        ConfigurationFormItem(
+        FormMetadata(
             label="Identifier Blacklist",
             description="Identifiers containing any of these strings are ignored when finding the 'correct' "
             "identifier for a patron's record, even if it means they end up with no identifier at all. "
             'If librarians invalidate library cards by adding strings like "EXPIRED" or "INVALID" '
             "on to the beginning of the card number, put those strings here so the Circulation Manager "
             "knows they do not represent real card numbers.",
-            type=ConfigurationFormItemType.LIST,
+            type=FormFieldType.LIST,
         ),
     ] = []
     # The field to use when validating a patron's credential.
     authentication_mode: Annotated[
         AuthenticationMode,
-        ConfigurationFormItem(
+        FormMetadata(
             label="Authentication Mode",
-            type=ConfigurationFormItemType.SELECT,
+            type=FormFieldType.SELECT,
             options={
                 AuthenticationMode.PIN: "PIN",
                 AuthenticationMode.FAMILY_NAME: "Family Name",
@@ -92,7 +92,7 @@ class MilleniumPatronSettings(BasicAuthProviderSettings):
     # Defaults to the barcode field ("pb").
     field_used_as_patron_identifier: Annotated[
         str,
-        ConfigurationFormItem(
+        FormMetadata(
             label="Field for patron identifier",
             description="The name of the field used as a patron identifier. Typically, this will be the "
             "<i>barcode</i> field which has code <tt>pb</tt>. Some systems, however, are configured to "
@@ -102,12 +102,12 @@ class MilleniumPatronSettings(BasicAuthProviderSettings):
     ] = "pb"
     use_post_requests: Annotated[
         bool,
-        ConfigurationFormItem(
+        FormMetadata(
             label="Use POST for requests",
             description="Whether to use POST (instead of GET) HTTP requests. If this is a Virtual Library Card "
             "integration, using POST will improve the security of this integration and is the recommended "
             "setting. Otherwise, do not use POST, as it is NOT compatible with other Millenium integrations.",
-            type=ConfigurationFormItemType.SELECT,
+            type=FormFieldType.SELECT,
             options={
                 True: "True",
                 False: "False",
@@ -119,7 +119,7 @@ class MilleniumPatronSettings(BasicAuthProviderSettings):
 class MilleniumPatronLibrarySettings(BasicAuthProviderLibrarySettings):
     library_identifier_field: Annotated[
         str,
-        ConfigurationFormItem(
+        FormMetadata(
             label="Library Identifier Field",
             description="This is the field on the patron record that the <em>Library Identifier Restriction "
             "Type</em> is applied to. The option 'barcode' matches the users barcode, other "

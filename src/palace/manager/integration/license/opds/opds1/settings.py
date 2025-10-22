@@ -16,8 +16,8 @@ from palace.manager.integration.license.opds.settings.wayfless import (
 from palace.manager.integration.license.settings.connection import ConnectionSetting
 from palace.manager.integration.settings import (
     BaseSettings,
-    ConfigurationFormItem,
-    ConfigurationFormItemType,
+    FormFieldType,
+    FormMetadata,
 )
 from palace.manager.util.opds_writer import OPDSFeed
 from palace.manager.util.pydantic import HttpUrl
@@ -36,7 +36,7 @@ class OPDSImporterSettings(
 ):
     external_account_id: Annotated[
         HttpUrl,
-        ConfigurationFormItem(
+        FormMetadata(
             label=_("URL"),
             required=True,
         ),
@@ -44,14 +44,14 @@ class OPDSImporterSettings(
 
     data_source: Annotated[
         str,
-        ConfigurationFormItem(label=_("Data source name"), required=True),
+        FormMetadata(label=_("Data source name"), required=True),
     ]
 
     include_in_inventory_report: Annotated[
         bool,
-        ConfigurationFormItem(
+        FormMetadata(
             label=_("Include in inventory report?"),
-            type=ConfigurationFormItemType.SELECT,
+            type=FormFieldType.SELECT,
             options={
                 True: "(Default) Yes",
                 False: "No",
@@ -61,13 +61,13 @@ class OPDSImporterSettings(
 
     default_audience: Annotated[
         str | None,
-        ConfigurationFormItem(
+        FormMetadata(
             label=_("Default audience"),
             description=_(
                 "If the vendor does not specify the target audience for their books, "
                 "assume the books have this target audience."
             ),
-            type=ConfigurationFormItemType.SELECT,
+            type=FormFieldType.SELECT,
             options={
                 **{None: _("No default audience")},
                 **{audience: audience for audience in sorted(Classifier.AUDIENCES)},
@@ -78,7 +78,7 @@ class OPDSImporterSettings(
 
     username: Annotated[
         str | None,
-        ConfigurationFormItem(
+        FormMetadata(
             label=_("Username"),
             description=_(
                 "If HTTP Basic authentication is required to access the OPDS feed (it usually isn't), enter the username here."
@@ -88,7 +88,7 @@ class OPDSImporterSettings(
 
     password: Annotated[
         str | None,
-        ConfigurationFormItem(
+        FormMetadata(
             label=_("Password"),
             description=_(
                 "If HTTP Basic authentication is required to access the OPDS feed (it usually isn't), enter the password here."
@@ -98,7 +98,7 @@ class OPDSImporterSettings(
 
     custom_accept_header: Annotated[
         str,
-        ConfigurationFormItem(
+        FormMetadata(
             label=_("Custom accept header"),
             required=False,
             description=_(
@@ -110,11 +110,11 @@ class OPDSImporterSettings(
 
     primary_identifier_source: Annotated[
         IdentifierSource,
-        ConfigurationFormItem(
+        FormMetadata(
             label=_("Identifer"),
             required=False,
             description=_("Which book identifier to use as ID."),
-            type=ConfigurationFormItemType.SELECT,
+            type=FormFieldType.SELECT,
             options={
                 IdentifierSource.ID: "(Default) Use <id>",
                 IdentifierSource.DCTERMS_IDENTIFIER: "Use <dcterms:identifier> first, if not exist use <id>",

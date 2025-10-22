@@ -9,7 +9,7 @@ from palace.manager.api.authentication.basic import (
     BasicAuthProviderLibrarySettings,
     BasicAuthProviderSettings,
 )
-from palace.manager.integration.settings import ConfigurationFormItem
+from palace.manager.integration.settings import FormMetadata
 from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.util.http.http import HTTP
 from palace.manager.util.pydantic import HttpUrl
@@ -18,7 +18,7 @@ from palace.manager.util.pydantic import HttpUrl
 class KansasAuthSettings(BasicAuthProviderSettings):
     url: Annotated[
         HttpUrl,
-        ConfigurationFormItem(
+        FormMetadata(
             label=_("URL"),
             required=True,
         ),

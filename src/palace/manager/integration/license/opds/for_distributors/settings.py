@@ -7,14 +7,14 @@ from flask_babel import lazy_gettext as _
 from palace.manager.integration.license.opds.opds1.settings import OPDSImporterSettings
 from palace.manager.integration.settings import (
     BaseSettings,
-    ConfigurationFormItem,
+    FormMetadata,
 )
 
 
 class OPDSForDistributorsSettings(OPDSImporterSettings):
     username: Annotated[
         str,
-        ConfigurationFormItem(
+        FormMetadata(
             label=_("Library's username or access key"),
             required=True,
         ),
@@ -22,7 +22,7 @@ class OPDSForDistributorsSettings(OPDSImporterSettings):
 
     password: Annotated[
         str,
-        ConfigurationFormItem(
+        FormMetadata(
             label=_("Library's password or secret key"),
             required=True,
         ),

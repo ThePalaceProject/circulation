@@ -23,7 +23,7 @@ from palace.manager.integration.metadata.base import (
 )
 from palace.manager.integration.settings import (
     BaseSettings,
-    ConfigurationFormItem,
+    FormMetadata,
 )
 from palace.manager.sqlalchemy.model.contributor import Contribution, Contributor
 from palace.manager.sqlalchemy.model.datasource import DataSource
@@ -45,13 +45,13 @@ class NoveListApiSettings(MetadataServiceSettings):
 
     username: Annotated[
         str,
-        ConfigurationFormItem(
+        FormMetadata(
             label="Profile",
         ),
     ]
     password: Annotated[
         str,
-        ConfigurationFormItem(
+        FormMetadata(
             label="Password",
         ),
     ]

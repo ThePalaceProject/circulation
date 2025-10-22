@@ -7,8 +7,8 @@ from palace.manager.api.authentication.basic import (
     BasicAuthProviderSettings,
 )
 from palace.manager.integration.settings import (
-    ConfigurationFormItem,
-    ConfigurationFormItemType,
+    FormFieldType,
+    FormMetadata,
 )
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.sqlalchemy.model.patron import Patron
@@ -17,7 +17,7 @@ from palace.manager.sqlalchemy.model.patron import Patron
 class SimpleAuthSettings(BasicAuthProviderSettings):
     test_identifier: Annotated[
         str,
-        ConfigurationFormItem(
+        FormMetadata(
             label="Test identifier",
             description="A test identifier to use when testing the authentication provider.",
             required=True,
@@ -25,7 +25,7 @@ class SimpleAuthSettings(BasicAuthProviderSettings):
     ]
     test_password: Annotated[
         str | None,
-        ConfigurationFormItem(
+        FormMetadata(
             required=True,
             label="Test password",
             description="A test password to use when testing the authentication provider. If you do not want to "
@@ -35,11 +35,11 @@ class SimpleAuthSettings(BasicAuthProviderSettings):
     ] = None
     additional_test_identifiers: Annotated[
         list[str] | None,
-        ConfigurationFormItem(
+        FormMetadata(
             label="Additional test identifiers",
             description="Identifiers for additional patrons to use in testing. "
             "The identifiers will all use the same test password as the first identifier.",
-            type=ConfigurationFormItemType.LIST,
+            type=FormFieldType.LIST,
         ),
     ] = None
 

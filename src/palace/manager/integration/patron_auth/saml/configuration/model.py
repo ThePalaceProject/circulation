@@ -48,9 +48,9 @@ from palace.manager.integration.patron_auth.saml.python_expression_dsl.parser im
     DSLParser,
 )
 from palace.manager.integration.settings import (
-    ConfigurationFormItem,
-    ConfigurationFormItemType,
-    ConfigurationFormOptionsType,
+    FormFieldType,
+    FormMetadata,
+    FormOptionsType,
     SettingsValidationError,
 )
 from palace.manager.sqlalchemy.model.saml import (
@@ -71,9 +71,9 @@ class FederatedIdentityProviderOptions:
         """Initialize a new instance of FederatedIdentityProviderOptions class."""
         self._mutex = Lock()
         self._last_updated_at = datetime.min
-        self._options: ConfigurationFormOptionsType = {}
+        self._options: FormOptionsType = {}
 
-    def __call__(self, db: Session) -> ConfigurationFormOptionsType:
+    def __call__(self, db: Session) -> FormOptionsType:
         """Get federated identity provider options."""
         with self._mutex:
             if self._needs_refresh(db):
@@ -95,7 +95,7 @@ class FederatedIdentityProviderOptions:
         return needs_refresh
 
     @staticmethod
-    def _fetch(db: Session) -> ConfigurationFormOptionsType:
+    def _fetch(db: Session) -> FormOptionsType:
         """Fetch federated identity provider options."""
         identity_providers = (
             db.query(
@@ -116,7 +116,7 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
 
     service_provider_xml_metadata: Annotated[
         str | None,
-        ConfigurationFormItem(
+        FormMetadata(
             label="Service Provider's XML Metadata",
             description=(
                 "SAML metadata of the Circulation Manager's Service Provider in an XML format. "
@@ -129,16 +129,16 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
     ] = None
     service_provider_private_key: Annotated[
         str | None,
-        ConfigurationFormItem(
+        FormMetadata(
             label="Service Provider's Private Key",
             description="Private key used for encrypting SAML requests. "
             "Leave empty to use environment configuration (PALACE_SAML_SP_PRIVATE_KEY or PALACE_SAML_SP_PRIVATE_KEY_FILE).",
-            type=ConfigurationFormItemType.TEXTAREA,
+            type=FormFieldType.TEXTAREA,
         ),
     ] = None
     federated_identity_provider_entity_ids: Annotated[
         list[str] | None,
-        ConfigurationFormItem(
+        FormMetadata(
             label="List of Federated IdPs",
             description=(
                 "List of federated (for example, from InCommon Federation) IdPs supported by this authentication provider. "
@@ -149,13 +149,13 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
     ] = None
     patron_id_use_name_id: Annotated[
         bool,
-        ConfigurationFormItem(
+        FormMetadata(
             label=_("Patron ID: SAML NameID"),
             description=_(
                 "Configuration setting indicating whether SAML NameID should be searched for a unique patron ID. "
                 "If NameID found, it will supersede any SAML attributes selected in the next section."
             ),
-            type=ConfigurationFormItemType.SELECT,
+            type=FormFieldType.SELECT,
             options={
                 True: "Use SAML NameID",
                 False: "Do NOT use SAML NameID",
@@ -164,7 +164,7 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
     ] = True
     patron_id_attributes: Annotated[
         list[str] | None,
-        ConfigurationFormItem(
+        FormMetadata(
             label=_("Patron ID: SAML Attributes"),
             description=_(
                 "List of SAML attributes that MAY contain a unique patron ID. "
@@ -173,14 +173,14 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
                 "<br>"
                 "NOTE: If a SAML attribute contains several values, only the first will be used."
             ),
-            type=ConfigurationFormItemType.MENU,
+            type=FormFieldType.MENU,
             options={attribute.name: attribute.name for attribute in SAMLAttributeType},
             format="narrow",
         ),
     ] = None
     patron_id_regular_expression: Annotated[
         Pattern | None,
-        ConfigurationFormItem(
+        FormMetadata(
             label="Patron ID: Regular expression",
             description=(
                 "Regular expression used to extract a unique patron ID from the attributes "
@@ -200,7 +200,7 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
     ] = None
     non_federated_identity_provider_xml_metadata: Annotated[
         str | None,
-        ConfigurationFormItem(
+        FormMetadata(
             label="Identity Provider's XML metadata",
             description=(
                 "SAML metadata of Identity Providers in an XML format. "
@@ -208,12 +208,12 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
                 "at least one SingleSignOnService tag with Binding attribute set to "
                 "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect."
             ),
-            type=ConfigurationFormItemType.TEXTAREA,
+            type=FormFieldType.TEXTAREA,
         ),
     ] = None
     session_lifetime: Annotated[
         PositiveInt | None,
-        ConfigurationFormItem(
+        FormMetadata(
             label="Session Lifetime",
             description=(
                 "This configuration setting determines how long "
@@ -230,7 +230,7 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
     ] = None
     filter_expression: Annotated[
         str | None,
-        ConfigurationFormItem(
+        FormMetadata(
             label="Filter Expression",
             description=(
                 "Python expression used for filtering out patrons by their SAML attributes."
@@ -253,12 +253,12 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
         """
                 "</pre>"
             ),
-            type=ConfigurationFormItemType.TEXTAREA,
+            type=FormFieldType.TEXTAREA,
         ),
     ] = None
     service_provider_strict_mode: Annotated[
         int,
-        ConfigurationFormItem(
+        FormMetadata(
             label="Service Provider's Strict Mode",
             description=(
                 "If strict is 1, then the Python Toolkit will reject unsigned or unencrypted messages "
@@ -269,7 +269,7 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
     ] = Field(default=0, ge=0, le=1)
     service_provider_debug_mode: Annotated[
         int,
-        ConfigurationFormItem(
+        FormMetadata(
             label="Service Provider's Debug Mode",
             description="Enable debug mode (outputs errors).",
         ),

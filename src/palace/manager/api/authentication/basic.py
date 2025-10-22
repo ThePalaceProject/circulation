@@ -33,8 +33,8 @@ from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.core.exceptions import IntegrationException
 from palace.manager.core.selftest import SelfTestResult
 from palace.manager.integration.settings import (
-    ConfigurationFormItem,
-    ConfigurationFormItemType,
+    FormFieldType,
+    FormMetadata,
     SettingsValidationError,
 )
 from palace.manager.service.analytics.analytics import Analytics
@@ -78,7 +78,7 @@ class BasicAuthProviderSettings(AuthProviderSettings):
     # authentication techniques.
     test_identifier: Annotated[
         str | None,
-        ConfigurationFormItem(
+        FormMetadata(
             label="Test identifier",
             description="A test identifier to use when testing the authentication provider.",
             weight=10,
@@ -87,7 +87,7 @@ class BasicAuthProviderSettings(AuthProviderSettings):
     ] = None
     test_password: Annotated[
         str | None,
-        ConfigurationFormItem(
+        FormMetadata(
             label="Test password",
             description="A test password to use when testing the authentication provider.",
             weight=10,
@@ -95,13 +95,13 @@ class BasicAuthProviderSettings(AuthProviderSettings):
     ] = None
     identifier_barcode_format: Annotated[
         BarcodeFormats,
-        ConfigurationFormItem(
+        FormMetadata(
             label="Patron identifier barcode format",
             description="Many libraries render patron identifiers as barcodes on "
             "physical library cards. If you specify the barcode format, patrons "
             "will be able to scan their library cards with a camera instead of "
             "manually typing in their identifiers.",
-            type=ConfigurationFormItemType.SELECT,
+            type=FormFieldType.SELECT,
             options={
                 BarcodeFormats.NONE: "Patron identifiers are not rendered as barcodes",
                 BarcodeFormats.CODABAR: "Patron identifiers are rendered as barcodes "
@@ -115,7 +115,7 @@ class BasicAuthProviderSettings(AuthProviderSettings):
     # a few other characters.
     identifier_regular_expression: Annotated[
         Pattern,
-        ConfigurationFormItem(
+        FormMetadata(
             label="Identifier Regular Expression",
             description="A patron's identifier will be immediately rejected if it doesn't match this "
             "regular expression.",
@@ -125,7 +125,7 @@ class BasicAuthProviderSettings(AuthProviderSettings):
     # By default, there are no restrictions on passwords.
     password_regular_expression: Annotated[
         Pattern | None,
-        ConfigurationFormItem(
+        FormMetadata(
             label="Password Regular Expression",
             description="A patron's password will be immediately rejected if it doesn't match this "
             "regular expression.",
@@ -134,9 +134,9 @@ class BasicAuthProviderSettings(AuthProviderSettings):
     ] = None
     identifier_keyboard: Annotated[
         Keyboards,
-        ConfigurationFormItem(
+        FormMetadata(
             label="Keyboard for identifier entry",
-            type=ConfigurationFormItemType.SELECT,
+            type=FormFieldType.SELECT,
             options={
                 Keyboards.DEFAULT: "System default",
                 Keyboards.EMAIL_ADDRESS: "Email address entry",
@@ -148,9 +148,9 @@ class BasicAuthProviderSettings(AuthProviderSettings):
     ] = Keyboards.DEFAULT
     password_keyboard: Annotated[
         Keyboards,
-        ConfigurationFormItem(
+        FormMetadata(
             label="Keyboard for password entry",
-            type=ConfigurationFormItemType.SELECT,
+            type=FormFieldType.SELECT,
             options={
                 Keyboards.DEFAULT: "System default",
                 Keyboards.NUMBER_PAD: "Number pad",
@@ -161,28 +161,28 @@ class BasicAuthProviderSettings(AuthProviderSettings):
     ] = Keyboards.DEFAULT
     identifier_maximum_length: Annotated[
         PositiveInt | None,
-        ConfigurationFormItem(
+        FormMetadata(
             label="Maximum identifier length",
             weight=10,
         ),
     ] = None
     password_maximum_length: Annotated[
         PositiveInt | None,
-        ConfigurationFormItem(
+        FormMetadata(
             label="Maximum password length",
             weight=10,
         ),
     ] = None
     identifier_label: Annotated[
         str,
-        ConfigurationFormItem(
+        FormMetadata(
             label="Label for identifier entry",
             weight=10,
         ),
     ] = "Barcode"
     password_label: Annotated[
         str,
-        ConfigurationFormItem(
+        FormMetadata(
             label="Label for password entry",
             weight=10,
         ),
@@ -196,9 +196,9 @@ class BasicAuthProviderLibrarySettings(AuthProviderLibrarySettings):
     # whether an identifier is valid for a specific library.
     library_identifier_restriction_type: Annotated[
         LibraryIdentifierRestriction,
-        ConfigurationFormItem(
+        FormMetadata(
             label="Library Identifier Restriction Type",
-            type=ConfigurationFormItemType.SELECT,
+            type=FormFieldType.SELECT,
             description="When multiple libraries share an ILS, a person may be able to "
             "authenticate with the ILS, but not be considered a patron of "
             "<em>this</em> library. This setting contains the rule for determining "
@@ -220,9 +220,9 @@ class BasicAuthProviderLibrarySettings(AuthProviderLibrarySettings):
     # subclasses can define this field as a more concrete type if they want.
     library_identifier_field: Annotated[
         str,
-        ConfigurationFormItem(
+        FormMetadata(
             label="Library Identifier Field",
-            type=ConfigurationFormItemType.SELECT,
+            type=FormFieldType.SELECT,
             description="This is the field on the patron record that the <em>Library Identifier Restriction "
             "Type</em> is applied to, different patron authentication methods provide different "
             "values here. This value is not used if <em>Library Identifier Restriction Type</em> "
@@ -239,7 +239,7 @@ class BasicAuthProviderLibrarySettings(AuthProviderLibrarySettings):
     # identifier_restriction_type.
     library_identifier_restriction_criteria: Annotated[
         str | None,
-        ConfigurationFormItem(
+        FormMetadata(
             label="Library Identifier Restriction",
             description="This is the restriction applied to the <em>Library Identifier Field</em> "
             "using the method chosen in <em>Library Identifier Restriction Type</em>. "

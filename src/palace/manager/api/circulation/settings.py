@@ -9,8 +9,8 @@ from pydantic import PositiveInt
 from palace.manager.api.admin.config import Configuration as AdminConfiguration
 from palace.manager.integration.settings import (
     BaseSettings,
-    ConfigurationFormItem,
-    ConfigurationFormItemType,
+    FormFieldType,
+    FormMetadata,
 )
 from palace.manager.sqlalchemy.constants import IntegrationConfigurationConstants
 from palace.manager.sqlalchemy.model.collection import Collection
@@ -21,9 +21,9 @@ class BaseCirculationEbookLoanSettings(BaseSettings):
 
     ebook_loan_duration: Annotated[
         PositiveInt | None,
-        ConfigurationFormItem(
+        FormMetadata(
             label=_("Ebook Loan Duration (in Days)"),
-            type=ConfigurationFormItemType.NUMBER,
+            type=FormFieldType.NUMBER,
             description=_(
                 "When a patron uses SimplyE to borrow an ebook from this collection, SimplyE will ask for a loan that lasts this number of days. This must be equal to or less than the maximum loan duration negotiated with the distributor."
             ),
@@ -36,9 +36,9 @@ class BaseCirculationLoanSettings(BaseSettings):
 
     default_loan_duration: Annotated[
         PositiveInt | None,
-        ConfigurationFormItem(
+        FormMetadata(
             label=_("Default Loan Period (in Days)"),
-            type=ConfigurationFormItemType.NUMBER,
+            type=FormFieldType.NUMBER,
             description=_(
                 "Until it hears otherwise from the distributor, this server will assume that any given loan for this library from this collection will last this number of days. This number is usually a negotiated value between the library and the distributor. This only affects estimates&mdash;it cannot affect the actual length of loans."
             ),
@@ -48,9 +48,9 @@ class BaseCirculationLoanSettings(BaseSettings):
 
 class BaseCirculationApiSettings(BaseSettings):
     _additional_form_fields = {
-        "export_marc_records": ConfigurationFormItem(
+        "export_marc_records": FormMetadata(
             label="Generate MARC Records",
-            type=ConfigurationFormItemType.SELECT,
+            type=FormFieldType.SELECT,
             description="Generate MARC Records for this collection. This setting only applies if a MARC Exporter is configured.",
             options={
                 "false": "Do not generate MARC records",
@@ -61,9 +61,9 @@ class BaseCirculationApiSettings(BaseSettings):
 
     subscription_activation_date: Annotated[
         datetime.date | None,
-        ConfigurationFormItem(
+        FormMetadata(
             label=_("Collection Subscription Activation Date"),
-            type=ConfigurationFormItemType.DATE,
+            type=FormFieldType.DATE,
             description=(
                 "A date before which this collection is considered inactive. Associated libraries"
                 " will not be considered to be subscribed until this date). If not specified,"
@@ -75,9 +75,9 @@ class BaseCirculationApiSettings(BaseSettings):
     ] = None
     subscription_expiration_date: Annotated[
         datetime.date | None,
-        ConfigurationFormItem(
+        FormMetadata(
             label=_("Collection Subscription Expiration Date"),
-            type=ConfigurationFormItemType.DATE,
+            type=FormFieldType.DATE,
             description=(
                 "A date after which this collection is considered inactive. Associated libraries"
                 " will not be considered to be subscribed beyond this date). If not specified,"
@@ -90,9 +90,9 @@ class BaseCirculationApiSettings(BaseSettings):
 
     lane_priority_level: Annotated[
         int,
-        ConfigurationFormItem(
+        FormMetadata(
             label=_("Lane Priority Level"),
-            type=ConfigurationFormItemType.SELECT,
+            type=FormFieldType.SELECT,
             options={str(index + 1): value for index, value in enumerate(range(1, 11))},
             description=(
                 "An integer between 1 (lowest priority) and 10 (highest) inclusive indicating "

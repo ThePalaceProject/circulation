@@ -22,7 +22,7 @@ from palace.manager.integration.base import HasIntegrationConfiguration
 from palace.manager.integration.goals import Goals
 from palace.manager.integration.settings import (
     BaseSettings,
-    ConfigurationFormItem,
+    FormMetadata,
 )
 from palace.manager.sqlalchemy.model.discovery_service_registration import (
     DiscoveryServiceRegistration,
@@ -40,7 +40,7 @@ from palace.manager.util.pydantic import HttpUrl
 class OpdsRegistrationServiceSettings(BaseSettings):
     url: Annotated[
         HttpUrl,
-        ConfigurationFormItem(
+        FormMetadata(
             label=_("URL"),
             required=True,
         ),

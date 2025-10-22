@@ -11,8 +11,8 @@ from palace.manager.api.lcp.hash import HashingAlgorithm
 from palace.manager.integration.license.opds.opds2.settings import OPDS2ImporterSettings
 from palace.manager.integration.license.opds.requests import OpdsAuthType
 from palace.manager.integration.settings import (
-    ConfigurationFormItem,
-    ConfigurationFormItemType,
+    FormFieldType,
+    FormMetadata,
     SettingsValidationError,
 )
 from palace.manager.sqlalchemy.model.collection import Collection
@@ -22,100 +22,100 @@ from palace.manager.util.pydantic import HttpUrl
 class OPDS2WithODLSettings(OPDS2ImporterSettings):
     encryption_algorithm: Annotated[
         HashingAlgorithm,
-        ConfigurationFormItem(
+        FormMetadata(
             label=_("Passphrase encryption algorithm"),
             description=_("Algorithm used for encrypting the passphrase."),
-            type=ConfigurationFormItemType.SELECT,
+            type=FormFieldType.SELECT,
             required=False,
             options={alg: alg.name for alg in HashingAlgorithm},
         ),
     ] = HashingAlgorithm.SHA256
     passphrase_hint_url: Annotated[
         HttpUrl,
-        ConfigurationFormItem(
+        FormMetadata(
             label=_("Passphrase hint URL"),
             description=_(
                 "Hint URL available to the user when opening an LCP protected publication."
             ),
-            type=ConfigurationFormItemType.TEXT,
+            type=FormFieldType.TEXT,
             required=True,
         ),
     ] = "https://lyrasis.zendesk.com/"
     passphrase_hint: Annotated[
         str,
-        ConfigurationFormItem(
+        FormMetadata(
             label=_("Passphrase hint"),
             description=_(
                 "Hint displayed to the user when opening an LCP protected publication."
             ),
-            type=ConfigurationFormItemType.TEXT,
+            type=FormFieldType.TEXT,
             required=True,
         ),
     ] = "View the help page for more information."
     default_reservation_period: Annotated[
         PositiveInt | None,
-        ConfigurationFormItem(
+        FormMetadata(
             label=_("Default Reservation Period (in Days)"),
         ),
     ] = Collection.STANDARD_DEFAULT_RESERVATION_PERIOD
     auth_type: Annotated[
         OpdsAuthType,
-        ConfigurationFormItem(
+        FormMetadata(
             label="Feed authentication type",
             description="Method used to authenticate when interacting with the feed.",
-            type=ConfigurationFormItemType.SELECT,
+            type=FormFieldType.SELECT,
             required=True,
             options={auth: auth.value for auth in OpdsAuthType},
         ),
     ] = OpdsAuthType.BASIC
     password: Annotated[
         str | None,
-        ConfigurationFormItem(
+        FormMetadata(
             label=_("Library's API password"),
             required=False,
         ),
     ] = None
     username: Annotated[
         str | None,
-        ConfigurationFormItem(
+        FormMetadata(
             label=_("Library's API username"),
             required=False,
         ),
     ] = None
     external_account_id: Annotated[
         HttpUrl,
-        ConfigurationFormItem(
+        FormMetadata(
             label=_("ODL feed URL"),
             required=True,
         ),
     ]
     skipped_license_formats: Annotated[
         list[str],
-        ConfigurationFormItem(
+        FormMetadata(
             label=_("Skipped license formats"),
             description=_(
                 "List of license formats that will NOT be imported into Circulation Manager."
             ),
-            type=ConfigurationFormItemType.LIST,
+            type=FormFieldType.LIST,
             required=False,
         ),
     ] = ["text/html"]
 
     loan_limit: Annotated[
         PositiveInt | None,
-        ConfigurationFormItem(
+        FormMetadata(
             label=_("Loan limit per patron"),
             description=_(
                 "The maximum number of books a patron can have loaned out at any given time."
             ),
-            type=ConfigurationFormItemType.NUMBER,
+            type=FormFieldType.NUMBER,
             required=False,
         ),
     ] = None
 
     hold_limit: Annotated[
         NonNegativeInt | None,
-        ConfigurationFormItem(
+        FormMetadata(
             label=_("Hold limit per patron"),
             description=_(
                 "The maximum number of books from this collection that a patron can "
@@ -123,7 +123,7 @@ class OPDS2WithODLSettings(OPDS2ImporterSettings):
                 "<br>A value of 0 means that holds are NOT permitted."
                 "<br>No value means that no limit is imposed by this setting."
             ),
-            type=ConfigurationFormItemType.NUMBER,
+            type=FormFieldType.NUMBER,
             required=False,
         ),
     ] = None

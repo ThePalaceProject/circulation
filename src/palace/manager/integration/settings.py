@@ -25,20 +25,20 @@ from palace.manager.util.problem_detail import (
 from palace.manager.util.sentinel import SentinelType
 
 
-def _get_form_item(field_info: FieldInfo) -> ConfigurationFormItem | None:
+def _get_form_metadata(field_info: FieldInfo) -> FormMetadata | None:
     """
-    Extract ConfigurationFormItem from FieldInfo.metadata.
+    Extract FormMetadata from FieldInfo.metadata.
 
     Pydantic automatically populates FieldInfo.metadata with items from
     Annotated type hints, so we just iterate through and find our metadata.
     """
     for item in field_info.metadata:
-        if isinstance(item, ConfigurationFormItem):
+        if isinstance(item, FormMetadata):
             return item
     return None
 
 
-class ConfigurationFormItemType(Enum):
+class FormFieldType(Enum):
     """Enumeration of configuration setting types"""
 
     TEXT = None
@@ -53,17 +53,17 @@ class ConfigurationFormItemType(Enum):
     IMAGE = "image"
 
 
-ConfigurationFormOptionsType = Mapping[Enum | str | bool | None, str | LazyString]
+FormOptionsType = Mapping[Enum | str | bool | None, str | LazyString]
 
 
 @dataclass(frozen=True)
-class ConfigurationFormItem(LoggerMixin):
+class FormMetadata(LoggerMixin):
     """
-    Configuration form item
+    Configuration form metadata
 
     This is used to generate the configuration form for the admin interface.
-    Each ConfigurationFormItem corresponds to a field in the Pydantic model
-    and is added to the model using Annotated type hints with ConfigurationFormItem
+    Each FormMetadata corresponds to a field in the Pydantic model
+    and is added to the model using Annotated type hints with FormMetadata
     as metadata.
     """
 
@@ -72,7 +72,7 @@ class ConfigurationFormItem(LoggerMixin):
 
     # The type of the form item, used to determine the type of the field displayed
     # in the admin interface.
-    type: ConfigurationFormItemType = ConfigurationFormItemType.TEXT
+    type: FormFieldType = FormFieldType.TEXT
 
     # The description of the form item, displayed below the field in the admin interface.
     description: str | LazyString | None = None
@@ -84,11 +84,7 @@ class ConfigurationFormItem(LoggerMixin):
     # When the type is SELECT, LIST, or MENU, the options are used to populate the
     # field in the admin interface. This can either be a callable that returns a
     # dictionary of options or a dictionary of options.
-    options: (
-        Callable[[Session], ConfigurationFormOptionsType]
-        | ConfigurationFormOptionsType
-        | None
-    ) = None
+    options: Callable[[Session], FormOptionsType] | FormOptionsType | None = None
 
     # Required is usually determined by the Pydantic model, but can be overridden
     # here, in the case where a field would not be required in the model, but is
@@ -119,7 +115,7 @@ class ConfigurationFormItem(LoggerMixin):
         self, db: Session, key: str, required: bool = False, default: Any = None
     ) -> tuple[int, dict[str, Any]]:
         """
-        Convert the ConfigurationFormItem to a dictionary
+        Convert the FormMetadata to a dictionary
 
         The dictionary is in the format expected by the admin interface.
         """
@@ -165,14 +161,14 @@ class BaseSettings(BaseModel, LoggerMixin):
     Base class for all our database backed pydantic settings classes
 
     Fields on the model should be defined using Annotated type hints with
-    ConfigurationFormItem metadata so that we can create a configuration form
+    FormMetadata metadata so that we can create a configuration form
     in the admin interface based on the model fields.
 
     For example:
     class MySettings(BaseSettings):
       my_field: Annotated[
           str,
-          ConfigurationFormItem(
+          FormMetadata(
             label="My Field",
             description="This is my field",
           )
@@ -237,18 +233,18 @@ class BaseSettings(BaseModel, LoggerMixin):
     # want to store that image data outside the settings model.
     #
     # The key for the dictionary should be the field name, and the value
-    # should be a ConfigurationFormItem object that defines the form field.
-    _additional_form_fields: dict[str, ConfigurationFormItem] = {}
+    # should be a FormMetadata object that defines the form field.
+    _additional_form_fields: dict[str, FormMetadata] = {}
 
     @classmethod
     def configuration_form(cls, db: Session) -> list[dict[str, Any]]:
         """Get the configuration dictionary for this class"""
         config = []
         for name, field_info in cls.model_fields.items():
-            form_item = _get_form_item(field_info)
+            form_item = _get_form_metadata(field_info)
             assert (
                 form_item is not None
-            ), f"{name} does not have ConfigurationFormItem metadata in its Annotated type hint"
+            ), f"{name} does not have FormMetadata metadata in its Annotated type hint"
             config.append(
                 form_item.to_dict(
                     db, name, field_info.is_required(), field_info.default
@@ -291,7 +287,7 @@ class BaseSettings(BaseModel, LoggerMixin):
                     field_info = field
                     break
         if field_info is not None:
-            form_item = _get_form_item(field_info)
+            form_item = _get_form_metadata(field_info)
             if form_item is not None:
                 return form_item.label
 

@@ -22,7 +22,7 @@ from palace.manager.integration.metadata.base import (
     MetadataService,
     MetadataServiceSettings,
 )
-from palace.manager.integration.settings import ConfigurationFormItem
+from palace.manager.integration.settings import FormMetadata
 from palace.manager.sqlalchemy.model.customlist import CustomList
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
@@ -36,7 +36,7 @@ from palace.manager.util.log import LoggerMixin
 class NytBestSellerApiSettings(MetadataServiceSettings):
     password: Annotated[
         str,
-        ConfigurationFormItem(
+        FormMetadata(
             label="API key",
         ),
     ]

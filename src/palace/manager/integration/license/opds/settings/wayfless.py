@@ -5,8 +5,8 @@ from flask_babel import lazy_gettext as _
 from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.integration.settings import (
     BaseSettings,
-    ConfigurationFormItem,
-    ConfigurationFormItemType,
+    FormFieldType,
+    FormMetadata,
 )
 
 
@@ -19,7 +19,7 @@ class SAMLWAYFlessConstants:
 class SAMLWAYFlessSetttings(BaseSettings):
     saml_wayfless_url_template: Annotated[
         str | None,
-        ConfigurationFormItem(
+        FormMetadata(
             label=_("SAML WAYFless URL Template"),
             description=_(
                 "<b>This configuration setting should be used ONLY when the authentication protocol is SAML.</b>"
@@ -45,7 +45,7 @@ class SAMLWAYFlessSetttings(BaseSettings):
                 "<br>"
                 " - <b>targetUrl</b> is substituted with the an encoded direct link to the publication."
             ),
-            type=ConfigurationFormItemType.TEXT,
+            type=FormFieldType.TEXT,
             required=False,
         ),
     ] = None

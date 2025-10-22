@@ -6,8 +6,8 @@ from pydantic import NonNegativeInt
 
 from palace.manager.integration.settings import (
     BaseSettings,
-    ConfigurationFormItem,
-    ConfigurationFormItemType,
+    FormFieldType,
+    FormMetadata,
 )
 
 
@@ -18,9 +18,9 @@ class MarcExporterSettings(BaseSettings):
     # generate files more or less often.
     update_frequency: Annotated[
         NonNegativeInt,
-        ConfigurationFormItem(
+        FormMetadata(
             label="Update frequency (in days)",
-            type=ConfigurationFormItemType.NUMBER,
+            type=FormFieldType.NUMBER,
             required=True,
         ),
     ] = 30
@@ -32,36 +32,36 @@ class MarcExporterLibrarySettings(BaseSettings):
     # http://www.loc.gov/marc/organizations/org-search.php
     organization_code: Annotated[
         str | None,
-        ConfigurationFormItem(
+        FormMetadata(
             label="The MARC organization code for this library (003 field).",
             description="MARC organization codes are assigned by the Library of Congress.",
-            type=ConfigurationFormItemType.TEXT,
+            type=FormFieldType.TEXT,
         ),
     ] = None
 
     web_client_url: Annotated[
         str | None,
-        ConfigurationFormItem(
+        FormMetadata(
             label="The base URL for the web catalog for this library, for the 856 field.",
             description="If using a library registry that provides a web catalog, this can be left blank.",
-            type=ConfigurationFormItemType.TEXT,
+            type=FormFieldType.TEXT,
         ),
     ] = None
 
     include_summary: Annotated[
         bool,
-        ConfigurationFormItem(
+        FormMetadata(
             label="Include summaries in MARC records (520 field)",
-            type=ConfigurationFormItemType.SELECT,
+            type=FormFieldType.SELECT,
             options={False: "Do not include summaries", True: "Include summaries"},
         ),
     ] = False
 
     include_genres: Annotated[
         bool,
-        ConfigurationFormItem(
+        FormMetadata(
             label="Include Palace Collection Manager genres in MARC records (650 fields)",
-            type=ConfigurationFormItemType.SELECT,
+            type=FormFieldType.SELECT,
             options={
                 False: "Do not include Palace Collection Manager genres",
                 True: "Include Palace Collection Manager genres",

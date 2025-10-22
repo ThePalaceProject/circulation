@@ -17,8 +17,8 @@ from palace.manager.api.problem_details import INVALID_CREDENTIALS
 from palace.manager.integration.patron_auth.sip2.client import Sip2Encoding, SIPClient
 from palace.manager.integration.patron_auth.sip2.dialect import Dialect as Sip2Dialect
 from palace.manager.integration.settings import (
-    ConfigurationFormItem,
-    ConfigurationFormItemType,
+    FormFieldType,
+    FormMetadata,
 )
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.sqlalchemy.model.patron import Patron
@@ -32,12 +32,12 @@ class SIP2Settings(BasicAuthProviderSettings):
     # Hostname of the SIP server
     url: Annotated[
         str,
-        ConfigurationFormItem(label="Server"),
+        FormMetadata(label="Server"),
     ]
     # The port number to connect to on the SIP server.
     port: Annotated[
         PositiveInt,
-        ConfigurationFormItem(
+        FormMetadata(
             label="Port",
             required=True,
         ),
@@ -48,14 +48,14 @@ class SIP2Settings(BasicAuthProviderSettings):
     # device dealing with patrons or library materials."
     username: Annotated[
         str | None,
-        ConfigurationFormItem(
+        FormMetadata(
             label="Login User ID",
         ),
     ] = None
     # Sip field CO; the password to use when initiating a SIP session, if necessary.
     password: Annotated[
         str | None,
-        ConfigurationFormItem(
+        FormMetadata(
             label="Login Password",
         ),
     ] = None
@@ -66,15 +66,15 @@ class SIP2Settings(BasicAuthProviderSettings):
     # circulation manager to be treated as its own special 'location'.
     location_code: Annotated[
         str | None,
-        ConfigurationFormItem(
+        FormMetadata(
             label="Location Code",
         ),
     ] = None
     encoding: Annotated[
         Sip2Encoding,
-        ConfigurationFormItem(
+        FormMetadata(
             label="Data Encoding",
-            type=ConfigurationFormItemType.SELECT,
+            type=FormFieldType.SELECT,
             options={
                 Sip2Encoding.utf8: "UTF-8",
                 Sip2Encoding.cp850: "CP850",
@@ -88,9 +88,9 @@ class SIP2Settings(BasicAuthProviderSettings):
     ] = Sip2Encoding.cp850
     use_ssl: Annotated[
         bool,
-        ConfigurationFormItem(
+        FormMetadata(
             label="Connect over SSL?",
-            type=ConfigurationFormItemType.SELECT,
+            type=FormFieldType.SELECT,
             options={
                 True: "Connect to the SIP2 server over SSL",
                 False: "Connect to the SIP2 server over an ordinary socket connection",
@@ -100,9 +100,9 @@ class SIP2Settings(BasicAuthProviderSettings):
     ] = False
     ssl_verification: Annotated[
         bool,
-        ConfigurationFormItem(
+        FormMetadata(
             label="Perform SSL certificate verification.",
-            type=ConfigurationFormItemType.SELECT,
+            type=FormFieldType.SELECT,
             options={
                 True: "Perform SSL certificate verification.",
                 False: "Do not perform SSL certificate verification.",
@@ -115,20 +115,20 @@ class SIP2Settings(BasicAuthProviderSettings):
     ] = True
     ils: Annotated[
         Sip2Dialect,
-        ConfigurationFormItem(
+        FormMetadata(
             label="ILS Dialect",
             description=(
                 "Some ILS require specific SIP2 settings. If the ILS you are using "
                 f"is in the list, please pick it. Otherwise, select '{Sip2Dialect.preferred()}'."
             ),
-            type=ConfigurationFormItemType.SELECT,
+            type=FormFieldType.SELECT,
             options=Sip2Dialect.form_options(),
             required=True,
         ),
     ] = Sip2Dialect.GENERIC_ILS
     ssl_certificate: Annotated[
         str | None,
-        ConfigurationFormItem(
+        FormMetadata(
             label="SSL Certificate",
             description=(
                 "The SSL certificate used to securely connect to an SSL-enabled SIP2 "
@@ -137,12 +137,12 @@ class SIP2Settings(BasicAuthProviderSettings):
                 "<code>-----BEGIN CERTIFICATE-----</code> and ending with "
                 "<code>-----END CERTIFICATE-----</code>"
             ),
-            type=ConfigurationFormItemType.TEXTAREA,
+            type=FormFieldType.TEXTAREA,
         ),
     ] = None
     ssl_key: Annotated[
         str | None,
-        ConfigurationFormItem(
+        FormMetadata(
             label="SSL Key",
             description=(
                 "The private key, if any, used to sign the SSL certificate above. "
@@ -150,26 +150,26 @@ class SIP2Settings(BasicAuthProviderSettings):
                 "<code>-----BEGIN PRIVATE KEY-----</code> and ending with "
                 "<code>-----END PRIVATE KEY-----</code>"
             ),
-            type=ConfigurationFormItemType.TEXTAREA,
+            type=FormFieldType.TEXTAREA,
         ),
     ] = None
     # The field delimiter (see "Variable-length fields" in the SIP2 spec). If no
     # value is specified, the default (the pipe character) will be used.
     field_separator: Annotated[
         str,
-        ConfigurationFormItem(
+        FormMetadata(
             label="Field Seperator",
             required=True,
         ),
     ] = "|"
     patron_status_block: Annotated[
         bool,
-        ConfigurationFormItem(
+        FormMetadata(
             label="SIP2 Patron Status Block",
             description=(
                 "Block patrons from borrowing based on the status of the SIP2 <em>patron status</em> field."
             ),
-            type=ConfigurationFormItemType.SELECT,
+            type=FormFieldType.SELECT,
             options={
                 True: "Block based on patron status field",
                 False: "No blocks based on patron status field",
@@ -178,7 +178,7 @@ class SIP2Settings(BasicAuthProviderSettings):
     ] = True
     timeout: Annotated[
         int,
-        ConfigurationFormItem(
+        FormMetadata(
             label="Timeout",
             description=(
                 "The number of seconds to wait for a response from the SIP2 server "
@@ -186,7 +186,7 @@ class SIP2Settings(BasicAuthProviderSettings):
                 "this value, as it can slow down the authentication process. Value must be "
                 "between 1 and 9 seconds."
             ),
-            type=ConfigurationFormItemType.NUMBER,
+            type=FormFieldType.NUMBER,
         ),
     ] = Field(default=3, ge=1, le=9)
 
@@ -195,7 +195,7 @@ class SIP2LibrarySettings(BasicAuthProviderLibrarySettings):
     # Used as the SIP2 AO field.
     institution_id: Annotated[
         str | None,
-        ConfigurationFormItem(
+        FormMetadata(
             label="Institution ID",
             description="A specific identifier for the library or branch, if used in patron authentication",
         ),

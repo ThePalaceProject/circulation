@@ -6,45 +6,45 @@ from werkzeug.datastructures import ImmutableMultiDict
 from palace.manager.api.admin.form_data import ProcessFormData
 from palace.manager.integration.settings import (
     BaseSettings,
-    ConfigurationFormItem,
-    ConfigurationFormItemType,
+    FormFieldType,
+    FormMetadata,
 )
 
 
 class MockSettings(BaseSettings):
     field1: Annotated[
         list[str],
-        ConfigurationFormItem(
+        FormMetadata(
             label="Field 1",
-            type=ConfigurationFormItemType.LIST,
+            type=FormFieldType.LIST,
         ),
     ] = []
     field2: Annotated[
         list[str],
-        ConfigurationFormItem(
+        FormMetadata(
             label="Field 2",
-            type=ConfigurationFormItemType.MENU,
+            type=FormFieldType.MENU,
         ),
     ] = []
     field3: Annotated[
         str | None,
-        ConfigurationFormItem(
+        FormMetadata(
             label="Field 3",
         ),
     ] = None
     field4: Annotated[
         datetime.date | None,
-        ConfigurationFormItem(
+        FormMetadata(
             label="Another date field with a date type",
-            type=ConfigurationFormItemType.DATE,
+            type=FormFieldType.DATE,
             description="A python date.",
         ),
     ] = None
     field5: Annotated[
         datetime.date | None,
-        ConfigurationFormItem(
+        FormMetadata(
             label="Another date field with a date type",
-            type=ConfigurationFormItemType.DATE,
+            type=FormFieldType.DATE,
             description="A python date.",
         ),
     ] = None

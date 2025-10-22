@@ -15,8 +15,8 @@ from sqlalchemy.orm import Session
 
 from palace.manager.integration.settings import (
     BaseSettings,
-    ConfigurationFormItem,
-    ConfigurationFormItemType,
+    FormFieldType,
+    FormMetadata,
     SettingsValidationError,
 )
 from palace.manager.service.logging.configuration import LogLevel
@@ -50,15 +50,15 @@ class MockSettings(BaseSettings):
         return self
 
     test: Annotated[
-        str | None, ConfigurationFormItem(label="Test", description="Test description")
+        str | None, FormMetadata(label="Test", description="Test description")
     ] = "test"
     number: Annotated[
         PositiveInt,
-        ConfigurationFormItem(label="Number", description="Number description"),
+        FormMetadata(label="Number", description="Number description"),
     ]
     with_alias: Annotated[
         float,
-        ConfigurationFormItem(label="With Alias", description="With Alias description"),
+        FormMetadata(label="With Alias", description="With Alias description"),
     ] = Field(default=-1.1, alias="foo")
 
 
@@ -238,13 +238,11 @@ class TestBaseSettings:
         class WeightedMockSettings(BaseSettings):
             string: Annotated[
                 str | None,
-                ConfigurationFormItem(
-                    label="Test", description="Test description", weight=100
-                ),
+                FormMetadata(label="Test", description="Test description", weight=100),
             ] = "test"
             number: Annotated[
                 PositiveInt,
-                ConfigurationFormItem(
+                FormMetadata(
                     label="Number", description="Number description", weight=1
                 ),
             ] = 12
@@ -262,7 +260,7 @@ class TestBaseSettings:
         class MockConfigSettings(BaseSettings):
             explicitly_unhidden_field: Annotated[
                 str,
-                ConfigurationFormItem(
+                FormMetadata(
                     label="Explicitly Unhidden",
                     description="An explicitly unhidden field",
                     hidden=False,
@@ -270,14 +268,14 @@ class TestBaseSettings:
             ] = "default"
             implicitly_unhidden_field: Annotated[
                 str,
-                ConfigurationFormItem(
+                FormMetadata(
                     label="Implicitly Unhidden",
                     description="An implicitly unhidden field",
                 ),
             ] = "default"
             hidden_field: Annotated[
                 str,
-                ConfigurationFormItem(
+                FormMetadata(
                     label="Hidden",
                     description="An explicitly hidden field",
                     hidden=True,
@@ -301,10 +299,10 @@ class TestBaseSettings:
         class OptionsMockSettings(BaseSettings):
             test: Annotated[
                 str,
-                ConfigurationFormItem(
+                FormMetadata(
                     label="Test",
                     options={"option1": "Option 1", "option2": "Option 2"},
-                    type=ConfigurationFormItemType.SELECT,
+                    type=FormFieldType.SELECT,
                 ),
             ] = "test"
 
@@ -322,10 +320,10 @@ class TestBaseSettings:
         class OptionsMockSettings(BaseSettings):
             test: Annotated[
                 str,
-                ConfigurationFormItem(
+                FormMetadata(
                     label="Test",
                     options=options_callable,
-                    type=ConfigurationFormItemType.SELECT,
+                    type=FormFieldType.SELECT,
                 ),
             ] = "test"
 
@@ -353,9 +351,9 @@ class TestBaseSettings:
 
         class AdditionalSettings(BaseSettings):
             _additional_form_fields = {
-                "test": ConfigurationFormItem(
+                "test": FormMetadata(
                     label="Test",
-                    type=ConfigurationFormItemType.TEXT,
+                    type=FormFieldType.TEXT,
                 )
             }
 
@@ -369,14 +367,12 @@ class TestBaseSettings:
             }
         ]
 
-    class TestConfigurationFormItem:
+    class TestFormMetadata:
         def test_required(self, caplog: pytest.LogCaptureFixture) -> None:
             caplog.set_level(LogLevel.warning)
 
             # If required isn't specified, we never get a warning and we use the default
-            item = ConfigurationFormItem(
-                label="Test", type=ConfigurationFormItemType.TEXT
-            )
+            item = FormMetadata(label="Test", type=FormFieldType.TEXT)
             assert item.to_dict(MagicMock(), "test", True) == (
                 0,
                 {
@@ -399,9 +395,7 @@ class TestBaseSettings:
             assert len(caplog.records) == 0
 
             # If we set required to true, it overrides the default.
-            item = ConfigurationFormItem(
-                label="Test", type=ConfigurationFormItemType.TEXT, required=True
-            )
+            item = FormMetadata(label="Test", type=FormFieldType.TEXT, required=True)
             assert item.to_dict(MagicMock(), "test", False) == (
                 0,
                 {
@@ -414,9 +408,7 @@ class TestBaseSettings:
             assert len(caplog.records) == 0
 
             # If we set required to false, and the default is True. It doesn't override and we get a warning.
-            item = ConfigurationFormItem(
-                label="Test", type=ConfigurationFormItemType.TEXT, required=False
-            )
+            item = FormMetadata(label="Test", type=FormFieldType.TEXT, required=False)
             assert item.to_dict(MagicMock(), "test", True) == (
                 0,
                 {

@@ -72,8 +72,8 @@ from palace.manager.data_layer.measurement import MeasurementData
 from palace.manager.data_layer.policy.replacement import ReplacementPolicy
 from palace.manager.data_layer.subject import SubjectData
 from palace.manager.integration.settings import (
-    ConfigurationFormItem,
-    ConfigurationFormItemType,
+    FormFieldType,
+    FormMetadata,
 )
 from palace.manager.scripts.monitor import RunCollectionMonitorScript
 from palace.manager.sqlalchemy.constants import DataSourceConstants
@@ -111,21 +111,21 @@ from palace.manager.util.xmlparser import XMLParser, XMLProcessor
 class BibliothecaSettings(BaseCirculationApiSettings):
     username: Annotated[
         str,
-        ConfigurationFormItem(
+        FormMetadata(
             label=_("Account ID"),
             required=True,
         ),
     ]
     password: Annotated[
         str,
-        ConfigurationFormItem(
+        FormMetadata(
             label=_("Account Key"),
             required=True,
         ),
     ]
     external_account_id: Annotated[
         str,
-        ConfigurationFormItem(
+        FormMetadata(
             label=_("Library ID"),
             required=True,
         ),
@@ -135,13 +135,13 @@ class BibliothecaSettings(BaseCirculationApiSettings):
 class BibliothecaLibrarySettings(BaseCirculationLoanSettings):
     dont_display_reserves: Annotated[
         ConfigurationAttributeValue,
-        ConfigurationFormItem(
+        FormMetadata(
             label=_("Show/Hide Titles with No Available Loans"),
             required=False,
             description=_(
                 "Titles with no available loans will not be displayed in the Catalog view."
             ),
-            type=ConfigurationFormItemType.SELECT,
+            type=FormFieldType.SELECT,
             options={
                 ConfigurationAttributeValue.YESVALUE: "Show",
                 ConfigurationAttributeValue.NOVALUE: "Hide",

@@ -12,8 +12,8 @@ from palace.manager.integration.license.overdrive.constants import OverdriveCons
 from palace.manager.integration.license.settings.connection import ConnectionSetting
 from palace.manager.integration.settings import (
     BaseSettings,
-    ConfigurationFormItem,
-    ConfigurationFormItemType,
+    FormFieldType,
+    FormMetadata,
 )
 
 
@@ -22,36 +22,36 @@ class OverdriveSettings(ConnectionSetting, BaseCirculationApiSettings):
 
     external_account_id: Annotated[
         str | None,
-        ConfigurationFormItem(
+        FormMetadata(
             label=_("Library ID"),
-            type=ConfigurationFormItemType.TEXT,
+            type=FormFieldType.TEXT,
             description="The library identifier.",
             required=True,
         ),
     ]
     overdrive_website_id: Annotated[
         str,
-        ConfigurationFormItem(
+        FormMetadata(
             label=_("Website ID"),
-            type=ConfigurationFormItemType.TEXT,
+            type=FormFieldType.TEXT,
             description="The web site identifier.",
             required=True,
         ),
     ]
     overdrive_client_key: Annotated[
         str,
-        ConfigurationFormItem(
+        FormMetadata(
             label=_("Client Key"),
-            type=ConfigurationFormItemType.TEXT,
+            type=FormFieldType.TEXT,
             description="The Overdrive client key.",
             required=True,
         ),
     ]
     overdrive_client_secret: Annotated[
         str,
-        ConfigurationFormItem(
+        FormMetadata(
             label=_("Client Secret"),
-            type=ConfigurationFormItemType.TEXT,
+            type=FormFieldType.TEXT,
             description="The Overdrive client secret.",
             required=True,
         ),
@@ -59,9 +59,9 @@ class OverdriveSettings(ConnectionSetting, BaseCirculationApiSettings):
 
     overdrive_server_nickname: Annotated[
         str,
-        ConfigurationFormItem(
+        FormMetadata(
             label=_("Server family"),
-            type=ConfigurationFormItemType.SELECT,
+            type=FormFieldType.SELECT,
             required=False,
             description="Unless you hear otherwise from Overdrive, your integration should use their production servers.",
             options={
@@ -75,7 +75,7 @@ class OverdriveSettings(ConnectionSetting, BaseCirculationApiSettings):
 class OverdriveLibrarySettings(BaseCirculationEbookLoanSettings):
     ils_name: Annotated[
         str,
-        ConfigurationFormItem(
+        FormMetadata(
             label=_("ILS Name"),
             description=_(
                 "When multiple libraries share an Overdrive account, Overdrive uses a setting called 'ILS Name' to determine which ILS to check when validating a given patron."
@@ -87,7 +87,7 @@ class OverdriveLibrarySettings(BaseCirculationEbookLoanSettings):
 class OverdriveChildSettings(BaseSettings):
     external_account_id: Annotated[
         str | None,
-        ConfigurationFormItem(
+        FormMetadata(
             label=_("Library ID"),
             required=True,
         ),

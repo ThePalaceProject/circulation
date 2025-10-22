@@ -5,20 +5,20 @@ from pydantic import PositiveInt
 
 from palace.manager.integration.settings import (
     BaseSettings,
-    ConfigurationFormItem,
-    ConfigurationFormItemType,
+    FormFieldType,
+    FormMetadata,
 )
 
 
 class ConnectionSetting(BaseSettings):
     max_retry_count: Annotated[
         PositiveInt,
-        ConfigurationFormItem(
+        FormMetadata(
             label=_("Connection retry limit"),
             description=_(
                 "The maximum number of times to retry a request for certain connection-related errors."
             ),
-            type=ConfigurationFormItemType.NUMBER,
+            type=FormFieldType.NUMBER,
             required=False,
         ),
     ] = 3
