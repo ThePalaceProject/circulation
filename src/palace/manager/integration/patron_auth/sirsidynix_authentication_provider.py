@@ -4,7 +4,7 @@ import json
 import os
 from collections.abc import Callable, Generator
 from gettext import gettext as _
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Annotated, Any, Literal
 from urllib.parse import urljoin
 
 from sqlalchemy.orm import Session
@@ -21,7 +21,6 @@ from palace.manager.core.selftest import SelfTestResult
 from palace.manager.integration.settings import (
     ConfigurationFormItem,
     ConfigurationFormItemType,
-    FormField,
 )
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.sqlalchemy.model.patron import Patron
@@ -39,24 +38,24 @@ class SirsiBlockReasons:
 
 
 class SirsiDynixHorizonAuthSettings(BasicAuthProviderSettings):
-    url: HttpUrl = FormField(
-        ...,
-        form=ConfigurationFormItem(
+    url: Annotated[
+        HttpUrl,
+        ConfigurationFormItem(
             label="Server URL",
             description="The external server url.",
         ),
-    )
-    client_id: str = FormField(
-        ...,
-        form=ConfigurationFormItem(
+    ]
+    client_id: Annotated[
+        str,
+        ConfigurationFormItem(
             label="Client ID",
             description="The client ID that should be used to identify this CM.",
         ),
-    )
+    ]
 
-    patron_blocks_enforced: bool = FormField(
-        True,
-        form=ConfigurationFormItem(
+    patron_blocks_enforced: Annotated[
+        bool,
+        ConfigurationFormItem(
             label="Enforce Patron ILS Blocks",
             description=(
                 "Block patrons from borrowing based on the approved, hasMaxDaysWithFines, hasMaxFines, hasMaxLostItem, "
@@ -69,20 +68,20 @@ class SirsiDynixHorizonAuthSettings(BasicAuthProviderSettings):
                 False: "Patron blocks NOT enforced.",
             },
         ),
-    )
+    ] = True
 
 
 class SirsiDynixHorizonAuthLibrarySettings(BasicAuthProviderLibrarySettings):
-    library_id: str = FormField(
-        ...,
-        form=ConfigurationFormItem(
+    library_id: Annotated[
+        str,
+        ConfigurationFormItem(
             label="Library ID",
             description="This is used to identify a unique library on the API. This must match what the API expects.",
         ),
-    )
-    library_disallowed_suffixes: list[str] = FormField(
-        [],
-        form=ConfigurationFormItem(
+    ]
+    library_disallowed_suffixes: Annotated[
+        list[str],
+        ConfigurationFormItem(
             label="Disallowed Patron Suffixes",
             description=(
                 "Any patron type ending in this suffix will remain unauthenticated. "
@@ -91,10 +90,10 @@ class SirsiDynixHorizonAuthLibrarySettings(BasicAuthProviderLibrarySettings):
             ),
             type=ConfigurationFormItemType.LIST,
         ),
-    )
-    library_identifier_field: Literal["barcode"] | Literal["patrontype"] = FormField(
-        "patrontype",
-        form=ConfigurationFormItem(
+    ] = []
+    library_identifier_field: Annotated[
+        Literal["barcode"] | Literal["patrontype"],
+        ConfigurationFormItem(
             label="Library Identifier Field",
             description="This is the field on the patron record that the <em>Library Identifier Restriction "
             "Type</em> is applied to, different patron authentication methods provide different "
@@ -106,7 +105,7 @@ class SirsiDynixHorizonAuthLibrarySettings(BasicAuthProviderLibrarySettings):
             },
             type=ConfigurationFormItemType.SELECT,
         ),
-    )
+    ] = "patrontype"
 
 
 class SirsiDynixHorizonAuthenticationProvider(

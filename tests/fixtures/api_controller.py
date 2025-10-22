@@ -320,7 +320,7 @@ class CirculationControllerFixture(ControllerFixture):
         # tests verify that non-default entry points can be selected.
         library = self.db.default_library()
         library.update_settings(
-            LibrarySettings.model_construct(
+            LibrarySettings.model_construct(  # type: ignore[call-arg]
                 enabled_entry_points=[
                     EbooksEntryPoint.INTERNAL_NAME,
                     AudiobooksEntryPoint.INTERNAL_NAME,

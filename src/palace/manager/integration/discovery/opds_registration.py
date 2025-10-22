@@ -3,7 +3,7 @@ from __future__ import annotations
 import base64
 import json
 from collections.abc import Callable
-from typing import Any, Literal, Self, Unpack, overload
+from typing import Annotated, Any, Literal, Self, Unpack, overload
 
 from Crypto.Cipher.PKCS1_OAEP import PKCS1OAEP_Cipher
 from flask_babel import lazy_gettext as _
@@ -23,7 +23,6 @@ from palace.manager.integration.goals import Goals
 from palace.manager.integration.settings import (
     BaseSettings,
     ConfigurationFormItem,
-    FormField,
 )
 from palace.manager.sqlalchemy.model.discovery_service_registration import (
     DiscoveryServiceRegistration,
@@ -39,13 +38,13 @@ from palace.manager.util.pydantic import HttpUrl
 
 
 class OpdsRegistrationServiceSettings(BaseSettings):
-    url: HttpUrl = FormField(
-        ...,
-        form=ConfigurationFormItem(
+    url: Annotated[
+        HttpUrl,
+        ConfigurationFormItem(
             label=_("URL"),
             required=True,
         ),
-    )
+    ]
 
 
 class OpdsRegistrationService(

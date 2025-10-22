@@ -56,7 +56,7 @@ class TestConfiguration:
 
         # We can change these values.
         library.update_settings(
-            LibrarySettings.model_construct(large_collection_languages=["spa", "jpn"])
+            LibrarySettings.model_construct(large_collection_languages=["spa", "jpn"])  # type: ignore[call-arg]
         )
         assert C.large_collection_languages(library) == ["jpn", "spa"]
 

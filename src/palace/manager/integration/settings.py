@@ -4,22 +4,11 @@ import typing
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Unpack
+from typing import Any
 
-import annotated_types
-import typing_extensions
 from flask_babel import LazyString
-from pydantic import (
-    AliasChoices,
-    AliasPath,
-    BaseModel,
-    ConfigDict,
-    ValidationError,
-    model_validator,
-    types,
-)
-from pydantic.config import JsonDict
-from pydantic.fields import Deprecated, FieldInfo, _EmptyKwargs, _Unset
+from pydantic import BaseModel, ConfigDict, ValidationError, model_validator
+from pydantic.fields import FieldInfo
 from pydantic_core import ErrorDetails, PydanticUndefined
 from sqlalchemy.orm import Session
 
@@ -35,147 +24,18 @@ from palace.manager.util.problem_detail import (
 )
 from palace.manager.util.sentinel import SentinelType
 
-# Storage key for form metadata in json_schema_extra
-_FORM_METADATA_KEY = "_palace_form_item"
-
 
 def _get_form_item(field_info: FieldInfo) -> ConfigurationFormItem | None:
-    """Extract the ConfigurationFormItem from a FieldInfo's json_schema_extra."""
-    if field_info.json_schema_extra is None:
-        return None
-    if isinstance(field_info.json_schema_extra, dict):
-        item = field_info.json_schema_extra.get(_FORM_METADATA_KEY)
+    """
+    Extract ConfigurationFormItem from FieldInfo.metadata.
+
+    Pydantic automatically populates FieldInfo.metadata with items from
+    Annotated type hints, so we just iterate through and find our metadata.
+    """
+    for item in field_info.metadata:
         if isinstance(item, ConfigurationFormItem):
-            return item  # type: ignore[unreachable]
+            return item
     return None
-
-
-def FormField(
-    default: Any = PydanticUndefined,
-    *,
-    form: ConfigurationFormItem,
-    default_factory: typing.Callable[[], Any] | None = _Unset,
-    alias: str | None = _Unset,
-    alias_priority: int | None = _Unset,
-    validation_alias: str | AliasPath | AliasChoices | None = _Unset,
-    serialization_alias: str | None = _Unset,
-    title: str | None = _Unset,
-    field_title_generator: (
-        typing_extensions.Callable[[str, FieldInfo], str] | None
-    ) = _Unset,
-    description: str | None = _Unset,
-    examples: list[Any] | None = _Unset,
-    exclude: bool | None = _Unset,
-    discriminator: str | types.Discriminator | None = _Unset,
-    deprecated: Deprecated | str | bool | None = _Unset,
-    json_schema_extra: JsonDict | typing.Callable[[JsonDict], None] | None = _Unset,
-    frozen: bool | None = _Unset,
-    validate_default: bool | None = _Unset,
-    repr: bool = _Unset,
-    init: bool | None = _Unset,
-    init_var: bool | None = _Unset,
-    kw_only: bool | None = _Unset,
-    pattern: str | typing.Pattern[str] | None = _Unset,
-    strict: bool | None = _Unset,
-    coerce_numbers_to_str: bool | None = _Unset,
-    gt: annotated_types.SupportsGt | None = _Unset,
-    ge: annotated_types.SupportsGe | None = _Unset,
-    lt: annotated_types.SupportsLt | None = _Unset,
-    le: annotated_types.SupportsLe | None = _Unset,
-    multiple_of: float | None = _Unset,
-    allow_inf_nan: bool | None = _Unset,
-    max_digits: int | None = _Unset,
-    decimal_places: int | None = _Unset,
-    min_length: int | None = _Unset,
-    max_length: int | None = _Unset,
-    union_mode: typing.Literal["smart", "left_to_right"] = _Unset,
-    fail_fast: bool | None = _Unset,
-    **extra: Unpack[_EmptyKwargs],
-) -> Any:
-    """
-    This function is equivalent to the Pydantic Field function, but stores
-    ConfigurationFormItem metadata in json_schema_extra for use in the admin interface.
-
-    When creating a Pydantic model based on the BaseSettings class below, you should
-    use this function instead of Field to create fields that will be used to generate
-    a configuration form in the admin interface.
-    """
-    from pydantic.fields import Field
-
-    if (
-        validation_alias
-        and validation_alias is not _Unset
-        and not isinstance(validation_alias, (str, AliasChoices, AliasPath))
-    ):
-        raise TypeError(
-            "Invalid `validation_alias` type. it should be `str`, `AliasChoices`, or `AliasPath`"
-        )
-
-    if serialization_alias in (_Unset, None) and isinstance(alias, str):
-        serialization_alias = alias
-
-    if validation_alias in (_Unset, None):
-        validation_alias = alias
-
-    # Merge the form metadata into json_schema_extra
-    # Note: We're storing a ConfigurationFormItem in json_schema_extra, which isn't
-    # JSON-serializable. This is OK because json_schema_extra can contain any Python
-    # objects - they're only used for JSON schema generation if they're serializable.
-    if json_schema_extra is _Unset or json_schema_extra is None:
-        merged_json_schema_extra: Any = {_FORM_METADATA_KEY: form}
-    elif callable(json_schema_extra):
-        # If json_schema_extra is a callable, we can't easily merge, so we create
-        # a wrapper that calls the original and adds our metadata
-        original_callable = json_schema_extra
-
-        def merged_callable(schema: JsonDict) -> None:
-            original_callable(schema)
-            schema[_FORM_METADATA_KEY] = form  # type: ignore[assignment]
-
-        merged_json_schema_extra = merged_callable
-    else:
-        # json_schema_extra is a dict, merge it with our form metadata
-        merged_json_schema_extra = {**json_schema_extra, _FORM_METADATA_KEY: form}
-
-    return Field(  # type: ignore[call-overload, misc]
-        # We're storing non-JSON-serializable ConfigurationFormItem in json_schema_extra.
-        # This is fine - it's just metadata that pydantic will preserve.
-        default,
-        default_factory=default_factory,
-        alias=alias,
-        alias_priority=alias_priority,
-        validation_alias=validation_alias,
-        serialization_alias=serialization_alias,
-        title=title,
-        field_title_generator=field_title_generator,
-        description=description,
-        examples=examples,
-        exclude=exclude,
-        discriminator=discriminator,
-        deprecated=deprecated,
-        json_schema_extra=merged_json_schema_extra,
-        frozen=frozen,
-        pattern=pattern,
-        validate_default=validate_default,
-        repr=repr,
-        init=init,
-        init_var=init_var,
-        kw_only=kw_only,
-        coerce_numbers_to_str=coerce_numbers_to_str,
-        strict=strict,
-        gt=gt,
-        ge=ge,
-        lt=lt,
-        le=le,
-        multiple_of=multiple_of,
-        min_length=min_length,
-        max_length=max_length,
-        allow_inf_nan=allow_inf_nan,
-        max_digits=max_digits,
-        decimal_places=decimal_places,
-        union_mode=union_mode,
-        fail_fast=fail_fast,
-    )
 
 
 class ConfigurationFormItemType(Enum):
@@ -309,13 +169,13 @@ class BaseSettings(BaseModel, LoggerMixin):
 
     For example:
     class MySettings(BaseSettings):
-      my_field: str = FormField(
-        "default value",
-        form=ConfigurationFormItem(
+      my_field: Annotated[
+          str,
+          ConfigurationFormItem(
             label="My Field",
             description="This is my field",
-        ),
-      )
+          )
+      ] = "default value"
     """
 
     @model_validator(mode="before")

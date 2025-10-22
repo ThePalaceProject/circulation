@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from enum import Enum
+from typing import Annotated
 
 from flask_babel import lazy_gettext as _
 
@@ -17,7 +18,6 @@ from palace.manager.integration.settings import (
     BaseSettings,
     ConfigurationFormItem,
     ConfigurationFormItemType,
-    FormField,
 )
 from palace.manager.util.opds_writer import OPDSFeed
 from palace.manager.util.pydantic import HttpUrl
@@ -34,20 +34,22 @@ class OPDSImporterSettings(
     FormatPrioritiesSettings,
     BaseCirculationApiSettings,
 ):
-    external_account_id: HttpUrl = FormField(
-        form=ConfigurationFormItem(
+    external_account_id: Annotated[
+        HttpUrl,
+        ConfigurationFormItem(
             label=_("URL"),
             required=True,
-        )
-    )
+        ),
+    ]
 
-    data_source: str = FormField(
-        form=ConfigurationFormItem(label=_("Data source name"), required=True)
-    )
+    data_source: Annotated[
+        str,
+        ConfigurationFormItem(label=_("Data source name"), required=True),
+    ]
 
-    include_in_inventory_report: bool = FormField(
-        True,
-        form=ConfigurationFormItem(
+    include_in_inventory_report: Annotated[
+        bool,
+        ConfigurationFormItem(
             label=_("Include in inventory report?"),
             type=ConfigurationFormItemType.SELECT,
             options={
@@ -55,11 +57,11 @@ class OPDSImporterSettings(
                 False: "No",
             },
         ),
-    )
+    ] = True
 
-    default_audience: str | None = FormField(
-        None,
-        form=ConfigurationFormItem(
+    default_audience: Annotated[
+        str | None,
+        ConfigurationFormItem(
             label=_("Default audience"),
             description=_(
                 "If the vendor does not specify the target audience for their books, "
@@ -72,40 +74,31 @@ class OPDSImporterSettings(
             },
             required=False,
         ),
-    )
+    ] = None
 
-    username: str | None = FormField(
-        None,
-        form=ConfigurationFormItem(
+    username: Annotated[
+        str | None,
+        ConfigurationFormItem(
             label=_("Username"),
             description=_(
                 "If HTTP Basic authentication is required to access the OPDS feed (it usually isn't), enter the username here."
             ),
-            weight=-1,
         ),
-    )
+    ] = None
 
-    password: str | None = FormField(
-        None,
-        form=ConfigurationFormItem(
+    password: Annotated[
+        str | None,
+        ConfigurationFormItem(
             label=_("Password"),
             description=_(
                 "If HTTP Basic authentication is required to access the OPDS feed (it usually isn't), enter the password here."
             ),
-            weight=-1,
         ),
-    )
+    ] = None
 
-    custom_accept_header: str = FormField(
-        default=",".join(
-            [
-                OPDSFeed.ACQUISITION_FEED_TYPE,
-                "application/atom+xml;q=0.9",
-                "application/xml;q=0.8",
-                "*/*;q=0.1",
-            ]
-        ),
-        form=ConfigurationFormItem(
+    custom_accept_header: Annotated[
+        str,
+        ConfigurationFormItem(
             label=_("Custom accept header"),
             required=False,
             description=_(
@@ -113,11 +106,11 @@ class OPDSImporterSettings(
             ),
             weight=-1,
         ),
-    )
+    ] = OPDSFeed.ATOM_TYPE
 
-    primary_identifier_source: IdentifierSource = FormField(
-        IdentifierSource.ID,
-        form=ConfigurationFormItem(
+    primary_identifier_source: Annotated[
+        IdentifierSource,
+        ConfigurationFormItem(
             label=_("Identifer"),
             required=False,
             description=_("Which book identifier to use as ID."),
@@ -127,7 +120,7 @@ class OPDSImporterSettings(
                 IdentifierSource.DCTERMS_IDENTIFIER: "Use <dcterms:identifier> first, if not exist use <id>",
             },
         ),
-    )
+    ] = IdentifierSource.ID
 
 
 class OPDSImporterLibrarySettings(BaseSettings):

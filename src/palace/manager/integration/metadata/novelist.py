@@ -6,7 +6,7 @@ import urllib.parse
 import urllib.request
 from collections import Counter
 from collections.abc import Mapping
-from typing import Any, Self
+from typing import Annotated, Any, Self
 
 from requests import Response
 from sqlalchemy.engine import Row
@@ -24,7 +24,6 @@ from palace.manager.integration.metadata.base import (
 from palace.manager.integration.settings import (
     BaseSettings,
     ConfigurationFormItem,
-    FormField,
 )
 from palace.manager.sqlalchemy.model.contributor import Contribution, Contributor
 from palace.manager.sqlalchemy.model.datasource import DataSource
@@ -44,18 +43,18 @@ from palace.manager.util.log import LoggerMixin
 class NoveListApiSettings(MetadataServiceSettings):
     """Settings for the NoveList API"""
 
-    username: str = FormField(
-        ...,
-        form=ConfigurationFormItem(
+    username: Annotated[
+        str,
+        ConfigurationFormItem(
             label="Profile",
         ),
-    )
-    password: str = FormField(
-        ...,
-        form=ConfigurationFormItem(
+    ]
+    password: Annotated[
+        str,
+        ConfigurationFormItem(
             label="Password",
         ),
-    )
+    ]
 
 
 class NoveListApiLibrarySettings(BaseSettings): ...

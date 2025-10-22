@@ -1,4 +1,5 @@
 import datetime
+from typing import Annotated
 
 from werkzeug.datastructures import ImmutableMultiDict
 
@@ -7,47 +8,46 @@ from palace.manager.integration.settings import (
     BaseSettings,
     ConfigurationFormItem,
     ConfigurationFormItemType,
-    FormField,
 )
 
 
 class MockSettings(BaseSettings):
-    field1: list[str] = FormField(
-        [],
-        form=ConfigurationFormItem(
+    field1: Annotated[
+        list[str],
+        ConfigurationFormItem(
             label="Field 1",
             type=ConfigurationFormItemType.LIST,
         ),
-    )
-    field2: list[str] = FormField(
-        [],
-        form=ConfigurationFormItem(
+    ] = []
+    field2: Annotated[
+        list[str],
+        ConfigurationFormItem(
             label="Field 2",
             type=ConfigurationFormItemType.MENU,
         ),
-    )
-    field3: str | None = FormField(
-        None,
-        form=ConfigurationFormItem(
+    ] = []
+    field3: Annotated[
+        str | None,
+        ConfigurationFormItem(
             label="Field 3",
         ),
-    )
-    field4: datetime.date | None = FormField(
-        None,
-        form=ConfigurationFormItem(
+    ] = None
+    field4: Annotated[
+        datetime.date | None,
+        ConfigurationFormItem(
             label="Another date field with a date type",
             type=ConfigurationFormItemType.DATE,
             description="A python date.",
         ),
-    )
-    field5: datetime.date | None = FormField(
-        None,
-        form=ConfigurationFormItem(
+    ] = None
+    field5: Annotated[
+        datetime.date | None,
+        ConfigurationFormItem(
             label="Another date field with a date type",
             type=ConfigurationFormItemType.DATE,
             description="A python date.",
         ),
-    )
+    ] = None
 
 
 def test_get_settings():

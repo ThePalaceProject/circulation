@@ -7,6 +7,7 @@ from typing import Annotated, Any, Self, cast
 import wcag_contrast_ratio
 from pydantic import (
     EmailStr,
+    Field,
     PositiveFloat,
     PositiveInt,
     ValidationInfo,
@@ -27,7 +28,6 @@ from palace.manager.integration.settings import (
     BaseSettings,
     ConfigurationFormItem,
     ConfigurationFormItemType,
-    FormField,
     SettingsValidationError,
 )
 from palace.manager.util.languages import LanguageCodes
@@ -115,19 +115,19 @@ class LibrarySettings(BaseSettings):
         ),
     }
 
-    website: HttpUrl = FormField(
-        ...,
-        form=LibraryConfFormItem(
+    website: Annotated[
+        HttpUrl,
+        LibraryConfFormItem(
             label="URL of the library's website",
             description='The library\'s main website, e.g. "https://www.nypl.org/" '
             "(not this Circulation Manager's URL).",
             category="Basic Information",
             level=Level.SYS_ADMIN_ONLY,
         ),
-    )
-    allow_holds: bool = FormField(
-        True,
-        form=LibraryConfFormItem(
+    ]
+    allow_holds: Annotated[
+        bool,
+        LibraryConfFormItem(
             label="Allow books to be put on hold",
             type=ConfigurationFormItemType.SELECT,
             options={
@@ -137,10 +137,10 @@ class LibrarySettings(BaseSettings):
             category="Loans, Holds, & Fines",
             level=Level.SYS_ADMIN_ONLY,
         ),
-    )
-    enabled_entry_points: list[str] = FormField(
-        [x.INTERNAL_NAME for x in EntryPoint.DEFAULT_ENABLED],
-        form=LibraryConfFormItem(
+    ] = True
+    enabled_entry_points: Annotated[
+        list[str],
+        LibraryConfFormItem(
             label="Enabled entry points",
             description="Patrons will see the selected entry points at the "
             "top level and in search results.",
@@ -154,31 +154,27 @@ class LibrarySettings(BaseSettings):
             read_only=True,
             level=Level.SYS_ADMIN_ONLY,
         ),
-    )
-    featured_lane_size: PositiveInt = FormField(
-        15,
-        form=LibraryConfFormItem(
+    ] = [x.INTERNAL_NAME for x in EntryPoint.DEFAULT_ENABLED]
+    featured_lane_size: Annotated[
+        PositiveInt,
+        LibraryConfFormItem(
             label="Maximum number of books in the 'featured' lanes",
             category="Lanes & Filters",
             level=Level.ALL_ACCESS,
         ),
-    )
+    ] = 15
     minimum_featured_quality: Annotated[
         float,
-        FormField(
-            ge=0,
-            le=1,
-            form=LibraryConfFormItem(
-                label="Minimum quality for books that show up in 'featured' lanes",
-                description="Between 0 and 1.",
-                category="Lanes & Filters",
-                level=Level.ALL_ACCESS,
-            ),
+        LibraryConfFormItem(
+            label="Minimum quality for books that show up in 'featured' lanes",
+            description="Between 0 and 1.",
+            category="Lanes & Filters",
+            level=Level.ALL_ACCESS,
         ),
-    ] = Configuration.DEFAULT_MINIMUM_FEATURED_QUALITY
-    facets_enabled_order: list[str] = FormField(
-        FacetConstants.DEFAULT_ENABLED_FACETS[FacetConstants.ORDER_FACET_GROUP_NAME],
-        form=LibraryConfFormItem(
+    ] = Field(default=Configuration.DEFAULT_MINIMUM_FEATURED_QUALITY, ge=0, le=1)
+    facets_enabled_order: Annotated[
+        list[str],
+        LibraryConfFormItem(
             label="Allow patrons to sort by",
             type=ConfigurationFormItemType.MENU,
             options={
@@ -189,10 +185,10 @@ class LibrarySettings(BaseSettings):
             paired="facets_default_order",
             level=Level.SYS_ADMIN_OR_MANAGER,
         ),
-    )
-    facets_default_order: str = FormField(
-        FacetConstants.ORDER_AUTHOR,
-        form=LibraryConfFormItem(
+    ] = FacetConstants.DEFAULT_ENABLED_FACETS[FacetConstants.ORDER_FACET_GROUP_NAME]
+    facets_default_order: Annotated[
+        str,
+        LibraryConfFormItem(
             label="Default Sort by",
             type=ConfigurationFormItemType.SELECT,
             options={
@@ -202,12 +198,10 @@ class LibrarySettings(BaseSettings):
             category="Lanes & Filters",
             skip=True,
         ),
-    )
-    facets_enabled_available: list[str] = FormField(
-        FacetConstants.DEFAULT_ENABLED_FACETS[
-            FacetConstants.AVAILABILITY_FACET_GROUP_NAME
-        ],
-        form=LibraryConfFormItem(
+    ] = FacetConstants.ORDER_AUTHOR
+    facets_enabled_available: Annotated[
+        list[str],
+        LibraryConfFormItem(
             label="Allow patrons to filter availability to",
             type=ConfigurationFormItemType.MENU,
             options={
@@ -218,10 +212,12 @@ class LibrarySettings(BaseSettings):
             paired="facets_default_available",
             level=Level.SYS_ADMIN_OR_MANAGER,
         ),
-    )
-    facets_default_available: str = FormField(
-        FacetConstants.AVAILABLE_ALL,
-        form=LibraryConfFormItem(
+    ] = FacetConstants.DEFAULT_ENABLED_FACETS[
+        FacetConstants.AVAILABILITY_FACET_GROUP_NAME
+    ]
+    facets_default_available: Annotated[
+        str,
+        LibraryConfFormItem(
             label="Default Availability",
             type=ConfigurationFormItemType.SELECT,
             options={
@@ -231,40 +227,40 @@ class LibrarySettings(BaseSettings):
             category="Lanes & Filters",
             skip=True,
         ),
-    )
+    ] = FacetConstants.AVAILABLE_ALL
 
-    library_description: str | None = FormField(
-        None,
-        form=LibraryConfFormItem(
+    library_description: Annotated[
+        str | None,
+        LibraryConfFormItem(
             label="A short description of this library",
             description="This will be shown to people who aren't sure they've chosen the right library.",
             category="Basic Information",
             level=Level.SYS_ADMIN_ONLY,
         ),
-    )
-    help_email: EmailStr | None = FormField(
-        None,
-        form=LibraryConfFormItem(
+    ] = None
+    help_email: Annotated[
+        EmailStr | None,
+        LibraryConfFormItem(
             label="Patron support email address",
             description="An email address a patron can use if they need help, "
             "e.g. 'palacehelp@yourlibrary.org'.",
             category="Basic Information",
             level=Level.ALL_ACCESS,
         ),
-    )
-    help_web: HttpUrl | None = FormField(
-        None,
-        form=LibraryConfFormItem(
+    ] = None
+    help_web: Annotated[
+        HttpUrl | None,
+        LibraryConfFormItem(
             label="Patron support website",
             description="A URL for patrons to get help. Either this field or "
             "patron support email address must be provided.",
             category="Basic Information",
             level=Level.ALL_ACCESS,
         ),
-    )
-    copyright_designated_agent_email_address: EmailStr | None = FormField(
-        None,
-        form=LibraryConfFormItem(
+    ] = None
+    copyright_designated_agent_email_address: Annotated[
+        EmailStr | None,
+        LibraryConfFormItem(
             label="Copyright designated agent email",
             description="Patrons of this library should use this email "
             "address to send a DMCA notification (or other copyright "
@@ -273,10 +269,10 @@ class LibrarySettings(BaseSettings):
             category="Patron Support",
             level=Level.SYS_ADMIN_OR_MANAGER,
         ),
-    )
-    configuration_contact_email_address: EmailStr | None = FormField(
-        None,
-        form=LibraryConfFormItem(
+    ] = None
+    configuration_contact_email_address: Annotated[
+        EmailStr | None,
+        LibraryConfFormItem(
             label="A point of contact for the organization responsible for configuring this library",
             description="This email address will be shared as part of "
             "integrations that you set up through this interface. It will not "
@@ -287,10 +283,10 @@ class LibrarySettings(BaseSettings):
             category="Patron Support",
             level=Level.SYS_ADMIN_OR_MANAGER,
         ),
-    )
-    default_notification_email_address: EmailStr = FormField(
-        "noreply@thepalaceproject.org",
-        form=LibraryConfFormItem(
+    ] = None
+    default_notification_email_address: Annotated[
+        EmailStr,
+        LibraryConfFormItem(
             label="Write-only email address for vendor hold notifications",
             description="This address must trash all email sent to it. Vendor hold notifications "
             "contain sensitive patron information, but "
@@ -300,10 +296,10 @@ class LibrarySettings(BaseSettings):
             "trashes all incoming email.",
             level=Level.SYS_ADMIN_OR_MANAGER,
         ),
-    )
-    color_scheme: str = FormField(
-        "blue",
-        form=LibraryConfFormItem(
+    ] = "noreply@thepalaceproject.org"
+    color_scheme: Annotated[
+        str,
+        LibraryConfFormItem(
             label="Mobile color scheme",
             description="This tells mobile applications what color scheme to use when rendering "
             "this library's OPDS feed.",
@@ -330,10 +326,10 @@ class LibrarySettings(BaseSettings):
             category="Client Interface Customization",
             level=Level.SYS_ADMIN_OR_MANAGER,
         ),
-    )
-    web_primary_color: str = FormField(
-        "#377F8B",
-        form=LibraryConfFormItem(
+    ] = "blue"
+    web_primary_color: Annotated[
+        str,
+        LibraryConfFormItem(
             label="Web primary color",
             description="This is the brand primary color for the web application. "
             "Must have sufficient contrast with white.",
@@ -341,10 +337,10 @@ class LibrarySettings(BaseSettings):
             type=ConfigurationFormItemType.COLOR,
             level=Level.SYS_ADMIN_OR_MANAGER,
         ),
-    )
-    web_secondary_color: str = FormField(
-        "#D53F34",
-        form=LibraryConfFormItem(
+    ] = "#377F8B"
+    web_secondary_color: Annotated[
+        str,
+        LibraryConfFormItem(
             label="Web secondary color",
             description="This is the brand secondary color for the web application. "
             "Must have sufficient contrast with white.",
@@ -352,19 +348,19 @@ class LibrarySettings(BaseSettings):
             type=ConfigurationFormItemType.COLOR,
             level=Level.SYS_ADMIN_OR_MANAGER,
         ),
-    )
-    web_css_file: HttpUrl | None = FormField(
-        None,
-        form=LibraryConfFormItem(
+    ] = "#D53F34"
+    web_css_file: Annotated[
+        HttpUrl | None,
+        LibraryConfFormItem(
             label="Custom CSS file for web",
             description="Give web applications a CSS file to customize the catalog display.",
             category="Client Interface Customization",
             level=Level.SYS_ADMIN_ONLY,
         ),
-    )
-    web_header_links: list[str] = FormField(
-        [],
-        form=LibraryConfFormItem(
+    ] = None
+    web_header_links: Annotated[
+        list[str],
+        LibraryConfFormItem(
             label="Web header links",
             description="This gives web applications a list of links to display in the header. "
             "Specify labels for each link in the same order under 'Web header labels'.",
@@ -372,20 +368,20 @@ class LibrarySettings(BaseSettings):
             type=ConfigurationFormItemType.LIST,
             level=Level.SYS_ADMIN_OR_MANAGER,
         ),
-    )
-    web_header_labels: list[str] = FormField(
-        [],
-        form=LibraryConfFormItem(
+    ] = []
+    web_header_labels: Annotated[
+        list[str],
+        LibraryConfFormItem(
             label="Web header labels",
             description="Labels for each link under 'Web header links'.",
             category="Client Interface Customization",
             type=ConfigurationFormItemType.LIST,
             level=Level.SYS_ADMIN_OR_MANAGER,
         ),
-    )
-    hidden_content_types: list[str] = FormField(
-        [],
-        form=LibraryConfFormItem(
+    ] = []
+    hidden_content_types: Annotated[
+        list[str],
+        LibraryConfFormItem(
             label="Hidden content types",
             description="A list of content types to hide from all clients, e.g. "
             "<code>application/pdf</code>. This can be left blank except to "
@@ -394,18 +390,18 @@ class LibrarySettings(BaseSettings):
             type=ConfigurationFormItemType.LIST,
             level=Level.SYS_ADMIN_ONLY,
         ),
-    )
-    max_outstanding_fines: PositiveFloat | None = FormField(
-        None,
-        form=LibraryConfFormItem(
+    ] = []
+    max_outstanding_fines: Annotated[
+        PositiveFloat | None,
+        LibraryConfFormItem(
             label="Maximum amount in fines a patron can have before losing lending privileges",
             category="Loans, Holds, & Fines",
             level=Level.ALL_ACCESS,
         ),
-    )
-    loan_limit: PositiveInt | None = FormField(
-        None,
-        form=LibraryConfFormItem(
+    ] = None
+    loan_limit: Annotated[
+        PositiveInt | None,
+        LibraryConfFormItem(
             label="Maximum number of books a patron can have on loan at once",
             description="Note: depending on distributor settings, a patron may be able to exceed "
             "the limit by checking out books directly from a distributor's app. They may also get "
@@ -413,10 +409,10 @@ class LibrarySettings(BaseSettings):
             category="Loans, Holds, & Fines",
             level=Level.ALL_ACCESS,
         ),
-    )
-    hold_limit: PositiveInt | None = FormField(
-        None,
-        form=LibraryConfFormItem(
+    ] = None
+    hold_limit: Annotated[
+        PositiveInt | None,
+        LibraryConfFormItem(
             label="Maximum number of books a patron can have on hold at once",
             description="Note: depending on distributor settings, a patron may be able to exceed "
             "the limit by placing holds directly from a distributor's app. They may also get "
@@ -424,68 +420,68 @@ class LibrarySettings(BaseSettings):
             category="Loans, Holds, & Fines",
             level=Level.ALL_ACCESS,
         ),
-    )
-    terms_of_service: HttpUrl | None = FormField(
-        None,
-        form=LibraryConfFormItem(
+    ] = None
+    terms_of_service: Annotated[
+        HttpUrl | None,
+        LibraryConfFormItem(
             label="Terms of service URL",
             category="Links",
             level=Level.ALL_ACCESS,
         ),
-    )
-    privacy_policy: HttpUrl | None = FormField(
-        None,
-        form=LibraryConfFormItem(
+    ] = None
+    privacy_policy: Annotated[
+        HttpUrl | None,
+        LibraryConfFormItem(
             label="Privacy policy URL",
             category="Links",
             level=Level.ALL_ACCESS,
         ),
-    )
-    copyright: HttpUrl | None = FormField(
-        None,
-        form=LibraryConfFormItem(
+    ] = None
+    copyright: Annotated[
+        HttpUrl | None,
+        LibraryConfFormItem(
             label="Copyright URL",
             category="Links",
             level=Level.SYS_ADMIN_OR_MANAGER,
         ),
-    )
-    about: HttpUrl | None = FormField(
-        None,
-        form=LibraryConfFormItem(
+    ] = None
+    about: Annotated[
+        HttpUrl | None,
+        LibraryConfFormItem(
             label="About URL",
             category="Links",
             level=Level.ALL_ACCESS,
         ),
-    )
-    license: HttpUrl | None = FormField(
-        None,
-        form=LibraryConfFormItem(
+    ] = None
+    license: Annotated[
+        HttpUrl | None,
+        LibraryConfFormItem(
             label="License URL",
             category="Links",
             level=Level.SYS_ADMIN_OR_MANAGER,
         ),
-    )
-    registration_url: HttpUrl | None = FormField(
-        None,
-        form=LibraryConfFormItem(
+    ] = None
+    registration_url: Annotated[
+        HttpUrl | None,
+        LibraryConfFormItem(
             label="Patron registration URL",
             description="A URL where someone who doesn't have a library card yet can sign up for one.",
             category="Patron Support",
             level=Level.ALL_ACCESS,
         ),
-    )
-    patron_password_reset: HttpUrl | None = FormField(
-        None,
-        form=LibraryConfFormItem(
+    ] = None
+    patron_password_reset: Annotated[
+        HttpUrl | None,
+        LibraryConfFormItem(
             label="Password Reset Link",
             description="A link to a web page where a user can reset their virtual library card password",
             category="Patron Support",
             level=Level.SYS_ADMIN_ONLY,
         ),
-    )
-    large_collection_languages: list[str] | None = FormField(
-        None,
-        form=LibraryConfFormItem(
+    ] = None
+    large_collection_languages: Annotated[
+        list[str] | None,
+        LibraryConfFormItem(
             label="The primary languages represented in this library's collection",
             type=ConfigurationFormItemType.LIST,
             format="language-code",
@@ -495,10 +491,10 @@ class LibrarySettings(BaseSettings):
             category="Languages",
             level=Level.ALL_ACCESS,
         ),
-    )
-    small_collection_languages: list[str] | None = FormField(
-        None,
-        form=LibraryConfFormItem(
+    ] = None
+    small_collection_languages: Annotated[
+        list[str] | None,
+        LibraryConfFormItem(
             label="Other major languages represented in this library's collection",
             type=ConfigurationFormItemType.LIST,
             format="language-code",
@@ -508,10 +504,10 @@ class LibrarySettings(BaseSettings):
             category="Languages",
             level=Level.ALL_ACCESS,
         ),
-    )
-    tiny_collection_languages: list[str] | None = FormField(
-        None,
-        form=LibraryConfFormItem(
+    ] = None
+    tiny_collection_languages: Annotated[
+        list[str] | None,
+        LibraryConfFormItem(
             label="Other languages in this library's collection",
             type=ConfigurationFormItemType.LIST,
             format="language-code",
@@ -521,7 +517,7 @@ class LibrarySettings(BaseSettings):
             category="Languages",
             level=Level.ALL_ACCESS,
         ),
-    )
+    ] = None
 
     @model_validator(mode="after")
     def validate_require_help_email_or_website(self) -> Self:

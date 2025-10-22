@@ -1,3 +1,5 @@
+from typing import Annotated
+
 from palace.manager.api.authentication.base import PatronData
 from palace.manager.api.authentication.basic import (
     BasicAuthenticationProvider,
@@ -7,40 +9,39 @@ from palace.manager.api.authentication.basic import (
 from palace.manager.integration.settings import (
     ConfigurationFormItem,
     ConfigurationFormItemType,
-    FormField,
 )
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.sqlalchemy.model.patron import Patron
 
 
 class SimpleAuthSettings(BasicAuthProviderSettings):
-    test_identifier: str = FormField(
-        ...,
-        form=ConfigurationFormItem(
+    test_identifier: Annotated[
+        str,
+        ConfigurationFormItem(
             label="Test identifier",
             description="A test identifier to use when testing the authentication provider.",
             required=True,
         ),
-    )
-    test_password: str | None = FormField(
-        None,
-        form=ConfigurationFormItem(
+    ]
+    test_password: Annotated[
+        str | None,
+        ConfigurationFormItem(
             required=True,
             label="Test password",
             description="A test password to use when testing the authentication provider. If you do not want to "
             "collect passwords, leave this field blank and set the 'Keyboard for password entry' option to "
             "'patrons have no password'.",
         ),
-    )
-    additional_test_identifiers: list[str] | None = FormField(
-        None,
-        form=ConfigurationFormItem(
+    ] = None
+    additional_test_identifiers: Annotated[
+        list[str] | None,
+        ConfigurationFormItem(
             label="Additional test identifiers",
             description="Identifiers for additional patrons to use in testing. "
             "The identifiers will all use the same test password as the first identifier.",
             type=ConfigurationFormItemType.LIST,
         ),
-    )
+    ] = None
 
 
 class SimpleAuthenticationProvider(

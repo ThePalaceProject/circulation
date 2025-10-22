@@ -14,7 +14,7 @@ from argparse import ArgumentParser, Namespace
 from collections.abc import Collection as CollectionT, Generator, Iterable
 from datetime import datetime, timedelta
 from io import BytesIO
-from typing import Any, Literal, Optional, Unpack, overload
+from typing import Annotated, Any, Literal, Optional, Unpack, overload
 
 import dateutil.parser
 from flask_babel import lazy_gettext as _
@@ -74,7 +74,6 @@ from palace.manager.data_layer.subject import SubjectData
 from palace.manager.integration.settings import (
     ConfigurationFormItem,
     ConfigurationFormItemType,
-    FormField,
 )
 from palace.manager.scripts.monitor import RunCollectionMonitorScript
 from palace.manager.sqlalchemy.constants import DataSourceConstants
@@ -110,30 +109,33 @@ from palace.manager.util.xmlparser import XMLParser, XMLProcessor
 
 
 class BibliothecaSettings(BaseCirculationApiSettings):
-    username: str = FormField(
-        form=ConfigurationFormItem(
+    username: Annotated[
+        str,
+        ConfigurationFormItem(
             label=_("Account ID"),
             required=True,
-        )
-    )
-    password: str = FormField(
-        form=ConfigurationFormItem(
+        ),
+    ]
+    password: Annotated[
+        str,
+        ConfigurationFormItem(
             label=_("Account Key"),
             required=True,
-        )
-    )
-    external_account_id: str = FormField(
-        form=ConfigurationFormItem(
+        ),
+    ]
+    external_account_id: Annotated[
+        str,
+        ConfigurationFormItem(
             label=_("Library ID"),
             required=True,
-        )
-    )
+        ),
+    ]
 
 
 class BibliothecaLibrarySettings(BaseCirculationLoanSettings):
-    dont_display_reserves: ConfigurationAttributeValue = FormField(
-        ConfigurationAttributeValue.YESVALUE,
-        form=ConfigurationFormItem(
+    dont_display_reserves: Annotated[
+        ConfigurationAttributeValue,
+        ConfigurationFormItem(
             label=_("Show/Hide Titles with No Available Loans"),
             required=False,
             description=_(
@@ -145,7 +147,7 @@ class BibliothecaLibrarySettings(BaseCirculationLoanSettings):
                 ConfigurationAttributeValue.NOVALUE: "Hide",
             },
         ),
-    )
+    ] = ConfigurationAttributeValue.YESVALUE
 
 
 class BibliothecaAPI(

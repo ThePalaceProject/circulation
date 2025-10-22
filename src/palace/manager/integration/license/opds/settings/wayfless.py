@@ -1,3 +1,5 @@
+from typing import Annotated
+
 from flask_babel import lazy_gettext as _
 
 from palace.manager.core.exceptions import BasePalaceException
@@ -5,7 +7,6 @@ from palace.manager.integration.settings import (
     BaseSettings,
     ConfigurationFormItem,
     ConfigurationFormItemType,
-    FormField,
 )
 
 
@@ -16,9 +17,9 @@ class SAMLWAYFlessConstants:
 
 
 class SAMLWAYFlessSetttings(BaseSettings):
-    saml_wayfless_url_template: str | None = FormField(
-        default=None,
-        form=ConfigurationFormItem(
+    saml_wayfless_url_template: Annotated[
+        str | None,
+        ConfigurationFormItem(
             label=_("SAML WAYFless URL Template"),
             description=_(
                 "<b>This configuration setting should be used ONLY when the authentication protocol is SAML.</b>"
@@ -47,7 +48,7 @@ class SAMLWAYFlessSetttings(BaseSettings):
             type=ConfigurationFormItemType.TEXT,
             required=False,
         ),
-    )
+    ] = None
 
 
 class SAMLWAYFlessFulfillmentError(BasePalaceException):

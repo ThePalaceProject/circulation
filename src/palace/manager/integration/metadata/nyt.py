@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import Generator
 from datetime import date, datetime, timedelta
-from typing import Any, Self
+from typing import Annotated, Any, Self
 
 from dateutil import tz
 from sqlalchemy import select
@@ -22,7 +22,7 @@ from palace.manager.integration.metadata.base import (
     MetadataService,
     MetadataServiceSettings,
 )
-from palace.manager.integration.settings import ConfigurationFormItem, FormField
+from palace.manager.integration.settings import ConfigurationFormItem
 from palace.manager.sqlalchemy.model.customlist import CustomList
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
@@ -34,12 +34,12 @@ from palace.manager.util.log import LoggerMixin
 
 
 class NytBestSellerApiSettings(MetadataServiceSettings):
-    password: str = FormField(
-        ...,
-        form=ConfigurationFormItem(
+    password: Annotated[
+        str,
+        ConfigurationFormItem(
             label="API key",
         ),
-    )
+    ]
 
 
 class NYTAPI:

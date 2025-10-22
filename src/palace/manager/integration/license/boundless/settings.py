@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Annotated
+
 from flask_babel import lazy_gettext as _
 from pydantic import NonNegativeInt
 
@@ -11,26 +13,28 @@ from palace.manager.integration.license.boundless.constants import ServerNicknam
 from palace.manager.integration.settings import (
     ConfigurationFormItem,
     ConfigurationFormItemType,
-    FormField,
 )
 
 
 class BoundlessSettings(BaseCirculationApiSettings):
-    username: str = FormField(
-        form=ConfigurationFormItem(label=_("Username"), required=True)
-    )
-    password: str = FormField(
-        form=ConfigurationFormItem(label=_("Password"), required=True)
-    )
-    external_account_id: str = FormField(
-        form=ConfigurationFormItem(
+    username: Annotated[
+        str,
+        ConfigurationFormItem(label=_("Username"), required=True),
+    ]
+    password: Annotated[
+        str,
+        ConfigurationFormItem(label=_("Password"), required=True),
+    ]
+    external_account_id: Annotated[
+        str,
+        ConfigurationFormItem(
             label=_("Library ID"),
             required=True,
-        )
-    )
-    server_nickname: ServerNickname = FormField(
-        default=ServerNickname.production,
-        form=ConfigurationFormItem(
+        ),
+    ]
+    server_nickname: Annotated[
+        ServerNickname,
+        ConfigurationFormItem(
             label=_("Server family"),
             type=ConfigurationFormItemType.SELECT,
             required=False,
@@ -40,10 +44,10 @@ class BoundlessSettings(BaseCirculationApiSettings):
                 ServerNickname.qa: _(ServerNickname.qa),
             },
         ),
-    )
-    verify_certificate: bool = FormField(
-        default=True,
-        form=ConfigurationFormItem(
+    ] = ServerNickname.production
+    verify_certificate: Annotated[
+        bool,
+        ConfigurationFormItem(
             label=_("Verify SSL Certificate"),
             description=_(
                 "This should always be True in production; though, it may need "
@@ -55,10 +59,10 @@ class BoundlessSettings(BaseCirculationApiSettings):
                 False: _("False"),
             },
         ),
-    )
-    prioritize_boundless_drm: bool = FormField(
-        default=False,
-        form=ConfigurationFormItem(
+    ] = True
+    prioritize_boundless_drm: Annotated[
+        bool,
+        ConfigurationFormItem(
             label=_("Prioritize Boundless DRM"),
             description=_("Always use Boundless DRM if it is available."),
             type=ConfigurationFormItemType.SELECT,
@@ -67,10 +71,10 @@ class BoundlessSettings(BaseCirculationApiSettings):
                 False: _("No, do not prioritize Boundless DRM"),
             },
         ),
-    )
-    timeout: NonNegativeInt = FormField(
-        default=15,
-        form=ConfigurationFormItem(
+    ] = False
+    timeout: Annotated[
+        NonNegativeInt,
+        ConfigurationFormItem(
             label=_("Timeout (seconds)"),
             description=_(
                 "The number of seconds to wait for a response from Boundless. Set to 0 for no timeout. "
@@ -79,7 +83,7 @@ class BoundlessSettings(BaseCirculationApiSettings):
             ),
             type=ConfigurationFormItemType.NUMBER,
         ),
-    )
+    ] = 15
 
 
 class BoundlessLibrarySettings(BaseCirculationLoanSettings):

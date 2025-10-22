@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from typing import Annotated
+
 from croniter import CroniterBadCronError, CroniterBadDateError, croniter
 from flask_babel import lazy_gettext as _
-from pydantic import field_validator
+from pydantic import Field, field_validator
 
 from palace.manager.integration.license.opds.opds1.settings import (
     OPDSImporterLibrarySettings,
@@ -11,18 +13,15 @@ from palace.manager.integration.license.opds.opds1.settings import (
 from palace.manager.integration.settings import (
     ConfigurationFormItem,
     ConfigurationFormItemType,
-    FormField,
 )
 from palace.manager.opds import opds2
 from palace.manager.sqlalchemy.constants import IdentifierType
 
 
 class OPDS2ImporterSettings(OPDSImporterSettings):
-    custom_accept_header: str = FormField(
-        default="{}, {};q=0.9, */*;q=0.1".format(
-            opds2.PublicationFeed.content_type(), "application/json"
-        ),
-        form=ConfigurationFormItem(
+    custom_accept_header: Annotated[
+        str,
+        ConfigurationFormItem(
             label=_("Custom accept header"),
             description=_(
                 "Some servers expect an accept header to decide which file to send. You can use */* if the server doesn't expect anything."
@@ -30,11 +29,15 @@ class OPDS2ImporterSettings(OPDSImporterSettings):
             type=ConfigurationFormItemType.TEXT,
             required=False,
         ),
+    ] = Field(
+        default="{}, {};q=0.9, */*;q=0.1".format(
+            opds2.PublicationFeed.content_type(), "application/json"
+        )
     )
 
-    ignored_identifier_types: list[str] = FormField(
-        default=[],
-        form=ConfigurationFormItem(
+    ignored_identifier_types: Annotated[
+        list[str],
+        ConfigurationFormItem(
             label=_("List of identifiers that will be skipped"),
             description=_(
                 "Circulation Manager will not be importing publications with identifiers having one of the selected types."
@@ -47,11 +50,11 @@ class OPDS2ImporterSettings(OPDSImporterSettings):
             },
             format="narrow",
         ),
-    )
+    ] = []
 
-    reap_schedule: str | None = FormField(
-        default=None,
-        form=ConfigurationFormItem(
+    reap_schedule: Annotated[
+        str | None,
+        ConfigurationFormItem(
             label=_("Reap schedule (cron expression)"),
             description=_(
                 "Cron expression for when to perform full import with reaping of identifiers not found in the feed. "
@@ -63,7 +66,7 @@ class OPDS2ImporterSettings(OPDSImporterSettings):
             type=ConfigurationFormItemType.TEXT,
             required=False,
         ),
-    )
+    ] = None
 
     @field_validator("reap_schedule")
     @classmethod

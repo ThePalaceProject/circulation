@@ -1,17 +1,22 @@
 import logging
 from functools import partial
-from typing import Self
+from typing import Annotated, Self
 from unittest.mock import MagicMock
 
 import pytest
-from pydantic import PositiveInt, ValidationError, field_validator, model_validator
+from pydantic import (
+    Field,
+    PositiveInt,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 from sqlalchemy.orm import Session
 
 from palace.manager.integration.settings import (
     BaseSettings,
     ConfigurationFormItem,
     ConfigurationFormItemType,
-    FormField,
     SettingsValidationError,
 )
 from palace.manager.service.logging.configuration import LogLevel
@@ -44,21 +49,17 @@ class MockSettings(BaseSettings):
             raise ValueError("Error! 66 is a secret number")
         return self
 
-    test: str | None = FormField(
-        "test",
-        form=ConfigurationFormItem(label="Test", description="Test description"),
-    )
-    number: PositiveInt = FormField(
-        ...,
-        form=ConfigurationFormItem(label="Number", description="Number description"),
-    )
-    with_alias: float = FormField(
-        -1.1,
-        form=ConfigurationFormItem(
-            label="With Alias", description="With Alias description"
-        ),
-        alias="foo",
-    )
+    test: Annotated[
+        str | None, ConfigurationFormItem(label="Test", description="Test description")
+    ] = "test"
+    number: Annotated[
+        PositiveInt,
+        ConfigurationFormItem(label="Number", description="Number description"),
+    ]
+    with_alias: Annotated[
+        float,
+        ConfigurationFormItem(label="With Alias", description="With Alias description"),
+    ] = Field(default=-1.1, alias="foo")
 
 
 class BaseSettingsFixture:
@@ -111,7 +112,7 @@ class TestBaseSettings:
             MockSettings(number=-1)
 
         with raises_problem_detail(detail="Required field 'Number' is missing."):
-            MockSettings()
+            MockSettings()  # type: ignore[call-arg]
 
         with raises_problem_detail(detail="Required field 'Number' is missing."):
             MockSettings(number=None)
@@ -235,18 +236,18 @@ class TestBaseSettings:
     ) -> None:
         # Make sure that the configuration form is sorted by weight
         class WeightedMockSettings(BaseSettings):
-            string: str | None = FormField(
-                "test",
-                form=ConfigurationFormItem(
+            string: Annotated[
+                str | None,
+                ConfigurationFormItem(
                     label="Test", description="Test description", weight=100
                 ),
-            )
-            number: PositiveInt = FormField(
-                12,
-                form=ConfigurationFormItem(
+            ] = "test"
+            number: Annotated[
+                PositiveInt,
+                ConfigurationFormItem(
                     label="Number", description="Number description", weight=1
                 ),
-            )
+            ] = 12
 
         [item1, item2] = WeightedMockSettings().configuration_form(
             base_settings_fixture.mock_db
@@ -259,29 +260,29 @@ class TestBaseSettings:
         base_settings_fixture: BaseSettingsFixture,
     ) -> None:
         class MockConfigSettings(BaseSettings):
-            explicitly_unhidden_field: str = FormField(
-                "default",
-                form=ConfigurationFormItem(
+            explicitly_unhidden_field: Annotated[
+                str,
+                ConfigurationFormItem(
                     label="Explicitly Unhidden",
                     description="An explicitly unhidden field",
                     hidden=False,
                 ),
-            )
-            implicitly_unhidden_field: str = FormField(
-                "default",
-                form=ConfigurationFormItem(
+            ] = "default"
+            implicitly_unhidden_field: Annotated[
+                str,
+                ConfigurationFormItem(
                     label="Implicitly Unhidden",
                     description="An implicitly unhidden field",
                 ),
-            )
-            hidden_field: str = FormField(
-                "default",
-                form=ConfigurationFormItem(
+            ] = "default"
+            hidden_field: Annotated[
+                str,
+                ConfigurationFormItem(
                     label="Hidden",
                     description="An explicitly hidden field",
                     hidden=True,
                 ),
-            )
+            ] = "default"
 
         [item1, item2, item3] = MockConfigSettings().configuration_form(
             base_settings_fixture.mock_db
@@ -298,14 +299,14 @@ class TestBaseSettings:
         self, base_settings_fixture: BaseSettingsFixture
     ) -> None:
         class OptionsMockSettings(BaseSettings):
-            test: str = FormField(
-                "test",
-                form=ConfigurationFormItem(
+            test: Annotated[
+                str,
+                ConfigurationFormItem(
                     label="Test",
                     options={"option1": "Option 1", "option2": "Option 2"},
                     type=ConfigurationFormItemType.SELECT,
                 ),
-            )
+            ] = "test"
 
         form = OptionsMockSettings().configuration_form(base_settings_fixture.mock_db)
         assert form[0]["options"] == [
@@ -319,14 +320,14 @@ class TestBaseSettings:
         options_callable = MagicMock(return_value={"xyz": "ABC"})
 
         class OptionsMockSettings(BaseSettings):
-            test: str = FormField(
-                "test",
-                form=ConfigurationFormItem(
+            test: Annotated[
+                str,
+                ConfigurationFormItem(
                     label="Test",
                     options=options_callable,
                     type=ConfigurationFormItemType.SELECT,
                 ),
-            )
+            ] = "test"
 
         options_callable.assert_not_called()
         form = OptionsMockSettings().configuration_form(base_settings_fixture.mock_db)
