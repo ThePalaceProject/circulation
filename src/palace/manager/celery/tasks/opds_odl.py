@@ -345,7 +345,9 @@ def import_collection(
         )
 
     if not import_result:
-        task.log.info("Import failed, aborting task.")
+        task.log.info(
+            f"Import failed, aborting task for collection '{collection.name}' (id={collection_id})."
+        )
         return
 
     next_link = import_result.next_url
@@ -360,4 +362,6 @@ def import_collection(
             )
         )
 
-    task.log.info("Import complete.")
+    task.log.info(
+        f"Import complete for collection '{collection.name}' (id={collection_id})."
+    )
