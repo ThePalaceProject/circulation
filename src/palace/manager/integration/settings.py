@@ -19,13 +19,7 @@ from pydantic import (
     types,
 )
 from pydantic.config import JsonDict
-from pydantic.fields import (
-    Deprecated,
-    FieldInfo,
-    _EmptyKwargs,
-    _FieldInfoInputs,
-    _Unset,
-)
+from pydantic.fields import Deprecated, FieldInfo, _EmptyKwargs, _Unset
 from pydantic_core import ErrorDetails, PydanticUndefined
 from sqlalchemy.orm import Session
 
@@ -41,29 +35,19 @@ from palace.manager.util.problem_detail import (
 )
 from palace.manager.util.sentinel import SentinelType
 
+# Storage key for form metadata in json_schema_extra
+_FORM_METADATA_KEY = "_palace_form_item"
 
-class FormFieldInfo(FieldInfo):
-    """
-    A Pydantic FieldInfo that includes a ConfigurationFormItem
 
-    This is used to store the ConfigurationFormItem for a field, so that
-    we can use it to generate a configuration form for the admin interface.
-
-    This class should not be called directly, rather it should be created by
-    calling the FormField function below.
-    """
-
-    __slots__ = ("form",)
-
-    def __init__(
-        self, *, form: ConfigurationFormItem, **kwargs: Unpack[_FieldInfoInputs]
-    ) -> None:
-        super().__init__(**kwargs)
-        self.form = form
-
-    @staticmethod
-    def from_field(default: Any = PydanticUndefined, **kwargs: Any) -> FormFieldInfo:
-        return FormFieldInfo(default=default, **kwargs)
+def _get_form_item(field_info: FieldInfo) -> ConfigurationFormItem | None:
+    """Extract the ConfigurationFormItem from a FieldInfo's json_schema_extra."""
+    if field_info.json_schema_extra is None:
+        return None
+    if isinstance(field_info.json_schema_extra, dict):
+        item = field_info.json_schema_extra.get(_FORM_METADATA_KEY)
+        if isinstance(item, ConfigurationFormItem):
+            return item  # type: ignore[unreachable]
+    return None
 
 
 def FormField(
@@ -109,16 +93,15 @@ def FormField(
     **extra: Unpack[_EmptyKwargs],
 ) -> Any:
     """
-    This function is equivalent to the Pydantic Field function, but instead of creating
-    a FieldInfo, it creates our FormFieldInfo class.
+    This function is equivalent to the Pydantic Field function, but stores
+    ConfigurationFormItem metadata in json_schema_extra for use in the admin interface.
 
     When creating a Pydantic model based on the BaseSettings class below, you should
     use this function instead of Field to create fields that will be used to generate
     a configuration form in the admin interface.
-
-    There isn't a great way to override this function so this code is just copied from the
-    Pydantic Field function with the FormFieldInfo class used instead of FieldInfo.
     """
+    from pydantic.fields import Field
+
     if (
         validation_alias
         and validation_alias is not _Unset
@@ -134,9 +117,30 @@ def FormField(
     if validation_alias in (_Unset, None):
         validation_alias = alias
 
-    return FormFieldInfo.from_field(
+    # Merge the form metadata into json_schema_extra
+    # Note: We're storing a ConfigurationFormItem in json_schema_extra, which isn't
+    # JSON-serializable. This is OK because json_schema_extra can contain any Python
+    # objects - they're only used for JSON schema generation if they're serializable.
+    if json_schema_extra is _Unset or json_schema_extra is None:
+        merged_json_schema_extra: Any = {_FORM_METADATA_KEY: form}
+    elif callable(json_schema_extra):
+        # If json_schema_extra is a callable, we can't easily merge, so we create
+        # a wrapper that calls the original and adds our metadata
+        original_callable = json_schema_extra
+
+        def merged_callable(schema: JsonDict) -> None:
+            original_callable(schema)
+            schema[_FORM_METADATA_KEY] = form  # type: ignore[assignment]
+
+        merged_json_schema_extra = merged_callable
+    else:
+        # json_schema_extra is a dict, merge it with our form metadata
+        merged_json_schema_extra = {**json_schema_extra, _FORM_METADATA_KEY: form}
+
+    return Field(  # type: ignore[call-overload, misc]
+        # We're storing non-JSON-serializable ConfigurationFormItem in json_schema_extra.
+        # This is fine - it's just metadata that pydantic will preserve.
         default,
-        form=form,
         default_factory=default_factory,
         alias=alias,
         alias_priority=alias_priority,
@@ -149,7 +153,7 @@ def FormField(
         exclude=exclude,
         discriminator=discriminator,
         deprecated=deprecated,
-        json_schema_extra=json_schema_extra,
+        json_schema_extra=merged_json_schema_extra,
         frozen=frozen,
         pattern=pattern,
         validate_default=validate_default,
@@ -380,11 +384,10 @@ class BaseSettings(BaseModel, LoggerMixin):
         """Get the configuration dictionary for this class"""
         config = []
         for name, field_info in cls.model_fields.items():
-            assert isinstance(
-                field_info, FormFieldInfo
-            ), f"{name} was not initialized with FormField"
+            form_item = _get_form_item(field_info)
+            assert form_item is not None, f"{name} was not initialized with FormField"
             config.append(
-                field_info.form.to_dict(
+                form_item.to_dict(
                     db, name, field_info.is_required(), field_info.default
                 )
             )
@@ -417,15 +420,17 @@ class BaseSettings(BaseModel, LoggerMixin):
 
     @classmethod
     def get_form_field_label(cls, field_name: str) -> str:
-        item = cls.model_fields.get(field_name)
-        if item is None:
+        field_info = cls.model_fields.get(field_name)
+        if field_info is None:
             # Try to lookup field_name by alias instead
             for field in cls.model_fields.values():
                 if field.alias == field_name:
-                    item = field
+                    field_info = field
                     break
-        if item is not None and isinstance(item, FormFieldInfo):
-            return item.form.label
+        if field_info is not None:
+            form_item = _get_form_item(field_info)
+            if form_item is not None:
+                return form_item.label
 
         return field_name
 
