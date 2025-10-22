@@ -52,6 +52,7 @@ from palace.manager.integration.patron_auth.saml.python_expression_dsl.parser im
     DSLParser,
 )
 from palace.manager.sqlalchemy.model.credential import Credential
+from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.util.datetime_helpers import datetime_utc, utc_now
 from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
 from tests.fixtures.api_controller import ControllerFixture
@@ -437,7 +438,7 @@ class TestSAMLWebSSOAuthenticationProvider:
             ),
         ],
     )
-    def test_remote_patron_lookup(
+    def test_remote_patron_lookup_from_saml_subject(
         self,
         create_saml_configuration: Callable[..., SAMLWebSSOAuthSettings],
         create_saml_provider: Callable[..., SAMLWebSSOAuthenticationProvider],
@@ -466,13 +467,73 @@ class TestSAMLWebSSOAuthenticationProvider:
 
         with context_manager as ctx:
             # Act
-            result = provider.remote_patron_lookup(subject)
+            result = provider.remote_patron_lookup_from_saml_subject(subject)
 
             # Assert
             if isinstance(expected_result, ProblemDetail):
                 assert ctx.value.problem_detail == expected_result
             else:
                 assert result == expected_result
+
+    @pytest.mark.parametrize(
+        "input_data, expected_result",
+        [
+            pytest.param(
+                PatronData(
+                    permanent_id="123",
+                    authorization_identifier="abc123",
+                    username="testuser",
+                    complete=True,
+                ),
+                PatronData(
+                    permanent_id="123",
+                    authorization_identifier="abc123",
+                    username="testuser",
+                    complete=True,
+                ),
+                id="patron_data_input",
+            ),
+        ],
+    )
+    def test_remote_patron_lookup(
+        self,
+        create_saml_provider: Callable[..., SAMLWebSSOAuthenticationProvider],
+        input_data: PatronData | Patron,
+        expected_result: PatronData | None,
+    ):
+        # Arrange
+        provider = create_saml_provider()
+
+        # Act
+        result = provider.remote_patron_lookup(input_data)
+
+        # Assert
+        if expected_result is None:
+            assert result is None
+        else:
+            assert result == expected_result
+
+    def test_remote_patron_lookup_with_patron(
+        self,
+        db: DatabaseTransactionFixture,
+        create_saml_provider: Callable[..., SAMLWebSSOAuthenticationProvider],
+    ):
+        # Arrange
+        provider = create_saml_provider()
+        patron = db.patron()
+        patron.external_identifier = "ext123"
+        patron.authorization_identifier = "auth456"
+        patron.username = "patron_user"
+
+        # Act
+        result = provider.remote_patron_lookup(patron)
+
+        # Assert
+        assert result is not None
+        assert result.permanent_id == "ext123"
+        assert result.authorization_identifier == "auth456"
+        assert result.username == "patron_user"
+        assert result.complete is True
 
     @pytest.mark.parametrize(
         "subject, expected_patron_data, expected_credential, expected_expiration_time, cm_session_lifetime",

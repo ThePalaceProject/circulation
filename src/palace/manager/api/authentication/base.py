@@ -108,6 +108,25 @@ class AuthenticationProvider(
         """
         ...
 
+    @abstractmethod
+    def remote_patron_lookup(
+        self, patron_or_patrondata: PatronData | Patron
+    ) -> PatronData | ProblemDetail | None:
+        """Ask the remote for detailed information about this patron.
+
+        This method is used by admin operations (like reset_adobe_id) to look up
+        patron information based on an authorization identifier.
+
+        For some authentication providers, this is not necessary. If that is the case,
+        this method can just be implemented as `return patron_or_patrondata`.
+
+        If the patron is not found, or an error occurs communicating with the remote,
+        return None or a ProblemDetail.
+
+        Otherwise, return a PatronData object with the complete property set to True.
+        """
+        ...
+
 
 type AuthenticationProviderType = AuthenticationProvider[
     AuthProviderSettings, AuthProviderLibrarySettings

@@ -351,22 +351,6 @@ class BasicAuthenticationProvider[
         return "http://opds-spec.org/auth/basic"
 
     @abstractmethod
-    def remote_patron_lookup(
-        self, patron_or_patrondata: PatronData | Patron
-    ) -> PatronData | ProblemDetail | None:
-        """Ask the remote for detailed information about this patron
-
-        For some authentication providers, this is not necessary. If that is the case,
-        this method can just be implemented as `return patron_or_patrondata`.
-
-        If the patron is not found, or an error occurs communicating with the remote,
-        return None or a ProblemDetail.
-
-        Otherwise, return a PatronData object with the complete property set to True.
-        """
-        ...
-
-    @abstractmethod
     def remote_authenticate(
         self, username: str | None, password: str | None
     ) -> PatronData | ProblemDetail | None:

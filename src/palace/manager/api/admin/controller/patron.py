@@ -48,10 +48,9 @@ class PatronController(CirculationManagerController, AdminPermissionsControllerM
             )
 
         for provider in patron_lookup_providers:
-            if lookup := getattr(provider, "remote_patron_lookup", None):
-                remote_patron_data: PatronData | None = lookup(patron_data)
-                if remote_patron_data:
-                    return remote_patron_data
+            remote_patron_data = provider.remote_patron_lookup(patron_data)
+            if remote_patron_data:
+                return remote_patron_data
 
         # If we get here, none of the providers succeeded.
         return NO_SUCH_PATRON.detailed(
