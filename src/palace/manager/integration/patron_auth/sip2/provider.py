@@ -5,7 +5,7 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import Annotated, Any
 
-from pydantic import PositiveInt
+from pydantic import Field, PositiveInt
 
 from palace.manager.api.authentication.base import PatronData
 from palace.manager.api.authentication.basic import (
@@ -121,6 +121,9 @@ class SIP2Settings(BasicAuthProviderSettings):
                 "Some ILS require specific SIP2 settings. If the ILS you are using "
                 f"is in the list, please pick it. Otherwise, select '{Sip2Dialect.preferred()}'."
             ),
+            type=ConfigurationFormItemType.SELECT,
+            options=Sip2Dialect.form_options(),
+            required=True,
         ),
     ] = Sip2Dialect.GENERIC_ILS
     ssl_certificate: Annotated[
@@ -185,7 +188,7 @@ class SIP2Settings(BasicAuthProviderSettings):
             ),
             type=ConfigurationFormItemType.NUMBER,
         ),
-    ] = 3
+    ] = Field(default=3, ge=1, le=9)
 
 
 class SIP2LibrarySettings(BasicAuthProviderLibrarySettings):

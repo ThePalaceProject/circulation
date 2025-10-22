@@ -63,7 +63,8 @@ class ConfigurationFormItem(LoggerMixin):
 
     This is used to generate the configuration form for the admin interface.
     Each ConfigurationFormItem corresponds to a field in the Pydantic model
-    and is added to the model using the FormField function above.
+    and is added to the model using Annotated type hints with ConfigurationFormItem
+    as metadata.
     """
 
     # The label for the form item, used as the field label in the admin interface.
@@ -163,9 +164,9 @@ class BaseSettings(BaseModel, LoggerMixin):
     """
     Base class for all our database backed pydantic settings classes
 
-    Fields on the model should be defined using the FormField function above so
-    that we can create a configuration form in the admin interface based on the
-    model fields.
+    Fields on the model should be defined using Annotated type hints with
+    ConfigurationFormItem metadata so that we can create a configuration form
+    in the admin interface based on the model fields.
 
     For example:
     class MySettings(BaseSettings):
@@ -245,7 +246,9 @@ class BaseSettings(BaseModel, LoggerMixin):
         config = []
         for name, field_info in cls.model_fields.items():
             form_item = _get_form_item(field_info)
-            assert form_item is not None, f"{name} was not initialized with FormField"
+            assert (
+                form_item is not None
+            ), f"{name} does not have ConfigurationFormItem metadata in its Annotated type hint"
             config.append(
                 form_item.to_dict(
                     db, name, field_info.is_required(), field_info.default

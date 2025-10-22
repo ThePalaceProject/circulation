@@ -41,7 +41,7 @@ class ProcessFormData:
             form_item = _get_form_item(field_info)
             assert (
                 form_item is not None
-            ), f"Field {field_name} was not initialized with FormField"
+            ), f"Field {field_name} does not have ConfigurationFormItem metadata in its Annotated type hint"
             if form_item.type == ConfigurationFormItemType.LIST:
                 return_data[field_name] = cls._process_list(field_name, form_data)
             elif form_item.type == ConfigurationFormItemType.MENU:
