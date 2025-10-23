@@ -6,8 +6,8 @@ from werkzeug.datastructures import ImmutableMultiDict
 
 from palace.manager.integration.settings import (
     BaseSettings,
-    ConfigurationFormItemType,
-    FormFieldInfo,
+    FormFieldType,
+    _get_form_metadata,
 )
 
 
@@ -38,13 +38,13 @@ class ProcessFormData:
         """
         return_data: dict[str, Any] = {}
         for field_name, field_info in settings_class.model_fields.items():
-            assert isinstance(
-                field_info, FormFieldInfo
-            ), f"Expected FormFieldInfo, got {field_info.__class__}"
-            form_item = field_info.form
-            if form_item.type == ConfigurationFormItemType.LIST:
+            form_item = _get_form_metadata(field_info)
+            assert (
+                form_item is not None
+            ), f"Field {field_name} does not have FormMetadata metadata in its Annotated type hint"
+            if form_item.type == FormFieldType.LIST:
                 return_data[field_name] = cls._process_list(field_name, form_data)
-            elif form_item.type == ConfigurationFormItemType.MENU:
+            elif form_item.type == FormFieldType.MENU:
                 return_data[field_name] = cls._process_menu(field_name, form_data)
             else:
                 data = form_data.get(field_name)

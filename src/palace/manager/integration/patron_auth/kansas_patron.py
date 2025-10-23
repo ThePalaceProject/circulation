@@ -1,3 +1,5 @@
+from typing import Annotated
+
 from flask_babel import lazy_gettext as _
 from lxml import etree
 
@@ -7,20 +9,20 @@ from palace.manager.api.authentication.basic import (
     BasicAuthProviderLibrarySettings,
     BasicAuthProviderSettings,
 )
-from palace.manager.integration.settings import ConfigurationFormItem, FormField
+from palace.manager.integration.settings import FormMetadata
 from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.util.http.http import HTTP
 from palace.manager.util.pydantic import HttpUrl
 
 
 class KansasAuthSettings(BasicAuthProviderSettings):
-    url: HttpUrl = FormField(
-        "https://ks-kansaslibrary3m.civicplus.com/api/UserDetails",
-        form=ConfigurationFormItem(
+    url: Annotated[
+        HttpUrl,
+        FormMetadata(
             label=_("URL"),
             required=True,
         ),
-    )
+    ] = "https://ks-kansaslibrary3m.civicplus.com/api/UserDetails"
 
 
 class KansasAuthenticationAPI(

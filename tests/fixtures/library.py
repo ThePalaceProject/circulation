@@ -54,7 +54,7 @@ class LibraryFixture:
         return settings
 
     def mock_settings(self) -> MockLibrarySettings:
-        return MockLibrarySettings.model_construct()
+        return MockLibrarySettings.model_construct()  # type: ignore[call-arg]
 
     def set_mock_on_library(
         self, library: Library, settings: MockLibrarySettings

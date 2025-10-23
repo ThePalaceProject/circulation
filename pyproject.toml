@@ -223,6 +223,7 @@ version = "0"  # Version number is managed with tags in git
 
 [tool.poetry.dependencies]
 alembic = {extras = ["tz"], version = "^1.8.1"}
+annotated-types = "^0.7.0"
 aws-xray-sdk = "~2.14"
 bcrypt = "^5.0.0"
 bidict = "^0.23.1"
@@ -256,7 +257,7 @@ opensearch-py = "^3.0"
 pillow = "^12.0.0"
 pycountry = "^24.6.1"
 pycryptodome = "^3.18"
-pydantic = {version = "2.11.10", extras = ["email"]}
+pydantic = {version = "^2.12", extras = ["email"]}
 pydantic-settings = "^2.5.2"
 pydantic-xml = "^2.17.0"
 pyinstrument = "^5.0"

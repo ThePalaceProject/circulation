@@ -1,18 +1,24 @@
 import logging
 from functools import partial
-from typing import Self
+from typing import Annotated, Self
 from unittest.mock import MagicMock
 
 import pytest
-from pydantic import PositiveInt, ValidationError, field_validator, model_validator
+from pydantic import (
+    Field,
+    PositiveInt,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 from sqlalchemy.orm import Session
 
 from palace.manager.integration.settings import (
     BaseSettings,
-    ConfigurationFormItem,
-    ConfigurationFormItemType,
-    FormField,
+    FormFieldType,
+    FormMetadata,
     SettingsValidationError,
+    _get_form_metadata,
 )
 from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
@@ -44,21 +50,17 @@ class MockSettings(BaseSettings):
             raise ValueError("Error! 66 is a secret number")
         return self
 
-    test: str | None = FormField(
-        "test",
-        form=ConfigurationFormItem(label="Test", description="Test description"),
-    )
-    number: PositiveInt = FormField(
-        ...,
-        form=ConfigurationFormItem(label="Number", description="Number description"),
-    )
-    with_alias: float = FormField(
-        -1.1,
-        form=ConfigurationFormItem(
-            label="With Alias", description="With Alias description"
-        ),
-        alias="foo",
-    )
+    test: Annotated[
+        str | None, FormMetadata(label="Test", description="Test description")
+    ] = "test"
+    number: Annotated[
+        PositiveInt,
+        FormMetadata(label="Number", description="Number description"),
+    ]
+    with_alias: Annotated[
+        float,
+        FormMetadata(label="With Alias", description="With Alias description"),
+    ] = Field(default=-1.1, alias="foo")
 
 
 class BaseSettingsFixture:
@@ -111,7 +113,7 @@ class TestBaseSettings:
             MockSettings(number=-1)
 
         with raises_problem_detail(detail="Required field 'Number' is missing."):
-            MockSettings()
+            MockSettings()  # type: ignore[call-arg]
 
         with raises_problem_detail(detail="Required field 'Number' is missing."):
             MockSettings(number=None)
@@ -235,18 +237,16 @@ class TestBaseSettings:
     ) -> None:
         # Make sure that the configuration form is sorted by weight
         class WeightedMockSettings(BaseSettings):
-            string: str | None = FormField(
-                "test",
-                form=ConfigurationFormItem(
-                    label="Test", description="Test description", weight=100
-                ),
-            )
-            number: PositiveInt = FormField(
-                12,
-                form=ConfigurationFormItem(
+            string: Annotated[
+                str | None,
+                FormMetadata(label="Test", description="Test description", weight=100),
+            ] = "test"
+            number: Annotated[
+                PositiveInt,
+                FormMetadata(
                     label="Number", description="Number description", weight=1
                 ),
-            )
+            ] = 12
 
         [item1, item2] = WeightedMockSettings().configuration_form(
             base_settings_fixture.mock_db
@@ -259,29 +259,29 @@ class TestBaseSettings:
         base_settings_fixture: BaseSettingsFixture,
     ) -> None:
         class MockConfigSettings(BaseSettings):
-            explicitly_unhidden_field: str = FormField(
-                "default",
-                form=ConfigurationFormItem(
+            explicitly_unhidden_field: Annotated[
+                str,
+                FormMetadata(
                     label="Explicitly Unhidden",
                     description="An explicitly unhidden field",
                     hidden=False,
                 ),
-            )
-            implicitly_unhidden_field: str = FormField(
-                "default",
-                form=ConfigurationFormItem(
+            ] = "default"
+            implicitly_unhidden_field: Annotated[
+                str,
+                FormMetadata(
                     label="Implicitly Unhidden",
                     description="An implicitly unhidden field",
                 ),
-            )
-            hidden_field: str = FormField(
-                "default",
-                form=ConfigurationFormItem(
+            ] = "default"
+            hidden_field: Annotated[
+                str,
+                FormMetadata(
                     label="Hidden",
                     description="An explicitly hidden field",
                     hidden=True,
                 ),
-            )
+            ] = "default"
 
         [item1, item2, item3] = MockConfigSettings().configuration_form(
             base_settings_fixture.mock_db
@@ -298,14 +298,14 @@ class TestBaseSettings:
         self, base_settings_fixture: BaseSettingsFixture
     ) -> None:
         class OptionsMockSettings(BaseSettings):
-            test: str = FormField(
-                "test",
-                form=ConfigurationFormItem(
+            test: Annotated[
+                str,
+                FormMetadata(
                     label="Test",
                     options={"option1": "Option 1", "option2": "Option 2"},
-                    type=ConfigurationFormItemType.SELECT,
+                    type=FormFieldType.SELECT,
                 ),
-            )
+            ] = "test"
 
         form = OptionsMockSettings().configuration_form(base_settings_fixture.mock_db)
         assert form[0]["options"] == [
@@ -319,14 +319,14 @@ class TestBaseSettings:
         options_callable = MagicMock(return_value={"xyz": "ABC"})
 
         class OptionsMockSettings(BaseSettings):
-            test: str = FormField(
-                "test",
-                form=ConfigurationFormItem(
+            test: Annotated[
+                str,
+                FormMetadata(
                     label="Test",
                     options=options_callable,
-                    type=ConfigurationFormItemType.SELECT,
+                    type=FormFieldType.SELECT,
                 ),
-            )
+            ] = "test"
 
         options_callable.assert_not_called()
         form = OptionsMockSettings().configuration_form(base_settings_fixture.mock_db)
@@ -352,9 +352,9 @@ class TestBaseSettings:
 
         class AdditionalSettings(BaseSettings):
             _additional_form_fields = {
-                "test": ConfigurationFormItem(
+                "test": FormMetadata(
                     label="Test",
-                    type=ConfigurationFormItemType.TEXT,
+                    type=FormFieldType.TEXT,
                 )
             }
 
@@ -368,14 +368,12 @@ class TestBaseSettings:
             }
         ]
 
-    class TestConfigurationFormItem:
+    class TestFormMetadata:
         def test_required(self, caplog: pytest.LogCaptureFixture) -> None:
             caplog.set_level(LogLevel.warning)
 
             # If required isn't specified, we never get a warning and we use the default
-            item = ConfigurationFormItem(
-                label="Test", type=ConfigurationFormItemType.TEXT
-            )
+            item = FormMetadata(label="Test", type=FormFieldType.TEXT)
             assert item.to_dict(MagicMock(), "test", True) == (
                 0,
                 {
@@ -398,9 +396,7 @@ class TestBaseSettings:
             assert len(caplog.records) == 0
 
             # If we set required to true, it overrides the default.
-            item = ConfigurationFormItem(
-                label="Test", type=ConfigurationFormItemType.TEXT, required=True
-            )
+            item = FormMetadata(label="Test", type=FormFieldType.TEXT, required=True)
             assert item.to_dict(MagicMock(), "test", False) == (
                 0,
                 {
@@ -413,9 +409,7 @@ class TestBaseSettings:
             assert len(caplog.records) == 0
 
             # If we set required to false, and the default is True. It doesn't override and we get a warning.
-            item = ConfigurationFormItem(
-                label="Test", type=ConfigurationFormItemType.TEXT, required=False
-            )
+            item = FormMetadata(label="Test", type=FormFieldType.TEXT, required=False)
             assert item.to_dict(MagicMock(), "test", True) == (
                 0,
                 {
@@ -430,3 +424,65 @@ class TestBaseSettings:
                 'Configuration form item (label="Test", key=test) does not have '
                 "a default value or factory and yet its required property is set to False"
             ) in caplog.text
+
+    def test_get_form_field_label_by_alias(
+        self, base_settings_fixture: BaseSettingsFixture
+    ) -> None:
+        # Test that we can get the form field label by alias
+        label = MockSettings.get_form_field_label("foo")
+        assert label == "With Alias"
+
+    def test_get_form_field_label_no_metadata(
+        self, base_settings_fixture: BaseSettingsFixture
+    ) -> None:
+        # Test that we return the field name when there is no FormMetadata
+        # Create a settings class with a field that has no FormMetadata
+        class NoMetadataSettings(BaseSettings):
+            # Using Field without FormMetadata in Annotated
+            test_field: str = Field(default="test")
+
+        label = NoMetadataSettings.get_form_field_label("test_field")
+        assert label == "test_field"
+
+    def test_get_form_field_label_missing_field(
+        self, base_settings_fixture: BaseSettingsFixture
+    ) -> None:
+        # Test that we return the field name when the field doesn't exist
+        label = MockSettings.get_form_field_label("nonexistent_field")
+        assert label == "nonexistent_field"
+
+
+class TestGetFormMetadata:
+    def test_get_form_metadata_with_multiple_items(self) -> None:
+        # Test that _get_form_metadata works correctly when there are multiple
+        # metadata items in the field_info.metadata list
+        from typing import cast
+
+        from pydantic.fields import FieldInfo
+
+        form_metadata = FormMetadata(label="Test")
+        # Create a FieldInfo with multiple metadata items
+        annotated_type = Annotated[
+            str, "other_metadata", form_metadata, "more_metadata"
+        ]
+        field_info = FieldInfo.from_annotated_attribute(
+            cast(type, annotated_type), None
+        )
+
+        result = _get_form_metadata(field_info)
+        assert result == form_metadata
+
+    def test_get_form_metadata_returns_none(self) -> None:
+        # Test that _get_form_metadata returns None when no FormMetadata is found
+        from typing import cast
+
+        from pydantic.fields import FieldInfo
+
+        # Create a FieldInfo with no FormMetadata
+        annotated_type = Annotated[str, "other_metadata"]
+        field_info = FieldInfo.from_annotated_attribute(
+            cast(type, annotated_type), None
+        )
+
+        result = _get_form_metadata(field_info)
+        assert result is None

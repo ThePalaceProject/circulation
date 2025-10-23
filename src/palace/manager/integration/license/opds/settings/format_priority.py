@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import sys
 from collections.abc import Mapping
+from typing import Annotated
 
 from flask_babel import lazy_gettext as _
 
 from palace.manager.integration.settings import (
     BaseSettings,
-    ConfigurationFormItem,
-    ConfigurationFormItemType,
-    FormField,
+    FormFieldType,
+    FormMetadata,
 )
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.licensing import (
@@ -114,9 +114,9 @@ class FormatPriorities:
 
 
 class FormatPrioritiesSettings(BaseSettings):
-    prioritized_drm_schemes: list[str] = FormField(
-        default=[],
-        form=ConfigurationFormItem(
+    prioritized_drm_schemes: Annotated[
+        list[str],
+        FormMetadata(
             label=_("Prioritized DRM schemes"),
             description=_(
                 "A list of DRM schemes that will be prioritized when OPDS links are generated. "
@@ -131,14 +131,14 @@ class FormatPrioritiesSettings(BaseSettings):
                 "<i>and</i> DRM-encumbered formats, the DRM-free version will become preferred, which might not be how your "
                 "collection originally behaved."
             ),
-            type=ConfigurationFormItemType.LIST,
+            type=FormFieldType.LIST,
             required=False,
         ),
-    )
+    ] = []
 
-    prioritized_content_types: list[str] = FormField(
-        default=[],
-        form=ConfigurationFormItem(
+    prioritized_content_types: Annotated[
+        list[str],
+        FormMetadata(
             label=_("Prioritized content types"),
             description=_(
                 "A list of content types that will be prioritized when OPDS links are generated. "
@@ -153,14 +153,14 @@ class FormatPrioritiesSettings(BaseSettings):
                 "<i>and</i> DRM-encumbered formats, the DRM-free version will become preferred, which might not be how your "
                 "collection originally behaved."
             ),
-            type=ConfigurationFormItemType.LIST,
+            type=FormFieldType.LIST,
             required=False,
         ),
-    )
+    ] = []
 
-    deprioritize_lcp_non_epubs: bool = FormField(
-        default=False,
-        form=ConfigurationFormItem(
+    deprioritize_lcp_non_epubs: Annotated[
+        bool,
+        FormMetadata(
             label=_("De-prioritize LCP non-EPUBs"),
             description=_(
                 "De-prioritize all LCP content except for EPUBs. Setting this configuration option to "
@@ -170,11 +170,11 @@ class FormatPrioritiesSettings(BaseSettings):
                 "<br/>"
                 "<b>Note:</b> This option is a temporary solution and will be removed in future releases!"
             ),
-            type=ConfigurationFormItemType.SELECT,
+            type=FormFieldType.SELECT,
             required=False,
             options={
                 True: _("De-prioritize"),
                 False: _("Do not de-prioritize"),
             },
         ),
-    )
+    ] = False

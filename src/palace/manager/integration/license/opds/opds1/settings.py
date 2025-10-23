@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from enum import Enum
+from typing import Annotated
 
 from flask_babel import lazy_gettext as _
 
@@ -15,12 +16,20 @@ from palace.manager.integration.license.opds.settings.wayfless import (
 from palace.manager.integration.license.settings.connection import ConnectionSetting
 from palace.manager.integration.settings import (
     BaseSettings,
-    ConfigurationFormItem,
-    ConfigurationFormItemType,
-    FormField,
+    FormFieldType,
+    FormMetadata,
 )
 from palace.manager.util.opds_writer import OPDSFeed
 from palace.manager.util.pydantic import HttpUrl
+
+DEFAULT_CUSTOM_ACCEPT_HEADER = ", ".join(
+    [
+        OPDSFeed.ACQUISITION_FEED_TYPE,
+        f"{OPDSFeed.ATOM_TYPE};q=0.9",
+        "application/xml;q=0.8",
+        "*/*;q=0.1",
+    ]
+)
 
 
 class IdentifierSource(Enum):
@@ -34,78 +43,71 @@ class OPDSImporterSettings(
     FormatPrioritiesSettings,
     BaseCirculationApiSettings,
 ):
-    external_account_id: HttpUrl = FormField(
-        form=ConfigurationFormItem(
+    external_account_id: Annotated[
+        HttpUrl,
+        FormMetadata(
             label=_("URL"),
             required=True,
-        )
-    )
+        ),
+    ]
 
-    data_source: str = FormField(
-        form=ConfigurationFormItem(label=_("Data source name"), required=True)
-    )
+    data_source: Annotated[
+        str,
+        FormMetadata(label=_("Data source name"), required=True),
+    ]
 
-    include_in_inventory_report: bool = FormField(
-        True,
-        form=ConfigurationFormItem(
+    include_in_inventory_report: Annotated[
+        bool,
+        FormMetadata(
             label=_("Include in inventory report?"),
-            type=ConfigurationFormItemType.SELECT,
+            type=FormFieldType.SELECT,
             options={
                 True: "(Default) Yes",
                 False: "No",
             },
         ),
-    )
+    ] = True
 
-    default_audience: str | None = FormField(
-        None,
-        form=ConfigurationFormItem(
+    default_audience: Annotated[
+        str | None,
+        FormMetadata(
             label=_("Default audience"),
             description=_(
                 "If the vendor does not specify the target audience for their books, "
                 "assume the books have this target audience."
             ),
-            type=ConfigurationFormItemType.SELECT,
+            type=FormFieldType.SELECT,
             options={
                 **{None: _("No default audience")},
                 **{audience: audience for audience in sorted(Classifier.AUDIENCES)},
             },
             required=False,
         ),
-    )
+    ] = None
 
-    username: str | None = FormField(
-        None,
-        form=ConfigurationFormItem(
+    username: Annotated[
+        str | None,
+        FormMetadata(
             label=_("Username"),
             description=_(
                 "If HTTP Basic authentication is required to access the OPDS feed (it usually isn't), enter the username here."
             ),
-            weight=-1,
         ),
-    )
+    ] = None
 
-    password: str | None = FormField(
-        None,
-        form=ConfigurationFormItem(
+    password: Annotated[
+        str | None,
+        FormMetadata(
             label=_("Password"),
             description=_(
                 "If HTTP Basic authentication is required to access the OPDS feed (it usually isn't), enter the password here."
             ),
-            weight=-1,
         ),
-    )
+    ] = None
 
-    custom_accept_header: str = FormField(
-        default=",".join(
-            [
-                OPDSFeed.ACQUISITION_FEED_TYPE,
-                "application/atom+xml;q=0.9",
-                "application/xml;q=0.8",
-                "*/*;q=0.1",
-            ]
-        ),
-        form=ConfigurationFormItem(
+    custom_accept_header: Annotated[
+        str,
+        FormMetadata(
             label=_("Custom accept header"),
             required=False,
             description=_(
@@ -113,21 +115,21 @@ class OPDSImporterSettings(
             ),
             weight=-1,
         ),
-    )
+    ] = DEFAULT_CUSTOM_ACCEPT_HEADER
 
-    primary_identifier_source: IdentifierSource = FormField(
-        IdentifierSource.ID,
-        form=ConfigurationFormItem(
+    primary_identifier_source: Annotated[
+        IdentifierSource,
+        FormMetadata(
             label=_("Identifer"),
             required=False,
             description=_("Which book identifier to use as ID."),
-            type=ConfigurationFormItemType.SELECT,
+            type=FormFieldType.SELECT,
             options={
                 IdentifierSource.ID: "(Default) Use <id>",
                 IdentifierSource.DCTERMS_IDENTIFIER: "Use <dcterms:identifier> first, if not exist use <id>",
             },
         ),
-    )
+    ] = IdentifierSource.ID
 
 
 class OPDSImporterLibrarySettings(BaseSettings):

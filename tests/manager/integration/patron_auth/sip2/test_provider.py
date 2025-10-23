@@ -187,6 +187,33 @@ class TestSIP2AuthenticationProvider:
         assert provider.encoding == Sip2Encoding.cp850.value
         assert provider.patron_status_should_block is True
 
+    def test_timeout_constraints(
+        self,
+        create_settings: Callable[..., SIP2Settings],
+    ) -> None:
+        """Test that timeout enforces ge=1, le=9 constraints."""
+        # Valid values should work
+        settings = create_settings(timeout=1)
+        assert settings.timeout == 1
+
+        settings = create_settings(timeout=5)
+        assert settings.timeout == 5
+
+        settings = create_settings(timeout=9)
+        assert settings.timeout == 9
+
+        # Invalid: below minimum (ge=1)
+        with pytest.raises(ProblemDetailException) as excinfo:
+            create_settings(timeout=0)
+        assert excinfo.value.problem_detail.detail is not None
+        assert "greater than or equal to 1" in excinfo.value.problem_detail.detail
+
+        # Invalid: above maximum (le=9)
+        with pytest.raises(ProblemDetailException) as excinfo:
+            create_settings(timeout=10)
+        assert excinfo.value.problem_detail.detail is not None
+        assert "less than or equal to 9" in excinfo.value.problem_detail.detail
+
     def test_remote_authenticate(
         self,
         create_provider: Callable[..., SIP2AuthenticationProvider],

@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Generator
 from enum import Enum
 from re import Pattern
-from typing import Any, cast
+from typing import Annotated, Any, cast
 
 from flask import url_for
 from pydantic import PositiveInt, field_validator
@@ -33,9 +33,8 @@ from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.core.exceptions import IntegrationException
 from palace.manager.core.selftest import SelfTestResult
 from palace.manager.integration.settings import (
-    ConfigurationFormItem,
-    ConfigurationFormItemType,
-    FormField,
+    FormFieldType,
+    FormMetadata,
     SettingsValidationError,
 )
 from palace.manager.service.analytics.analytics import Analytics
@@ -77,32 +76,32 @@ class BasicAuthProviderSettings(AuthProviderSettings):
 
     # Configuration settings that are common to all Basic Auth-type
     # authentication techniques.
-    test_identifier: str | None = FormField(
-        None,
-        form=ConfigurationFormItem(
+    test_identifier: Annotated[
+        str | None,
+        FormMetadata(
             label="Test identifier",
             description="A test identifier to use when testing the authentication provider.",
             weight=10,
             required=True,
         ),
-    )
-    test_password: str | None = FormField(
-        None,
-        form=ConfigurationFormItem(
+    ] = None
+    test_password: Annotated[
+        str | None,
+        FormMetadata(
             label="Test password",
             description="A test password to use when testing the authentication provider.",
             weight=10,
         ),
-    )
-    identifier_barcode_format: BarcodeFormats = FormField(
-        BarcodeFormats.NONE,
-        form=ConfigurationFormItem(
+    ] = None
+    identifier_barcode_format: Annotated[
+        BarcodeFormats,
+        FormMetadata(
             label="Patron identifier barcode format",
             description="Many libraries render patron identifiers as barcodes on "
             "physical library cards. If you specify the barcode format, patrons "
             "will be able to scan their library cards with a camera instead of "
             "manually typing in their identifiers.",
-            type=ConfigurationFormItemType.SELECT,
+            type=FormFieldType.SELECT,
             options={
                 BarcodeFormats.NONE: "Patron identifiers are not rendered as barcodes",
                 BarcodeFormats.CODABAR: "Patron identifiers are rendered as barcodes "
@@ -111,33 +110,33 @@ class BasicAuthProviderSettings(AuthProviderSettings):
             required=True,
             weight=10,
         ),
-    )
+    ] = BarcodeFormats.NONE
     # By default, patron identifiers can only contain alphanumerics and
     # a few other characters.
-    identifier_regular_expression: Pattern = FormField(
-        re.compile(r"^[A-Za-z0-9@.-]+$"),
-        form=ConfigurationFormItem(
+    identifier_regular_expression: Annotated[
+        Pattern,
+        FormMetadata(
             label="Identifier Regular Expression",
             description="A patron's identifier will be immediately rejected if it doesn't match this "
             "regular expression.",
             weight=10,
         ),
-    )
+    ] = re.compile(r"^[A-Za-z0-9@.-]+$")
     # By default, there are no restrictions on passwords.
-    password_regular_expression: Pattern | None = FormField(
-        None,
-        form=ConfigurationFormItem(
+    password_regular_expression: Annotated[
+        Pattern | None,
+        FormMetadata(
             label="Password Regular Expression",
             description="A patron's password will be immediately rejected if it doesn't match this "
             "regular expression.",
             weight=10,
         ),
-    )
-    identifier_keyboard: Keyboards = FormField(
-        Keyboards.DEFAULT,
-        form=ConfigurationFormItem(
+    ] = None
+    identifier_keyboard: Annotated[
+        Keyboards,
+        FormMetadata(
             label="Keyboard for identifier entry",
-            type=ConfigurationFormItemType.SELECT,
+            type=FormFieldType.SELECT,
             options={
                 Keyboards.DEFAULT: "System default",
                 Keyboards.EMAIL_ADDRESS: "Email address entry",
@@ -146,12 +145,12 @@ class BasicAuthProviderSettings(AuthProviderSettings):
             required=True,
             weight=10,
         ),
-    )
-    password_keyboard: Keyboards = FormField(
-        Keyboards.DEFAULT,
-        form=ConfigurationFormItem(
+    ] = Keyboards.DEFAULT
+    password_keyboard: Annotated[
+        Keyboards,
+        FormMetadata(
             label="Keyboard for password entry",
-            type=ConfigurationFormItemType.SELECT,
+            type=FormFieldType.SELECT,
             options={
                 Keyboards.DEFAULT: "System default",
                 Keyboards.NUMBER_PAD: "Number pad",
@@ -159,35 +158,35 @@ class BasicAuthProviderSettings(AuthProviderSettings):
             },
             weight=10,
         ),
-    )
-    identifier_maximum_length: PositiveInt | None = FormField(
-        None,
-        form=ConfigurationFormItem(
+    ] = Keyboards.DEFAULT
+    identifier_maximum_length: Annotated[
+        PositiveInt | None,
+        FormMetadata(
             label="Maximum identifier length",
             weight=10,
         ),
-    )
-    password_maximum_length: PositiveInt | None = FormField(
-        None,
-        form=ConfigurationFormItem(
+    ] = None
+    password_maximum_length: Annotated[
+        PositiveInt | None,
+        FormMetadata(
             label="Maximum password length",
             weight=10,
         ),
-    )
-    identifier_label: str = FormField(
-        "Barcode",
-        form=ConfigurationFormItem(
+    ] = None
+    identifier_label: Annotated[
+        str,
+        FormMetadata(
             label="Label for identifier entry",
             weight=10,
         ),
-    )
-    password_label: str = FormField(
-        "PIN",
-        form=ConfigurationFormItem(
+    ] = "Barcode"
+    password_label: Annotated[
+        str,
+        FormMetadata(
             label="Label for password entry",
             weight=10,
         ),
-    )
+    ] = "PIN"
 
 
 class BasicAuthProviderLibrarySettings(AuthProviderLibrarySettings):
@@ -195,11 +194,11 @@ class BasicAuthProviderLibrarySettings(AuthProviderLibrarySettings):
     # authenticate with the ILS but not be considered a patron of
     # _this_ library. This setting contains the rule for determining
     # whether an identifier is valid for a specific library.
-    library_identifier_restriction_type: LibraryIdentifierRestriction = FormField(
-        LibraryIdentifierRestriction.NONE,
-        form=ConfigurationFormItem(
+    library_identifier_restriction_type: Annotated[
+        LibraryIdentifierRestriction,
+        FormMetadata(
             label="Library Identifier Restriction Type",
-            type=ConfigurationFormItemType.SELECT,
+            type=FormFieldType.SELECT,
             description="When multiple libraries share an ILS, a person may be able to "
             "authenticate with the ILS, but not be considered a patron of "
             "<em>this</em> library. This setting contains the rule for determining "
@@ -215,15 +214,15 @@ class BasicAuthProviderLibrarySettings(AuthProviderLibrarySettings):
                 LibraryIdentifierRestriction.LIST: "Exact Match, comma separated list",
             },
         ),
-    )
+    ] = LibraryIdentifierRestriction.NONE
 
     # This field lets the user choose the data source for the patron match.
     # subclasses can define this field as a more concrete type if they want.
-    library_identifier_field: str = FormField(
-        "barcode",
-        form=ConfigurationFormItem(
+    library_identifier_field: Annotated[
+        str,
+        FormMetadata(
             label="Library Identifier Field",
-            type=ConfigurationFormItemType.SELECT,
+            type=FormFieldType.SELECT,
             description="This is the field on the patron record that the <em>Library Identifier Restriction "
             "Type</em> is applied to, different patron authentication methods provide different "
             "values here. This value is not used if <em>Library Identifier Restriction Type</em> "
@@ -233,21 +232,21 @@ class BasicAuthProviderLibrarySettings(AuthProviderLibrarySettings):
                 LibraryIdenfitierRestrictionField.PATRON_LIBRARY: "Patron Location",
             },
         ),
-    )
+    ] = "barcode"
 
     # Usually this is a string which is compared against the
     # patron's identifiers using the comparison method chosen in
     # identifier_restriction_type.
-    library_identifier_restriction_criteria: str | None = FormField(
-        None,
-        form=ConfigurationFormItem(
+    library_identifier_restriction_criteria: Annotated[
+        str | None,
+        FormMetadata(
             label="Library Identifier Restriction",
             description="This is the restriction applied to the <em>Library Identifier Field</em> "
             "using the method chosen in <em>Library Identifier Restriction Type</em>. "
             "This value is not used if <em>Library Identifier Restriction Type</em> "
             "is set to 'No restriction'.",
         ),
-    )
+    ] = None
 
     @field_validator("library_identifier_restriction_criteria")
     @classmethod

@@ -612,6 +612,67 @@ class TestSAMLSettings:
         ]
         assert 2 == len(federated_identity_provider_entity_ids["options"])
 
+    def test_service_provider_mode_constraints(self):
+        """Test that service_provider_strict_mode and service_provider_debug_mode enforce ge=0, le=1 constraints."""
+        # Valid values should work (0 and 1)
+        settings = SAMLWebSSOAuthSettings(
+            service_provider_xml_metadata=saml_strings.CORRECT_XML_WITH_ONE_SP,
+            service_provider_private_key=saml_strings.PRIVATE_KEY,
+            service_provider_strict_mode=0,
+            service_provider_debug_mode=0,
+        )
+        assert settings.service_provider_strict_mode == 0
+        assert settings.service_provider_debug_mode == 0
+
+        settings = SAMLWebSSOAuthSettings(
+            service_provider_xml_metadata=saml_strings.CORRECT_XML_WITH_ONE_SP,
+            service_provider_private_key=saml_strings.PRIVATE_KEY,
+            service_provider_strict_mode=1,
+            service_provider_debug_mode=1,
+        )
+        assert settings.service_provider_strict_mode == 1
+        assert settings.service_provider_debug_mode == 1
+
+        # Invalid: below minimum (ge=0) for strict_mode
+        with pytest.raises(ProblemDetailException) as excinfo:
+            SAMLWebSSOAuthSettings(
+                service_provider_xml_metadata=saml_strings.CORRECT_XML_WITH_ONE_SP,
+                service_provider_private_key=saml_strings.PRIVATE_KEY,
+                service_provider_strict_mode=-1,
+            )
+        assert excinfo.value.problem_detail.detail is not None
+        assert "greater than or equal to 0" in excinfo.value.problem_detail.detail
+
+        # Invalid: above maximum (le=1) for strict_mode
+        with pytest.raises(ProblemDetailException) as excinfo:
+            SAMLWebSSOAuthSettings(
+                service_provider_xml_metadata=saml_strings.CORRECT_XML_WITH_ONE_SP,
+                service_provider_private_key=saml_strings.PRIVATE_KEY,
+                service_provider_strict_mode=2,
+            )
+        assert excinfo.value.problem_detail.detail is not None
+        assert "less than or equal to 1" in excinfo.value.problem_detail.detail
+
+        # Invalid: below minimum (ge=0) for debug_mode
+        with pytest.raises(ProblemDetailException) as excinfo:
+            SAMLWebSSOAuthSettings(
+                service_provider_xml_metadata=saml_strings.CORRECT_XML_WITH_ONE_SP,
+                service_provider_private_key=saml_strings.PRIVATE_KEY,
+                service_provider_debug_mode=-1,
+            )
+        assert excinfo.value.problem_detail.detail is not None
+        assert "greater than or equal to 0" in excinfo.value.problem_detail.detail
+
+        # Invalid: above maximum (le=1) for debug_mode
+        with pytest.raises(ProblemDetailException) as excinfo:
+            SAMLWebSSOAuthSettings(
+                service_provider_xml_metadata=saml_strings.CORRECT_XML_WITH_ONE_SP,
+                service_provider_private_key=saml_strings.PRIVATE_KEY,
+                service_provider_debug_mode=2,
+            )
+        assert excinfo.value.problem_detail.detail is not None
+        assert "less than or equal to 1" in excinfo.value.problem_detail.detail
+
 
 class TestSAMLOneLoginConfiguration:
     def test_get_identity_provider_settings_returns_correct_result(self):

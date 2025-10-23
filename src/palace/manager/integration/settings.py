@@ -4,28 +4,11 @@ import typing
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Unpack
+from typing import Any
 
-import annotated_types
-import typing_extensions
 from flask_babel import LazyString
-from pydantic import (
-    AliasChoices,
-    AliasPath,
-    BaseModel,
-    ConfigDict,
-    ValidationError,
-    model_validator,
-    types,
-)
-from pydantic.config import JsonDict
-from pydantic.fields import (
-    Deprecated,
-    FieldInfo,
-    _EmptyKwargs,
-    _FieldInfoInputs,
-    _Unset,
-)
+from pydantic import BaseModel, ConfigDict, ValidationError, model_validator
+from pydantic.fields import FieldInfo
 from pydantic_core import ErrorDetails, PydanticUndefined
 from sqlalchemy.orm import Session
 
@@ -42,139 +25,20 @@ from palace.manager.util.problem_detail import (
 from palace.manager.util.sentinel import SentinelType
 
 
-class FormFieldInfo(FieldInfo):
+def _get_form_metadata(field_info: FieldInfo) -> FormMetadata | None:
     """
-    A Pydantic FieldInfo that includes a ConfigurationFormItem
+    Extract FormMetadata from FieldInfo.metadata.
 
-    This is used to store the ConfigurationFormItem for a field, so that
-    we can use it to generate a configuration form for the admin interface.
-
-    This class should not be called directly, rather it should be created by
-    calling the FormField function below.
+    Pydantic automatically populates FieldInfo.metadata with items from
+    Annotated type hints, so we just iterate through and find our metadata.
     """
-
-    __slots__ = ("form",)
-
-    def __init__(
-        self, *, form: ConfigurationFormItem, **kwargs: Unpack[_FieldInfoInputs]
-    ) -> None:
-        super().__init__(**kwargs)
-        self.form = form
-
-    @staticmethod
-    def from_field(default: Any = PydanticUndefined, **kwargs: Any) -> FormFieldInfo:
-        return FormFieldInfo(default=default, **kwargs)
+    for item in field_info.metadata:
+        if isinstance(item, FormMetadata):
+            return item
+    return None
 
 
-def FormField(
-    default: Any = PydanticUndefined,
-    *,
-    form: ConfigurationFormItem,
-    default_factory: typing.Callable[[], Any] | None = _Unset,
-    alias: str | None = _Unset,
-    alias_priority: int | None = _Unset,
-    validation_alias: str | AliasPath | AliasChoices | None = _Unset,
-    serialization_alias: str | None = _Unset,
-    title: str | None = _Unset,
-    field_title_generator: (
-        typing_extensions.Callable[[str, FieldInfo], str] | None
-    ) = _Unset,
-    description: str | None = _Unset,
-    examples: list[Any] | None = _Unset,
-    exclude: bool | None = _Unset,
-    discriminator: str | types.Discriminator | None = _Unset,
-    deprecated: Deprecated | str | bool | None = _Unset,
-    json_schema_extra: JsonDict | typing.Callable[[JsonDict], None] | None = _Unset,
-    frozen: bool | None = _Unset,
-    validate_default: bool | None = _Unset,
-    repr: bool = _Unset,
-    init: bool | None = _Unset,
-    init_var: bool | None = _Unset,
-    kw_only: bool | None = _Unset,
-    pattern: str | typing.Pattern[str] | None = _Unset,
-    strict: bool | None = _Unset,
-    coerce_numbers_to_str: bool | None = _Unset,
-    gt: annotated_types.SupportsGt | None = _Unset,
-    ge: annotated_types.SupportsGe | None = _Unset,
-    lt: annotated_types.SupportsLt | None = _Unset,
-    le: annotated_types.SupportsLe | None = _Unset,
-    multiple_of: float | None = _Unset,
-    allow_inf_nan: bool | None = _Unset,
-    max_digits: int | None = _Unset,
-    decimal_places: int | None = _Unset,
-    min_length: int | None = _Unset,
-    max_length: int | None = _Unset,
-    union_mode: typing.Literal["smart", "left_to_right"] = _Unset,
-    fail_fast: bool | None = _Unset,
-    **extra: Unpack[_EmptyKwargs],
-) -> Any:
-    """
-    This function is equivalent to the Pydantic Field function, but instead of creating
-    a FieldInfo, it creates our FormFieldInfo class.
-
-    When creating a Pydantic model based on the BaseSettings class below, you should
-    use this function instead of Field to create fields that will be used to generate
-    a configuration form in the admin interface.
-
-    There isn't a great way to override this function so this code is just copied from the
-    Pydantic Field function with the FormFieldInfo class used instead of FieldInfo.
-    """
-    if (
-        validation_alias
-        and validation_alias is not _Unset
-        and not isinstance(validation_alias, (str, AliasChoices, AliasPath))
-    ):
-        raise TypeError(
-            "Invalid `validation_alias` type. it should be `str`, `AliasChoices`, or `AliasPath`"
-        )
-
-    if serialization_alias in (_Unset, None) and isinstance(alias, str):
-        serialization_alias = alias
-
-    if validation_alias in (_Unset, None):
-        validation_alias = alias
-
-    return FormFieldInfo.from_field(
-        default,
-        form=form,
-        default_factory=default_factory,
-        alias=alias,
-        alias_priority=alias_priority,
-        validation_alias=validation_alias,
-        serialization_alias=serialization_alias,
-        title=title,
-        field_title_generator=field_title_generator,
-        description=description,
-        examples=examples,
-        exclude=exclude,
-        discriminator=discriminator,
-        deprecated=deprecated,
-        json_schema_extra=json_schema_extra,
-        frozen=frozen,
-        pattern=pattern,
-        validate_default=validate_default,
-        repr=repr,
-        init=init,
-        init_var=init_var,
-        kw_only=kw_only,
-        coerce_numbers_to_str=coerce_numbers_to_str,
-        strict=strict,
-        gt=gt,
-        ge=ge,
-        lt=lt,
-        le=le,
-        multiple_of=multiple_of,
-        min_length=min_length,
-        max_length=max_length,
-        allow_inf_nan=allow_inf_nan,
-        max_digits=max_digits,
-        decimal_places=decimal_places,
-        union_mode=union_mode,
-        fail_fast=fail_fast,
-    )
-
-
-class ConfigurationFormItemType(Enum):
+class FormFieldType(Enum):
     """Enumeration of configuration setting types"""
 
     TEXT = None
@@ -189,17 +53,18 @@ class ConfigurationFormItemType(Enum):
     IMAGE = "image"
 
 
-ConfigurationFormOptionsType = Mapping[Enum | str | bool | None, str | LazyString]
+FormOptionsType = Mapping[Enum | str | bool | None, str | LazyString]
 
 
 @dataclass(frozen=True)
-class ConfigurationFormItem(LoggerMixin):
+class FormMetadata(LoggerMixin):
     """
-    Configuration form item
+    Configuration form metadata
 
     This is used to generate the configuration form for the admin interface.
-    Each ConfigurationFormItem corresponds to a field in the Pydantic model
-    and is added to the model using the FormField function above.
+    Each FormMetadata corresponds to a field in the Pydantic model
+    and is added to the model using Annotated type hints with FormMetadata
+    as metadata.
     """
 
     # The label for the form item, used as the field label in the admin interface.
@@ -207,7 +72,7 @@ class ConfigurationFormItem(LoggerMixin):
 
     # The type of the form item, used to determine the type of the field displayed
     # in the admin interface.
-    type: ConfigurationFormItemType = ConfigurationFormItemType.TEXT
+    type: FormFieldType = FormFieldType.TEXT
 
     # The description of the form item, displayed below the field in the admin interface.
     description: str | LazyString | None = None
@@ -219,11 +84,7 @@ class ConfigurationFormItem(LoggerMixin):
     # When the type is SELECT, LIST, or MENU, the options are used to populate the
     # field in the admin interface. This can either be a callable that returns a
     # dictionary of options or a dictionary of options.
-    options: (
-        Callable[[Session], ConfigurationFormOptionsType]
-        | ConfigurationFormOptionsType
-        | None
-    ) = None
+    options: Callable[[Session], FormOptionsType] | FormOptionsType | None = None
 
     # Required is usually determined by the Pydantic model, but can be overridden
     # here, in the case where a field would not be required in the model, but is
@@ -254,7 +115,7 @@ class ConfigurationFormItem(LoggerMixin):
         self, db: Session, key: str, required: bool = False, default: Any = None
     ) -> tuple[int, dict[str, Any]]:
         """
-        Convert the ConfigurationFormItem to a dictionary
+        Convert the FormMetadata to a dictionary
 
         The dictionary is in the format expected by the admin interface.
         """
@@ -299,19 +160,19 @@ class BaseSettings(BaseModel, LoggerMixin):
     """
     Base class for all our database backed pydantic settings classes
 
-    Fields on the model should be defined using the FormField function above so
-    that we can create a configuration form in the admin interface based on the
-    model fields.
+    Fields on the model should be defined using Annotated type hints with
+    FormMetadata metadata so that we can create a configuration form
+    in the admin interface based on the model fields.
 
     For example:
     class MySettings(BaseSettings):
-      my_field: str = FormField(
-        "default value",
-        form=ConfigurationFormItem(
+      my_field: Annotated[
+          str,
+          FormMetadata(
             label="My Field",
             description="This is my field",
-        ),
-      )
+          )
+      ] = "default value"
     """
 
     @model_validator(mode="before")
@@ -372,19 +233,20 @@ class BaseSettings(BaseModel, LoggerMixin):
     # want to store that image data outside the settings model.
     #
     # The key for the dictionary should be the field name, and the value
-    # should be a ConfigurationFormItem object that defines the form field.
-    _additional_form_fields: dict[str, ConfigurationFormItem] = {}
+    # should be a FormMetadata object that defines the form field.
+    _additional_form_fields: dict[str, FormMetadata] = {}
 
     @classmethod
     def configuration_form(cls, db: Session) -> list[dict[str, Any]]:
         """Get the configuration dictionary for this class"""
         config = []
         for name, field_info in cls.model_fields.items():
-            assert isinstance(
-                field_info, FormFieldInfo
-            ), f"{name} was not initialized with FormField"
+            form_item = _get_form_metadata(field_info)
+            assert (
+                form_item is not None
+            ), f"{name} does not have FormMetadata metadata in its Annotated type hint"
             config.append(
-                field_info.form.to_dict(
+                form_item.to_dict(
                     db, name, field_info.is_required(), field_info.default
                 )
             )
@@ -417,15 +279,17 @@ class BaseSettings(BaseModel, LoggerMixin):
 
     @classmethod
     def get_form_field_label(cls, field_name: str) -> str:
-        item = cls.model_fields.get(field_name)
-        if item is None:
+        field_info = cls.model_fields.get(field_name)
+        if field_info is None:
             # Try to lookup field_name by alias instead
             for field in cls.model_fields.values():
                 if field.alias == field_name:
-                    item = field
+                    field_info = field
                     break
-        if item is not None and isinstance(item, FormFieldInfo):
-            return item.form.label
+        if field_info is not None:
+            form_item = _get_form_metadata(field_info)
+            if form_item is not None:
+                return form_item.label
 
         return field_name
 

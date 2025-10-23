@@ -1,53 +1,53 @@
 import datetime
+from typing import Annotated
 
 from werkzeug.datastructures import ImmutableMultiDict
 
 from palace.manager.api.admin.form_data import ProcessFormData
 from palace.manager.integration.settings import (
     BaseSettings,
-    ConfigurationFormItem,
-    ConfigurationFormItemType,
-    FormField,
+    FormFieldType,
+    FormMetadata,
 )
 
 
 class MockSettings(BaseSettings):
-    field1: list[str] = FormField(
-        [],
-        form=ConfigurationFormItem(
+    field1: Annotated[
+        list[str],
+        FormMetadata(
             label="Field 1",
-            type=ConfigurationFormItemType.LIST,
+            type=FormFieldType.LIST,
         ),
-    )
-    field2: list[str] = FormField(
-        [],
-        form=ConfigurationFormItem(
+    ] = []
+    field2: Annotated[
+        list[str],
+        FormMetadata(
             label="Field 2",
-            type=ConfigurationFormItemType.MENU,
+            type=FormFieldType.MENU,
         ),
-    )
-    field3: str | None = FormField(
-        None,
-        form=ConfigurationFormItem(
+    ] = []
+    field3: Annotated[
+        str | None,
+        FormMetadata(
             label="Field 3",
         ),
-    )
-    field4: datetime.date | None = FormField(
-        None,
-        form=ConfigurationFormItem(
+    ] = None
+    field4: Annotated[
+        datetime.date | None,
+        FormMetadata(
             label="Another date field with a date type",
-            type=ConfigurationFormItemType.DATE,
+            type=FormFieldType.DATE,
             description="A python date.",
         ),
-    )
-    field5: datetime.date | None = FormField(
-        None,
-        form=ConfigurationFormItem(
+    ] = None
+    field5: Annotated[
+        datetime.date | None,
+        FormMetadata(
             label="Another date field with a date type",
-            type=ConfigurationFormItemType.DATE,
+            type=FormFieldType.DATE,
             description="A python date.",
         ),
-    )
+    ] = None
 
 
 def test_get_settings():

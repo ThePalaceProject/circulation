@@ -67,3 +67,30 @@ def test_serialize_language(library_settings: LibrarySettingsFixture) -> None:
     assert serialized["large_collection_languages"] == ["eng", "fre"]
     assert serialized["small_collection_languages"] == ["chi", "jpn"]
     assert serialized["tiny_collection_languages"] == ["chi", "eng"]
+
+
+def test_minimum_featured_quality_constraints(
+    library_settings: LibrarySettingsFixture,
+) -> None:
+    """Test that minimum_featured_quality enforces ge=0, le=1 constraints."""
+    # Valid values should work
+    settings = library_settings(minimum_featured_quality=0.0)
+    assert settings.minimum_featured_quality == 0.0
+
+    settings = library_settings(minimum_featured_quality=0.5)
+    assert settings.minimum_featured_quality == 0.5
+
+    settings = library_settings(minimum_featured_quality=1.0)
+    assert settings.minimum_featured_quality == 1.0
+
+    # Invalid: below minimum (ge=0)
+    with pytest.raises(ProblemDetailException) as excinfo:
+        library_settings(minimum_featured_quality=-0.1)
+    assert excinfo.value.problem_detail.detail is not None
+    assert "greater than or equal to 0" in excinfo.value.problem_detail.detail
+
+    # Invalid: above maximum (le=1)
+    with pytest.raises(ProblemDetailException) as excinfo:
+        library_settings(minimum_featured_quality=1.1)
+    assert excinfo.value.problem_detail.detail is not None
+    assert "less than or equal to 1" in excinfo.value.problem_detail.detail
