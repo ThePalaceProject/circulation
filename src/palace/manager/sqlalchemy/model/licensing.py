@@ -651,7 +651,7 @@ class LicensePool(Base):
         new_licenses_available: int | None,
         new_licenses_reserved: int | None,
         new_patrons_in_hold_queue: int | None,
-        as_of: datetime.datetime | str | None = None,
+        as_of: datetime.datetime | None = None,
     ) -> bool:
         """Update the LicensePool with new availability information.
         Log the implied changes with the analytics provider.
