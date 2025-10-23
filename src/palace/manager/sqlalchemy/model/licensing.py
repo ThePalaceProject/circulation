@@ -513,24 +513,6 @@ class LicensePool(Base):
             ]
         )
 
-    @property
-    def open_access_source_priority(self):
-        """What priority does this LicensePool's DataSource have in
-        our list of open-access content sources?
-        e.g. GITenberg books are prefered over Gutenberg books,
-        because there's a defined process for fixing errors and they
-        are more likely to have good cover art.
-        """
-        try:
-            priority = DataSourceConstants.OPEN_ACCESS_SOURCE_PRIORITY.index(
-                self.data_source.name
-            )
-        except ValueError as e:
-            # The source of this download is not mentioned in our
-            # priority list. Treat it as the lowest priority.
-            priority = -1
-        return priority
-
     def set_open_access_status(self):
         """Set .open_access based on whether there is currently
         an open-access LicensePoolDeliveryMechanism for this LicensePool.

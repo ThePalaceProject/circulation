@@ -44,22 +44,6 @@ class DataSourceConstants:
 
     DEPRECATED_NAMES: frozenbidict[str, str] = frozenbidict({})
 
-    # Some sources of open-access ebooks are better than others. This
-    # list shows which sources we prefer, in ascending order of
-    # priority. unglue.it is lowest priority because it tends to
-    # aggregate books from other sources. We prefer books from their
-    # original sources.
-    OPEN_ACCESS_SOURCE_PRIORITY = [
-        UNGLUE_IT,
-        GUTENBERG,
-        GUTENBERG_EPUB_GENERATOR,
-        PROJECT_GITENBERG,
-        ELIB,
-        FEEDBOOKS,
-        PLYMPTON,
-        STANDARD_EBOOKS,
-    ]
-
     # When we're generating the presentation edition for a
     # LicensePool, editions are processed based on their data source,
     # in the following order:
