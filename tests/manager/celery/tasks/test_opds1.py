@@ -579,6 +579,9 @@ class TestImportCollection:
         opds_files_fixture: OPDSFilesFixture,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
+
+        collection = opds1_import_fixture.collection
+
         # Normal case, we just call out to Identifier.parse_urn
         expected_identifier = IdentifierData(
             type=Identifier.URI, identifier="https://example.com/12345"
@@ -607,7 +610,7 @@ class TestImportCollection:
         )
         opds1_import_fixture.run_import_task(apply=True)
         assert (
-            "https://unglue.it/api/id/work/7775/ (Warbreaker) - "
+            f"https://unglue.it/api/id/work/7775/ (Warbreaker) for collection '{collection.name}' (id={collection.id}) - "
             "Could not extract an identifier from the publication: My god, it's full of stars"
             in caplog.text
         )

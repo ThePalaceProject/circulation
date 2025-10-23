@@ -867,7 +867,7 @@ class TestImportCollection:
 
         # 4. Make sure that the failure is covered
         assert (
-            "Failed to import publication: urn:isbn:9781234567897 (None) - Error validating publication: 2 validation errors"
+            f"Failed to import publication: urn:isbn:9781234567897 (None) for collection '{collection.name}' (id={collection.id}) - Error validating publication: 2 validation errors"
             in caplog.text
         )
 
