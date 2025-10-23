@@ -231,7 +231,6 @@ class AlembicDatabaseFixture:
         self,
         name: str | None = None,
         offers_licenses: bool = True,
-        extra: str = "{}",
     ) -> int:
         """Create a data source record."""
         if name is None:
@@ -241,12 +240,12 @@ class AlembicDatabaseFixture:
             data_source = connection.execute(
                 text(
                     """
-                    INSERT INTO datasources (name, offers_licenses, extra)
-                    VALUES (:name, :offers_licenses, :extra)
+                    INSERT INTO datasources (name, offers_licenses)
+                    VALUES (:name, :offers_licenses)
                     RETURNING id
                 """
                 ),
-                {"name": name, "offers_licenses": offers_licenses, "extra": extra},
+                {"name": name, "offers_licenses": offers_licenses},
             ).fetchone()
 
         assert data_source is not None
