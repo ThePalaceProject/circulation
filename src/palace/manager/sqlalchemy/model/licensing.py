@@ -536,67 +536,6 @@ class LicensePool(Base):
             priority = -1
         return priority
 
-    def better_open_access_pool_than(self, champion):
-        """Is this open-access pool generally known for better-quality
-        download files than the passed-in pool?
-        """
-        # A license pool with no identifier shouldn't happen, but it
-        # definitely shouldn't be considered.
-        if not self.identifier:
-            return False
-
-        # A non-open-access license pool is not eligible for consideration.
-        if not self.open_access:
-            return False
-
-        # At this point we have a LicensePool that is at least
-        # better than nothing.
-        if not champion:
-            return True
-
-        # A suppressed license pool should never be used unless there is
-        # no alternative.
-        if self.suppressed:
-            return False
-
-        # If the previous champion is suppressed but we have a license pool
-        # that's not, it's definitely better.
-        if champion.suppressed:
-            return True
-
-        challenger_resource = self.best_open_access_link
-        if not challenger_resource:
-            # This LicensePool is supposedly open-access but we don't
-            # actually know where the book is. It will be chosen only
-            # if there is no alternative.
-            return False
-
-        champion_priority = champion.open_access_source_priority
-        challenger_priority = self.open_access_source_priority
-
-        if challenger_priority > champion_priority:
-            return True
-
-        if challenger_priority < champion_priority:
-            return False
-
-        if (
-            self.data_source.name == DataSourceConstants.GUTENBERG
-            and champion.data_source == self.data_source
-        ):
-            # These two LicensePools are both from Gutenberg, and
-            # normally this wouldn't matter, but higher Gutenberg
-            # numbers beat lower Gutenberg numbers.
-            champion_id = int(champion.identifier.identifier)
-            challenger_id = int(self.identifier.identifier)
-
-            if challenger_id > champion_id:
-                logging.info(
-                    "Gutenberg %d beats Gutenberg %d", challenger_id, champion_id
-                )
-                return True
-        return False
-
     def set_open_access_status(self):
         """Set .open_access based on whether there is currently
         an open-access LicensePoolDeliveryMechanism for this LicensePool.
