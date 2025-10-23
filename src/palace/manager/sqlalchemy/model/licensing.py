@@ -25,7 +25,7 @@ from sqlalchemy import (
     select,
     true,
 )
-from sqlalchemy.orm import Mapped, lazyload, relationship
+from sqlalchemy.orm import Mapped, Query, lazyload, relationship
 from sqlalchemy.orm.session import Session
 
 from palace.manager.api.circulation.exceptions import CannotHold, CannotLoan
@@ -181,7 +181,7 @@ class License(Base, LicenseFunctions):
         loan.license = self
         return loan, is_new
 
-    def checkout(self):
+    def checkout(self) -> None:
         """
         Update licenses internal accounting when a license is checked out.
         """
@@ -193,15 +193,20 @@ class License(Base, LicenseFunctions):
         else:
             logging.warning(f"Checking out expired license # {self.identifier}.")
 
-    def checkin(self):
+    def checkin(self) -> None:
         """
         Update a licenses internal accounting when a license is checked in.
         """
         if not self.is_inactive:
-            available = [self.checkouts_available + 1, self.terms_concurrency]
-            if self.is_loan_limited:
+            available: list[int] = []
+            if self.checkouts_available is not None:
+                available.append(self.checkouts_available + 1)
+            if self.terms_concurrency is not None:
+                available.append(self.terms_concurrency)
+            if self.is_loan_limited and self.checkouts_left is not None:
                 available.append(self.checkouts_left)
-            self.checkouts_available = min(available)
+            if available:
+                self.checkouts_available = min(available)
         else:
             logging.warning(f"Checking in expired license # {self.identifier}.")
 
@@ -337,7 +342,7 @@ class LicensePool(Base):
         viewonly=True,
     )
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         if self.identifier:
             identifier = "{}/{}".format(
                 self.identifier.type, self.identifier.identifier
@@ -366,7 +371,7 @@ class LicensePool(Base):
         return self.licenses_owned == self.UNLIMITED_ACCESS
 
     @unlimited_access.setter
-    def unlimited_access(self, value: bool):
+    def unlimited_access(self, value: bool) -> None:
         """Sets value of unlimited_access property.
         If you set it to False, license_owned and license_available will be reset to 0
 
@@ -485,7 +490,7 @@ class LicensePool(Base):
             return get_one(_db, LicensePool, **kw), False
 
     @classmethod
-    def with_no_delivery_mechanisms(cls, _db):
+    def with_no_delivery_mechanisms(cls, _db: Session) -> Query[LicensePool]:
         """Find LicensePools that have no delivery mechanisms.
 
         :return: A query object.
@@ -497,7 +502,7 @@ class LicensePool(Base):
         )
 
     @property
-    def deliverable(self):
+    def deliverable(self) -> bool:
         """This LicensePool can actually be delivered to patrons."""
         return (self.open_access or self.licenses_owned > 0) and any(
             [
@@ -506,7 +511,7 @@ class LicensePool(Base):
             ]
         )
 
-    def set_open_access_status(self):
+    def set_open_access_status(self) -> None:
         """Set .open_access based on whether there is currently
         an open-access LicensePoolDeliveryMechanism for this LicensePool.
         """
@@ -518,7 +523,9 @@ class LicensePool(Base):
         else:
             self.open_access = False
 
-    def set_presentation_edition(self, equivalent_editions=None):
+    def set_presentation_edition(
+        self, equivalent_editions: list[Edition] | None = None
+    ) -> bool:
         """Create or update the presentation Edition for this LicensePool.
         The presentation Edition is made of metadata from all Editions
         associated with the LicensePool's identifier.
@@ -588,7 +595,7 @@ class LicensePool(Base):
         self,
         as_of: datetime.datetime | None = None,
         ignored_holds: set[Hold] | None = None,
-    ):
+    ) -> bool:
         """
         Update the LicensePool with new availability information, based on the
         licenses and holds that are associated with it.
@@ -646,12 +653,12 @@ class LicensePool(Base):
 
     def update_availability(
         self,
-        new_licenses_owned,
-        new_licenses_available,
-        new_licenses_reserved,
-        new_patrons_in_hold_queue,
-        as_of=None,
-    ):
+        new_licenses_owned: int | None,
+        new_licenses_available: int | None,
+        new_licenses_reserved: int | None,
+        new_patrons_in_hold_queue: int | None,
+        as_of: datetime.datetime | str | None = None,
+    ) -> bool:
         """Update the LicensePool with new availability information.
         Log the implied changes with the analytics provider.
         """
@@ -735,7 +742,9 @@ class LicensePool(Base):
 
         return changes_made
 
-    def update_availability_from_delta(self, event_type, event_date, delta):
+    def update_availability_from_delta(
+        self, event_type: str, event_date: datetime.datetime, delta: int
+    ) -> None:
         """Call update_availability based on a single change seen in the
         distributor data, rather than a complete snapshot of
         distributor information as of a certain time.
@@ -786,13 +795,15 @@ class LicensePool(Base):
                 as_of=event_date,
             )
 
-    def _calculate_change_from_one_event(self, type, delta):
+    def _calculate_change_from_one_event(
+        self, type: str, delta: int
+    ) -> tuple[int, int, int, int]:
         new_licenses_owned = self.licenses_owned
         new_licenses_available = self.licenses_available
         new_licenses_reserved = self.licenses_reserved
         new_patrons_in_hold_queue = self.patrons_in_hold_queue
 
-        def deduct(value):
+        def deduct(value: int) -> int:
             # It's impossible for any of these numbers to be
             # negative.
             return max(value - delta, 0)
@@ -863,29 +874,29 @@ class LicensePool(Base):
 
     def circulation_changelog(
         self,
-        old_licenses_owned,
-        old_licenses_available,
-        old_licenses_reserved,
-        old_patrons_in_hold_queue,
-    ):
+        old_licenses_owned: int,
+        old_licenses_available: int,
+        old_licenses_reserved: int,
+        old_patrons_in_hold_queue: int,
+    ) -> tuple[str, tuple[str, ...]]:
         """Generate a log message describing a change to the circulation.
         :return: a 2-tuple (message, args) suitable for passing into
         logging.info or a similar method
         """
         edition = self.presentation_edition
         message = "CHANGED "
-        args = []
+        args: list[str] = []
         if self.identifier:
             identifier_template = "%s/%s"
             identifier_args = [self.identifier.type, self.identifier.identifier]
         else:
             identifier_template = "%s"
-            identifier_args = [self.identifier]
+            identifier_args = [str(self.identifier)]
         if edition:
             message += '%s "%s" %s (' + identifier_template + ")"
             args.extend(
                 [
-                    edition.medium,
+                    str(edition.medium),
                     edition.title or "[NO TITLE]",
                     edition.author or "[NO AUTHOR]",
                 ]
@@ -895,7 +906,9 @@ class LicensePool(Base):
             message += identifier_template
             args.extend(identifier_args)
 
-        def _part(message, args, string, old_value, new_value):
+        def _part(
+            message: str, args: list[Any], string: str, old_value: int, new_value: int
+        ) -> tuple[str, list[Any]]:
             if old_value != new_value:
                 args.extend([string, old_value, new_value])
                 message += " %s: %s=>%s"
@@ -964,10 +977,10 @@ class LicensePool(Base):
     def on_hold_to(
         self,
         patron: Patron,
-        start=None,
-        end=None,
-        position=None,
-    ):
+        start: datetime.datetime | None = None,
+        end: datetime.datetime | None = None,
+        position: int | None = None,
+    ) -> tuple[Hold, bool]:
         _db = Session.object_session(patron)
         if not patron.library.settings.allow_holds:
             raise PolicyException("Holds are disabled for this library.")
@@ -1050,8 +1063,11 @@ class LicensePool(Base):
         )
 
     def calculate_work(
-        self, known_edition=None, exclude_search=False, even_if_no_title=False
-    ):
+        self,
+        known_edition: Edition | None = None,
+        exclude_search: bool = False,
+        even_if_no_title: bool = False,
+    ) -> tuple[Work | None, bool]:
         """Find or create a Work for this LicensePool.
         A pool that is not open-access will always have its own
         Work. Open-access LicensePools will be grouped together with
@@ -1070,6 +1086,7 @@ class LicensePool(Base):
         """
         from palace.manager.sqlalchemy.model.work import Work
 
+        presentation_edition: Edition | None
         if known_edition:
             presentation_edition = known_edition
         else:
@@ -1413,18 +1430,22 @@ class LicensePoolDeliveryMechanism(Base):
         return lpdm
 
     @property
-    def is_open_access(self):
+    def is_open_access(self) -> bool:
         """Is this an open-access delivery mechanism?"""
-        return self.rights_status and self.rights_status.uri in RightsStatus.OPEN_ACCESS
+        return bool(
+            self.rights_status and self.rights_status.uri in RightsStatus.OPEN_ACCESS
+        )
 
-    def compatible_with(self, other):
+    def compatible_with(self, other: LicensePoolDeliveryMechanism) -> bool:
         """Can a single loan be fulfilled with both this
         LicensePoolDeliveryMechanism and the given one?
 
         :param other: A LicensePoolDeliveryMechanism.
         """
         if not isinstance(other, LicensePoolDeliveryMechanism):
-            return False
+            # TODO: We may want to just remove this check, since it should be unreachable.
+            #   it was here before I added type annotations, so I'm leaving it in for now.
+            return False  # type: ignore[unreachable]
 
         if other.id == self.id:
             # They two LicensePoolDeliveryMechanisms are the same object.
@@ -1451,11 +1472,11 @@ class LicensePoolDeliveryMechanism(Base):
         # DeliveryMechanisms are the same or that one of them is a
         # streaming mechanism.
         open_access_rules = self.is_open_access and other.is_open_access
-        return other.delivery_mechanism and self.delivery_mechanism.compatible_with(
+        return self.delivery_mechanism.compatible_with(
             other.delivery_mechanism, open_access_rules
         )
 
-    def delete(self):
+    def delete(self) -> None:
         """Delete a LicensePoolDeliveryMechanism."""
         _db = Session.object_session(self)
         pools = list(self.license_pools)
@@ -1469,7 +1490,7 @@ class LicensePoolDeliveryMechanism(Base):
             # the open-access status of its associated LicensePools.
             pool.set_open_access_status()
 
-    def set_rights_status(self, uri):
+    def set_rights_status(self, uri: str | None) -> RightsStatus:
         _db = Session.object_session(self)
         status = RightsStatus.lookup(_db, uri)
 
@@ -1484,7 +1505,7 @@ class LicensePoolDeliveryMechanism(Base):
         return status
 
     @property
-    def license_pools(self):
+    def license_pools(self) -> Any:
         """Find all LicensePools for this LicensePoolDeliveryMechanism."""
         _db = Session.object_session(self)
         return (
@@ -1493,7 +1514,7 @@ class LicensePoolDeliveryMechanism(Base):
             .filter(LicensePool.identifier == self.identifier)
         )
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "<LicensePoolDeliveryMechanism: data_source={}, identifier={}, mechanism={}>".format(
             str(self.data_source), repr(self.identifier), repr(self.delivery_mechanism)
         )
@@ -1523,7 +1544,7 @@ class DeliveryMechanismTuple(NamedTuple):
     content_type: str | None
     drm_scheme: str | None
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.content_type} (drm_scheme={self.drm_scheme})"
 
 
@@ -1679,7 +1700,7 @@ class DeliveryMechanism(Base, HasSessionCache):
     __table_args__ = (UniqueConstraint("content_type", "drm_scheme"),)
 
     @property
-    def name(self):
+    def name(self) -> str:
         if self.drm_scheme is self.NO_DRM:
             drm_scheme = "DRM-free"
         else:
@@ -1694,7 +1715,7 @@ class DeliveryMechanism(Base, HasSessionCache):
     def cache_key(self) -> DeliveryMechanismTuple:
         return self.as_tuple
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         if self.default_client_can_fulfill:
             fulfillable = "fulfillable"
         else:
@@ -1716,7 +1737,7 @@ class DeliveryMechanism(Base, HasSessionCache):
         )
 
     @property
-    def implicit_medium(self):
+    def implicit_medium(self) -> str | None:
         """What would be a good setting for EditionConstants.MEDIUM for an edition
         available through this DeliveryMechanism?
         """
@@ -1727,15 +1748,15 @@ class DeliveryMechanism(Base, HasSessionCache):
             "Streaming Text",
         ):
             return EditionConstants.BOOK_MEDIUM
-        elif self.content_type in (
-            "Streaming Video" or self.content_type.startswith("video/")
+        elif self.content_type == "Streaming Video" or (
+            self.content_type is not None and self.content_type.startswith("video/")
         ):
             return EditionConstants.VIDEO_MEDIUM
         else:
             return None
 
     @classmethod
-    def is_media_type(cls, x):
+    def is_media_type(cls, x: str | None) -> bool:
         "Does this string look like a media type?"
         if x is None:
             return False
@@ -1746,11 +1767,11 @@ class DeliveryMechanism(Base, HasSessionCache):
         )
 
     @property
-    def is_streaming(self):
+    def is_streaming(self) -> bool:
         return self.content_type in list(self.MEDIA_TYPES_FOR_STREAMING.keys())
 
     @property
-    def drm_scheme_media_type(self):
+    def drm_scheme_media_type(self) -> str | None:
         """Return the media type for this delivery mechanism's
         DRM scheme, assuming it's represented that way.
         """
@@ -1759,27 +1780,32 @@ class DeliveryMechanism(Base, HasSessionCache):
         return None
 
     @property
-    def content_type_media_type(self):
+    def content_type_media_type(self) -> str | None:
         """Return the media type for this delivery mechanism's
         content type, assuming it's represented as a media type.
         """
         if self.is_media_type(self.content_type):
             if self.drm_scheme == self.FEEDBOOKS_AUDIOBOOK_DRM:
+                # We've already verified content_type is not None through is_media_type
+                assert self.content_type is not None
                 return self.content_type + self.FEEDBOOKS_AUDIOBOOK_PROFILE
             return self.content_type
 
-        media_type_for_streaming = self.MEDIA_TYPES_FOR_STREAMING.get(self.content_type)
-        if media_type_for_streaming:
-            return media_type_for_streaming + self.STREAMING_PROFILE
+        if self.content_type is not None:
+            media_type_for_streaming = self.MEDIA_TYPES_FOR_STREAMING.get(
+                self.content_type
+            )
+            if media_type_for_streaming:
+                return media_type_for_streaming + self.STREAMING_PROFILE
 
         return None
 
-    def compatible_with(self, other, open_access_rules=False):
+    def compatible_with(self, other: Any, open_access_rules: bool = False) -> bool:
         """Can a single loan be fulfilled with both this delivery mechanism
         and the given one?
 
         :param other: A DeliveryMechanism
-        :param open_access: If this is True, the rules for open-access
+        :param open_access_rules: If this is True, the rules for open-access
             fulfillment will be applied. If not, the stricted rules
             for commercial fulfillment will be applied.
         """

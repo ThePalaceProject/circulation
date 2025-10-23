@@ -132,6 +132,7 @@ module = [
     "palace.manager.sqlalchemy.model.identifier",
     "palace.manager.sqlalchemy.model.integration",
     "palace.manager.sqlalchemy.model.library",
+    "palace.manager.sqlalchemy.model.licensing",
     "palace.manager.sqlalchemy.model.patron",
     "palace.manager.sqlalchemy.util",
     "palace.manager.util.authentication_for_opds",
