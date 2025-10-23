@@ -313,7 +313,9 @@ class SAMLWebSSOAuthenticationProvider(
 
         return authentication_manager
 
-    def remote_patron_lookup(self, subject: SAMLSubject) -> PatronData:
+    def remote_patron_lookup_from_saml_subject(
+        self, subject: SAMLSubject
+    ) -> PatronData:
         """Creates a PatronData object based on Subject object containing SAML Subject and AttributeStatement
 
         :param subject: Subject object containing SAML Subject and AttributeStatement
@@ -354,6 +356,31 @@ class SAMLWebSSOAuthenticationProvider(
             complete=True,
         )
 
+    def remote_patron_lookup(
+        self, patron_or_patrondata: PatronData | Patron
+    ) -> PatronData | None:
+        """Look up patron information from PatronData or Patron object.
+
+        SAML authentication requires the full SSO flow, so we cannot perform
+        a fresh lookup using only an authorization identifier. However, for
+        admin operations like reset_adobe_id, we can work with the patron
+        information we already have.
+
+        :param patron_or_patrondata: PatronData or Patron object
+        :return: PatronData object if the input contains sufficient information, None otherwise
+        """
+        if isinstance(patron_or_patrondata, PatronData):
+            # Return the PatronData as-is since we can't do a fresh SAML lookup
+            return patron_or_patrondata
+
+        # Convert the Patron to PatronData for admin operations
+        return PatronData(
+            permanent_id=patron_or_patrondata.external_identifier,
+            authorization_identifier=patron_or_patrondata.authorization_identifier,
+            username=patron_or_patrondata.username,
+            complete=True,
+        )
+
     def saml_callback(
         self, db: Session, subject: SAMLSubject
     ) -> tuple[Credential, Patron, PatronData]:
@@ -369,7 +396,7 @@ class SAMLWebSSOAuthenticationProvider(
             circulation manager's database, but which should be passed on
             to the client.
         """
-        patron_data = self.remote_patron_lookup(subject)
+        patron_data = self.remote_patron_lookup_from_saml_subject(subject)
 
         # Convert the PatronData into a Patron object
         patron, is_new = patron_data.get_or_create_patron(

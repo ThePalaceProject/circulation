@@ -437,7 +437,7 @@ class TestSAMLWebSSOAuthenticationProvider:
             ),
         ],
     )
-    def test_remote_patron_lookup(
+    def test_remote_patron_lookup_from_saml_subject(
         self,
         create_saml_configuration: Callable[..., SAMLWebSSOAuthSettings],
         create_saml_provider: Callable[..., SAMLWebSSOAuthenticationProvider],
@@ -466,13 +466,61 @@ class TestSAMLWebSSOAuthenticationProvider:
 
         with context_manager as ctx:
             # Act
-            result = provider.remote_patron_lookup(subject)
+            result = provider.remote_patron_lookup_from_saml_subject(subject)
 
             # Assert
             if isinstance(expected_result, ProblemDetail):
                 assert ctx.value.problem_detail == expected_result
             else:
                 assert result == expected_result
+
+    def test_remote_patron_lookup(
+        self,
+        create_saml_provider: Callable[..., SAMLWebSSOAuthenticationProvider],
+    ):
+        # Arrange
+        provider = create_saml_provider()
+        input_data = PatronData(
+            permanent_id="123",
+            authorization_identifier="abc123",
+            username="testuser",
+            complete=True,
+        )
+        expected_result = PatronData(
+            permanent_id="123",
+            authorization_identifier="abc123",
+            username="testuser",
+            complete=True,
+        )
+
+        # Act
+        result = provider.remote_patron_lookup(input_data)
+
+        # Assert
+        assert result == expected_result
+
+    def test_remote_patron_lookup_with_patron(
+        self,
+        db: DatabaseTransactionFixture,
+        create_saml_provider: Callable[..., SAMLWebSSOAuthenticationProvider],
+    ):
+        # Arrange
+        provider = create_saml_provider()
+        patron = db.patron()
+        patron.external_identifier = "ext123"
+        patron.authorization_identifier = "auth456"
+        patron.username = "patron_user"
+
+        # Act
+        result = provider.remote_patron_lookup(patron)
+
+        # Assert
+        assert result is not None
+        assert isinstance(result, PatronData)
+        assert result.permanent_id == "ext123"
+        assert result.authorization_identifier == "auth456"
+        assert result.username == "patron_user"
+        assert result.complete is True
 
     @pytest.mark.parametrize(
         "subject, expected_patron_data, expected_credential, expected_expiration_time, cm_session_lifetime",
