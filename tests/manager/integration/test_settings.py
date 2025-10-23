@@ -456,12 +456,17 @@ class TestGetFormMetadata:
     def test_get_form_metadata_with_multiple_items(self) -> None:
         # Test that _get_form_metadata works correctly when there are multiple
         # metadata items in the field_info.metadata list
+        from typing import cast
+
         from pydantic.fields import FieldInfo
 
         form_metadata = FormMetadata(label="Test")
         # Create a FieldInfo with multiple metadata items
+        annotated_type = Annotated[
+            str, "other_metadata", form_metadata, "more_metadata"
+        ]
         field_info = FieldInfo.from_annotated_attribute(
-            Annotated[str, "other_metadata", form_metadata, "more_metadata"], None
+            cast(type, annotated_type), None
         )
 
         result = _get_form_metadata(field_info)
@@ -469,11 +474,14 @@ class TestGetFormMetadata:
 
     def test_get_form_metadata_returns_none(self) -> None:
         # Test that _get_form_metadata returns None when no FormMetadata is found
+        from typing import cast
+
         from pydantic.fields import FieldInfo
 
         # Create a FieldInfo with no FormMetadata
+        annotated_type = Annotated[str, "other_metadata"]
         field_info = FieldInfo.from_annotated_attribute(
-            Annotated[str, "other_metadata"], None
+            cast(type, annotated_type), None
         )
 
         result = _get_form_metadata(field_info)
