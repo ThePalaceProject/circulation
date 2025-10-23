@@ -1078,7 +1078,7 @@ class TestOPDS2WithODLApi:
         )
 
         assert isinstance(fulfillment, RedirectFulfillment)
-        assert fulfillment.content_link == pool.open_access_download_url
+        assert fulfillment.content_link is not None
         assert fulfillment.content_type == lpdm.delivery_mechanism.content_type
 
     @freeze_time()

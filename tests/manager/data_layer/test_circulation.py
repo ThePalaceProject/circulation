@@ -151,7 +151,7 @@ class TestCirculationData:
         [epub, pdf] = sorted(
             pool.delivery_mechanisms, key=lambda x: x.delivery_mechanism.content_type
         )
-        assert epub.resource == pool.best_open_access_resource
+        assert epub.resource is not None
 
         assert Representation.PDF_MEDIA_TYPE == pdf.delivery_mechanism.content_type
         assert DeliveryMechanism.ADOBE_DRM == pdf.delivery_mechanism.drm_scheme

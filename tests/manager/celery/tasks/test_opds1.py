@@ -519,7 +519,6 @@ class TestImportCollection:
 
         [august_pool] = imported_pools
         assert august_pool.open_access == True
-        assert august_pool.open_access_download_url == download_manifest_url
 
         [lpdm] = august_pool.delivery_mechanisms
         mechanism = lpdm.delivery_mechanism

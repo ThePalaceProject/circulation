@@ -34,7 +34,6 @@ from palace.manager.opds.odl.info import LicenseStatus
 from palace.manager.sqlalchemy.constants import (
     DataSourceConstants,
     EditionConstants,
-    LinkRelations,
     MediaTypes,
 )
 from palace.manager.sqlalchemy.hassessioncache import HasSessionCache
@@ -300,10 +299,6 @@ class LicensePool(Base):
     licenses_reserved: Mapped[int] = Column(Integer, default=0, nullable=False)
     patrons_in_hold_queue: Mapped[int] = Column(Integer, default=0, nullable=False)
     should_track_playtime: Mapped[bool] = Column(Boolean, default=False, nullable=False)
-
-    # This lets us cache the work of figuring out the best open access
-    # link for this LicensePool.
-    _open_access_download_url = Column("open_access_download_url", Unicode)
 
     # A Collection can not have more than one LicensePool for a given
     # Identifier from a given DataSource.
@@ -1325,85 +1320,6 @@ class LicensePool(Base):
 
         # All done!
         return work, is_new
-
-    @property
-    def open_access_links(self):
-        """Yield all open-access Resources for this LicensePool."""
-        from palace.manager.sqlalchemy.model.identifier import Identifier
-
-        open_access = LinkRelations.OPEN_ACCESS_DOWNLOAD
-        _db = Session.object_session(self)
-        if not self.identifier:
-            return
-        q = Identifier.resources_for_identifier_ids(
-            _db, [self.identifier.id], open_access
-        )
-        yield from q
-
-    @property
-    def open_access_download_url(self):
-        """Alias for best_open_access_link.
-        If _open_access_download_url is currently None, this will set
-        to a good value if possible.
-        """
-        return self.best_open_access_link
-
-    @property
-    def best_open_access_link(self):
-        """Find the best open-access link for this LicensePool.
-        Cache it so that the next access will be faster.
-        """
-        if not self.open_access:
-            return None
-        if not self._open_access_download_url:
-            url = None
-            resource = self.best_open_access_resource
-            if resource and resource.representation:
-                url = resource.representation.public_url
-            self._open_access_download_url = url
-        return self._open_access_download_url
-
-    @property
-    def best_open_access_resource(self):
-        """Determine the best open-access Resource currently provided by this
-        LicensePool.
-        """
-        best = None
-        best_priority = -1
-        for resource in self.open_access_links:
-            if not any(
-                [
-                    resource.representation
-                    and resource.representation.media_type
-                    and resource.representation.media_type.startswith(x)
-                    for x in MediaTypes.SUPPORTED_BOOK_MEDIA_TYPES
-                ]
-            ):
-                # This representation is not in a media type we
-                # support. We can't serve it, so we won't consider it.
-                continue
-
-            data_source_priority = self.open_access_source_priority
-            if not best or data_source_priority > best_priority:
-                # Something is better than nothing.
-                best = resource
-                best_priority = data_source_priority
-                continue
-
-            if (
-                best.data_source.name == DataSourceConstants.GUTENBERG
-                and resource.data_source.name == DataSourceConstants.GUTENBERG
-                and "noimages" in best.representation.public_url
-                and not "noimages" in resource.representation.public_url
-            ):
-                # A Project Gutenberg-ism: an epub without 'noimages'
-                # in the filename is better than an epub with
-                # 'noimages' in the filename.
-                best = resource
-                best_priority = data_source_priority
-                continue
-
-        return best
 
     def set_delivery_mechanism(
         self,

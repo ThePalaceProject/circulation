@@ -973,31 +973,6 @@ class TestLicensePool:
         assert 30 == pool.licenses_reserved
         assert 40 == pool.patrons_in_hold_queue
 
-    def test_open_access_links(self, db: DatabaseTransactionFixture):
-        edition, pool = db.edition(with_open_access_download=True)
-        source = DataSource.lookup(db.session, DataSource.GUTENBERG)
-
-        [oa1] = list(pool.open_access_links)
-
-        # We have one open-access download, let's
-        # add another.
-        url = db.fresh_url()
-        media_type = MediaTypes.EPUB_MEDIA_TYPE
-        link2, new = pool.identifier.add_link(
-            Hyperlink.OPEN_ACCESS_DOWNLOAD, url, source, media_type
-        )
-        oa2 = link2.resource
-
-        # And let's add a link that's not an open-access download.
-        url = db.fresh_url()
-        image, new = pool.identifier.add_link(
-            Hyperlink.IMAGE, url, source, MediaTypes.JPEG_MEDIA_TYPE
-        )
-        db.session.commit()
-
-        # Only the two open-access download links show up.
-        assert {oa1, oa2} == set(pool.open_access_links)
-
     def test_set_presentation_edition(self, db: DatabaseTransactionFixture):
         """
         Make sure composite edition creation makes good choices when combining

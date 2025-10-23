@@ -1158,13 +1158,17 @@ class Work(Base, LoggerMixin):
                 continue
             edition = p.presentation_edition
             if p.open_access:
-                if p.best_open_access_link:
+                # Only use an open access pool if it has delivery mechanisms available
+                if p.delivery_mechanisms:
                     active_license_pool = p
                     # We have an unlimited source for this book.
                     # There's no need to keep looking.
                     break
             elif p.unlimited_access:
                 active_license_pool = p
+                # We have an unlimited source for this book.
+                # There's no need to keep looking.
+                break
             elif (
                 edition and edition.title and p.licenses_owned and p.licenses_owned > 0
             ):
