@@ -15,27 +15,18 @@ from tenacity import (
     wait_exponential,
 )
 
-from palace.manager.core.exceptions import BasePalaceException
-from palace.manager.data_layer.policy.presentation import (
-    PresentationCalculationPolicy,
-)
 from palace.manager.service.container import container_instance
 from palace.manager.sqlalchemy.model.base import Base
-from palace.manager.sqlalchemy.model.classification import Subject
 from palace.manager.sqlalchemy.model.collection import Collection, CollectionMissing
-from palace.manager.sqlalchemy.model.coverage import CoverageRecord, Timestamp
-from palace.manager.sqlalchemy.model.customlist import CustomListEntry
-from palace.manager.sqlalchemy.model.edition import Edition
+from palace.manager.sqlalchemy.model.coverage import Timestamp
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import LicensePool
-from palace.manager.sqlalchemy.model.patron import Patron
-from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.sqlalchemy.util import get_one, get_one_or_create
 from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.sentinel import SentinelType
 
 if TYPE_CHECKING:
-    from sqlalchemy.orm import Query, Session
+    from sqlalchemy.orm import Session
 
 
 class CollectionMonitorLogger(logging.LoggerAdapter):
@@ -592,225 +583,6 @@ class IdentifierSweepMonitor(SweepMonitor):
         return qu.join(Identifier.licensed_through).filter(
             LicensePool.collection == collection
         )
-
-
-class SubjectSweepMonitor(SweepMonitor):
-    """A Monitor that does some work for every Subject."""
-
-    MODEL_CLASS = Subject
-
-    # It's usually easy to process a Subject, so make the batch size
-    # large.
-    DEFAULT_BATCH_SIZE = 500
-
-    def __init__(self, _db, subject_type=None, filter_string=None):
-        """Constructor.
-        :param subject_type: Only process Subjects of this type.
-        :param filter_string: Only process Subjects whose .identifier
-           or .name contain this string.
-        """
-        super().__init__(_db, None)
-        self.subject_type = subject_type
-        self.filter_string = filter_string
-
-    def item_query(self):
-        """Find only Subjects that match the given filters."""
-        qu = self._db.query(Subject)
-        if self.subject_type:
-            qu = qu.filter(Subject.type == self.subject_type)
-        if self.filter_string:
-            filter_string = "%" + self.filter_string + "%"
-            or_clause = or_(
-                Subject.identifier.ilike(filter_string),
-                Subject.name.ilike(filter_string),
-            )
-            qu = qu.filter(or_clause)
-        return qu
-
-    def scope_to_collection(self, qu, collection):
-        """Refuse to scope this query to a Collection."""
-        return qu
-
-
-class CustomListEntrySweepMonitor(SweepMonitor):
-    """A Monitor that does something to every CustomListEntry."""
-
-    MODEL_CLASS = CustomListEntry
-
-    def scope_to_collection(self, qu, collection):
-        """Restrict the query to only find CustomListEntries whose
-        Work is in the given Collection.
-        """
-        return (
-            qu.join(CustomListEntry.work)
-            .join(Work.license_pools)
-            .filter(LicensePool.collection == collection)
-        )
-
-
-class EditionSweepMonitor(SweepMonitor):
-    """A Monitor that does something to every Edition."""
-
-    MODEL_CLASS = Edition
-
-    def scope_to_collection(self, qu, collection):
-        """Restrict the query to only find Editions whose
-        primary Identifier is licensed to the given Collection.
-        """
-        return (
-            qu.join(Edition.primary_identifier)
-            .join(Identifier.licensed_through)
-            .filter(LicensePool.collection == collection)
-        )
-
-
-class WorkSweepMonitor(SweepMonitor):
-    """A Monitor that does something to every Work."""
-
-    MODEL_CLASS = Work
-
-    def scope_to_collection(self, qu, collection):
-        """Restrict the query to only find Works found in the given
-        Collection.
-        """
-        return qu.join(Work.license_pools).filter(LicensePool.collection == collection)
-
-
-class PresentationReadyWorkSweepMonitor(WorkSweepMonitor):
-    """A Monitor that does something to every presentation-ready Work."""
-
-    def item_query(self):
-        return super().item_query().filter(Work.presentation_ready == True)
-
-
-class NotPresentationReadyWorkSweepMonitor(WorkSweepMonitor):
-    """A Monitor that does something to every Work that is not
-    presentation-ready.
-    """
-
-    def item_query(self):
-        not_presentation_ready = or_(
-            Work.presentation_ready == False, Work.presentation_ready == None
-        )
-        return super().item_query().filter(not_presentation_ready)
-
-
-class PatronSweepMonitor(SweepMonitor):
-    """Sweep through all Patrons"""
-
-    MODEL_CLASS: type[Base] | None = Patron
-
-    def scope_to_collection(self, qu: Query, collection: Collection) -> Query:
-        """Patrons aren't scoped to a collection"""
-        return qu
-
-
-# SweepMonitors that do something specific.
-
-
-class PermanentWorkIDRefreshMonitor(EditionSweepMonitor):
-    """A monitor that calculates or recalculates the permanent work ID for
-    every edition.
-    """
-
-    SERVICE_NAME = "Permanent work ID refresh"
-
-    def process_item(self, edition):
-        edition.calculate_permanent_work_id()
-
-
-class MakePresentationReadyMonitor(NotPresentationReadyWorkSweepMonitor):
-    """A monitor that makes works presentation ready.
-
-    By default this works by passing the work's active edition into
-    ensure_coverage() for each of a list of CoverageProviders. If all
-    the ensure_coverage() calls succeed, presentation of the work is
-    calculated and the work is marked presentation ready.
-    """
-
-    SERVICE_NAME = "Make Works Presentation Ready"
-
-    def __init__(self, _db, coverage_providers, collection=None):
-        super().__init__(_db, collection)
-        self.coverage_providers = coverage_providers
-        self.policy = PresentationCalculationPolicy(choose_edition=False)
-
-    def run(self):
-        """Before doing anything, consolidate works."""
-        LicensePool.consolidate_works(self._db)
-        return super().run()
-
-    def process_item(self, work):
-        """Do the work necessary to make one Work presentation-ready,
-        and handle exceptions.
-        """
-        exception = None
-
-        try:
-            self.prepare(work)
-        except CoverageProvidersFailed as e:
-            exception = "Provider(s) failed: %s" % e
-        except Exception as e:
-            self.log.error("Exception processing work %r", work, exc_info=e)
-            exception = str(e)
-
-        if exception:
-            # Unlike with most Monitors, an exception is not a good
-            # reason to stop doing our job. Note it inside the Work
-            # and keep going.
-            work.presentation_ready_exception = exception
-        else:
-            # Success!
-            work.calculate_presentation(self.policy)
-            work.set_presentation_ready()
-
-    def prepare(self, work):
-        """Try to make a single Work presentation-ready.
-
-        :raise CoverageProvidersFailed: If we can't make a Work
-            presentation-ready because one or more CoverageProviders
-            failed.
-        """
-        edition = work.presentation_edition
-        if not edition:
-            work = work.calculate_presentation()
-        identifier = edition.primary_identifier
-        overall_success = True
-        failures = []
-        for provider in self.coverage_providers:
-            covered_types = provider.input_identifier_types
-            if covered_types and identifier.type in covered_types:
-                coverage_record = provider.ensure_coverage(identifier)
-                if (
-                    not isinstance(coverage_record, CoverageRecord)
-                    or coverage_record.status != CoverageRecord.SUCCESS
-                    or coverage_record.exception is not None
-                ):
-                    # This provider has failed.
-                    failures.append(provider)
-        if failures:
-            raise CoverageProvidersFailed(failures)
-        return failures
-
-
-class CoverageProvidersFailed(BasePalaceException):
-    """We tried to run CoverageProviders on a Work's identifier,
-    but some of the providers failed.
-    """
-
-    def __init__(self, failed_providers):
-        self.failed_providers = failed_providers
-        super().__init__(", ".join([x.service_name for x in failed_providers]))
-
-
-class CustomListEntryWorkUpdateMonitor(CustomListEntrySweepMonitor):
-    """Set or reset the Work associated with each custom list entry."""
-
-    SERVICE_NAME = "Update Works for custom list entries"
-    DEFAULT_BATCH_SIZE = 100
-
-    def process_item(self, item):
-        item.set_work()
 
 
 class TimestampData:

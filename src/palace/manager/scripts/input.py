@@ -324,25 +324,6 @@ class PatronInputScript(LibraryInputScript):
         raise NotImplementedError()
 
 
-class SubjectInputScript(Script):
-    """A script whose command line filters the set of Subjects.
-
-    :return: a 2-tuple (subject type, subject filter) that can be
-        passed into the SubjectSweepMonitor constructor.
-
-    """
-
-    @classmethod
-    def arg_parser(cls):
-        parser = argparse.ArgumentParser()
-        parser.add_argument("--subject-type", help="Process subjects of this type")
-        parser.add_argument(
-            "--subject-filter",
-            help="Process subjects whose names or identifiers match this substring",
-        )
-        return parser
-
-
 class CollectionInputScript(Script):
     """A script that takes collection names as command line inputs."""
 
