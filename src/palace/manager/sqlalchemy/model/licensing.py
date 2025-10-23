@@ -485,13 +485,6 @@ class LicensePool(Base):
             return get_one(_db, LicensePool, **kw), False
 
     @classmethod
-    def with_no_work(cls, _db):
-        """Find LicensePools that have no corresponding Work."""
-        from palace.manager.sqlalchemy.model.work import Work
-
-        return _db.query(LicensePool).outerjoin(Work).filter(Work.id == None).all()
-
-    @classmethod
     def with_no_delivery_mechanisms(cls, _db):
         """Find LicensePools that have no delivery mechanisms.
 
@@ -1055,25 +1048,6 @@ class LicensePool(Base):
             (l for l in self.licenses if l.is_available_for_borrowing),
             key=self._license_sort_func,
         )
-
-    @classmethod
-    def consolidate_works(cls, _db, batch_size=10):
-        """Assign a (possibly new) Work to every unassigned LicensePool."""
-        a = 0
-        lps = cls.with_no_work(_db)
-        logging.info("Assigning Works to %d LicensePools with no Work.", len(lps))
-        for unassigned in lps:
-            etext, new = unassigned.calculate_work()
-            if not etext:
-                # We could not create a work for this LicensePool,
-                # most likely because it does not yet have any
-                # associated Edition.
-                continue
-            a += 1
-            logging.info("When consolidating works, created %r", etext)
-            if a and not a % batch_size:
-                _db.commit()
-        _db.commit()
 
     def calculate_work(
         self, known_edition=None, exclude_search=False, even_if_no_title=False

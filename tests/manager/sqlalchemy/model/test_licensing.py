@@ -849,31 +849,6 @@ class TestLicensePool:
             collection=collection,
         )
 
-    def test_with_no_work(self, db: DatabaseTransactionFixture):
-        p1, ignore = LicensePool.for_foreign_id(
-            db.session,
-            DataSource.GUTENBERG,
-            Identifier.GUTENBERG_ID,
-            "1",
-            collection=db.default_collection(),
-        )
-        assert p1 is not None
-
-        p2, ignore = LicensePool.for_foreign_id(
-            db.session,
-            DataSource.OVERDRIVE,
-            Identifier.OVERDRIVE_ID,
-            "2",
-            collection=db.default_collection(),
-        )
-        assert p2 is not None
-
-        work = db.work(title="Foo")
-        p1.work = work
-
-        assert p1 in work.license_pools
-        assert [p2] == LicensePool.with_no_work(db.session)
-
     def test_get_active_holds(self, db: DatabaseTransactionFixture):
         pool = db.licensepool(None)
         decoy_pool = db.licensepool(None)
