@@ -1618,12 +1618,6 @@ class TestWork:
         assert pool1 == work.active_license_pool()
         pool1.open_access = False
 
-        # pool2 is open-access but has no usable download. The other
-        # pool wins.
-        pool2.open_access = True
-        assert pool1 == work.active_license_pool()
-        pool2.open_access = False
-
         # If one license pool has no owned licenses and the other has
         # owned licenses, the one with licenses wins.
         pool1.licenses_owned = 0
@@ -1658,9 +1652,6 @@ class TestWork:
             collection=c2,
             unlimited_access=True,
             open_access=False,
-        )
-        lp1._open_access_download_url = (
-            "http://example.org/"  # Unscoped calls will ALWAYS pick this pool now
         )
         lp1.calculate_work()
         lp2.calculate_work()

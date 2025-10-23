@@ -34,7 +34,6 @@ from palace.manager.opds.odl.info import LicenseStatus
 from palace.manager.sqlalchemy.constants import (
     DataSourceConstants,
     EditionConstants,
-    LinkRelations,
     MediaTypes,
 )
 from palace.manager.sqlalchemy.hassessioncache import HasSessionCache
@@ -301,10 +300,6 @@ class LicensePool(Base):
     patrons_in_hold_queue: Mapped[int] = Column(Integer, default=0, nullable=False)
     should_track_playtime: Mapped[bool] = Column(Boolean, default=False, nullable=False)
 
-    # This lets us cache the work of figuring out the best open access
-    # link for this LicensePool.
-    _open_access_download_url = Column("open_access_download_url", Unicode)
-
     # A Collection can not have more than one LicensePool for a given
     # Identifier from a given DataSource.
     __table_args__ = (
@@ -517,85 +512,6 @@ class LicensePool(Base):
                 for dm in self.available_delivery_mechanisms
             ]
         )
-
-    @property
-    def open_access_source_priority(self):
-        """What priority does this LicensePool's DataSource have in
-        our list of open-access content sources?
-        e.g. GITenberg books are prefered over Gutenberg books,
-        because there's a defined process for fixing errors and they
-        are more likely to have good cover art.
-        """
-        try:
-            priority = DataSourceConstants.OPEN_ACCESS_SOURCE_PRIORITY.index(
-                self.data_source.name
-            )
-        except ValueError as e:
-            # The source of this download is not mentioned in our
-            # priority list. Treat it as the lowest priority.
-            priority = -1
-        return priority
-
-    def better_open_access_pool_than(self, champion):
-        """Is this open-access pool generally known for better-quality
-        download files than the passed-in pool?
-        """
-        # A license pool with no identifier shouldn't happen, but it
-        # definitely shouldn't be considered.
-        if not self.identifier:
-            return False
-
-        # A non-open-access license pool is not eligible for consideration.
-        if not self.open_access:
-            return False
-
-        # At this point we have a LicensePool that is at least
-        # better than nothing.
-        if not champion:
-            return True
-
-        # A suppressed license pool should never be used unless there is
-        # no alternative.
-        if self.suppressed:
-            return False
-
-        # If the previous champion is suppressed but we have a license pool
-        # that's not, it's definitely better.
-        if champion.suppressed:
-            return True
-
-        challenger_resource = self.best_open_access_link
-        if not challenger_resource:
-            # This LicensePool is supposedly open-access but we don't
-            # actually know where the book is. It will be chosen only
-            # if there is no alternative.
-            return False
-
-        champion_priority = champion.open_access_source_priority
-        challenger_priority = self.open_access_source_priority
-
-        if challenger_priority > champion_priority:
-            return True
-
-        if challenger_priority < champion_priority:
-            return False
-
-        if (
-            self.data_source.name == DataSourceConstants.GUTENBERG
-            and champion.data_source == self.data_source
-        ):
-            # These two LicensePools are both from Gutenberg, and
-            # normally this wouldn't matter, but higher Gutenberg
-            # numbers beat lower Gutenberg numbers.
-            champion_id = int(champion.identifier.identifier)
-            challenger_id = int(self.identifier.identifier)
-
-            if challenger_id > champion_id:
-                logging.info(
-                    "Gutenberg %d beats Gutenberg %d", challenger_id, champion_id
-                )
-                return True
-        return False
 
     def set_open_access_status(self):
         """Set .open_access based on whether there is currently
@@ -1386,85 +1302,6 @@ class LicensePool(Base):
 
         # All done!
         return work, is_new
-
-    @property
-    def open_access_links(self):
-        """Yield all open-access Resources for this LicensePool."""
-        from palace.manager.sqlalchemy.model.identifier import Identifier
-
-        open_access = LinkRelations.OPEN_ACCESS_DOWNLOAD
-        _db = Session.object_session(self)
-        if not self.identifier:
-            return
-        q = Identifier.resources_for_identifier_ids(
-            _db, [self.identifier.id], open_access
-        )
-        yield from q
-
-    @property
-    def open_access_download_url(self):
-        """Alias for best_open_access_link.
-        If _open_access_download_url is currently None, this will set
-        to a good value if possible.
-        """
-        return self.best_open_access_link
-
-    @property
-    def best_open_access_link(self):
-        """Find the best open-access link for this LicensePool.
-        Cache it so that the next access will be faster.
-        """
-        if not self.open_access:
-            return None
-        if not self._open_access_download_url:
-            url = None
-            resource = self.best_open_access_resource
-            if resource and resource.representation:
-                url = resource.representation.public_url
-            self._open_access_download_url = url
-        return self._open_access_download_url
-
-    @property
-    def best_open_access_resource(self):
-        """Determine the best open-access Resource currently provided by this
-        LicensePool.
-        """
-        best = None
-        best_priority = -1
-        for resource in self.open_access_links:
-            if not any(
-                [
-                    resource.representation
-                    and resource.representation.media_type
-                    and resource.representation.media_type.startswith(x)
-                    for x in MediaTypes.SUPPORTED_BOOK_MEDIA_TYPES
-                ]
-            ):
-                # This representation is not in a media type we
-                # support. We can't serve it, so we won't consider it.
-                continue
-
-            data_source_priority = self.open_access_source_priority
-            if not best or data_source_priority > best_priority:
-                # Something is better than nothing.
-                best = resource
-                best_priority = data_source_priority
-                continue
-
-            if (
-                best.data_source.name == DataSourceConstants.GUTENBERG
-                and resource.data_source.name == DataSourceConstants.GUTENBERG
-                and "noimages" in best.representation.public_url
-                and not "noimages" in resource.representation.public_url
-            ):
-                # A Project Gutenberg-ism: an epub without 'noimages'
-                # in the filename is better than an epub with
-                # 'noimages' in the filename.
-                best = resource
-                best_priority = data_source_priority
-                continue
-
-        return best
 
     def set_delivery_mechanism(
         self,
