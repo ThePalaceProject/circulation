@@ -906,7 +906,7 @@ class TestLibrarySettings:
             response = controller.import_libraries()
             assert isinstance(response, ProblemDetail)
             assert response.uri == INCOMPLETE_CONFIGURATION.uri
-            assert "libraries" in response.detail
+            assert "libraries" in str(response.detail)
 
     def test_import_libraries_not_a_list(
         self,
@@ -921,7 +921,7 @@ class TestLibrarySettings:
             response = controller.import_libraries()
             assert isinstance(response, ProblemDetail)
             assert response.uri == INCOMPLETE_CONFIGURATION.uri
-            assert "must be a list" in response.detail
+            assert "must be a list" in str(response.detail)
 
     def test_import_libraries_missing_required_fields(
         self,
