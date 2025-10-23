@@ -20,12 +20,11 @@ from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import (
     DeliveryMechanism,
     DeliveryMechanismTuple,
-    Hold,
     LicensePool,
     LicensePoolDeliveryMechanism,
-    Loan,
     RightsStatus,
 )
+from palace.manager.sqlalchemy.model.patron import Hold, Loan
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
 from palace.manager.sqlalchemy.util import create
 from palace.manager.util import first_or_default
@@ -74,6 +73,26 @@ class TestDeliveryMechanism:
         assert Edition.BOOK_MEDIUM == data.epub_no_drm.implicit_medium
         assert Edition.BOOK_MEDIUM == data.epub_adobe_drm.implicit_medium
         assert Edition.BOOK_MEDIUM == data.overdrive_streaming_text.implicit_medium
+
+        # Test VIDEO_MEDIUM for "Streaming Video"
+        streaming_video, _ = DeliveryMechanism.lookup(
+            data.transaction.session, "Streaming Video", DeliveryMechanism.NO_DRM
+        )
+        assert Edition.VIDEO_MEDIUM == streaming_video.implicit_medium
+
+        # Test VIDEO_MEDIUM for content types starting with "video/"
+        video_mp4, _ = DeliveryMechanism.lookup(
+            data.transaction.session, "video/mp4", DeliveryMechanism.NO_DRM
+        )
+        assert Edition.VIDEO_MEDIUM == video_mp4.implicit_medium
+
+        # Test None for other content types
+        audiobook, _ = DeliveryMechanism.lookup(
+            data.transaction.session,
+            MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE,
+            DeliveryMechanism.NO_DRM,
+        )
+        assert audiobook.implicit_medium is None
 
     def test_is_media_type(self):
         assert False == DeliveryMechanism.is_media_type(None)
@@ -203,8 +222,11 @@ class TestDeliveryMechanism:
 
         # A non-streaming DeliveryMechanism is compatible only with
         # itself or a streaming mechanism.
-        assert False == epub_adobe.compatible_with(None)
-        assert False == epub_adobe.compatible_with("Not a DeliveryMechanism")
+        # TODO: We ignore the arg type here to explicitly test what happens if you pass
+        #   the wrong type. If we remove the type checking in compatible_with, we can remove the
+        #   these first two assertions.
+        assert False == epub_adobe.compatible_with(None)  # type: ignore[arg-type]
+        assert False == epub_adobe.compatible_with("Not a DeliveryMechanism")  # type: ignore[arg-type]
         assert False == epub_adobe.compatible_with(epub_no_drm)
         assert False == epub_adobe.compatible_with(pdf_adobe)
         assert False == epub_no_drm.compatible_with(pdf_no_drm)
@@ -1080,6 +1102,30 @@ class TestLicensePool:
         msg, args = pool.circulation_changelog(10, 9, 8, 15)
         assert "[NO TITLE]" == args[1]
         assert "[NO AUTHOR]" == args[2]
+
+        # Test the case where pool.identifier is None
+        # This is an edge case where the identifier is somehow missing.
+        pool.identifier = None
+        pool.presentation_edition = None
+
+        msg, args = pool.circulation_changelog(10, 9, 8, 15)
+        # When identifier is None, it should create a message with just the identifier string
+        assert "CHANGED %s %s: %s=>%s" == msg
+        assert args == ("None", "HOLD", 15, 7)
+
+        # Also test with an edition but no identifier
+        pool.presentation_edition = edition
+        msg, args = pool.circulation_changelog(10, 9, 8, 15)
+        assert 'CHANGED %s "%s" %s (%s) %s: %s=>%s' == msg
+        assert args == (
+            edition.medium,
+            "[NO TITLE]",
+            "[NO AUTHOR]",
+            "None",
+            "HOLD",
+            15,
+            7,
+        )
 
     def test_update_availability_from_delta(self, db: DatabaseTransactionFixture):
         """A LicensePool may have its availability information updated based

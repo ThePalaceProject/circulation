@@ -25,7 +25,8 @@ from palace.manager.sqlalchemy.model.customlist import CustomList
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.integration import IntegrationLibraryConfiguration
-from palace.manager.sqlalchemy.model.licensing import Hold, License, LicensePool, Loan
+from palace.manager.sqlalchemy.model.licensing import License, LicensePool
+from palace.manager.sqlalchemy.model.patron import Hold, Loan
 from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.sqlalchemy.util import get_one_or_create
 from palace.manager.util.datetime_helpers import utc_now

@@ -576,7 +576,7 @@ class Collection(Base, HasSessionCache, RedisKeyMixin):
         """
         _db = Session.object_session(self)
         qu = LicensePool.with_no_delivery_mechanisms(_db)
-        return qu.filter(LicensePool.collection == self)  # type: ignore[no-any-return]
+        return qu.filter(LicensePool.collection == self)
 
     def explain(self, include_secrets: bool = False) -> list[str]:
         """Create a series of human-readable strings to explain a collection's
