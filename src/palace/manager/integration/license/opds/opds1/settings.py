@@ -22,6 +22,15 @@ from palace.manager.integration.settings import (
 from palace.manager.util.opds_writer import OPDSFeed
 from palace.manager.util.pydantic import HttpUrl
 
+DEFAULT_CUSTOM_ACCEPT_HEADER = ", ".join(
+    [
+        OPDSFeed.ACQUISITION_FEED_TYPE,
+        f"{OPDSFeed.ATOM_TYPE};q=0.9",
+        "application/xml;q=0.8",
+        "*/*;q=0.1",
+    ]
+)
+
 
 class IdentifierSource(Enum):
     ID = "id"
@@ -106,7 +115,7 @@ class OPDSImporterSettings(
             ),
             weight=-1,
         ),
-    ] = OPDSFeed.ATOM_TYPE
+    ] = DEFAULT_CUSTOM_ACCEPT_HEADER
 
     primary_identifier_source: Annotated[
         IdentifierSource,
