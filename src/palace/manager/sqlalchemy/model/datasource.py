@@ -6,8 +6,6 @@ from collections.abc import Generator
 from typing import TYPE_CHECKING, Literal, overload
 
 from sqlalchemy import Boolean, Column, Integer, String, or_
-from sqlalchemy.dialects.postgresql import JSON
-from sqlalchemy.ext.mutable import MutableDict
 from sqlalchemy.orm import Mapped, Query, Session, relationship
 
 from palace.manager.sqlalchemy.constants import DataSourceConstants, IdentifierConstants
@@ -50,9 +48,6 @@ class DataSource(Base, HasSessionCache, DataSourceConstants):
 
     offers_licenses: Mapped[bool] = Column(Boolean, default=False, nullable=False)
     primary_identifier_type = Column(String, index=True)
-    extra: Mapped[dict[str, str]] = Column(
-        MutableDict.as_mutable(JSON), default={}, nullable=False
-    )
 
     # One DataSource can generate many Editions.
     editions: Mapped[list[Edition]] = relationship(
