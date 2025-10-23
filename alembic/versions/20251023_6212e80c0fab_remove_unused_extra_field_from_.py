@@ -32,5 +32,7 @@ def downgrade() -> None:
             postgresql.JSON(astext_type=sa.Text()),
             autoincrement=False,
             nullable=False,
+            server_default="{}",
         ),
     )
+    op.alter_column("datasources", "extra", server_default=None)
