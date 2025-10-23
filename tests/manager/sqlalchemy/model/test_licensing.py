@@ -74,6 +74,26 @@ class TestDeliveryMechanism:
         assert Edition.BOOK_MEDIUM == data.epub_adobe_drm.implicit_medium
         assert Edition.BOOK_MEDIUM == data.overdrive_streaming_text.implicit_medium
 
+        # Test VIDEO_MEDIUM for "Streaming Video"
+        streaming_video, _ = DeliveryMechanism.lookup(
+            data.transaction.session, "Streaming Video", DeliveryMechanism.NO_DRM
+        )
+        assert Edition.VIDEO_MEDIUM == streaming_video.implicit_medium
+
+        # Test VIDEO_MEDIUM for content types starting with "video/"
+        video_mp4, _ = DeliveryMechanism.lookup(
+            data.transaction.session, "video/mp4", DeliveryMechanism.NO_DRM
+        )
+        assert Edition.VIDEO_MEDIUM == video_mp4.implicit_medium
+
+        # Test None for other content types
+        audiobook, _ = DeliveryMechanism.lookup(
+            data.transaction.session,
+            MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE,
+            DeliveryMechanism.NO_DRM,
+        )
+        assert audiobook.implicit_medium is None
+
     def test_is_media_type(self):
         assert False == DeliveryMechanism.is_media_type(None)
         assert True == DeliveryMechanism.is_media_type(Representation.EPUB_MEDIA_TYPE)
@@ -1082,6 +1102,30 @@ class TestLicensePool:
         msg, args = pool.circulation_changelog(10, 9, 8, 15)
         assert "[NO TITLE]" == args[1]
         assert "[NO AUTHOR]" == args[2]
+
+        # Test the case where pool.identifier is None
+        # This is an edge case where the identifier is somehow missing.
+        pool.identifier = None
+        pool.presentation_edition = None
+
+        msg, args = pool.circulation_changelog(10, 9, 8, 15)
+        # When identifier is None, it should create a message with just the identifier string
+        assert "CHANGED %s %s: %s=>%s" == msg
+        assert args == ("None", "HOLD", 15, 7)
+
+        # Also test with an edition but no identifier
+        pool.presentation_edition = edition
+        msg, args = pool.circulation_changelog(10, 9, 8, 15)
+        assert 'CHANGED %s "%s" %s (%s) %s: %s=>%s' == msg
+        assert args == (
+            edition.medium,
+            "[NO TITLE]",
+            "[NO AUTHOR]",
+            "None",
+            "HOLD",
+            15,
+            7,
+        )
 
     def test_update_availability_from_delta(self, db: DatabaseTransactionFixture):
         """A LicensePool may have its availability information updated based
