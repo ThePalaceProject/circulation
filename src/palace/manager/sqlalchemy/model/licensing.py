@@ -138,7 +138,7 @@ class License(Base, LicenseFunctions):
     checkouts_left = Column(Integer)
 
     # License info document checkouts.available field
-    checkouts_available = Column(Integer)
+    checkouts_available: Mapped[int] = Column(Integer, nullable=False)
 
     # License info document terms.concurrency field
     terms_concurrency = Column(Integer)
@@ -161,11 +161,7 @@ class License(Base, LicenseFunctions):
     @property
     def is_available_for_borrowing(self) -> bool:
         """Can this license currently be used to borrow a book?"""
-        return (
-            not self.is_inactive
-            and self.checkouts_available is not None
-            and self.checkouts_available > 0
-        )
+        return not self.is_inactive and self.checkouts_available > 0
 
     def loan_to(
         self,
@@ -188,8 +184,8 @@ class License(Base, LicenseFunctions):
         if not self.is_inactive:
             if self.checkouts_left:
                 self.checkouts_left -= 1
-            if self.checkouts_available:
-                self.checkouts_available -= 1
+
+            self.checkouts_available -= 1
         else:
             logging.warning(f"Checking out expired license # {self.identifier}.")
 
@@ -198,15 +194,13 @@ class License(Base, LicenseFunctions):
         Update a licenses internal accounting when a license is checked in.
         """
         if not self.is_inactive:
-            available: list[int] = []
-            if self.checkouts_available is not None:
-                available.append(self.checkouts_available + 1)
+            available: list[int] = [self.checkouts_available + 1]
             if self.terms_concurrency is not None:
                 available.append(self.terms_concurrency)
             if self.is_loan_limited and self.checkouts_left is not None:
                 available.append(self.checkouts_left)
-            if available:
-                self.checkouts_available = min(available)
+
+            self.checkouts_available = min(available)
         else:
             logging.warning(f"Checking in expired license # {self.identifier}.")
 
