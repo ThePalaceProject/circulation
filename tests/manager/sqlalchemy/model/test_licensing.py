@@ -20,12 +20,11 @@ from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import (
     DeliveryMechanism,
     DeliveryMechanismTuple,
-    Hold,
     LicensePool,
     LicensePoolDeliveryMechanism,
-    Loan,
     RightsStatus,
 )
+from palace.manager.sqlalchemy.model.patron import Hold, Loan
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
 from palace.manager.sqlalchemy.util import create
 from palace.manager.util import first_or_default

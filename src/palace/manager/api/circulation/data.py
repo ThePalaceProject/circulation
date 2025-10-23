@@ -194,7 +194,7 @@ class HoldInfo(LoanAndHoldInfoMixin):
     ) -> tuple[Hold, bool]:
         session = Session.object_session(patron)
         license_pool = license_pool or self.license_pool(session)
-        return license_pool.on_hold_to(  # type: ignore[no-any-return]
+        return license_pool.on_hold_to(
             patron,
             start=self.start_date,
             end=self.end_date,
