@@ -52,7 +52,6 @@ from palace.manager.integration.patron_auth.saml.python_expression_dsl.parser im
     DSLParser,
 )
 from palace.manager.sqlalchemy.model.credential import Credential
-from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.util.datetime_helpers import datetime_utc, utc_now
 from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
 from tests.fixtures.api_controller import ControllerFixture
@@ -475,43 +474,30 @@ class TestSAMLWebSSOAuthenticationProvider:
             else:
                 assert result == expected_result
 
-    @pytest.mark.parametrize(
-        "input_data, expected_result",
-        [
-            pytest.param(
-                PatronData(
-                    permanent_id="123",
-                    authorization_identifier="abc123",
-                    username="testuser",
-                    complete=True,
-                ),
-                PatronData(
-                    permanent_id="123",
-                    authorization_identifier="abc123",
-                    username="testuser",
-                    complete=True,
-                ),
-                id="patron_data_input",
-            ),
-        ],
-    )
     def test_remote_patron_lookup(
         self,
         create_saml_provider: Callable[..., SAMLWebSSOAuthenticationProvider],
-        input_data: PatronData | Patron,
-        expected_result: PatronData | None,
     ):
         # Arrange
         provider = create_saml_provider()
+        input_data = PatronData(
+            permanent_id="123",
+            authorization_identifier="abc123",
+            username="testuser",
+            complete=True,
+        )
+        expected_result = PatronData(
+            permanent_id="123",
+            authorization_identifier="abc123",
+            username="testuser",
+            complete=True,
+        )
 
         # Act
         result = provider.remote_patron_lookup(input_data)
 
         # Assert
-        if expected_result is None:
-            assert result is None
-        else:
-            assert result == expected_result
+        assert result == expected_result
 
     def test_remote_patron_lookup_with_patron(
         self,
@@ -530,6 +516,7 @@ class TestSAMLWebSSOAuthenticationProvider:
 
         # Assert
         assert result is not None
+        assert isinstance(result, PatronData)
         assert result.permanent_id == "ext123"
         assert result.authorization_identifier == "auth456"
         assert result.username == "patron_user"
