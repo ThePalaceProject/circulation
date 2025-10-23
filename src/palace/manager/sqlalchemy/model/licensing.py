@@ -872,21 +872,6 @@ class LicensePool(Base):
 
         return changes_made
 
-    def collect_analytics_event(
-        self, analytics, event_name, as_of, old_value, new_value
-    ):
-        if not analytics:
-            return
-        for library in self.collection.libraries:
-            analytics.collect_event(
-                library,
-                self,
-                event_name,
-                as_of,
-                old_value=old_value,
-                new_value=new_value,
-            )
-
     def update_availability_from_delta(self, event_type, event_date, delta):
         """Call update_availability based on a single change seen in the
         distributor data, rather than a complete snapshot of
