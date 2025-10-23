@@ -721,21 +721,6 @@ class LicensePool(Base):
             db,
         )
 
-    def needs_update(self):
-        """Is it time to update the circulation info for this license pool?"""
-        now = utc_now()
-        if not self.last_checked:
-            # This pool has never had its circulation info checked.
-            return True
-        maximum_stale_time = self.data_source.extra.get(
-            "circulation_refresh_rate_seconds"
-        )
-        if maximum_stale_time is None:
-            # This pool never needs to have its circulation info checked.
-            return False
-        age = now - self.last_checked
-        return age > maximum_stale_time
-
     def update_availability_from_licenses(
         self,
         as_of: datetime.datetime | None = None,
