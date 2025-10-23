@@ -27,13 +27,20 @@ class LicenseData(BaseFrozenData, LicenseFunctions):
     content_types: tuple[str, ...] = tuple()
 
     def add_to_pool(self, db: Session, pool: LicensePool) -> License:
+        kwargs = {
+            key: value
+            for key, value in vars(self).items()
+            if key not in ["content_types", "identifier"]
+        }
+
         license_obj, _ = get_one_or_create(
             db,
             License,
             identifier=self.identifier,
             license_pool=pool,
+            create_method_kwargs=kwargs,
         )
-        for key, value in vars(self).items():
-            if key != "content_types":
+        for key, value in kwargs.items():
+            if getattr(license_obj, key) != value:
                 setattr(license_obj, key, value)
         return license_obj

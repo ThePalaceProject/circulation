@@ -1079,7 +1079,7 @@ class DatabaseTransactionFixture:
         status_url=None,
         expires=None,
         checkouts_left=None,
-        checkouts_available=None,
+        checkouts_available=0,
         status=LicenseStatus.available,
         terms_concurrency=None,
     ) -> License:

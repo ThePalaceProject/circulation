@@ -872,14 +872,14 @@ class LicensePool(Base):
         old_licenses_available: int,
         old_licenses_reserved: int,
         old_patrons_in_hold_queue: int,
-    ) -> tuple[str, tuple[str, ...]]:
+    ) -> tuple[str, tuple[str | int, ...]]:
         """Generate a log message describing a change to the circulation.
         :return: a 2-tuple (message, args) suitable for passing into
         logging.info or a similar method
         """
         edition = self.presentation_edition
         message = "CHANGED "
-        args: list[str] = []
+        args: list[str | int] = []
         if self.identifier:
             identifier_template = "%s/%s"
             identifier_args = [self.identifier.type, self.identifier.identifier]
@@ -901,10 +901,14 @@ class LicensePool(Base):
             args.extend(identifier_args)
 
         def _part(
-            message: str, args: list[str], string: str, old_value: int, new_value: int
-        ) -> tuple[str, list[str]]:
+            message: str,
+            args: list[str | int],
+            string: str,
+            old_value: int,
+            new_value: int,
+        ) -> tuple[str, list[str | int]]:
             if old_value != new_value:
-                args.extend([string, str(old_value), str(new_value)])
+                args.extend([string, old_value, new_value])
                 message += " %s: %s=>%s"
             return message, args
 
