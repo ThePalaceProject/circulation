@@ -4,9 +4,10 @@ from re import Pattern
 from threading import Lock
 from typing import Annotated, Any
 
+from annotated_types import Ge, Le
 from flask_babel import lazy_gettext as _
 from onelogin.saml2.settings import OneLogin_Saml2_Settings
-from pydantic import Field, PositiveInt, field_validator
+from pydantic import PositiveInt, field_validator
 from sqlalchemy.orm import Session
 
 from palace.manager.api.admin.problem_details import INCOMPLETE_CONFIGURATION
@@ -266,14 +267,18 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
                 "if the SAML standard is not strictly followed."
             ),
         ),
-    ] = Field(default=0, ge=0, le=1)
+        Ge(0),
+        Le(1),
+    ] = 0
     service_provider_debug_mode: Annotated[
         int,
         FormMetadata(
             label="Service Provider's Debug Mode",
             description="Enable debug mode (outputs errors).",
         ),
-    ] = Field(default=0, ge=0, le=1)
+        Ge(0),
+        Le(1),
+    ] = 0
 
     @classmethod
     def validate_xml_metadata(cls, v: str, metadata_type: str):

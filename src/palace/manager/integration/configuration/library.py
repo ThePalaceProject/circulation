@@ -5,9 +5,9 @@ from enum import IntEnum
 from typing import Annotated, Any, Self, cast
 
 import wcag_contrast_ratio
+from annotated_types import Ge, Le
 from pydantic import (
     EmailStr,
-    Field,
     PositiveFloat,
     PositiveInt,
     ValidationInfo,
@@ -171,7 +171,9 @@ class LibrarySettings(BaseSettings):
             category="Lanes & Filters",
             level=Level.ALL_ACCESS,
         ),
-    ] = Field(default=Configuration.DEFAULT_MINIMUM_FEATURED_QUALITY, ge=0, le=1)
+        Ge(0),
+        Le(1),
+    ] = Configuration.DEFAULT_MINIMUM_FEATURED_QUALITY
     facets_enabled_order: Annotated[
         list[str],
         LibraryFormMetadata(

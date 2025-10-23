@@ -5,7 +5,8 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import Annotated, Any
 
-from pydantic import Field, PositiveInt
+from annotated_types import Ge, Le
+from pydantic import PositiveInt
 
 from palace.manager.api.authentication.base import PatronData
 from palace.manager.api.authentication.basic import (
@@ -188,7 +189,9 @@ class SIP2Settings(BasicAuthProviderSettings):
             ),
             type=FormFieldType.NUMBER,
         ),
-    ] = Field(default=3, ge=1, le=9)
+        Ge(1),
+        Le(9),
+    ] = 3
 
 
 class SIP2LibrarySettings(BasicAuthProviderLibrarySettings):
