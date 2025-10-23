@@ -192,11 +192,6 @@ def rehydrate_identifier_set(
     return IdentifierSet(task.services.redis().client(), identifier_set_info["key"])
 
 
-# @shared_task
-# def import_children_and_cleanup_chord(task: Task, identifier_set: IdentifierSet, collection_id: int,
-#                                       import_all: bool, modified_since: datetime.datetime | None) -> dict:
-
-
 @shared_task(
     queue=QueueNames.default,
     bind=True,
