@@ -1409,8 +1409,10 @@ class LibraryAnnotator(CirculationManagerAnnotator):
         """
         if not self.identifies_patrons and rel != OPDSFeed.OPEN_ACCESS_REL:
             return None
-        if isinstance(delivery_mechanism, LicensePoolDeliveryMechanism):
-            logging.warning(
+        if isinstance(delivery_mechanism, LicensePoolDeliveryMechanism):  # type: ignore[unreachable]
+            # TODO: We may want to remove this in the future, once we have strict type checking
+            #  enabled throughout the codebase, because this should never happen if types are correct.
+            logging.warning(  # type: ignore[unreachable]
                 "LicensePoolDeliveryMechanism passed into fulfill_link instead of DeliveryMechanism!"
             )
             delivery_mechanism = delivery_mechanism.delivery_mechanism

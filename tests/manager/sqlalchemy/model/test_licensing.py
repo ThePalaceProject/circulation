@@ -202,8 +202,11 @@ class TestDeliveryMechanism:
 
         # A non-streaming DeliveryMechanism is compatible only with
         # itself or a streaming mechanism.
-        assert False == epub_adobe.compatible_with(None)
-        assert False == epub_adobe.compatible_with("Not a DeliveryMechanism")
+        # TODO: We ignore the arg type here to explicitly test what happens if you pass
+        #   the wrong type. If we remove the type checking in compatible_with, we can remove the
+        #   these first two assertions.
+        assert False == epub_adobe.compatible_with(None)  # type: ignore[arg-type]
+        assert False == epub_adobe.compatible_with("Not a DeliveryMechanism")  # type: ignore[arg-type]
         assert False == epub_adobe.compatible_with(epub_no_drm)
         assert False == epub_adobe.compatible_with(pdf_adobe)
         assert False == epub_no_drm.compatible_with(pdf_no_drm)

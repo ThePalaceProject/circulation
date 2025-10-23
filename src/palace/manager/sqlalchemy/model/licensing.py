@@ -907,10 +907,10 @@ class LicensePool(Base):
             args.extend(identifier_args)
 
         def _part(
-            message: str, args: list[Any], string: str, old_value: int, new_value: int
-        ) -> tuple[str, list[Any]]:
+            message: str, args: list[str], string: str, old_value: int, new_value: int
+        ) -> tuple[str, list[str]]:
             if old_value != new_value:
-                args.extend([string, old_value, new_value])
+                args.extend([string, str(old_value), str(new_value)])
                 message += " %s: %s=>%s"
             return message, args
 
@@ -1505,7 +1505,7 @@ class LicensePoolDeliveryMechanism(Base):
         return status
 
     @property
-    def license_pools(self) -> Any:
+    def license_pools(self) -> Query[LicensePool]:
         """Find all LicensePools for this LicensePoolDeliveryMechanism."""
         _db = Session.object_session(self)
         return (
@@ -1800,7 +1800,9 @@ class DeliveryMechanism(Base, HasSessionCache):
 
         return None
 
-    def compatible_with(self, other: Any, open_access_rules: bool = False) -> bool:
+    def compatible_with(
+        self, other: DeliveryMechanism, open_access_rules: bool = False
+    ) -> bool:
         """Can a single loan be fulfilled with both this delivery mechanism
         and the given one?
 
@@ -1810,7 +1812,9 @@ class DeliveryMechanism(Base, HasSessionCache):
             for commercial fulfillment will be applied.
         """
         if not isinstance(other, DeliveryMechanism):
-            return False
+            # TODO: We may want to just remove this check, since it should be unreachable.
+            #  it was here before I added type annotations, so I'm leaving it in for now.
+            return False  # type: ignore[unreachable]
 
         if self.id == other.id:
             # The two DeliveryMechanisms are the same.
