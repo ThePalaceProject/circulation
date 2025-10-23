@@ -18,6 +18,7 @@ from palace.manager.integration.settings import (
     FormFieldType,
     FormMetadata,
     SettingsValidationError,
+    _get_form_metadata,
 )
 from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
@@ -423,3 +424,57 @@ class TestBaseSettings:
                 'Configuration form item (label="Test", key=test) does not have '
                 "a default value or factory and yet its required property is set to False"
             ) in caplog.text
+
+    def test_get_form_field_label_by_alias(
+        self, base_settings_fixture: BaseSettingsFixture
+    ) -> None:
+        # Test that we can get the form field label by alias
+        label = MockSettings.get_form_field_label("foo")
+        assert label == "With Alias"
+
+    def test_get_form_field_label_no_metadata(
+        self, base_settings_fixture: BaseSettingsFixture
+    ) -> None:
+        # Test that we return the field name when there is no FormMetadata
+        # Create a settings class with a field that has no FormMetadata
+        class NoMetadataSettings(BaseSettings):
+            # Using Field without FormMetadata in Annotated
+            test_field: str = Field(default="test")
+
+        label = NoMetadataSettings.get_form_field_label("test_field")
+        assert label == "test_field"
+
+    def test_get_form_field_label_missing_field(
+        self, base_settings_fixture: BaseSettingsFixture
+    ) -> None:
+        # Test that we return the field name when the field doesn't exist
+        label = MockSettings.get_form_field_label("nonexistent_field")
+        assert label == "nonexistent_field"
+
+
+class TestGetFormMetadata:
+    def test_get_form_metadata_with_multiple_items(self) -> None:
+        # Test that _get_form_metadata works correctly when there are multiple
+        # metadata items in the field_info.metadata list
+        from pydantic.fields import FieldInfo
+
+        form_metadata = FormMetadata(label="Test")
+        # Create a FieldInfo with multiple metadata items
+        field_info = FieldInfo.from_annotated_attribute(
+            Annotated[str, "other_metadata", form_metadata, "more_metadata"], None
+        )
+
+        result = _get_form_metadata(field_info)
+        assert result == form_metadata
+
+    def test_get_form_metadata_returns_none(self) -> None:
+        # Test that _get_form_metadata returns None when no FormMetadata is found
+        from pydantic.fields import FieldInfo
+
+        # Create a FieldInfo with no FormMetadata
+        field_info = FieldInfo.from_annotated_attribute(
+            Annotated[str, "other_metadata"], None
+        )
+
+        result = _get_form_metadata(field_info)
+        assert result is None
