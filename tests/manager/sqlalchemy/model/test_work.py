@@ -730,7 +730,7 @@ class TestWork:
             "test-book-cover.png"
         )
         cover_href = "http://cover.png"
-        cover_link = lp.add_link(
+        cover_link = lp.identifier.add_link(
             Hyperlink.IMAGE,
             cover_href,
             lp.data_source,

@@ -439,7 +439,7 @@ class TestEdition:
         overdrive = DataSource.lookup(db.session, DataSource.OVERDRIVE)
 
         # Set the work's summary.
-        l1, new = pool.add_link(
+        l1, new = pool.identifier.add_link(
             Hyperlink.DESCRIPTION, None, overdrive, "text/plain", "F"
         )
         work.set_summary(l1.resource)
@@ -449,7 +449,7 @@ class TestEdition:
 
         # Set the work's summary to a string that contains characters that cannot be
         # represented in XML.
-        l2, new = pool.add_link(
+        l2, new = pool.identifier.add_link(
             Hyperlink.DESCRIPTION,
             None,
             overdrive,
@@ -475,14 +475,14 @@ class TestEdition:
         overdrive = DataSource.lookup(db.session, DataSource.OVERDRIVE, autocreate=True)
 
         # There's a perfunctory description from Overdrive.
-        l1, new = pool.add_link(
+        l1, new = pool.identifier.add_link(
             Hyperlink.SHORT_DESCRIPTION, None, overdrive, "text/plain", "F"
         )
 
         overdrive_resource = l1.resource
 
         # There's a much better description from OCLC Linked Data.
-        l2, new = pool.add_link(
+        l2, new = pool.identifier.add_link(
             Hyperlink.DESCRIPTION,
             None,
             oclc,
@@ -529,7 +529,7 @@ class TestEdition:
         # This is not a silly example.  The librarian may choose to set the description
         # to an empty string in the admin inteface, to override a bad overdrive/etc. description.
         staff = DataSource.lookup(db.session, DataSource.LIBRARY_STAFF, autocreate=True)
-        l3, new = pool.add_link(
+        l3, new = pool.identifier.add_link(
             Hyperlink.SHORT_DESCRIPTION, None, staff, "text/plain", ""
         )
         staff_resource = l3.resource

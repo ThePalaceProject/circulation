@@ -591,52 +591,6 @@ class LicensePool(Base):
 
         return self.presentation_edition != old_presentation_edition or changed
 
-    def add_link(
-        self,
-        rel,
-        href,
-        data_source,
-        media_type=None,
-        content=None,
-        content_path=None,
-        rights_status_uri=None,
-        rights_explanation=None,
-        original_resource=None,
-        transformation_settings=None,
-        db=None,
-    ):
-        """Add a link between this LicensePool and a Resource.
-
-        :param rel: The relationship between this LicensePool and the resource
-            on the other end of the link.
-        :param href: The URI of the resource on the other end of the link.
-        :param media_type: Media type of the representation associated
-            with the resource.
-        :param content: Content of the representation associated with the
-            resource.
-        :param content_path: Path (relative to DATA_DIRECTORY) of the
-            representation associated with the resource.
-        :param rights_status_uri: The URI of the RightsStatus for this resource.
-        :param rights_explanation: A free text explanation of why the RightsStatus
-            applies.
-        :param original_resource: Another resource that this resource was derived from.
-        :param transformation_settings: The settings used to transform the original
-            resource into this resource.
-        """
-        return self.identifier.add_link(
-            rel,
-            href,
-            data_source,
-            media_type,
-            content,
-            content_path,
-            rights_status_uri,
-            rights_explanation,
-            original_resource,
-            transformation_settings,
-            db,
-        )
-
     def update_availability_from_licenses(
         self,
         as_of: datetime.datetime | None = None,

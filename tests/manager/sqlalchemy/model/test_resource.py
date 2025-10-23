@@ -22,7 +22,7 @@ class TestHyperlink:
         identifier = edition.primary_identifier
         data_source = pool.data_source
         original, ignore = create(db.session, Resource, url="http://bar.com")
-        hyperlink, is_new = pool.add_link(
+        hyperlink, is_new = pool.identifier.add_link(
             Hyperlink.DESCRIPTION,
             "http://foo.com/",
             data_source,
@@ -733,7 +733,7 @@ class TestCoverResource:
         sample_cover_path = sample_covers_fixture.sample_cover_path(
             "test-book-cover.png"
         )
-        hyperlink, ignore = pool.add_link(
+        hyperlink, ignore = pool.identifier.add_link(
             Hyperlink.IMAGE,
             original,
             edition.data_source,
@@ -766,7 +766,7 @@ class TestCoverResource:
         sample_cover_path = sample_covers_fixture.sample_cover_path(
             "tiny-image-cover.png"
         )
-        hyperlink, ignore = pool.add_link(
+        hyperlink, ignore = pool.identifier.add_link(
             Hyperlink.IMAGE,
             original,
             edition.data_source,
@@ -791,7 +791,7 @@ class TestCoverResource:
         sample_cover_path = sample_covers_fixture.sample_cover_path(
             "tiny-image-cover.png"
         )
-        hyperlink, ignore = pool.add_link(
+        hyperlink, ignore = pool.identifier.add_link(
             Hyperlink.IMAGE,
             original,
             edition.data_source,
@@ -947,7 +947,7 @@ class TestCoverResource:
         # Here's a book with a thumbnail image.
         edition, pool = db.edition(with_license_pool=True)
 
-        link1, ignore = pool.add_link(
+        link1, ignore = pool.identifier.add_link(
             Hyperlink.THUMBNAIL_IMAGE,
             db.fresh_url(),
             pool.data_source,
@@ -964,7 +964,7 @@ class TestCoverResource:
         )
         lousy_cover.image_height = 1
         lousy_cover.image_width = 10000
-        link2, ignore = pool.add_link(
+        link2, ignore = pool.identifier.add_link(
             Hyperlink.THUMBNAIL_IMAGE,
             db.fresh_url(),
             pool.data_source,
@@ -980,7 +980,7 @@ class TestCoverResource:
         decent_cover = sample_covers_fixture.sample_cover_representation(
             "test-book-cover.png"
         )
-        link3, ignore = pool.add_link(
+        link3, ignore = pool.identifier.add_link(
             Hyperlink.THUMBNAIL_IMAGE,
             db.fresh_url(),
             pool.data_source,
@@ -996,7 +996,7 @@ class TestCoverResource:
 
         # Let's create another cover image with identical
         # characteristics.
-        link4, ignore = pool.add_link(
+        link4, ignore = pool.identifier.add_link(
             Hyperlink.THUMBNAIL_IMAGE,
             db.fresh_url(),
             pool.data_source,
@@ -1034,7 +1034,9 @@ class TestCoverResource:
     ):
         # Create a Resource.
         edition, pool = db.edition(with_open_access_download=True)
-        link = pool.add_link(Hyperlink.IMAGE, db.fresh_url(), pool.data_source)[0]
+        link = pool.identifier.add_link(
+            Hyperlink.IMAGE, db.fresh_url(), pool.data_source
+        )[0]
         cover = link.resource
 
         # Give it all the right covers.
@@ -1111,7 +1113,7 @@ class TestCoverResource:
 
         # Here's a book with a thumbnail image.
         edition, pool = db.edition(with_license_pool=True)
-        hyperlink, ignore = pool.add_link(
+        hyperlink, ignore = pool.identifier.add_link(
             Hyperlink.THUMBNAIL_IMAGE, db.fresh_url(), overdrive
         )
         resource = hyperlink.resource
