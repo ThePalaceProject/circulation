@@ -1498,29 +1498,6 @@ class LicensePool(Base):
 
         return best
 
-    @property
-    def best_license_link(self):
-        """Find the best available licensing link for the work associated
-        with this LicensePool.
-        # TODO: This needs work and may not be necessary anymore.
-        """
-        edition = self.edition
-        if not edition:
-            return self, None
-        link = edition.best_open_access_link
-        if link:
-            return self, link
-
-        # Either this work is not open-access, or there was no epub
-        # link associated with it.
-        work = self.work
-        for pool in work.license_pools:
-            edition = pool.edition
-            link = edition.best_open_access_link
-            if link:
-                return pool, link
-        return self, None
-
     def set_delivery_mechanism(
         self,
         content_type: str | None,
