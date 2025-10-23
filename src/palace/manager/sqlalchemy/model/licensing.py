@@ -721,21 +721,6 @@ class LicensePool(Base):
             db,
         )
 
-    def needs_update(self):
-        """Is it time to update the circulation info for this license pool?"""
-        now = utc_now()
-        if not self.last_checked:
-            # This pool has never had its circulation info checked.
-            return True
-        maximum_stale_time = self.data_source.extra.get(
-            "circulation_refresh_rate_seconds"
-        )
-        if maximum_stale_time is None:
-            # This pool never needs to have its circulation info checked.
-            return False
-        age = now - self.last_checked
-        return age > maximum_stale_time
-
     def update_availability_from_licenses(
         self,
         as_of: datetime.datetime | None = None,
@@ -886,21 +871,6 @@ class LicensePool(Base):
             logging.info(message, *args)
 
         return changes_made
-
-    def collect_analytics_event(
-        self, analytics, event_name, as_of, old_value, new_value
-    ):
-        if not analytics:
-            return
-        for library in self.collection.libraries:
-            analytics.collect_event(
-                library,
-                self,
-                event_name,
-                as_of,
-                old_value=old_value,
-                new_value=new_value,
-            )
 
     def update_availability_from_delta(self, event_type, event_date, delta):
         """Call update_availability based on a single change seen in the
