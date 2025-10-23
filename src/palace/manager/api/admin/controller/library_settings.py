@@ -4,6 +4,7 @@ import base64
 import json
 import uuid
 from io import BytesIO
+from typing import Any
 
 import flask
 from flask import Response
@@ -171,7 +172,6 @@ class LibrarySettingsController(AdminPermissionsControllerMixin):
             return Response(str(library.uuid), 200)
 
     def create_library(self, short_name: str) -> tuple[Library, bool]:
-        self.require_system_admin()
         public_key, private_key = Library.generate_keypair()
         library, is_new = create(
             self._db,
@@ -182,6 +182,179 @@ class LibrarySettingsController(AdminPermissionsControllerMixin):
             private_key=private_key,
         )
         return library, is_new
+
+    def import_libraries(self) -> Response | ProblemDetail:
+        """Import multiple libraries from JSON data. Libraries that already exist will not be updated.
+
+        Expected JSON format:
+        {
+            "libraries": [
+                {
+                    "name": "Library Name",
+                    "short_name": "lib_short",
+                    "website_url": "https://example.com",
+                    "patron_support_email": "support@example.com"
+                },
+                ...
+            ]
+        }
+        """
+        try:
+            data = flask.request.json
+            if not data or "libraries" not in data:
+                raise ProblemDetailException(
+                    problem_detail=INCOMPLETE_CONFIGURATION.detailed(
+                        "Request must include 'libraries' field."
+                    )
+                )
+
+            libraries_data = data["libraries"]
+            if not isinstance(libraries_data, list):
+                raise ProblemDetailException(
+                    problem_detail=INCOMPLETE_CONFIGURATION.detailed(
+                        "'libraries' must be a list."
+                    )
+                )
+
+            created = []
+            skipped = []
+            errors = []
+
+            for idx, library_data in enumerate(libraries_data):
+                try:
+                    result = self._import_single_library(library_data)
+                    if result["is_new"]:
+                        created.append(result)
+                    else:
+                        skipped.append(result)
+                except ProblemDetailException as e:
+                    errors.append(
+                        {
+                            "index": idx,
+                            "data": library_data,
+                            "error": str(e.problem_detail.detail),
+                        }
+                    )
+                except Exception as e:
+                    errors.append({"index": idx, "data": library_data, "error": str(e)})
+
+            # Commit if there were any successful imports
+            if created:
+                self._db.commit()
+                site_configuration_has_changed(self._db)
+
+            return Response(
+                json_serializer(
+                    {
+                        "result": "success",
+                        "created": created,
+                        "skipped": skipped,
+                        "errors": errors,
+                    }
+                ),
+                status=(
+                    200 if not errors else 207
+                ),  # 207 Multi-Status if there were any errors
+                mimetype="application/json",
+            )
+
+        except ProblemDetailException as e:
+            self._db.rollback()
+            return e.problem_detail
+        except Exception as e:
+            self._db.rollback()
+            raise ProblemDetailException(
+                problem_detail=INCOMPLETE_CONFIGURATION.detailed(
+                    f"Error importing libraries: {str(e)}"
+                )
+            )
+
+    def _import_single_library(self, library_data: dict[str, Any]) -> dict[str, Any]:
+        """Import a single library from data dictionary."""
+        # Validate required fields
+        name = library_data.get("name", "").strip()
+        if not name:
+            raise ProblemDetailException(
+                problem_detail=INCOMPLETE_CONFIGURATION.detailed(
+                    f"Required field 'name' is missing."
+                )
+            )
+
+        short_name = library_data.get("short_name", "").strip()
+        if not short_name:
+            raise ProblemDetailException(
+                problem_detail=INCOMPLETE_CONFIGURATION.detailed(
+                    f"Required field 'short_name' is missing for library '{name}'."
+                )
+            )
+
+        website_url = library_data.get("website_url", "").strip()
+        if not website_url:
+            raise ProblemDetailException(
+                problem_detail=INCOMPLETE_CONFIGURATION.detailed(
+                    f"Required field 'website_url' is missing for library '{name}'."
+                )
+            )
+
+        patron_support_email = library_data.get("patron_support_email", "").strip()
+        if not patron_support_email:
+            raise ProblemDetailException(
+                problem_detail=INCOMPLETE_CONFIGURATION.detailed(
+                    f"Required field 'patron_support_email' is missing for library '{name}'."
+                )
+            )
+
+        # Check if library already exists
+        existing_library = get_one(self._db, Library, short_name=short_name)
+
+        if existing_library:
+            # Library already exists, skip it (don't update)
+            return {
+                "uuid": str(existing_library.uuid),
+                "name": existing_library.name,
+                "short_name": existing_library.short_name,
+                "is_new": False,
+            }
+
+        # Check that short_name is unique
+        self.check_short_name_unique(None, short_name)
+        # Create new library
+        library, is_new = self.create_library(short_name)
+
+        # Set library properties
+        library.name = name
+        library.short_name = short_name
+
+        # Build settings dictionary
+        settings_data = {
+            "website": website_url,
+            "help_email": patron_support_email,
+            "large_collection_languages": ["en"],
+            "small_collection_languages": ["es"],
+            "facets_default_order": "added",  # Sort by most recently added
+            "enabled_entry_points": ["All", "Book", "Audio"],  # All, eBooks, Audiobooks
+        }
+
+        # Validate settings using LibrarySettings model
+        try:
+            validated_settings = LibrarySettings(**settings_data)
+            library.settings_dict = validated_settings.model_dump()
+        except Exception as e:
+            raise ProblemDetailException(
+                problem_detail=INVALID_CONFIGURATION_OPTION.detailed(
+                    f"Invalid settings for library '{name}': {str(e)}"
+                )
+            )
+
+        # Create default lanes for new libraries
+        create_default_lanes(self._db, library)
+
+        return {
+            "uuid": str(library.uuid),
+            "name": library.name,
+            "short_name": library.short_name,
+            "is_new": is_new,
+        }
 
     def process_delete(self, library_uuid: str) -> Response:
         self.require_system_admin()

@@ -502,6 +502,13 @@ class TestAdminLibrarySettings:
         )
         fixture.assert_supported_methods(url, "DELETE")
 
+    def test_import_libraries(self, fixture: AdminRouteFixture):
+        url = "/admin/import-libraries"
+        fixture.assert_authenticated_request_calls(
+            url, fixture.controller.import_libraries, http_method="POST"
+        )
+        fixture.assert_supported_methods(url, "POST")
+
 
 class TestAdminCollectionSettings:
     CONTROLLER_NAME = "admin_collection_settings_controller"

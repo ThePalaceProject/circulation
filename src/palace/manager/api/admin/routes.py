@@ -730,6 +730,15 @@ def admin_base(**kwargs):
     return redirect(url_for("admin_view", _external=True))
 
 
+@app.route("/admin/import-libraries", strict_slashes=False, methods=["POST"])
+@returns_json_or_response_or_problem_detail
+@requires_admin
+@requires_csrf_token
+def import_libraries():
+    """Import multiple libraries from a list of library configurations."""
+    return app.manager.admin_library_settings_controller.import_libraries()
+
+
 # This path is used only in debug mode to serve frontend assets.
 if AdminClientConfig.operational_mode() == OperationalMode.development:
 
