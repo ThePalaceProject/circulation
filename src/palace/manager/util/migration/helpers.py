@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from typing import Any
 
 import sqlalchemy as sa
@@ -11,8 +12,8 @@ def pg_update_enum(
     table: str,
     column: str,
     enum_name: str,
-    old_values: list[str],
-    new_values: list[str],
+    old_values: Sequence[str],
+    new_values: Sequence[str],
 ) -> None:
     """
     Alembic migration helper function to update an enum type.

@@ -1,9 +1,9 @@
 import json
+import os
 from contextlib import AbstractContextManager, nullcontext
 from typing import Any
 
 import pytest
-from coverage.annotate import os
 from pydantic_settings import PydanticBaseSettingsSource
 from pytest import MonkeyPatch
 
