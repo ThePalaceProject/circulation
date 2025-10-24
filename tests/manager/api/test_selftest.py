@@ -12,9 +12,9 @@ from palace.manager.api.authentication.basic import BasicAuthenticationProvider
 from palace.manager.api.selftest import (
     HasCollectionSelfTests,
     HasPatronSelfTests,
-    SelfTestResult,
 )
 from palace.manager.core.exceptions import IntegrationException
+from palace.manager.core.selftest import SelfTestResult
 from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.util.problem_detail import ProblemDetail
 
@@ -199,7 +199,9 @@ class TestHasCollectionSelfTests:
 
         # Now a list of strings is returned, one for each problematic
         # book.
-        [result] = hastests._no_delivery_mechanisms_test()
+        results = hastests._no_delivery_mechanisms_test()
+        assert isinstance(results, list)
+        [result] = results
         assert "[title unknown] (ID: %s)" % pool.identifier.identifier == result
 
         # Change the LicensePool so it has no owned licenses.
