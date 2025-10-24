@@ -670,7 +670,7 @@ class OverdriveAPI(
                 BookInfoEndpoint(next_url) if next_url else None
             )
             async_task_list = list()
-            response_products = data["products"]
+            response_products = data.get("products", [])
             for product in response_products:
                 identifier = product["id"].lower()
                 books[identifier] = product
