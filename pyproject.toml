@@ -110,7 +110,6 @@ module = [
     "palace.manager.api.authenticator",
     "palace.manager.api.circulation_manager",
     "palace.manager.api.config",
-    "palace.manager.api.controller.analytics",
     "palace.manager.api.controller.annotation",
     "palace.manager.api.controller.base",
     "palace.manager.api.controller.device_tokens",
