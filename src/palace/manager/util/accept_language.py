@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 
 def parse_accept_language(
     accept_language_str: str, default_quality: float | None = None
-) -> list:
+) -> list[Lang]:
     """
     Parse a RFC 2616 Accept-Language string.
     https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14

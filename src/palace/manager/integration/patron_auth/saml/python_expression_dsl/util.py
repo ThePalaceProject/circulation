@@ -175,7 +175,7 @@ def _parse_parenthesized_expression(tokens: ParseResults) -> Expression:
 
     :return: ComparisonExpression node
     """
-    return tokens[0]
+    return tokens[0]  # type: ignore[no-any-return]
 
 
 def _parse_function_call_expression(tokens: ParseResults) -> FunctionCallExpression:

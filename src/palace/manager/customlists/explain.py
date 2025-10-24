@@ -1,7 +1,10 @@
+from __future__ import annotations
+
 import argparse
 import csv
 import json
 import logging
+from typing import TYPE_CHECKING
 
 from palace.manager.customlists.report import (
     CustomListProblemBookBrokenOnSourceCM,
@@ -16,6 +19,9 @@ from palace.manager.customlists.report import (
     CustomListReport,
     CustomListsReport,
 )
+
+if TYPE_CHECKING:
+    from _csv import Writer
 
 
 class CustomListImportExplainer:
@@ -49,7 +55,9 @@ class CustomListImportExplainer:
             _report_dict = json.load(f)
         return CustomListsReport.parse(_report_dict)
 
-    def _generate_csv_for_list(self, csv_writer, list_report: CustomListReport) -> int:
+    def _generate_csv_for_list(
+        self, csv_writer: Writer, list_report: CustomListReport
+    ) -> int:
         wrote_rows = 0
         for problem in list_report.problems():
             ++wrote_rows
@@ -203,7 +211,7 @@ class CustomListImportExplainer:
         self._output_csv_file = args.output_csv_file
 
     @staticmethod
-    def create(args: list[str]) -> "CustomListImportExplainer":
+    def create(args: list[str]) -> CustomListImportExplainer:
         return CustomListImportExplainer(
             CustomListImportExplainer._parse_arguments(args)
         )

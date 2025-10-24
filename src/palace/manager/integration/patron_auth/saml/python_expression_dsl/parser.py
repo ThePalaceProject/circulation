@@ -191,7 +191,7 @@ class DSLParser:
         try:
             results = self.expression.parseString(expression, parseAll=True)
 
-            return results[0]
+            return results[0]  # type: ignore[no-any-return]
         except ParseException as exception:
             error_message = self._parse_error_message(exception)
 

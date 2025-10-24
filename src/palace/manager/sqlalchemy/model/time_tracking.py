@@ -240,5 +240,5 @@ def _title_for_identifier(identifier: Identifier | None) -> str | None:
         .filter(Edition.primary_identifier == identifier)
         .first()
     ):
-        return edition.title
+        return edition.title  # type: ignore[no-any-return]
     return None
