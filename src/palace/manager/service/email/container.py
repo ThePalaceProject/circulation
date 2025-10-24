@@ -1,7 +1,7 @@
 from dependency_injector import providers
 from dependency_injector.containers import DeclarativeContainer
 from dependency_injector.providers import Provider
-from redmail import EmailSender
+from redmail.email.sender import EmailSender
 
 from palace.manager.service.email.email import (
     SendEmailCallable,

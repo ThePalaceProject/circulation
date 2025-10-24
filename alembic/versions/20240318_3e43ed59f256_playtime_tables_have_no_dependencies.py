@@ -270,7 +270,7 @@ def update_playtime_entries(conn: Connection) -> None:
 @cache
 def get_collection_name(conn: Connection, collection_id: int) -> str:
     """Given the id of a collection, return its name."""
-    return conn.execute(
+    return conn.execute(  # type: ignore[no-any-return]
         sa.text(
             """
             SELECT ic.name
@@ -302,6 +302,6 @@ def get_identifier_urn(conn: Connection, identifier_id: int) -> str:
 @cache
 def get_library_name(conn: Connection, library_id: int) -> str:
     """Given the id of a library, return its name."""
-    return conn.execute(
+    return conn.execute(  # type: ignore[no-any-return]
         sa.text("SELECT name FROM libraries WHERE id = %s"), (library_id,)
     ).scalar_one()

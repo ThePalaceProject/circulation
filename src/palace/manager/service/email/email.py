@@ -3,7 +3,7 @@ from collections.abc import Mapping
 from email.message import EmailMessage
 from typing import Any, Protocol
 
-from redmail import EmailSender
+from redmail.email.sender import EmailSender
 
 from palace.manager.core.config import CannotLoadConfiguration
 

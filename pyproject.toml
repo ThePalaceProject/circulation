@@ -32,129 +32,221 @@ known_third_party = ["alembic"]
 profile = "black"
 
 [tool.mypy]
-# TODO: Enable the the check_untyped_defs option
-# This will get rid of the warnings that we get when running mypy
-# > note: By default the bodies of untyped functions are not checked
-# However this currently causes a number of errors to surface that will
-# need to be cleaned up before we can enable the option.
-# check_untyped_defs = true
-# When we enable this option, we should remove this disable. Its just here
-# to silence the noise in the mypy output for now, so its easier to see when
-# there are errors in the output.
-disable_error_code = "annotation-unchecked"
+# This is the main mypy configuration for the project.
+# All new code should aim to pass mypy with strict settings.
+disallow_untyped_calls = false
 explicit_package_bases = true
 files = ["alembic", "src/palace", "tests"]
 mypy_path = ["alembic", "src"]
 plugins = ["pydantic.mypy", "sqlalchemy.ext.mypy.plugin"]
-strict_bytes = true
+strict = true
 warn_redundant_casts = true
 warn_unreachable = true
-warn_unused_configs = true
 warn_unused_ignores = true
 
 [[tool.mypy.overrides]]
+# Overrides for the tests module.
+check_untyped_defs = false
 # In our tests, we often overwrite methods on classes to mock out behavior.
 # This is a common pattern in Python, but mypy doesn't like it. This override
 # silences those errors, but only for the tests module.
 # See discussion here:
 # https://github.com/python/mypy/issues/2427
-disable_error_code = "method-assign, union-attr"
+disable_error_code = "method-assign, union-attr, annotation-unchecked"
+disallow_any_generics = false
+disallow_incomplete_defs = false
+disallow_subclassing_any = false
+disallow_untyped_calls = false
+disallow_untyped_decorators = false
+disallow_untyped_defs = false
+extra_checks = false
 module = "tests.*"
+no_implicit_reexport = false
+strict_equality = false
+warn_return_any = false
 # Mypy seems to have issues in the test code where it thinks code is unreachable
 # when it is not. So we disable this warning for the tests module.
 warn_unreachable = false
 
 [[tool.mypy.overrides]]
-# This override is the equivalent of running mypy with the --strict flag.
-# This is a work in progress, but we should try to get as many of our files
-# into the module list here as possible.
-check_untyped_defs = true
-disallow_any_generics = true
-disallow_incomplete_defs = true
-disallow_subclassing_any = true
-disallow_untyped_decorators = true
-disallow_untyped_defs = true
+# These overrides use lax checking for any modules that we have not
+# yet added type hints to. We are aiming to gradually add type hints
+# to all of these modules, at which point we will remove this override.
+check_untyped_defs = false
+disable_error_code = "annotation-unchecked"
+disallow_any_generics = false
+disallow_incomplete_defs = false
+disallow_subclassing_any = false
+disallow_untyped_calls = false
+disallow_untyped_decorators = false
+disallow_untyped_defs = false
+extra_checks = false
 module = [
-    "palace.manager.api.admin.announcement_list_validator",
-    "palace.manager.api.admin.config",
-    "palace.manager.api.admin.controller.catalog_services",
-    "palace.manager.api.admin.controller.collection_settings",
-    "palace.manager.api.admin.controller.discovery_service_library_registrations",
-    "palace.manager.api.admin.controller.discovery_services",
-    "palace.manager.api.admin.controller.integration_settings",
-    "palace.manager.api.admin.controller.library_settings",
-    "palace.manager.api.admin.controller.metadata_services",
-    "palace.manager.api.admin.controller.patron",
-    "palace.manager.api.admin.controller.patron_auth_services",
-    "palace.manager.api.admin.controller.report",
-    "palace.manager.api.admin.controller.util",
-    "palace.manager.api.admin.dashboard_stats",
-    "palace.manager.api.admin.form_data",
-    "palace.manager.api.admin.model.dashboard_statistics",
-    "palace.manager.api.adobe_vendor_id",
-    "palace.manager.api.circulation.*",
-    "palace.manager.api.controller.circulation_manager",
-    "palace.manager.api.controller.loan",
-    "palace.manager.api.controller.marc",
-    "palace.manager.api.controller.odl_notification",
-    "palace.manager.api.controller.patron_activity_history",
-    "palace.manager.api.lcp.hash",
-    "palace.manager.api.metadata.*",
-    "palace.manager.api.util.flask",
-    "palace.manager.core.selftest",
-    "palace.manager.data_layer.*",
-    "palace.manager.feed.*",
-    "palace.manager.integration.base",
-    "palace.manager.integration.catalog.*",
-    "palace.manager.integration.configuration.*",
-    "palace.manager.integration.discovery.*",
-    "palace.manager.integration.goals",
-    "palace.manager.integration.license.*",
-    "palace.manager.integration.metadata.*",
-    "palace.manager.integration.settings",
-    "palace.manager.opds.*",
-    "palace.manager.scripts.initialization",
-    "palace.manager.scripts.rotate_jwe_key",
-    "palace.manager.scripts.search",
-    "palace.manager.search.document",
-    "palace.manager.search.migrator",
-    "palace.manager.search.revision",
-    "palace.manager.search.revision_directory",
-    "palace.manager.search.service",
-    "palace.manager.search.v5",
-    "palace.manager.service.*",
-    "palace.manager.sqlalchemy.hassessioncache",
-    "palace.manager.sqlalchemy.model.announcements",
-    "palace.manager.sqlalchemy.model.circulationevent",
-    "palace.manager.sqlalchemy.model.classification",
-    "palace.manager.sqlalchemy.model.collection",
-    "palace.manager.sqlalchemy.model.datasource",
-    "palace.manager.sqlalchemy.model.identifier",
-    "palace.manager.sqlalchemy.model.integration",
-    "palace.manager.sqlalchemy.model.library",
-    "palace.manager.sqlalchemy.model.licensing",
-    "palace.manager.sqlalchemy.model.patron",
-    "palace.manager.sqlalchemy.util",
-    "palace.manager.util.authentication_for_opds",
-    "palace.manager.util.base64",
-    "palace.manager.util.cache",
-    "palace.manager.util.http.*",
-    "palace.manager.util.log",
-    "palace.manager.util.migration.*",
-    "palace.manager.util.problem_detail",
-    "palace.manager.util.string_helpers",
-    "palace.manager.util.uuid",
-    "palace.manager.util.worker_pools",
-    "palace.manager.util.xmlparser",
-    "tests.fixtures.authenticator",
-    "tests.fixtures.webserver",
-    "tests.migration.*",
+    "palace.manager.api.admin.admin_authentication_provider",
+    "palace.manager.api.admin.controller",
+    "palace.manager.api.admin.controller.admin_search",
+    "palace.manager.api.admin.controller.announcement_service",
+    "palace.manager.api.admin.controller.base",
+    "palace.manager.api.admin.controller.custom_lists",
+    "palace.manager.api.admin.controller.dashboard",
+    "palace.manager.api.admin.controller.feed",
+    "palace.manager.api.admin.controller.individual_admin_settings",
+    "palace.manager.api.admin.controller.lanes",
+    "palace.manager.api.admin.controller.quicksight",
+    "palace.manager.api.admin.controller.sign_in",
+    "palace.manager.api.admin.controller.timestamps",
+    "palace.manager.api.admin.controller.view",
+    "palace.manager.api.admin.controller.work_editor",
+    "palace.manager.api.admin.model.custom_lists",
+    "palace.manager.api.admin.model.quicksight",
+    "palace.manager.api.admin.password_admin_authentication_provider",
+    "palace.manager.api.admin.routes",
+    "palace.manager.api.admin.validator",
+    "palace.manager.api.annotations",
+    "palace.manager.api.app",
+    "palace.manager.api.authentication.access_token",
+    "palace.manager.api.authentication.base",
+    "palace.manager.api.authentication.basic",
+    "palace.manager.api.authentication.basic_token",
+    "palace.manager.api.authenticator",
+    "palace.manager.api.circulation_manager",
+    "palace.manager.api.config",
+    "palace.manager.api.controller.analytics",
+    "palace.manager.api.controller.annotation",
+    "palace.manager.api.controller.base",
+    "palace.manager.api.controller.device_tokens",
+    "palace.manager.api.controller.index",
+    "palace.manager.api.controller.opds_feed",
+    "palace.manager.api.controller.patron_auth_token",
+    "palace.manager.api.controller.playtime_entries",
+    "palace.manager.api.controller.profile",
+    "palace.manager.api.controller.static_file",
+    "palace.manager.api.controller.urn_lookup",
+    "palace.manager.api.controller.work",
+    "palace.manager.api.lanes",
+    "palace.manager.api.local_analytics_exporter",
+    "palace.manager.api.model.time_tracking",
+    "palace.manager.api.routes",
+    "palace.manager.api.selftest",
+    "palace.manager.api.util.patron",
+    "palace.manager.api.util.profilers",
+    "palace.manager.api.util.url",
+    "palace.manager.api.util.xray",
+    "palace.manager.api.web_publication_manifest",
+    "palace.manager.core.app_server",
+    "palace.manager.core.classifier",
+    "palace.manager.core.classifier.age",
+    "palace.manager.core.classifier.bic",
+    "palace.manager.core.classifier.bisac",
+    "palace.manager.core.classifier.ddc",
+    "palace.manager.core.classifier.gutenberg",
+    "palace.manager.core.classifier.keyword",
+    "palace.manager.core.classifier.lcc",
+    "palace.manager.core.classifier.overdrive",
+    "palace.manager.core.classifier.simplified",
+    "palace.manager.core.classifier.work",
+    "palace.manager.core.config",
+    "palace.manager.core.coverage",
+    "palace.manager.core.entrypoint",
+    "palace.manager.core.equivalents_coverage",
+    "palace.manager.core.external_list",
+    "palace.manager.core.facets",
+    "palace.manager.core.lcp.credential",
+    "palace.manager.core.monitor",
+    "palace.manager.core.opensearch",
+    "palace.manager.core.query.coverage",
+    "palace.manager.core.query.customlist",
+    "palace.manager.core.query.playtime_entries",
+    "palace.manager.core.user_profile",
+    "palace.manager.customlists.explain",
+    "palace.manager.customlists.exporter",
+    "palace.manager.customlists.importer",
+    "palace.manager.customlists.report",
+    "palace.manager.integration.patron_auth.kansas_patron",
+    "palace.manager.integration.patron_auth.millenium_patron",
+    "palace.manager.integration.patron_auth.saml.auth",
+    "palace.manager.integration.patron_auth.saml.configuration.model",
+    "palace.manager.integration.patron_auth.saml.controller",
+    "palace.manager.integration.patron_auth.saml.credential",
+    "palace.manager.integration.patron_auth.saml.metadata.federations.loader",
+    "palace.manager.integration.patron_auth.saml.metadata.federations.validator",
+    "palace.manager.integration.patron_auth.saml.metadata.filter",
+    "palace.manager.integration.patron_auth.saml.metadata.model",
+    "palace.manager.integration.patron_auth.saml.metadata.monitor",
+    "palace.manager.integration.patron_auth.saml.metadata.parser",
+    "palace.manager.integration.patron_auth.saml.provider",
+    "palace.manager.integration.patron_auth.saml.python_expression_dsl.ast",
+    "palace.manager.integration.patron_auth.saml.python_expression_dsl.evaluator",
+    "palace.manager.integration.patron_auth.saml.python_expression_dsl.parser",
+    "palace.manager.integration.patron_auth.saml.python_expression_dsl.util",
+    "palace.manager.integration.patron_auth.sip2.client",
+    "palace.manager.integration.patron_auth.sip2.provider",
+    "palace.manager.integration.patron_auth.sirsidynix_authentication_provider",
+    "palace.manager.reporting.model",
+    "palace.manager.reporting.reports.library_collection",
+    "palace.manager.reporting.util",
+    "palace.manager.scripts.adobe",
+    "palace.manager.scripts.availability",
+    "palace.manager.scripts.base",
+    "palace.manager.scripts.configuration",
+    "palace.manager.scripts.contributor_names",
+    "palace.manager.scripts.coverage_provider",
+    "palace.manager.scripts.customlist",
+    "palace.manager.scripts.identifier",
+    "palace.manager.scripts.informational",
+    "palace.manager.scripts.input",
+    "palace.manager.scripts.integration_test",
+    "palace.manager.scripts.lane",
+    "palace.manager.scripts.local_analytics",
+    "palace.manager.scripts.metadata",
+    "palace.manager.scripts.monitor",
+    "palace.manager.scripts.novelist",
+    "palace.manager.scripts.nyt",
+    "palace.manager.scripts.playtime_entries",
+    "palace.manager.scripts.saml",
+    "palace.manager.scripts.self_test",
+    "palace.manager.scripts.short_token",
+    "palace.manager.scripts.suppress",
+    "palace.manager.scripts.timestamp",
+    "palace.manager.scripts.translations",
+    "palace.manager.scripts.work",
+    "palace.manager.search.external_search",
+    "palace.manager.sqlalchemy.before_flush_decorator",
+    "palace.manager.sqlalchemy.bulk_operation",
+    "palace.manager.sqlalchemy.flask_sqlalchemy_session",
+    "palace.manager.sqlalchemy.listeners",
+    "palace.manager.sqlalchemy.model.admin",
+    "palace.manager.sqlalchemy.model.contributor",
+    "palace.manager.sqlalchemy.model.coverage",
+    "palace.manager.sqlalchemy.model.credential",
+    "palace.manager.sqlalchemy.model.customlist",
+    "palace.manager.sqlalchemy.model.devicetokens",
+    "palace.manager.sqlalchemy.model.edition",
+    "palace.manager.sqlalchemy.model.key",
+    "palace.manager.sqlalchemy.model.lane",
+    "palace.manager.sqlalchemy.model.measurement",
+    "palace.manager.sqlalchemy.model.resource",
+    "palace.manager.sqlalchemy.model.saml",
+    "palace.manager.sqlalchemy.model.time_tracking",
+    "palace.manager.sqlalchemy.model.work",
+    "palace.manager.sqlalchemy.session",
+    "palace.manager.util",
+    "palace.manager.util.accept_language",
+    "palace.manager.util.aes",
+    "palace.manager.util.flask_util",
+    "palace.manager.util.languages",
+    "palace.manager.util.median",
+    "palace.manager.util.opds_writer",
+    "palace.manager.util.permanent_work_id",
+    "palace.manager.util.personal_names",
+    "palace.manager.util.pydantic",
+    "palace.manager.util.summary",
+    "palace.manager.util.titles",
+    "palace.manager.util.web_publication_manifest",
 ]
-no_implicit_reexport = true
-strict_concatenate = true
-strict_equality = true
-warn_return_any = true
-warn_unused_ignores = true
+no_implicit_reexport = false
+strict_equality = false
+warn_return_any = false
 
 [[tool.mypy.overrides]]
 # Custom mypy overrides for the palace.manager.celery module.

@@ -1,7 +1,7 @@
 from unittest.mock import create_autospec
 
 import pytest
-from redmail import EmailSender
+from redmail.email.sender import EmailSender
 
 from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.service.email.container import Email

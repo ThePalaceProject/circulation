@@ -25,14 +25,14 @@ old_options = (
 new_options = old_options + (Timestamp.TASK_TYPE,)
 
 
-def upgrade():
+def upgrade() -> None:
     # Add task type to the enum
     pg_update_enum(
         op, "timestamps", "service_type", "service_type", old_options, new_options
     )
 
 
-def downgrade():
+def downgrade() -> None:
     # Convert 'task' service_type into 'script'
     op.execute(
         f"UPDATE timestamps SET service_type='{Timestamp.SCRIPT_TYPE}' "

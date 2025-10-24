@@ -16,3 +16,5 @@ try:
     from palace.manager._version import __branch__
 except (ModuleNotFoundError, ImportError):
     __branch__ = None
+
+__all__ = ["__version__", "__commit__", "__branch__"]
