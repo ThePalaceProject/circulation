@@ -4,7 +4,7 @@ from collections import defaultdict
 from sqlalchemy.orm import Session
 
 import palace.manager.core.classifier as genres
-from palace.manager.api.config import CannotLoadConfiguration, Configuration
+from palace.manager.api.config import Configuration
 from palace.manager.core import classifier
 from palace.manager.core.classifier import (
     Classifier,
@@ -12,6 +12,7 @@ from palace.manager.core.classifier import (
     fiction_genres,
     nonfiction_genres,
 )
+from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.integration.metadata.novelist import NoveListAPI
 from palace.manager.integration.metadata.nyt import NYTBestSellerAPI
 from palace.manager.sqlalchemy.model.collection import Collection

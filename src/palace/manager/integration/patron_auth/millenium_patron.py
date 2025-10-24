@@ -10,10 +10,10 @@ from lxml import etree
 
 from palace.manager.api.authentication.base import PatronData
 from palace.manager.api.authentication.basic import (
+    BasicAuthenticationProvider,
     BasicAuthProviderLibrarySettings,
     BasicAuthProviderSettings,
 )
-from palace.manager.api.authenticator import BasicAuthenticationProvider
 from palace.manager.integration.settings import (
     FormFieldType,
     FormMetadata,

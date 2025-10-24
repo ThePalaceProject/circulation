@@ -1,10 +1,12 @@
 import csv
 import datetime
 from datetime import timedelta
+from typing import cast
 from unittest import mock
 
 import pytest
 
+from palace.manager.api.local_analytics_exporter import LocalAnalyticsExporter
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.classification import Genre
 from palace.manager.sqlalchemy.model.work import WorkGenre
@@ -103,7 +105,7 @@ class TestDashboardController:
                 date_end,
                 library_short_name,
             ) = dashboard_fixture.manager.admin_dashboard_controller.bulk_circulation_events(
-                analytics_exporter=exporter
+                analytics_exporter=cast(LocalAnalyticsExporter, exporter)
             )
 
             # export() was called with the arguments we expect.

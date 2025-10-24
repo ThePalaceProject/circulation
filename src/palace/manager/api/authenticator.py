@@ -25,7 +25,7 @@ from palace.manager.api.authentication.basic import BasicAuthenticationProvider
 from palace.manager.api.authentication.basic_token import (
     BasicTokenAuthenticationProvider,
 )
-from palace.manager.api.config import CannotLoadConfiguration, Configuration
+from palace.manager.api.config import Configuration
 from palace.manager.api.problem_details import (
     INVALID_SAML_BEARER_TOKEN,
     LIBRARY_NOT_FOUND,
@@ -33,6 +33,7 @@ from palace.manager.api.problem_details import (
     UNSUPPORTED_AUTHENTICATION_MECHANISM,
 )
 from palace.manager.api.util.flask import get_request_library
+from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.core.user_profile import ProfileController
 from palace.manager.integration.goals import Goals
 from palace.manager.service.analytics.analytics import Analytics

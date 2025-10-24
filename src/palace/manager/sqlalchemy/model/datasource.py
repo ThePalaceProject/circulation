@@ -16,13 +16,13 @@ from palace.manager.sqlalchemy.util import get_one, get_one_or_create
 if TYPE_CHECKING:
     # This is needed during type checking so we have the
     # types of related models.
-    from palace.manager.api.lanes import Lane
     from palace.manager.sqlalchemy.model.classification import Classification
     from palace.manager.sqlalchemy.model.coverage import CoverageRecord
     from palace.manager.sqlalchemy.model.credential import Credential
     from palace.manager.sqlalchemy.model.customlist import CustomList
     from palace.manager.sqlalchemy.model.edition import Edition
     from palace.manager.sqlalchemy.model.identifier import Equivalency, Identifier
+    from palace.manager.sqlalchemy.model.lane import Lane
     from palace.manager.sqlalchemy.model.licensing import (
         LicensePool,
         LicensePoolDeliveryMechanism,

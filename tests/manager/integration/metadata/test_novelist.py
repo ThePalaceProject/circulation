@@ -10,7 +10,7 @@ import dateutil.parser
 import pytest
 from pytest import MonkeyPatch
 
-from palace.manager.api.config import CannotLoadConfiguration
+from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.integration.goals import Goals
 from palace.manager.integration.metadata.novelist import (

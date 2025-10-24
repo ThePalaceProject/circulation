@@ -43,7 +43,7 @@ from palace.manager.api.authenticator import (
     CirculationPatronProfileStorage,
     LibraryAuthenticator,
 )
-from palace.manager.api.config import CannotLoadConfiguration, Configuration
+from palace.manager.api.config import Configuration
 from palace.manager.api.problem_details import (
     LIBRARY_NOT_FOUND,
     PATRON_AUTH_ACCESS_TOKEN_EXPIRED,
@@ -51,6 +51,7 @@ from palace.manager.api.problem_details import (
     UNSUPPORTED_AUTHENTICATION_MECHANISM,
 )
 from palace.manager.api.util.patron import PatronUtility
+from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.core.exceptions import IntegrationException
 from palace.manager.core.user_profile import ProfileController
 from palace.manager.integration.goals import Goals

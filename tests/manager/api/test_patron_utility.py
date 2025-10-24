@@ -10,7 +10,8 @@ from palace.manager.api.circulation.exceptions import (
     AuthorizationExpired,
     OutstandingFines,
 )
-from palace.manager.api.util.patron import Patron, PatronUtility
+from palace.manager.api.util.patron import PatronUtility
+from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.util import MoneyUtility
 from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture

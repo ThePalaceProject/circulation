@@ -55,13 +55,9 @@ check_untyped_defs = false
 disable_error_code = "method-assign, union-attr, annotation-unchecked"
 disallow_any_generics = false
 disallow_incomplete_defs = false
-disallow_subclassing_any = false
-disallow_untyped_calls = false
 disallow_untyped_decorators = false
 disallow_untyped_defs = false
-extra_checks = false
 module = "tests.*"
-no_implicit_reexport = false
 strict_equality = false
 warn_return_any = false
 # Mypy seems to have issues in the test code where it thinks code is unreachable
@@ -76,18 +72,14 @@ check_untyped_defs = false
 disable_error_code = "annotation-unchecked"
 disallow_any_generics = false
 disallow_incomplete_defs = false
-disallow_subclassing_any = false
-disallow_untyped_calls = false
 disallow_untyped_decorators = false
 disallow_untyped_defs = false
-extra_checks = false
 module = [
     "palace.manager.api.admin.admin_authentication_provider",
     "palace.manager.api.admin.controller.admin_search",
     "palace.manager.api.admin.controller.announcement_service",
     "palace.manager.api.admin.controller.base",
     "palace.manager.api.admin.controller.custom_lists",
-    "palace.manager.api.admin.controller.dashboard",
     "palace.manager.api.admin.controller.feed",
     "palace.manager.api.admin.controller.individual_admin_settings",
     "palace.manager.api.admin.controller.lanes",
@@ -102,7 +94,6 @@ module = [
     "palace.manager.api.admin.validator",
     "palace.manager.api.annotations",
     "palace.manager.api.app",
-    "palace.manager.api.authentication.access_token",
     "palace.manager.api.authentication.base",
     "palace.manager.api.authentication.basic",
     "palace.manager.api.authentication.basic_token",
@@ -121,7 +112,6 @@ module = [
     "palace.manager.api.controller.work",
     "palace.manager.api.lanes",
     "palace.manager.api.local_analytics_exporter",
-    "palace.manager.api.model.time_tracking",
     "palace.manager.api.routes",
     "palace.manager.api.util.patron",
     "palace.manager.api.util.profilers",
@@ -221,8 +211,6 @@ module = [
     "palace.manager.util.titles",
     "palace.manager.util.web_publication_manifest",
 ]
-no_implicit_reexport = false
-strict_equality = false
 warn_return_any = false
 
 [[tool.mypy.overrides]]
@@ -230,20 +218,11 @@ warn_return_any = false
 # Since Celery is untyped, and we're using a lot of its
 # features, we disable some of the strict mypy checks
 # that get annoying when working with Celery.
-check_untyped_defs = true
-disallow_any_generics = true
-disallow_incomplete_defs = true
 disallow_subclassing_any = false
 disallow_untyped_decorators = false
-disallow_untyped_defs = true
 module = [
     "palace.manager.celery.*",
 ]
-no_implicit_reexport = true
-strict_concatenate = true
-strict_equality = true
-warn_return_any = true
-warn_unused_ignores = true
 
 [[tool.mypy.overrides]]
 # This override silences errors for modules we import that don't currently

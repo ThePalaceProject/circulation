@@ -23,10 +23,12 @@ class DashboardController(CirculationManagerController):
         admin = get_request_admin()
         return stats_function(admin, self._db)
 
-    def bulk_circulation_events(self, analytics_exporter=None):
+    def bulk_circulation_events(
+        self, analytics_exporter: LocalAnalyticsExporter | None = None
+    ) -> tuple[str, str, str, str | None]:
         date_format = "%Y-%m-%d"
 
-        def get_date(field):
+        def get_date(field: str) -> date:
             # Return a date or datetime object representing the
             # _beginning_ of the asked-for day, local time.
             #

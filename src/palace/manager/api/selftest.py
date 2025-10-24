@@ -5,8 +5,7 @@ from collections.abc import Generator, Iterable
 
 from sqlalchemy.orm.session import Session
 
-from palace.manager.core.config import IntegrationException
-from palace.manager.core.exceptions import BasePalaceException
+from palace.manager.core.exceptions import BasePalaceException, IntegrationException
 from palace.manager.core.selftest import HasSelfTests, SelfTestResult
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.integration import IntegrationConfiguration

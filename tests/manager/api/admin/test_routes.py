@@ -103,8 +103,8 @@ class AdminRouteFixture:
         self.routes = routes
         self.api_routes = api_routes
         self.manager = app.manager
-        self.original_app = self.routes.app
-        self.original_api_app = self.api_routes.app
+        self.original_app = self.routes.app  # type: ignore[attr-defined]
+        self.original_api_app = self.api_routes.app  # type: ignore[attr-defined]
         self.resolver = self.original_app.url_map.bind("", "/")
 
         self.controller: CirculationManagerController | None = None

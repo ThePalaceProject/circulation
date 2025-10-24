@@ -18,6 +18,7 @@ from palace.manager.core.entrypoint import (
     EntryPoint,
     EverythingEntryPoint,
 )
+from palace.manager.core.facets import FacetConstants
 from palace.manager.core.problem_details import INVALID_INPUT
 from palace.manager.integration.license.bibliotheca import BibliothecaAPI
 from palace.manager.integration.license.opds.odl.api import OPDS2WithODLApi
@@ -35,7 +36,6 @@ from palace.manager.sqlalchemy.model.lane import (
     DatabaseBackedFacets,
     DatabaseBackedWorkList,
     DefaultSortOrderFacets,
-    FacetConstants,
     Facets,
     FacetsWithEntryPoint,
     FeaturedFacets,

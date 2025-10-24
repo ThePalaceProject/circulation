@@ -143,7 +143,7 @@ class RouteTestFixture:
         app = MockApp()
         self.routes = routes
         self.manager = app.manager
-        self.original_app = self.routes.app
+        self.original_app = self.routes.app  # type: ignore[attr-defined]
         self.resolver = self.original_app.url_map.bind("", "/")
 
         self.controller: CirculationManagerController | None = None

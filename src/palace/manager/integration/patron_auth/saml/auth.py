@@ -32,7 +32,7 @@ from palace.manager.integration.patron_auth.saml.python_expression_dsl.parser im
 from palace.manager.util.problem_detail import ProblemDetail as pd
 
 if TYPE_CHECKING:
-    from palace.manager.integration.patron_auth.saml.provider import (
+    from palace.manager.integration.patron_auth.saml.configuration.model import (
         SAMLWebSSOAuthSettings,
     )
 
