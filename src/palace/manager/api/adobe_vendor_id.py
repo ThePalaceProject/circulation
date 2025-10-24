@@ -12,7 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Query
 from sqlalchemy.orm.session import Session
 
-from palace.manager.api.config import CannotLoadConfiguration
+from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.integration.discovery.opds_registration import (
     OpdsRegistrationService,
 )

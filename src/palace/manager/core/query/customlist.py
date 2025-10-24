@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import datetime
 import json
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from palace.manager.api.admin.problem_details import (
     CUSTOMLIST_ENTRY_NOT_VALID_FOR_LIBRARY,
@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 class CustomListQueries(LoggerMixin):
     @classmethod
     def share_locally_with_library(
-        cls, _db, customlist: CustomList, library: Library
+        cls, _db: Session, customlist: CustomList, library: Library
     ) -> ProblemDetail | bool:
         # All customlist collections must be present in the library
         log = cls.logger()
@@ -90,7 +90,7 @@ class CustomListQueries(LoggerMixin):
         start_page: int = 1,
         max_pages: int = 100000,
         page_size: int = 100,
-        json_query: dict | None = None,
+        json_query: dict[str, Any] | None = None,
     ) -> int:
         """Populate the custom list while paging through the search query results
         :param _db: The database connection

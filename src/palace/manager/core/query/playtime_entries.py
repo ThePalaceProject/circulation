@@ -1,4 +1,5 @@
 import logging
+from typing import TypedDict
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -15,6 +16,12 @@ from palace.manager.sqlalchemy.util import create
 from palace.manager.util.datetime_helpers import utc_now
 
 
+class PlaytimeEntryResponseDict(TypedDict):
+    id: str
+    status: int
+    message: str
+
+
 class PlaytimeEntries:
     # The oldest entry acceptable by the insert API
     # If anything earlier arrives, we ignore it with a 410 response
@@ -29,7 +36,7 @@ class PlaytimeEntries:
         library: Library,
         data: PlaytimeEntriesPost,
         loan_identifier: str,
-    ) -> tuple[list, PlaytimeEntriesPostSummary]:
+    ) -> tuple[list[PlaytimeEntryResponseDict], PlaytimeEntriesPostSummary]:
         """Insert into the database playtime entries from a request"""
         responses = []
         summary = PlaytimeEntriesPostSummary()
@@ -89,7 +96,11 @@ class PlaytimeEntries:
                     summary.failures += 1
                 transaction.commit()
 
-            responses.append(dict(id=entry.id, status=status_code, message=message))
+            responses.append(
+                PlaytimeEntryResponseDict(
+                    id=entry.id, status=status_code, message=message
+                )
+            )
             summary.total += 1
 
         return responses, summary

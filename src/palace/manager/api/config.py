@@ -6,8 +6,6 @@ from Crypto.Cipher.PKCS1_OAEP import PKCS1OAEP_Cipher
 from Crypto.PublicKey import RSA
 from flask_babel import lazy_gettext as _
 
-from palace.manager.core.config import CannotLoadConfiguration  # noqa: autoflake
-from palace.manager.core.config import IntegrationException  # noqa: autoflake
 from palace.manager.core.config import Configuration as CoreConfiguration
 from palace.manager.integration.configuration.library import LibrarySettings
 from palace.manager.sqlalchemy.model.announcements import (

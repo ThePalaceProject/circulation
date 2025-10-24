@@ -150,4 +150,4 @@ class Key(Base):
         # The sqlalchemy docs say that the rowcount attribute is always present
         # when doing a DELETE statement, so we can safely ignore this error.
         # https://docs.sqlalchemy.org/en/20/tutorial/data_update.html#getting-affected-row-count-from-update-delete
-        return result.rowcount  # type: ignore[attr-defined]
+        return result.rowcount  # type: ignore[attr-defined, no-any-return]

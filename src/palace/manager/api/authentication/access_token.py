@@ -38,7 +38,7 @@ class PatronJWEAccessTokenProvider(LoggerMixin):
         """Generate a new key compatible with the token encyption type"""
         kid = uuid_encode(key_id)
         generated_key = jwk.JWK.generate(kty="oct", size=256, kid=kid)
-        return generated_key.export()
+        return generated_key.export()  # type: ignore[no-any-return]
 
     @classmethod
     def create_key(cls, _db: Session) -> Key:
@@ -88,7 +88,7 @@ class PatronJWEAccessTokenProvider(LoggerMixin):
             ),
             recipient=jwk_obj,
         )
-        return token.serialize(compact=True)
+        return token.serialize(compact=True)  # type: ignore[no-any-return]
 
     @classmethod
     def decode_token(cls, token: str) -> jwe.JWE:

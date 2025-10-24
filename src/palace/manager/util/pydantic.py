@@ -70,7 +70,9 @@ class _PydanticFrozenDictAnnotation:
     def __get_pydantic_core_schema__(
         cls, source_type: Any, handler: GetCoreSchemaHandler
     ) -> CoreSchema:
-        def validate_from_dict(d: dict | frozendict) -> frozendict:
+        def validate_from_dict[KeyT, ValT](
+            d: dict[KeyT, ValT] | frozendict[KeyT, ValT],
+        ) -> frozendict[KeyT, ValT]:
             return frozendict(d)
 
         args = get_args(source_type)

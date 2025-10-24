@@ -9,7 +9,7 @@ if TYPE_CHECKING:
     from palace.manager.api.circulation_manager import CirculationManager
 
 
-def setup_admin_controllers(manager: CirculationManager):
+def setup_admin_controllers(manager: CirculationManager) -> None:
     """Set up all the controllers that will be used by the admin parts of the web app."""
     from palace.manager.api.admin.controller.admin_search import AdminSearchController
     from palace.manager.api.admin.controller.announcement_service import (

@@ -205,7 +205,7 @@ class CustomBaseModel(BaseModel):
         return self.model_dump(**kwargs)
 
 
-def str_comma_list_validator(value):
+def str_comma_list_validator(value: int | float | str) -> list[str]:
     """Validate a comma separated string and parse it into a list, generally used for query parameters"""
     if isinstance(value, (int, float)):
         # A single number shows up as an int

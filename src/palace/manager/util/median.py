@@ -1,4 +1,7 @@
-def median(numbers):
+from collections.abc import Sequence
+
+
+def median(numbers: Sequence[float]) -> float:
     numbers = sorted(numbers)
     length = len(numbers)
     if length % 2 == 0:

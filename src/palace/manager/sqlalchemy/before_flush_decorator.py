@@ -41,7 +41,7 @@ class BeforeFlushListener:
         # If True, the listener has been triggered once.
         one_shot_triggered: bool = False
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._listeners: list[BeforeFlushListener.Listeners] = []
 
     def before_flush[**P](
@@ -154,7 +154,7 @@ class BeforeFlushListener:
         return True
 
     @staticmethod
-    def _filter_directly_modified(session: Session, instance: Base):
+    def _filter_directly_modified(session: Session, instance: Base) -> bool:
         """Return True only if `obj` has itself been modified, as opposed to having an object added or removed to
         one of its associated collections.
 

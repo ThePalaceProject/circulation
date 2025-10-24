@@ -25,7 +25,7 @@ from palace.manager.api.problem_details import (
     SPECIFIC_HOLD_LIMIT_MESSAGE,
     SPECIFIC_LOAN_LIMIT_MESSAGE,
 )
-from palace.manager.core.config import IntegrationException
+from palace.manager.core.exceptions import IntegrationException
 from palace.manager.core.problem_details import (
     INTEGRATION_ERROR,
     INTERNAL_SERVER_ERROR,

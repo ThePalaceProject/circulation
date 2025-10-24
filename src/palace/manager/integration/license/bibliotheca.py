@@ -49,7 +49,7 @@ from palace.manager.api.circulation.settings import (
     BaseCirculationApiSettings,
     BaseCirculationLoanSettings,
 )
-from palace.manager.api.selftest import HasCollectionSelfTests, SelfTestResult
+from palace.manager.api.selftest import HasCollectionSelfTests
 from palace.manager.api.web_publication_manifest import FindawayManifest, SpineItem
 from palace.manager.core.config import (
     CannotLoadConfiguration,
@@ -62,6 +62,7 @@ from palace.manager.core.monitor import (
     TimelineMonitor,
     TimestampData,
 )
+from palace.manager.core.selftest import SelfTestResult
 from palace.manager.data_layer.bibliographic import BibliographicData
 from palace.manager.data_layer.circulation import CirculationData
 from palace.manager.data_layer.contributor import ContributorData

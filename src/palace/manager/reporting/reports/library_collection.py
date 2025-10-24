@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from functools import cached_property, partial
 from io import TextIOWrapper
-from typing import IO, ClassVar, TypedDict, Unpack
+from typing import IO, Any, ClassVar, TypedDict, Unpack
 
 from sqlalchemy.orm import Session
 
@@ -179,8 +179,8 @@ class LibraryCollectionReport(LoggerMixin):
         )
 
     def get_table_processor(
-        self, table: ReportTable, **kwargs
-    ) -> TTabularDataProcessor:
+        self, table: ReportTable, **kwargs: Any
+    ) -> TTabularDataProcessor[None]:
         """Get the processor for a specific table.
 
         Override in subclasses for different processing strategies (e.g.,

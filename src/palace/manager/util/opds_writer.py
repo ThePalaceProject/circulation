@@ -6,7 +6,7 @@ from lxml import builder, etree
 from palace.manager.util.datetime_helpers import utc_now
 
 
-class ElementMaker(builder.ElementMaker):
+class ElementMaker(builder.ElementMaker):  # type: ignore[misc]
     """A helper object for creating etree elements."""
 
     def __dict__(self):

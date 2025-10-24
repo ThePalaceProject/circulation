@@ -11,7 +11,7 @@ from palace.manager.sqlalchemy.model.identifier import (
 class EquivalencyCoverageQueries:
     @classmethod
     def add_coverage_for_identifiers_chain(
-        cls, identifiers: list[Identifier], _db=None
+        cls, identifiers: list[Identifier], _db: Session | None = None
     ) -> list[EquivalencyCoverageRecord]:
         """Hunt down any recursive identifiers that may be touched by these identifiers
         set all the possible coverages to reset and recompute the chain

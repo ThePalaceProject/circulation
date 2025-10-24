@@ -39,7 +39,9 @@ class TabularQueryDefinition:
             )
         return headings
 
-    def rows(self, *, session: Session, **query_params) -> Generator[tuple[Any, ...]]:
+    def rows(
+        self, *, session: Session, **query_params: Any
+    ) -> Generator[tuple[Any, ...]]:
         """Run the query and yield its rows."""
         for row in session.execute(self.statement.params(**query_params)):
             yield tuple(row)
@@ -59,7 +61,7 @@ class TTabularDataProcessor[TTabularDataProcessorReturn](Protocol):
 class ReportTable(Protocol):
     """A table of data."""
 
-    def __init__(self, *args, **kwargs) -> None: ...
+    def __init__(self, **kwargs: Any) -> None: ...
 
     @property
     def definition(self) -> TabularQueryDefinition:

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from palace.manager.core.config import CannotLoadConfiguration
+
 """Interface to the New York Times APIs."""
 
 import json
@@ -11,7 +13,7 @@ from dateutil import tz
 from sqlalchemy import select
 from sqlalchemy.orm.session import Session
 
-from palace.manager.api.config import CannotLoadConfiguration, IntegrationException
+from palace.manager.core.exceptions import IntegrationException
 from palace.manager.core.external_list import TitleFromExternalList
 from palace.manager.core.selftest import HasSelfTests, SelfTestResult
 from palace.manager.data_layer.bibliographic import BibliographicData

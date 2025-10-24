@@ -35,7 +35,7 @@ class CustomListImportFailed(Exception):
 
 class CustomListImporter:
     @staticmethod
-    def _fatal(message: str):
+    def _fatal(message: str) -> None:
         raise CustomListImportFailed(message)
 
     @staticmethod
@@ -284,7 +284,7 @@ class CustomListImporter:
             f"Updating list '{customlist.name()}' ({customlist.id()}) on the target CM with {customlist.size()} books"
         )
         if not self._dry_run:
-            output_books: list[dict] = []
+            output_books: list[dict[str, str]] = []
             for book in customlist.books():
                 if book.id() in rejected_books:
                     continue

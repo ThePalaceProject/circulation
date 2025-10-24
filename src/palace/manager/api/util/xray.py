@@ -9,7 +9,7 @@ from flask import Flask, Response, request, session
 from palace import manager
 
 
-class PalaceXrayMiddleware(XRayMiddleware):
+class PalaceXrayMiddleware(XRayMiddleware):  # type: ignore[misc]
     XRAY_ENV_NAME = "PALACE_XRAY_NAME"
     XRAY_ENV_ANNOTATE = "PALACE_XRAY_ANNOTATE_"
     XRAY_ENV_PATRON_BARCODE = "PALACE_XRAY_INCLUDE_BARCODE"

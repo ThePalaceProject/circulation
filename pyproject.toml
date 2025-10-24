@@ -55,13 +55,9 @@ check_untyped_defs = false
 disable_error_code = "method-assign, union-attr, annotation-unchecked"
 disallow_any_generics = false
 disallow_incomplete_defs = false
-disallow_subclassing_any = false
-disallow_untyped_calls = false
 disallow_untyped_decorators = false
 disallow_untyped_defs = false
-extra_checks = false
 module = "tests.*"
-no_implicit_reexport = false
 strict_equality = false
 warn_return_any = false
 # Mypy seems to have issues in the test code where it thinks code is unreachable
@@ -76,19 +72,14 @@ check_untyped_defs = false
 disable_error_code = "annotation-unchecked"
 disallow_any_generics = false
 disallow_incomplete_defs = false
-disallow_subclassing_any = false
-disallow_untyped_calls = false
 disallow_untyped_decorators = false
 disallow_untyped_defs = false
-extra_checks = false
 module = [
     "palace.manager.api.admin.admin_authentication_provider",
-    "palace.manager.api.admin.controller",
     "palace.manager.api.admin.controller.admin_search",
     "palace.manager.api.admin.controller.announcement_service",
     "palace.manager.api.admin.controller.base",
     "palace.manager.api.admin.controller.custom_lists",
-    "palace.manager.api.admin.controller.dashboard",
     "palace.manager.api.admin.controller.feed",
     "palace.manager.api.admin.controller.individual_admin_settings",
     "palace.manager.api.admin.controller.lanes",
@@ -98,20 +89,17 @@ module = [
     "palace.manager.api.admin.controller.view",
     "palace.manager.api.admin.controller.work_editor",
     "palace.manager.api.admin.model.custom_lists",
-    "palace.manager.api.admin.model.quicksight",
     "palace.manager.api.admin.password_admin_authentication_provider",
     "palace.manager.api.admin.routes",
     "palace.manager.api.admin.validator",
     "palace.manager.api.annotations",
     "palace.manager.api.app",
-    "palace.manager.api.authentication.access_token",
     "palace.manager.api.authentication.base",
     "palace.manager.api.authentication.basic",
     "palace.manager.api.authentication.basic_token",
     "palace.manager.api.authenticator",
     "palace.manager.api.circulation_manager",
     "palace.manager.api.config",
-    "palace.manager.api.controller.analytics",
     "palace.manager.api.controller.annotation",
     "palace.manager.api.controller.base",
     "palace.manager.api.controller.device_tokens",
@@ -120,17 +108,13 @@ module = [
     "palace.manager.api.controller.patron_auth_token",
     "palace.manager.api.controller.playtime_entries",
     "palace.manager.api.controller.profile",
-    "palace.manager.api.controller.static_file",
     "palace.manager.api.controller.urn_lookup",
     "palace.manager.api.controller.work",
     "palace.manager.api.lanes",
     "palace.manager.api.local_analytics_exporter",
-    "palace.manager.api.model.time_tracking",
     "palace.manager.api.routes",
-    "palace.manager.api.selftest",
     "palace.manager.api.util.patron",
     "palace.manager.api.util.profilers",
-    "palace.manager.api.util.url",
     "palace.manager.api.util.xray",
     "palace.manager.api.web_publication_manifest",
     "palace.manager.core.app_server",
@@ -154,13 +138,8 @@ module = [
     "palace.manager.core.lcp.credential",
     "palace.manager.core.monitor",
     "palace.manager.core.opensearch",
-    "palace.manager.core.query.coverage",
-    "palace.manager.core.query.customlist",
-    "palace.manager.core.query.playtime_entries",
     "palace.manager.core.user_profile",
-    "palace.manager.customlists.explain",
     "palace.manager.customlists.exporter",
-    "palace.manager.customlists.importer",
     "palace.manager.customlists.report",
     "palace.manager.integration.patron_auth.kansas_patron",
     "palace.manager.integration.patron_auth.millenium_patron",
@@ -177,14 +156,9 @@ module = [
     "palace.manager.integration.patron_auth.saml.provider",
     "palace.manager.integration.patron_auth.saml.python_expression_dsl.ast",
     "palace.manager.integration.patron_auth.saml.python_expression_dsl.evaluator",
-    "palace.manager.integration.patron_auth.saml.python_expression_dsl.parser",
-    "palace.manager.integration.patron_auth.saml.python_expression_dsl.util",
     "palace.manager.integration.patron_auth.sip2.client",
     "palace.manager.integration.patron_auth.sip2.provider",
     "palace.manager.integration.patron_auth.sirsidynix_authentication_provider",
-    "palace.manager.reporting.model",
-    "palace.manager.reporting.reports.library_collection",
-    "palace.manager.reporting.util",
     "palace.manager.scripts.adobe",
     "palace.manager.scripts.availability",
     "palace.manager.scripts.base",
@@ -211,7 +185,6 @@ module = [
     "palace.manager.scripts.translations",
     "palace.manager.scripts.work",
     "palace.manager.search.external_search",
-    "palace.manager.sqlalchemy.before_flush_decorator",
     "palace.manager.sqlalchemy.bulk_operation",
     "palace.manager.sqlalchemy.flask_sqlalchemy_session",
     "palace.manager.sqlalchemy.listeners",
@@ -220,32 +193,24 @@ module = [
     "palace.manager.sqlalchemy.model.coverage",
     "palace.manager.sqlalchemy.model.credential",
     "palace.manager.sqlalchemy.model.customlist",
-    "palace.manager.sqlalchemy.model.devicetokens",
     "palace.manager.sqlalchemy.model.edition",
-    "palace.manager.sqlalchemy.model.key",
     "palace.manager.sqlalchemy.model.lane",
     "palace.manager.sqlalchemy.model.measurement",
     "palace.manager.sqlalchemy.model.resource",
     "palace.manager.sqlalchemy.model.saml",
-    "palace.manager.sqlalchemy.model.time_tracking",
     "palace.manager.sqlalchemy.model.work",
     "palace.manager.sqlalchemy.session",
     "palace.manager.util",
-    "palace.manager.util.accept_language",
     "palace.manager.util.aes",
     "palace.manager.util.flask_util",
     "palace.manager.util.languages",
-    "palace.manager.util.median",
     "palace.manager.util.opds_writer",
     "palace.manager.util.permanent_work_id",
     "palace.manager.util.personal_names",
-    "palace.manager.util.pydantic",
     "palace.manager.util.summary",
     "palace.manager.util.titles",
     "palace.manager.util.web_publication_manifest",
 ]
-no_implicit_reexport = false
-strict_equality = false
 warn_return_any = false
 
 [[tool.mypy.overrides]]
@@ -253,20 +218,11 @@ warn_return_any = false
 # Since Celery is untyped, and we're using a lot of its
 # features, we disable some of the strict mypy checks
 # that get annoying when working with Celery.
-check_untyped_defs = true
-disallow_any_generics = true
-disallow_incomplete_defs = true
 disallow_subclassing_any = false
 disallow_untyped_decorators = false
-disallow_untyped_defs = true
 module = [
     "palace.manager.celery.*",
 ]
-no_implicit_reexport = true
-strict_concatenate = true
-strict_equality = true
-warn_return_any = true
-warn_unused_ignores = true
 
 [[tool.mypy.overrides]]
 # This override silences errors for modules we import that don't currently

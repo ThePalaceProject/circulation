@@ -5,8 +5,7 @@ from collections.abc import Generator, Iterable
 
 from sqlalchemy.orm.session import Session
 
-from palace.manager.core.config import IntegrationException
-from palace.manager.core.exceptions import BasePalaceException
+from palace.manager.core.exceptions import BasePalaceException, IntegrationException
 from palace.manager.core.selftest import HasSelfTests, SelfTestResult
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.integration import IntegrationConfiguration
@@ -74,7 +73,7 @@ class HasPatronSelfTests(HasSelfTests, ABC):
 
     @classmethod
     def _determine_self_test_patron(
-        cls, library: Library, _db=None
+        cls, library: Library, _db: Session | None = None
     ) -> tuple[Patron, str | None]:
         """Obtain the test Patron and optional password for a library's self-tests.
 
@@ -134,21 +133,22 @@ class HasCollectionSelfTests(HasPatronSelfTests, ABC):
             return None
         return self.collection.integration_configuration
 
-    def _no_delivery_mechanisms_test(self):
+    def _no_delivery_mechanisms_test(self) -> str | list[str]:
         # Find works in the tested collection that have no delivery
         # mechanisms.
         titles = []
 
-        qu = self.collection.pools_with_no_delivery_mechanisms
-        qu = qu.filter(LicensePool.licenses_owned > 0)
-        for lp in qu:
-            edition = lp.presentation_edition
-            if edition:
-                title = edition.title
-            else:
-                title = "[title unknown]"
-            identifier = lp.identifier.identifier
-            titles.append(f"{title} (ID: {identifier})")
+        if self.collection is not None:
+            qu = self.collection.pools_with_no_delivery_mechanisms
+            qu = qu.filter(LicensePool.licenses_owned > 0)
+            for lp in qu:
+                edition = lp.presentation_edition
+                if edition:
+                    title = edition.title
+                else:
+                    title = "[title unknown]"
+                identifier = lp.identifier.identifier
+                titles.append(f"{title} (ID: {identifier})")
 
         if titles:
             return titles

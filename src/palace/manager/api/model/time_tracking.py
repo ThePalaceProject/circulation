@@ -18,7 +18,7 @@ class PlaytimeTimeEntry(CustomBaseModel):
 
     @field_validator("during_minute")
     @classmethod
-    def validate_minute_datetime(cls, value: datetime.datetime):
+    def validate_minute_datetime(cls, value: datetime.datetime) -> datetime.datetime:
         """Coerce the datetime to a minute boundary"""
         if value.tzname() != "UTC":
             logging.getLogger("TimeTracking").error(
@@ -30,7 +30,7 @@ class PlaytimeTimeEntry(CustomBaseModel):
 
     @field_validator("seconds_played")
     @classmethod
-    def validate_seconds_played(cls, value: int):
+    def validate_seconds_played(cls, value: int) -> int:
         """Coerce the seconds played to a max of 60 seconds"""
         if value > 60:
             logging.getLogger("TimeTracking").warning(

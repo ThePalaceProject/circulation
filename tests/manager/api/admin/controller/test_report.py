@@ -8,7 +8,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 from flask import Response
 
-from palace.manager.api.admin.controller import ReportController, report
+from palace.manager.api.admin.controller import report
+from palace.manager.api.admin.controller.report import ReportController
 from palace.manager.api.admin.model.inventory_report import (
     InventoryReportCollectionInfo,
     InventoryReportInfo,
