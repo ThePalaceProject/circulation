@@ -43,9 +43,10 @@ from palace.manager.api.circulation.fulfillment import (
     Fulfillment,
     RedirectFulfillment,
 )
-from palace.manager.api.selftest import HasCollectionSelfTests, SelfTestResult
+from palace.manager.api.selftest import HasCollectionSelfTests
 from palace.manager.core.config import CannotLoadConfiguration, Configuration
 from palace.manager.core.exceptions import IntegrationException
+from palace.manager.core.selftest import SelfTestResult
 from palace.manager.data_layer.format import FormatData
 from palace.manager.data_layer.policy.replacement import ReplacementPolicy
 from palace.manager.integration.base import HasChildIntegrationConfiguration

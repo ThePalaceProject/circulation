@@ -1,3 +1,4 @@
+from typing import Any
 from uuid import UUID
 
 from pydantic import Field, field_validator
@@ -12,7 +13,7 @@ class QuicksightGenerateUrlRequest(CustomBaseModel):
 
     @field_validator("library_uuids", mode="before")
     @classmethod
-    def parse_library_uuids(cls, value) -> list[str]:
+    def parse_library_uuids(cls, value: Any) -> list[str]:
         return str_comma_list_validator(value)
 
 

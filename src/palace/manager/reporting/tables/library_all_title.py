@@ -7,7 +7,6 @@ from sqlalchemy.sql import Select
 
 from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.reporting.model import (
-    ReportTable,
     TabularQueryDefinition,
     TTabularDataProcessor,
     TTabularHeadings,
@@ -105,7 +104,7 @@ def collections_all_titles_query() -> Select:
     )
 
 
-class LibraryAllTitleReportTable(ReportTable):
+class LibraryAllTitleReportTable:
     """A report table with all titles in a library's collections."""
 
     DEFINITION = TabularQueryDefinition(

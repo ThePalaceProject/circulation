@@ -1,8 +1,8 @@
-from typing import Self
+from typing import Any, Self
 
 from sqlalchemy import Column, Enum, ForeignKey, Index, Integer, Unicode
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Mapped, relationship
+from sqlalchemy.orm import Mapped, Session, relationship
 
 from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.sqlalchemy.model.base import Base
@@ -47,7 +47,7 @@ class DeviceToken(Base):
     @classmethod
     def create(
         cls,
-        db,
+        db: Session,
         token_type: str,
         device_token: str,
         patron: Patron | int,
@@ -58,7 +58,7 @@ class DeviceToken(Base):
         if token_type not in [DeviceTokenTypes.FCM_ANDROID, DeviceTokenTypes.FCM_IOS]:
             raise InvalidTokenTypeError(token_type)
 
-        kwargs: dict = dict(device_token=device_token, token_type=token_type)
+        kwargs: dict[str, Any] = dict(device_token=device_token, token_type=token_type)
         if type(patron) is int:
             kwargs["patron_id"] = patron
         elif type(patron) is Patron:

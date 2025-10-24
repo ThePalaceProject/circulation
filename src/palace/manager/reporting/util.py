@@ -16,13 +16,13 @@ from palace.manager.util.iteration_helpers import CountingIterator
 from palace.manager.util.log import ExtraDataLoggerAdapter
 
 type TCounterWrappedResult[TTabularDataProcessorReturn] = tuple[
-    CountingIterator, TTabularDataProcessorReturn
+    CountingIterator[Any], TTabularDataProcessorReturn
 ]
 
 
 def row_counter_wrapper[TTabularDataProcessorReturn](
     func: TTabularDataProcessor[TTabularDataProcessorReturn],
-) -> TTabularDataProcessor[TCounterWrappedResult]:
+) -> TTabularDataProcessor[TCounterWrappedResult[TTabularDataProcessorReturn]]:
     """
     Wraps the 'rows' argument with CountingIterator, calls the wrapped
     function, and returns a tuple containing the CountingIterator instance
@@ -36,7 +36,7 @@ def row_counter_wrapper[TTabularDataProcessorReturn](
     @wraps(func)
     def wrapper(
         *, rows: TTabularRows, headings: TTabularHeadings | None = None
-    ) -> tuple[CountingIterator, TTabularDataProcessorReturn]:
+    ) -> TCounterWrappedResult[TTabularDataProcessorReturn]:
         if not isinstance(rows, Iterable):
             raise TypeError(f"The 'rows' argument for `{func}` must be an Iterable.")
         counted_rows = CountingIterator(rows)
