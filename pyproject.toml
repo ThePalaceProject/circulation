@@ -83,7 +83,6 @@ disallow_untyped_defs = false
 extra_checks = false
 module = [
     "palace.manager.api.admin.admin_authentication_provider",
-    "palace.manager.api.admin.controller",
     "palace.manager.api.admin.controller.admin_search",
     "palace.manager.api.admin.controller.announcement_service",
     "palace.manager.api.admin.controller.base",

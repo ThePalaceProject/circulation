@@ -6,7 +6,7 @@ from unittest import mock
 
 import pytest
 
-from palace.manager.api.admin.controller import QuickSightController
+from palace.manager.api.admin.controller.quicksight import QuickSightController
 from palace.manager.sqlalchemy.model.admin import Admin, AdminRole
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.util import create
