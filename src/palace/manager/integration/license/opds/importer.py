@@ -358,7 +358,8 @@ class OpdsImporter[FeedType, PublicationType](LoggerMixin):
             feed = self._fetch_feed(feed_url)
         except ValueError as e:
             self.log.error(
-                f"Failed to fetch or parse the feed from '{feed_url}': {e}",
+                f"Failed to fetch or parse the feed from '{feed_url}' "
+                f"for collection '{collection.name}' (id={collection.id}): {e}",
                 exc_info=e,
             )
             return False
@@ -405,11 +406,13 @@ class OpdsImporter[FeedType, PublicationType](LoggerMixin):
 
         if failures:
             self.log.error(
-                f"Failed to import {len(failures)} publications from '{feed_url}'."
+                f"Failed to import {len(failures)} publications from '{feed_url}' "
+                f"for collection '{collection.name}' (id={collection.id})."
             )
             for failure in failures:
                 self.log.error(
-                    f"Failed to import publication: {failure.identifier} ({failure.title})"
+                    f"Failed to import publication: {failure.identifier} ({failure.title}) "
+                    f"for collection '{collection.name}' (id={collection.id})"
                     f" - {failure.error_message}: {failure.error}",
                     exc_info=failure.error,
                     extra={"palace_publication_data": failure.publication_data},
