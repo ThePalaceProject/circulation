@@ -2,7 +2,9 @@ import asyncio
 import datetime
 from collections.abc import Set
 from dataclasses import dataclass
+from typing import Any
 
+import dateutil
 from sqlalchemy.orm import Session
 
 from palace.manager.celery.tasks.apply import (
@@ -99,6 +101,24 @@ class OverdriveImporter(LoggerMixin):
             return self.DEFAULT_START_TIME
         return timestamp.start
 
+    def _all_books_out_of_scope(
+        self,
+        modified_since: datetime.datetime | None,
+        book_data: list[dict[str, Any]],
+    ) -> bool:
+        out_of_scope_count = 0
+
+        for book in book_data:
+            date_added = book.get("date_added")
+            if not date_added:
+                continue
+
+            date_added = dateutil.parser.parse(date_added)
+            if date_added < modified_since:
+                out_of_scope_count += 1
+
+        return out_of_scope_count == len(book_data)
+
     def import_collection(
         self,
         *,
@@ -167,7 +187,7 @@ class OverdriveImporter(LoggerMixin):
                 if book["metadata"]:
                     bibliographic = self._extractor.book_info_to_bibliographic(book)
                     assert bibliographic
-                    if self._import_all or bibliographic.has_changed(self._db):
+                    if bibliographic.has_changed(self._db):
                         apply_bibliographic(
                             bibliographic,
                             collection_id=self._collection.id,
@@ -180,7 +200,7 @@ class OverdriveImporter(LoggerMixin):
                 if availability:
                     circulation = self._extractor.book_info_to_circulation(availability)
                     assert circulation
-                    if self._import_all or circulation.has_changed(
+                    if circulation.has_changed(
                         session=self._db, collection=self._collection
                     ):
                         apply_circulation(
@@ -203,7 +223,11 @@ class OverdriveImporter(LoggerMixin):
             f"Finished import of {len(identifiers)} for collection {self._collection.name} (id={self._collection.id}. "
             f"{' '.join(achievements)}"
         )
-
+        # if all books are out of scope, we don't need to fetch the next page.
+        if not self._import_all and self._all_books_out_of_scope(
+            modified_since, book_data
+        ):
+            next_endpoint = None
         return FeedImportResult(
             next_page=next_endpoint,
             current_page=endpoint,

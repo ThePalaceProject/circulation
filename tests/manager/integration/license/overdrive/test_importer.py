@@ -278,7 +278,10 @@ class TestOverdriveImporter:
         api = overdrive_api_fixture.api
 
         importer = OverdriveImporter(
-            db=db.session, collection=collection, registry=registry, api=api
+            db=db.session,
+            collection=collection,
+            registry=registry,
+            api=api,
         )
 
         # Mock the API and extractor
@@ -349,7 +352,10 @@ class TestOverdriveImporter:
         api = overdrive_api_fixture.api
 
         importer = OverdriveImporter(
-            db=db.session, collection=collection, registry=registry, api=api
+            db=db.session,
+            collection=collection,
+            registry=registry,
+            api=api,
         )
 
         mock_apply_bib = Mock()
@@ -439,8 +445,12 @@ class TestOverdriveImporter:
         registry = services_fixture.services.integration_registry.license_providers()
         api = overdrive_api_fixture.api
         importer = OverdriveImporter(
-            db=db.session, collection=collection, registry=registry, api=api
+            db=db.session,
+            collection=collection,
+            registry=registry,
+            api=api,
         )
+
         mock_apply_bib = Mock()
         mock_apply_circ = Mock()
         modified_since = datetime_utc(2023, 1, 1)
@@ -480,43 +490,61 @@ class TestOverdriveImporter:
         # But circulation should still be applied
         assert mock_apply_circ.call_count == 1
 
-    def test_import_collection_with_import_all_flag(
+    def test_import_collection_skips_next_page_when_all_books_out_of_scope(
         self,
         db: DatabaseTransactionFixture,
         overdrive_api_fixture: OverdriveAPIFixture,
         services_fixture: ServicesFixture,
     ):
-        """Test import_collection with import_all=True imports even unchanged data."""
+        """Test that next page is not returned when all books are out of scope."""
         collection = overdrive_api_fixture.collection
         registry = services_fixture.services.integration_registry.license_providers()
         api = overdrive_api_fixture.api
+
         importer = OverdriveImporter(
             db=db.session,
             collection=collection,
             registry=registry,
-            import_all=True,
             api=api,
         )
 
         mock_apply_bib = Mock()
         mock_apply_circ = Mock()
-        modified_since = datetime_utc(2023, 1, 1)
+        # Set modified_since to a date after all books were added
+        modified_since = datetime_utc(2023, 6, 1)
 
-        # Mock book data
+        # Mock book data where all books have date_added before modified_since
         mock_book_data = [
             {
                 "id": "overdrive-id-1",
-                "metadata": {"title": "Test Book"},
+                "metadata": {"title": "Old Book 1"},
                 "availabilityV2": {"copiesOwned": 1},
-            }
+                "date_added": "2023-01-15T00:00:00Z",  # Before modified_since
+            },
+            {
+                "id": "overdrive-id-2",
+                "metadata": {"title": "Old Book 2"},
+                "availabilityV2": {"copiesOwned": 1},
+                "date_added": "2023-02-10T00:00:00Z",  # Before modified_since
+            },
+            {
+                "id": "overdrive-id-3",
+                "metadata": {"title": "Old Book 3"},
+                "availabilityV2": {"copiesOwned": 1},
+                "date_added": "2023-03-20T00:00:00Z",  # Before modified_since
+            },
         ]
-        api.fetch_book_info_list = AsyncMock(return_value=(mock_book_data, None))
+        # API would normally return a next page, but it should be ignored
+        mock_next_endpoint = BookInfoEndpoint(url="http://next.page")
+        api.fetch_book_info_list = AsyncMock(
+            return_value=(mock_book_data, mock_next_endpoint)
+        )
 
-        # Mock extractor - data hasn't changed but should be imported anyway
+        # Mock extractor
         mock_bibliographic = Mock(spec=BibliographicData)
-        mock_bibliographic.has_changed.return_value = False  # Not changed
+        mock_bibliographic.has_changed.return_value = True
         mock_circulation = Mock(spec=CirculationData)
-        mock_circulation.has_changed.return_value = False  # Not changed
+        mock_circulation.has_changed.return_value = True
 
         importer._extractor.book_info_to_bibliographic = Mock(
             return_value=mock_bibliographic
@@ -526,15 +554,18 @@ class TestOverdriveImporter:
         )
 
         # Run import
-        importer.import_collection(
+        result = importer.import_collection(
             apply_bibliographic=mock_apply_bib,
             apply_circulation=mock_apply_circ,
             modified_since=modified_since,
         )
 
-        # Both should be applied despite not having changed
-        assert mock_apply_bib.call_count == 1
-        assert mock_apply_circ.call_count == 1
+        # Verify that books were still processed
+        assert result.processed_count == 3
+
+        # Verify that next_page is None even though API returned one
+        # because all books are out of scope
+        assert result.next_page is None
 
     def test_import_collection_handles_missing_metadata(
         self,
@@ -545,12 +576,14 @@ class TestOverdriveImporter:
         """Test import_collection handles books with missing metadata."""
         collection = overdrive_api_fixture.collection
         registry = services_fixture.services.integration_registry.license_providers()
+        api = overdrive_api_fixture.api
 
         importer = OverdriveImporter(
-            db=db.session, collection=collection, registry=registry
+            db=db.session,
+            collection=collection,
+            registry=registry,
+            api=api,
         )
-        api = overdrive_api_fixture.api
-        importer._api = api
 
         mock_apply_bib = Mock()
         mock_apply_circ = Mock()
