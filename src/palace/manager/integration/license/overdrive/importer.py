@@ -41,6 +41,7 @@ class FeedImportResult:
 
 class OverdriveImporter(LoggerMixin):
     DEFAULT_START_TIME = datetime_utc(1970, 1, 1)
+    DEFAULT_PAGE_SIZE = 100
 
     def __init__(
         self,
@@ -70,7 +71,7 @@ class OverdriveImporter(LoggerMixin):
 
         self._parent_identifiers: Set[str] | None = None
         if parent_identifier_set is not None:
-            # create an in-memory set from the redis set to optimize existence checks for individiual identifiers.
+            # create an in-memory set from the redis set to optimize existence checks for individual identifiers.
             # I don't believe we need to worry about memory here: few redis identifier sets will likely exceed 200K
             # items which should be easily manageable given an identifier is 36 characters (36*200K = 7.2 MB). Most OD
             # collections are much  smaller in the 20-70K range.
@@ -101,6 +102,70 @@ class OverdriveImporter(LoggerMixin):
             collection=self._collection,
         )
         return timestamp
+
+    def _process_book(
+        self,
+        book: dict[str, Any],
+        fetch_metadata: bool,
+        policy: ReplacementPolicy,
+        apply_bibliographic: ApplyBibliographicCallable,
+        apply_circulation: ApplyCirculationCallable,
+    ) -> tuple[Identifier, bool]:
+        """Process a single book and return (identifier, changed).
+
+        Args:
+            book: Book data dictionary from OverDrive API
+            fetch_metadata: Whether metadata was already fetched
+            policy: Replacement policy for bibliographic updates
+            apply_bibliographic: Callback to apply bibliographic updates
+            apply_circulation: Callback to apply circulation updates
+
+        Returns:
+            Tuple of (identifier, changed) where changed is True if any data changed
+        """
+        identifier, _ = Identifier.for_foreign_id(
+            self._db,
+            foreign_id=book.get("id"),
+            foreign_identifier_type=Identifier.OVERDRIVE_ID,
+        )
+
+        assert identifier
+        changed: bool = False
+
+        # We only need to look up metadata if we didn't already fetch it and it was not in the parent identifier
+        # set.  Why? Because the existence of the parent identifier set implies that the parent collection
+        # has already been imported which would have included all the metadata.
+        if not fetch_metadata and (
+            not self._parent_identifiers
+            or identifier.identifier not in self._parent_identifiers
+        ):
+            book["metadata"] = self._api.metadata_lookup(identifier=identifier)
+
+        # we need to check that there is metadata because it is possible that we attempted to fetch it, but we
+        # didn't get anything back from overdrive (ie from the book list fetch above).
+        if book["metadata"]:
+            bibliographic = self._extractor.book_info_to_bibliographic(book)
+            assert bibliographic
+            if bibliographic.has_changed(self._db):
+                changed = True
+                apply_bibliographic(
+                    bibliographic,
+                    collection_id=self._collection.id,
+                    replace=policy,
+                )
+
+        # availability needs to be checked/updated in all but a few instances so it is
+        # probably not worth the compute time to save ourselves a handful of unnecessary updates.
+        availability = book.get("availabilityV2", None)
+        if availability:
+            circulation = self._extractor.book_info_to_circulation(availability)
+            assert circulation
+
+            if circulation.has_changed(session=self._db, collection=self._collection):
+                changed = True
+                apply_circulation(circulation, collection_id=self._collection.id)
+
+        return identifier, changed
 
     def _all_books_out_of_scope(
         self,
@@ -141,6 +206,7 @@ class OverdriveImporter(LoggerMixin):
         apply_circulation: ApplyCirculationCallable,
         modified_since: datetime.datetime,
         endpoint: BookInfoEndpoint | None = None,
+        page_size: int = DEFAULT_PAGE_SIZE,
     ) -> FeedImportResult:
         """Import books from an OverDrive collection into the circulation manager.
 
@@ -153,7 +219,7 @@ class OverdriveImporter(LoggerMixin):
              skipping books that are already in the parent collection
 
         2. **Out-of-Scope Optimization**:
-           - If all books in the current page were added before modified_since and there were not changes detected,
+           - If all books in the current page were added before modified_since and there were no changes detected,
            stops pagination early to avoid processing old data
            - Can be disabled with import_all=True
 
@@ -197,8 +263,9 @@ class OverdriveImporter(LoggerMixin):
         if not endpoint:
             self.log.info(f"No endpoint provided, generating default endpoint.")
             endpoint = self._api.book_info_initial_endpoint(
-                start=modified_since, page_size=100
+                start=modified_since, page_size=page_size
             )
+            self.log.info(f"Generated endpoint: {endpoint}")
         else:
             self.log.info(f"Using provided endpoint: {endpoint}")
             self.log.info(
@@ -210,8 +277,8 @@ class OverdriveImporter(LoggerMixin):
         changed_books_count = 0
         # Fetch metadata upfront if no parent identifier set is provided.  Practically speaking,
         # if there is no parent identifier set, then the collection being imported is a
-        # main rather than an advantage collection.  We always fetch availabililty because we do not gain
-        # much by trying to
+        # main rather than an advantage collection.  We always fetch availability because we do not gain
+        # much by trying to fetch it lazily.
         fetch_metadata = self._parent_identifiers is None
         book_data, next_endpoint = asyncio.run(
             self._api.fetch_book_info_list(
@@ -221,51 +288,11 @@ class OverdriveImporter(LoggerMixin):
             )
         )
         for book in book_data:
-            identifier, _ = Identifier.for_foreign_id(
-                self._db,
-                foreign_id=book.get("id"),
-                foreign_identifier_type=Identifier.OVERDRIVE_ID,
+            identifier, changed = self._process_book(
+                book, fetch_metadata, policy, apply_bibliographic, apply_circulation
             )
-
-            assert identifier
-            changed = False
-            # We only need to look up metadata if we didn't already fetch it and it was not in the parent identifier
-            # set.  Why? Because the existence of the parent identifier set implies that the parent collection
-            # has already been imported which would have included all the metadata.
-            if not fetch_metadata and (
-                not self._parent_identifiers
-                or identifier.identifier not in self._parent_identifiers
-            ):
-                book["metadata"] = self._api.metadata_lookup(identifier=identifier)
-
-            # we need to check that there is metadata because it is possible that we attempted to fetch it, but we
-            # didn't get anything back from overdrive (ie from the book list fetch above).
-            if book["metadata"]:
-                bibliographic = self._extractor.book_info_to_bibliographic(book)
-                assert bibliographic
-                if bibliographic.has_changed(self._db):
-                    changed = True
-                    apply_bibliographic(
-                        bibliographic,
-                        collection_id=self._collection.id,
-                        replace=policy,
-                    )
-
-            # availability needs to be checked/updated in all but a few instances so it is
-            # probably not worth the compute time to save ourselves a handful of unnecessary updates.
-            availability = book.get("availabilityV2", None)
-            if availability:
-                circulation = self._extractor.book_info_to_circulation(availability)
-                assert circulation
-
-                if circulation.has_changed(
-                    session=self._db, collection=self._collection
-                ):
-                    changed = True
-                    apply_circulation(circulation, collection_id=self._collection.id)
-
-            # add identifier for later counting.
-            changed_books_count += 1 if changed else 0
+            if changed:
+                changed_books_count += 1
             identifiers.append(identifier)
 
         achievements = [f"Total items queued for import:  {len(identifiers)}."]
