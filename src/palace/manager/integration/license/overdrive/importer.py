@@ -153,13 +153,13 @@ class OverdriveImporter(LoggerMixin):
              skipping books that are already in the parent collection
 
         2. **Out-of-Scope Optimization**:
-           - If all books in the current page were added before modified_since, stops pagination
-             early to avoid processing old data
+           - If all books in the current page were added before modified_since and there were not changes detected,
+           stops pagination early to avoid processing old data
            - Can be disabled with import_all=True
 
         3. **Change Detection**:
            - Only applies bibliographic updates if metadata has changed
-           - Always checks circulation data as availability changes frequently
+           - Always checks circulation data as availability changes frequently and applies changes only if changed.
 
         Args:
             apply_bibliographic: Callback to apply bibliographic metadata updates (title, author, etc.)
