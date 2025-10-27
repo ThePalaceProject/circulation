@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import Any
 from unittest.mock import AsyncMock, Mock
 
 import pytest
@@ -847,7 +848,7 @@ class TestAllBooksOutOfScope:
         )
 
         modified_since = datetime_utc(2023, 6, 1)
-        book_data = []
+        book_data: list[dict[str, Any]] = []
 
         # Empty list: 0 == 0 should be True
         result = importer._all_books_out_of_scope(modified_since, book_data)

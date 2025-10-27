@@ -104,7 +104,7 @@ class OverdriveImporter(LoggerMixin):
 
     def _all_books_out_of_scope(
         self,
-        modified_since: datetime.datetime | None,
+        modified_since: datetime.datetime,
         book_data: list[dict[str, Any]],
     ) -> bool:
         """Check if all books in the book_data are out of scope in terms of the date they were added.
