@@ -30,6 +30,35 @@ from tests.fixtures.overdrive import OverdriveAPIFixture
 from tests.fixtures.services import ServicesFixture
 
 
+def _create_mock_book_data(
+    book_id: str,
+    has_metadata: bool = True,
+    has_availability: bool = True,
+    date_added: str | None = None,
+) -> dict[str, Any]:
+    """Helper to create mock book data for tests.
+
+    Args:
+        book_id: The OverDrive book ID
+        has_metadata: Whether to include metadata in the book data
+        has_availability: Whether to include availability data
+        date_added: Optional date_added timestamp string
+
+    Returns:
+        Mock book data dictionary
+    """
+    book: dict[str, Any] = {"id": book_id}
+    if has_metadata:
+        book["metadata"] = {"title": f"Book {book_id}"}
+    else:
+        book["metadata"] = None
+    if has_availability:
+        book["availabilityV2"] = {"copiesOwned": 1, "copiesAvailable": 1}
+    if date_added:
+        book["date_added"] = date_added
+    return book
+
+
 class TestOverdriveImporter:
     """Tests for the OverdriveImporter class."""
 
@@ -403,13 +432,13 @@ class TestOverdriveImporter:
         # But circulation should still be applied
         assert mock_apply_circ.call_count == 1
 
-    def test_import_collection_skips_next_page_when_all_books_out_of_scope_and_unchanged(
+    def test_import_collection_stops_pagination_when_no_changes_and_out_of_scope(
         self,
         db: DatabaseTransactionFixture,
         overdrive_api_fixture: OverdriveAPIFixture,
         services_fixture: ServicesFixture,
     ):
-        """Test that next page is not returned when all books are out of scope."""
+        """Test that next page is not returned when all books are out of scope and unchanged."""
         collection = overdrive_api_fixture.collection
         registry = services_fixture.services.integration_registry.license_providers()
         api = overdrive_api_fixture.api
@@ -546,6 +575,71 @@ class TestOverdriveImporter:
 
         # Verify that next_page is still returned even though all books are out of scope
         # because import_all=True bypasses the check
+        assert result.next_page == mock_next_endpoint
+        assert result.processed_count == 2
+
+    def test_import_collection_continues_when_changes_detected_despite_out_of_scope(
+        self,
+        db: DatabaseTransactionFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        services_fixture: ServicesFixture,
+    ):
+        """Test that pagination continues if changes are detected, even if books are old."""
+        collection = overdrive_api_fixture.collection
+        registry = services_fixture.services.integration_registry.license_providers()
+        api = overdrive_api_fixture.api
+
+        importer = OverdriveImporter(
+            db=db.session,
+            collection=collection,
+            registry=registry,
+            api=api,
+        )
+
+        mock_apply_bib = Mock()
+        mock_apply_circ = Mock()
+        modified_since = datetime_utc(2023, 6, 1)
+
+        # Mock book data where all books are out of scope BUT have changes
+        mock_book_data = [
+            _create_mock_book_data(
+                "overdrive-id-1",
+                date_added="2023-01-15T00:00:00Z",  # Out of scope
+            ),
+            _create_mock_book_data(
+                "overdrive-id-2",
+                date_added="2023-02-10T00:00:00Z",  # Out of scope
+            ),
+        ]
+
+        # API returns a next page
+        mock_next_endpoint = BookInfoEndpoint(url="http://next.page")
+        api.fetch_book_info_list = AsyncMock(
+            return_value=(mock_book_data, mock_next_endpoint)
+        )
+
+        # Mock extractor - books HAVE changed despite being old
+        mock_bibliographic = Mock(spec=BibliographicData)
+        mock_bibliographic.has_changed.return_value = True
+        mock_circulation = Mock(spec=CirculationData)
+        mock_circulation.has_changed.return_value = True
+
+        importer._extractor.book_info_to_bibliographic = Mock(
+            return_value=mock_bibliographic
+        )
+        importer._extractor.book_info_to_circulation = Mock(
+            return_value=mock_circulation
+        )
+
+        # Run import
+        result = importer.import_collection(
+            apply_bibliographic=mock_apply_bib,
+            apply_circulation=mock_apply_circ,
+            modified_since=modified_since,
+        )
+
+        # Verify that next_page IS returned because changes were detected,
+        # even though all books are out of scope
         assert result.next_page == mock_next_endpoint
         assert result.processed_count == 2
 
@@ -824,12 +918,13 @@ class TestAllBooksOutOfScope:
 
         modified_since = datetime_utc(2023, 6, 1)
         book_data = [
-            {"date_added": "2024-01-15T00:00:00Z"},  # In  scope
-            {},  # No date_added - skipped
-            {"date_added": "2024-03-20T00:00:00Z"},  # In scope
+            {"date_added": "2023-01-15T00:00:00Z"},  # Out of scope
+            {},  # No date_added - skipped, treated as not out of scope
+            {"date_added": "2023-03-20T00:00:00Z"},  # Out of scope
         ]
 
-        # Should return False because not all books have date_added
+        # Should return False because missing date_added means we can't verify
+        # all books are out of scope (conservative approach: out_of_scope_count=2, len=3)
         result = importer._all_books_out_of_scope(modified_since, book_data)
         assert result is False
 
