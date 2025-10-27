@@ -178,94 +178,6 @@ class TestOverdriveImporter:
         timestamp2 = importer.get_timestamp()
         assert timestamp1.id == timestamp2.id
 
-    def test_get_start_time_default(
-        self,
-        db: DatabaseTransactionFixture,
-        overdrive_api_fixture: OverdriveAPIFixture,
-        services_fixture: ServicesFixture,
-    ):
-        """Test _get_start_time returns default when timestamp.start is None."""
-        collection = overdrive_api_fixture.collection
-        registry = services_fixture.services.integration_registry.license_providers()
-
-        importer = OverdriveImporter(
-            db=db.session, collection=collection, registry=registry
-        )
-
-        timestamp = importer.get_timestamp()
-        # timestamp.start should be None initially
-        assert timestamp.start is None
-
-        start_time = importer._get_start_time(timestamp)
-        assert start_time == OverdriveImporter.DEFAULT_START_TIME
-
-    def test_get_start_time_with_import_all(
-        self,
-        db: DatabaseTransactionFixture,
-        overdrive_api_fixture: OverdriveAPIFixture,
-        services_fixture: ServicesFixture,
-    ):
-        """Test _get_start_time returns default when import_all is True."""
-        collection = overdrive_api_fixture.collection
-        registry = services_fixture.services.integration_registry.license_providers()
-
-        importer = OverdriveImporter(
-            db=db.session, collection=collection, registry=registry, import_all=True
-        )
-
-        timestamp = importer.get_timestamp()
-        # Set a start time, but it should be ignored due to import_all
-        timestamp.start = datetime_utc(2020, 1, 1)
-
-        start_time = importer._get_start_time(timestamp)
-        assert start_time == OverdriveImporter.DEFAULT_START_TIME
-
-    def test_get_start_time_with_identifier_set(
-        self,
-        db: DatabaseTransactionFixture,
-        overdrive_api_fixture: OverdriveAPIFixture,
-        services_fixture: ServicesFixture,
-    ):
-        """Test _get_start_time returns default when identifier_set is provided."""
-        collection = overdrive_api_fixture.collection
-        registry = services_fixture.services.integration_registry.license_providers()
-        mock_identifier_set = Mock(spec=IdentifierSet)
-
-        importer = OverdriveImporter(
-            db=db.session,
-            collection=collection,
-            registry=registry,
-            identifier_set=mock_identifier_set,
-        )
-
-        timestamp = importer.get_timestamp()
-        # Set a start time, but it should be ignored due to identifier_set
-        timestamp.start = datetime_utc(2020, 1, 1)
-
-        start_time = importer._get_start_time(timestamp)
-        assert start_time == OverdriveImporter.DEFAULT_START_TIME
-
-    def test_get_start_time_uses_timestamp_start(
-        self,
-        db: DatabaseTransactionFixture,
-        overdrive_api_fixture: OverdriveAPIFixture,
-        services_fixture: ServicesFixture,
-    ):
-        """Test _get_start_time returns timestamp.start in normal case."""
-        collection = overdrive_api_fixture.collection
-        registry = services_fixture.services.integration_registry.license_providers()
-
-        importer = OverdriveImporter(
-            db=db.session, collection=collection, registry=registry
-        )
-
-        timestamp = importer.get_timestamp()
-        expected_start = datetime_utc(2022, 6, 15)
-        timestamp.start = expected_start
-
-        start_time = importer._get_start_time(timestamp)
-        assert start_time == expected_start
-
     def test_import_collection_basic(
         self,
         db: DatabaseTransactionFixture,
@@ -567,6 +479,75 @@ class TestOverdriveImporter:
         # because all books are out of scope
         assert result.next_page is None
 
+    def test_import_collection_with_import_all_ignores_out_of_scope_check(
+        self,
+        db: DatabaseTransactionFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        services_fixture: ServicesFixture,
+    ):
+        """Test that import_all bypasses the out-of-scope check and continues to next page."""
+        collection = overdrive_api_fixture.collection
+        registry = services_fixture.services.integration_registry.license_providers()
+        api = overdrive_api_fixture.api
+
+        importer = OverdriveImporter(
+            db=db.session,
+            collection=collection,
+            registry=registry,
+            api=api,
+            import_all=True,  # This should bypass the out-of-scope check
+        )
+
+        mock_apply_bib = Mock()
+        mock_apply_circ = Mock()
+        modified_since = datetime_utc(2023, 6, 1)
+
+        # Mock book data where all books are out of scope
+        mock_book_data = [
+            {
+                "id": "overdrive-id-1",
+                "metadata": {"title": "Old Book 1"},
+                "availabilityV2": {"copiesOwned": 1},
+                "date_added": "2023-01-15T00:00:00Z",  # Before modified_since
+            },
+            {
+                "id": "overdrive-id-2",
+                "metadata": {"title": "Old Book 2"},
+                "availabilityV2": {"copiesOwned": 1},
+                "date_added": "2023-02-10T00:00:00Z",  # Before modified_since
+            },
+        ]
+        # API returns a next page
+        mock_next_endpoint = BookInfoEndpoint(url="http://next.page")
+        api.fetch_book_info_list = AsyncMock(
+            return_value=(mock_book_data, mock_next_endpoint)
+        )
+
+        # Mock extractor
+        mock_bibliographic = Mock(spec=BibliographicData)
+        mock_bibliographic.has_changed.return_value = True
+        mock_circulation = Mock(spec=CirculationData)
+        mock_circulation.has_changed.return_value = True
+
+        importer._extractor.book_info_to_bibliographic = Mock(
+            return_value=mock_bibliographic
+        )
+        importer._extractor.book_info_to_circulation = Mock(
+            return_value=mock_circulation
+        )
+
+        # Run import
+        result = importer.import_collection(
+            apply_bibliographic=mock_apply_bib,
+            apply_circulation=mock_apply_circ,
+            modified_since=modified_since,
+        )
+
+        # Verify that next_page is still returned even though all books are out of scope
+        # because import_all=True bypasses the check
+        assert result.next_page == mock_next_endpoint
+        assert result.processed_count == 2
+
     def test_import_collection_handles_missing_metadata(
         self,
         db: DatabaseTransactionFixture,
@@ -619,6 +600,259 @@ class TestOverdriveImporter:
         # But circulation should still be processed
         assert mock_apply_circ.call_count == 1
         assert result.processed_count == 1
+
+    def test_import_collection_with_parent_identifiers_fetches_metadata_upfront(
+        self,
+        db: DatabaseTransactionFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        services_fixture: ServicesFixture,
+    ):
+        """Test import_collection without parent identifiers fetches metadata upfront."""
+        collection = overdrive_api_fixture.collection
+        registry = services_fixture.services.integration_registry.license_providers()
+        api = overdrive_api_fixture.api
+
+        importer = OverdriveImporter(
+            db=db.session,
+            collection=collection,
+            registry=registry,
+            api=api,
+            # No parent_identifier_set provided
+        )
+
+        mock_apply_bib = Mock()
+        mock_apply_circ = Mock()
+        modified_since = datetime_utc(2023, 1, 1)
+
+        # Mock book data - metadata should be included since fetch_metadata=True
+        mock_book_data = [
+            {
+                "id": "overdrive-id-1",
+                "metadata": {"title": "Test Book"},
+                "availabilityV2": {"copiesOwned": 1},
+            }
+        ]
+
+        api.fetch_book_info_list = AsyncMock(return_value=(mock_book_data, None))
+        api.metadata_lookup = Mock(return_value={"title": "New Book"})
+        # Mock extractor
+        mock_bibliographic = Mock(spec=BibliographicData)
+        mock_bibliographic.has_changed.return_value = True
+        mock_circulation = Mock(spec=CirculationData)
+        mock_circulation.has_changed.return_value = True
+
+        importer._extractor.book_info_to_bibliographic = Mock(
+            return_value=mock_bibliographic
+        )
+        importer._extractor.book_info_to_circulation = Mock(
+            return_value=mock_circulation
+        )
+
+        # Run import
+        result = importer.import_collection(
+            apply_bibliographic=mock_apply_bib,
+            apply_circulation=mock_apply_circ,
+            modified_since=modified_since,
+        )
+
+        # Verify fetch_book_info_list was called with fetch_metadata=True
+        api.fetch_book_info_list.assert_called_once()
+        call_kwargs = api.fetch_book_info_list.call_args.kwargs
+        assert call_kwargs["fetch_metadata"] is True
+        assert call_kwargs["fetch_availability"] is True
+
+        # Verify metadata_lookup was NOT called (metadata was fetched upfront)
+        api.metadata_lookup.assert_not_called()
+
+        assert result.processed_count == 1
+
+    def test_import_collection_with_parent_identifiers_skips_metadata_for_known_identifiers(
+        self,
+        db: DatabaseTransactionFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        services_fixture: ServicesFixture,
+    ):
+        """Test import_collection with parent identifiers skips fetching metadata for books in parent set."""
+        collection = overdrive_api_fixture.collection
+        registry = services_fixture.services.integration_registry.license_providers()
+        api = overdrive_api_fixture.api
+
+        # Create a mock parent identifier set
+        mock_parent_id1 = Mock()
+        mock_parent_id1.identifier = "overdrive-id-1"
+        mock_parent_id2 = Mock()
+        mock_parent_id2.identifier = "overdrive-id-2"
+
+        mock_parent_set = Mock(spec=IdentifierSet)
+        mock_parent_set.get.return_value = [mock_parent_id1, mock_parent_id2]
+
+        importer = OverdriveImporter(
+            db=db.session,
+            collection=collection,
+            registry=registry,
+            api=api,
+            parent_identifier_set=mock_parent_set,
+        )
+
+        mock_apply_bib = Mock()
+        mock_apply_circ = Mock()
+        modified_since = datetime_utc(2023, 1, 1)
+
+        # Mock book data - one book in parent set, one not
+        # Metadata should NOT be included since fetch_metadata=False with parent set
+        mock_book_data = [
+            {
+                "id": "overdrive-id-1",  # In parent set
+                "metadata": None,  # No metadata fetched upfront
+                "availabilityV2": {"copiesOwned": 1},
+            },
+            {
+                "id": "overdrive-id-3",  # NOT in parent set
+                "metadata": None,  # No metadata fetched upfront
+                "availabilityV2": {"copiesOwned": 1},
+            },
+        ]
+
+        api.fetch_book_info_list = AsyncMock(return_value=(mock_book_data, None))
+
+        # Mock metadata_lookup to return metadata for the book not in parent set
+        api.metadata_lookup = Mock(return_value={"title": "New Book"})
+
+        # Mock extractor
+        mock_bibliographic = Mock(spec=BibliographicData)
+        mock_bibliographic.has_changed.return_value = True
+        mock_circulation = Mock(spec=CirculationData)
+        mock_circulation.has_changed.return_value = True
+
+        importer._extractor.book_info_to_bibliographic = Mock(
+            return_value=mock_bibliographic
+        )
+        importer._extractor.book_info_to_circulation = Mock(
+            return_value=mock_circulation
+        )
+
+        # Run import
+        result = importer.import_collection(
+            apply_bibliographic=mock_apply_bib,
+            apply_circulation=mock_apply_circ,
+            modified_since=modified_since,
+        )
+
+        # Verify fetch_book_info_list was called with fetch_metadata=False
+        api.fetch_book_info_list.assert_called_once()
+        call_kwargs = api.fetch_book_info_list.call_args.kwargs
+        assert call_kwargs["fetch_metadata"] is False
+        assert call_kwargs["fetch_availability"] is True
+
+        # Verify metadata_lookup was called once for the book NOT in parent set
+        assert api.metadata_lookup.call_count == 1
+
+        # Bibliographic should be applied once (only for the new book with metadata)
+        assert mock_apply_bib.call_count == 1
+
+        # Circulation should be applied for both books
+        assert mock_apply_circ.call_count == 2
+
+        assert result.processed_count == 2
+
+
+class TestAllBooksOutOfScope:
+    """Tests for the _all_books_out_of_scope method."""
+
+    def test_all_books_out_of_scope_returns_true(
+        self,
+        db: DatabaseTransactionFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        services_fixture: ServicesFixture,
+    ):
+        """Test _all_books_out_of_scope returns True when all books are before modified_since."""
+        collection = overdrive_api_fixture.collection
+        registry = services_fixture.services.integration_registry.license_providers()
+
+        importer = OverdriveImporter(
+            db=db.session, collection=collection, registry=registry
+        )
+
+        modified_since = datetime_utc(2023, 6, 1)
+        book_data = [
+            {"date_added": "2023-01-15T00:00:00Z"},
+            {"date_added": "2023-02-10T00:00:00Z"},
+            {"date_added": "2023-03-20T00:00:00Z"},
+        ]
+
+        result = importer._all_books_out_of_scope(modified_since, book_data)
+        assert result is True
+
+    def test_all_books_out_of_scope_returns_false_when_one_in_scope(
+        self,
+        db: DatabaseTransactionFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        services_fixture: ServicesFixture,
+    ):
+        """Test _all_books_out_of_scope returns False when at least one book is after modified_since."""
+        collection = overdrive_api_fixture.collection
+        registry = services_fixture.services.integration_registry.license_providers()
+
+        importer = OverdriveImporter(
+            db=db.session, collection=collection, registry=registry
+        )
+
+        modified_since = datetime_utc(2023, 6, 1)
+        book_data = [
+            {"date_added": "2023-01-15T00:00:00Z"},  # Out of scope
+            {"date_added": "2023-07-10T00:00:00Z"},  # In scope
+            {"date_added": "2023-03-20T00:00:00Z"},  # Out of scope
+        ]
+
+        result = importer._all_books_out_of_scope(modified_since, book_data)
+        assert result is False
+
+    def test_all_books_out_of_scope_handles_missing_date_added(
+        self,
+        db: DatabaseTransactionFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        services_fixture: ServicesFixture,
+    ):
+        """Test _all_books_out_of_scope handles books without date_added field."""
+        collection = overdrive_api_fixture.collection
+        registry = services_fixture.services.integration_registry.license_providers()
+
+        importer = OverdriveImporter(
+            db=db.session, collection=collection, registry=registry
+        )
+
+        modified_since = datetime_utc(2023, 6, 1)
+        book_data = [
+            {"date_added": "2023-01-15T00:00:00Z"},  # Out of scope
+            {},  # No date_added - skipped
+            {"date_added": "2023-03-20T00:00:00Z"},  # Out of scope
+        ]
+
+        # Should return False because not all books have date_added
+        # (out_of_scope_count=2, len(book_data)=3)
+        result = importer._all_books_out_of_scope(modified_since, book_data)
+        assert result is False
+
+    def test_all_books_out_of_scope_empty_list(
+        self,
+        db: DatabaseTransactionFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        services_fixture: ServicesFixture,
+    ):
+        """Test _all_books_out_of_scope with empty book list."""
+        collection = overdrive_api_fixture.collection
+        registry = services_fixture.services.integration_registry.license_providers()
+
+        importer = OverdriveImporter(
+            db=db.session, collection=collection, registry=registry
+        )
+
+        modified_since = datetime_utc(2023, 6, 1)
+        book_data = []
+
+        # Empty list: 0 == 0 should be True
+        result = importer._all_books_out_of_scope(modified_since, book_data)
+        assert result is True
 
 
 class TestFeedImportResult:

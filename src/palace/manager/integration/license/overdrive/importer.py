@@ -91,16 +91,6 @@ class OverdriveImporter(LoggerMixin):
         )
         return timestamp
 
-    def _get_start_time(self, timestamp: Timestamp) -> datetime.datetime:
-        """Determine the start time for fetching new data."""
-        if (
-            self._import_all
-            or self._identifier_set is not None
-            or timestamp.start is None
-        ):
-            return self.DEFAULT_START_TIME
-        return timestamp.start
-
     def _all_books_out_of_scope(
         self,
         modified_since: datetime.datetime | None,
@@ -128,9 +118,6 @@ class OverdriveImporter(LoggerMixin):
         endpoint: BookInfoEndpoint | None = None,
     ) -> FeedImportResult:
 
-        timestamp = self.get_timestamp()
-        start_time = self._get_start_time(timestamp)
-
         identifiers = []
         policy = ReplacementPolicy(
             identifiers=False,
@@ -142,7 +129,7 @@ class OverdriveImporter(LoggerMixin):
 
         self.log.info(
             f"Starting process of queuing items in collection {self._collection.name} (id={self._collection.id} "
-            f"for import that have changed since {start_time}. "
+            f"for import that have changed since {modified_since}. "
         )
 
         if not endpoint:
@@ -150,6 +137,8 @@ class OverdriveImporter(LoggerMixin):
             endpoint = self._api.book_info_initial_endpoint(
                 start=modified_since, page_size=100
             )
+
+        timestamp = self.get_timestamp()
 
         with timestamp.recording():
             # Fetch metadata upfront if no parent identifier set is provided.  Practically speaking,
