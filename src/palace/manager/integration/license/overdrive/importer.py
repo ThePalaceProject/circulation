@@ -202,7 +202,8 @@ class OverdriveImporter(LoggerMixin):
         else:
             self.log.info(f"Using provided endpoint: {endpoint}")
             self.log.info(
-                f"Ignoring modified_since parameter: {modified_since} because an endpoint was provided and endpoint already modified_since date"
+                f"Ignoring modified_since parameter (value='{modified_since}') since the endpoint "
+                f"includes modified_since date"
             )
 
         timestamp = self.get_timestamp()
