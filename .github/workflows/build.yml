@@ -240,7 +240,7 @@ jobs:
           echo "EXEC_DIGEST=$exec_digest"
 
       - name: Upload digests
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: digests-${{ matrix.arch.name }}
           path: ${{ runner.temp }}/digests/*
