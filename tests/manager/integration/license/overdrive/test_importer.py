@@ -402,7 +402,7 @@ class TestOverdriveImporter:
         # But circulation should still be applied
         assert mock_apply_circ.call_count == 1
 
-    def test_import_collection_skips_next_page_when_all_books_out_of_scope(
+    def test_import_collection_skips_next_page_when_all_books_out_of_scope_and_unchanged(
         self,
         db: DatabaseTransactionFixture,
         overdrive_api_fixture: OverdriveAPIFixture,
@@ -454,9 +454,9 @@ class TestOverdriveImporter:
 
         # Mock extractor
         mock_bibliographic = Mock(spec=BibliographicData)
-        mock_bibliographic.has_changed.return_value = True
+        mock_bibliographic.has_changed.return_value = False
         mock_circulation = Mock(spec=CirculationData)
-        mock_circulation.has_changed.return_value = True
+        mock_circulation.has_changed.return_value = False
 
         importer._extractor.book_info_to_bibliographic = Mock(
             return_value=mock_bibliographic
@@ -823,13 +823,12 @@ class TestAllBooksOutOfScope:
 
         modified_since = datetime_utc(2023, 6, 1)
         book_data = [
-            {"date_added": "2023-01-15T00:00:00Z"},  # Out of scope
+            {"date_added": "2024-01-15T00:00:00Z"},  # In  scope
             {},  # No date_added - skipped
-            {"date_added": "2023-03-20T00:00:00Z"},  # Out of scope
+            {"date_added": "2024-03-20T00:00:00Z"},  # In scope
         ]
 
         # Should return False because not all books have date_added
-        # (out_of_scope_count=2, len(book_data)=3)
         result = importer._all_books_out_of_scope(modified_since, book_data)
         assert result is False
 

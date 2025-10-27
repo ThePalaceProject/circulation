@@ -52,6 +52,17 @@ class OverdriveImporter(LoggerMixin):
         parent_identifier_set: IdentifierSet | None = None,
         api: OverdriveAPI | None = None,
     ) -> None:
+        """Constructor for the OverdriveImporter class.
+
+        Args:
+            db: The database session.
+            collection: The collection to import.
+            registry: The license providers registry.
+            import_all: Whether to import all books from the collection.
+            identifier_set: The identifier set to use for the import.
+            parent_identifier_set: The parent identifier set to use for the import.
+            api: The OverdriveAPI instance to use for the import.
+        """
         self._db = db
         self._collection = collection
         self._import_all = import_all
@@ -96,11 +107,25 @@ class OverdriveImporter(LoggerMixin):
         modified_since: datetime.datetime | None,
         book_data: list[dict[str, Any]],
     ) -> bool:
+        """Check if all books in the book_data are out of scope in terms of the date they were added.
+        This method is used to determine if we should continue to fetch the next page of books.
+        Overdrive does not provide a way to retrieve books that were added or modified since a given date.
+        They do however give us the "date_added" value for each book which we can use to determine
+        if the book was added before the modified_since date.
+
+        Args:
+            modified_since: The datetime to check if the books are out of scope.
+            book_data: The book data to check if the books are out of scope.
+
+        Returns:
+            True if all books are out of scope, False otherwise.
+        """
         out_of_scope_count = 0
 
         for book in book_data:
-            date_added = book.get("date_added")
+            date_added = book.get("date_added", None)
             if not date_added:
+                # this should not happen, but if it does, we'll assume the book is not out of scope.
                 continue
 
             date_added = dateutil.parser.parse(date_added)
@@ -117,7 +142,44 @@ class OverdriveImporter(LoggerMixin):
         modified_since: datetime.datetime,
         endpoint: BookInfoEndpoint | None = None,
     ) -> FeedImportResult:
+        """Import books from an OverDrive collection into the circulation manager.
 
+        This method fetches book information from OverDrive's API and queues bibliographic
+        and circulation data for processing. It implements several optimizations:
+
+        1. **Metadata Fetching Strategy**:
+           - For main collections (no parent_identifier_set): Fetches metadata upfront in bulk
+           - For advantage collections (with parent_identifier_set): Fetches metadata lazily,
+             skipping books that are already in the parent collection
+
+        2. **Out-of-Scope Optimization**:
+           - If all books in the current page were added before modified_since, stops pagination
+             early to avoid processing old data
+           - Can be disabled with import_all=True
+
+        3. **Change Detection**:
+           - Only applies bibliographic updates if metadata has changed
+           - Always checks circulation data as availability changes frequently
+
+        Args:
+            apply_bibliographic: Callback to apply bibliographic metadata updates (title, author, etc.)
+            apply_circulation: Callback to apply circulation data updates (copies owned, available, etc.)
+            modified_since: Only process books modified after this datetime
+            endpoint: OverDrive API endpoint to fetch from. If None, generates a default endpoint
+                     starting from modified_since
+
+        Returns:
+            FeedImportResult containing:
+                - current_page: The endpoint that was processed
+                - next_page: The next endpoint to process (None if done or all books out of scope)
+                - processed_count: Number of books processed in this call
+
+        Side Effects:
+            - Creates/updates Identifier records in the database
+            - Adds identifiers to self._identifier_set if provided
+            - Records timing and achievement data in the Timestamp
+            - Logs progress information
+        """
         identifiers = []
         policy = ReplacementPolicy(
             identifiers=False,
@@ -137,67 +199,73 @@ class OverdriveImporter(LoggerMixin):
             endpoint = self._api.book_info_initial_endpoint(
                 start=modified_since, page_size=100
             )
+        else:
+            self.log.info(f"Using provided endpoint: {endpoint}")
+            self.log.info(
+                f"Ignoring modified_since parameter: {modified_since} because an endpoint was provided and endpoint already modified_since date"
+            )
 
         timestamp = self.get_timestamp()
-
-        with timestamp.recording():
-            # Fetch metadata upfront if no parent identifier set is provided.  Practically speaking,
-            # if there is no parent identifier set, then the collection being imported is a
-            # main rather than an advantage collection.  We always fetch availabililty because we do not gain
-            # much by trying to
-            fetch_metadata = self._parent_identifiers is None
-            book_data, next_endpoint = asyncio.run(
-                self._api.fetch_book_info_list(
-                    endpoint,
-                    fetch_metadata=fetch_metadata,
-                    fetch_availability=True,
-                )
+        changed_books_count = 0
+        # Fetch metadata upfront if no parent identifier set is provided.  Practically speaking,
+        # if there is no parent identifier set, then the collection being imported is a
+        # main rather than an advantage collection.  We always fetch availabililty because we do not gain
+        # much by trying to
+        fetch_metadata = self._parent_identifiers is None
+        book_data, next_endpoint = asyncio.run(
+            self._api.fetch_book_info_list(
+                endpoint,
+                fetch_metadata=fetch_metadata,
+                fetch_availability=True,
             )
-            for book in book_data:
-                identifier, _ = Identifier.for_foreign_id(
-                    self._db,
-                    foreign_id=book.get("id"),
-                    foreign_identifier_type=Identifier.OVERDRIVE_ID,
-                )
+        )
+        for book in book_data:
+            identifier, _ = Identifier.for_foreign_id(
+                self._db,
+                foreign_id=book.get("id"),
+                foreign_identifier_type=Identifier.OVERDRIVE_ID,
+            )
 
-                assert identifier
+            assert identifier
+            changed = False
+            # We only need to look up metadata if we didn't already fetch it and it was not in the parent identifier
+            # set.  Why? Because the existence of the parent identifier set implies that the parent collection
+            # has already been imported which would have included all the metadata.
+            if not fetch_metadata and (
+                not self._parent_identifiers
+                or identifier.identifier not in self._parent_identifiers
+            ):
+                book["metadata"] = self._api.metadata_lookup(identifier=identifier)
 
-                # We only need to look up metadata if we didn't already fetch it and it was not in the parent identifier
-                # set.  Why? Because the existence of the parent identifier set implies that the parent collection
-                # has already been imported which would have included all the metadata.
-                if not fetch_metadata and (
-                    not self._parent_identifiers
-                    or identifier.identifier not in self._parent_identifiers
+            # we need to check that there is metadata because it is possible that we attempted to fetch it, but we
+            # didn't get anything back from overdrive (ie from the book list fetch above).
+            if book["metadata"]:
+                bibliographic = self._extractor.book_info_to_bibliographic(book)
+                assert bibliographic
+                if bibliographic.has_changed(self._db):
+                    changed = True
+                    apply_bibliographic(
+                        bibliographic,
+                        collection_id=self._collection.id,
+                        replace=policy,
+                    )
+
+            # availability needs to be checked/updated in all but a few instances so it is
+            # probably not worth the compute time to save ourselves a handful of unnecessary updates.
+            availability = book.get("availabilityV2", None)
+            if availability:
+                circulation = self._extractor.book_info_to_circulation(availability)
+                assert circulation
+
+                if circulation.has_changed(
+                    session=self._db, collection=self._collection
                 ):
-                    book["metadata"] = self._api.metadata_lookup(identifier=identifier)
+                    changed = True
+                    apply_circulation(circulation, collection_id=self._collection.id)
 
-                # we need to check that there is metadata because it is possible that we attempted to fetch it, but we
-                # didn't get anything back from overdrive (ie from the book list fetch above).
-                if book["metadata"]:
-                    bibliographic = self._extractor.book_info_to_bibliographic(book)
-                    assert bibliographic
-                    if bibliographic.has_changed(self._db):
-                        apply_bibliographic(
-                            bibliographic,
-                            collection_id=self._collection.id,
-                            replace=policy,
-                        )
-
-                # availability needs to be checked/updated in all but a few instances so it is
-                # probably not worth the compute time to save ourselves a handful of unnecessary updates.
-                availability = book.get("availabilityV2", None)
-                if availability:
-                    circulation = self._extractor.book_info_to_circulation(availability)
-                    assert circulation
-                    if circulation.has_changed(
-                        session=self._db, collection=self._collection
-                    ):
-                        apply_circulation(
-                            circulation, collection_id=self._collection.id
-                        )
-
-                # add identifier for later counting.
-                identifiers.append(identifier)
+            # add identifier for later counting.
+            changed_books_count += 1 if changed else 0
+            identifiers.append(identifier)
 
         achievements = [f"Total items queued for import:  {len(identifiers)}."]
         if (elapsed_time := timestamp.elapsed_seconds) is not None:
@@ -212,9 +280,12 @@ class OverdriveImporter(LoggerMixin):
             f"Finished import of {len(identifiers)} for collection {self._collection.name} (id={self._collection.id}. "
             f"{' '.join(achievements)}"
         )
-        # if all books are out of scope, we don't need to fetch the next page.
-        if not self._import_all and self._all_books_out_of_scope(
-            modified_since, book_data
+        # if we're are not in import all mode and all books are both out of scope and no books were changed, we can assume that
+        # were are done importing and therefore we don't need to fetch the next page.
+        if (
+            not self._import_all
+            and changed_books_count == 0
+            and self._all_books_out_of_scope(modified_since, book_data)
         ):
             next_endpoint = None
         return FeedImportResult(
