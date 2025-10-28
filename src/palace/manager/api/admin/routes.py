@@ -14,7 +14,10 @@ from palace.manager.api.admin.model.dashboard_statistics import StatisticsRespon
 from palace.manager.api.admin.password_admin_authentication_provider import (
     PasswordAdminAuthenticationProvider,
 )
-from palace.manager.api.admin.problem_details import INVALID_ADMIN_CREDENTIALS
+from palace.manager.api.admin.problem_details import (
+    ADMIN_NOT_AUTHORIZED,
+    INVALID_ADMIN_CREDENTIALS,
+)
 from palace.manager.api.app import app
 from palace.manager.api.controller.static_file import StaticFileController
 from palace.manager.api.routes import allows_library, has_library, library_route
@@ -111,21 +114,15 @@ def requires_auth(f):
 
     @wraps(f)
     def decorated(*args, **kwargs):
-        # First check if already authenticated via session (existing flow)
-        admin = app.manager.admin_sign_in_controller.authenticated_admin_from_request()
-        if not isinstance(admin, ProblemDetail):
-            # Already authenticated via session
-            return f(*args, **kwargs)
-
         # Try to authenticate via Authorization header
         auth_header = flask.request.headers.get("Authorization")
         if not auth_header:
-            return INVALID_ADMIN_CREDENTIALS.response
+            return INVALID_ADMIN_CREDENTIALS
 
         # Check if it's a Bearer token
         parts = auth_header.split()
         if len(parts) != 2 or parts[0].lower() != "bearer":
-            return INVALID_ADMIN_CREDENTIALS.response
+            return INVALID_ADMIN_CREDENTIALS
 
         token = parts[1]
 
@@ -133,19 +130,21 @@ def requires_auth(f):
         try:
             decoded = base64.b64decode(token).decode("utf-8")
         except Exception:
-            return INVALID_ADMIN_CREDENTIALS.response
+            return INVALID_ADMIN_CREDENTIALS
 
         # Extract username and password
         if ":" not in decoded:
-            return INVALID_ADMIN_CREDENTIALS.response
+            return INVALID_ADMIN_CREDENTIALS
 
         email, password = decoded.split(":", 1)
 
         # Authenticate using Admin.authenticate
         authenticated_admin = Admin.authenticate(app.manager._db, email, password)
         if not authenticated_admin:
-            return INVALID_ADMIN_CREDENTIALS.response
+            return INVALID_ADMIN_CREDENTIALS
 
+        if not authenticated_admin.is_system_admin():
+            return ADMIN_NOT_AUTHORIZED
         # Set the admin on the request
         setattr(flask.request, "admin", authenticated_admin)
 

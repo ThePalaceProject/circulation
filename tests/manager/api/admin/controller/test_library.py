@@ -1068,17 +1068,6 @@ class TestLibrarySettings:
         db: DatabaseTransactionFixture,
     ):
         """Test that import_libraries works for non-system admin users."""
-        libraries_data = {
-            "libraries": [
-                {
-                    "name": "Test Library",
-                    "short_name": "test_lib",
-                    "website_url": "https://test.example.com",
-                    "patron_support_email": "test@example.com",
-                }
-            ]
-        }
-
         # Create a non-system-admin user (librarian)
         admin = flask_app_fixture.admin_user()
         admin.remove_role(AdminRole.SYSTEM_ADMIN)
@@ -1086,19 +1075,10 @@ class TestLibrarySettings:
         admin.add_role(AdminRole.LIBRARIAN, library)
 
         with flask_app_fixture.test_request_context(
-            "/", method="POST", json=libraries_data, admin=admin
+            "/", method="POST", json={}, admin=admin
         ):
-            response = controller.import_libraries()
-            assert response.status_code == 200
-            assert isinstance(response.json, dict)
-            result = response.json
-            assert result["result"] == "success"
-            assert len(result["created"]) == 1
-            assert result["created"][0]["name"] == "Test Library"
-
-        # Verify the library was actually created
-        test_lib = get_one(db.session, Library, short_name="test_lib")
-        assert test_lib is not None
+            with pytest.raises(AdminNotAuthorized):
+                controller.import_libraries()
 
     def test_import_libraries_mixed_success_and_errors(
         self,
