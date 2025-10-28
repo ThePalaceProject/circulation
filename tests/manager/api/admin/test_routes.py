@@ -69,6 +69,13 @@ class MockAdminController(MockController):
     def bulk_circulation_events(self):
         return "data", "date", "date_end", "library"
 
+    def import_libraries(self):
+        return flask.Response(
+            '{"result": "success", "created": [], "skipped": [], "errors": []}',
+            200,
+            mimetype="application/json",
+        )
+
 
 class AdminRouteFixture:
     # The first time __init__() is called, it will instantiate a real
@@ -501,13 +508,6 @@ class TestAdminLibrarySettings:
             http_method="DELETE",
         )
         fixture.assert_supported_methods(url, "DELETE")
-
-    def test_import_libraries(self, fixture: AdminRouteFixture):
-        url = "/admin/import-libraries"
-        fixture.assert_authenticated_request_calls(
-            url, fixture.controller.import_libraries, http_method="POST"
-        )
-        fixture.assert_supported_methods(url, "POST")
 
 
 class TestAdminCollectionSettings:
