@@ -53,17 +53,11 @@ class PatronController(CirculationManagerController, AdminPermissionsControllerM
 
         for provider in patron_lookup_providers:
             try:
-                remote_patron_data = provider.remote_patron_lookup(patron_data)
-                if isinstance(remote_patron_data, ProblemDetail):
-                    return remote_patron_data
-                if remote_patron_data:
+                if remote_patron_data := provider.remote_patron_lookup(patron_data):
                     return remote_patron_data
             except PatronLookupNotSupported:
                 # This provider doesn't support remote lookup, try local lookup
-                local_patron = provider.local_patron_lookup(
-                    self._db, identifier, patron_data
-                )
-                if local_patron:
+                if local_patron := provider.local_patron_lookup(self._db, identifier):
                     # Convert the local Patron to PatronData for consistency
                     return PatronData(
                         permanent_id=local_patron.external_identifier,
