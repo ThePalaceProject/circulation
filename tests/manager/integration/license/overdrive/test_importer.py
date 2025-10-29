@@ -38,14 +38,11 @@ def _create_mock_book_data(
 ) -> dict[str, Any]:
     """Helper to create mock book data for tests.
 
-    Args:
-        book_id: The OverDrive book ID
-        has_metadata: Whether to include metadata in the book data
-        has_availability: Whether to include availability data
-        date_added: Optional date_added timestamp string
-
-    Returns:
-        Mock book data dictionary
+    :param book_id: The OverDrive book ID
+    :param has_metadata: Whether to include metadata in the book data
+    :param has_availability: Whether to include availability data
+    :param date_added: Optional date_added timestamp string
+    :return: Mock book data dictionary
     """
     book: dict[str, Any] = {"id": book_id}
     if has_metadata:

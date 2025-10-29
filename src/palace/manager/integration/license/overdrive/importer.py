@@ -55,14 +55,13 @@ class OverdriveImporter(LoggerMixin):
     ) -> None:
         """Constructor for the OverdriveImporter class.
 
-        Args:
-            db: The database session.
-            collection: The collection to import.
-            registry: The license providers registry.
-            import_all: Whether to import all books from the collection.
-            identifier_set: The identifier set to use for the import.
-            parent_identifier_set: The parent identifier set to use for the import.
-            api: The OverdriveAPI instance to use for the import.
+        :param db: The database session.
+        :param collection: The collection to import.
+        :param registry: The license providers registry.
+        :param import_all: Whether to import all books from the collection.
+        :param identifier_set: The identifier set to use for the import.
+        :param parent_identifier_set: The parent identifier set to use for the import.
+        :param api: The OverdriveAPI instance to use for the import.
         """
         self._db = db
         self._collection = collection
@@ -111,15 +110,12 @@ class OverdriveImporter(LoggerMixin):
     ) -> tuple[Identifier, bool]:
         """Process a single book and return (identifier, changed).
 
-        Args:
-            book: Book data dictionary from OverDrive API
-            fetch_metadata: Whether metadata was already fetched
-            policy: Replacement policy for bibliographic updates
-            apply_bibliographic: Callback to apply bibliographic updates
-            apply_circulation: Callback to apply circulation updates
-
-        Returns:
-            Tuple of (identifier, changed) where changed is True if any data changed
+        :param book: Book data dictionary from OverDrive API
+        :param fetch_metadata: Whether metadata was already fetched
+        :param policy: Replacement policy for bibliographic updates
+        :param apply_bibliographic: Callback to apply bibliographic updates
+        :param apply_circulation: Callback to apply circulation updates
+        :return: Tuple of (identifier, changed) where changed is True if any data changed
         """
         identifier, _ = Identifier.for_foreign_id(
             self._db,
@@ -171,17 +167,15 @@ class OverdriveImporter(LoggerMixin):
         book_data: list[dict[str, Any]],
     ) -> bool:
         """Check if all books in the book_data are out of scope in terms of the date they were added.
+
         This method is used to determine if we should continue to fetch the next page of books.
         Overdrive does not provide a way to retrieve books that were added or modified since a given date.
         They do however give us the "date_added" value for each book which we can use to determine
         if the book was added before the modified_since date.
 
-        Args:
-            modified_since: The datetime to check if the books are out of scope.
-            book_data: The book data to check if the books are out of scope.
-
-        Returns:
-            True if all books are out of scope, False otherwise.
+        :param modified_since: The datetime to check if the books are out of scope.
+        :param book_data: The book data to check if the books are out of scope.
+        :return: True if all books are out of scope, False otherwise.
         """
         out_of_scope_count = 0
 
@@ -218,31 +212,29 @@ class OverdriveImporter(LoggerMixin):
 
         2. **Out-of-Scope Optimization**:
            - If all books in the current page were added before modified_since and there were no changes detected,
-           stops pagination early to avoid processing old data
+             stops pagination early to avoid processing old data
            - Can be disabled with import_all=True
 
         3. **Change Detection**:
            - Only applies bibliographic updates if metadata has changed
            - Always checks circulation data as availability changes frequently and applies changes only if changed.
 
-        Args:
-            apply_bibliographic: Callback to apply bibliographic metadata updates (title, author, etc.)
-            apply_circulation: Callback to apply circulation data updates (copies owned, available, etc.)
-            modified_since: Only process books modified after this datetime
-            endpoint: OverDrive API endpoint to fetch from. If None, generates a default endpoint
-                     starting from modified_since
+        :param apply_bibliographic: Callback to apply bibliographic metadata updates (title, author, etc.)
+        :param apply_circulation: Callback to apply circulation data updates (copies owned, available, etc.)
+        :param modified_since: Only process books modified after this datetime
+        :param endpoint: OverDrive API endpoint to fetch from. If None, generates a default endpoint
+                         starting from modified_since
+        :param page_size: Number of items to fetch per page
+        :return: FeedImportResult containing current_page (the endpoint that was processed),
+                 next_page (the next endpoint to process, None if done or all books out of scope),
+                 and processed_count (number of books processed in this call)
 
-        Returns:
-            FeedImportResult containing:
-                - current_page: The endpoint that was processed
-                - next_page: The next endpoint to process (None if done or all books out of scope)
-                - processed_count: Number of books processed in this call
-
-        Side Effects:
-            - Creates/updates Identifier records in the database
-            - Adds identifiers to self._identifier_set if provided
-            - Records timing and achievement data in the Timestamp
-            - Logs progress information
+        .. note::
+           Side Effects:
+           - Creates/updates Identifier records in the database
+           - Adds identifiers to self._identifier_set if provided
+           - Records timing and achievement data in the Timestamp
+           - Logs progress information
         """
         identifiers = []
         policy = ReplacementPolicy(
