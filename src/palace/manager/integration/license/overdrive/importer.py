@@ -12,6 +12,7 @@ from palace.manager.celery.tasks.apply import (
     ApplyCirculationCallable,
 )
 from palace.manager.core.exceptions import PalaceValueError
+from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.data_layer.policy.replacement import ReplacementPolicy
 from palace.manager.integration.license.overdrive.api import (
     BookInfoEndpoint,
@@ -68,12 +69,13 @@ class OverdriveImporter(LoggerMixin):
         self._import_all = import_all
         self._identifier_set = identifier_set
 
-        self._parent_identifiers: Set[str] | None = None
+        self._parent_identifiers: Set[IdentifierData] | None = None
         if parent_identifier_set is not None:
-            # create an in-memory set from the redis set to optimize existence checks for individual identifiers.
+            # create an in-memory set from the redis set  to optimize existence checks for individual identifiers.
             # I don't believe we need to worry about memory here: few redis identifier sets will likely exceed 200K
             # items which should be easily manageable given an identifier is 36 characters (36*200K = 7.2 MB). Most OD
             # collections are much  smaller in the 20-70K range.
+
             self._parent_identifiers = parent_identifier_set.get()
 
         if not registry.equivalent(collection.protocol, OverdriveAPI):
@@ -123,7 +125,11 @@ class OverdriveImporter(LoggerMixin):
             foreign_identifier_type=Identifier.OVERDRIVE_ID,
         )
 
+        # the identifier should never be null, because by default autocreate = True in for_foreign_id().
+        # however mypy complains throughout without changing type hints or adding an asssertion.
+        # An assertion is least verbose solution.
         assert identifier
+
         changed: bool = False
 
         # We only need to look up metadata if we didn't already fetch it and it was not in the parent identifier
@@ -131,7 +137,8 @@ class OverdriveImporter(LoggerMixin):
         # has already been imported which would have included all the metadata.
         if not fetch_metadata and (
             not self._parent_identifiers
-            or identifier.identifier not in self._parent_identifiers
+            or IdentifierData.from_identifier(identifier)
+            not in self._parent_identifiers
         ):
             book["metadata"] = self._api.metadata_lookup(identifier=identifier)
 
@@ -139,7 +146,10 @@ class OverdriveImporter(LoggerMixin):
         # didn't get anything back from overdrive (ie from the book list fetch above).
         if book["metadata"]:
             bibliographic = self._extractor.book_info_to_bibliographic(book)
+            # The bibliographic should never be null here because there is a non-null entry for metadata in the
+            # book dictionary.  Mypy complains without an assertion or type hints.
             assert bibliographic
+
             if bibliographic.has_changed(self._db):
                 changed = True
                 apply_bibliographic(
@@ -151,8 +161,17 @@ class OverdriveImporter(LoggerMixin):
         # availability needs to be checked/updated in all but a few instances so it is
         # probably not worth the compute time to save ourselves a handful of unnecessary updates.
         availability = book.get("availabilityV2", None)
-        if availability:
+        if not availability:
+            # This is a rare and probably transient case where the availabilityV2
+            # was not retrieved due to a 404 from OD.
+            self.log.warning(
+                f"No availabilityV2 found for book {identifier}. book={book}.  This state can "
+                f"arise when the OD returns a 404 for the availability url."
+            )
+        else:
             circulation = self._extractor.book_info_to_circulation(availability)
+            # The circulation should never be null here because there is a non-null entry for availabilityV2 in the
+            # book dictionary.  Mypy complains without an assertion or type hints.
             assert circulation
 
             if circulation.has_changed(session=self._db, collection=self._collection):

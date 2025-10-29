@@ -10,6 +10,7 @@ import pytest
 from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.data_layer.bibliographic import BibliographicData
 from palace.manager.data_layer.circulation import CirculationData
+from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.integration.license.overdrive.api import (
     BookInfoEndpoint,
     OverdriveAPI,
@@ -148,13 +149,10 @@ class TestOverdriveImporter:
         registry = services_fixture.services.integration_registry.license_providers()
 
         # Create mock identifiers
-        mock_id1 = Mock()
-        mock_id1.identifier = "id1"
-        mock_id2 = Mock()
-        mock_id2.identifier = "id2"
-
+        id1 = IdentifierData(type=Identifier.OVERDRIVE_ID, identifier="id1")
+        id2 = IdentifierData(type=Identifier.OVERDRIVE_ID, identifier="id2")
         mock_parent_set = Mock(spec=IdentifierSet)
-        mock_parent_set.get.return_value = [mock_id1, mock_id2]
+        mock_parent_set.get.return_value = {id1, id2}
 
         importer = OverdriveImporter(
             db=db.session,
@@ -163,7 +161,7 @@ class TestOverdriveImporter:
             parent_identifier_set=mock_parent_set,
         )
 
-        assert importer._parent_identifiers == {"id1", "id2"}
+        assert importer._parent_identifiers == {id1, id2}
 
     def test_init_invalid_collection_protocol(
         self,
@@ -770,13 +768,15 @@ class TestOverdriveImporter:
         api = overdrive_api_fixture.api
 
         # Create a mock parent identifier set
-        mock_parent_id1 = Mock()
-        mock_parent_id1.identifier = "overdrive-id-1"
-        mock_parent_id2 = Mock()
-        mock_parent_id2.identifier = "overdrive-id-2"
+        mock_parent_id1 = IdentifierData(
+            type=Identifier.OVERDRIVE_ID, identifier="overdrive-id-1"
+        )
+        mock_parent_id2 = IdentifierData(
+            type=Identifier.OVERDRIVE_ID, identifier="overdrive-id-2"
+        )
 
         mock_parent_set = Mock(spec=IdentifierSet)
-        mock_parent_set.get.return_value = [mock_parent_id1, mock_parent_id2]
+        mock_parent_set.get.return_value = {mock_parent_id1, mock_parent_id2}
 
         importer = OverdriveImporter(
             db=db.session,
