@@ -8,13 +8,15 @@ import flask
 import pytest
 
 from palace.manager.api.admin.routes import requires_auth
-from palace.manager.sqlalchemy.model.admin import Admin
 from palace.manager.util.problem_detail import ProblemDetail
 from tests.fixtures.database import DatabaseTransactionFixture
 
 
 class TestRequiresAuthDecorator:
     """Tests for the @requires_auth decorator."""
+
+    ADMIN_EMAIL = "test@example.com"
+    ADMIN_PASSWORD = "password"
 
     @pytest.fixture
     def mock_flask_app(self):
@@ -34,11 +36,14 @@ class TestRequiresAuthDecorator:
     @pytest.fixture
     def test_admin(self, db: DatabaseTransactionFixture):
         """Create a test admin user."""
-        admin = Admin(email="test@example.com")
-        admin.password = "test_password"
-        db.session.add(admin)
-        db.session.commit()
-        return admin
+        return db.admin(email=self.ADMIN_EMAIL, password=self.ADMIN_PASSWORD)
+
+    @pytest.fixture
+    def test_system_admin(self, db: DatabaseTransactionFixture):
+        """Create a test admin user."""
+        return db.admin(
+            email=self.ADMIN_EMAIL, password=self.ADMIN_PASSWORD, is_system_admin=True
+        )
 
     @pytest.fixture
     def test_endpoint(self):
@@ -55,7 +60,7 @@ class TestRequiresAuthDecorator:
         """Provide a context manager for making authenticated requests."""
 
         @contextmanager
-        def _auth_context(headers=None, mock_authenticate=None, admin=None):
+        def _auth_context(headers=None):
             """
             Context manager that sets up authentication mocking.
 
@@ -67,22 +72,7 @@ class TestRequiresAuthDecorator:
             with mock_flask_app.test_request_context(headers=headers or {}):
                 with patch("palace.manager.api.admin.routes.app") as mock_app:
                     mock_app.manager = mock_manager
-
-                    if mock_authenticate is not None and admin is not None:
-                        with patch.object(
-                            Admin, "authenticate"
-                        ) as auth_mock, patch.object(
-                            admin, "is_system_admin"
-                        ) as is_system_admin:
-                            auth_mock.return_value = mock_authenticate
-                            is_system_admin.return_value = True
-                            yield
-                    elif mock_authenticate is not None:
-                        with patch.object(Admin, "authenticate") as auth_mock:
-                            auth_mock.return_value = mock_authenticate
-                            yield
-                    else:
-                        yield
+                    yield
 
         return _auth_context
 
@@ -138,15 +128,13 @@ class TestRequiresAuthDecorator:
         self.assert_invalid_credentials(result)
 
     def test_requires_auth_valid_credentials(
-        self, test_endpoint, auth_context, test_admin
+        self, test_endpoint, auth_context, test_system_admin
     ):
         """Test successful authentication with valid credentials."""
-        credentials = self.encode_credentials("user@email.com", "password")
+        credentials = self.encode_credentials(self.ADMIN_EMAIL, self.ADMIN_PASSWORD)
         headers = {"Authorization": f"Bearer {credentials}"}
 
-        with auth_context(
-            headers=headers, mock_authenticate=test_admin, admin=test_admin
-        ):
+        with auth_context(headers=headers):
             result = test_endpoint()
 
         assert result == {"success": True}
@@ -155,12 +143,11 @@ class TestRequiresAuthDecorator:
         self, test_endpoint, auth_context, test_admin
     ):
         """Test that non-system admin returns 403 error."""
-        credentials = self.encode_credentials("user@email.com", "password")
+        credentials = self.encode_credentials(self.ADMIN_EMAIL, self.ADMIN_PASSWORD)
         headers = {"Authorization": f"Bearer {credentials}"}
 
-        with auth_context(headers=headers, mock_authenticate=test_admin):
-            with patch.object(test_admin, "is_system_admin", return_value=False):
-                result = test_endpoint()
+        with auth_context(headers=headers):
+            result = test_endpoint()
 
         assert isinstance(result, ProblemDetail)
         assert result.status_code == 403
