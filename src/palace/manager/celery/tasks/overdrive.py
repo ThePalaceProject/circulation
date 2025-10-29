@@ -51,11 +51,14 @@ def import_collection(
 
     :param collection_id: The ID of the collection to import
     :param import_all: If True, import all titles regardless of whether they have changed.
-        If False, only import titles that have been modified since the last import.
-    :param page: The "page" to be processed. The page param is a url represented as a string. When starting an import task,
-        the value should be None. Defaults to None.
-    :param modified_since: Only process titles modified after this datetime. If None,
-        will be determined based on import_all flag and last import timestamp.
+        If False, only import titles that have changed since the modified_since date.
+    :param page: The "page" to be processed. The page param is a url represented as a string. A None value means the
+        import will start from the beginning of the set.
+    :param modified_since: Only process titles modified after this datetime. This field parameter is ignored if
+        import_all is True. If import_all is False and modified_since is None, then only titles after the last import
+        timestamp's start time will be imported. If there is no prior timestamp, all titles will be imported.
+         Finally, if import_all is False and modified_since is not None, then
+        only titles modified after modified_since date will be imported.
     :param start_time: The datetime when this import process began. Used to update
         the collection's timestamp only after all pages have been processed. If None,
         will be set to the current time on the first page.
@@ -92,17 +95,16 @@ def import_collection(
             db=session,
             collection=collection,
             registry=registry,
-            import_all=import_all,
             identifier_set=identifier_set,
             parent_identifier_set=parent_identifier_set,
         )
 
         if modified_since is None:
             if import_all:
-                modified_since = OverdriveImporter.DEFAULT_START_TIME
+                modified_since = None
             else:
                 timestamp = importer.get_timestamp()
-                modified_since = timestamp.start or OverdriveImporter.DEFAULT_START_TIME
+                modified_since = timestamp.start
 
         task.log.info(
             f"OverDrive import started: '{collection_name}' Modified since: {modified_since}, "
