@@ -793,9 +793,8 @@ def admin_base(**kwargs):
 def import_libraries():
     """Import multiple libraries from a list of library configurations.
 
-    Supports authentication via:
-    - Session-based authentication (existing admin workflow)
-    - Bearer token authentication: Authorization: Bearer <base64(email:password)>
+    Supports authentication via bearer token authentication:
+        Authorization: Bearer <base64(email:password)>
     """
     return app.manager.admin_library_settings_controller.import_libraries()
 
