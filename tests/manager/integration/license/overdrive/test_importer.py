@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 from unittest.mock import AsyncMock, Mock
 
@@ -27,34 +28,9 @@ from palace.manager.sqlalchemy.model.coverage import Timestamp
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.util.datetime_helpers import datetime_utc
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.files import OverdriveFilesFixture
 from tests.fixtures.overdrive import OverdriveAPIFixture
 from tests.fixtures.services import ServicesFixture
-
-
-def _create_mock_book_data(
-    book_id: str,
-    has_metadata: bool = True,
-    has_availability: bool = True,
-    date_added: str | None = None,
-) -> dict[str, Any]:
-    """Helper to create mock book data for tests.
-
-    :param book_id: The OverDrive book ID
-    :param has_metadata: Whether to include metadata in the book data
-    :param has_availability: Whether to include availability data
-    :param date_added: Optional date_added timestamp string
-    :return: Mock book data dictionary
-    """
-    book: dict[str, Any] = {"id": book_id}
-    if has_metadata:
-        book["metadata"] = {"title": f"Book {book_id}"}
-    else:
-        book["metadata"] = None
-    if has_availability:
-        book["availabilityV2"] = {"copiesOwned": 1, "copiesAvailable": 1}
-    if date_added:
-        book["date_added"] = date_added
-    return book
 
 
 class TestOverdriveImporter:
@@ -207,6 +183,7 @@ class TestOverdriveImporter:
         self,
         db: DatabaseTransactionFixture,
         overdrive_api_fixture: OverdriveAPIFixture,
+        overdrive_files_fixture: OverdriveFilesFixture,
         services_fixture: ServicesFixture,
     ):
         """Test import_collection with basic book data."""
@@ -226,14 +203,22 @@ class TestOverdriveImporter:
         mock_apply_circ = Mock()
         modified_since = datetime_utc(2023, 1, 1)
 
-        # Mock book data returned from API
-        mock_book_data = [
-            {
-                "id": "overdrive-id-1",
-                "metadata": {"title": "Test Book"},
-                "availabilityV2": {"copiesOwned": 1, "copiesAvailable": 1},
-            }
-        ]
+        # Load real book data from test files
+        book_list_data = json.loads(
+            overdrive_files_fixture.sample_data("overdrive_book_list.json")
+        )
+        # Get the first product from the real data
+        mock_book_data = [book_list_data["products"][0]]
+        # Add metadata and availability that would be fetched
+        mock_book_data[0]["metadata"] = json.loads(
+            overdrive_files_fixture.sample_data("overdrive_metadata.json")
+        )
+        mock_book_data[0]["availabilityV2"] = json.loads(
+            overdrive_files_fixture.sample_data(
+                "overdrive_availability_information.json"
+            )
+        )
+
         mock_next_endpoint = BookInfoEndpoint(url="http://next.page")
 
         api.fetch_book_info_list = AsyncMock(
@@ -577,6 +562,7 @@ class TestOverdriveImporter:
         self,
         db: DatabaseTransactionFixture,
         overdrive_api_fixture: OverdriveAPIFixture,
+        overdrive_files_fixture: OverdriveFilesFixture,
         services_fixture: ServicesFixture,
     ):
         """Test that pagination continues if changes are detected, even if books are old."""
@@ -595,17 +581,26 @@ class TestOverdriveImporter:
         mock_apply_circ = Mock()
         modified_since = datetime_utc(2023, 6, 1)
 
-        # Mock book data where all books are out of scope BUT have changes
-        mock_book_data = [
-            _create_mock_book_data(
-                "overdrive-id-1",
-                date_added="2023-01-15T00:00:00Z",  # Out of scope
-            ),
-            _create_mock_book_data(
-                "overdrive-id-2",
-                date_added="2023-02-10T00:00:00Z",  # Out of scope
-            ),
-        ]
+        # Load real book data and modify dates to be out of scope
+        book_list_data = json.loads(
+            overdrive_files_fixture.sample_data("overdrive_book_list.json")
+        )
+        mock_book_data = book_list_data["products"][:2]
+
+        # Modify dates to be out of scope
+        mock_book_data[0]["dateAdded"] = "2023-01-15T00:00:00Z"
+        mock_book_data[1]["dateAdded"] = "2023-02-10T00:00:00Z"
+
+        # Add metadata and availability
+        for book in mock_book_data:
+            book["metadata"] = json.loads(
+                overdrive_files_fixture.sample_data("overdrive_metadata.json")
+            )
+            book["availabilityV2"] = json.loads(
+                overdrive_files_fixture.sample_data(
+                    "overdrive_availability_information.json"
+                )
+            )
 
         # API returns a next page
         mock_next_endpoint = BookInfoEndpoint(url="http://next.page")
