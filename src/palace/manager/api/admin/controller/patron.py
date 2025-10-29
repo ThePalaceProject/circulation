@@ -10,7 +10,11 @@ from palace.manager.api.admin.controller.base import AdminPermissionsControllerM
 from palace.manager.api.admin.controller.util import required_library_from_request
 from palace.manager.api.admin.problem_details import NO_SUCH_PATRON
 from palace.manager.api.adobe_vendor_id import AuthdataUtility
-from palace.manager.api.authentication.base import CannotCreateLocalPatron, PatronData
+from palace.manager.api.authentication.base import (
+    CannotCreateLocalPatron,
+    PatronData,
+    PatronLookupNotSupported,
+)
 from palace.manager.api.authenticator import LibraryAuthenticator
 from palace.manager.api.controller.circulation_manager import (
     CirculationManagerController,
@@ -48,9 +52,29 @@ class PatronController(CirculationManagerController, AdminPermissionsControllerM
             )
 
         for provider in patron_lookup_providers:
-            remote_patron_data = provider.remote_patron_lookup(patron_data)
-            if remote_patron_data:
-                return remote_patron_data
+            try:
+                remote_patron_data = provider.remote_patron_lookup(patron_data)
+                if isinstance(remote_patron_data, ProblemDetail):
+                    return remote_patron_data
+                if remote_patron_data:
+                    return remote_patron_data
+            except PatronLookupNotSupported:
+                # This provider doesn't support remote lookup, try local lookup
+                local_patron = provider.local_patron_lookup(
+                    self._db, identifier, patron_data
+                )
+                if local_patron:
+                    # Convert the local Patron to PatronData for consistency
+                    return PatronData(
+                        permanent_id=local_patron.external_identifier,
+                        authorization_identifier=local_patron.authorization_identifier,
+                        username=local_patron.username,
+                        external_type=local_patron.external_type,
+                        fines=local_patron.fines,
+                        block_reason=local_patron.block_reason,
+                        authorization_expires=local_patron.authorization_expires,
+                        complete=True,
+                    )
 
         # If we get here, none of the providers succeeded.
         return NO_SUCH_PATRON.detailed(

@@ -3,7 +3,7 @@ from typing import Annotated
 from flask_babel import lazy_gettext as _
 from lxml import etree
 
-from palace.manager.api.authentication.base import PatronData
+from palace.manager.api.authentication.base import PatronData, PatronLookupNotSupported
 from palace.manager.api.authentication.basic import (
     BasicAuthenticationProvider,
     BasicAuthProviderLibrarySettings,
@@ -86,10 +86,7 @@ class KansasAuthenticationAPI(
         self, patron_or_patrondata: PatronData | Patron
     ) -> PatronData | None:
         # Kansas auth gives very little data about the patron. So this function is just a passthrough.
-        if isinstance(patron_or_patrondata, PatronData):
-            return patron_or_patrondata
-
-        return None
+        raise PatronLookupNotSupported()
 
     # End implementation of BasicAuthenticationProvider abstract methods.
 

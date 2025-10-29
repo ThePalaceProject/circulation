@@ -103,9 +103,9 @@ class BasicTokenAuthenticationProvider(
         flow_doc["links"] = links
         return flow_doc
 
-    def remote_patron_lookup(self, _db):
-        """There is no remote lookup"""
-        raise NotImplementedError()
+    def remote_patron_lookup(self, patron_or_patrondata):
+        """Delegate remote patron lookup to the underlying basic provider."""
+        return self.basic_provider.remote_patron_lookup(patron_or_patrondata)
 
     @property
     def flow_type(self) -> str:

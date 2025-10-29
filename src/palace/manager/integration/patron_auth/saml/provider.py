@@ -3,7 +3,7 @@ from flask_babel import lazy_gettext as _
 from sqlalchemy.orm import Session
 from werkzeug.datastructures import Authorization
 
-from palace.manager.api.authentication.base import PatronData
+from palace.manager.api.authentication.base import PatronData, PatronLookupNotSupported
 from palace.manager.api.authenticator import BaseSAMLAuthenticationProvider
 from palace.manager.integration.patron_auth.saml.auth import (
     SAMLAuthenticationManagerFactory,
@@ -369,17 +369,7 @@ class SAMLWebSSOAuthenticationProvider(
         :param patron_or_patrondata: PatronData or Patron object
         :return: PatronData object if the input contains sufficient information, None otherwise
         """
-        if isinstance(patron_or_patrondata, PatronData):
-            # Return the PatronData as-is since we can't do a fresh SAML lookup
-            return patron_or_patrondata
-
-        # Convert the Patron to PatronData for admin operations
-        return PatronData(
-            permanent_id=patron_or_patrondata.external_identifier,
-            authorization_identifier=patron_or_patrondata.authorization_identifier,
-            username=patron_or_patrondata.username,
-            complete=True,
-        )
+        raise PatronLookupNotSupported()
 
     def saml_callback(
         self, db: Session, subject: SAMLSubject
