@@ -104,7 +104,6 @@ class TestImportCollection:
         mock_importer_class.assert_called_once()
         call_kwargs = mock_importer_class.call_args.kwargs
         assert call_kwargs["collection"].id == collection.id
-        assert call_kwargs["import_all"] is False
         assert call_kwargs["identifier_set"] is not None
 
         # Verify import was executed
@@ -113,6 +112,7 @@ class TestImportCollection:
         # Verify timestamp was updated (since next_page is None)
         assert mock_timestamp.start is not None
         assert mock_timestamp.finish is not None
+        assert mock_timestamp.finish > mock_timestamp.start
 
     @patch("palace.manager.celery.tasks.overdrive.OverdriveImporter")
     def test_import_collection_with_import_all(
@@ -121,7 +121,11 @@ class TestImportCollection:
         overdrive_import_fixture: OverdriveImportFixture,
         db: DatabaseTransactionFixture,
     ):
-        """Test import_collection with import_all=True."""
+        """Test import_collection with import_all=True.
+
+        When import_all=True, modified_since should be set to None,
+        which bypasses the out-of-scope check in the importer.
+        """
         collection = overdrive_import_fixture.collection
 
         # Mock the importer
@@ -141,16 +145,13 @@ class TestImportCollection:
         # Run the task with import_all=True
         overdrive.import_collection.delay(collection.id, import_all=True).wait()
 
-        # Verify import_all was passed to importer
+        # Verify importer was created WITHOUT import_all parameter (removed)
         call_kwargs = mock_importer_class.call_args.kwargs
-        assert call_kwargs["import_all"] is True
+        assert "import_all" not in call_kwargs
 
-        # Verify modified_since uses DEFAULT_START_TIME when import_all is True
+        # Verify modified_since is None when import_all is True (bypasses out-of-scope check)
         import_call = mock_importer.import_collection.call_args
-        assert (
-            import_call.kwargs["modified_since"]
-            == mock_importer_class.DEFAULT_START_TIME
-        )
+        assert import_call.kwargs["modified_since"] is None
 
     @patch("palace.manager.celery.tasks.overdrive.OverdriveImporter")
     def test_import_collection_with_next_page(
@@ -189,7 +190,7 @@ class TestImportCollection:
             mock_replace.assert_called_once()
 
     @patch("palace.manager.celery.tasks.overdrive.OverdriveImporter")
-    def test_import_collection_with_custom_endpoint(
+    def test_import_collection_with_endpoint_not_none(
         self,
         mock_importer_class: MagicMock,
         overdrive_import_fixture: OverdriveImportFixture,
@@ -197,7 +198,7 @@ class TestImportCollection:
     ):
         """Test import_collection with custom page URL."""
         collection = overdrive_import_fixture.collection
-        custom_page_url = "http://custom.endpoint.com/books"
+        endpoint_url = "http://custom.endpoint.com/books"
 
         # Mock the importer
         mock_importer = Mock(spec=OverdriveImporter)
@@ -206,7 +207,7 @@ class TestImportCollection:
         mock_importer.get_timestamp.return_value = mock_timestamp
 
         mock_result = FeedImportResult(
-            current_page=BookInfoEndpoint(url=custom_page_url),
+            current_page=BookInfoEndpoint(url=endpoint_url),
             next_page=None,
             processed_count=3,
         )
@@ -214,11 +215,11 @@ class TestImportCollection:
         mock_importer_class.return_value = mock_importer
 
         # Run the task with custom page
-        overdrive.import_collection.delay(collection.id, page=custom_page_url).wait()
+        overdrive.import_collection.delay(collection.id, page=endpoint_url).wait()
 
         # Verify the custom endpoint was used
         import_call = mock_importer.import_collection.call_args
-        assert import_call.kwargs["endpoint"] == BookInfoEndpoint(url=custom_page_url)
+        assert import_call.kwargs["endpoint"] == BookInfoEndpoint(url=endpoint_url)
 
     @patch("palace.manager.celery.tasks.overdrive.OverdriveImporter")
     def test_import_collection_modified_since(
