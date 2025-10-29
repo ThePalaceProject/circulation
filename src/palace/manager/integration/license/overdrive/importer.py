@@ -293,7 +293,7 @@ class OverdriveImporter(LoggerMixin):
                 changed_books_count += 1
             identifiers.append(identifier)
 
-        achievements = [f"Total items queued for import:  {len(identifiers)}."]
+        achievements = [f"Total items queued for import: {len(identifiers)}."]
         if (elapsed_time := timestamp.elapsed_seconds) is not None:
             achievements.append(f"Elapsed time: {elapsed_time:.2f} seconds.")
 
