@@ -303,7 +303,7 @@ class OverdriveImporter(LoggerMixin):
         timestamp.achievements = "\n".join(achievements)
 
         self.log.info(
-            f"Finished import of {len(identifiers)} for collection {self._collection.name} (id={self._collection.id}. "
+            f"Finished import of {len(identifiers)} for collection {self._collection.name} (id={self._collection.id}). "
             f"{' '.join(achievements)}"
         )
         # if we're are not in import all mode and all books are both out of scope and no books were changed, we can assume that
