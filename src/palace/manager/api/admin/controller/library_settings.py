@@ -288,7 +288,7 @@ class LibrarySettingsController(AdminPermissionsControllerMixin):
         Raises:
             ProblemDetailException: If the field is missing or empty
         """
-        value = library_data.get(field_name, "").strip()
+        value: str = library_data.get(field_name, "").strip()
         if not value:
             context = f" for library '{library_name}'" if library_name else ""
             raise ProblemDetailException(
