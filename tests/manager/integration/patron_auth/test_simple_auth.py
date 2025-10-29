@@ -1,9 +1,10 @@
 from collections.abc import Callable
 from functools import partial
+from unittest.mock import patch
 
 import pytest
 
-from palace.manager.api.authentication.base import PatronData
+from palace.manager.api.authentication.base import PatronData, PatronLookupNotSupported
 from palace.manager.api.authentication.basic import (
     BasicAuthProviderLibrarySettings,
     Keyboards,
@@ -12,6 +13,7 @@ from palace.manager.integration.patron_auth.simple_authentication import (
     SimpleAuthenticationProvider,
     SimpleAuthSettings,
 )
+from palace.manager.sqlalchemy.model.patron import Patron
 from tests.fixtures.database import DatabaseTransactionFixture
 
 
@@ -183,3 +185,80 @@ class TestSimpleAuth:
         result = provider.remote_patron_lookup(patron_data)
         assert isinstance(result, PatronData)
         assert result.permanent_id == "barcode_id"
+
+    def test_authenticated_patron_with_patron_lookup_not_supported(
+        self,
+        create_settings: Callable[..., SimpleAuthSettings],
+        create_library_settings: Callable[..., BasicAuthProviderLibrarySettings],
+        db: DatabaseTransactionFixture,
+    ):
+        """Test authenticated_patron when remote_patron_lookup raises PatronLookupNotSupported.
+
+        This tests the exception handling in the authenticate flow that calls
+        remote_patron_lookup to get complete patron data.
+        """
+        # Use the default library from the database fixture
+        library = db.default_library()
+
+        # Create provider with the actual library ID
+        provider = SimpleAuthenticationProvider(
+            library_id=library.id,
+            integration_id=1,
+            settings=create_settings(),
+            library_settings=create_library_settings(),
+        )
+
+        # Create a patron in the database with the correct library ID
+        patron = db.patron()
+        patron.library_id = library.id
+        patron.authorization_identifier = "barcode"
+        patron.username = "barcode_username"
+        patron.external_identifier = "barcode_id"
+
+        # Mock remote_patron_lookup to raise PatronLookupNotSupported
+        # The authenticate flow should handle this gracefully and continue with incomplete data
+        with patch.object(
+            provider, "remote_patron_lookup", side_effect=PatronLookupNotSupported()
+        ):
+            # Authenticate with valid credentials
+            result = provider.authenticated_patron(
+                db.session, dict(username="barcode", password="pass")
+            )
+
+        # Should still authenticate successfully even though remote lookup failed
+        assert isinstance(result, Patron)
+        assert result.authorization_identifier == "barcode"
+
+    def test_update_patron_metadata_with_patron_lookup_not_supported(
+        self,
+        create_settings: Callable[..., SimpleAuthSettings],
+        create_library_settings: Callable[..., BasicAuthProviderLibrarySettings],
+        db: DatabaseTransactionFixture,
+    ):
+        """Test update_patron_metadata when remote_patron_lookup raises PatronLookupNotSupported."""
+        library = db.default_library()
+        provider = SimpleAuthenticationProvider(
+            library_id=library.id,
+            integration_id=1,
+            settings=create_settings(),
+            library_settings=create_library_settings(),
+        )
+
+        # Create a patron in the database
+        patron = db.patron()
+        patron.library_id = library.id
+        patron.authorization_identifier = "original_barcode"
+        patron.username = "original_username"
+        patron.external_identifier = "original_id"
+
+        # Mock remote_patron_lookup to raise PatronLookupNotSupported
+        with patch.object(
+            provider, "remote_patron_lookup", side_effect=PatronLookupNotSupported()
+        ):
+            result = provider.update_patron_metadata(patron)
+
+        # Should return the patron unchanged
+        assert result is patron
+        assert patron.authorization_identifier == "original_barcode"
+        assert patron.username == "original_username"
+        assert patron.external_identifier == "original_id"
