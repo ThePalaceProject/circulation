@@ -266,15 +266,40 @@ class TestSimpleAuth:
         assert patron.username == "original_username"
         assert patron.external_identifier == "original_id"
 
-    def test_get_library_identifier_field_data_with_patron_lookup_not_supported(
+    @pytest.mark.parametrize(
+        "mock_behavior",
+        [
+            pytest.param(
+                {"side_effect": PatronLookupNotSupported()},
+                id="patron_lookup_not_supported_exception",
+            ),
+            pytest.param(
+                {
+                    "return_value": ProblemDetail(
+                        "http://librarysimplified.org/terms/problem/remote-integration-failed",
+                        status_code=502,
+                        detail="Incomplete solar system activity, check cosmic ray generator.",
+                    )
+                },
+                id="problem_detail_response",
+            ),
+            pytest.param(
+                {"return_value": None},
+                id="none_response",
+            ),
+        ],
+    )
+    def test_get_library_identifier_field_data_with_remote_lookup_failures(
         self,
         create_settings: Callable[..., SimpleAuthSettings],
         create_library_settings: Callable[..., BasicAuthProviderLibrarySettings],
         db: DatabaseTransactionFixture,
+        mock_behavior: dict,
     ):
-        """Test get_library_identifier_field_data when remote_patron_lookup raises PatronLookupNotSupported.
+        """Test get_library_identifier_field_data handles remote_patron_lookup failures.
 
-        This tests where the exception is caught and original patrondata is used.
+        When remote_patron_lookup raises an exception or returns a non-PatronData value,
+        the method should gracefully return the original patrondata with None for field_value.
         """
         library = db.default_library()
         library_settings = create_library_settings(
@@ -296,100 +321,12 @@ class TestSimpleAuth:
             complete=False,  # This will trigger remote lookup attempt
         )
 
-        # Mock remote_patron_lookup to raise PatronLookupNotSupported
-        with patch.object(
-            provider, "remote_patron_lookup", side_effect=PatronLookupNotSupported()
-        ):
+        # Mock remote_patron_lookup with the specified behavior
+        with patch.object(provider, "remote_patron_lookup", **mock_behavior):
             result_patrondata, field_value = provider.get_library_identifier_field_data(
                 incomplete_patrondata
             )
 
-        # Should return original patrondata and None since lookup not supported
+        # Should return original patrondata and None since lookup failed
         assert result_patrondata is incomplete_patrondata
         assert field_value is None
-
-    def test_get_library_identifier_field_data_with_problem_detail_response(
-        self,
-        create_settings: Callable[..., SimpleAuthSettings],
-        create_library_settings: Callable[..., BasicAuthProviderLibrarySettings],
-        db: DatabaseTransactionFixture,
-    ):
-        """Test get_library_identifier_field_data when remote_patron_lookup returns ProblemDetail.
-
-        This tests line 692-694 where isinstance check fails because result is ProblemDetail.
-        """
-        library = db.default_library()
-        library_settings = create_library_settings(
-            library_identifier_restriction_type=LibraryIdentifierRestriction.PREFIX,
-            library_identifier_field=LibraryIdenfitierRestrictionField.PATRON_LIBRARY,
-            library_identifier_restriction_criteria="branch_",
-        )
-        provider = SimpleAuthenticationProvider(
-            library_id=library.id,
-            integration_id=1,
-            settings=create_settings(),
-            library_settings=library_settings,
-        )
-
-        # Create incomplete PatronData
-        incomplete_patrondata = PatronData(
-            authorization_identifier="test_barcode",
-            complete=False,  # This will trigger remote lookup attempt
-        )
-
-        # Mock remote_patron_lookup to return a ProblemDetail
-        error_detail = ProblemDetail(
-            "http://librarysimplified.org/terms/problem/remote-integration-failed",
-            status_code=502,
-            title="Integration error",
-            detail="Failed to communicate with patron database",
-        )
-
-        with patch.object(provider, "remote_patron_lookup", return_value=error_detail):
-            result_patrondata, field_value = provider.get_library_identifier_field_data(
-                incomplete_patrondata
-            )
-
-            # Should return original patrondata and None since lookup returned error
-            assert result_patrondata is incomplete_patrondata
-            assert field_value is None
-
-    def test_get_library_identifier_field_data_with_none_response(
-        self,
-        create_settings: Callable[..., SimpleAuthSettings],
-        create_library_settings: Callable[..., BasicAuthProviderLibrarySettings],
-        db: DatabaseTransactionFixture,
-    ):
-        """Test get_library_identifier_field_data when remote_patron_lookup returns None.
-
-        This tests line 692-694 where isinstance check fails because result is None.
-        """
-        library = db.default_library()
-        library_settings = create_library_settings(
-            library_identifier_restriction_type=LibraryIdentifierRestriction.REGEX,
-            library_identifier_field=LibraryIdenfitierRestrictionField.PATRON_LIBRARY,
-            library_identifier_restriction_criteria="^[A-Z]{2}\\d{4}$",
-        )
-        provider = SimpleAuthenticationProvider(
-            library_id=library.id,
-            integration_id=1,
-            settings=create_settings(),
-            library_settings=library_settings,
-        )
-
-        # Create incomplete PatronData
-        incomplete_patrondata = PatronData(
-            authorization_identifier="test_barcode",
-            username="test_user",
-            complete=False,  # This will trigger remote lookup attempt
-        )
-
-        # Mock remote_patron_lookup to return None (patron not found)
-        with patch.object(provider, "remote_patron_lookup", return_value=None):
-            result_patrondata, field_value = provider.get_library_identifier_field_data(
-                incomplete_patrondata
-            )
-
-            # Should return original patrondata and None since lookup returned None
-            assert result_patrondata is incomplete_patrondata
-            assert field_value is None
