@@ -306,7 +306,7 @@ class OverdriveImporter(LoggerMixin):
             f"Finished import of {len(identifiers)} for collection {self._collection.name} (id={self._collection.id}). "
             f"{' '.join(achievements)}"
         )
-        # if we're are not in import all mode and all books are both out of scope and no books were changed, we can assume that
+        # if we are not in import all mode and all books are both out of scope and no books were changed, we can assume that
         # were are done importing and therefore we don't need to fetch the next page.
         if (
             not self._import_all
