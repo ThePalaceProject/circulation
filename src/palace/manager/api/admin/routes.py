@@ -11,9 +11,6 @@ from palace.manager.api.admin.config import (
 )
 from palace.manager.api.admin.dashboard_stats import generate_statistics
 from palace.manager.api.admin.model.dashboard_statistics import StatisticsResponse
-from palace.manager.api.admin.password_admin_authentication_provider import (
-    PasswordAdminAuthenticationProvider,
-)
 from palace.manager.api.admin.problem_details import (
     ADMIN_NOT_AUTHORIZED,
     INVALID_ADMIN_CREDENTIALS,
@@ -147,11 +144,6 @@ def requires_auth(f):
             return ADMIN_NOT_AUTHORIZED
         # Set the admin on the request
         setattr(flask.request, "admin", authenticated_admin)
-
-        # Store in session for subsequent requests
-        flask.session["admin_email"] = authenticated_admin.email
-        flask.session["auth_type"] = PasswordAdminAuthenticationProvider.NAME
-        flask.session.permanent = True
 
         return f(*args, **kwargs)
 
