@@ -73,7 +73,7 @@ from palace.manager.integration.settings import BaseSettings
 from palace.manager.opds.odl.info import LicenseStatus
 from palace.manager.service.integration_registry.base import IntegrationRegistry
 from palace.manager.sqlalchemy.constants import MediaTypes
-from palace.manager.sqlalchemy.model.admin import Admin
+from palace.manager.sqlalchemy.model.admin import Admin, AdminRole
 from palace.manager.sqlalchemy.model.classification import (
     Classification,
     Genre,
@@ -1072,13 +1072,19 @@ class DatabaseTransactionFixture:
             library=library,
         )[0]
 
-    def admin(self, email: str | None = None, password: str | None = None) -> Admin:
+    def admin(
+        self,
+        email: str | None = None,
+        password: str | None = None,
+        is_system_admin: bool = False,
+    ) -> Admin:
         """Create an admin user with a properly hashed password.
 
         Args:
             email: The admin's email address. If not provided, a unique email is generated.
             password: The admin's password. If provided, it will be properly hashed using bcrypt.
                      If not provided, no password is set (password_hashed will be None).
+            is_system_admin: Whether the admin should be a system admin.
 
         Returns:
             The created or retrieved Admin object with the password properly hashed.
@@ -1099,6 +1105,9 @@ class DatabaseTransactionFixture:
         # Set the password if provided - the setter will automatically hash it
         if password is not None:
             admin.password = password
+
+        if is_system_admin:
+            admin.add_role(AdminRole.SYSTEM_ADMIN)
 
         return admin
 
