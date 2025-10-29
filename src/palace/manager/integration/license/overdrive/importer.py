@@ -29,7 +29,6 @@ from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.coverage import Timestamp
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.util import get_one_or_create
-from palace.manager.util.datetime_helpers import datetime_utc
 from palace.manager.util.log import LoggerMixin
 
 
@@ -41,7 +40,6 @@ class FeedImportResult:
 
 
 class OverdriveImporter(LoggerMixin):
-    DEFAULT_START_TIME = datetime_utc(1970, 1, 1)
     DEFAULT_PAGE_SIZE = 100
 
     def __init__(
@@ -59,14 +57,12 @@ class OverdriveImporter(LoggerMixin):
         :param db: The database session.
         :param collection: The collection to import.
         :param registry: The license providers registry.
-        :param import_all: Whether to import all books from the collection.
         :param identifier_set: The identifier set to use for the import.
         :param parent_identifier_set: The parent identifier set to use for the import.
         :param api: The OverdriveAPI instance to use for the import.
         """
         self._db = db
         self._collection = collection
-        self._import_all = import_all
         self._identifier_set = identifier_set
 
         self._parent_identifiers: Set[IdentifierData] | None = None
@@ -119,6 +115,11 @@ class OverdriveImporter(LoggerMixin):
         :param apply_circulation: Callback to apply circulation updates
         :return: Tuple of (identifier, changed) where changed is True if any data changed
         """
+
+        # we may need to manipulate values in the book dictionary.  Therefore we make a copy for local changes
+        # to avoid unnecessary side effects.
+        book = book.copy()
+
         identifier, _ = Identifier.for_foreign_id(
             self._db,
             foreign_id=book.get("id"),
@@ -135,6 +136,7 @@ class OverdriveImporter(LoggerMixin):
         # We only need to look up metadata if we didn't already fetch it and it was not in the parent identifier
         # set.  Why? Because the existence of the parent identifier set implies that the parent collection
         # has already been imported which would have included all the metadata.
+
         if not fetch_metadata and (
             not self._parent_identifiers
             or IdentifierData.from_identifier(identifier)
@@ -215,7 +217,7 @@ class OverdriveImporter(LoggerMixin):
         *,
         apply_bibliographic: ApplyBibliographicCallable,
         apply_circulation: ApplyCirculationCallable,
-        modified_since: datetime.datetime,
+        modified_since: datetime.datetime | None = None,
         endpoint: BookInfoEndpoint | None = None,
         page_size: int = DEFAULT_PAGE_SIZE,
     ) -> FeedImportResult:
@@ -240,7 +242,7 @@ class OverdriveImporter(LoggerMixin):
 
         :param apply_bibliographic: Callback to apply bibliographic metadata updates (title, author, etc.)
         :param apply_circulation: Callback to apply circulation data updates (copies owned, available, etc.)
-        :param modified_since: Only process books modified after this datetime
+        :param modified_since: Only process books modified after this datetime. If None, processes all books.
         :param endpoint: OverDrive API endpoint to fetch from. If None, generates a default endpoint
                          starting from modified_since
         :param page_size: Number of items to fetch per page
@@ -279,7 +281,7 @@ class OverdriveImporter(LoggerMixin):
             self.log.info(f"Using provided endpoint: {endpoint}")
             self.log.info(
                 f"Ignoring modified_since parameter (value='{modified_since}') since the endpoint "
-                f"includes modified_since date"
+                f"was provided."
             )
 
         timestamp = self.get_timestamp()
@@ -320,7 +322,7 @@ class OverdriveImporter(LoggerMixin):
         # if we are not in import all mode and all books are both out of scope and no books were changed, we can assume that
         # were are done importing and therefore we don't need to fetch the next page.
         if (
-            not self._import_all
+            modified_since is not None
             and changed_books_count == 0
             and self._all_books_out_of_scope(modified_since, book_data)
         ):

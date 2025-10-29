@@ -52,7 +52,6 @@ class TestOverdriveImporter:
 
         assert importer._db == db.session
         assert importer._collection == collection
-        assert importer._import_all is False
         assert importer._identifier_set is None
         assert importer._parent_identifiers is None
         assert isinstance(importer._api, OverdriveAPI)
@@ -74,25 +73,6 @@ class TestOverdriveImporter:
         )
 
         assert importer._api == mock_api
-
-    def test_init_with_import_all(
-        self,
-        db: DatabaseTransactionFixture,
-        overdrive_api_fixture: OverdriveAPIFixture,
-        services_fixture: ServicesFixture,
-    ):
-        """Test initialization with import_all flag set."""
-        collection = overdrive_api_fixture.collection
-        registry = services_fixture.services.integration_registry.license_providers()
-
-        importer = OverdriveImporter(
-            db=db.session,
-            collection=collection,
-            registry=registry,
-            import_all=True,
-        )
-
-        assert importer._import_all is True
 
     def test_init_with_identifier_set(
         self,
@@ -489,13 +469,14 @@ class TestOverdriveImporter:
         # because all books are out of scope
         assert result.next_page is None
 
-    def test_import_collection_with_import_all_ignores_out_of_scope_check(
+    def test_import_collection_with_no_modified_since_ignores_out_of_scope_check(
         self,
         db: DatabaseTransactionFixture,
         overdrive_api_fixture: OverdriveAPIFixture,
+        overdrive_files_fixture: OverdriveFilesFixture,
         services_fixture: ServicesFixture,
     ):
-        """Test that import_all bypasses the out-of-scope check and continues to next page."""
+        """Test that modified_since=None bypasses the out-of-scope check and continues to next page."""
         collection = overdrive_api_fixture.collection
         registry = services_fixture.services.integration_registry.license_providers()
         api = overdrive_api_fixture.api
@@ -505,39 +486,43 @@ class TestOverdriveImporter:
             collection=collection,
             registry=registry,
             api=api,
-            import_all=True,  # This should bypass the out-of-scope check
         )
 
         mock_apply_bib = Mock()
         mock_apply_circ = Mock()
-        modified_since = datetime_utc(2023, 6, 1)
 
-        # Mock book data where all books are out of scope
-        mock_book_data = [
-            {
-                "id": "overdrive-id-1",
-                "metadata": {"title": "Old Book 1"},
-                "availabilityV2": {"copiesOwned": 1},
-                "date_added": "2023-01-15T00:00:00Z",  # Before modified_since
-            },
-            {
-                "id": "overdrive-id-2",
-                "metadata": {"title": "Old Book 2"},
-                "availabilityV2": {"copiesOwned": 1},
-                "date_added": "2023-02-10T00:00:00Z",  # Before modified_since
-            },
-        ]
+        # Load real book data
+        book_list_data = json.loads(
+            overdrive_files_fixture.sample_data("overdrive_book_list.json")
+        )
+        mock_book_data = book_list_data["products"][:2]
+
+        # Set old dates that would be out of scope
+        mock_book_data[0]["dateAdded"] = "2023-01-15T00:00:00Z"
+        mock_book_data[1]["dateAdded"] = "2023-02-10T00:00:00Z"
+
+        # Add metadata and availability
+        for book in mock_book_data:
+            book["metadata"] = json.loads(
+                overdrive_files_fixture.sample_data("overdrive_metadata.json")
+            )
+            book["availabilityV2"] = json.loads(
+                overdrive_files_fixture.sample_data(
+                    "overdrive_availability_information.json"
+                )
+            )
+
         # API returns a next page
         mock_next_endpoint = BookInfoEndpoint(url="http://next.page")
         api.fetch_book_info_list = AsyncMock(
             return_value=(mock_book_data, mock_next_endpoint)
         )
 
-        # Mock extractor
+        # Mock extractor - no changes
         mock_bibliographic = Mock(spec=BibliographicData)
-        mock_bibliographic.has_changed.return_value = True
+        mock_bibliographic.has_changed.return_value = False
         mock_circulation = Mock(spec=CirculationData)
-        mock_circulation.has_changed.return_value = True
+        mock_circulation.has_changed.return_value = False
 
         importer._extractor.book_info_to_bibliographic = Mock(
             return_value=mock_bibliographic
@@ -546,15 +531,15 @@ class TestOverdriveImporter:
             return_value=mock_circulation
         )
 
-        # Run import
+        # Run import with modified_since=None (this bypasses the out-of-scope check)
         result = importer.import_collection(
             apply_bibliographic=mock_apply_bib,
             apply_circulation=mock_apply_circ,
-            modified_since=modified_since,
+            modified_since=None,  # None means bypass out-of-scope check
         )
 
-        # Verify that next_page is still returned even though all books are out of scope
-        # because import_all=True bypasses the check
+        # Verify that next_page is still returned even though all books are old and unchanged
+        # because modified_since=None bypasses the out-of-scope check
         assert result.next_page == mock_next_endpoint
         assert result.processed_count == 2
 
