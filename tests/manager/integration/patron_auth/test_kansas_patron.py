@@ -4,7 +4,7 @@ from functools import partial
 import pytest
 from lxml import etree
 
-from palace.manager.api.authentication.base import PatronData
+from palace.manager.api.authentication.base import PatronData, PatronLookupNotSupported
 from palace.manager.api.authentication.basic import BasicAuthProviderLibrarySettings
 from palace.manager.integration.patron_auth.kansas_patron import (
     KansasAuthenticationAPI,
@@ -187,13 +187,18 @@ class TestKansasPatronAPI:
     def test_remote_patron_lookup(
         self, create_provider: Callable[..., MockAPI], db: DatabaseTransactionFixture
     ):
-        # Remote patron lookup is not supported. It always returns
-        # the same PatronData object passed into it.
-        provider = create_provider()
-        input_patrondata = PatronData()
-        output_patrondata = provider.remote_patron_lookup(input_patrondata)
-        assert input_patrondata == output_patrondata
+        """Test that remote_patron_lookup raises PatronLookupNotSupported.
 
-        # if anything else is passed in, it returns None
-        output_patrondata = provider.remote_patron_lookup(db.patron())
-        assert output_patrondata is None
+        Kansas auth gives very little data about the patron and cannot perform
+        arbitrary patron lookups.
+        """
+        provider = create_provider()
+
+        # Test with PatronData
+        input_patrondata = PatronData()
+        with pytest.raises(PatronLookupNotSupported):
+            provider.remote_patron_lookup(input_patrondata)
+
+        # Test with Patron object
+        with pytest.raises(PatronLookupNotSupported):
+            provider.remote_patron_lookup(db.patron())

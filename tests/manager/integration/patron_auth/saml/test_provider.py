@@ -8,7 +8,7 @@ import pytest
 from freezegun import freeze_time
 from werkzeug.datastructures import Authorization
 
-from palace.manager.api.authentication.base import PatronData
+from palace.manager.api.authentication.base import PatronData, PatronLookupNotSupported
 from palace.manager.integration.patron_auth.saml import provider as saml_provider
 from palace.manager.integration.patron_auth.saml.auth import (
     SAMLAuthenticationManager,
@@ -478,6 +478,11 @@ class TestSAMLWebSSOAuthenticationProvider:
         self,
         create_saml_provider: Callable[..., SAMLWebSSOAuthenticationProvider],
     ):
+        """Test that remote_patron_lookup raises PatronLookupNotSupported.
+
+        SAML authentication requires a full SSO flow and cannot perform
+        arbitrary patron lookups using just an identifier.
+        """
         # Arrange
         provider = create_saml_provider()
         input_data = PatronData(
@@ -486,24 +491,21 @@ class TestSAMLWebSSOAuthenticationProvider:
             username="testuser",
             complete=True,
         )
-        expected_result = PatronData(
-            permanent_id="123",
-            authorization_identifier="abc123",
-            username="testuser",
-            complete=True,
-        )
 
-        # Act
-        result = provider.remote_patron_lookup(input_data)
-
-        # Assert
-        assert result == expected_result
+        # Act & Assert
+        with pytest.raises(PatronLookupNotSupported):
+            provider.remote_patron_lookup(input_data)
 
     def test_remote_patron_lookup_with_patron(
         self,
         db: DatabaseTransactionFixture,
         create_saml_provider: Callable[..., SAMLWebSSOAuthenticationProvider],
     ):
+        """Test that remote_patron_lookup raises PatronLookupNotSupported with Patron.
+
+        SAML authentication requires a full SSO flow and cannot perform
+        arbitrary patron lookups using just a Patron object.
+        """
         # Arrange
         provider = create_saml_provider()
         patron = db.patron()
@@ -511,16 +513,9 @@ class TestSAMLWebSSOAuthenticationProvider:
         patron.authorization_identifier = "auth456"
         patron.username = "patron_user"
 
-        # Act
-        result = provider.remote_patron_lookup(patron)
-
-        # Assert
-        assert result is not None
-        assert isinstance(result, PatronData)
-        assert result.permanent_id == "ext123"
-        assert result.authorization_identifier == "auth456"
-        assert result.username == "patron_user"
-        assert result.complete is True
+        # Act & Assert
+        with pytest.raises(PatronLookupNotSupported):
+            provider.remote_patron_lookup(patron)
 
     @pytest.mark.parametrize(
         "subject, expected_patron_data, expected_credential, expected_expiration_time, cm_session_lifetime",
