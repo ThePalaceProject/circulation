@@ -1,4 +1,4 @@
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, PropertyMock
 
 import flask
 import pytest
@@ -9,6 +9,7 @@ from palace.manager.api.admin.exceptions import AdminNotAuthorized
 from palace.manager.api.admin.problem_details import NO_SUCH_PATRON
 from palace.manager.api.adobe_vendor_id import AuthdataUtility
 from palace.manager.api.authentication.base import PatronData, PatronLookupNotSupported
+from palace.manager.api.authentication.basic import BasicAuthenticationProvider
 from palace.manager.api.authenticator import LibraryAuthenticator
 from palace.manager.sqlalchemy.model.admin import AdminRole
 from palace.manager.util.problem_detail import ProblemDetail
@@ -110,17 +111,14 @@ class TestPatronController:
         patron.block_reason = None
 
         # Provider raises PatronLookupNotSupported and local lookup succeeds
-        class MockProviderWithLocalFallback:
-            library_id = patron_controller_fixture.ctrl.db.default_library().id
-
-            def remote_patron_lookup(self, patrondata):
-                raise PatronLookupNotSupported()
-
-            def local_patron_lookup(self, _db, username, patrondata):
-                # This will find the patron we created above
-                return patron
-
-        auth_provider_local_fallback = MockProviderWithLocalFallback()
+        auth_provider_local_fallback = MagicMock(
+            spec=BasicAuthenticationProvider,
+            library_id=PropertyMock(
+                return_value=patron_controller_fixture.ctrl.db.default_library().id
+            ),
+            remote_patron_lookup=MagicMock(side_effect=PatronLookupNotSupported()),
+            local_patron_lookup=MagicMock(return_value=patron),
+        )
         authenticator = mock_authenticator([auth_provider_local_fallback])
 
         with patron_controller_fixture.request_context_with_library_and_admin("/"):
@@ -138,16 +136,14 @@ class TestPatronController:
             assert response.complete is True
 
         # Provider raises PatronLookupNotSupported and local lookup fails
-        class MockProviderLocalNotFound:
-            library_id = patron_controller_fixture.ctrl.db.default_library().id
-
-            def remote_patron_lookup(self, patrondata):
-                raise PatronLookupNotSupported()
-
-            def local_patron_lookup(self, _db, username, patrondata):
-                return None
-
-        auth_provider_not_found = MockProviderLocalNotFound()
+        auth_provider_not_found = MagicMock(
+            spec=BasicAuthenticationProvider,
+            library_id=PropertyMock(
+                return_value=patron_controller_fixture.ctrl.db.default_library().id
+            ),
+            remote_patron_lookup=MagicMock(side_effect=PatronLookupNotSupported()),
+            local_patron_lookup=MagicMock(return_value=None),
+        )
         authenticator = mock_authenticator([auth_provider_not_found])
 
         identifier_not_found = "nonexistent_patron"
@@ -175,11 +171,13 @@ class TestPatronController:
             detail="Failed to communicate with ILS",
         )
 
-        class MockProviderWithError:
-            def remote_patron_lookup(self, patrondata):
-                return error_detail
-
-        auth_provider_with_error = MockProviderWithError()
+        auth_provider_with_error = MagicMock(
+            spec=BasicAuthenticationProvider,
+            library_id=PropertyMock(
+                return_value=patron_controller_fixture.ctrl.db.default_library().id
+            ),
+            remote_patron_lookup=MagicMock(return_value=error_detail),
+        )
         authenticator = mock_authenticator([auth_provider_with_error])
 
         with patron_controller_fixture.request_context_with_library_and_admin("/"):
@@ -194,15 +192,6 @@ class TestPatronController:
 
         # Test _load_patrondata with multiple providers, some raising PatronLookupNotSupported.
         # First provider raises PatronLookupNotSupported and local lookup fails
-        class FirstProvider:
-            library_id = patron_controller_fixture.ctrl.db.default_library().id
-
-            def remote_patron_lookup(self, patrondata):
-                raise PatronLookupNotSupported()
-
-            def local_patron_lookup(self, _db, username, patrondata):
-                return None
-
         # Second provider succeeds with remote lookup
         successful_patron_data = PatronData(
             authorization_identifier=identifier,
@@ -210,11 +199,22 @@ class TestPatronController:
             username="multi_user",
         )
 
-        class SecondProvider:
-            def remote_patron_lookup(self, patrondata):
-                return successful_patron_data
-
-        providers = [FirstProvider(), SecondProvider()]
+        first_provider = MagicMock(
+            spec=BasicAuthenticationProvider,
+            library_id=PropertyMock(
+                return_value=patron_controller_fixture.ctrl.db.default_library().id
+            ),
+            remote_patron_lookup=MagicMock(side_effect=PatronLookupNotSupported()),
+            local_patron_lookup=MagicMock(return_value=None),
+        )
+        second_provider = MagicMock(
+            spec=BasicAuthenticationProvider,
+            library_id=PropertyMock(
+                return_value=patron_controller_fixture.ctrl.db.default_library().id
+            ),
+            remote_patron_lookup=MagicMock(return_value=successful_patron_data),
+        )
+        providers = [first_provider, second_provider]
         authenticator = mock_authenticator(providers)
 
         with patron_controller_fixture.request_context_with_library_and_admin("/"):
