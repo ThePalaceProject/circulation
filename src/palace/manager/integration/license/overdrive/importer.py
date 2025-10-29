@@ -75,9 +75,7 @@ class OverdriveImporter(LoggerMixin):
             # I don't believe we need to worry about memory here: few redis identifier sets will likely exceed 200K
             # items which should be easily manageable given an identifier is 36 characters (36*200K = 7.2 MB). Most OD
             # collections are much  smaller in the 20-70K range.
-            self._parent_identifiers = {
-                x.identifier for x in parent_identifier_set.get()
-            }
+            self._parent_identifiers = parent_identifier_set.get()
 
         if not registry.equivalent(collection.protocol, OverdriveAPI):
             raise PalaceValueError(
