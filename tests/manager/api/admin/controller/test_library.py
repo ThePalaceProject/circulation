@@ -1041,10 +1041,10 @@ class TestLibrarySettings:
         libraries_data = {
             "libraries": [
                 {
-                    "name": "Invalid URL Library",
-                    "short_name": "invalid_url",
-                    "website_url": "not-a-url",
-                    "patron_support_email": "support@example.com",
+                    "name": "Valid Library",
+                    "short_name": "valid_short_name",
+                    "website_url": "invalid_url",
+                    "patron_support_email": "valid-support@example.com",
                 }
             ]
         }
