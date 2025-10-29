@@ -272,40 +272,41 @@ class LibrarySettingsController(AdminPermissionsControllerMixin):
                 )
             )
 
+    def _validate_required_field(
+        self, library_data: dict[str, Any], field_name: str, library_name: str = ""
+    ) -> str:
+        """Validate and return a required field from library data.
+
+        Args:
+            library_data: Dictionary containing library data
+            field_name: Name of the required field to validate
+            library_name: Optional library name for error messages
+
+        Returns:
+            The validated field value (stripped)
+
+        Raises:
+            ProblemDetailException: If the field is missing or empty
+        """
+        value = library_data.get(field_name, "").strip()
+        if not value:
+            context = f" for library '{library_name}'" if library_name else ""
+            raise ProblemDetailException(
+                problem_detail=INCOMPLETE_CONFIGURATION.detailed(
+                    f"Required field '{field_name}' is missing{context}."
+                )
+            )
+        return value
+
     def _import_single_library(self, library_data: dict[str, Any]) -> dict[str, Any]:
         """Import a single library from data dictionary."""
         # Validate required fields
-        name = library_data.get("name", "").strip()
-        if not name:
-            raise ProblemDetailException(
-                problem_detail=INCOMPLETE_CONFIGURATION.detailed(
-                    f"Required field 'name' is missing."
-                )
-            )
-
-        short_name = library_data.get("short_name", "").strip()
-        if not short_name:
-            raise ProblemDetailException(
-                problem_detail=INCOMPLETE_CONFIGURATION.detailed(
-                    f"Required field 'short_name' is missing for library '{name}'."
-                )
-            )
-
-        website_url = library_data.get("website_url", "").strip()
-        if not website_url:
-            raise ProblemDetailException(
-                problem_detail=INCOMPLETE_CONFIGURATION.detailed(
-                    f"Required field 'website_url' is missing for library '{name}'."
-                )
-            )
-
-        patron_support_email = library_data.get("patron_support_email", "").strip()
-        if not patron_support_email:
-            raise ProblemDetailException(
-                problem_detail=INCOMPLETE_CONFIGURATION.detailed(
-                    f"Required field 'patron_support_email' is missing for library '{name}'."
-                )
-            )
+        name = self._validate_required_field(library_data, "name")
+        short_name = self._validate_required_field(library_data, "short_name", name)
+        website_url = self._validate_required_field(library_data, "website_url", name)
+        patron_support_email = self._validate_required_field(
+            library_data, "patron_support_email", name
+        )
 
         # Check if library already exists
         existing_library = get_one(self._db, Library, short_name=short_name)
