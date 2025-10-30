@@ -47,11 +47,40 @@ class OverdriveImportFixture:
         import_all: bool = False,
         apply: bool = False,
     ) -> None:
-        """Run the import_collection task."""
+        """Run the import_collection task.
+
+        :param collection: Collection to import (defaults to self.collection)
+        :param import_all: Whether to import all books
+        :param apply: Whether to process the apply queue after import
+        """
         collection = collection if collection is not None else self.collection
         overdrive.import_collection.delay(collection.id, import_all=import_all).wait()
         if apply:
             self.apply.process_apply_queue()
+
+    @staticmethod
+    def create_mock_importer(
+        next_page: BookInfoEndpoint | None = None, processed_count: int = 5
+    ) -> tuple[Mock, Mock]:
+        """Create a mock importer with standard setup.
+
+        :param next_page: Next page endpoint (None means last page)
+        :param processed_count: Number of items processed
+        :return: Tuple of (mock_importer, mock_timestamp)
+        """
+        mock_importer = Mock(spec=OverdriveImporter)
+        mock_timestamp = Mock(spec=Timestamp)
+        mock_timestamp.start = None
+        mock_timestamp.elapsed = "10 seconds"
+        mock_importer.get_timestamp.return_value = mock_timestamp
+
+        mock_result = FeedImportResult(
+            current_page=BookInfoEndpoint(url="http://test.com/books"),
+            next_page=next_page,
+            processed_count=processed_count,
+        )
+        mock_importer.import_collection.return_value = mock_result
+        return mock_importer, mock_timestamp
 
 
 @pytest.fixture
@@ -77,24 +106,12 @@ class TestImportCollection:
         self,
         mock_importer_class: MagicMock,
         overdrive_import_fixture: OverdriveImportFixture,
-        db: DatabaseTransactionFixture,
     ):
         """Test basic import_collection task execution."""
         collection = overdrive_import_fixture.collection
 
-        # Mock the importer
-        mock_importer = Mock(spec=OverdriveImporter)
-        mock_timestamp = Mock(spec=Timestamp)
-        mock_timestamp.start = None
-        mock_importer.get_timestamp.return_value = mock_timestamp
-
-        # Mock import result
-        current_endpoint = BookInfoEndpoint(url="http://test.com/books")
-        mock_result = FeedImportResult(
-            current_page=current_endpoint, next_page=None, processed_count=5
-        )
-        mock_importer.import_collection.return_value = mock_result
-
+        # Create mock importer with standard setup
+        mock_importer, mock_timestamp = overdrive_import_fixture.create_mock_importer()
         mock_importer_class.return_value = mock_importer
 
         # Run the task
@@ -119,7 +136,6 @@ class TestImportCollection:
         self,
         mock_importer_class: MagicMock,
         overdrive_import_fixture: OverdriveImportFixture,
-        db: DatabaseTransactionFixture,
     ):
         """Test import_collection with import_all=True.
 
@@ -128,18 +144,8 @@ class TestImportCollection:
         """
         collection = overdrive_import_fixture.collection
 
-        # Mock the importer
-        mock_importer = Mock(spec=OverdriveImporter)
-        mock_timestamp = Mock(spec=Timestamp)
-        mock_timestamp.start = None
-        mock_importer.get_timestamp.return_value = mock_timestamp
-
-        mock_result = FeedImportResult(
-            current_page=BookInfoEndpoint(url="http://test.com"),
-            next_page=None,
-            processed_count=10,
-        )
-        mock_importer.import_collection.return_value = mock_result
+        # Create mock importer
+        mock_importer, _ = overdrive_import_fixture.create_mock_importer()
         mock_importer_class.return_value = mock_importer
 
         # Run the task with import_all=True
@@ -158,25 +164,15 @@ class TestImportCollection:
         self,
         mock_importer_class: MagicMock,
         overdrive_import_fixture: OverdriveImportFixture,
-        db: DatabaseTransactionFixture,
     ):
         """Test import_collection replaces itself when there's a next page."""
         collection = overdrive_import_fixture.collection
 
-        # Mock the importer
-        mock_importer = Mock(spec=OverdriveImporter)
-        mock_timestamp = Mock(spec=Timestamp)
-        mock_timestamp.start = None
-        mock_importer.get_timestamp.return_value = mock_timestamp
-
-        # Mock result with next page
+        # Create mock importer with next page
         next_endpoint = BookInfoEndpoint(url="http://test.com/books/page2")
-        mock_result = FeedImportResult(
-            current_page=BookInfoEndpoint(url="http://test.com/books"),
-            next_page=next_endpoint,
-            processed_count=5,
+        mock_importer, _ = overdrive_import_fixture.create_mock_importer(
+            next_page=next_endpoint
         )
-        mock_importer.import_collection.return_value = mock_result
         mock_importer_class.return_value = mock_importer
 
         # Mock the task to capture the replace call
@@ -194,24 +190,15 @@ class TestImportCollection:
         self,
         mock_importer_class: MagicMock,
         overdrive_import_fixture: OverdriveImportFixture,
-        db: DatabaseTransactionFixture,
     ):
         """Test import_collection with custom page URL."""
         collection = overdrive_import_fixture.collection
         endpoint_url = "http://custom.endpoint.com/books"
 
-        # Mock the importer
-        mock_importer = Mock(spec=OverdriveImporter)
-        mock_timestamp = Mock(spec=Timestamp)
-        mock_timestamp.start = None
-        mock_importer.get_timestamp.return_value = mock_timestamp
-
-        mock_result = FeedImportResult(
-            current_page=BookInfoEndpoint(url=endpoint_url),
-            next_page=None,
-            processed_count=3,
+        # Create mock importer
+        mock_importer, _ = overdrive_import_fixture.create_mock_importer(
+            processed_count=3
         )
-        mock_importer.import_collection.return_value = mock_result
         mock_importer_class.return_value = mock_importer
 
         # Run the task with custom page
@@ -226,24 +213,16 @@ class TestImportCollection:
         self,
         mock_importer_class: MagicMock,
         overdrive_import_fixture: OverdriveImportFixture,
-        db: DatabaseTransactionFixture,
     ):
         """Test import_collection with custom modified_since datetime."""
         collection = overdrive_import_fixture.collection
         custom_modified = datetime_utc(2023, 6, 15, 10, 30)
 
-        # Mock the importer
-        mock_importer = Mock(spec=OverdriveImporter)
-        mock_timestamp = Mock(spec=Timestamp)
-        mock_timestamp.start = datetime_utc(2023, 1, 1)
-        mock_importer.get_timestamp.return_value = mock_timestamp
-
-        mock_result = FeedImportResult(
-            current_page=BookInfoEndpoint(url="http://test.com"),
-            next_page=None,
-            processed_count=7,
+        # Create mock importer
+        mock_importer, mock_timestamp = overdrive_import_fixture.create_mock_importer(
+            processed_count=7
         )
-        mock_importer.import_collection.return_value = mock_result
+        mock_timestamp.start = datetime_utc(2023, 1, 1)
         mock_importer_class.return_value = mock_importer
 
         # Run the task with custom modified_since
@@ -260,24 +239,12 @@ class TestImportCollection:
         self,
         mock_importer_class: MagicMock,
         overdrive_import_fixture: OverdriveImportFixture,
-        db: DatabaseTransactionFixture,
-        redis_fixture: RedisFixture,
     ):
         """Test that import_collection tracks identifiers in Redis set."""
         collection = overdrive_import_fixture.collection
 
-        # Mock the importer
-        mock_importer = Mock(spec=OverdriveImporter)
-        mock_timestamp = Mock(spec=Timestamp)
-        mock_timestamp.start = None
-        mock_importer.get_timestamp.return_value = mock_timestamp
-
-        mock_result = FeedImportResult(
-            current_page=BookInfoEndpoint(url="http://test.com"),
-            next_page=None,
-            processed_count=5,
-        )
-        mock_importer.import_collection.return_value = mock_result
+        # Create mock importer
+        mock_importer, _ = overdrive_import_fixture.create_mock_importer()
         mock_importer_class.return_value = mock_importer
 
         # Run the task
@@ -298,23 +265,14 @@ class TestImportCollection:
         self,
         mock_importer_class: MagicMock,
         overdrive_import_fixture: OverdriveImportFixture,
-        db: DatabaseTransactionFixture,
     ):
         """Test import_collection with return_identifiers=False."""
         collection = overdrive_import_fixture.collection
 
-        # Mock the importer
-        mock_importer = Mock(spec=OverdriveImporter)
-        mock_timestamp = Mock(spec=Timestamp)
-        mock_timestamp.start = None
-        mock_importer.get_timestamp.return_value = mock_timestamp
-
-        mock_result = FeedImportResult(
-            current_page=BookInfoEndpoint(url="http://test.com"),
-            next_page=None,
-            processed_count=3,
+        # Create mock importer
+        mock_importer, _ = overdrive_import_fixture.create_mock_importer(
+            processed_count=3
         )
-        mock_importer.import_collection.return_value = mock_result
         mock_importer_class.return_value = mock_importer
 
         # Run the task without identifier tracking
@@ -333,6 +291,25 @@ class TestImportCollection:
 class TestImportCollectionGroup:
     """Tests for the import_collection_group Celery task."""
 
+    @staticmethod
+    def setup_task_signatures(
+        mock_import_collection: MagicMock, mock_cleanup_chord: MagicMock
+    ) -> tuple[Mock, Mock]:
+        """Set up mock task signatures for testing.
+
+        :param mock_import_collection: Mock for import_collection task
+        :param mock_cleanup_chord: Mock for cleanup chord task
+        :return: Tuple of (import_sig, cleanup_sig)
+        """
+        mock_import_sig = Mock()
+        mock_import_sig.apply_async = Mock()
+        mock_import_collection.s.return_value = mock_import_sig
+
+        mock_cleanup_sig = Mock()
+        mock_cleanup_chord.s.return_value = mock_cleanup_sig
+
+        return mock_import_sig, mock_cleanup_sig
+
     @patch("palace.manager.celery.tasks.overdrive.import_collection")
     @patch("palace.manager.celery.tasks.overdrive.import_children_and_cleanup_chord")
     def test_import_collection_group_basic(
@@ -344,13 +321,10 @@ class TestImportCollectionGroup:
         """Test import_collection_group chains parent and children import."""
         collection = overdrive_import_fixture.collection
 
-        # Mock the task signatures
-        mock_import_sig = Mock()
-        mock_import_sig.apply_async = Mock()
-        mock_import_collection.s.return_value = mock_import_sig
-
-        mock_cleanup_sig = Mock()
-        mock_cleanup_chord.s.return_value = mock_cleanup_sig
+        # Set up mock task signatures
+        mock_import_sig, _ = self.setup_task_signatures(
+            mock_import_collection, mock_cleanup_chord
+        )
 
         # Run the task
         overdrive.import_collection_group.delay(collection.id).wait()
@@ -382,13 +356,8 @@ class TestImportCollectionGroup:
         """Test import_collection_group with import_all flag."""
         collection = overdrive_import_fixture.collection
 
-        # Mock the task signatures
-        mock_import_sig = Mock()
-        mock_import_sig.apply_async = Mock()
-        mock_import_collection.s.return_value = mock_import_sig
-
-        mock_cleanup_sig = Mock()
-        mock_cleanup_chord.s.return_value = mock_cleanup_sig
+        # Set up mock task signatures
+        self.setup_task_signatures(mock_import_collection, mock_cleanup_chord)
 
         # Run the task with import_all=True
         overdrive.import_collection_group.delay(collection.id, import_all=True).wait()
@@ -410,13 +379,8 @@ class TestImportCollectionGroup:
         modified_since = datetime_utc(2023, 1, 1)
         start_time = datetime_utc(2023, 6, 1)
 
-        # Mock the task signatures
-        mock_import_sig = Mock()
-        mock_import_sig.apply_async = Mock()
-        mock_import_collection.s.return_value = mock_import_sig
-
-        mock_cleanup_sig = Mock()
-        mock_cleanup_chord.s.return_value = mock_cleanup_sig
+        # Set up mock task signatures
+        self.setup_task_signatures(mock_import_collection, mock_cleanup_chord)
 
         # Run the task with custom dates
         overdrive.import_collection_group.delay(
@@ -453,6 +417,28 @@ class TestRehydrateIdentifierSet:
 
 class TestImportChildrenAndCleanupChord:
     """Tests for the import_children_and_cleanup_chord Celery task."""
+
+    @staticmethod
+    def setup_chord_mocks(
+        mock_group: MagicMock, mock_chord: MagicMock
+    ) -> tuple[Mock, str]:
+        """Set up chord and group mocks.
+
+        :param mock_group: Mock for group function
+        :param mock_chord: Mock for chord function
+        :return: Tuple of (mock_chord_result, chord_id)
+        """
+        mock_group_result = Mock()
+        mock_group.return_value = mock_group_result
+
+        chord_id = "test-chord-id"
+        mock_chord_result = Mock()
+        mock_async_result = Mock()
+        mock_async_result.id = chord_id
+        mock_chord_result.apply_async.return_value = mock_async_result
+        mock_chord.return_value = mock_chord_result
+
+        return mock_chord_result, chord_id
 
     @patch("palace.manager.celery.tasks.overdrive.chord")
     @patch("palace.manager.celery.tasks.overdrive.group")
@@ -494,16 +480,8 @@ class TestImportChildrenAndCleanupChord:
         mock_import.si.return_value = Mock()
         mock_remove.si.return_value = Mock()
 
-        # Mock chord and group
-        mock_group_result = Mock()
-        mock_group.return_value = mock_group_result
-
-        mock_chord_result = Mock()
-        mock_chord_result.id = "test-chord-id"
-        mock_async_result = Mock()
-        mock_async_result.id = "test-chord-id"
-        mock_chord_result.apply_async.return_value = mock_async_result
-        mock_chord.return_value = mock_chord_result
+        # Set up chord and group mocks
+        _, chord_id = self.setup_chord_mocks(mock_group, mock_chord)
 
         # Run the task
         identifier_set_info = {"key": ["test", "key"]}
@@ -523,7 +501,7 @@ class TestImportChildrenAndCleanupChord:
         mock_chord.assert_called_once()
 
         # Verify result contains chord_id
-        assert result["chord_id"] == "test-chord-id"
+        assert result["chord_id"] == chord_id
 
     @patch("palace.manager.celery.tasks.overdrive.chord")
     @patch("palace.manager.celery.tasks.overdrive.group")
@@ -534,7 +512,6 @@ class TestImportChildrenAndCleanupChord:
         mock_group: MagicMock,
         mock_chord: MagicMock,
         overdrive_import_fixture: OverdriveImportFixture,
-        db: DatabaseTransactionFixture,
     ):
         """Test import_children_and_cleanup_chord with no child collections."""
         collection = overdrive_import_fixture.collection
@@ -543,12 +520,8 @@ class TestImportChildrenAndCleanupChord:
         mock_identifier_set = Mock(spec=IdentifierSet)
         mock_rehydrate.return_value = mock_identifier_set
 
-        # Mock chord
-        mock_chord_result = Mock()
-        mock_async_result = Mock()
-        mock_async_result.id = "test-chord-id"
-        mock_chord_result.apply_async.return_value = mock_async_result
-        mock_chord.return_value = mock_chord_result
+        # Set up chord mocks
+        self.setup_chord_mocks(mock_group, mock_chord)
 
         # Run the task
         identifier_set_info = {"key": ["test", "key"]}
@@ -634,25 +607,14 @@ class TestIntegration:
         self,
         mock_importer_class: MagicMock,
         overdrive_import_fixture: OverdriveImportFixture,
-        db: DatabaseTransactionFixture,
     ):
         """Test complete import workflow with single page."""
         collection = overdrive_import_fixture.collection
 
-        # Mock the importer
-        mock_importer = Mock(spec=OverdriveImporter)
-        mock_timestamp = Mock(spec=Timestamp)
-        mock_timestamp.start = None
-        mock_timestamp.elapsed = "10 seconds"
-        mock_importer.get_timestamp.return_value = mock_timestamp
-
-        # Single page result
-        mock_result = FeedImportResult(
-            current_page=BookInfoEndpoint(url="http://test.com/books"),
-            next_page=None,
-            processed_count=50,
+        # Create mock importer
+        mock_importer, mock_timestamp = overdrive_import_fixture.create_mock_importer(
+            processed_count=50
         )
-        mock_importer.import_collection.return_value = mock_result
         mock_importer_class.return_value = mock_importer
 
         # Run the task
@@ -670,7 +632,6 @@ class TestIntegration:
         self,
         mock_importer_class: MagicMock,
         overdrive_import_fixture: OverdriveImportFixture,
-        db: DatabaseTransactionFixture,
         redis_fixture: RedisFixture,
     ):
         """Test import with parent identifiers provided."""
@@ -684,18 +645,10 @@ class TestIntegration:
         parent_set.add(identifier)
         assert parent_set.exists()
 
-        # Mock the importer
-        mock_importer = Mock(spec=OverdriveImporter)
-        mock_timestamp = Mock(spec=Timestamp)
-        mock_timestamp.start = None
-        mock_importer.get_timestamp.return_value = mock_timestamp
-
-        mock_result = FeedImportResult(
-            current_page=BookInfoEndpoint(url="http://test.com"),
-            next_page=None,
-            processed_count=25,
+        # Create mock importer
+        mock_importer, _ = overdrive_import_fixture.create_mock_importer(
+            processed_count=25
         )
-        mock_importer.import_collection.return_value = mock_result
         mock_importer_class.return_value = mock_importer
 
         # Run the task with parent identifiers
