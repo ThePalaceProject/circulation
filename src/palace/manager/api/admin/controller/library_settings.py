@@ -277,16 +277,11 @@ class LibrarySettingsController(AdminPermissionsControllerMixin):
     ) -> str:
         """Validate and return a required field from library data.
 
-        Args:
-            library_data: Dictionary containing library data
-            field_name: Name of the required field to validate
-            library_name: Optional library name for error messages
-
-        Returns:
-            The validated field value (stripped)
-
-        Raises:
-            ProblemDetailException: If the field is missing or empty
+        :param library_data: Dictionary containing library data
+        :param field_name: Name of the required field to validate
+        :param library_name: Optional library name for error messages
+        :return: The validated field value (stripped)
+        :raises ProblemDetailException: If the field is missing or empty
         """
         value: str = library_data.get(field_name, "").strip()
         if not value:

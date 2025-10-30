@@ -105,7 +105,8 @@ def requires_auth(f):
     Supports Bearer token authentication where the token is base64-encoded
     credentials in the format "username:password".
 
-    Example:
+    Example::
+
         Authorization: Bearer base64(admin@example.com:password123)
     """
 
