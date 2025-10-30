@@ -266,7 +266,6 @@ def _library_holds_lateral() -> Lateral:
                 | (hold_alias.end > func.now())
                 | (hold_alias.position > 0)
             ),
-            LicensePool.licenses_owned <= bindparam("licenses_owned"),
         )
     )
 
@@ -274,7 +273,6 @@ def _library_holds_lateral() -> Lateral:
 def _is_shared_collection_lateral() -> Lateral:
     """Do other libraries share this collection?"""
     ilc_alias = aliased(IntegrationLibraryConfiguration)
-
     return lateral(
         select(
             (func.count(ilc_alias.parent_id) > 1).label("is_shared_collection")
@@ -283,8 +281,10 @@ def _is_shared_collection_lateral() -> Lateral:
 
 
 def _licenses_lateral() -> Lateral:
-    # License information, if present.
-    # Note that this may result in multiple rows.
+    """License information, if present.
+
+    Note that this may result in multiple rows.
+    """
     license_alias = aliased(License)
     return lateral(
         select(
@@ -299,10 +299,10 @@ def _licenses_lateral() -> Lateral:
 
 
 def _library_loans_lateral() -> Lateral:
-    # How many loans are active for this item in this library?
+    """How many loans are active for this item in this library?"""
     loan_alias = aliased(Loan)
     patron_alias = aliased(Patron)
-    lib_loans = lateral(
+    return lateral(
         select(func.count(loan_alias.id).label("active_loan_count"))
         .join(patron_alias, loan_alias.patron_id == patron_alias.id)
         .where(
@@ -310,7 +310,6 @@ def _library_loans_lateral() -> Lateral:
             patron_alias.library_id == Library.id,
         )
     )
-    return lib_loans
 
 
 def inventory_report_query() -> Select:
@@ -455,6 +454,7 @@ def holds_report_query() -> Select:
             IntegrationConfiguration.id.in_(
                 bindparam("integration_ids", expanding=True)
             ),
+            LicensePool.licenses_owned <= bindparam("licenses_owned"),
             # Only include items with holds in this library
             func.coalesce(lib_holds.c.active_hold_count, 0) > 0,
         )
