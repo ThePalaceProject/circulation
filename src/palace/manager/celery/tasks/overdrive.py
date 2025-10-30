@@ -174,6 +174,31 @@ def import_collection_group(
     modified_since: datetime.datetime | None = None,
     start_time: datetime.datetime | None = None,
 ) -> None:
+    """Import an Overdrive collection and all its child (Advantage) collections.
+
+    This task orchestrates the import of a parent Overdrive collection and chains
+    the import of any associated Overdrive Advantage (child) collections. It uses
+    Celery's chord pattern to run child imports in parallel after the parent completes,
+    and then cleans up the shared identifier set.
+
+    Workflow:
+        1. Imports the parent collection
+        2. Passes the parent's identifier set to child collections
+        3. Imports all child collections in parallel (if any exist)
+        4. Cleans up the shared identifier set after all imports complete
+
+    :param collection_id: The ID of the parent collection to import
+    :param import_all: If True, import all titles regardless of change status.
+                       If False, only import changed titles based on modified_since.
+    :param modified_since: Only process titles modified after this datetime.
+                          See import_collection docstring for detailed behavior.
+    :param start_time: The datetime when this import began. Used to update the
+                      collection's timestamp. If None, uses current time.
+
+    .. note::
+       This task does not return a value. Results are tracked through the
+       linked chord and cleanup tasks.
+    """
 
     import_collection.s(
         collection_id=collection_id,
@@ -190,12 +215,22 @@ def import_collection_group(
             modified_since=modified_since,
         )
     )
-    # ), import_children_and_cleanup_chord.s(collection_id=collection_id, import_all=import_all, modified_since=modified_since).apply_async()
 
 
 def rehydrate_identifier_set(
     task: Task, identifier_set_info: dict[str, Any]
 ) -> IdentifierSet:
+    """Reconstruct an IdentifierSet from its serialized representation.
+
+    This helper function takes a dictionary containing identifier set metadata
+    (specifically the Redis key) and recreates the IdentifierSet object that
+    can be used to access the data in Redis.
+
+    :param task: The Celery task instance (provides access to Redis client)
+    :param identifier_set_info: Dictionary containing the identifier set's key
+                                Format: {"key": ["key", "parts"]}
+    :return: Reconstructed IdentifierSet connected to Redis
+    """
     return IdentifierSet(task.services.redis().client(), identifier_set_info["key"])
 
 
@@ -214,6 +249,31 @@ def import_children_and_cleanup_chord(
     import_all: bool,
     modified_since: datetime.datetime,
 ) -> dict[str, Any]:
+    """Import child (Advantage) collections and clean up the parent identifier set.
+
+    This task is called as the callback/link after a parent collection import completes.
+    It receives the parent collection's identifier set and uses a Celery chord to:
+
+    1. Import all child Overdrive Advantage collections in parallel, passing the
+       parent's identifier set to optimize metadata fetching (children skip books
+       already imported by the parent)
+    2. After all child imports complete, remove the shared identifier set from Redis
+
+    The chord pattern ensures the cleanup (step 2) only runs after all child imports
+    have finished, preventing premature deletion of the shared identifier set.
+
+    :param identifier_set_info: Serialized parent identifier set info from the parent import.
+                                Format: {"key": ["redis", "key", "parts"]}
+    :param collection_id: The ID of the parent collection whose children to import
+    :param import_all: If True, import all titles in children regardless of change status.
+                      If False, only import changed titles.
+    :param modified_since: Only process titles modified after this datetime in child collections
+    :return: Dictionary containing the chord ID for tracking: {"chord_id": "..."}
+
+    .. note::
+       If the parent collection has no children, the chord will still be created
+       but with an empty group, and cleanup will proceed normally.
+    """
     with task.session() as session:
         collection = load_from_id(session, Collection, collection_id)
         identifier_set = rehydrate_identifier_set(task, identifier_set_info)
@@ -245,6 +305,24 @@ def import_children_and_cleanup_chord(
     retry_backoff=60,
 )
 def remove_identifier_set(task: Task, identifier_set_info: dict[str, Any]) -> None:
+    """Clean up a temporary identifier set from Redis after import completes.
+
+    This task is used as the callback body of the chord in import_children_and_cleanup_chord.
+    It deletes the temporary Redis set that was used to share identifiers between
+    parent and child collection imports. This cleanup prevents Redis memory leaks
+    from accumulating identifier sets.
+
+    The task asserts that the set exists before attempting deletion to catch
+    cases where the set was unexpectedly removed or never created.
+
+    :param identifier_set_info: Serialized identifier set info.
+                                Format: {"key": ["redis", "key", "parts"]}
+    :raises AssertionError: If the identifier set doesn't exist in Redis
+
+    .. note::
+       This task is designed to be used as a chord callback and should not
+       be called directly in most cases.
+    """
     identifier_set = rehydrate_identifier_set(task, identifier_set_info)
     assert identifier_set.exists()
     identifier_set.delete()
