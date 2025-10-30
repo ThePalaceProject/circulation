@@ -3,6 +3,8 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any, TypeVar
 
+from sqlalchemy import or_
+from sqlalchemy.exc import NoResultFound
 from sqlalchemy.orm import Session
 from werkzeug.datastructures import Authorization
 
@@ -16,11 +18,15 @@ from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.integration import IntegrationConfiguration
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.patron import Patron
-from palace.manager.sqlalchemy.util import get_one_or_create
+from palace.manager.sqlalchemy.util import get_one, get_one_or_create
 from palace.manager.util.authentication_for_opds import OPDSAuthenticationFlow
 from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.log import LoggerMixin
 from palace.manager.util.problem_detail import ProblemDetail
+
+
+class PatronLookupNotSupported(BasePalaceException):
+    """Raised when a patron lookup operation is not supported by the authentication provider."""
 
 
 class AuthProviderSettings(BaseSettings): ...
@@ -65,6 +71,83 @@ class AuthenticationProvider(
             .filter(IntegrationConfiguration.id == self.integration_id)
             .one_or_none()
         )
+
+    def local_patron_lookup(
+        self, _db: Session, username: str | None, patrondata: PatronData | None = None
+    ) -> Patron | None:
+        """Try to find a Patron object in the local database.
+
+        :param username: An HTTP Basic Auth username. May or may not
+            correspond to the `Patron.username` field.
+
+        :param patrondata: A PatronData object recently obtained from
+            the source of truth, possibly as a side effect of validating
+            the username and password. This may make it possible to
+            identify the patron more precisely. Or it may be None, in
+            which case it's no help at all.
+
+        :return: A Patron object if one can be found, or None.
+        """
+
+        # We're going to try a number of different strategies to look
+        # up the appropriate patron based on PatronData. In theory we
+        # could employ all these strategies at once (see the code at
+        # the end of this method), but if the source of truth is
+        # well-behaved, the first available lookup should work, and if
+        # it's not, it's better to check the more reliable mechanisms
+        # before the less reliable.
+        lookups = []
+        if patrondata:
+            if patrondata.permanent_id:
+                # Permanent ID is the most reliable way of identifying
+                # a patron, since this is supposed to be an internal
+                # ID that never changes.
+                lookups.append(dict(external_identifier=patrondata.permanent_id))
+            if patrondata.username:
+                # Username is fairly reliable, since the patron
+                # generally has to decide to change it.
+                lookups.append(dict(username=patrondata.username))
+
+            if patrondata.authorization_identifier:
+                # Authorization identifiers change all the time so
+                # they're not terribly reliable.
+                lookups.append(
+                    dict(authorization_identifier=patrondata.authorization_identifier)
+                )
+
+        patron = None
+        for lookup in lookups:
+            lookup["library_id"] = self.library_id
+            patron = get_one(_db, Patron, **lookup)
+            if patron:
+                # We found them!
+                break
+
+        if not patron and username:
+            # This is a Basic Auth username, but it might correspond
+            # to either Patron.authorization_identifier or
+            # Patron.username.
+            #
+            # NOTE: If patrons are allowed to choose their own
+            # usernames, it's possible that a username and
+            # authorization_identifier can conflict. In that case it's
+            # undefined which Patron is returned from this query. If
+            # this happens, it's a problem with the ILS and needs to
+            # be resolved over there.
+            clause = or_(
+                Patron.authorization_identifier == username, Patron.username == username
+            )
+            qu = (
+                _db.query(Patron)
+                .filter(clause)
+                .filter(Patron.library_id == self.library_id)
+                .limit(1)
+            )
+            try:
+                patron = qu.one()
+            except NoResultFound:
+                patron = None
+        return patron
 
     @property
     @abstractmethod
@@ -114,16 +197,14 @@ class AuthenticationProvider(
     ) -> PatronData | ProblemDetail | None:
         """Ask the remote for detailed information about this patron.
 
-        This method is used by admin operations (like reset_adobe_id) to look up
-        patron information based on an authorization identifier.
+        :param patron_or_patrondata: The patron or patron data to look up.
 
-        For some authentication providers, this is not necessary. If that is the case,
-        this method can just be implemented as `return patron_or_patrondata`.
+        :return: A PatronData object with the complete property set to True if found,
+            None if the patron is not found. If an error occurs, a ProblemDetail
+            may be returned instead.
 
-        If the patron is not found, or an error occurs communicating with the remote,
-        return None or a ProblemDetail.
-
-        Otherwise, return a PatronData object with the complete property set to True.
+        :raises PatronLookupNotSupported: If the authentication provider does not
+            support patron lookup operations.
         """
         ...
 

@@ -10,9 +10,7 @@ from typing import Annotated, Any, cast
 from flask import url_for
 from pydantic import PositiveInt, field_validator
 from pydantic_core.core_schema import ValidationInfo
-from sqlalchemy import or_
 from sqlalchemy.orm import Session
-from sqlalchemy.orm.exc import NoResultFound
 from werkzeug.datastructures import Authorization
 
 from palace.manager.api.admin.problem_details import (
@@ -23,6 +21,7 @@ from palace.manager.api.authentication.base import (
     AuthProviderLibrarySettings,
     AuthProviderSettings,
     PatronData,
+    PatronLookupNotSupported,
 )
 from palace.manager.api.problem_details import (
     PATRON_OF_ANOTHER_LIBRARY,
@@ -39,7 +38,6 @@ from palace.manager.integration.settings import (
 )
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.sqlalchemy.model.patron import Patron
-from palace.manager.sqlalchemy.util import get_one
 from palace.manager.util.log import elapsed_time_logging
 from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
 
@@ -568,81 +566,6 @@ class BasicAuthenticationProvider[
 
         return True
 
-    def local_patron_lookup(
-        self, _db: Session, username: str | None, patrondata: PatronData | None
-    ) -> Patron | None:
-        """Try to find a Patron object in the local database.
-
-        :param username: An HTTP Basic Auth username. May or may not
-            correspond to the `Patron.username` field.
-
-        :param patrondata: A PatronData object recently obtained from
-            the source of truth, possibly as a side effect of validating
-            the username and password. This may make it possible to
-            identify the patron more precisely. Or it may be None, in
-            which case it's no help at all.
-        """
-
-        # We're going to try a number of different strategies to look
-        # up the appropriate patron based on PatronData. In theory we
-        # could employ all these strategies at once (see the code at
-        # the end of this method), but if the source of truth is
-        # well-behaved, the first available lookup should work, and if
-        # it's not, it's better to check the more reliable mechanisms
-        # before the less reliable.
-        lookups = []
-        if patrondata:
-            if patrondata.permanent_id:
-                # Permanent ID is the most reliable way of identifying
-                # a patron, since this is supposed to be an internal
-                # ID that never changes.
-                lookups.append(dict(external_identifier=patrondata.permanent_id))
-            if patrondata.username:
-                # Username is fairly reliable, since the patron
-                # generally has to decide to change it.
-                lookups.append(dict(username=patrondata.username))
-
-            if patrondata.authorization_identifier:
-                # Authorization identifiers change all the time so
-                # they're not terribly reliable.
-                lookups.append(
-                    dict(authorization_identifier=patrondata.authorization_identifier)
-                )
-
-        patron = None
-        for lookup in lookups:
-            lookup["library_id"] = self.library_id
-            patron = get_one(_db, Patron, **lookup)
-            if patron:
-                # We found them!
-                break
-
-        if not patron and username:
-            # This is a Basic Auth username, but it might correspond
-            # to either Patron.authorization_identifier or
-            # Patron.username.
-            #
-            # NOTE: If patrons are allowed to choose their own
-            # usernames, it's possible that a username and
-            # authorization_identifier can conflict. In that case it's
-            # undefined which Patron is returned from this query. If
-            # this happens, it's a problem with the ILS and needs to
-            # be resolved over there.
-            clause = or_(
-                Patron.authorization_identifier == username, Patron.username == username
-            )
-            qu = (
-                _db.query(Patron)
-                .filter(clause)
-                .filter(Patron.library_id == self.library_id)
-                .limit(1)
-            )
-            try:
-                patron = qu.one()
-            except NoResultFound:
-                patron = None
-        return patron
-
     @property
     def authentication_header(self) -> str:
         return f'Basic realm="{self.authentication_realm}"'
@@ -762,7 +685,10 @@ class BasicAuthenticationProvider[
             return patrondata, field_value
 
         if not patrondata.complete:
-            remote_patrondata = self.remote_patron_lookup(patrondata)
+            try:
+                remote_patrondata = self.remote_patron_lookup(patrondata)
+            except PatronLookupNotSupported:
+                remote_patrondata = patrondata
             if not isinstance(remote_patrondata, PatronData):
                 # Unable to lookup, just return the original patrondata.
                 return patrondata, None
@@ -855,7 +781,10 @@ class BasicAuthenticationProvider[
             log_method=self.logger().info,
             message_prefix=f"update_patron_metadata - remote_patron_lookup",
         ):
-            remote_patron_info = self.remote_patron_lookup(patron)
+            try:
+                remote_patron_info = self.remote_patron_lookup(patron)
+            except PatronLookupNotSupported:
+                remote_patron_info = None
 
         if isinstance(remote_patron_info, PatronData):
             remote_patron_info.apply(patron)
