@@ -148,7 +148,11 @@ class Work(Base, LoggerMixin):
 
     # One Work may have copies scattered across many LicensePools.
     license_pools: Mapped[list[LicensePool]] = relationship(
-        "LicensePool", back_populates="work", lazy="joined", uselist=True
+        "LicensePool",
+        back_populates="work",
+        lazy="joined",
+        uselist=True,
+        order_by="asc(LicensePool.id)",
     )
 
     # A Work takes its presentation metadata from a single Edition.
@@ -1153,6 +1157,7 @@ class Work(Base, LoggerMixin):
         # now.
         active_license_pool = None
         collections = [] if not library else [c for c in library.active_collections]
+        best_availability = 0
         for p in self.license_pools:
             if collections and p.collection not in collections:
                 continue
@@ -1164,10 +1169,20 @@ class Work(Base, LoggerMixin):
                 break
             elif p.unlimited_access:
                 active_license_pool = p
+                # Keep the first unlimited_access pool we find, but continue
+                # checking for open_access pools
             elif (
                 edition and edition.title and p.licenses_owned and p.licenses_owned > 0
             ):
-                active_license_pool = p
+                # continue if an unlimited or open pool has been found.
+                if active_license_pool and (
+                    active_license_pool.unlimited_access
+                    or active_license_pool.open_access
+                ):
+                    continue
+                if p.licenses_available >= best_availability:
+                    active_license_pool = p
+                    best_availability = p.licenses_available
         return active_license_pool
 
     def external_index_needs_updating(self) -> None:
