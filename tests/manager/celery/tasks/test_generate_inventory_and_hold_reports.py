@@ -324,13 +324,37 @@ def test_generate_report(
             entry_list = archive.namelist()
             assert len(entry_list) == 3
             with (
-                archive.open(entry_list[0]) as holds_report_zip_entry,
+                archive.open(entry_list[0]) as inventory_activity_report_zip_entry,
                 archive.open(entry_list[1]) as inventory_report_zip_entry,
                 archive.open(entry_list[2]) as holds_with_no_licenses_report_zip_entry,
             ):
+                # >> Report: inventory report.
                 assert inventory_report_zip_entry
                 assert "test_library" in inventory_report_zip_entry.name
                 inventory_report_csv = zip_csv_entry_to_dict(inventory_report_zip_entry)
+
+                # Verify column order for inventory report
+                expected_inventory_columns = [
+                    "status",
+                    "title",
+                    "author",
+                    "identifier",
+                    "isbn",
+                    "language",
+                    "publisher",
+                    "format",
+                    "audience",
+                    "genres",
+                    "data_source",
+                    "collection_name",
+                    "license_expiration",
+                    "days_remaining_on_license",
+                    "remaining_loans",
+                    "allowed_concurrent_users",
+                ]
+                assert (
+                    list(inventory_report_csv[0].keys()) == expected_inventory_columns
+                )
 
                 # The inventory report should have two rows, since we have three books.
                 assert len(inventory_report_csv) == 3
@@ -348,7 +372,7 @@ def test_generate_report(
                 )
 
                 # Ensure that our test book is described properly in the inventory report.
-                assert len(row) == 17
+                assert row["status"] == str(LicenseStatus.available)
                 assert row["title"] == title
                 assert row["author"] == author
                 assert row["identifier"] == identifier_value
@@ -361,8 +385,6 @@ def test_generate_report(
                 assert row["data_source"] == data_source
                 assert row["collection_name"] == collection_name
                 assert float(row["days_remaining_on_license"]) == float(days_remaining)
-                assert row["shared_active_loan_count"] == "0"
-                assert row["library_active_loan_count"] == "0"
                 assert row["remaining_loans"] == str(checkouts_left)
                 assert row["allowed_concurrent_users"] == str(terms_concurrency)
                 assert (
@@ -370,27 +392,57 @@ def test_generate_report(
                     in row["license_expiration"]
                 )
 
-                assert holds_report_zip_entry
-                assert "test_library" in holds_report_zip_entry.name
-                assert holds_report_zip_entry
-                holds_report_csv = zip_csv_entry_to_dict(holds_report_zip_entry)
-                # Only our well-described test book should be in the holds report, since the other has no holds.
-                assert len(holds_report_csv) == 2
+                # >> Report: inventory activity report.
+                assert inventory_activity_report_zip_entry
+                assert "test_library" in inventory_activity_report_zip_entry.name
+                inventory_activity_report_csv = zip_csv_entry_to_dict(
+                    inventory_activity_report_zip_entry
+                )
+
+                # Verify column order for activity report
+                expected_activity_columns = [
+                    "title",
+                    "author",
+                    "identifier",
+                    "isbn",
+                    "language",
+                    "publisher",
+                    "format",
+                    "audience",
+                    "genres",
+                    "data_source",
+                    "collection_name",
+                    "total_library_allowed_concurrent_users",
+                    "library_active_loan_count",
+                    "shared_active_loan_count",
+                    "library_active_hold_count",
+                    "shared_active_hold_count",
+                    "library_hold_ratio",
+                ]
+                assert (
+                    list(inventory_activity_report_csv[0].keys())
+                    == expected_activity_columns
+                )
+
+                # The activity report includes all books (with or without holds).
+                assert len(inventory_activity_report_csv) == 3
                 row = next(
-                    r for r in holds_report_csv if r["identifier"] == identifier_value
+                    r
+                    for r in inventory_activity_report_csv
+                    if r["identifier"] == identifier_value
                 )
                 no_holds_row = next(
                     (
                         r
-                        for r in holds_report_csv
+                        for r in inventory_activity_report_csv
                         if r["identifier"] == no_holds_identifier_value
                     ),
                     None,
                 )
-                assert no_holds_row is None
+                # Even the book with no holds should be included in the activity report.
+                assert no_holds_row is not None
 
-                # Ensure that our test book is described properly in the holds report.
-                assert len(row) == 13
+                # Ensure that our test book is described properly in the activity report.
                 assert row["title"] == title
                 assert row["author"] == author
                 assert row["identifier"] == identifier_value
@@ -402,18 +454,57 @@ def test_generate_report(
                 assert row["format"] == edition.BOOK_MEDIUM
                 assert row["data_source"] == data_source
                 assert row["collection_name"] == collection_name
+                # Activity report specific fields for book with holds
+                assert int(row["total_library_allowed_concurrent_users"]) == 1
+                assert int(row["library_active_loan_count"]) == 0
+                # Collection is shared (library2 was added), licenses_reserved defaults to 0
+                assert int(row["shared_active_loan_count"]) == 0
+                assert int(row["library_active_hold_count"]) == 3
                 assert (
                     int(row["shared_active_hold_count"]) == shared_patrons_in_hold_queue
                 )
-                assert int(row["library_active_hold_count"]) == 3
+                # Hold ratio: 3 active holds / 1 available license = 3
+                assert float(row["library_hold_ratio"]) == 3.0
 
-                # holds with no licenses.
+                # Test the book with no holds
+                assert no_holds_row is not None
+                assert no_holds_row["title"] is not None
+                assert no_holds_row["identifier"] == no_holds_identifier_value
+                # Activity report fields for book with no holds
+                assert int(no_holds_row["library_active_hold_count"]) == 0
+                assert int(no_holds_row["library_active_loan_count"]) == 0
+                # Since there are no holds and licenses_available > 0, ratio should be 0
+                assert float(no_holds_row["library_hold_ratio"]) == 0
+
+                # >> Report: holds with no licenses.
                 assert holds_with_no_licenses_report_zip_entry
                 assert "test_library" in holds_with_no_licenses_report_zip_entry.name
                 assert holds_with_no_licenses_report_zip_entry
                 holds_with_no_licenses_report_csv = zip_csv_entry_to_dict(
                     holds_with_no_licenses_report_zip_entry
                 )
+
+                # Verify column order for holds with no licenses report
+                expected_holds_no_licenses_columns = [
+                    "title",
+                    "author",
+                    "identifier",
+                    "isbn",
+                    "language",
+                    "publisher",
+                    "format",
+                    "audience",
+                    "genres",
+                    "data_source",
+                    "collection_name",
+                    "library_active_hold_count",
+                    "shared_active_hold_count",
+                ]
+                assert (
+                    list(holds_with_no_licenses_report_csv[0].keys())
+                    == expected_holds_no_licenses_columns
+                )
+
                 # Only our single book with no licenses should be in the holds report.
                 assert len(holds_with_no_licenses_report_csv) == 1
 
@@ -433,7 +524,6 @@ def test_generate_report(
                 assert no_holds_row is None
 
                 # Ensure that our test book is described properly in the holds report.
-                assert len(row) == 13
                 assert row["title"] == title2
                 assert row["author"] == author2
                 assert row["identifier"] == identifier2_value
