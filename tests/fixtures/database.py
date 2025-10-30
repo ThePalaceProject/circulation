@@ -1080,16 +1080,14 @@ class DatabaseTransactionFixture:
     ) -> Admin:
         """Create an admin user with a properly hashed password.
 
-        Args:
-            email: The admin's email address. If not provided, a unique email is generated.
-            password: The admin's password. If provided, it will be properly hashed using bcrypt.
-                     If not provided, no password is set (password_hashed will be None).
-            is_system_admin: Whether the admin should be a system admin.
-
-        Returns:
-            The created or retrieved Admin object with the password properly hashed.
+        :param email: The admin's email address. If not provided, a unique email is generated.
+        :param password: The admin's password. If provided, it will be properly hashed using bcrypt.
+                        If not provided, no password is set (password_hashed will be None).
+        :param is_system_admin: Whether the admin should be a system admin.
+        :return: The created or retrieved Admin object with the password properly hashed.
 
         Example:
+
             # Create admin with password
             admin = db.admin(email="admin@example.com", password="password123")
 

@@ -61,13 +61,9 @@ class TestRequiresAuthDecorator:
 
         @contextmanager
         def _auth_context(headers=None):
-            """
-            Context manager that sets up authentication mocking.
+            """Context manager that sets up authentication mocking.
 
-            Args:
-                headers: Optional dict of HTTP headers
-                mock_authenticate: Optional Admin instance to return from authenticate()
-                admin: Optional Admin instance to use for is_system_admin check
+            :param headers: Optional dict of HTTP headers
             """
             with mock_flask_app.test_request_context(headers=headers or {}):
                 with patch("palace.manager.api.admin.routes.app") as mock_app:
