@@ -9,9 +9,11 @@ from unittest.mock import MagicMock, create_autospec
 
 import pytest
 from pytest import LogCaptureFixture
+from sqlalchemy import select
 from sqlalchemy.sql import Select
 
 from palace.manager.celery.tasks.generate_inventory_and_hold_reports import (
+    generate_csv_report,
     generate_inventory_and_hold_reports,
     generate_report,
     holds_with_no_licenses_report_query,
@@ -32,6 +34,42 @@ from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.celery import CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.services import ServicesFixture
+
+
+def test_generate_csv_report(
+    db: DatabaseTransactionFixture,
+    caplog: LogCaptureFixture,
+):
+    """Make sure the CSV generation works the way we expect."""
+    # Set log level to DEBUG to capture elapsed time logs
+    caplog.set_level(LogLevel.debug)
+
+    library = db.library(short_name="test_library")
+    query = select(Library.id, Library.short_name)
+
+    csv_file = io.StringIO()
+    csv_file.name = "test_report.csv"
+
+    # Call generate_csv_report
+    generate_csv_report(
+        db=db.session,
+        csv_file=csv_file,
+        sql_params={},
+        query=query,
+    )
+
+    # Verify the CSV was actually written
+    csv_file.seek(0)
+    csv_content = csv_file.read()
+    assert "id,short_name" in csv_content
+    assert "test_library" in csv_content
+
+    # Verify that the elapsed time log message was written
+    assert (
+        "generate_csv_report - test_report.csv: Completed. (elapsed time:"
+        in caplog.text
+    )
+    assert "report written to test_report.csv" in caplog.text
 
 
 def test_only_active_collections_are_included(
