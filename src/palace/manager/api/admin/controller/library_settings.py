@@ -11,6 +11,7 @@ from flask import Response
 from flask_babel import lazy_gettext as _
 from PIL import Image, UnidentifiedImageError
 from PIL.Image import Resampling
+from pydantic import BaseModel
 from werkzeug.datastructures import FileStorage
 
 from palace.manager.api.admin.announcement_list_validator import (
@@ -39,6 +40,13 @@ from palace.manager.sqlalchemy.model.resource import Representation
 from palace.manager.sqlalchemy.util import create, get_one
 from palace.manager.util.json import json_serializer
 from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
+
+
+class LibraryImportInfo(BaseModel):
+    name: str
+    short_name: str
+    website_url: str
+    patron_support_email: str
 
 
 class LibrarySettingsController(AdminPermissionsControllerMixin):
@@ -225,7 +233,8 @@ class LibrarySettingsController(AdminPermissionsControllerMixin):
 
             for idx, library_data in enumerate(libraries_data):
                 try:
-                    result = self._import_single_library(library_data)
+                    library_import_info = LibraryImportInfo(**library_data)
+                    result = self._import_single_library(library_import_info)
                     if result["is_new"]:
                         created.append(result)
                     else:
@@ -272,39 +281,14 @@ class LibrarySettingsController(AdminPermissionsControllerMixin):
                 )
             )
 
-    def _validate_required_field(
-        self, library_data: dict[str, Any], field_name: str, library_name: str = ""
-    ) -> str:
-        """Validate and return a required field from library data.
-
-        :param library_data: Dictionary containing library data
-        :param field_name: Name of the required field to validate
-        :param library_name: Optional library name for error messages
-        :return: The validated field value (stripped)
-        :raises ProblemDetailException: If the field is missing or empty
-        """
-        value: str = library_data.get(field_name, "").strip()
-        if not value:
-            context = f" for library '{library_name}'" if library_name else ""
-            raise ProblemDetailException(
-                problem_detail=INCOMPLETE_CONFIGURATION.detailed(
-                    f"Required field '{field_name}' is missing{context}."
-                )
-            )
-        return value
-
-    def _import_single_library(self, library_data: dict[str, Any]) -> dict[str, Any]:
-        """Import a single library from data dictionary."""
-        # Validate required fields
-        name = self._validate_required_field(library_data, "name")
-        short_name = self._validate_required_field(library_data, "short_name", name)
-        website_url = self._validate_required_field(library_data, "website_url", name)
-        patron_support_email = self._validate_required_field(
-            library_data, "patron_support_email", name
-        )
-
+    def _import_single_library(
+        self, library_import_info: LibraryImportInfo
+    ) -> dict[str, Any]:
+        """Import a single library."""
         # Check if library already exists
-        existing_library = get_one(self._db, Library, short_name=short_name)
+        existing_library = get_one(
+            self._db, Library, short_name=library_import_info.short_name
+        )
 
         if existing_library:
             # Library already exists, skip it (don't update)
@@ -316,18 +300,18 @@ class LibrarySettingsController(AdminPermissionsControllerMixin):
             }
 
         # Check that short_name is unique
-        self.check_short_name_unique(None, short_name)
+        self.check_short_name_unique(None, library_import_info.short_name)
         # Create new library
-        library, is_new = self.create_library(short_name)
+        library, is_new = self.create_library(library_import_info.short_name)
 
         # Set library properties
-        library.name = name
-        library.short_name = short_name
+        library.name = library_import_info.name
+        library.short_name = library_import_info.short_name
 
         # Build settings dictionary
         settings_data = {
-            "website": website_url,
-            "help_email": patron_support_email,
+            "website": library_import_info.website_url,
+            "help_email": library_import_info.patron_support_email,
             "large_collection_languages": ["en"],
             "small_collection_languages": ["es"],
             "facets_default_order": "added",  # Sort by most recently added
@@ -341,7 +325,7 @@ class LibrarySettingsController(AdminPermissionsControllerMixin):
         except Exception as e:
             raise ProblemDetailException(
                 problem_detail=INVALID_CONFIGURATION_OPTION.detailed(
-                    f"Invalid settings for library '{name}': {str(e)}"
+                    f"Invalid settings for library '{library_import_info.name}': {str(e)}"
                 )
             )
 
@@ -352,6 +336,7 @@ class LibrarySettingsController(AdminPermissionsControllerMixin):
             "uuid": str(library.uuid),
             "name": library.name,
             "short_name": library.short_name,
+            "website_url": library_import_info.website_url,
             "is_new": is_new,
         }
 
