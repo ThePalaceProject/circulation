@@ -903,6 +903,7 @@ class TestImportCollection:
         3. Re-import with force continues through all pages despite unchanged publications
         """
         caplog.set_level(LogLevel.info)
+        collection = opds2_import_fixture.collection
 
         # First import: Import both pages successfully
         # feed2 has a next link to feed, which has no next link.
@@ -949,7 +950,10 @@ class TestImportCollection:
         # Should NOT see the log message about stopping due to unchanged publications
         assert "Found unchanged publications in feed" not in caplog.text
         # Should see the log message about completing the import
-        assert "Import complete." in caplog.text
+        assert (
+            f"Import complete for collection '{collection.name}' (id={collection.id})"
+            in caplog.text
+        )
         # Should have 6 tasks queued (3 from each page) even though publications are unchanged
         assert len(apply_task_fixture.apply_queue) == 6
 
