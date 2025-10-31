@@ -148,7 +148,11 @@ class Work(Base, LoggerMixin):
 
     # One Work may have copies scattered across many LicensePools.
     license_pools: Mapped[list[LicensePool]] = relationship(
-        "LicensePool", back_populates="work", lazy="joined", uselist=True
+        "LicensePool",
+        back_populates="work",
+        lazy="joined",
+        uselist=True,
+        order_by="asc(LicensePool.id)",
     )
 
     # A Work takes its presentation metadata from a single Edition.
@@ -1148,27 +1152,58 @@ class Work(Base, LoggerMixin):
         return "\n".join(l)
 
     def active_license_pool(self, library: Library | None = None) -> LicensePool | None:
-        # The active license pool is the one that *would* be
-        # associated with a loan, were a loan to be issued right
-        # now.
-        active_license_pool = None
+        """
+        Select the most appropriate license pool for this work.
+
+        Pools are prioritized in the following order:
+        1. Open access pools (unlimited free access)
+        2. Unlimited access pools (unlimited licensed access)
+        3. Regular pools sorted by licenses_available (highest first)
+
+        When multiple pools have the same priority and availability,
+        the pool with the lowest ID is selected for determinism.
+
+        :param library: If provided, only consider pools from this library's collections
+        :return: The selected license pool, or None if no suitable pool exists
+        """
+        # Filter pools by library's collections if specified
         collections = [] if not library else [c for c in library.active_collections]
+        eligible_pools = []
+
         for p in self.license_pools:
+            # Skip pools not in the library's collections
             if collections and p.collection not in collections:
                 continue
+
             edition = p.presentation_edition
-            if p.open_access:
-                active_license_pool = p
-                # We have an unlimited source for this book.
-                # There's no need to keep looking.
-                break
-            elif p.unlimited_access:
-                active_license_pool = p
+
+            # Open access and unlimited access pools are always eligible
+            if p.open_access or p.unlimited_access:
+                eligible_pools.append(p)
+            # Regular pools need valid edition and owned licenses
             elif (
                 edition and edition.title and p.licenses_owned and p.licenses_owned > 0
             ):
-                active_license_pool = p
-        return active_license_pool
+                eligible_pools.append(p)
+
+        if not eligible_pools:
+            return None
+
+        # Sort by priority (lower sort key = higher priority):
+        # 1. open_access first (False=0 sorts before True=1, so negate)
+        # 2. unlimited_access second (same logic)
+        # 3. licenses_available third (negate for descending order)
+        # 4. id fourth (ascending for determinism)
+        eligible_pools.sort(
+            key=lambda p: (
+                not p.open_access,
+                not p.unlimited_access,
+                -p.licenses_available,
+                p.id,
+            )
+        )
+
+        return eligible_pools[0]
 
     def external_index_needs_updating(self) -> None:
         """Mark this work as needing to have its search document reindexed."""
