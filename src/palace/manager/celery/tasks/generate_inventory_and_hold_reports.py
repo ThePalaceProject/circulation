@@ -39,6 +39,7 @@ from palace.manager.sqlalchemy.model.licensing import License, LicensePool
 from palace.manager.sqlalchemy.model.patron import Hold, Loan, Patron
 from palace.manager.sqlalchemy.model.work import Work, WorkGenre
 from palace.manager.sqlalchemy.util import get_one
+from palace.manager.util.log import elapsed_time_logging
 from palace.manager.util.uuid import uuid_encode
 
 
@@ -201,12 +202,17 @@ def generate_csv_report(
     sql_params: dict[str, Any],
     query: Select,
 ) -> None:
-    writer = csv.writer(csv_file, delimiter=",")
-    rows = db.execute(query, sql_params)
-    writer.writerow(rows.keys())
-    writer.writerows(rows)
-    csv_file.flush()
-    log.debug(f"report written to {csv_file.name}")
+    with elapsed_time_logging(
+        log_method=log.debug,
+        message_prefix=f"generate_csv_report - {csv_file.name}",
+        skip_start=True,
+    ):
+        writer = csv.writer(csv_file, delimiter=",")
+        rows = db.execute(query, sql_params)
+        writer.writerow(rows.keys())
+        writer.writerows(rows)
+        csv_file.flush()
+        log.debug(f"report written to {csv_file.name}")
 
 
 def _comma_separated_sorted_work_genre_list_subquery() -> Subquery:
@@ -306,7 +312,11 @@ def _library_loans_lateral() -> Lateral:
 
 
 def inventory_report_query() -> Select:
-    """A query for inventory report with license information."""
+    """A query for inventory report with license information.
+
+    Note that this may result in multiple rows per license pool, if an item
+    has more than one license.
+    """
 
     isbn = _best_isbn_lateral()
     wg_subquery = _comma_separated_sorted_work_genre_list_subquery()
@@ -375,7 +385,7 @@ def inventory_report_query() -> Select:
 
 
 def palace_inventory_activity_report_query() -> Select:
-    """A query for holds report with hold information."""
+    """A query for the inventory activity report with loan and hold metrics."""
 
     isbn = _best_isbn_lateral()
     wg_subquery = _comma_separated_sorted_work_genre_list_subquery()
