@@ -39,6 +39,7 @@ from palace.manager.sqlalchemy.model.licensing import License, LicensePool
 from palace.manager.sqlalchemy.model.patron import Hold, Loan, Patron
 from palace.manager.sqlalchemy.model.work import Work, WorkGenre
 from palace.manager.sqlalchemy.util import get_one
+from palace.manager.util.log import elapsed_time_logging
 from palace.manager.util.uuid import uuid_encode
 
 
@@ -115,12 +116,10 @@ def generate_report(
         )
     ]
 
-    MAX_LICENSE_COUNT = 1_000_000_000_000
     # generate inventory report csv file
     sql_params: dict[str, Any] = {
         "library_id": library.id,
         "integration_ids": tuple(integration_ids),
-        "licenses_owned": MAX_LICENSE_COUNT,
     }
 
     with tempfile.NamedTemporaryFile() as report_zip:
@@ -128,7 +127,7 @@ def generate_report(
 
         with (
             create_temp_file() as inventory_report_file,
-            create_temp_file() as holds_report_file,
+            create_temp_file() as inventory_activity_report_file,
             create_temp_file() as holds_with_no_licenses_report_file,
         ):
             generate_csv_report(
@@ -140,23 +139,22 @@ def generate_report(
 
             generate_csv_report(
                 session,
-                csv_file=holds_report_file,
+                csv_file=inventory_activity_report_file,
                 sql_params=sql_params,
-                query=holds_report_query(),
+                query=palace_inventory_activity_report_query(),
             )
 
-            sql_params_for_holds_no_licenses = {**sql_params, "licenses_owned": 0}
             generate_csv_report(
                 session,
                 csv_file=holds_with_no_licenses_report_file,
-                sql_params=sql_params_for_holds_no_licenses,
-                query=holds_report_query(),
+                sql_params=sql_params,
+                query=holds_with_no_licenses_report_query(),
             )
 
             with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as archive:
                 archive.write(
-                    filename=holds_report_file.name,
-                    arcname=f"palace-holds-report-for-library-{file_name_modifier}.csv",
+                    filename=inventory_activity_report_file.name,
+                    arcname=f"palace-inventory-activity-report-for-library-{file_name_modifier}.csv",
                 )
                 archive.write(
                     filename=inventory_report_file.name,
@@ -204,12 +202,17 @@ def generate_csv_report(
     sql_params: dict[str, Any],
     query: Select,
 ) -> None:
-    writer = csv.writer(csv_file, delimiter=",")
-    rows = db.execute(query, sql_params)
-    writer.writerow(rows.keys())
-    writer.writerows(rows)
-    csv_file.flush()
-    log.debug(f"report written to {csv_file.name}")
+    with elapsed_time_logging(
+        log_method=log.debug,
+        message_prefix=f"generate_csv_report - {csv_file.name}",
+        skip_start=True,
+    ):
+        writer = csv.writer(csv_file, delimiter=",")
+        rows = db.execute(query, sql_params)
+        writer.writerow(rows.keys())
+        writer.writerows(rows)
+        csv_file.flush()
+        log.debug(f"report written to {csv_file.name}")
 
 
 def _comma_separated_sorted_work_genre_list_subquery() -> Subquery:
@@ -287,13 +290,8 @@ def _licenses_lateral() -> Lateral:
     """
     license_alias = aliased(License)
     return lateral(
-        select(
-            license_alias.checkouts_left,
-            license_alias.expires,
-            license_alias.terms_concurrency,
-        ).where(
+        select(license_alias).where(
             license_alias.license_pool_id == LicensePool.id,
-            license_alias.status == "available",
         )
     )
 
@@ -313,16 +311,20 @@ def _library_loans_lateral() -> Lateral:
 
 
 def inventory_report_query() -> Select:
-    """A query for inventory report with license information."""
+    """A query for inventory report with license information.
+
+    Note that this may result in multiple rows per license pool, if an item
+    has more than one license.
+    """
 
     isbn = _best_isbn_lateral()
     wg_subquery = _comma_separated_sorted_work_genre_list_subquery()
     collection_sharing = _is_shared_collection_lateral()
-    lib_loans = _library_loans_lateral()
     lic = _licenses_lateral()
 
     return (
         select(
+            lic.c.status,
             Edition.title,
             Edition.author,
             Identifier.identifier,
@@ -346,16 +348,6 @@ def inventory_report_query() -> Select:
             ),
             lic.c.checkouts_left.label("remaining_loans"),
             lic.c.terms_concurrency.label("allowed_concurrent_users"),
-            func.coalesce(lib_loans.c.active_loan_count, 0).label(
-                "library_active_loan_count"
-            ),
-            case(
-                (
-                    collection_sharing.c.is_shared_collection,
-                    LicensePool.licenses_reserved,
-                ),
-                else_=-1,
-            ).label("shared_active_loan_count"),
         )
         .select_from(LicensePool)
         .join(Identifier, LicensePool.identifier_id == Identifier.id)
@@ -374,7 +366,6 @@ def inventory_report_query() -> Select:
         )
         .join(Library, IntegrationLibraryConfiguration.library_id == Library.id)
         .outerjoin(wg_subquery, Work.id == wg_subquery.c.work_id)
-        .outerjoin(lib_loans, true())
         .join(collection_sharing, true())
         .outerjoin(lic, true())
         .where(
@@ -392,7 +383,100 @@ def inventory_report_query() -> Select:
     )
 
 
-def holds_report_query() -> Select:
+def palace_inventory_activity_report_query() -> Select:
+    """A query for the inventory activity report with loan and hold metrics."""
+
+    isbn = _best_isbn_lateral()
+    wg_subquery = _comma_separated_sorted_work_genre_list_subquery()
+    collection_sharing = _is_shared_collection_lateral()
+    lib_holds = _library_holds_lateral()
+    lib_loans = _library_loans_lateral()
+
+    return (
+        select(
+            Edition.title,
+            Edition.author,
+            Identifier.identifier,
+            func.coalesce(
+                case(
+                    (Identifier.type == Identifier.ISBN, Identifier.identifier),
+                    else_=isbn.c.identifier,
+                ),
+                "",
+            ).label("isbn"),
+            Edition.language,
+            Edition.publisher,
+            Edition.medium.label("format"),
+            Work.audience,
+            func.coalesce(wg_subquery.c.genres, "").label("genres"),
+            DataSource.name.label("data_source"),
+            IntegrationConfiguration.name.label("collection_name"),
+            LicensePool.licenses_owned.label("total_library_allowed_concurrent_users"),
+            func.coalesce(lib_loans.c.active_loan_count, 0).label(
+                "library_active_loan_count"
+            ),
+            case(
+                (
+                    collection_sharing.c.is_shared_collection,
+                    LicensePool.licenses_reserved,
+                ),
+                else_=-1,
+            ).label("shared_active_loan_count"),
+            func.coalesce(lib_holds.c.active_hold_count, 0).label(
+                "library_active_hold_count"
+            ),
+            case(
+                (
+                    collection_sharing.c.is_shared_collection,
+                    LicensePool.patrons_in_hold_queue,
+                ),
+                else_=-1,
+            ).label("shared_active_hold_count"),
+            case(
+                (
+                    LicensePool.licenses_owned > 0,
+                    func.coalesce(lib_holds.c.active_hold_count, 0)
+                    / LicensePool.licenses_owned,
+                ),
+                else_=-1,
+            ).label("library_hold_ratio"),
+        )
+        .select_from(LicensePool)
+        .join(Identifier, LicensePool.identifier_id == Identifier.id)
+        .outerjoin(isbn, Identifier.type != Identifier.ISBN)
+        .join(Edition, Edition.id == LicensePool.presentation_edition_id)
+        .join(Work, LicensePool.work_id == Work.id)
+        .join(DataSource, LicensePool.data_source_id == DataSource.id)
+        .join(Collection, LicensePool.collection_id == Collection.id)
+        .join(
+            IntegrationConfiguration,
+            Collection.integration_configuration_id == IntegrationConfiguration.id,
+        )
+        .join(
+            IntegrationLibraryConfiguration,
+            IntegrationConfiguration.id == IntegrationLibraryConfiguration.parent_id,
+        )
+        .join(Library, IntegrationLibraryConfiguration.library_id == Library.id)
+        .outerjoin(wg_subquery, Work.id == wg_subquery.c.work_id)
+        .outerjoin(lib_holds, true())
+        .outerjoin(lib_loans, true())
+        .join(collection_sharing, true())
+        .where(
+            Library.id == bindparam("library_id"),
+            IntegrationConfiguration.id.in_(
+                bindparam("integration_ids", expanding=True)
+            ),
+        )
+        .order_by(
+            Edition.sort_title,
+            Edition.sort_author,
+            DataSource.name,
+            IntegrationConfiguration.name,
+        )
+    )
+
+
+def holds_with_no_licenses_report_query() -> Select:
     """A query for holds report with hold information."""
 
     isbn = _best_isbn_lateral()
@@ -454,7 +538,7 @@ def holds_report_query() -> Select:
             IntegrationConfiguration.id.in_(
                 bindparam("integration_ids", expanding=True)
             ),
-            LicensePool.licenses_owned <= bindparam("licenses_owned"),
+            LicensePool.licenses_owned == 0,
             # Only include items with holds in this library
             func.coalesce(lib_holds.c.active_hold_count, 0) > 0,
         )
