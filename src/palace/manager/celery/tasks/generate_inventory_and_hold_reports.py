@@ -292,7 +292,6 @@ def _licenses_lateral() -> Lateral:
     return lateral(
         select(license_alias).where(
             license_alias.license_pool_id == LicensePool.id,
-            license_alias.status == "available",
         )
     )
 
