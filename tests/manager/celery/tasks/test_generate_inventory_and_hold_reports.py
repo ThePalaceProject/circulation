@@ -194,7 +194,6 @@ def test_generate_report(
     author = "Laura Goering"
     language = "eng"
     publisher = "My Publisher"
-    identifier_value = "urn:identifier-1"
     checkouts_left = 10
     terms_concurrency = 5
     edition = db.edition(data_source_name=ds.name)
@@ -239,7 +238,6 @@ def test_generate_report(
     # Add a second book with no copies
     title2 = "Test Book 2"
     author2 = "Tom Pen"
-    identifier2_value = "urn:identifier-2"
     edition2 = db.edition(data_source_name=ds.name)
     edition2.language = language
     edition2.publisher = publisher
