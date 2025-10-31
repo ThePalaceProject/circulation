@@ -207,8 +207,6 @@ class LibrarySettingsController(AdminPermissionsControllerMixin):
             ]
         }
         """
-        # Only system admins can create new libraries
-        self.require_system_admin()
 
         try:
             data = flask.request.json

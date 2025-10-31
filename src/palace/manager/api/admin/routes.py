@@ -1,4 +1,3 @@
-import base64
 from datetime import timedelta
 from functools import wraps
 
@@ -11,15 +10,10 @@ from palace.manager.api.admin.config import (
 )
 from palace.manager.api.admin.dashboard_stats import generate_statistics
 from palace.manager.api.admin.model.dashboard_statistics import StatisticsResponse
-from palace.manager.api.admin.problem_details import (
-    ADMIN_NOT_AUTHORIZED,
-    INVALID_ADMIN_CREDENTIALS,
-)
 from palace.manager.api.app import app
 from palace.manager.api.controller.static_file import StaticFileController
 from palace.manager.api.routes import allows_library, has_library, library_route
 from palace.manager.core.app_server import returns_problem_detail
-from palace.manager.sqlalchemy.model.admin import Admin
 from palace.manager.util.problem_detail import BaseProblemDetailException, ProblemDetail
 
 # An admin's session will expire after this amount of time and
@@ -95,58 +89,6 @@ def returns_json_or_response_or_problem_detail(f):
         if isinstance(v, Response):
             return v
         return flask.jsonify(**v)
-
-    return decorated
-
-
-def requires_auth(f):
-    """Decorator that authenticates an admin user via Authorization header.
-
-    Supports Bearer token authentication where the token is base64-encoded
-    credentials in the format "username:password".
-
-    Example::
-
-        Authorization: Bearer base64(admin@example.com:password123)
-    """
-
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        # Try to authenticate via Authorization header
-        auth_header = flask.request.headers.get("Authorization")
-        if not auth_header:
-            return INVALID_ADMIN_CREDENTIALS
-
-        # Check if it's a Bearer token
-        parts = auth_header.split()
-        if len(parts) != 2 or parts[0].lower() != "bearer":
-            return INVALID_ADMIN_CREDENTIALS
-
-        token = parts[1]
-
-        # Decode the base64 token
-        try:
-            decoded = base64.b64decode(token).decode("utf-8")
-        except Exception:
-            return INVALID_ADMIN_CREDENTIALS
-
-        # Extract username and password
-        if ":" not in decoded:
-            return INVALID_ADMIN_CREDENTIALS
-
-        email, password = decoded.split(":", 1)
-
-        # Authenticate using Admin.authenticate
-        authenticated_admin = Admin.authenticate(app.manager._db, email, password)
-        if not authenticated_admin:
-            return INVALID_ADMIN_CREDENTIALS
-
-        if not authenticated_admin.is_system_admin():
-            return ADMIN_NOT_AUTHORIZED
-        # Set the admin on the request
-        setattr(flask.request, "admin", authenticated_admin)
-
-        return f(*args, **kwargs)
 
     return decorated
 
@@ -790,13 +732,8 @@ def admin_base(**kwargs):
 
 @app.route("/admin/import-libraries", strict_slashes=False, methods=["POST"])
 @returns_json_or_response_or_problem_detail
-@requires_auth
 def import_libraries():
-    """Import multiple libraries from a list of library configurations.
-
-    Supports authentication via bearer token authentication:
-        Authorization: Bearer <base64(email:password)>
-    """
+    """Import multiple libraries from a list of library configurations."""
     return app.manager.admin_library_settings_controller.import_libraries()
 
 
