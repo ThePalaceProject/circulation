@@ -557,6 +557,39 @@ class TestCollection:
         assert 0 == len(list1.entries)
         assert 1 == len(list2.entries)
 
+    def test_customlists_ordered_by_id(
+        self,
+        example_collection_fixture: ExampleCollectionFixture,
+    ):
+        """Test that customlists are always returned ordered by ID.
+
+        This ordering is critical to prevent database deadlocks when multiple
+        workers update works that share the same customlists.
+        """
+        db = example_collection_fixture.database_fixture
+        test_collection = example_collection_fixture.collection
+
+        # Create multiple custom lists with specific IDs
+        list1, _ = get_one_or_create(db.session, CustomList, name=db.fresh_str())
+        list2, _ = get_one_or_create(db.session, CustomList, name=db.fresh_str())
+        list3, _ = get_one_or_create(db.session, CustomList, name=db.fresh_str())
+        db.session.flush()
+
+        # Associate them with the collection in non-ID order
+        # (add them in reverse order to test that ORM ordering works)
+        test_collection.customlists = [list3, list1, list2]
+        db.session.commit()
+
+        # Verify they are returned in ID order
+        retrieved_lists = test_collection.customlists
+        assert len(retrieved_lists) == 3
+        assert retrieved_lists[0].id < retrieved_lists[1].id
+        assert retrieved_lists[1].id < retrieved_lists[2].id
+
+        # Verify the specific lists are present
+        retrieved_ids = {lst.id for lst in retrieved_lists}
+        assert retrieved_ids == {list1.id, list2.id, list3.id}
+
     @pytest.mark.parametrize(
         "is_inactive, active_collection_count",
         (
