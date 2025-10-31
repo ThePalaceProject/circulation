@@ -2,16 +2,22 @@ import csv
 import io
 import os
 import zipfile
+from collections.abc import Callable
 from datetime import timedelta
 from typing import IO, BinaryIO
 from unittest.mock import MagicMock, create_autospec
 
+import pytest
 from pytest import LogCaptureFixture
+from sqlalchemy.sql import Select
 
 from palace.manager.celery.tasks.generate_inventory_and_hold_reports import (
     generate_inventory_and_hold_reports,
     generate_report,
+    holds_with_no_licenses_report_query,
+    inventory_report_query,
     library_report_integrations,
+    palace_inventory_activity_report_query,
 )
 from palace.manager.integration.license.opds.opds1.settings import OPDSImporterSettings
 from palace.manager.integration.license.overdrive.api import OverdriveAPI
@@ -54,6 +60,81 @@ def test_only_active_collections_are_included(
 
     assert len(eligible_integrations) == 1
     assert eligible_integrations == [collection1.integration_configuration]
+
+
+@pytest.mark.parametrize(
+    "query_function, expected_column_names",
+    (
+        (
+            inventory_report_query,
+            (
+                "status",
+                "title",
+                "author",
+                "identifier",
+                "isbn",
+                "language",
+                "publisher",
+                "format",
+                "audience",
+                "genres",
+                "data_source",
+                "collection_name",
+                "license_expiration",
+                "days_remaining_on_license",
+                "remaining_loans",
+                "allowed_concurrent_users",
+            ),
+        ),
+        (
+            palace_inventory_activity_report_query,
+            (
+                "title",
+                "author",
+                "identifier",
+                "isbn",
+                "language",
+                "publisher",
+                "format",
+                "audience",
+                "genres",
+                "data_source",
+                "collection_name",
+                "total_library_allowed_concurrent_users",
+                "library_active_loan_count",
+                "shared_active_loan_count",
+                "library_active_hold_count",
+                "shared_active_hold_count",
+                "library_hold_ratio",
+            ),
+        ),
+        (
+            holds_with_no_licenses_report_query,
+            (
+                "title",
+                "author",
+                "identifier",
+                "isbn",
+                "language",
+                "publisher",
+                "format",
+                "audience",
+                "genres",
+                "data_source",
+                "collection_name",
+                "library_active_hold_count",
+                "shared_active_hold_count",
+            ),
+        ),
+    ),
+)
+def test_report_columns(
+    query_function: Callable[[], Select],
+    expected_column_names: tuple[str, ...],
+):
+    """Verify column order and count for each of the query functions."""
+    actual_inventory_columns = tuple(c.name for c in query_function().selected_columns)
+    assert actual_inventory_columns == expected_column_names
 
 
 def test_generate_report(
@@ -333,29 +414,6 @@ def test_generate_report(
                 assert "test_library" in inventory_report_zip_entry.name
                 inventory_report_csv = zip_csv_entry_to_dict(inventory_report_zip_entry)
 
-                # Verify column order for inventory report
-                expected_inventory_columns = [
-                    "status",
-                    "title",
-                    "author",
-                    "identifier",
-                    "isbn",
-                    "language",
-                    "publisher",
-                    "format",
-                    "audience",
-                    "genres",
-                    "data_source",
-                    "collection_name",
-                    "license_expiration",
-                    "days_remaining_on_license",
-                    "remaining_loans",
-                    "allowed_concurrent_users",
-                ]
-                assert (
-                    list(inventory_report_csv[0].keys()) == expected_inventory_columns
-                )
-
                 # The inventory report should have two rows, since we have three books.
                 assert len(inventory_report_csv) == 3
                 # One row should be our well-described test book...
@@ -397,31 +455,6 @@ def test_generate_report(
                 assert "test_library" in inventory_activity_report_zip_entry.name
                 inventory_activity_report_csv = zip_csv_entry_to_dict(
                     inventory_activity_report_zip_entry
-                )
-
-                # Verify column order for activity report
-                expected_activity_columns = [
-                    "title",
-                    "author",
-                    "identifier",
-                    "isbn",
-                    "language",
-                    "publisher",
-                    "format",
-                    "audience",
-                    "genres",
-                    "data_source",
-                    "collection_name",
-                    "total_library_allowed_concurrent_users",
-                    "library_active_loan_count",
-                    "shared_active_loan_count",
-                    "library_active_hold_count",
-                    "shared_active_hold_count",
-                    "library_hold_ratio",
-                ]
-                assert (
-                    list(inventory_activity_report_csv[0].keys())
-                    == expected_activity_columns
                 )
 
                 # The activity report includes all books (with or without holds).
@@ -482,27 +515,6 @@ def test_generate_report(
                 assert holds_with_no_licenses_report_zip_entry
                 holds_with_no_licenses_report_csv = zip_csv_entry_to_dict(
                     holds_with_no_licenses_report_zip_entry
-                )
-
-                # Verify column order for holds with no licenses report
-                expected_holds_no_licenses_columns = [
-                    "title",
-                    "author",
-                    "identifier",
-                    "isbn",
-                    "language",
-                    "publisher",
-                    "format",
-                    "audience",
-                    "genres",
-                    "data_source",
-                    "collection_name",
-                    "library_active_hold_count",
-                    "shared_active_hold_count",
-                ]
-                assert (
-                    list(holds_with_no_licenses_report_csv[0].keys())
-                    == expected_holds_no_licenses_columns
                 )
 
                 # Only our single book with no licenses should be in the holds report.
