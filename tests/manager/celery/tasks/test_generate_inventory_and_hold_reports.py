@@ -414,15 +414,16 @@ def test_generate_report(
                 assert "test_library" in inventory_report_zip_entry.name
                 inventory_report_csv = zip_csv_entry_to_dict(inventory_report_zip_entry)
 
-                # The inventory report should have two rows, since we have three books.
+                # The inventory report should have three rows.
                 assert len(inventory_report_csv) == 3
+
                 # One row should be our well-described test book...
                 row = next(
                     r
                     for r in inventory_report_csv
                     if r["identifier"] == identifier_value
                 )
-                # ... and the other should be our poorly-described book with no holds.
+                # ... and another should be our poorly-described book with no holds.
                 _ = next(
                     r
                     for r in inventory_report_csv
@@ -472,8 +473,14 @@ def test_generate_report(
                     ),
                     None,
                 )
-                # Even the book with no holds should be included in the activity report.
-                assert no_holds_row is not None
+                no_licenses_owned_row = next(
+                    (
+                        r
+                        for r in inventory_activity_report_csv
+                        if r["identifier"] == identifier2_value
+                    ),
+                    None,
+                )
 
                 # Ensure that our test book is described properly in the activity report.
                 assert row["title"] == title
@@ -499,7 +506,7 @@ def test_generate_report(
                 # Hold ratio: 3 active holds / 1 available license = 3
                 assert float(row["library_hold_ratio"]) == 3.0
 
-                # Test the book with no holds
+                # Even the book with no holds should be included in the activity report.
                 assert no_holds_row is not None
                 assert no_holds_row["title"] is not None
                 assert no_holds_row["identifier"] == no_holds_identifier_value
@@ -508,6 +515,18 @@ def test_generate_report(
                 assert int(no_holds_row["library_active_loan_count"]) == 0
                 # Since there are no holds and licenses_available > 0, ratio should be 0
                 assert float(no_holds_row["library_hold_ratio"]) == 0
+
+                # Test the book with no owned licenses.
+                assert no_licenses_owned_row is not None
+                assert no_licenses_owned_row["title"] == title2
+                assert int(no_licenses_owned_row["library_active_hold_count"]) == 1
+                assert int(no_licenses_owned_row["library_active_loan_count"]) == 0
+                assert (
+                    int(no_licenses_owned_row["total_library_allowed_concurrent_users"])
+                    == 0
+                )
+                # When `total_library_allowed_concurrent_users` <= 0, ratio should be -1
+                assert int(no_licenses_owned_row["library_hold_ratio"]) == -1
 
                 # >> Report: holds with no licenses.
                 assert holds_with_no_licenses_report_zip_entry

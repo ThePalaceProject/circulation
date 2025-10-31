@@ -412,9 +412,7 @@ def palace_inventory_activity_report_query() -> Select:
             func.coalesce(wg_subquery.c.genres, "").label("genres"),
             DataSource.name.label("data_source"),
             IntegrationConfiguration.name.label("collection_name"),
-            LicensePool.licenses_available.label(
-                "total_library_allowed_concurrent_users"
-            ),
+            LicensePool.licenses_owned.label("total_library_allowed_concurrent_users"),
             func.coalesce(lib_loans.c.active_loan_count, 0).label(
                 "library_active_loan_count"
             ),
@@ -437,9 +435,9 @@ def palace_inventory_activity_report_query() -> Select:
             ).label("shared_active_hold_count"),
             case(
                 (
-                    LicensePool.licenses_available > 0,
+                    LicensePool.licenses_owned > 0,
                     func.coalesce(lib_holds.c.active_hold_count, 0)
-                    / LicensePool.licenses_available,
+                    / LicensePool.licenses_owned,
                 ),
                 else_=-1,
             ).label("library_hold_ratio"),
