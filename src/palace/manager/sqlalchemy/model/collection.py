@@ -144,8 +144,12 @@ class Collection(Base, HasSessionCache, RedisKeyMixin):
     # also be added to the list. Admins can remove items from the
     # the list and they won't be added back, so the list doesn't
     # necessarily match the collection.
+    # Order by ID to ensure consistent lock acquisition order and prevent deadlocks.
     customlists: Mapped[list[CustomList]] = relationship(
-        "CustomList", secondary="collections_customlists", back_populates="collections"
+        "CustomList",
+        secondary="collections_customlists",
+        back_populates="collections",
+        order_by="CustomList.id",
     )
 
     export_marc_records: Mapped[bool] = Column(Boolean, default=False, nullable=False)
