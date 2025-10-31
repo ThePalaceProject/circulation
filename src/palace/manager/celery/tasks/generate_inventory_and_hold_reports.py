@@ -10,8 +10,11 @@ from pathlib import Path
 from typing import IO, Any
 
 from celery import shared_task
-from sqlalchemy import not_, select, text
-from sqlalchemy.orm import Session
+from sqlalchemy import bindparam, case, func, lateral, not_, select, true
+from sqlalchemy.dialects.postgresql import aggregate_order_by
+from sqlalchemy.orm import Session, aliased
+from sqlalchemy.sql import Select, Subquery
+from sqlalchemy.sql.selectable import Lateral
 
 from palace.manager.celery.task import Task
 from palace.manager.integration.goals import Goals
@@ -22,11 +25,19 @@ from palace.manager.service.integration_registry.license_providers import (
     LicenseProvidersRegistry,
 )
 from palace.manager.service.storage.s3 import S3Service
+from palace.manager.sqlalchemy.model.classification import Genre
+from palace.manager.sqlalchemy.model.collection import Collection
+from palace.manager.sqlalchemy.model.datasource import DataSource
+from palace.manager.sqlalchemy.model.edition import Edition
+from palace.manager.sqlalchemy.model.identifier import Equivalency, Identifier
 from palace.manager.sqlalchemy.model.integration import (
     IntegrationConfiguration,
     IntegrationLibraryConfiguration,
 )
 from palace.manager.sqlalchemy.model.library import Library
+from palace.manager.sqlalchemy.model.licensing import License, LicensePool
+from palace.manager.sqlalchemy.model.patron import Hold, Loan, Patron
+from palace.manager.sqlalchemy.model.work import Work, WorkGenre
 from palace.manager.sqlalchemy.util import get_one
 from palace.manager.util.uuid import uuid_encode
 
@@ -151,7 +162,6 @@ def generate_report(
                     filename=inventory_report_file.name,
                     arcname=f"palace-inventory-report-for-library-{file_name_modifier}.csv",
                 )
-
                 archive.write(
                     filename=holds_with_no_licenses_report_file.name,
                     arcname=f"palace-holds-with-no-licenses-report-for-library-{file_name_modifier}.csv",
@@ -192,175 +202,269 @@ def generate_csv_report(
     db: Session,
     csv_file: IO[str],
     sql_params: dict[str, Any],
-    query: str,
+    query: Select,
 ) -> None:
     writer = csv.writer(csv_file, delimiter=",")
-    rows = db.execute(
-        text(query),
-        sql_params,
-    )
+    rows = db.execute(query, sql_params)
     writer.writerow(rows.keys())
     writer.writerows(rows)
     csv_file.flush()
     log.debug(f"report written to {csv_file.name}")
 
 
-def inventory_report_query() -> str:
-    return """
-       SELECT
-            ed.title,
-            ed.author,
-            id.identifier,
-            COALESCE(
-                CASE
-                    WHEN id.type = 'ISBN' THEN id.identifier
-                    ELSE isbn.identifier
-                END,
-                ''
-            ) AS isbn,
-            ed.language,
-            ed.publisher,
-            ed.medium AS format,
-            w.audience,
-            wg.genres,
-            ds.name AS data_source,
-            ic.name AS collection_name,
-            lic.expires AS license_expiration,
-            DATE_PART('day', lic.expires - NOW()) AS days_remaining_on_license,
-            lic.checkouts_left AS remaining_loans,
-            lic.terms_concurrency AS allowed_concurrent_users,
-            COALESCE(lib_loans.active_loan_count, 0) AS library_active_loan_count,
-            CASE
-                WHEN collection_sharing.is_shared_collection THEN lp.licenses_reserved
-                ELSE -1
-            END AS shared_active_loan_count
-        FROM licensepools lp
-        JOIN identifiers id ON lp.identifier_id = id.id
-        LEFT OUTER JOIN LATERAL (
-            -- Best matching ISBN for this item, if available.
-            -- Note: We do this only if primary identifier is not ISBN.
-            SELECT isbn_sub.identifier
-            FROM equivalents eq
-            JOIN identifiers isbn_sub ON eq.output_id = isbn_sub.id
-            WHERE eq.input_id = id.id
-              AND isbn_sub.type = 'ISBN' AND isbn_sub.identifier IS NOT NULL
-              AND eq.strength > 0.5 AND eq.enabled = true
-            ORDER BY eq.strength DESC
-            LIMIT 1
-        ) isbn ON id.type != 'ISBN'
-        JOIN editions ed ON ed.id = lp.presentation_edition_id
-        JOIN works w ON lp.work_id = w.id
-        JOIN datasources ds ON lp.data_source_id = ds.id
-        JOIN collections c ON lp.collection_id = c.id
-        JOIN integration_configurations ic ON c.integration_configuration_id = ic.id
-        JOIN integration_library_configurations ilc ON ic.id = ilc.parent_id
-        JOIN libraries lib ON ilc.library_id = lib.id
-        LEFT OUTER JOIN (
-            -- Comma-separated list of genres for this license pool's work.
-            SELECT wg.work_id, STRING_AGG(g.name, ',' ORDER BY g.name) AS genres
-            FROM genres g
-            JOIN workgenres wg ON g.id = wg.genre_id
-            GROUP BY wg.work_id
-        ) wg ON w.id = wg.work_id
-        LEFT OUTER JOIN LATERAL (
-            -- How many loans are active for this item in this library?
-            SELECT COUNT(ln.id) AS active_loan_count
-            FROM loans ln
-            JOIN patrons p ON ln.patron_id = p.id
-            WHERE ln.license_pool_id = lp.id AND p.library_id = lib.id
-        ) lib_loans ON TRUE
-        JOIN LATERAL (
-            -- Do other libraries share this collection?
-            SELECT COUNT(ilc_sub.parent_id) > 1 AS is_shared_collection
-            FROM integration_library_configurations ilc_sub
-            WHERE ilc_sub.parent_id = ic.id
-        ) collection_sharing ON TRUE
-        LEFT OUTER JOIN LATERAL (
-            -- License information, if present.
-            -- Note that this may result in multiple rows.
-            SELECT checkouts_left, expires, terms_concurrency
-            FROM licenses
-            WHERE license_pool_id = lp.id AND status = 'available'
-        ) lic ON TRUE
-        WHERE lib.id = :library_id AND ic.id IN :integration_ids
-        ORDER BY ed.sort_title, ed.sort_author, ds.name, ic.name
-    """
+def _comma_separated_sorted_work_genre_list_subquery() -> Subquery:
+    """Comma-separated list of genres for this work, in ascending order."""
+    work_genre_alias = aliased(WorkGenre)
+    genre_alias = aliased(Genre)
+    return (
+        select(
+            work_genre_alias.work_id,
+            func.array_to_string(
+                func.array_agg(
+                    aggregate_order_by(genre_alias.name, genre_alias.name.asc())
+                ),
+                ",",
+            ).label("genres"),
+        )
+        .join(genre_alias, genre_alias.id == work_genre_alias.genre_id)
+        .group_by(work_genre_alias.work_id)
+        .subquery()
+    )
 
 
-def holds_report_query() -> str:
-    return """
-        SELECT
-            ed.title,
-            ed.author,
-            id.identifier,
-            COALESCE(
-                CASE
-                    WHEN id.type = 'ISBN' THEN id.identifier
-                    ELSE isbn.identifier
-                END,
-                ''
-            ) AS isbn,
-            ed.language,
-            ed.publisher,
-            ed.medium AS format,
-            w.audience,
-            wg.genres,
-            d.name AS data_source,
-            ic.name AS collection_name,
-            COALESCE(lib_holds.active_hold_count, 0) AS library_active_hold_count,
-            CASE
-                WHEN collection_sharing.is_shared_collection THEN lp.patrons_in_hold_queue
-                ELSE -1
-            END AS shared_active_hold_count
-        FROM licensepools lp
-        JOIN identifiers id ON lp.identifier_id = id.id
-        LEFT OUTER JOIN LATERAL (
-            -- Best matching ISBN for this item, if available.
-            -- Note: We do this only if primary identifier is not ISBN.
-            SELECT isbn_sub.identifier
-            FROM equivalents eq
-            JOIN identifiers isbn_sub ON eq.output_id = isbn_sub.id
-            WHERE eq.input_id = id.id
-              AND isbn_sub.type = 'ISBN' AND isbn_sub.identifier IS NOT NULL
-              AND eq.strength > 0.5 AND eq.enabled = true
-            ORDER BY eq.strength DESC
-            LIMIT 1
-        ) isbn ON id.type != 'ISBN'
-        JOIN editions ed ON ed.id = lp.presentation_edition_id
-        JOIN works w ON lp.work_id = w.id
-        JOIN datasources d ON lp.data_source_id = d.id
-        JOIN collections c ON lp.collection_id = c.id
-        JOIN integration_configurations ic ON c.integration_configuration_id = ic.id
-        JOIN integration_library_configurations il ON ic.id = il.parent_id
-        JOIN libraries lib ON il.library_id = lib.id
-        LEFT OUTER JOIN (
-            -- Comma-separated list of genres for this license pool's work.
-            SELECT wg.work_id, STRING_AGG(g.name, ',' ORDER BY g.name) AS genres
-            FROM genres g
-            JOIN workgenres wg ON g.id = wg.genre_id
-            GROUP BY wg.work_id
-        ) wg ON w.id = wg.work_id
-        LEFT OUTER JOIN LATERAL (
-            -- How many holds are active for this item in this library?
-            SELECT COUNT(h.id) AS active_hold_count
-            FROM holds h
-            JOIN patrons p ON h.patron_id = p.id
-            WHERE h.license_pool_id = lp.id AND p.library_id = lib.id
-              AND (h.end IS NULL OR h.end > NOW() OR h.position > 0)
-              AND lp.licenses_owned <= :licenses_owned
-        ) lib_holds ON TRUE
-       JOIN LATERAL (
-            -- Do other libraries share this collection?
-            SELECT COUNT(ilc.parent_id) > 1 AS is_shared_collection
-            FROM integration_library_configurations ilc
-            WHERE ilc.parent_id = ic.id
-        ) collection_sharing ON TRUE
-        WHERE lib.id = :library_id
-          AND ic.id IN :integration_ids
-          -- Only include items with holds in this library
-          AND COALESCE(lib_holds.active_hold_count, 0) > 0
-        ORDER BY ed.sort_title, ed.sort_author, d.name, ic.name
+def _best_isbn_lateral() -> Lateral:
+    """Best ISBN for an identifier, if available."""
+    id_isbn = aliased(Identifier)
+    equivalency_alias = aliased(Equivalency)
+    return lateral(
+        select(id_isbn.identifier)
+        .join(equivalency_alias, equivalency_alias.output_id == id_isbn.id)
+        .where(
+            equivalency_alias.input_id == Identifier.id,
+            id_isbn.type == Identifier.ISBN,
+            id_isbn.identifier.is_not(None),
+            equivalency_alias.strength > 0.5,
+            equivalency_alias.enabled == true(),
+        )
+        .order_by(equivalency_alias.strength.desc())
+        .limit(1)
+    )
+
+
+def _library_holds_lateral() -> Lateral:
+    """How many holds are active for this item in this library?"""
+    hold_alias = aliased(Hold)
+    patron_alias = aliased(Patron)
+    return lateral(
+        select(func.count(hold_alias.id).label("active_hold_count"))
+        .join(patron_alias, hold_alias.patron_id == patron_alias.id)
+        .where(
+            hold_alias.license_pool_id == LicensePool.id,
+            patron_alias.library_id == Library.id,
+            (
+                hold_alias.end.is_(None)
+                | (hold_alias.end > func.now())
+                | (hold_alias.position > 0)
+            ),
+        )
+    )
+
+
+def _is_shared_collection_lateral() -> Lateral:
+    """Do other libraries share this collection?"""
+    ilc_alias = aliased(IntegrationLibraryConfiguration)
+    return lateral(
+        select(
+            (func.count(ilc_alias.parent_id) > 1).label("is_shared_collection")
+        ).where(ilc_alias.parent_id == IntegrationConfiguration.id)
+    )
+
+
+def _licenses_lateral() -> Lateral:
+    """License information, if present.
+
+    Note that this may result in multiple rows.
     """
+    license_alias = aliased(License)
+    return lateral(
+        select(
+            license_alias.checkouts_left,
+            license_alias.expires,
+            license_alias.terms_concurrency,
+        ).where(
+            license_alias.license_pool_id == LicensePool.id,
+            license_alias.status == "available",
+        )
+    )
+
+
+def _library_loans_lateral() -> Lateral:
+    """How many loans are active for this item in this library?"""
+    loan_alias = aliased(Loan)
+    patron_alias = aliased(Patron)
+    return lateral(
+        select(func.count(loan_alias.id).label("active_loan_count"))
+        .join(patron_alias, loan_alias.patron_id == patron_alias.id)
+        .where(
+            loan_alias.license_pool_id == LicensePool.id,
+            patron_alias.library_id == Library.id,
+        )
+    )
+
+
+def inventory_report_query() -> Select:
+    """A query for inventory report with license information."""
+
+    isbn = _best_isbn_lateral()
+    wg_subquery = _comma_separated_sorted_work_genre_list_subquery()
+    collection_sharing = _is_shared_collection_lateral()
+    lib_loans = _library_loans_lateral()
+    lic = _licenses_lateral()
+
+    return (
+        select(
+            Edition.title,
+            Edition.author,
+            Identifier.identifier,
+            func.coalesce(
+                case(
+                    (Identifier.type == Identifier.ISBN, Identifier.identifier),
+                    else_=isbn.c.identifier,
+                ),
+                "",
+            ).label("isbn"),
+            Edition.language,
+            Edition.publisher,
+            Edition.medium.label("format"),
+            Work.audience,
+            func.coalesce(wg_subquery.c.genres, "").label("genres"),
+            DataSource.name.label("data_source"),
+            IntegrationConfiguration.name.label("collection_name"),
+            lic.c.expires.label("license_expiration"),
+            func.date_part("day", lic.c.expires - func.now()).label(
+                "days_remaining_on_license"
+            ),
+            lic.c.checkouts_left.label("remaining_loans"),
+            lic.c.terms_concurrency.label("allowed_concurrent_users"),
+            func.coalesce(lib_loans.c.active_loan_count, 0).label(
+                "library_active_loan_count"
+            ),
+            case(
+                (
+                    collection_sharing.c.is_shared_collection,
+                    LicensePool.licenses_reserved,
+                ),
+                else_=-1,
+            ).label("shared_active_loan_count"),
+        )
+        .select_from(LicensePool)
+        .join(Identifier, LicensePool.identifier_id == Identifier.id)
+        .outerjoin(isbn, Identifier.type != Identifier.ISBN)
+        .join(Edition, Edition.id == LicensePool.presentation_edition_id)
+        .join(Work, LicensePool.work_id == Work.id)
+        .join(DataSource, LicensePool.data_source_id == DataSource.id)
+        .join(Collection, LicensePool.collection_id == Collection.id)
+        .join(
+            IntegrationConfiguration,
+            Collection.integration_configuration_id == IntegrationConfiguration.id,
+        )
+        .join(
+            IntegrationLibraryConfiguration,
+            IntegrationConfiguration.id == IntegrationLibraryConfiguration.parent_id,
+        )
+        .join(Library, IntegrationLibraryConfiguration.library_id == Library.id)
+        .outerjoin(wg_subquery, Work.id == wg_subquery.c.work_id)
+        .outerjoin(lib_loans, true())
+        .join(collection_sharing, true())
+        .outerjoin(lic, true())
+        .where(
+            Library.id == bindparam("library_id"),
+            IntegrationConfiguration.id.in_(
+                bindparam("integration_ids", expanding=True)
+            ),
+        )
+        .order_by(
+            Edition.sort_title,
+            Edition.sort_author,
+            DataSource.name,
+            IntegrationConfiguration.name,
+        )
+    )
+
+
+def holds_report_query() -> Select:
+    """A query for holds report with hold information."""
+
+    isbn = _best_isbn_lateral()
+    wg_subquery = _comma_separated_sorted_work_genre_list_subquery()
+    collection_sharing = _is_shared_collection_lateral()
+    lib_holds = _library_holds_lateral()
+
+    return (
+        select(
+            Edition.title,
+            Edition.author,
+            Identifier.identifier,
+            func.coalesce(
+                case(
+                    (Identifier.type == Identifier.ISBN, Identifier.identifier),
+                    else_=isbn.c.identifier,
+                ),
+                "",
+            ).label("isbn"),
+            Edition.language,
+            Edition.publisher,
+            Edition.medium.label("format"),
+            Work.audience,
+            func.coalesce(wg_subquery.c.genres, "").label("genres"),
+            DataSource.name.label("data_source"),
+            IntegrationConfiguration.name.label("collection_name"),
+            func.coalesce(lib_holds.c.active_hold_count, 0).label(
+                "library_active_hold_count"
+            ),
+            case(
+                (
+                    collection_sharing.c.is_shared_collection,
+                    LicensePool.patrons_in_hold_queue,
+                ),
+                else_=-1,
+            ).label("shared_active_hold_count"),
+        )
+        .select_from(LicensePool)
+        .join(Identifier, LicensePool.identifier_id == Identifier.id)
+        .outerjoin(isbn, Identifier.type != Identifier.ISBN)
+        .join(Edition, Edition.id == LicensePool.presentation_edition_id)
+        .join(Work, LicensePool.work_id == Work.id)
+        .join(DataSource, LicensePool.data_source_id == DataSource.id)
+        .join(Collection, LicensePool.collection_id == Collection.id)
+        .join(
+            IntegrationConfiguration,
+            Collection.integration_configuration_id == IntegrationConfiguration.id,
+        )
+        .join(
+            IntegrationLibraryConfiguration,
+            IntegrationConfiguration.id == IntegrationLibraryConfiguration.parent_id,
+        )
+        .join(Library, IntegrationLibraryConfiguration.library_id == Library.id)
+        .outerjoin(wg_subquery, Work.id == wg_subquery.c.work_id)
+        .outerjoin(lib_holds, true())
+        .join(collection_sharing, true())
+        .where(
+            Library.id == bindparam("library_id"),
+            IntegrationConfiguration.id.in_(
+                bindparam("integration_ids", expanding=True)
+            ),
+            LicensePool.licenses_owned <= bindparam("licenses_owned"),
+            # Only include items with holds in this library
+            func.coalesce(lib_holds.c.active_hold_count, 0) > 0,
+        )
+        .order_by(
+            Edition.sort_title,
+            Edition.sort_author,
+            DataSource.name,
+            IntegrationConfiguration.name,
+        )
+    )
 
 
 @shared_task(queue=QueueNames.high, bind=True)
