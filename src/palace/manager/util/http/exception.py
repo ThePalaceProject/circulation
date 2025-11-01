@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Self
+from typing import Any, Self
 from urllib.parse import urlparse
 
 import httpx
@@ -10,6 +10,81 @@ from flask_babel import lazy_gettext as _
 from palace.manager.core.exceptions import IntegrationException
 from palace.manager.core.problem_details import INTEGRATION_ERROR
 from palace.manager.util.problem_detail import BaseProblemDetailException, ProblemDetail
+
+
+def _unpickle_bad_response_exception(
+    exception_module: str,
+    exception_class: str,
+    exception_dict: dict[str, Any],
+    response_data: dict[str, Any],
+    response_module: str,
+    response_class: str,
+) -> Any:
+    # Returns BadResponseException or subclass
+    # Using Any here because the generic type parameter doesn't support unions
+    """Helper function to unpickle BadResponseException and its subclasses.
+
+    This function recreates a BadResponseException (or subclass) from pickled data by
+    constructing a minimal response object and restoring the exception's state.
+
+    :param exception_module: Module name of the exception class
+    :param exception_class: Class name of the exception
+    :param exception_dict: Dictionary of the exception's __dict__
+    :param response_data: Dictionary with response status_code, content, headers, url
+    :param response_module: Module name of the original response class
+    :param response_class: Class name of the original response class
+    :return: Reconstructed exception
+    """
+    import importlib
+
+    # Create a minimal response object
+    response: requests.Response | httpx.Response
+    if response_module == "requests.models":
+        # Create a requests.Response object
+        req_response = requests.Response()
+        req_response.status_code = response_data["status_code"]
+        req_response._content = response_data["content"]
+        req_response.headers.update(response_data["headers"])
+        if response_data["url"]:
+            req_response.url = response_data["url"]
+        response = req_response
+    elif response_module == "httpx._models":
+        # Create an httpx.Response object
+        # httpx.Response requires a request to have a URL, so create a minimal request
+        request = httpx.Request(
+            method="GET",
+            url=response_data["url"] or "http://unknown",
+        )
+        response = httpx.Response(
+            status_code=response_data["status_code"],
+            content=response_data["content"],
+            headers=response_data["headers"],
+            request=request,
+        )
+    else:
+        # Fallback: create a requests.Response object
+        req_response = requests.Response()
+        req_response.status_code = response_data["status_code"]
+        req_response._content = response_data["content"]
+        req_response.headers.update(response_data["headers"])
+        if response_data["url"]:
+            req_response.url = response_data["url"]
+        response = req_response
+
+    # Dynamically import and get the exception class
+    module = importlib.import_module(exception_module)
+    exc_class = getattr(module, exception_class)
+
+    # Create instance without calling __init__
+    exc = exc_class.__new__(exc_class)
+
+    # Restore the exception's state
+    exc.__dict__.update(exception_dict)
+
+    # Update the response object (since it was reconstructed)
+    exc.response = response
+
+    return exc
 
 
 class RemoteIntegrationException(IntegrationException, BaseProblemDetailException):
@@ -112,6 +187,41 @@ class BadResponseException[T: (requests.Response, httpx.Response)](
             url,
             message,
             response,
+        )
+
+    def __reduce__(self) -> tuple[object, tuple[Any, ...]]:
+        """Custom pickle support to handle response serialization.
+
+        The requests.Response and httpx.Response objects are not fully pickleable,
+        so we need to extract and store only the essential information.
+
+        This method also preserves the exact exception subclass type, so that
+        OpdsResponseException, OverdriveResponseException, etc. are properly
+        reconstructed during unpickling.
+        """
+        # Extract essential response information for serialization
+        response_data = {
+            "status_code": self.response.status_code,
+            "content": self.response.content,
+            "headers": dict(self.response.headers),
+            "url": str(self.response.url) if hasattr(self.response, "url") else None,
+        }
+
+        # Create a copy of __dict__ without the response object
+        exception_dict = self.__dict__.copy()
+        exception_dict.pop("response", None)
+
+        # Return a tuple of (callable, args) for unpickling
+        return (
+            _unpickle_bad_response_exception,
+            (
+                type(self).__module__,
+                type(self).__qualname__,
+                exception_dict,
+                response_data,
+                type(self.response).__module__,
+                type(self.response).__name__,
+            ),
         )
 
 

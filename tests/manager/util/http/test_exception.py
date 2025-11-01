@@ -163,6 +163,113 @@ class TestBadResponseException:
         )
         assert exception.response is response
 
+    def test_pickle_preserves_type(self):
+        """Test that BadResponseException maintains its type when pickled/unpickled.
+
+        This test reproduces the issue seen in Celery where exceptions are
+        serialized for retry handling and lose their type information, appearing
+        as IntegrationException instead of BadResponseException.
+        """
+        import pickle
+
+        response = MockRequestsResponse(401, content="Unauthorized")
+        original_exc = BadResponseException(
+            "http://url/", "Auth failed", response, debug_message="Debug info"
+        )
+
+        # Pickle and unpickle (simulates what Celery does during autoretry)
+        pickled = pickle.dumps(original_exc)
+        unpickled_exc = pickle.loads(pickled)
+
+        # Verify type is preserved (will fail with current code)
+        assert type(unpickled_exc).__name__ == "BadResponseException"
+        assert isinstance(unpickled_exc, BadResponseException)
+
+        # Verify attributes are preserved
+        assert unpickled_exc.message == "Auth failed"
+        assert unpickled_exc.debug_message == "Debug info"
+        assert unpickled_exc.response.status_code == 401
+        assert unpickled_exc.response.content == b"Unauthorized"
+
+    def test_pickle_preserves_subclass_type(self):
+        """Test that subclasses of BadResponseException also preserve their type.
+
+        We need to import a real subclass to test this properly.
+        """
+        import pickle
+
+        from palace.manager.integration.license.opds.exception import (
+            OpdsResponseException,
+        )
+
+        response = MockRequestsResponse(
+            400, content="Bad Request", headers={"Content-Type": "application/json"}
+        )
+        original_exc = OpdsResponseException(
+            type="http://example.com/problem",
+            title="Test Error",
+            status=400,
+            detail="Something went wrong",
+            response=response,
+        )
+
+        # Pickle and unpickle
+        pickled = pickle.dumps(original_exc)
+        unpickled_exc = pickle.loads(pickled)
+
+        # Verify the subclass type is preserved
+        assert type(unpickled_exc).__name__ == "OpdsResponseException"
+        assert isinstance(unpickled_exc, OpdsResponseException)
+
+        # Verify subclass-specific attributes are preserved
+        assert unpickled_exc.type == "http://example.com/problem"
+        assert unpickled_exc.title == "Test Error"
+        assert unpickled_exc.status == 400
+        assert unpickled_exc.detail == "Something went wrong"
+
+        # Verify inherited attributes are preserved
+        assert unpickled_exc.response.status_code == 400
+
+    def test_pickle_preserves_httpx_response_url(self):
+        """Test that httpx.Response URLs are preserved through pickling.
+
+        This is important because httpx.Response.url is accessed in integration
+        code for logging and debugging, and it must survive the Celery
+        serialization round-trip.
+        """
+        import pickle
+
+        import httpx
+
+        # Create an httpx.Response with a URL
+        request = httpx.Request("GET", "https://example.com/api/endpoint")
+        response = httpx.Response(
+            status_code=401,
+            content=b"Unauthorized",
+            headers={"Content-Type": "application/json"},
+            request=request,
+        )
+
+        original_exc = BadResponseException(
+            "https://example.com/api/endpoint",
+            "Auth failed",
+            response,
+            debug_message="Debug info",
+        )
+
+        # Verify the URL is accessible before pickling
+        assert str(original_exc.response.url) == "https://example.com/api/endpoint"
+
+        # Pickle and unpickle
+        pickled = pickle.dumps(original_exc)
+        unpickled_exc = pickle.loads(pickled)
+
+        # Verify the URL is still accessible after unpickling
+        # This would raise RuntimeError if the request wasn't properly restored
+        assert str(unpickled_exc.response.url) == "https://example.com/api/endpoint"
+        assert unpickled_exc.response.status_code == 401
+        assert unpickled_exc.response.content == b"Unauthorized"
+
 
 class TestRequestTimedOut:
     def test_problem_detail(self):
