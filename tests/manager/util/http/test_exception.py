@@ -270,6 +270,38 @@ class TestBadResponseException:
         assert unpickled_exc.response.status_code == 401
         assert unpickled_exc.response.content == b"Unauthorized"
 
+    def test_pickle_preserves_exception_string_representation(self):
+        """Test that str(exception) works correctly after pickling.
+
+        Exception.args must be preserved so that str(exc) and logging work
+        properly in Celery retry scenarios. Without args, super().__str__()
+        returns an empty string, breaking error messages in logs.
+        """
+        import pickle
+
+        response = MockRequestsResponse(401, content="Unauthorized")
+        original_exc = BadResponseException(
+            "http://url/", "Auth failed", response, debug_message="Debug info"
+        )
+
+        # Verify string representation before pickling
+        original_str = str(original_exc)
+        assert "Auth failed" in original_str
+        assert original_exc.args  # Should not be empty
+
+        # Pickle and unpickle
+        pickled = pickle.dumps(original_exc)
+        unpickled_exc = pickle.loads(pickled)
+
+        # Verify Exception.args is preserved
+        assert unpickled_exc.args == original_exc.args
+        assert unpickled_exc.args  # Should not be empty
+
+        # Verify string representation still works
+        unpickled_str = str(unpickled_exc)
+        assert unpickled_str == original_str
+        assert "Auth failed" in unpickled_str
+
 
 class TestRequestTimedOut:
     def test_problem_detail(self):

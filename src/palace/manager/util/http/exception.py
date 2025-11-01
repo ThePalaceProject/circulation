@@ -15,6 +15,7 @@ from palace.manager.util.problem_detail import BaseProblemDetailException, Probl
 def _unpickle_bad_response_exception(
     exception_module: str,
     exception_class: str,
+    exception_args: tuple[Any, ...],
     exception_dict: dict[str, Any],
     response_data: dict[str, Any],
     response_module: str,
@@ -29,6 +30,7 @@ def _unpickle_bad_response_exception(
 
     :param exception_module: Module name of the exception class
     :param exception_class: Class name of the exception
+    :param exception_args: The exception's args tuple (for str() representation)
     :param exception_dict: Dictionary of the exception's __dict__
     :param response_data: Dictionary with response status_code, content, headers, url
     :param response_module: Module name of the original response class
@@ -77,6 +79,9 @@ def _unpickle_bad_response_exception(
 
     # Create instance without calling __init__
     exc = exc_class.__new__(exc_class)
+
+    # Restore the exception's args (needed for str() and logging)
+    exc.args = exception_args
 
     # Restore the exception's state
     exc.__dict__.update(exception_dict)
@@ -198,6 +203,9 @@ class BadResponseException[T: (requests.Response, httpx.Response)](
         This method also preserves the exact exception subclass type, so that
         OpdsResponseException, OverdriveResponseException, etc. are properly
         reconstructed during unpickling.
+
+        Additionally, this preserves Exception.args so that str(exc) and logging
+        work correctly after unpickling.
         """
         # Extract essential response information for serialization
         response_data = {
@@ -217,6 +225,7 @@ class BadResponseException[T: (requests.Response, httpx.Response)](
             (
                 type(self).__module__,
                 type(self).__qualname__,
+                self.args,  # Preserve Exception.args for str() representation
                 exception_dict,
                 response_data,
                 type(self.response).__module__,
