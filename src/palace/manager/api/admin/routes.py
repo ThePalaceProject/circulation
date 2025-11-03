@@ -26,6 +26,25 @@ app.permanent_session_lifetime = timedelta(hours=9)
 auth = HTTPBasicAuth()
 
 
+@auth.verify_password
+def authenticate_admin(username: str | None, password: str | None) -> Admin | None:
+    """Returns an authenticated admin if successful or None if not. This method is called by Flask-HTTPAuth's basic auth mechanism."""
+    setattr(flask.request, "admin", None)
+    if not username or not password:
+        return None
+    admin = Admin.authenticate(app.manager._db, email=username, password=password)
+    if admin:
+        setattr(flask.request, "admin", admin)
+        return admin
+    return None
+
+
+@auth.error_handler
+def auth_error(status: int):
+    """Returns a problem detail if basic authentication fails. This method is called by Flask-HTTPAuth."""
+    return INVALID_ADMIN_CREDENTIALS.response
+
+
 def allows_admin_auth_setup(f):
     @wraps(f)
     def decorated(*args, **kwargs):
@@ -737,30 +756,10 @@ def admin_base(**kwargs):
 
 @app.route("/admin/import-libraries", strict_slashes=False, methods=["POST"])
 @returns_json_or_response_or_problem_detail
-@auth.login_required()
+@auth.login_required()  # This annotation enables basic auth for this end point.
 def import_libraries():
     """Import multiple libraries from a list of library configurations."""
     return app.manager.admin_library_settings_controller.import_libraries()
-
-
-@auth.verify_password
-def authenticate_admin(username: str, password: str) -> Admin | None:
-    """Returns an authenticated admin or None"""
-    setattr(flask.request, "admin", None)
-    if not username or not password:
-        return None
-    # if not username or not password:
-    #     return None
-    admin = Admin.authenticate(app.manager._db, email=username, password=password)
-    if admin:
-        setattr(flask.request, "admin", admin)
-        return admin
-    return None
-
-
-@auth.error_handler
-def auth_error(status: int):
-    return INVALID_ADMIN_CREDENTIALS.response
 
 
 # This path is used only in debug mode to serve frontend assets.
