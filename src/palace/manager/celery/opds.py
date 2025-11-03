@@ -57,7 +57,9 @@ def opds_import_task[FeedType](
         )
 
         if not import_result:
-            task.log.info("Import failed, aborting task.")
+            task.log.info(
+                f"Import failed, aborting task for collection '{collection.name}' (id={collection.id})"
+            )
             return None
 
         # If a post-import hook is provided, call it with the import result.
@@ -81,8 +83,11 @@ def opds_import_task[FeedType](
 
     if not should_continue:
         task.log.info(
-            f"Found unchanged publications in feed, stopping import without harvesting the rest of the feed."
+            f"Found unchanged publications in feed, stopping import without harvesting the rest of the feed"
+            f" for collection '{collection.name}' (id={collection.id}) "
         )
 
-    task.log.info("Import complete.")
+    task.log.info(
+        f"Import complete for collection '{collection.name}' (id={collection.id})"
+    )
     return identifier_set
