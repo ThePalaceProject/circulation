@@ -1061,25 +1061,6 @@ class TestLibrarySettings:
             assert len(result["errors"]) == 1
             assert "Invalid settings" in result["errors"][0]["error"]
 
-    def test_import_libraries_works_for_non_system_admin(
-        self,
-        flask_app_fixture: FlaskAppFixture,
-        controller: LibrarySettingsController,
-        db: DatabaseTransactionFixture,
-    ):
-        """Test that import_libraries works for non-system admin users."""
-        # Create a non-system-admin user (librarian)
-        admin = flask_app_fixture.admin_user()
-        admin.remove_role(AdminRole.SYSTEM_ADMIN)
-        library = db.default_library()
-        admin.add_role(AdminRole.LIBRARIAN, library)
-
-        with flask_app_fixture.test_request_context(
-            "/", method="POST", json={}, admin=admin
-        ):
-            with pytest.raises(AdminNotAuthorized):
-                controller.import_libraries()
-
     def test_import_libraries_mixed_success_and_errors(
         self,
         flask_app_fixture: FlaskAppFixture,

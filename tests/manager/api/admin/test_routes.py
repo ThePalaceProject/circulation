@@ -6,6 +6,7 @@ from unittest.mock import MagicMock
 
 import flask
 import pytest
+from fixtures.flask import FlaskAppFixture
 from flask import Response
 from werkzeug.exceptions import MethodNotAllowed
 
@@ -20,6 +21,7 @@ from palace.manager.api.controller.circulation_manager import (
     CirculationManagerController,
 )
 from palace.manager.sqlalchemy.constants import MediaTypes
+from palace.manager.util import base64
 from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
 from tests.fixtures.api_controller import ControllerFixture
 from tests.fixtures.api_routes import MockApp, MockController, MockManager
@@ -131,7 +133,13 @@ class AdminRouteFixture:
         # CirculationManager.
         self.real_controller = getattr(self.REAL_CIRCULATION_MANAGER, name)
 
-    def request(self, url, method="GET"):
+    def request(
+        self,
+        url,
+        method="GET",
+        headers=None,
+        json=None,
+    ):
         """Simulate a request to a URL without triggering any code outside
         routes.py.
         """
@@ -142,7 +150,9 @@ class AdminRouteFixture:
         mock_function = getattr(self.routes, function_name)
 
         # Call it in the context of the mock app.
-        with self.controller_fixture.app.test_request_context():
+        with self.controller_fixture.app.test_request_context(
+            headers=headers, json=json
+        ):
             return mock_function(**kwargs)
 
     def assert_request_calls(self, url, method, *args, **kwargs):
@@ -508,6 +518,32 @@ class TestAdminLibrarySettings:
             http_method="DELETE",
         )
         fixture.assert_supported_methods(url, "DELETE")
+
+    def test_import_libraries_fails_if_unauthenticated(
+        self, fixture: AdminRouteFixture
+    ):
+        """Test that import_libraries succeeds for authenticated users."""
+        with fixture.request("/admin/import-libraries", method="POST") as response:
+            assert 401 == response.status_code
+
+    def test_import_libraries_succeeds_with_basic_auth(
+        self, fixture: AdminRouteFixture, flask_app_fixture: FlaskAppFixture
+    ):
+        admin_email = "test@email.com"
+        password = "password"
+        admin = flask_app_fixture.admin_user(email=admin_email)
+        admin.password = password
+
+        fixture.manager._db = fixture.db.session
+        with fixture.request(
+            "/admin/import-libraries",
+            method="POST",
+            headers={
+                "Authorization": f"Basic { base64.b64encode(f"{admin_email}:{password}")}"
+            },
+            json={"libraries": []},
+        ) as response:
+            assert response.status_code == 200
 
 
 class TestAdminCollectionSettings:

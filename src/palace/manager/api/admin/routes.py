@@ -3,6 +3,7 @@ from functools import wraps
 
 import flask
 from flask import Response, make_response, redirect, url_for
+from flask_httpauth import HTTPBasicAuth
 
 from palace.manager.api.admin.config import (
     Configuration as AdminClientConfig,
@@ -10,15 +11,19 @@ from palace.manager.api.admin.config import (
 )
 from palace.manager.api.admin.dashboard_stats import generate_statistics
 from palace.manager.api.admin.model.dashboard_statistics import StatisticsResponse
+from palace.manager.api.admin.problem_details import INVALID_ADMIN_CREDENTIALS
 from palace.manager.api.app import app
 from palace.manager.api.controller.static_file import StaticFileController
 from palace.manager.api.routes import allows_library, has_library, library_route
 from palace.manager.core.app_server import returns_problem_detail
+from palace.manager.sqlalchemy.model.admin import Admin
 from palace.manager.util.problem_detail import BaseProblemDetailException, ProblemDetail
 
 # An admin's session will expire after this amount of time and
 # the admin will have to log in again.
 app.permanent_session_lifetime = timedelta(hours=9)
+
+auth = HTTPBasicAuth()
 
 
 def allows_admin_auth_setup(f):
@@ -732,9 +737,30 @@ def admin_base(**kwargs):
 
 @app.route("/admin/import-libraries", strict_slashes=False, methods=["POST"])
 @returns_json_or_response_or_problem_detail
+@auth.login_required()
 def import_libraries():
     """Import multiple libraries from a list of library configurations."""
     return app.manager.admin_library_settings_controller.import_libraries()
+
+
+@auth.verify_password
+def authenticate_admin(username: str, password: str) -> Admin | None:
+    """Returns an authenticated admin or None"""
+    setattr(flask.request, "admin", None)
+    if not username or not password:
+        return None
+    # if not username or not password:
+    #     return None
+    admin = Admin.authenticate(app.manager._db, email=username, password=password)
+    if admin:
+        setattr(flask.request, "admin", admin)
+        return admin
+    return None
+
+
+@auth.error_handler
+def auth_error(status: int):
+    return INVALID_ADMIN_CREDENTIALS.response
 
 
 # This path is used only in debug mode to serve frontend assets.
