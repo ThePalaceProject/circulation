@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 import httpx
 import requests
 from flask_babel import lazy_gettext as _
+from httpx import Headers
 
 from palace.manager.core.exceptions import IntegrationException
 from palace.manager.core.problem_details import INTEGRATION_ERROR
@@ -77,7 +78,7 @@ class HttpResponse:
 
     status_code: int
     url: str
-    headers: Mapping[str, str]
+    headers: Headers
     text: str
     content: bytes
     extensions: Mapping[str, Any]
@@ -97,7 +98,7 @@ class HttpResponse:
         return cls(
             status_code=response.status_code,
             url=str(response.url),
-            headers=dict(response.headers),
+            headers=Headers(response.headers),
             text=response.text,
             content=response.content,
             extensions=extensions,

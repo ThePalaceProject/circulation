@@ -80,7 +80,9 @@ class TestErrorResponse:
             ErrorResponse.raise_from_response(response, "default message")
         assert exc_info.value.error_code is None
         assert exc_info.value.error_message == "default message"
-        assert exc_info.value.response is response
+        assert exc_info.value.response.status_code == response.status_code
+        assert exc_info.value.response.url == response.url
+        assert exc_info.value.response.text == response.text
 
         # The error is logged.
         assert "Error parsing Overdrive response" in caplog.text
