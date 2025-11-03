@@ -37,6 +37,7 @@ from palace.manager.integration.license.overdrive.exception import (
     NotFoundError,
     OverdriveResponseException,
 )
+from palace.manager.util.http.exception import HttpResponse
 from palace.manager.util.log import LoggerMixin
 
 
@@ -66,7 +67,7 @@ class ErrorResponse(BaseOverdriveModel, LoggerMixin):
     token: str | None = None
 
     @classmethod
-    def from_response(cls, response: Response) -> Self | None:
+    def from_response(cls, response: Response | HttpResponse) -> Self | None:
         """
         Parse the error response from the given response object.
 
@@ -85,7 +86,7 @@ class ErrorResponse(BaseOverdriveModel, LoggerMixin):
 
     @classmethod
     def raise_from_response(
-        cls, response: Response, default_message: str | None = None
+        cls, response: HttpResponse | Response, default_message: str | None = None
     ) -> None:
         """
         Raise an appropriate exception based on the Overdrive error code

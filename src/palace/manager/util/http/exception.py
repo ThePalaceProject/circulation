@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import Any, Self
 from urllib.parse import urlparse
 
@@ -10,86 +13,6 @@ from flask_babel import lazy_gettext as _
 from palace.manager.core.exceptions import IntegrationException
 from palace.manager.core.problem_details import INTEGRATION_ERROR
 from palace.manager.util.problem_detail import BaseProblemDetailException, ProblemDetail
-
-
-def _unpickle_bad_response_exception(
-    exception_module: str,
-    exception_class: str,
-    exception_args: tuple[Any, ...],
-    exception_dict: dict[str, Any],
-    response_data: dict[str, Any],
-    response_module: str,
-    response_class: str,
-) -> Any:
-    # Returns BadResponseException or subclass
-    # Using Any here because the generic type parameter doesn't support unions
-    """Helper function to unpickle BadResponseException and its subclasses.
-
-    This function recreates a BadResponseException (or subclass) from pickled data by
-    constructing a minimal response object and restoring the exception's state.
-
-    :param exception_module: Module name of the exception class
-    :param exception_class: Class name of the exception
-    :param exception_args: The exception's args tuple (for str() representation)
-    :param exception_dict: Dictionary of the exception's __dict__
-    :param response_data: Dictionary with response status_code, content, headers, url
-    :param response_module: Module name of the original response class
-    :param response_class: Class name of the original response class
-    :return: Reconstructed exception
-    """
-    import importlib
-
-    # Create a minimal response object
-    response: requests.Response | httpx.Response
-    if response_module == "requests.models":
-        # Create a requests.Response object
-        req_response = requests.Response()
-        req_response.status_code = response_data["status_code"]
-        req_response._content = response_data["content"]
-        req_response.headers.update(response_data["headers"])
-        if response_data["url"]:
-            req_response.url = response_data["url"]
-        response = req_response
-    elif response_module == "httpx._models":
-        # Create an httpx.Response object
-        # httpx.Response requires a request to have a URL, so create a minimal request
-        request = httpx.Request(
-            method="GET",
-            url=response_data["url"] or "http://unknown",
-        )
-        response = httpx.Response(
-            status_code=response_data["status_code"],
-            content=response_data["content"],
-            headers=response_data["headers"],
-            request=request,
-        )
-    else:
-        # Fallback: create a requests.Response object
-        req_response = requests.Response()
-        req_response.status_code = response_data["status_code"]
-        req_response._content = response_data["content"]
-        req_response.headers.update(response_data["headers"])
-        if response_data["url"]:
-            req_response.url = response_data["url"]
-        response = req_response
-
-    # Dynamically import and get the exception class
-    module = importlib.import_module(exception_module)
-    exc_class = getattr(module, exception_class)
-
-    # Create instance without calling __init__
-    exc = exc_class.__new__(exc_class)
-
-    # Restore the exception's args (needed for str() and logging)
-    exc.args = exception_args
-
-    # Restore the exception's state
-    exc.__dict__.update(exception_dict)
-
-    # Update the response object (since it was reconstructed)
-    exc.response = response
-
-    return exc
 
 
 class RemoteIntegrationException(IntegrationException, BaseProblemDetailException):
@@ -142,9 +65,46 @@ class RemoteIntegrationException(IntegrationException, BaseProblemDetailExceptio
         return str(self)
 
 
-class BadResponseException[T: (requests.Response, httpx.Response)](
-    RemoteIntegrationException,
-):
+@dataclass(frozen=True)
+class HttpResponse:
+    """
+    A simple dataclass representing an HTTP response.
+
+    We use this so that we can have a common representation of HTTP responses
+    from different libraries (like requests and httpx) without depending on either
+    library throughout our codebase.
+    """
+
+    status_code: int
+    url: str
+    headers: Mapping[str, str]
+    text: str
+    content: bytes
+    extensions: Mapping[str, Any]
+
+    def json(self) -> Any:
+        return json.loads(self.text)
+
+    @classmethod
+    def from_response(cls, response: requests.Response | httpx.Response | Self) -> Self:
+        if isinstance(response, cls):
+            return response
+
+        extensions = (
+            {} if isinstance(response, requests.Response) else response.extensions
+        )
+
+        return cls(
+            status_code=response.status_code,
+            url=str(response.url),
+            headers=dict(response.headers),
+            text=response.text,
+            content=response.content,
+            extensions=extensions,
+        )
+
+
+class BadResponseException(RemoteIntegrationException):
     """The request seemingly went okay, but we got a bad response."""
 
     title = _("Bad response")
@@ -161,7 +121,7 @@ class BadResponseException[T: (requests.Response, httpx.Response)](
         self,
         url_or_service: str,
         message: str,
-        response: T,
+        response: httpx.Response | requests.Response | HttpResponse,
         debug_message: str | None = None,
         retry_count: int | None = None,
     ):
@@ -181,11 +141,13 @@ class BadResponseException[T: (requests.Response, httpx.Response)](
             )
 
         super().__init__(url_or_service, message, debug_message)
-        self.response: T = response
+        self.response = HttpResponse.from_response(response)
         self.retry_count: int | None = retry_count
 
     @classmethod
-    def bad_status_code(cls, url: str, response: T) -> Self:
+    def bad_status_code(
+        cls, url: str, response: httpx.Response | requests.Response
+    ) -> Self:
         """The response is bad because the status code is wrong."""
         message = cls.BAD_STATUS_CODE_MESSAGE % response.status_code
         return cls(
@@ -194,44 +156,17 @@ class BadResponseException[T: (requests.Response, httpx.Response)](
             response,
         )
 
-    def __reduce__(self) -> tuple[object, tuple[Any, ...]]:
-        """Custom pickle support to handle response serialization.
+    def __getstate__(self) -> tuple[dict[str, Any], tuple[Any, ...]]:
+        return self.__dict__, self.args
 
-        The requests.Response and httpx.Response objects are not fully pickleable,
-        so we need to extract and store only the essential information.
+    def __setstate__(self, state: tuple[dict[str, Any], tuple[Any, ...]]) -> None:
+        dict_state, args_state = state
+        self.__dict__.update(dict_state)
+        self.args = args_state
 
-        This method also preserves the exact exception subclass type, so that
-        OpdsResponseException, OverdriveResponseException, etc. are properly
-        reconstructed during unpickling.
-
-        Additionally, this preserves Exception.args so that str(exc) and logging
-        work correctly after unpickling.
-        """
-        # Extract essential response information for serialization
-        response_data = {
-            "status_code": self.response.status_code,
-            "content": self.response.content,
-            "headers": dict(self.response.headers),
-            "url": str(self.response.url) if hasattr(self.response, "url") else None,
-        }
-
-        # Create a copy of __dict__ without the response object
-        exception_dict = self.__dict__.copy()
-        exception_dict.pop("response", None)
-
-        # Return a tuple of (callable, args) for unpickling
-        return (
-            _unpickle_bad_response_exception,
-            (
-                type(self).__module__,
-                type(self).__qualname__,
-                self.args,  # Preserve Exception.args for str() representation
-                exception_dict,
-                response_data,
-                type(self.response).__module__,
-                type(self.response).__name__,
-            ),
-        )
+    def __reduce__(self) -> tuple[Any, ...]:
+        state = self.__getstate__()
+        return self.__class__.__new__, (self.__class__,), state
 
 
 class RequestNetworkException(RemoteIntegrationException):

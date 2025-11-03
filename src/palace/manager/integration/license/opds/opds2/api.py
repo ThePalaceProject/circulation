@@ -215,13 +215,13 @@ class OPDS2API(BaseOPDSAPI[OPDS2ImporterSettings, OPDS2ImporterLibrarySettings])
         try:
             response = self._request("GET", url, allowed_response_codes=["2xx"])
         except BadResponseException as e:
-            response = e.response
+            exc_response = e.response
             self.log.error(
                 f"Could not authenticate the patron (authorization identifier: '{patron.authorization_identifier}'). "
-                f"Bad status code {response.status_code} from {url} expected 2xx.",
+                f"Bad status code {exc_response.status_code} from {url} expected 2xx.",
                 extra={
-                    "palace_response_content": response.content,
-                    "palace_response_status_code": response.status_code,
+                    "palace_response_content": exc_response.content,
+                    "palace_response_status_code": exc_response.status_code,
                     "palace_template_parameters": parameters,
                 },
             )

@@ -5,17 +5,17 @@ from collections.abc import Iterable
 from requests import Response
 
 from palace.manager.core.exceptions import BasePalaceException
-from palace.manager.util.http.exception import BadResponseException
+from palace.manager.util.http.exception import BadResponseException, HttpResponse
 from palace.manager.util.problem_detail import ProblemDetail
 
 
-class OverdriveResponseException(BadResponseException[Response]):
+class OverdriveResponseException(BadResponseException):
     def __init__(
         self,
         error_message: str,
         error_code: str | None,
         token: str | None,
-        response: Response,
+        response: Response | HttpResponse,
     ) -> None:
         super().__init__(
             url_or_service=response.url, message=error_message, response=response
@@ -50,7 +50,7 @@ class OverdriveModelError(BasePalaceException):
     ...
 
 
-class OverdriveValidationError(BadResponseException[Response], OverdriveModelError):
+class OverdriveValidationError(BadResponseException, OverdriveModelError):
     """
     Raise when we are unable to validate a response from Overdrive.
     """

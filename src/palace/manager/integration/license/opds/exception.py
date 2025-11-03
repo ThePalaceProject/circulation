@@ -2,11 +2,11 @@ from typing import Self
 
 from requests import Response
 
-from palace.manager.util.http.exception import BadResponseException
+from palace.manager.util.http.exception import BadResponseException, HttpResponse
 from palace.manager.util.problem_detail import ProblemDetail
 
 
-class OpdsResponseException(BadResponseException[Response]):
+class OpdsResponseException(BadResponseException):
     """
     OPDS in general, and ODL (and Readium LCP) in particular, often return errors as
     Problem Detail documents. This isn't always the case, but we try to use this information
@@ -19,7 +19,7 @@ class OpdsResponseException(BadResponseException[Response]):
         title: str,
         status: int,
         detail: str | None,
-        response: Response,
+        response: Response | HttpResponse,
     ) -> None:
         super().__init__(url_or_service=response.url, message=title, response=response)
         self.type = type
@@ -37,7 +37,7 @@ class OpdsResponseException(BadResponseException[Response]):
         )
 
     @classmethod
-    def from_response(cls, response: Response) -> Self | None:
+    def from_response(cls, response: HttpResponse | Response) -> Self | None:
         # Wrap the response if it is a problem detail document.
         #
         # DeMarque sends "application/api-problem+json", but the ODL spec says we should

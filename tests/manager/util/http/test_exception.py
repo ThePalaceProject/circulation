@@ -1,3 +1,6 @@
+import pickle
+
+from palace.manager.integration.license.opds.exception import OpdsResponseException
 from palace.manager.util.http.exception import (
     BadResponseException,
     RemoteIntegrationException,
@@ -90,7 +93,10 @@ class TestBadResponseException:
         )
 
         # the response gets set on the exception
-        assert exc.response is response
+        assert exc.response.status_code == response.status_code
+        assert exc.response.content == response.content
+        assert exc.response.headers == response.headers
+        assert exc.response.url == response.url
 
         # Turn the exception into a problem detail document, and it's full
         # of useful information.
@@ -161,7 +167,6 @@ class TestBadResponseException:
             "Bad response from http://url/: What even is this\n\nsome debug info"
             == document.debug_message
         )
-        assert exception.response is response
 
     def test_pickle_preserves_type(self):
         """Test that BadResponseException maintains its type when pickled/unpickled.
@@ -170,8 +175,6 @@ class TestBadResponseException:
         serialized for retry handling and lose their type information, appearing
         as IntegrationException instead of BadResponseException.
         """
-        import pickle
-
         response = MockRequestsResponse(401, content="Unauthorized")
         original_exc = BadResponseException(
             "http://url/", "Auth failed", response, debug_message="Debug info"
@@ -191,17 +194,13 @@ class TestBadResponseException:
         assert unpickled_exc.response.status_code == 401
         assert unpickled_exc.response.content == b"Unauthorized"
 
+        assert str(unpickled_exc) == str(original_exc)
+
     def test_pickle_preserves_subclass_type(self):
         """Test that subclasses of BadResponseException also preserve their type.
 
         We need to import a real subclass to test this properly.
         """
-        import pickle
-
-        from palace.manager.integration.license.opds.exception import (
-            OpdsResponseException,
-        )
-
         response = MockRequestsResponse(
             400, content="Bad Request", headers={"Content-Type": "application/json"}
         )
@@ -230,77 +229,7 @@ class TestBadResponseException:
         # Verify inherited attributes are preserved
         assert unpickled_exc.response.status_code == 400
 
-    def test_pickle_preserves_httpx_response_url(self):
-        """Test that httpx.Response URLs are preserved through pickling.
-
-        This is important because httpx.Response.url is accessed in integration
-        code for logging and debugging, and it must survive the Celery
-        serialization round-trip.
-        """
-        import pickle
-
-        import httpx
-
-        # Create an httpx.Response with a URL
-        request = httpx.Request("GET", "https://example.com/api/endpoint")
-        response = httpx.Response(
-            status_code=401,
-            content=b"Unauthorized",
-            headers={"Content-Type": "application/json"},
-            request=request,
-        )
-
-        original_exc = BadResponseException(
-            "https://example.com/api/endpoint",
-            "Auth failed",
-            response,
-            debug_message="Debug info",
-        )
-
-        # Verify the URL is accessible before pickling
-        assert str(original_exc.response.url) == "https://example.com/api/endpoint"
-
-        # Pickle and unpickle
-        pickled = pickle.dumps(original_exc)
-        unpickled_exc = pickle.loads(pickled)
-
-        # Verify the URL is still accessible after unpickling
-        # This would raise RuntimeError if the request wasn't properly restored
-        assert str(unpickled_exc.response.url) == "https://example.com/api/endpoint"
-        assert unpickled_exc.response.status_code == 401
-        assert unpickled_exc.response.content == b"Unauthorized"
-
-    def test_pickle_preserves_exception_string_representation(self):
-        """Test that str(exception) works correctly after pickling.
-
-        Exception.args must be preserved so that str(exc) and logging work
-        properly in Celery retry scenarios. Without args, super().__str__()
-        returns an empty string, breaking error messages in logs.
-        """
-        import pickle
-
-        response = MockRequestsResponse(401, content="Unauthorized")
-        original_exc = BadResponseException(
-            "http://url/", "Auth failed", response, debug_message="Debug info"
-        )
-
-        # Verify string representation before pickling
-        original_str = str(original_exc)
-        assert "Auth failed" in original_str
-        assert original_exc.args  # Should not be empty
-
-        # Pickle and unpickle
-        pickled = pickle.dumps(original_exc)
-        unpickled_exc = pickle.loads(pickled)
-
-        # Verify Exception.args is preserved
-        assert unpickled_exc.args == original_exc.args
-        assert unpickled_exc.args  # Should not be empty
-
-        # Verify string representation still works
-        unpickled_str = str(unpickled_exc)
-        assert unpickled_str == original_str
-        assert "Auth failed" in unpickled_str
+        assert str(unpickled_exc) == str(original_exc)
 
 
 class TestRequestTimedOut:
