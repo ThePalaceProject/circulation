@@ -14,7 +14,6 @@ from pydantic import (
     NonNegativeInt,
 )
 from pydantic.alias_generators import to_camel
-from requests import Response
 
 from palace.manager.api.circulation.exceptions import (
     AlreadyCheckedOut,
@@ -67,7 +66,7 @@ class ErrorResponse(BaseOverdriveModel, LoggerMixin):
     token: str | None = None
 
     @classmethod
-    def from_response(cls, response: Response | HttpResponse) -> Self | None:
+    def from_response(cls, response: HttpResponse) -> Self | None:
         """
         Parse the error response from the given response object.
 
@@ -86,7 +85,7 @@ class ErrorResponse(BaseOverdriveModel, LoggerMixin):
 
     @classmethod
     def raise_from_response(
-        cls, response: HttpResponse | Response, default_message: str | None = None
+        cls, response: HttpResponse, default_message: str | None = None
     ) -> None:
         """
         Raise an appropriate exception based on the Overdrive error code

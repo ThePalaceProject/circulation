@@ -1,9 +1,10 @@
 import json
 
 import pytest
+from httpx import Headers
 
 from palace.manager.integration.license.opds.exception import OpdsResponseException
-from tests.mocks.mock import MockRequestsResponse
+from palace.manager.util.http.exception import HttpResponse
 
 
 class TestOpdsResponseException:
@@ -49,7 +50,9 @@ class TestOpdsResponseException:
         headers = {}
         if type:
             headers["Content-Type"] = type
-        response = MockRequestsResponse(code, headers, data)
+        response = HttpResponse(
+            code, "https://test.com", Headers(headers), data, data.encode(), {}
+        )
         exception = OpdsResponseException.from_response(response)
 
         if none_response:

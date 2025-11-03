@@ -175,7 +175,9 @@ class TestBadResponseException:
         serialized for retry handling and lose their type information, appearing
         as IntegrationException instead of BadResponseException.
         """
-        response = MockRequestsResponse(401, content="Unauthorized")
+        response = MockRequestsResponse(
+            401, headers={"Content-Type": "application/json"}, content="Unauthorized"
+        )
         original_exc = BadResponseException(
             "http://url/", "Auth failed", response, debug_message="Debug info"
         )
@@ -184,7 +186,7 @@ class TestBadResponseException:
         pickled = pickle.dumps(original_exc)
         unpickled_exc = pickle.loads(pickled)
 
-        # Verify type is preserved (will fail with current code)
+        # Verify type is preserved
         assert type(unpickled_exc).__name__ == "BadResponseException"
         assert isinstance(unpickled_exc, BadResponseException)
 
@@ -193,6 +195,8 @@ class TestBadResponseException:
         assert unpickled_exc.debug_message == "Debug info"
         assert unpickled_exc.response.status_code == 401
         assert unpickled_exc.response.content == b"Unauthorized"
+        assert unpickled_exc.response.headers.get("Content-Type") == "application/json"
+        assert unpickled_exc.response.headers.get("content-type") == "application/json"
 
         assert str(unpickled_exc) == str(original_exc)
 

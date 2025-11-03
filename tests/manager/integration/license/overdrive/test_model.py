@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
+from httpx import Headers
 
 from palace.manager.api.circulation.exceptions import (
     AlreadyCheckedOut,
@@ -35,24 +36,29 @@ from palace.manager.integration.license.overdrive.model import (
     PatronInformation,
 )
 from palace.manager.util.datetime_helpers import utc_now
+from palace.manager.util.http.exception import HttpResponse
 from tests.fixtures.files import OverdriveFilesFixture
-from tests.mocks.mock import MockRequestsResponse
 
 
 class ErrorResponseFixture:
     def __init__(self) -> None: ...
 
-    def mock_response(
-        self, *, status_code: int = 500, content: str
-    ) -> MockRequestsResponse:
-        return MockRequestsResponse(status_code, content=content)
+    def mock_response(self, *, status_code: int = 500, content: str) -> HttpResponse:
+        return HttpResponse(
+            status_code,
+            url="http://example.com/api/endpoint",
+            headers=Headers(),
+            text=content,
+            content=content.encode("utf-8"),
+            extensions={},
+        )
 
     def mock_error(
         self,
         error_code: str,
         error_message: str | None = None,
         token: str | None = None,
-    ) -> MockRequestsResponse:
+    ) -> HttpResponse:
         error_response = ErrorResponse(
             error_code=error_code,
             message=error_message or "An error has occurred",
