@@ -2,7 +2,7 @@ from typing import Self
 
 from requests import Response
 
-from palace.manager.util.http.exception import BadResponseException, HttpResponse
+from palace.manager.util.http.exception import BadResponseException, ResponseData
 from palace.manager.util.problem_detail import ProblemDetail
 
 
@@ -19,7 +19,7 @@ class OpdsResponseException(BadResponseException):
         title: str,
         status: int,
         detail: str | None,
-        response: Response | HttpResponse,
+        response: Response | ResponseData,
     ) -> None:
         super().__init__(url_or_service=response.url, message=title, response=response)
         self.type = type
@@ -37,7 +37,7 @@ class OpdsResponseException(BadResponseException):
         )
 
     @classmethod
-    def from_response(cls, response: HttpResponse) -> Self | None:
+    def from_response(cls, response: ResponseData) -> Self | None:
         # Wrap the response if it is a problem detail document.
         #
         # DeMarque sends "application/api-problem+json", but the ODL spec says we should

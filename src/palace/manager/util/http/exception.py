@@ -67,13 +67,12 @@ class RemoteIntegrationException(IntegrationException, BaseProblemDetailExceptio
 
 
 @dataclass(frozen=True)
-class HttpResponse:
+class ResponseData:
     """
-    A simple dataclass representing an HTTP response.
+    A serializable data container for HTTP response information.
 
-    We use this so that we can have a common representation of HTTP responses
-    from different libraries (like requests and httpx) without depending on either
-    library throughout our codebase.
+    This provides a common representation of HTTP responses from different
+    libraries (requests, httpx) that can be safely pickled for Celery tasks.
     """
 
     status_code: int
@@ -122,7 +121,7 @@ class BadResponseException(RemoteIntegrationException):
         self,
         url_or_service: str,
         message: str,
-        response: httpx.Response | requests.Response | HttpResponse,
+        response: httpx.Response | requests.Response | ResponseData,
         debug_message: str | None = None,
         retry_count: int | None = None,
     ):
@@ -142,7 +141,7 @@ class BadResponseException(RemoteIntegrationException):
             )
 
         super().__init__(url_or_service, message, debug_message)
-        self.response = HttpResponse.from_response(response)
+        self.response = ResponseData.from_response(response)
         self.retry_count: int | None = retry_count
 
     @classmethod

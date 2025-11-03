@@ -4,7 +4,7 @@ import pytest
 from httpx import Headers
 
 from palace.manager.integration.license.opds.exception import OpdsResponseException
-from palace.manager.util.http.exception import HttpResponse
+from palace.manager.util.http.exception import ResponseData
 
 
 class TestOpdsResponseException:
@@ -50,7 +50,7 @@ class TestOpdsResponseException:
         headers = {}
         if type:
             headers["Content-Type"] = type
-        response = HttpResponse(
+        response = ResponseData(
             code, "https://test.com", Headers(headers), data, data.encode(), {}
         )
         exception = OpdsResponseException.from_response(response)

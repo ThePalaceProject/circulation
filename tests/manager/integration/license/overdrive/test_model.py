@@ -36,15 +36,15 @@ from palace.manager.integration.license.overdrive.model import (
     PatronInformation,
 )
 from palace.manager.util.datetime_helpers import utc_now
-from palace.manager.util.http.exception import HttpResponse
+from palace.manager.util.http.exception import ResponseData
 from tests.fixtures.files import OverdriveFilesFixture
 
 
 class ErrorResponseFixture:
     def __init__(self) -> None: ...
 
-    def mock_response(self, *, status_code: int = 500, content: str) -> HttpResponse:
-        return HttpResponse(
+    def mock_response(self, *, status_code: int = 500, content: str) -> ResponseData:
+        return ResponseData(
             status_code,
             url="http://example.com/api/endpoint",
             headers=Headers(),
@@ -58,7 +58,7 @@ class ErrorResponseFixture:
         error_code: str,
         error_message: str | None = None,
         token: str | None = None,
-    ) -> HttpResponse:
+    ) -> ResponseData:
         error_response = ErrorResponse(
             error_code=error_code,
             message=error_message or "An error has occurred",

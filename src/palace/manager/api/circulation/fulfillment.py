@@ -6,7 +6,7 @@ import requests
 from flask import Response
 
 from palace.manager.util.http.base import ResponseCodesTypes
-from palace.manager.util.http.exception import BadResponseException, HttpResponse
+from palace.manager.util.http.exception import BadResponseException, ResponseData
 from palace.manager.util.http.http import HTTP
 from palace.manager.util.log import LoggerMixin
 
@@ -112,7 +112,7 @@ class FetchFulfillment(UrlFulfillment, LoggerMixin):
         )
 
     def response(self) -> Response:
-        response: requests.Response | HttpResponse
+        response: requests.Response | ResponseData
         try:
             response = self.get(self.content_link)
         except BadResponseException as ex:

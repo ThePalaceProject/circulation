@@ -5,7 +5,7 @@ from collections.abc import Iterable
 from requests import Response
 
 from palace.manager.core.exceptions import BasePalaceException
-from palace.manager.util.http.exception import BadResponseException, HttpResponse
+from palace.manager.util.http.exception import BadResponseException, ResponseData
 from palace.manager.util.problem_detail import ProblemDetail
 
 
@@ -15,7 +15,7 @@ class OverdriveResponseException(BadResponseException):
         error_message: str,
         error_code: str | None,
         token: str | None,
-        response: Response | HttpResponse,
+        response: Response | ResponseData,
     ) -> None:
         super().__init__(
             url_or_service=response.url, message=error_message, response=response
