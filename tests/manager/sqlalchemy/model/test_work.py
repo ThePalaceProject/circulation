@@ -1661,6 +1661,106 @@ class TestWork:
         assert work.active_license_pool() == lp1
         assert work.active_license_pool(library=l2) == lp2
 
+    def test_active_license_pool_with_availability_comparison(
+        self, db: DatabaseTransactionFixture
+    ):
+        """Test that active_license_pool correctly selects the pool with best availability."""
+        # Create a work with three non-open-access license pools
+        work = db.work(with_license_pool=True)
+        [pool1] = work.license_pools
+
+        edition2, pool2 = db.edition(with_license_pool=True)
+        work.license_pools.append(pool2)
+
+        edition3, pool3 = db.edition(with_license_pool=True)
+        work.license_pools.append(pool3)
+
+        # Set up all pools as non-open-access with different availability
+        for pool in [pool1, pool2, pool3]:
+            pool.open_access = False
+            pool.unlimited_access = False
+            pool.licenses_owned = 10
+
+        # pool1 has 2 available
+        pool1.licenses_available = 2
+        pool1.licenses_reserved = 0
+
+        # pool2 has 5 available (should win)
+        pool2.licenses_available = 5
+        pool2.licenses_reserved = 0
+
+        # pool3 has 3 available
+        pool3.licenses_available = 3
+        pool3.licenses_reserved = 0
+
+        # The pool with the most availability should be selected
+        assert pool2 == work.active_license_pool()
+
+        # If we increase pool3's availability, it should become active
+        pool3.licenses_available = 7
+        assert pool3 == work.active_license_pool()
+
+        # If a pool has unlimited_access, it should be preferred over regular pools
+        pool1.unlimited_access = True
+        assert pool1 == work.active_license_pool()
+
+        # But open_access always wins
+        pool2.open_access = True
+        assert pool2 == work.active_license_pool()
+
+    def test_active_license_pool_filters_by_library(
+        self, db: DatabaseTransactionFixture
+    ):
+        """Test that when a library is provided, only pools from that library's collections are considered."""
+        lib1 = db.library()
+        lib2 = db.library()
+
+        coll1 = db.collection()
+        coll2 = db.collection()
+
+        coll1.associated_libraries = [lib1]
+        coll2.associated_libraries = [lib2]
+
+        work = db.work(presentation_edition=db.edition())
+
+        # Create two pools in different collections
+        pool1 = db.licensepool(
+            work.presentation_edition,
+            collection=coll1,
+            open_access=False,
+        )
+        pool1.licenses_owned = 5
+        pool1.licenses_available = 5
+
+        pool2 = db.licensepool(
+            work.presentation_edition,
+            collection=coll2,
+            open_access=False,
+        )
+        pool2.licenses_owned = 10
+        pool2.licenses_available = 10
+
+        pool1.calculate_work()
+        pool2.calculate_work()
+        db.session.commit()
+
+        # Without a library, the pool with more availability should be selected
+        assert work.active_license_pool() == pool2
+
+        # When scoped to lib1, only pool1 should be considered
+        assert work.active_license_pool(library=lib1) == pool1
+
+        # When scoped to lib2, only pool2 should be considered
+        assert work.active_license_pool(library=lib2) == pool2
+
+        # Make pool1 open_access - it should win for lib1 but not affect lib2
+        pool1.open_access = True
+        assert work.active_license_pool(library=lib1) == pool1
+        assert work.active_license_pool(library=lib2) == pool2
+
+        # Without library scope, open_access pool1 should win
+        assert work.active_license_pool() == pool1
+
     def test_delete_work(self, db: DatabaseTransactionFixture):
         # Search mock
         class MockSearchIndex:
