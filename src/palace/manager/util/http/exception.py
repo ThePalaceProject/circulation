@@ -1,13 +1,17 @@
 from __future__ import annotations
 
-from typing import Self
+import json
+from collections.abc import Mapping
+from dataclasses import dataclass
+from typing import Any, Self
 from urllib.parse import urlparse
 
 import httpx
 import requests
 from flask_babel import lazy_gettext as _
+from httpx import Headers
 
-from palace.manager.core.exceptions import IntegrationException
+from palace.manager.core.exceptions import IntegrationException, PalaceValueError
 from palace.manager.core.problem_details import INTEGRATION_ERROR
 from palace.manager.util.problem_detail import BaseProblemDetailException, ProblemDetail
 
@@ -62,9 +66,45 @@ class RemoteIntegrationException(IntegrationException, BaseProblemDetailExceptio
         return str(self)
 
 
-class BadResponseException[T: (requests.Response, httpx.Response)](
-    RemoteIntegrationException,
-):
+@dataclass(frozen=True)
+class ResponseData:
+    """
+    A serializable data container for HTTP response information.
+
+    This provides a common representation of HTTP responses from different
+    libraries (requests, httpx) that can be safely pickled for Celery tasks.
+    """
+
+    status_code: int
+    url: str
+    headers: Headers
+    text: str
+    content: bytes
+    extensions: Mapping[str, Any]
+
+    def json(self) -> Any:
+        return json.loads(self.text)
+
+    @classmethod
+    def from_response(cls, response: requests.Response | httpx.Response | Self) -> Self:
+        if isinstance(response, cls):
+            return response
+
+        extensions = (
+            {} if isinstance(response, requests.Response) else response.extensions
+        )
+
+        return cls(
+            status_code=response.status_code,
+            url=str(response.url),
+            headers=Headers(response.headers),
+            text=response.text,
+            content=response.content,
+            extensions=extensions,
+        )
+
+
+class BadResponseException(RemoteIntegrationException):
     """The request seemingly went okay, but we got a bad response."""
 
     title = _("Bad response")
@@ -81,7 +121,7 @@ class BadResponseException[T: (requests.Response, httpx.Response)](
         self,
         url_or_service: str,
         message: str,
-        response: T,
+        response: httpx.Response | requests.Response | ResponseData,
         debug_message: str | None = None,
         retry_count: int | None = None,
     ):
@@ -101,11 +141,13 @@ class BadResponseException[T: (requests.Response, httpx.Response)](
             )
 
         super().__init__(url_or_service, message, debug_message)
-        self.response: T = response
+        self.response = ResponseData.from_response(response)
         self.retry_count: int | None = retry_count
 
     @classmethod
-    def bad_status_code(cls, url: str, response: T) -> Self:
+    def bad_status_code(
+        cls, url: str, response: httpx.Response | requests.Response
+    ) -> Self:
         """The response is bad because the status code is wrong."""
         message = cls.BAD_STATUS_CODE_MESSAGE % response.status_code
         return cls(
@@ -113,6 +155,22 @@ class BadResponseException[T: (requests.Response, httpx.Response)](
             message,
             response,
         )
+
+    def __getstate__(self) -> dict[str, Any]:
+        return {"dict": self.__dict__, "args": self.args}
+
+    def __setstate__(self, state: dict[str, Any] | None) -> None:
+        if state is None:
+            raise PalaceValueError(
+                "Cannot deserialize BadResponseException with no state"
+            )
+
+        self.__dict__.update(state["dict"])
+        self.args = state["args"]
+
+    def __reduce__(self) -> tuple[Any, ...]:
+        state = self.__getstate__()
+        return self.__class__.__new__, (self.__class__,), state
 
 
 class RequestNetworkException(RemoteIntegrationException):

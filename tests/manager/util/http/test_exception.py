@@ -1,8 +1,16 @@
+import json
+import pickle
+
+import httpx
+from httpx import Headers
+
+from palace.manager.integration.license.opds.exception import OpdsResponseException
 from palace.manager.util.http.exception import (
     BadResponseException,
     RemoteIntegrationException,
     RequestNetworkException,
     RequestTimedOut,
+    ResponseData,
 )
 from tests.mocks.mock import MockRequestsResponse
 
@@ -90,7 +98,10 @@ class TestBadResponseException:
         )
 
         # the response gets set on the exception
-        assert exc.response is response
+        assert exc.response.status_code == response.status_code
+        assert exc.response.content == response.content
+        assert exc.response.headers == response.headers
+        assert exc.response.url == response.url
 
         # Turn the exception into a problem detail document, and it's full
         # of useful information.
@@ -161,7 +172,73 @@ class TestBadResponseException:
             "Bad response from http://url/: What even is this\n\nsome debug info"
             == document.debug_message
         )
-        assert exception.response is response
+
+    def test_pickle_preserves_type(self):
+        """Test that BadResponseException maintains its type when pickled/unpickled.
+
+        This test reproduces the issue seen in Celery where exceptions are
+        serialized for retry handling and lose their type information, appearing
+        as IntegrationException instead of BadResponseException.
+        """
+        response = MockRequestsResponse(
+            401, headers={"Content-Type": "application/json"}, content="Unauthorized"
+        )
+        original_exc = BadResponseException(
+            "http://url/", "Auth failed", response, debug_message="Debug info"
+        )
+
+        # Pickle and unpickle (simulates what Celery does during autoretry)
+        pickled = pickle.dumps(original_exc)
+        unpickled_exc = pickle.loads(pickled)
+
+        # Verify type is preserved
+        assert type(unpickled_exc).__name__ == "BadResponseException"
+        assert isinstance(unpickled_exc, BadResponseException)
+
+        # Verify attributes are preserved
+        assert unpickled_exc.message == "Auth failed"
+        assert unpickled_exc.debug_message == "Debug info"
+        assert unpickled_exc.response.status_code == 401
+        assert unpickled_exc.response.content == b"Unauthorized"
+        assert unpickled_exc.response.headers.get("Content-Type") == "application/json"
+        assert unpickled_exc.response.headers.get("content-type") == "application/json"
+
+        assert str(unpickled_exc) == str(original_exc)
+
+    def test_pickle_preserves_subclass_type(self):
+        """Test that subclasses of BadResponseException also preserve their type.
+
+        We need to import a real subclass to test this properly.
+        """
+        response = MockRequestsResponse(
+            400, content="Bad Request", headers={"Content-Type": "application/json"}
+        )
+        original_exc = OpdsResponseException(
+            type="http://example.com/problem",
+            title="Test Error",
+            status=400,
+            detail="Something went wrong",
+            response=response,
+        )
+
+        # Pickle and unpickle
+        pickled = pickle.dumps(original_exc)
+        unpickled_exc = pickle.loads(pickled)
+
+        # Verify the subclass type is preserved
+        assert type(unpickled_exc).__name__ == "OpdsResponseException"
+        assert isinstance(unpickled_exc, OpdsResponseException)
+
+        # Verify subclass-specific attributes are preserved
+        assert unpickled_exc.type == "http://example.com/problem"
+        assert unpickled_exc.title == "Test Error"
+        assert unpickled_exc.status == 400
+        assert unpickled_exc.detail == "Something went wrong"
+
+        # Verify inherited attributes are preserved
+        assert unpickled_exc.response.status_code == 400
+
+        assert str(unpickled_exc) == str(original_exc)
 
 
 class TestRequestTimedOut:
@@ -211,3 +288,218 @@ class TestRequestNetworkException:
             detail.debug_message
             == "Network error contacting http://url/: Colossal failure"
         )
+
+
+class TestResponseData:
+    """Tests for the TestResponseData dataclass."""
+
+    def test_basic_attributes(self):
+        """Test that HttpResponse correctly stores basic attributes."""
+        response = ResponseData(
+            status_code=200,
+            url="http://example.com",
+            headers={"Content-Type": "text/html"},
+            text="Hello World",
+            content=b"Hello World",
+            extensions={"custom": "value"},
+        )
+
+        assert response.status_code == 200
+        assert response.url == "http://example.com"
+        assert response.headers["Content-Type"] == "text/html"
+        assert response.text == "Hello World"
+        assert response.content == b"Hello World"
+        assert response.extensions == {"custom": "value"}
+
+    def test_json_method(self):
+        """Test that the json() method correctly parses JSON content."""
+        json_data = {"key": "value", "number": 42, "nested": {"foo": "bar"}}
+        response = ResponseData(
+            status_code=200,
+            url="http://api.example.com",
+            headers={"Content-Type": "application/json"},
+            text=json.dumps(json_data),
+            content=json.dumps(json_data).encode("utf-8"),
+            extensions={},
+        )
+
+        parsed = response.json()
+        assert parsed == json_data
+        assert parsed["key"] == "value"
+        assert parsed["number"] == 42
+        assert parsed["nested"]["foo"] == "bar"
+
+    def test_json_method_invalid_json(self):
+        """Test that json() raises JSONDecodeError for invalid JSON."""
+        response = ResponseData(
+            status_code=200,
+            url="http://example.com",
+            headers={"Content-Type": "text/plain"},
+            text="Not valid JSON",
+            content=b"Not valid JSON",
+            extensions={},
+        )
+
+        # Should raise JSONDecodeError when trying to parse invalid JSON
+        try:
+            response.json()
+            assert False, "Should have raised JSONDecodeError"
+        except json.JSONDecodeError:
+            pass  # Expected
+
+    def test_from_response_with_requests(self):
+        """Test from_response() with a requests.Response object."""
+        # Create a mock requests.Response
+        mock_response = MockRequestsResponse(
+            status_code=404,
+            headers={"X-Custom-Header": "custom-value"},
+            content="Page not found",
+            url="http://example.com/missing",
+        )
+
+        http_response = ResponseData.from_response(mock_response)
+
+        assert http_response.status_code == 404
+        assert http_response.url == "http://example.com/missing"
+        assert http_response.headers["X-Custom-Header"] == "custom-value"
+        assert http_response.text == "Page not found"
+        assert http_response.content == b"Page not found"
+        # requests.Response doesn't have extensions, so it should be empty
+        assert http_response.extensions == {}
+
+    def test_from_response_with_httpx(self):
+        """Test from_response() with an httpx.Response object."""
+        # Create a mock httpx.Response
+        request = httpx.Request("GET", "http://example.com/test")
+        httpx_response = httpx.Response(
+            status_code=201,
+            headers={"Location": "http://example.com/created/123"},
+            content=b'{"id": 123}',
+            request=request,
+            extensions={"http_version": b"HTTP/1.1"},
+        )
+
+        http_response = ResponseData.from_response(httpx_response)
+
+        assert http_response.status_code == 201
+        assert http_response.url == "http://example.com/test"
+        # httpx normalizes headers to lowercase
+        assert (
+            http_response.headers.get("location") == "http://example.com/created/123"
+            or http_response.headers.get("Location") == "http://example.com/created/123"
+        )
+        assert http_response.text == '{"id": 123}'
+        assert http_response.content == b'{"id": 123}'
+        # httpx.Response has extensions
+        assert http_response.extensions == {"http_version": b"HTTP/1.1"}
+
+    def test_from_response_with_self(self):
+        """Test that from_response() returns self when given an HttpResponse."""
+        original = ResponseData(
+            status_code=200,
+            url="http://example.com",
+            headers={"Content-Type": "text/plain"},
+            text="Original",
+            content=b"Original",
+            extensions={"test": True},
+        )
+
+        result = ResponseData.from_response(original)
+
+        # Should return the exact same object (identity check)
+        assert result is original
+
+    def test_from_response_with_binary_content(self):
+        """Test that binary content is preserved correctly."""
+        binary_data = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR"  # PNG file header
+
+        mock_response = MockRequestsResponse(
+            status_code=200,
+            headers={"Content-Type": "image/png"},
+            content=binary_data,
+        )
+
+        http_response = ResponseData.from_response(mock_response)
+
+        assert http_response.content == binary_data
+        # Text representation might vary depending on encoding handling
+        assert isinstance(http_response.text, str)
+
+    def test_from_response_with_unicode_content(self):
+        """Test that Unicode content is handled correctly."""
+        unicode_text = "Hello 世界 🌍"
+
+        mock_response = MockRequestsResponse(
+            status_code=200,
+            headers={"Content-Type": "text/plain; charset=utf-8"},
+            content=unicode_text,
+        )
+
+        http_response = ResponseData.from_response(mock_response)
+
+        assert http_response.text == unicode_text
+        assert http_response.content == unicode_text.encode("utf-8")
+
+    def test_pickle_serialization(self):
+        """Test that HttpResponse can be pickled and unpickled correctly."""
+        original = ResponseData(
+            status_code=503,
+            url="http://api.example.com/endpoint",
+            headers=Headers({"Retry-After": "60", "Content-Type": "application/json"}),
+            text='{"error": "Service Unavailable"}',
+            content=b'{"error": "Service Unavailable"}',
+            extensions={"retry_count": 3},
+        )
+
+        # Pickle and unpickle
+        pickled = pickle.dumps(original)
+        unpickled = pickle.loads(pickled)
+
+        # Verify all attributes are preserved
+        assert unpickled.status_code == original.status_code
+        assert unpickled.url == original.url
+        assert unpickled.headers == original.headers
+        assert unpickled.text == original.text
+        assert unpickled.content == original.content
+        assert unpickled.extensions == original.extensions
+
+        # Verify json() method still works
+        assert unpickled.json() == {"error": "Service Unavailable"}
+
+    def test_empty_response(self):
+        """Test handling of empty responses."""
+        response = ResponseData(
+            status_code=204,  # No Content
+            url="http://example.com/empty",
+            headers={},
+            text="",
+            content=b"",
+            extensions={},
+        )
+
+        assert response.status_code == 204
+        assert response.text == ""
+        assert response.content == b""
+        assert len(response.headers) == 0
+        assert response.extensions == {}
+
+    def test_headers_case_insensitive_access(self):
+        """Test that headers can be accessed case-insensitively."""
+        from httpx import Headers
+
+        # Create response with Headers object
+        headers = Headers({"Content-Type": "application/json", "X-Custom": "value"})
+        response = ResponseData(
+            status_code=200,
+            url="http://example.com",
+            headers=headers,
+            text="test",
+            content=b"test",
+            extensions={},
+        )
+
+        # httpx.Headers provides case-insensitive access
+        assert response.headers.get("content-type") == "application/json"
+        assert response.headers.get("Content-Type") == "application/json"
+        assert response.headers.get("x-custom") == "value"
+        assert response.headers.get("X-Custom") == "value"

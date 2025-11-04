@@ -115,11 +115,11 @@ class FetchFulfillment(UrlFulfillment, LoggerMixin):
         try:
             response = self.get(self.content_link)
         except BadResponseException as ex:
-            response = ex.response
+            exc_response = ex.response
             self.log.exception(
                 f"Error fulfilling loan. Bad response from: {self.content_link}. "
-                f"Status code: {response.status_code}. "
-                f"Response: {response.text}."
+                f"Status code: {exc_response.status_code}. "
+                f"Response: {exc_response.text}."
             )
             raise
 
