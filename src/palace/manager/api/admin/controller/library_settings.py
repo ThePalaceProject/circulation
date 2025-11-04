@@ -11,7 +11,7 @@ from flask import Response
 from flask_babel import lazy_gettext as _
 from PIL import Image, UnidentifiedImageError
 from PIL.Image import Resampling
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from werkzeug.datastructures import FileStorage
 
 from palace.manager.api.admin.announcement_list_validator import (
@@ -207,7 +207,6 @@ class LibrarySettingsController(AdminPermissionsControllerMixin):
             ]
         }
         """
-
         try:
             data = flask.request.json
             if not data or "libraries" not in data:
@@ -228,29 +227,34 @@ class LibrarySettingsController(AdminPermissionsControllerMixin):
             created = []
             skipped = []
             errors = []
-
+            tx = self._db
             for idx, library_data in enumerate(libraries_data):
-                try:
-                    library_import_info = LibraryImportInfo(**library_data)
-                    result = self._import_single_library(library_import_info)
-                    if result["is_new"]:
-                        created.append(result)
-                    else:
-                        skipped.append(result)
-                except ProblemDetailException as e:
-                    errors.append(
-                        {
-                            "index": idx,
-                            "data": library_data,
-                            "error": str(e.problem_detail.detail),
-                        }
-                    )
-                except Exception as e:
-                    errors.append({"index": idx, "data": library_data, "error": str(e)})
+                with tx.begin_nested() as nested_tx:
+                    try:
+
+                        library_import_info = LibraryImportInfo(**library_data)
+                        result = self._import_single_library(library_import_info)
+                        if result["is_new"]:
+                            created.append(result)
+                        else:
+                            skipped.append(result)
+                    except ProblemDetailException as e:
+                        nested_tx.rollback()
+                        errors.append(
+                            {
+                                "index": idx,
+                                "data": library_data,
+                                "error": str(e.problem_detail.detail),
+                            }
+                        )
+                    except ValidationError as e:
+                        nested_tx.rollback()
+                        errors.append(
+                            {"index": idx, "data": library_data, "error": str(e)}
+                        )
 
             # Commit if there were any successful imports
             if created:
-                self._db.commit()
                 site_configuration_has_changed(self._db)
 
             return Response(
@@ -269,15 +273,7 @@ class LibrarySettingsController(AdminPermissionsControllerMixin):
             )
 
         except ProblemDetailException as e:
-            self._db.rollback()
             return e.problem_detail
-        except Exception as e:
-            self._db.rollback()
-            raise ProblemDetailException(
-                problem_detail=INCOMPLETE_CONFIGURATION.detailed(
-                    f"Error importing libraries: {str(e)}"
-                )
-            )
 
     def _import_single_library(
         self, library_import_info: LibraryImportInfo

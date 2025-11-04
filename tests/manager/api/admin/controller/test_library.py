@@ -1031,6 +1031,48 @@ class TestLibrarySettings:
             assert len(result["errors"]) == 1
             assert "Invalid settings" in result["errors"][0]["error"]
 
+    def test_import_libraries_invalid_followed_by_valid(
+        self,
+        flask_app_fixture: FlaskAppFixture,
+        controller: LibrarySettingsController,
+        db: DatabaseTransactionFixture,
+    ):
+        """Test that invalid email format is caught."""
+        libraries_data = {
+            "libraries": [
+                {
+                    "name": "Invalid Library",
+                    "short_name": "invalid",
+                    "website_url": "https://example.com",
+                    "patron_support_email": "not-an-email",
+                },
+                {
+                    "name": "Valid Library",
+                    "short_name": "valid",
+                    "website_url": "https://example.com",
+                    "patron_support_email": "email@example.com",
+                },
+            ]
+        }
+
+        with flask_app_fixture.test_request_context_system_admin(
+            "/", method="POST", json=libraries_data
+        ):
+            response = controller.import_libraries()
+            assert response.status_code == 207  # Multi-Status
+            assert isinstance(response.json, dict)
+            result = response.json
+
+            assert len(result["created"]) == 1
+            assert len(result["errors"]) == 1
+            assert "Invalid settings" in result["errors"][0]["error"]
+
+            # The invalid library should not be in the database.
+            controller.check_short_name_unique(library=None, short_name="invalid")
+            # the valid library should be
+            with pytest.raises(ProblemDetailException):
+                controller.check_short_name_unique(library=None, short_name="valid")
+
     def test_import_libraries_invalid_url(
         self,
         flask_app_fixture: FlaskAppFixture,
