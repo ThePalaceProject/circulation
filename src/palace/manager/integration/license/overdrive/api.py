@@ -915,7 +915,7 @@ class OverdriveAPI(
                 allowed_response_codes=["2xx", 401],
             )
         except BadResponseException as e:
-            ErrorResponse.raise_from_response(e.response, e.message)
+            ErrorResponse.raise_from_response_data(e.response, e.message)
         if response.status_code == 401:
             if exception_on_401:
                 # This is our second try. Give up.
@@ -1037,7 +1037,7 @@ class OverdriveAPI(
                 allowed_response_codes=["2xx"],
             )
         except BadResponseException as e:
-            error = ErrorResponse.from_response(e.response)
+            error = ErrorResponse.from_response_data(e.response)
             error_code = error.error_code if error and error.error_code else "Unknown"
             description = (
                 error.message

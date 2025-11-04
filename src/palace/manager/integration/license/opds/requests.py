@@ -88,7 +88,7 @@ class BaseOpdsHttpRequest(ABC):
                 return response
             return parser(response.content)
         except BadResponseException as e:
-            if opds_exception := OpdsResponseException.from_response(e.response):
+            if opds_exception := OpdsResponseException.from_response_data(e.response):
                 raise opds_exception from e
             raise
 

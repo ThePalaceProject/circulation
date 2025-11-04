@@ -37,7 +37,7 @@ class OpdsResponseException(BadResponseException):
         )
 
     @classmethod
-    def from_response(cls, response: ResponseData) -> Self | None:
+    def from_response_data(cls, response: ResponseData) -> Self | None:
         # Wrap the response if it is a problem detail document.
         #
         # DeMarque sends "application/api-problem+json", but the ODL spec says we should

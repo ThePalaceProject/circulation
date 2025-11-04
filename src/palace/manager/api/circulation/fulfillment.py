@@ -6,7 +6,7 @@ import requests
 from flask import Response
 
 from palace.manager.util.http.base import ResponseCodesTypes
-from palace.manager.util.http.exception import BadResponseException, ResponseData
+from palace.manager.util.http.exception import BadResponseException
 from palace.manager.util.http.http import HTTP
 from palace.manager.util.log import LoggerMixin
 
@@ -112,15 +112,14 @@ class FetchFulfillment(UrlFulfillment, LoggerMixin):
         )
 
     def response(self) -> Response:
-        response: requests.Response | ResponseData
         try:
             response = self.get(self.content_link)
         except BadResponseException as ex:
-            response = ex.response
+            exc_response = ex.response
             self.log.exception(
                 f"Error fulfilling loan. Bad response from: {self.content_link}. "
-                f"Status code: {response.status_code}. "
-                f"Response: {response.text}."
+                f"Status code: {exc_response.status_code}. "
+                f"Response: {exc_response.text}."
             )
             raise
 

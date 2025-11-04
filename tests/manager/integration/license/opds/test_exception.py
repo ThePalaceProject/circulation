@@ -44,7 +44,7 @@ class TestOpdsResponseException:
             ),
         ],
     )
-    def test_from_response(
+    def test_from_response_data(
         self, code: int, type: str, data: str, none_response: bool
     ) -> None:
         headers = {}
@@ -53,7 +53,7 @@ class TestOpdsResponseException:
         response = ResponseData(
             code, "https://test.com", Headers(headers), data, data.encode(), {}
         )
-        exception = OpdsResponseException.from_response(response)
+        exception = OpdsResponseException.from_response_data(response)
 
         if none_response:
             assert exception is None

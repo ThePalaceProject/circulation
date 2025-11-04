@@ -83,7 +83,7 @@ class TestErrorResponse:
         with pytest.raises(
             OverdriveResponseException, match="default message"
         ) as exc_info:
-            ErrorResponse.raise_from_response(response, "default message")
+            ErrorResponse.raise_from_response_data(response, "default message")
         assert exc_info.value.error_code is None
         assert exc_info.value.error_message == "default message"
         assert exc_info.value.response.status_code == response.status_code
@@ -95,21 +95,21 @@ class TestErrorResponse:
 
         # If no default message is supplied, we should get a generic message.
         with pytest.raises(OverdriveResponseException, match="Unknown Overdrive error"):
-            ErrorResponse.raise_from_response(response)
+            ErrorResponse.raise_from_response_data(response)
 
         # Malformed error document should also raise a generic OverdriveResponseException.
         response = error_response_fixture.mock_response(
             content=json.dumps({"errorCode": ["Complete nonsense", 12, 52]})
         )
         with pytest.raises(OverdriveResponseException, match="Unknown Overdrive error"):
-            ErrorResponse.raise_from_response(response)
+            ErrorResponse.raise_from_response_data(response)
 
     def test_checkout_errors(
         self, error_response_fixture: ErrorResponseFixture
     ) -> None:
         # Errors not specifically known become generic OverdriveResponseException exceptions.
         with pytest.raises(OverdriveResponseException, match="Weird error") as exc_info:
-            ErrorResponse.raise_from_response(
+            ErrorResponse.raise_from_response_data(
                 error_response_fixture.mock_error("WeirdError", "Weird error", "token")
             )
         assert exc_info.value.error_code == "WeirdError"
@@ -118,24 +118,24 @@ class TestErrorResponse:
 
         # Some known errors become specific subclasses of CannotLoan.
         with pytest.raises(PatronLoanLimitReached):
-            ErrorResponse.raise_from_response(
+            ErrorResponse.raise_from_response_data(
                 error_response_fixture.mock_error("PatronHasExceededCheckoutLimit")
             )
 
         with pytest.raises(PatronLoanLimitReached):
-            ErrorResponse.raise_from_response(
+            ErrorResponse.raise_from_response_data(
                 error_response_fixture.mock_error(
                     "PatronHasExceededCheckoutLimit_ForCPC"
                 )
             )
 
         with pytest.raises(NoAvailableCopies):
-            ErrorResponse.raise_from_response(
+            ErrorResponse.raise_from_response_data(
                 error_response_fixture.mock_error("NoCopiesAvailable")
             )
 
         with pytest.raises(AlreadyCheckedOut):
-            ErrorResponse.raise_from_response(
+            ErrorResponse.raise_from_response_data(
                 error_response_fixture.mock_error("TitleAlreadyCheckedOut")
             )
 
@@ -144,15 +144,15 @@ class TestErrorResponse:
     ):
         # Some error messages result in specific CirculationExceptions.
         with pytest.raises(CannotRenew):
-            ErrorResponse.raise_from_response(
+            ErrorResponse.raise_from_response_data(
                 error_response_fixture.mock_error("NotWithinRenewalWindow")
             )
         with pytest.raises(PatronHoldLimitReached):
-            ErrorResponse.raise_from_response(
+            ErrorResponse.raise_from_response_data(
                 error_response_fixture.mock_error("PatronExceededHoldLimit")
             )
         with pytest.raises(AlreadyOnHold):
-            ErrorResponse.raise_from_response(
+            ErrorResponse.raise_from_response_data(
                 error_response_fixture.mock_error("AlreadyOnWaitList")
             )
 
