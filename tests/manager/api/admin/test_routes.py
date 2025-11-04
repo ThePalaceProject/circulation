@@ -6,7 +6,6 @@ from unittest.mock import MagicMock
 
 import flask
 import pytest
-from fixtures.flask import FlaskAppFixture
 from flask import Response
 from werkzeug.exceptions import MethodNotAllowed
 
@@ -26,6 +25,7 @@ from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailExcep
 from tests.fixtures.api_controller import ControllerFixture
 from tests.fixtures.api_routes import MockApp, MockController, MockManager
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.flask import FlaskAppFixture
 from tests.fixtures.services import ServicesFixture
 from tests.mocks.circulation import MockCirculationManager
 

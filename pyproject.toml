@@ -236,6 +236,7 @@ module = [
     "feedparser",
     "firebase_admin.*",
     "flask_babel",
+    "flask_httpauth",
     "fuzzywuzzy",
     "google.auth",
     "greenlet",
