@@ -5,7 +5,6 @@ from __future__ import annotations
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
-from mocks.overdrive import MockOverdriveAPI
 
 from palace.manager.celery.tasks import overdrive
 from palace.manager.celery.tasks.overdrive import import_collection_group
@@ -28,6 +27,7 @@ from tests.fixtures.celery import ApplyTaskFixture, CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.overdrive import OverdriveAPIFixture
 from tests.fixtures.redis import RedisFixture
+from tests.mocks.overdrive import MockOverdriveAPI
 
 
 class OverdriveImportFixture:
@@ -316,7 +316,7 @@ class TestImportCollection:
         assert result["key"]
 
     @patch("palace.manager.celery.tasks.overdrive.OverdriveImporter")
-    def test_import_collection_with_parent_identifierst(
+    def test_import_collection_with_parent_identifiers_dict(
         self,
         mock_importer_class: MagicMock,
         overdrive_import_fixture: OverdriveImportFixture,
@@ -389,38 +389,45 @@ class TestImportCollectionGroup:
     """Tests for the import_collection_group Celery task."""
 
     @staticmethod
-    def setup_task_signatures(
-        mock_import_collection: MagicMock, mock_cleanup_chord: MagicMock
-    ) -> tuple[Mock, Mock]:
-        """Set up mock task signatures for testing.
+    def setup_chain_mocks(
+        mock_import_collection: MagicMock,
+        mock_cleanup_chord: MagicMock,
+        mock_chain: MagicMock,
+    ) -> Mock:
+        """Set up mock chain and task signatures for testing.
 
         :param mock_import_collection: Mock for import_collection task
         :param mock_cleanup_chord: Mock for cleanup chord task
-        :return: Tuple of (import_sig, cleanup_sig)
+        :param mock_chain: Mock for chain function
+        :return: Mock chain result
         """
         mock_import_sig = Mock()
-        mock_import_sig.apply_async = Mock()
         mock_import_collection.s.return_value = mock_import_sig
 
         mock_cleanup_sig = Mock()
         mock_cleanup_chord.s.return_value = mock_cleanup_sig
 
-        return mock_import_sig, mock_cleanup_sig
+        mock_chain_result = Mock()
+        mock_chain.return_value = mock_chain_result
 
+        return mock_chain_result
+
+    @patch("palace.manager.celery.tasks.overdrive.chain")
     @patch("palace.manager.celery.tasks.overdrive.import_collection")
     @patch("palace.manager.celery.tasks.overdrive.import_children_and_cleanup_chord")
     def test_import_collection_group_basic(
         self,
         mock_cleanup_chord: MagicMock,
         mock_import_collection: MagicMock,
+        mock_chain: MagicMock,
         overdrive_import_fixture: OverdriveImportFixture,
     ):
         """Test import_collection_group chains parent and children import."""
         collection = overdrive_import_fixture.collection
 
-        # Set up mock task signatures
-        mock_import_sig, _ = self.setup_task_signatures(
-            mock_import_collection, mock_cleanup_chord
+        # Set up chain mocks
+        mock_chain_result = self.setup_chain_mocks(
+            mock_import_collection, mock_cleanup_chord, mock_chain
         )
 
         # Run the task
@@ -437,24 +444,32 @@ class TestImportCollectionGroup:
             start_time=None,
         )
 
-        # Verify it was applied with link to cleanup chord
-        mock_import_sig.apply_async.assert_called_once()
-        call_kwargs = mock_import_sig.apply_async.call_args.kwargs
-        assert "link" in call_kwargs
+        # Verify cleanup chord signature was created
+        mock_cleanup_chord.s.assert_called_once_with(
+            collection_id=collection.id,
+            import_all=False,
+            modified_since=None,
+        )
 
+        # Verify chain was created and called
+        assert mock_chain.call_count == 1
+        mock_chain_result.assert_called_once()
+
+    @patch("palace.manager.celery.tasks.overdrive.chain")
     @patch("palace.manager.celery.tasks.overdrive.import_collection")
     @patch("palace.manager.celery.tasks.overdrive.import_children_and_cleanup_chord")
     def test_import_collection_group_with_import_all(
         self,
         mock_cleanup_chord: MagicMock,
         mock_import_collection: MagicMock,
+        mock_chain: MagicMock,
         overdrive_import_fixture: OverdriveImportFixture,
     ):
         """Test import_collection_group with import_all flag."""
         collection = overdrive_import_fixture.collection
 
-        # Set up mock task signatures
-        self.setup_task_signatures(mock_import_collection, mock_cleanup_chord)
+        # Set up chain mocks
+        self.setup_chain_mocks(mock_import_collection, mock_cleanup_chord, mock_chain)
 
         # Run the task with import_all=True
         overdrive.import_collection_group.delay(collection.id, import_all=True).wait()
@@ -463,12 +478,14 @@ class TestImportCollectionGroup:
         call_args = mock_import_collection.s.call_args.kwargs
         assert call_args["import_all"] is True
 
+    @patch("palace.manager.celery.tasks.overdrive.chain")
     @patch("palace.manager.celery.tasks.overdrive.import_collection")
     @patch("palace.manager.celery.tasks.overdrive.import_children_and_cleanup_chord")
     def test_import_collection_group_with_custom_dates(
         self,
         mock_cleanup_chord: MagicMock,
         mock_import_collection: MagicMock,
+        mock_chain: MagicMock,
         overdrive_import_fixture: OverdriveImportFixture,
     ):
         """Test import_collection_group with custom modified_since and start_time."""
@@ -476,8 +493,8 @@ class TestImportCollectionGroup:
         modified_since = datetime_utc(2023, 1, 1)
         start_time = datetime_utc(2023, 6, 1)
 
-        # Set up mock task signatures
-        self.setup_task_signatures(mock_import_collection, mock_cleanup_chord)
+        # Set up chain mocks
+        self.setup_chain_mocks(mock_import_collection, mock_cleanup_chord, mock_chain)
 
         # Run the task with custom dates
         overdrive.import_collection_group.delay(
