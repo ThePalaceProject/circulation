@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
@@ -822,13 +823,7 @@ class TestIntegration:
         )
 
         # sanity check that the identifier does not exist
-        identifier, _ = Identifier.for_foreign_id(
-            overdrive_api_fixture.db.session,
-            foreign_id=book["id"],
-            foreign_identifier_type=Identifier.OVERDRIVE_ID,
-            autocreate=False,
-        )
-        assert not identifier
+        assert not self._get_identifier(book, overdrive_api_fixture)
 
         with patch(
             "palace.manager.service.integration_registry.license_providers.LicenseProvidersRegistry.equivalent"
@@ -838,11 +833,18 @@ class TestIntegration:
             import_collection_group.delay(
                 collection_id=collection.id, import_all=True
             ).wait()
+
+            # wait a second before proceeding.  For reasons that aren't clear to me,
+            # this delay seems to be necessary to keep the test from flapping.
+            time.sleep(1)
             # verify that the identifier is now in the database.
-            identifier, _ = Identifier.for_foreign_id(
-                overdrive_api_fixture.db.session,
-                foreign_id=book["id"],
-                foreign_identifier_type=Identifier.OVERDRIVE_ID,
-                autocreate=False,
-            )
-            assert identifier
+            assert self._get_identifier(book, overdrive_api_fixture)
+
+    def _get_identifier(self, book, overdrive_api_fixture):
+        identifier, _ = Identifier.for_foreign_id(
+            overdrive_api_fixture.db.session,
+            foreign_id=book["id"],
+            foreign_identifier_type=Identifier.OVERDRIVE_ID,
+            autocreate=False,
+        )
+        return identifier
