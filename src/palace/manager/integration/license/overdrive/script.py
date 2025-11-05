@@ -8,6 +8,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from palace.manager.celery.tasks import overdrive
+from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.integration.license.overdrive.advantage import (
     OverdriveAdvantageAccount,
 )
@@ -201,7 +202,7 @@ class ImportCollection(Script):
 
         collection = Collection.by_name(self._db, collection_name)
         if not collection:
-            raise ValueError(f'No collection found named "{collection_name}".')
+            raise PalaceValueError(f'No collection found named "{collection_name}".')
 
         overdrive.import_collection.delay(
             collection_id=collection.id,
@@ -234,10 +235,10 @@ class ImportCollectionGroup(Script):
 
         collection = Collection.by_name(self._db, collection_name)
         if not collection:
-            raise ValueError(f'No collection found named "{collection_name}".')
+            raise PalaceValueError(f'No collection found named "{collection_name}".')
 
         if collection.parent:
-            raise ValueError(
+            raise PalaceValueError(
                 f'This collection, "{collection_name}", is an advantage collection. The main collection'
                 f'associated with this advantage collection is "{collection.parent.name}".'
             )

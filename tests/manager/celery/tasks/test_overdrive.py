@@ -5,8 +5,10 @@ from __future__ import annotations
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
+from mocks.overdrive import MockOverdriveAPI
 
 from palace.manager.celery.tasks import overdrive
+from palace.manager.celery.tasks.overdrive import import_collection_group
 from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.integration.license.overdrive.api import (
     BookInfoEndpoint,
@@ -20,6 +22,7 @@ from palace.manager.service.redis.models.set import IdentifierSet
 from palace.manager.sqlalchemy.constants import IdentifierType
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.coverage import Timestamp
+from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.util.datetime_helpers import datetime_utc
 from tests.fixtures.celery import ApplyTaskFixture, CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
@@ -577,13 +580,13 @@ class TestRemoveIdentifierSet:
         assert not identifier_set.exists()
 
     @patch("palace.manager.celery.tasks.overdrive.rehydrate_identifier_set")
-    def test_remove_identifier_set_assertion_error(
+    def test_remove_identifier_set_nonexistent_set(
         self,
         mock_rehydrate: MagicMock,
         celery_fixture: CeleryFixture,
         redis_fixture: RedisFixture,
     ):
-        """Test that remove_identifier_set raises AssertionError if set doesn't exist."""
+        """Test that remove_identifier_set logs warning and skips cleanup if set doesn't exist."""
         # Create an identifier set that doesn't exist
         identifier_set_info = {"key": ["test", "nonexistent", "key"]}
         identifier_set = IdentifierSet(redis_fixture.client, identifier_set_info["key"])
@@ -592,11 +595,13 @@ class TestRemoveIdentifierSet:
         # Mock rehydrate to return the non-existent set
         mock_rehydrate.return_value = identifier_set
 
-        # Run the task - should raise AssertionError
-        with pytest.raises(AssertionError):
-            overdrive.remove_identifier_set.delay(
-                identifier_set_info=identifier_set_info
-            ).wait()
+        # Run the task - should complete without error and log a warning
+        overdrive.remove_identifier_set.delay(
+            identifier_set_info=identifier_set_info
+        ).wait()
+
+        # Verify the set still doesn't exist (no error was raised)
+        assert not identifier_set.exists()
 
 
 class TestIntegration:
@@ -661,3 +666,69 @@ class TestIntegration:
         assert call_kwargs["parent_identifier_set"] is not None
         assert isinstance(call_kwargs["parent_identifier_set"], IdentifierSet)
         assert call_kwargs["parent_identifier_set"]._key == parent_set._key
+
+    @patch(
+        target="palace.manager.integration.license.overdrive.importer.OverdriveAPI",
+        new=MockOverdriveAPI,
+    )
+    def test_full_import_flow_with_parent_identifiers_and_overdrive_data(
+        self,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        celery_fixture: CeleryFixture,
+        redis_fixture: RedisFixture,
+        db: DatabaseTransactionFixture,
+    ):
+        """Test import with parent identifiers provided and Overdrive data."""
+        collection = overdrive_api_fixture.collection
+        availability_data, availability_json = overdrive_api_fixture.sample_json(
+            "overdrive_availability_information.json"
+        )
+        metadata_data, metadata_json = overdrive_api_fixture.sample_json(
+            "bibliographic_information_book_list_test.json"
+        )
+        (
+            overdrive_book_list_with_next_link_data,
+            overdrive_book_list_with_next_link_json,
+        ) = overdrive_api_fixture.sample_json("overdrive_book_list_with_next_link.json")
+
+        book = overdrive_book_list_with_next_link_json["products"][0]
+
+        (
+            overdrive_book_list_last_page_no_products_data,
+            overdrive_book_list_last_page_no_products_json,
+        ) = overdrive_api_fixture.sample_json(
+            "overdrive_book_list_last_page_no_products.json"
+        )
+        mock_async_client = overdrive_api_fixture.mock_async_client
+        mock_async_client.queue_response(
+            200, content=overdrive_book_list_with_next_link_data
+        )
+
+        mock_async_client.queue_response(200, content=metadata_data)
+        mock_async_client.queue_response(200, content=availability_data)
+
+        mock_async_client.queue_response(
+            200, content=overdrive_book_list_last_page_no_products_data
+        )
+
+        # sanity check that the identifier does not exist
+        identifier, _ = Identifier.for_foreign_id(
+            db.session,
+            foreign_id=book["id"],
+            foreign_identifier_type=Identifier.OVERDRIVE_ID,
+            autocreate=False,
+        )
+        assert not identifier
+
+        with patch(
+            "palace.manager.service.integration_registry.license_providers.LicenseProvidersRegistry.equivalent"
+        ) as equivalent:
+            equivalent.return_value = True
+            import_collection_group.delay(collection.id, import_all=True).wait()
+            identifier, _ = Identifier.for_foreign_id(
+                db.session,
+                foreign_id=book["id"],
+                foreign_identifier_type=Identifier.OVERDRIVE_ID,
+                autocreate=False,
+            )
+            assert identifier

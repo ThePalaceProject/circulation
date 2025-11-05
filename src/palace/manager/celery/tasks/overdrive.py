@@ -19,8 +19,6 @@ from palace.manager.util.http.exception import (
     RequestTimedOut,
 )
 
-# IdentifierSetKey =  Sequence[SupportsRedisKey | str | int] | list[str]
-
 
 @shared_task(
     queue=QueueNames.default,
@@ -64,7 +62,8 @@ def import_collection(
         will be set to the current time on the first page.
     :param return_identifiers: A running set of identifiers that have been processed so far in this run.
     :param parent_identifiers: A running set of parent identifiers (if not a parent collection)
-        that were processed before this run started.
+        that were processed before this run started. This value is a serialized representation of the
+        parent_identifier IdentifierSet.
     """
     redis = task.services.redis().client()
     registry = task.services.integration_registry().license_providers()
@@ -149,6 +148,8 @@ def import_collection(
             task.s(
                 collection_id=collection_id,
                 import_all=import_all,
+                parent_identifier_set=parent_identifier_set,
+                return_identifiers=return_identifiers,
                 page=result.next_page.url,
                 modified_since=modified_since,
                 start_time=start_time,
@@ -200,7 +201,7 @@ def import_collection_group(
        linked chord and cleanup tasks.
     """
 
-    import_collection.s(
+    return import_collection.s(
         collection_id=collection_id,
         import_all=import_all,
         page=None,
@@ -324,5 +325,9 @@ def remove_identifier_set(task: Task, identifier_set_info: dict[str, Any]) -> No
        be called directly in most cases.
     """
     identifier_set = rehydrate_identifier_set(task, identifier_set_info)
-    assert identifier_set.exists()
-    identifier_set.delete()
+    if not identifier_set.exists():
+        task.log.warning(
+            f"Identifier set (key={identifier_set._key}) does not exist in Redis. Skipping cleanup."
+        )
+    else:
+        identifier_set.delete()
