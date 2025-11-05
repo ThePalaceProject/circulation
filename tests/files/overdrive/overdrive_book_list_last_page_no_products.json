@@ -10,8 +10,6 @@
             "href": "http://api.overdrive.com/v1/collections/collection-id/products?limit=1&offset=1&lastupdatetime=2014-04-28%2009:25:09&sort=popularity:desc&formats=ebook-epub-open,ebook-epub-adobe,ebook-pdf-adobe,ebook-pdf-open",
             "type": "application/vnd.overdrive.api+json"
         },
-        "next": {
-        },
         "self": {
             "href": "http://api.overdrive.com/v1/collections/collection-id/products?limit=1&offset=1&lastupdatetime=2014-04-28%2009:25:09&sort=popularity:desc&formats=ebook-epub-open,ebook-epub-adobe,ebook-pdf-adobe,ebook-pdf-open",
             "type": "application/vnd.overdrive.api+json"

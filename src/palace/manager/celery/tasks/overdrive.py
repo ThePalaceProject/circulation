@@ -1,7 +1,7 @@
 import datetime
 from typing import Any
 
-from celery import chord, group, shared_task
+from celery import chain, chord, group, shared_task
 
 from palace.manager.celery.importer import import_key, import_lock
 from palace.manager.celery.task import Task
@@ -144,11 +144,15 @@ def import_collection(
         task.log.info(
             f"OverDrive import re-queueing: '{collection_name}' Next page: {result.next_page}."
         )
+        # Serialize parent_identifier_set to dict for passing to next task
+        serialized_parent_identifiers = (
+            parent_identifier_set.__json__() if parent_identifier_set else None
+        )
         raise task.replace(
             task.s(
                 collection_id=collection_id,
                 import_all=import_all,
-                parent_identifier_set=parent_identifier_set,
+                parent_identifiers=serialized_parent_identifiers,
                 return_identifiers=return_identifiers,
                 page=result.next_page.url,
                 modified_since=modified_since,
@@ -201,21 +205,22 @@ def import_collection_group(
        linked chord and cleanup tasks.
     """
 
-    return import_collection.s(
-        collection_id=collection_id,
-        import_all=import_all,
-        page=None,
-        parent_identifiers=None,
-        return_identifiers=True,
-        modified_since=modified_since,
-        start_time=start_time,
-    ).apply_async(
-        link=import_children_and_cleanup_chord.s(
+    chain(
+        import_collection.s(
+            collection_id=collection_id,
+            import_all=import_all,
+            page=None,
+            parent_identifiers=None,
+            return_identifiers=True,
+            modified_since=modified_since,
+            start_time=start_time,
+        ),
+        import_children_and_cleanup_chord.s(
             collection_id=collection_id,
             import_all=import_all,
             modified_since=modified_since,
-        )
-    )
+        ),
+    )()
 
 
 def rehydrate_identifier_set(

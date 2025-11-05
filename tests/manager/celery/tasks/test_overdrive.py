@@ -189,6 +189,58 @@ class TestImportCollection:
             mock_replace.assert_called_once()
 
     @patch("palace.manager.celery.tasks.overdrive.OverdriveImporter")
+    def test_import_collection_with_next_page_and_parent_identifiers(
+        self,
+        mock_importer_class: MagicMock,
+        overdrive_import_fixture: OverdriveImportFixture,
+        redis_fixture: RedisFixture,
+    ):
+        """Test import_collection serializes parent_identifiers when replacing task with next page."""
+        collection = overdrive_import_fixture.collection
+
+        # Create a parent identifier set
+        parent_set = IdentifierSet(redis_fixture.client, ["parent", "test", "key"])
+        identifier = IdentifierData(
+            identifier="parent-id", type=IdentifierType.OVERDRIVE_ID
+        )
+        parent_set.add(identifier)
+        assert parent_set.exists()
+
+        # Create mock importer with next page
+        next_endpoint = BookInfoEndpoint(url="http://test.com/books/page2")
+        mock_importer, _ = overdrive_import_fixture.create_mock_importer(
+            next_page=next_endpoint
+        )
+        mock_importer_class.return_value = mock_importer
+
+        # Mock the task to capture the replace call
+        with patch.object(overdrive.import_collection, "replace") as mock_replace:
+            mock_replace.side_effect = Exception("Task replaced")
+
+            with pytest.raises(Exception, match="Task replaced"):
+                overdrive.import_collection.delay(
+                    collection.id, parent_identifiers=parent_set
+                ).wait()
+
+            # Verify replace was called
+            mock_replace.assert_called_once()
+
+            # Get the signature passed to replace
+            replace_sig = mock_replace.call_args[0][0]
+            replace_kwargs = replace_sig.kwargs
+
+            # Verify parent_identifiers was serialized to dict format
+            assert replace_kwargs["parent_identifiers"] is not None
+            assert isinstance(replace_kwargs["parent_identifiers"], dict)
+            assert "key" in replace_kwargs["parent_identifiers"]
+            assert replace_kwargs["parent_identifiers"]["key"] == [
+                "parent",
+                "test",
+                "key",
+            ]
+            assert "expire_time" in replace_kwargs["parent_identifiers"]
+
+    @patch("palace.manager.celery.tasks.overdrive.OverdriveImporter")
     def test_import_collection_with_endpoint_not_none(
         self,
         mock_importer_class: MagicMock,
@@ -262,6 +314,48 @@ class TestImportCollection:
 
         # Verify result is the identifier set info object
         assert result["key"]
+
+    @patch("palace.manager.celery.tasks.overdrive.OverdriveImporter")
+    def test_import_collection_with_parent_identifierst(
+        self,
+        mock_importer_class: MagicMock,
+        overdrive_import_fixture: OverdriveImportFixture,
+        redis_fixture: RedisFixture,
+    ):
+        """Test that import_collection properly rehydrates parent_identifiers from dict."""
+        collection = overdrive_import_fixture.collection
+
+        # Create a real parent identifier set in Redis
+        parent_key = ["parent", "dict", "test"]
+        parent_set = IdentifierSet(redis_fixture.client, parent_key)
+        identifier = IdentifierData(
+            identifier="parent-dict-id", type=IdentifierType.OVERDRIVE_ID
+        )
+        parent_set.add(identifier)
+        assert parent_set.exists()
+
+        # Serialize it as if coming from a previous task
+        parent_identifiers_dict = parent_set.__json__()
+
+        # Create mock importer
+        mock_importer, _ = overdrive_import_fixture.create_mock_importer()
+        mock_importer_class.return_value = mock_importer
+
+        # Run the task with serialized parent_identifiers
+        overdrive.import_collection.delay(
+            collection.id, parent_identifiers=parent_identifiers_dict
+        ).wait()
+
+        # Verify parent_identifier_set was rehydrated and passed to importer
+        call_kwargs = mock_importer_class.call_args.kwargs
+        assert call_kwargs["parent_identifier_set"] is not None
+        assert isinstance(call_kwargs["parent_identifier_set"], IdentifierSet)
+
+        # Verify it's the same identifier set by checking the key
+        assert call_kwargs["parent_identifier_set"]._supplied_key == parent_key
+
+        # Verify the data is accessible
+        assert identifier in call_kwargs["parent_identifier_set"]
 
     @patch("palace.manager.celery.tasks.overdrive.OverdriveImporter")
     def test_import_collection_no_identifier_tracking(
@@ -676,7 +770,6 @@ class TestIntegration:
         overdrive_api_fixture: OverdriveAPIFixture,
         celery_fixture: CeleryFixture,
         redis_fixture: RedisFixture,
-        db: DatabaseTransactionFixture,
     ):
         """Test import with parent identifiers provided and Overdrive data."""
         collection = overdrive_api_fixture.collection
@@ -713,7 +806,7 @@ class TestIntegration:
 
         # sanity check that the identifier does not exist
         identifier, _ = Identifier.for_foreign_id(
-            db.session,
+            overdrive_api_fixture.db.session,
             foreign_id=book["id"],
             foreign_identifier_type=Identifier.OVERDRIVE_ID,
             autocreate=False,
@@ -724,9 +817,13 @@ class TestIntegration:
             "palace.manager.service.integration_registry.license_providers.LicenseProvidersRegistry.equivalent"
         ) as equivalent:
             equivalent.return_value = True
-            import_collection_group.delay(collection.id, import_all=True).wait()
+
+            import_collection_group.delay(
+                collection_id=collection.id, import_all=True
+            ).wait()
+            # verify that the identifier is now in the database.
             identifier, _ = Identifier.for_foreign_id(
-                db.session,
+                overdrive_api_fixture.db.session,
                 foreign_id=book["id"],
                 foreign_identifier_type=Identifier.OVERDRIVE_ID,
                 autocreate=False,
