@@ -48,14 +48,16 @@ def _update_saml_federation_idps_metadata(
 @shared_task(queue=QueueNames.default, bind=True)
 def update_saml_federation_idps_metadata(task: Task) -> None:
     """
-    For each SAML Fedoration in the CM, update the federations IdPs metadata
+    For each SAML Federation in the CM, update the federations IdPs metadata
     Please note that the monitor looks for federations in the `samlfederations` table.
     Currently, there is no way to configure SAML federations in the admin interface.
     """
 
     saml_federated_idp_loader = _create_saml_federated_identity_provider_loader()
 
-    with task.session() as session:
+    # Note that we need to use a transaction here, since we are going
+    # to update the database.
+    with task.transaction() as session:
         saml_federations = session.query(SAMLFederation).all()
 
         task.log.info(f"Found {len(saml_federations)} SAML federations")
@@ -79,7 +81,6 @@ def _create_saml_federated_identity_provider_loader() -> (
         [SAMLFederatedMetadataExpirationValidator(), SAMLMetadataSignatureValidator()]
     )
     saml_metadata_parser = SAMLMetadataParser(skip_incorrect_providers=True)
-    saml_federated_idp_loader = SAMLFederatedIdentityProviderLoader(
+    return SAMLFederatedIdentityProviderLoader(
         saml_metadata_loader, saml_metadata_validator, saml_metadata_parser
     )
-    return saml_federated_idp_loader
