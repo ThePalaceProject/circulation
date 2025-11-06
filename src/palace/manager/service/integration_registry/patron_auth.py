@@ -3,6 +3,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from palace.manager.integration.goals import Goals
+from palace.manager.integration.patron_auth.minimal_authentication import (
+    MinimalAuthenticationProvider,
+)
 from palace.manager.service.integration_registry.base import IntegrationRegistry
 
 if TYPE_CHECKING:
@@ -35,6 +38,9 @@ class PatronAuthRegistry(IntegrationRegistry["AuthenticationProviderType"]):
 
         self.register(
             SimpleAuthenticationProvider, canonical="api.simple_authentication"
+        )
+        self.register(
+            MinimalAuthenticationProvider, canonical="api.minimal_authentication"
         )
         self.register(MilleniumPatronAPI, canonical="api.millenium_patron")
         self.register(SIP2AuthenticationProvider, canonical="api.sip")
