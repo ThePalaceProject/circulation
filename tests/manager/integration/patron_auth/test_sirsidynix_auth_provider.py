@@ -346,6 +346,79 @@ class TestSirsiDynixAuthenticationProvider:
         assert patrondata.block_reason == SirsiBlockReasons.PATRON_BLOCKED
         assert patrondata.library_identifier == "testblocked"
 
+    @pytest.mark.parametrize(
+        "standing_key, approved, expected_blocked",
+        [
+            ("OK", True, False),  # Both approved AND standing=ok → not blocked
+            (
+                "ok",
+                True,
+                False,
+            ),  # Case insensitive: standing=ok (lowercase) → not blocked
+            ("Ok", True, False),  # Case insensitive: standing=Ok (mixed) → not blocked
+            (
+                "DELINQUENT",
+                True,
+                False,
+            ),  # approved=True (standing doesn't matter) → not blocked
+            (
+                "",
+                True,
+                False,
+            ),  # approved=True (standing empty doesn't matter) → not blocked
+            ("OK", False, False),  # standing=ok (approved doesn't matter) → not blocked
+            (None, True, False),  # approved=True (no standing field) → not blocked
+            (
+                "ok",
+                False,
+                False,
+            ),  # standing=ok (approved=False doesn't matter) → not blocked
+            ("DELINQUENT", False, True),  # Neither approved nor standing=ok → blocked
+            ("", False, True),  # Neither approved nor standing=ok → blocked
+            (None, False, True),  # Neither approved nor standing=ok → blocked
+        ],
+    )
+    def test_remote_patron_lookup_approval_and_standing_fields(
+        self,
+        sirsi_auth_fixture: SirsiAuthFixture,
+        standing_key: str | None,
+        approved: bool,
+        expected_blocked: bool,
+    ):
+        """Test patron approval requires EITHER 'approved=True' OR 'standing.key=ok' (case-insensitive).
+
+        The logic is: block if NOT (approved OR standing=="ok")
+        Which means patron is unblocked if EITHER:
+        - approved=True (regardless of standing), OR
+        - standing.key.lower()=="ok" (regardless of approved)
+        """
+        provider_mock = sirsi_auth_fixture.provider_mocked_api()
+
+        # Build patron response with standing field
+        patron_fields = {
+            "displayName": "Test User",
+            "approved": approved,
+            "patronType": {"key": "testtype"},
+        }
+
+        if standing_key is not None:
+            patron_fields["standing"] = {"key": standing_key}
+
+        patron_resp = {"fields": patron_fields}
+        provider_mock.api_read_patron_data.return_value = patron_resp
+
+        patrondata = provider_mock.provider.remote_patron_lookup(
+            SirsiDynixPatronData(permanent_id="xxxx", session_token="xxx")
+        )
+
+        assert isinstance(patrondata, PatronData)
+
+        if expected_blocked:
+            assert patrondata.block_reason == SirsiBlockReasons.NOT_APPROVED
+        else:
+            # If not blocked by approval/standing, should be NO_VALUE (no blocks)
+            assert patrondata.block_reason == PatronData.NO_VALUE
+
     def test_remote_patron_lookup_bad_patron_status_info(
         self, sirsi_auth_fixture: SirsiAuthFixture
     ):
