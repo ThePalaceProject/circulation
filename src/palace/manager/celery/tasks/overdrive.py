@@ -314,20 +314,13 @@ def remove_identifier_set(task: Task, identifier_set_info: dict[str, Any]) -> No
     """Clean up a temporary identifier set from Redis after import completes.
 
     This task is used as the callback body of the chord in import_children_and_cleanup_chord.
-    It deletes the temporary Redis set that was used to share identifiers between
-    parent and child collection imports. This cleanup prevents Redis memory leaks
-    from accumulating identifier sets.
+    It deletes the temporary Redis set used to share identifiers between
+    parent and child collection imports.  If the set doesn't exist, the operation will
+    still succeed.
 
-    The task asserts that the set exists before attempting deletion to catch
-    cases where the set was unexpectedly removed or never created.
 
     :param identifier_set_info: Serialized identifier set info.
                                 Format: {"key": ["redis", "key", "parts"]}
-    :raises AssertionError: If the identifier set doesn't exist in Redis
-
-    .. note::
-       This task is designed to be used as a chord callback and should not
-       be called directly in most cases.
     """
     identifier_set = rehydrate_identifier_set(task, identifier_set_info)
     if not identifier_set.exists():
