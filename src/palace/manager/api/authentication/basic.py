@@ -48,6 +48,7 @@ class LibraryIdentifierRestriction(Enum):
     PREFIX = "prefix"
     STRING = "string"
     LIST = "list"
+    PREFIX_LIST = "prefix_list"
 
 
 class LibraryIdenfitierRestrictionField(Enum):
@@ -210,6 +211,7 @@ class BasicAuthProviderLibrarySettings(AuthProviderLibrarySettings):
                 LibraryIdentifierRestriction.PREFIX: "Prefix Match",
                 LibraryIdentifierRestriction.STRING: "Exact Match",
                 LibraryIdentifierRestriction.LIST: "Exact Match, comma separated list",
+                LibraryIdentifierRestriction.PREFIX_LIST: "Prefix Match, comma separated list",
             },
         ),
     ] = LibraryIdentifierRestriction.NONE
@@ -323,9 +325,9 @@ class BasicAuthenticationProvider[
             == LibraryIdentifierRestriction.REGEX
         ):
             return re.compile(criteria)
-        elif (
-            self.library_identifier_restriction_type
-            == LibraryIdentifierRestriction.LIST
+        elif self.library_identifier_restriction_type in (
+            LibraryIdentifierRestriction.LIST,
+            LibraryIdentifierRestriction.PREFIX_LIST,
         ):
             return [item.strip() for item in criteria.split(",")]
         elif (
@@ -659,6 +661,15 @@ class BasicAuthenticationProvider[
             case [LibraryIdentifierRestriction.LIST, *_]:
                 if value not in (_list := cast(list, restriction)):
                     failure_reason = f"{value!r} not in list {restriction!r}"
+            case [LibraryIdentifierRestriction.PREFIX_LIST, *_]:
+                matches = False
+                for prefix in (_list := cast(list, restriction)):
+                    if value.startswith(prefix):
+                        matches = True
+                        break
+
+                if not matches:
+                    failure_reason = f"{value!r} does not match any of the prefixes in list {restriction!r}"
 
         return (False, failure_reason) if failure_reason else (True, "")
 
