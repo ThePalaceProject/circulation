@@ -221,12 +221,13 @@ class SirsiDynixHorizonAuthenticationProvider(
         fields: dict = data["fields"]
         patrondata.personal_name = fields.get("displayName")
 
+        patron_type: str | None = None
         if self.library_identifier_field == "patrontype":
-            patron_type: str = fields["patronType"].get("key", "")
+            patron_type = fields["patronType"].get("key", "")
             patrondata.library_identifier = patron_type
         elif self.library_identifier_field == "barcode":
             pass
-            # do nothing sense the library identifier field and restriction type are handled in the authentication
+            # do nothing since the library identifier field and restriction type are handled in the authentication
             # function (see enforce_library_identifier_restriction())
         else:
             # this should never happen
@@ -252,11 +253,6 @@ class SirsiDynixHorizonAuthenticationProvider(
                 if patron_type.endswith(suffix):
                     patrondata.block_reason = SirsiBlockReasons.PATRON_BLOCKED
                     return patrondata
-
-        for suffix in self.sirsi_disallowed_suffixes:
-            if patron_type.endswith(suffix):
-                patrondata.block_reason = SirsiBlockReasons.PATRON_BLOCKED
-                return patrondata
 
         # Get patron "fines" information
         status = self.api_patron_status_info(

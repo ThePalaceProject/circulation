@@ -347,35 +347,117 @@ class TestSirsiDynixAuthenticationProvider:
         assert patrondata.library_identifier == "testblocked"
 
     @pytest.mark.parametrize(
+        "patron_type, disallowed_suffixes, expected_blocked",
+        [
+            pytest.param(
+                "testblocked",
+                ["blocked"],
+                True,
+                id="patron_type_ends_with_disallowed_suffix_blocked",
+            ),
+            pytest.param(
+                "testblocked",
+                ["ed", "xyz"],
+                True,
+                id="patron_type_matches_one_of_multiple_suffixes_blocked",
+            ),
+            pytest.param(
+                "testuser",
+                ["blocked", "admin"],
+                False,
+                id="patron_type_no_matching_suffix_not_blocked",
+            ),
+            pytest.param(
+                "blocked",
+                ["blocked"],
+                True,
+                id="patron_type_exact_match_with_suffix_blocked",
+            ),
+            pytest.param(
+                "test",
+                [],
+                False,
+                id="no_disallowed_suffixes_configured_not_blocked",
+            ),
+            pytest.param(
+                "",
+                ["test"],
+                False,
+                id="empty_patron_type_not_blocked",
+            ),
+        ],
+    )
+    def test_remote_patron_lookup_disallowed_suffixes(
+        self,
+        sirsi_auth_fixture: SirsiAuthFixture,
+        patron_type: str,
+        disallowed_suffixes: list[str],
+        expected_blocked: bool,
+    ):
+        """Test that patron types ending with disallowed suffixes are blocked."""
+        library_settings = sirsi_auth_fixture.library_settings(
+            library_disallowed_suffixes=disallowed_suffixes
+        )
+        provider = sirsi_auth_fixture.provider(library_settings=library_settings)
+        provider_mock = sirsi_auth_fixture.provider_mocked_api(provider=provider)
+
+        # Set up patron response with specific patron type
+        patron_resp = {
+            "fields": {
+                "displayName": "Test User",
+                "approved": True,
+                "patronType": {"key": patron_type},
+            }
+        }
+        provider_mock.api_read_patron_data.return_value = patron_resp
+
+        patrondata = provider_mock.provider.remote_patron_lookup(
+            SirsiDynixPatronData(permanent_id="xxxx", session_token="xxx")
+        )
+
+        assert isinstance(patrondata, PatronData)
+
+        if expected_blocked:
+            assert patrondata.block_reason == SirsiBlockReasons.PATRON_BLOCKED
+        else:
+            # If not blocked by suffix, should be NO_VALUE (no blocks)
+            assert patrondata.block_reason == PatronData.NO_VALUE
+
+    @pytest.mark.parametrize(
         "standing_key, approved, expected_blocked",
         [
-            ("OK", True, False),  # Both approved AND standing=ok → not blocked
-            (
-                "ok",
-                True,
-                False,
-            ),  # Case insensitive: standing=ok (lowercase) → not blocked
-            ("Ok", True, False),  # Case insensitive: standing=Ok (mixed) → not blocked
-            (
+            pytest.param("OK", True, False, id="approved_and_standing_OK_not_blocked"),
+            pytest.param(
+                "ok", True, False, id="approved_and_standing_ok_lowercase_not_blocked"
+            ),
+            pytest.param(
+                "Ok", True, False, id="approved_and_standing_Ok_mixedcase_not_blocked"
+            ),
+            pytest.param(
                 "DELINQUENT",
                 True,
                 False,
-            ),  # approved=True (standing doesn't matter) → not blocked
-            (
-                "",
-                True,
-                False,
-            ),  # approved=True (standing empty doesn't matter) → not blocked
-            ("OK", False, False),  # standing=ok (approved doesn't matter) → not blocked
-            (None, True, False),  # approved=True (no standing field) → not blocked
-            (
-                "ok",
-                False,
-                False,
-            ),  # standing=ok (approved=False doesn't matter) → not blocked
-            ("DELINQUENT", False, True),  # Neither approved nor standing=ok → blocked
-            ("", False, True),  # Neither approved nor standing=ok → blocked
-            (None, False, True),  # Neither approved nor standing=ok → blocked
+                id="approved_true_standing_delinquent_not_blocked",
+            ),
+            pytest.param(
+                "", True, False, id="approved_true_standing_empty_not_blocked"
+            ),
+            pytest.param(
+                "OK", False, False, id="standing_ok_approved_false_not_blocked"
+            ),
+            pytest.param(
+                None, True, False, id="approved_true_no_standing_field_not_blocked"
+            ),
+            pytest.param(
+                "ok", False, False, id="standing_ok_approved_false_not_blocked"
+            ),
+            pytest.param(
+                "DELINQUENT", False, True, id="not_approved_standing_delinquent_blocked"
+            ),
+            pytest.param("", False, True, id="not_approved_standing_empty_blocked"),
+            pytest.param(
+                None, False, True, id="not_approved_no_standing_field_blocked"
+            ),
         ],
     )
     def test_remote_patron_lookup_approval_and_standing_fields(
@@ -417,6 +499,65 @@ class TestSirsiDynixAuthenticationProvider:
             assert patrondata.block_reason == SirsiBlockReasons.NOT_APPROVED
         else:
             # If not blocked by approval/standing, should be NO_VALUE (no blocks)
+            assert patrondata.block_reason == PatronData.NO_VALUE
+
+    @pytest.mark.parametrize(
+        "library_identifier_field, expect_error",
+        [
+            pytest.param(
+                "patrontype",
+                True,
+                id="patrontype_field_missing_patronType_raises_KeyError",
+            ),
+            pytest.param(
+                "barcode",
+                False,
+                id="barcode_field_missing_patronType_handled_gracefully",
+            ),
+        ],
+    )
+    def test_remote_patron_lookup_missing_patron_type_with_disallowed_suffixes(
+        self,
+        sirsi_auth_fixture: SirsiAuthFixture,
+        library_identifier_field: str,
+        expect_error: bool,
+    ):
+        """Test behavior when patronType field is missing from API response.
+
+        When library_identifier_field is 'patrontype', missing patronType raises KeyError.
+        When library_identifier_field is 'barcode', missing patronType is handled gracefully.
+        """
+        library_settings = sirsi_auth_fixture.library_settings(
+            library_identifier_field=library_identifier_field,
+            library_disallowed_suffixes=["blocked", "test"],
+        )
+        provider = sirsi_auth_fixture.provider(library_settings=library_settings)
+        provider_mock = sirsi_auth_fixture.provider_mocked_api(provider=provider)
+
+        # Return patron data WITHOUT patronType field
+        patron_resp_no_type = {
+            "fields": {
+                "displayName": "Test User",
+                "approved": True,
+                # patronType is missing
+            }
+        }
+        provider_mock.api_read_patron_data.return_value = patron_resp_no_type
+
+        if expect_error:
+            # When library_identifier_field is "patrontype", should raise KeyError
+            with pytest.raises(KeyError, match="patronType"):
+                provider_mock.provider.remote_patron_lookup(
+                    SirsiDynixPatronData(permanent_id="xxxx", session_token="xxx")
+                )
+        else:
+            # When library_identifier_field is "barcode", should handle gracefully
+            patrondata = provider_mock.provider.remote_patron_lookup(
+                SirsiDynixPatronData(permanent_id="xxxx", session_token="xxx")
+            )
+            assert isinstance(patrondata, PatronData)
+            assert patrondata.personal_name == "Test User"
+            # Should not be blocked since approved=True
             assert patrondata.block_reason == PatronData.NO_VALUE
 
     def test_remote_patron_lookup_bad_patron_status_info(
