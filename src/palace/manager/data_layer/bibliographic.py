@@ -349,8 +349,8 @@ class BibliographicData(BaseMutableData):
             if (
                 Identifier.get_active_type(self.primary_identifier_data.type)
                 != Identifier.get_active_type(edition.primary_identifier.type)
-                or self.primary_identifier_data.identifier
-                != edition.primary_identifier.identifier
+                or self.primary_identifier_data.identifier.lower()
+                != edition.primary_identifier.identifier.lower()
             ):
                 raise PalaceValueError(
                     f"BibliographicData's primary identifier "
