@@ -22,12 +22,20 @@ class MinimalAuthenticationProvider(
 
     @classmethod
     def description(cls) -> str:
-        return (
-            "An internal authentication service that provides a no op remote authentication. "
-            "As long as the pre-auth tests succeed, this auth provider will provide a successful authentication. "
-            "It is useful for libraries that only want to perform only simple validation checks such as user barcodes "
-            "matching a list of prefixes and do not require passwords and/or remote authentication checks."
-        )
+        return """
+        An internal authentication service that provides a no op remote authentication.
+        As long as the pre-auth tests succeed, this auth provider will provide a successful authentication.
+        It is useful for libraries that only want to perform only simple validation checks such as user barcodes
+        matching a list of prefixes and do not require passwords and/or remote authentication checks.
+        Here are a few examples of pre-auth tests that you might use this to perform:
+    <pre>
+    Configurable at the individual library level:
+      * Library Identifier Restriction based on a list of barcode prefixes
+      * Library Identifier Restriction based on a list of exact barcode matches
+      * Library Identifier Restriction based on a regex matches
+    Configurable across all libraries:
+      * Password match by regular expression
+      * Barcode match by regular expression</pre>"""
 
     @classmethod
     def settings_class(cls) -> type[BasicAuthProviderSettings]:
