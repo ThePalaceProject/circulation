@@ -56,18 +56,11 @@ class MinimalAuthenticationProvider(
 
     @classmethod
     def generate_patrondata(cls, authorization_identifier: str) -> PatronData:
-        # I'm not sure why or even if this normalization is required: I just grabbed this code from
-        # SimpleAuthenticationProvider.generate_patrondata.
-        _username_suffix = "_username"
-        identifier = authorization_identifier.removesuffix(_username_suffix)
-        username = identifier + _username_suffix
-        personal_name = "PersonalName" + identifier
-
         patrondata = PatronData(
-            authorization_identifier=identifier,
-            permanent_id=identifier + "_id",
-            username=username,
-            personal_name=personal_name,
+            authorization_identifier=authorization_identifier,
+            permanent_id=f"id:{authorization_identifier}",
+            username=authorization_identifier,
+            personal_name=f"Unavailable: {authorization_identifier}",
             authorization_expires=None,
             fines=None,
         )
