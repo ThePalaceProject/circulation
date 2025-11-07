@@ -1178,6 +1178,7 @@ class TestBibliographicData:
         identifier_mixed = edition.primary_identifier.identifier.swapcase()
 
         # Test with lowercase version - should NOT raise an error
+        # because the identifiers match exactly -- no difference in case
         bibliographic_lower = BibliographicData(
             data_source_name=edition.data_source.name,
             primary_identifier_data=IdentifierData(
@@ -1213,7 +1214,7 @@ class TestBibliographicData:
         )
         updated_edition, changed = bibliographic_mixed.apply(db.session, edition, None)
 
-        # Test that a truly different identifier still raises an error
+        # Test that an identifier with differences beyond case still raises an error.
         bibliographic_wrong = BibliographicData(
             data_source_name=edition.data_source.name,
             primary_identifier_data=IdentifierData(
