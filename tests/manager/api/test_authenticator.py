@@ -1644,6 +1644,46 @@ class TestBasicAuthenticationProvider:
                 False,
                 "'54321' not in list ['1234', '4321']",
             ),
+            # Test PREFIX_LIST
+            (
+                "12345",
+                ["123", "456"],
+                LibraryIdentifierRestriction.PREFIX_LIST,
+                True,
+                "",
+            ),
+            (
+                "45678",
+                ["123", "456"],
+                LibraryIdentifierRestriction.PREFIX_LIST,
+                True,
+                "",
+            ),
+            ("123", ["123", "456"], LibraryIdentifierRestriction.PREFIX_LIST, True, ""),
+            (
+                "789",
+                ["123", "456"],
+                LibraryIdentifierRestriction.PREFIX_LIST,
+                False,
+                "'789' does not match any of the prefixes in list ['123', '456']",
+            ),
+            (
+                "abc123",
+                ["123", "456"],
+                LibraryIdentifierRestriction.PREFIX_LIST,
+                False,
+                "'abc123' does not match any of the prefixes in list ['123', '456']",
+            ),
+            # Test PREFIX_LIST with None field value
+            (
+                None,
+                ["123", "456"],
+                LibraryIdentifierRestriction.PREFIX_LIST,
+                False,
+                "No value in field",
+            ),
+            # Test PREFIX_LIST with None restriction (should pass)
+            ("anything", None, LibraryIdentifierRestriction.PREFIX_LIST, True, ""),
             # Test Regex
             (
                 "123",
@@ -1686,6 +1726,78 @@ class TestBasicAuthenticationProvider:
         assert expected_reason == "" if expect_success else expected_reason != ""
         assert success == expect_success
         assert reason == expected_reason
+
+    @pytest.mark.parametrize(
+        "restriction_type, criteria_string, expected_result",
+        [
+            # Test NONE - should return None
+            (LibraryIdentifierRestriction.NONE, "anything", None),
+            # Test REGEX - should return compiled pattern
+            (LibraryIdentifierRestriction.REGEX, "^test.*", re.compile("^test.*")),
+            # Test LIST - should return list of stripped items
+            (
+                LibraryIdentifierRestriction.LIST,
+                "item1, item2, item3",
+                ["item1", "item2", "item3"],
+            ),
+            (
+                LibraryIdentifierRestriction.LIST,
+                "item1,item2,item3",
+                ["item1", "item2", "item3"],
+            ),
+            (
+                LibraryIdentifierRestriction.LIST,
+                " item1 , item2 , item3 ",
+                ["item1", "item2", "item3"],
+            ),
+            # Test PREFIX_LIST - should return list of stripped items
+            (
+                LibraryIdentifierRestriction.PREFIX_LIST,
+                "pre1, pre2, pre3",
+                ["pre1", "pre2", "pre3"],
+            ),
+            (
+                LibraryIdentifierRestriction.PREFIX_LIST,
+                "pre1,pre2,pre3",
+                ["pre1", "pre2", "pre3"],
+            ),
+            (
+                LibraryIdentifierRestriction.PREFIX_LIST,
+                " pre1 , pre2 , pre3 ",
+                ["pre1", "pre2", "pre3"],
+            ),
+            # Test PREFIX - should return stripped string
+            (LibraryIdentifierRestriction.PREFIX, "  prefix  ", "prefix"),
+            # Test STRING - should return stripped string
+            (LibraryIdentifierRestriction.STRING, "  exact  ", "exact"),
+            # Test with None criteria - should return None
+            (LibraryIdentifierRestriction.PREFIX, None, None),
+            (LibraryIdentifierRestriction.LIST, None, None),
+            (LibraryIdentifierRestriction.PREFIX_LIST, None, None),
+        ],
+    )
+    def test_process_library_identifier_restriction_criteria(
+        self,
+        mock_basic: MockBasicFixture,
+        restriction_type: LibraryIdentifierRestriction,
+        criteria_string: str | None,
+        expected_result: str | list[str] | re.Pattern | None,
+    ):
+        """Test that process_library_identifier_restriction_criteria properly processes different restriction types."""
+        library_settings = BasicAuthProviderLibrarySettings(
+            library_identifier_restriction_type=restriction_type,
+            library_identifier_restriction_criteria=criteria_string,
+        )
+
+        provider = mock_basic(library_settings=library_settings)
+        result = provider.library_identifier_restriction_criteria
+
+        if isinstance(expected_result, re.Pattern):
+            # For regex, compare the pattern string
+            assert isinstance(result, re.Pattern)
+            assert result.pattern == expected_result.pattern
+        else:
+            assert result == expected_result
 
     @pytest.mark.parametrize(
         "restriction_type, restriction, restriction_as_string, identifier, expected_success",
