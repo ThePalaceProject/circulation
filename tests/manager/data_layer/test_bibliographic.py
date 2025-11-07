@@ -1163,3 +1163,65 @@ class TestBibliographicData:
         with freeze_time(now):
             bibliographic.apply(db.session, edition, None)
         assert edition.updated_at == now
+
+    def test_validate_primary_identifier_case_insensitive(
+        self, db: DatabaseTransactionFixture
+    ):
+        """Test that _validate_primary_identifier performs case-insensitive comparison."""
+        # Create an edition with a mixed-case identifier
+        edition = db.edition()
+        edition.primary_identifier.identifier = "ABC123def"
+        db.session.flush()
+
+        identifier_lower = edition.primary_identifier.identifier.lower()
+        identifier_upper = edition.primary_identifier.identifier.upper()
+        identifier_mixed = edition.primary_identifier.identifier.swapcase()
+
+        # Test with lowercase version - should NOT raise an error
+        # because the identifiers match exactly -- no difference in case
+        bibliographic_lower = BibliographicData(
+            data_source_name=edition.data_source.name,
+            primary_identifier_data=IdentifierData(
+                type=edition.primary_identifier.type,
+                identifier=identifier_lower,
+            ),
+            title="Lowercase",
+        )
+        # This should not raise an error due to case-insensitive comparison
+        updated_edition, changed = bibliographic_lower.apply(db.session, edition, None)
+        assert updated_edition.title == "Lowercase"
+
+        # Test with uppercase version - should NOT raise an error
+        bibliographic_upper = BibliographicData(
+            data_source_name=edition.data_source.name,
+            primary_identifier_data=IdentifierData(
+                type=edition.primary_identifier.type,
+                identifier=identifier_upper,
+            ),
+            title="Uppercase",
+        )
+        updated_edition, changed = bibliographic_upper.apply(db.session, edition, None)
+        assert updated_edition.title == "Uppercase"
+
+        # Test with swapped case version - should NOT raise an error
+        bibliographic_mixed = BibliographicData(
+            data_source_name=edition.data_source.name,
+            primary_identifier_data=IdentifierData(
+                type=edition.primary_identifier.type,
+                identifier=identifier_mixed,
+            ),
+            title="Mixed Case",
+        )
+        updated_edition, changed = bibliographic_mixed.apply(db.session, edition, None)
+
+        # Test that an identifier with differences beyond case still raises an error.
+        bibliographic_wrong = BibliographicData(
+            data_source_name=edition.data_source.name,
+            primary_identifier_data=IdentifierData(
+                type=edition.primary_identifier.type,
+                identifier="completely_different_id",
+            ),
+            title="Completely Different",
+        )
+        with pytest.raises(PalaceValueError, match="primary identifier"):
+            bibliographic_wrong.apply(db.session, edition, None)
