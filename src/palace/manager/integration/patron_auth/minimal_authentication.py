@@ -56,12 +56,9 @@ class MinimalAuthenticationProvider(
 
     @classmethod
     def generate_patrondata(cls, authorization_identifier: str) -> PatronData:
-        if authorization_identifier.endswith("_username"):
-            username = authorization_identifier
-            identifier = authorization_identifier[:-9]
-        else:
-            identifier = authorization_identifier
-            username = authorization_identifier + "_username"
+        _username_suffix = "_username"
+        identifier = authorization_identifier.removesuffix(_username_suffix)
+        username = identifier + _username_suffix
 
         personal_name = "PersonalName" + identifier
 
