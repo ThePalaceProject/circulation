@@ -117,7 +117,7 @@ class TestPatronAuth:
         assert response_data.get("patron_auth_services") == []
         protocols = response_data.get("protocols")
         assert isinstance(protocols, list)
-        assert 6 == len(protocols)
+        assert 7 == len(protocols)
         assert "settings" in protocols[0]
         assert "library_settings" in protocols[0]
 
