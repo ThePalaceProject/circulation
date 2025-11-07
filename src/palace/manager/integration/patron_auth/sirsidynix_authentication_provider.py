@@ -16,7 +16,7 @@ from palace.manager.api.authentication.basic import (
     BasicAuthProviderSettings,
 )
 from palace.manager.core.config import Configuration
-from palace.manager.core.exceptions import BasePalaceException
+from palace.manager.core.exceptions import BasePalaceException, PalaceValueError
 from palace.manager.core.selftest import SelfTestResult
 from palace.manager.integration.settings import (
     FormFieldType,
@@ -220,21 +220,39 @@ class SirsiDynixHorizonAuthenticationProvider(
         patrondata.complete = True
         fields: dict = data["fields"]
         patrondata.personal_name = fields.get("displayName")
-        patron_type: str = fields["patronType"].get("key", "")
-        patrondata.library_identifier = patron_type
+
+        patron_type: str | None = None
+        if self.library_identifier_field == "patrontype":
+            patron_type = fields["patronType"].get("key", "")
+            patrondata.library_identifier = patron_type
+        elif self.library_identifier_field == "barcode":
+            pass
+            # do nothing since the library identifier field and restriction type are handled in the authentication
+            # function (see enforce_library_identifier_restriction())
+        else:
+            # this should never happen
+            raise PalaceValueError(
+                f"Unexpected  library_identifier_field value ({self.library_identifier_field})"
+            )
 
         # Basic block reasons
 
-        if not fields.get("approved", False):
+        # Some Symphony installations appear to use "standing" to indicate approval.
+        # TODO we may want to make the approval mechanism configurable.
+        if not (
+            fields.get("approved", False)
+            or fields.get("standing", {}).get("key", "").lower() == "ok"
+        ):
             patrondata.block_reason = SirsiBlockReasons.NOT_APPROVED
             return patrondata
 
         # If the patron type ends with a disallowed suffix the
         # patron will be authenticated but marked as blocked.
-        for suffix in self.sirsi_disallowed_suffixes:
-            if patron_type.endswith(suffix):
-                patrondata.block_reason = SirsiBlockReasons.PATRON_BLOCKED
-                return patrondata
+        if patron_type is not None:
+            for suffix in self.sirsi_disallowed_suffixes:
+                if patron_type.endswith(suffix):
+                    patrondata.block_reason = SirsiBlockReasons.PATRON_BLOCKED
+                    return patrondata
 
         # Get patron "fines" information
         status = self.api_patron_status_info(
