@@ -133,32 +133,33 @@ class TestMinimalAuthenticationProvider:
         assert patrondata.fines is None
 
     @pytest.mark.parametrize(
-        "input_type, authorization_identifier, expect_success",
+        "authorization_identifier, expect_success",
         [
             pytest.param(
-                "patrondata",
                 "user123",
                 True,
                 id="patrondata_with_valid_identifier",
             ),
             pytest.param(
-                "patrondata",
                 "test_username",
                 True,
                 id="patrondata_with_username_suffix",
             ),
             pytest.param(
-                "none",
                 None,
                 False,
-                id="none_input_returns_none",
+                id="patrondata_with_none_identifier_returns_none",
+            ),
+            pytest.param(
+                "",
+                False,
+                id="patrondata_with_empty_identifier_returns_none",
             ),
         ],
     )
     def test_remote_patron_lookup(
         self,
         minimal_auth_fixture: MinimalAuthFixture,
-        input_type: str,
         authorization_identifier: str | None,
         expect_success: bool,
     ):
@@ -166,11 +167,7 @@ class TestMinimalAuthenticationProvider:
         provider = minimal_auth_fixture.provider()
 
         # Create input based on type
-        if input_type == "patrondata":
-            patron_input = PatronData(authorization_identifier=authorization_identifier)
-        else:
-            patron_input = None
-
+        patron_input = PatronData(authorization_identifier=authorization_identifier)
         result = provider.remote_patron_lookup(patron_input)
 
         if expect_success:

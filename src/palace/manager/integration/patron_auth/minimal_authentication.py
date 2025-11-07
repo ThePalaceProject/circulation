@@ -70,7 +70,7 @@ class MinimalAuthenticationProvider(
     def remote_patron_lookup(
         self, patron_or_patrondata: Patron | PatronData
     ) -> PatronData | None:
-        if not patron_or_patrondata:
+        if not patron_or_patrondata.authorization_identifier:
             return None
 
         return self.generate_patrondata(patron_or_patrondata.authorization_identifier)
