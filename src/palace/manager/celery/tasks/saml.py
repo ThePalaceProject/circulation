@@ -28,17 +28,23 @@ def _update_saml_federation_idps_metadata(
     session: Session,
     log: Logger | LoggerAdapterType,
 ) -> None:
-    """Update IdPs' metadata belonging to the specified SAML federation."""
+    """Update IdPs' metadata belonging to the specified SAML federation.
+
+    This is done by deleting all of the existing IdPs for the given
+    federation and adding all of those most recently fetched.
+
+    TODO: This is a rather brute force way to do this and probably
+     results in a bunch of unnecessary churn, given that most entries
+     probably have not changed from one run to the next, but get
+     replaced anyway.
+    """
     log.info(f"Started processing {saml_federation}")
 
     for existing_identity_provider in saml_federation.identity_providers:
         session.delete(existing_identity_provider)
 
     new_identity_providers = loader.load(saml_federation)
-
-    for new_identity_provider in new_identity_providers:
-        session.add(new_identity_provider)
-        new_identity_provider
+    session.add_all(new_identity_providers)
 
     saml_federation.last_updated_at = utc_now()
 
