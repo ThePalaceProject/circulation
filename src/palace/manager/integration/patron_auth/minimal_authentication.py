@@ -24,7 +24,7 @@ class MinimalAuthenticationProvider(
     def description(cls) -> str:
         return (
             "An internal authentication service that provides a no op remote authentication. "
-            "As long as the pre auth tests succeeds this auth provider will provide a successful authentication. "
+            "As long as the pre-auth tests succeed, this auth provider will provide a successful authentication. "
             "It is useful for libraries that only want to perform only simple validation checks such as user barcodes "
             "matching a list of prefixes and do not require passwords and/or remote authentication checks."
         )
