@@ -47,6 +47,10 @@ class LibraryImportInfo(BaseModel):
     short_name: str
     website_url: str
     patron_support_email: str
+    large_collection_languages: list[str]
+    small_collection_languages: list[str]
+    facets_default_order: str
+    enabled_entry_points: list[str]
 
 
 class LibrarySettingsController(AdminPermissionsControllerMixin):
@@ -201,7 +205,11 @@ class LibrarySettingsController(AdminPermissionsControllerMixin):
                     "name": "Library Name",
                     "short_name": "lib_short",
                     "website_url": "https://example.com",
-                    "patron_support_email": "support@example.com"
+                    "patron_support_email": "support@example.com",
+                    "large_collection_languages": ["en"],
+                    "small_collection_languages": ["es"],
+                    "facets_default_order": "added",
+                    "enabled_entry_points": ["All", "Book", "Audio"]
                 },
                 ...
             ]
@@ -306,10 +314,10 @@ class LibrarySettingsController(AdminPermissionsControllerMixin):
         settings_data = {
             "website": library_import_info.website_url,
             "help_email": library_import_info.patron_support_email,
-            "large_collection_languages": ["en"],
-            "small_collection_languages": ["es"],
-            "facets_default_order": "added",  # Sort by most recently added
-            "enabled_entry_points": ["All", "Book", "Audio"],  # All, eBooks, Audiobooks
+            "large_collection_languages": library_import_info.large_collection_languages,
+            "small_collection_languages": library_import_info.small_collection_languages,
+            "facets_default_order": library_import_info.facets_default_order,
+            "enabled_entry_points": library_import_info.enabled_entry_points,
         }
 
         # Validate settings using LibrarySettings model
