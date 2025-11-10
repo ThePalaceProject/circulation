@@ -523,7 +523,7 @@ class TestAdminLibrarySettings:
         self, fixture: AdminRouteFixture
     ):
         """Test that import_libraries succeeds for authenticated users."""
-        with fixture.request("/admin/import-libraries", method="POST") as response:
+        with fixture.request("/admin/libraries/import", method="POST") as response:
             assert 401 == response.status_code
 
     def test_import_libraries_succeeds_with_basic_auth(
@@ -536,7 +536,7 @@ class TestAdminLibrarySettings:
 
         fixture.manager._db = fixture.db.session
         with fixture.request(
-            "/admin/import-libraries",
+            "/admin/libraries/import",
             method="POST",
             headers={
                 "Authorization": f"Basic { base64.b64encode(f"{admin_email}:{password}")}"

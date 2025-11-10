@@ -754,7 +754,7 @@ def admin_base(**kwargs):
     return redirect(url_for("admin_view", _external=True))
 
 
-@app.route("/admin/import-libraries", strict_slashes=False, methods=["POST"])
+@app.route("/admin/libraries/import", strict_slashes=False, methods=["POST"])
 @returns_json_or_response_or_problem_detail
 @auth.login_required()  # This annotation enables basic auth for this end point.
 def import_libraries():
