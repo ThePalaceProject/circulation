@@ -1110,7 +1110,8 @@ class TestLibrarySettings:
         ):
             response = controller.import_libraries()
             assert response.status_code == 207  # Multi-Status
-            result = response.json
+            result = response.get_json()
+            assert isinstance(result, dict)
 
             assert len(result["created"]) == 0
             assert len(result["errors"]) == 1
@@ -1141,7 +1142,8 @@ class TestLibrarySettings:
         ):
             response = controller.import_libraries()
             assert response.status_code == 207  # Multi-Status
-            result = response.json
+            result = response.get_json()
+            assert isinstance(result, dict)
 
             assert len(result["created"]) == 0
             assert len(result["errors"]) == 1
@@ -1178,8 +1180,8 @@ class TestLibrarySettings:
         ):
             response = controller.import_libraries()
             assert response.status_code == 207  # Multi-Status
-            assert isinstance(response.json, dict)
-            result = response.json
+            result = response.get_json()
+            assert isinstance(result, dict)
 
             assert len(result["created"]) == 1
             assert len(result["errors"]) == 1
@@ -1214,8 +1216,8 @@ class TestLibrarySettings:
         ):
             response = controller.import_libraries()
             assert response.status_code == 207  # Multi-Status
-            assert isinstance(response.json, dict)
-            result = response.json
+            result = response.get_json()
+            assert isinstance(result, dict)
 
             assert len(result["created"]) == 0
             assert len(result["errors"]) == 1
@@ -1243,7 +1245,8 @@ class TestLibrarySettings:
         ):
             response = controller.import_libraries()
             assert response.status_code == 207
-            result = response.json
+            result = response.get_json()
+            assert isinstance(result, dict)
 
             assert len(result["created"]) == 0
             assert len(result["errors"]) == 1
@@ -1273,7 +1276,8 @@ class TestLibrarySettings:
         ):
             response = controller.import_libraries()
             assert response.status_code == 207
-            result = response.json
+            result = response.get_json()
+            assert isinstance(result, dict)
 
             assert len(result["created"]) == 0
             assert len(result["errors"]) == 1

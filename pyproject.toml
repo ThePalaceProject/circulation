@@ -236,7 +236,6 @@ module = [
     "feedparser",
     "firebase_admin.*",
     "flask_babel",
-    "flask_httpauth",
     "fuzzywuzzy",
     "google.auth",
     "greenlet",
@@ -289,7 +288,6 @@ firebase-admin = "^7.0.0"
 Flask = "^3.0"
 Flask-Babel = "^4.0"
 Flask-Cors = "6.0.1"
-Flask-HTTPAuth = "^4.8.0"
 frozendict = "^2.4.6"
 fuzzywuzzy = "0.18.0"  # fuzzywuzzy is for author name manipulations
 google-api-python-client = "^2.162.0"

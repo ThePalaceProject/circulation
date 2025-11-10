@@ -1,9 +1,10 @@
+from collections.abc import Callable
 from datetime import timedelta
 from functools import wraps
+from typing import ParamSpec, TypeVar
 
 import flask
-from flask import Response, make_response, redirect, url_for
-from flask_httpauth import HTTPBasicAuth
+from flask import Response, make_response, redirect, request, url_for
 
 from palace.manager.api.admin.config import (
     Configuration as AdminClientConfig,
@@ -11,7 +12,10 @@ from palace.manager.api.admin.config import (
 )
 from palace.manager.api.admin.dashboard_stats import generate_statistics
 from palace.manager.api.admin.model.dashboard_statistics import StatisticsResponse
-from palace.manager.api.admin.problem_details import INVALID_ADMIN_CREDENTIALS
+from palace.manager.api.admin.problem_details import (
+    ADMIN_NOT_AUTHORIZED,
+    INVALID_ADMIN_CREDENTIALS,
+)
 from palace.manager.api.app import app
 from palace.manager.api.controller.static_file import StaticFileController
 from palace.manager.api.routes import allows_library, has_library, library_route
@@ -23,26 +27,8 @@ from palace.manager.util.problem_detail import BaseProblemDetailException, Probl
 # the admin will have to log in again.
 app.permanent_session_lifetime = timedelta(hours=9)
 
-auth = HTTPBasicAuth()
-
-
-@auth.verify_password
-def authenticate_admin(username: str | None, password: str | None) -> Admin | None:
-    """Returns an authenticated admin if successful or None if not. This method is called by Flask-HTTPAuth's basic auth mechanism."""
-    setattr(flask.request, "admin", None)
-    if not username or not password:
-        return None
-    admin = Admin.authenticate(app.manager._db, email=username, password=password)
-    if admin:
-        setattr(flask.request, "admin", admin)
-        return admin
-    return None
-
-
-@auth.error_handler
-def auth_error(status: int):
-    """Returns a problem detail if basic authentication fails. This method is called by Flask-HTTPAuth."""
-    return INVALID_ADMIN_CREDENTIALS.response
+P = ParamSpec("P")
+T = TypeVar("T")
 
 
 def allows_admin_auth_setup(f):
@@ -52,6 +38,27 @@ def allows_admin_auth_setup(f):
         return f(*args, setting_up=setting_up, **kwargs)
 
     return decorated
+
+
+def requires_basic_auth[**P, T](func: Callable[P, T]) -> Callable[P, T | ProblemDetail]:
+    """Basic auth for stateless system admin only API calls."""
+
+    @wraps(func)
+    def wrapper(*args: P.args, **kwargs: P.kwargs) -> T | ProblemDetail:
+        auth = request.authorization
+        if not auth or auth.username is None or auth.password is None:
+            return INVALID_ADMIN_CREDENTIALS
+
+        admin = Admin.authenticate(app.manager._db, auth.username, auth.password)
+
+        if not admin:
+            return INVALID_ADMIN_CREDENTIALS
+
+        if not admin.is_system_admin():
+            return ADMIN_NOT_AUTHORIZED
+        return func(*args, **kwargs)
+
+    return wrapper
 
 
 def requires_admin(f):
@@ -756,7 +763,7 @@ def admin_base(**kwargs):
 
 @app.route("/admin/libraries/import", strict_slashes=False, methods=["POST"])
 @returns_json_or_response_or_problem_detail
-@auth.login_required()  # This annotation enables basic auth for this end point.
+@requires_basic_auth
 def import_libraries():
     """Import multiple libraries from a list of library configurations."""
     return app.manager.admin_library_settings_controller.import_libraries()
