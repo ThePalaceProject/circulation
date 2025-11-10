@@ -90,6 +90,43 @@ class TestLibrarySettings:
         form = ImmutableMultiDict(form_data)
         return form
 
+    def import_library_payload(
+        self,
+        *,
+        name: str = "Test Library",
+        short_name: str = "lib",
+        website_url: str = "https://library.example.com",
+        patron_support_email: str = "support@example.com",
+        large_collection_languages: list[str] | None = None,
+        small_collection_languages: list[str] | None = None,
+        facets_default_order: str = "added",
+        enabled_entry_points: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Generate default JSON payload for library import tests."""
+        payload: dict[str, Any] = {
+            "name": name,
+            "short_name": short_name,
+            "website_url": website_url,
+            "patron_support_email": patron_support_email,
+            "large_collection_languages": (
+                large_collection_languages
+                if large_collection_languages is not None
+                else ["English"]
+            ),
+            "small_collection_languages": (
+                small_collection_languages
+                if small_collection_languages is not None
+                else ["Spanish"]
+            ),
+            "facets_default_order": facets_default_order,
+            "enabled_entry_points": (
+                enabled_entry_points
+                if enabled_entry_points is not None
+                else ["All", "Book", "Audio"]
+            ),
+        }
+        return payload
+
     def test_libraries_get_with_no_libraries(
         self,
         flask_app_fixture: FlaskAppFixture,
@@ -493,14 +530,16 @@ class TestLibrarySettings:
                     ("featured_lane_size", "5"),
                     (
                         "facets_default_order",
-                        FacetConstants.ORDER_RANDOM,
+                        FacetConstants.ORDER_ADDED_TO_COLLECTION,
                     ),
                     (
                         "facets_enabled_order" + "_" + FacetConstants.ORDER_TITLE,
                         "",
                     ),
                     (
-                        "facets_enabled_order" + "_" + FacetConstants.ORDER_RANDOM,
+                        "facets_enabled_order"
+                        + "_"
+                        + FacetConstants.ORDER_ADDED_TO_COLLECTION,
                         "",
                     ),
                 ]
@@ -523,10 +562,13 @@ class TestLibrarySettings:
         assert library.name == "The New York Public Library"
         assert library.short_name == "nypl"
         assert library.settings.featured_lane_size == 5
-        assert library.settings.facets_default_order == FacetConstants.ORDER_RANDOM
+        assert (
+            library.settings.facets_default_order
+            == FacetConstants.ORDER_ADDED_TO_COLLECTION
+        )
         assert library.settings.facets_enabled_order == [
             FacetConstants.ORDER_TITLE,
-            FacetConstants.ORDER_RANDOM,
+            FacetConstants.ORDER_ADDED_TO_COLLECTION,
         ]
         assert library.logo is not None
         assert expected_logo_data_url == library.logo.data_url
@@ -576,10 +618,10 @@ class TestLibrarySettings:
         # A library already exists.
         settings = library_fixture.mock_settings()
         settings.featured_lane_size = 5
-        settings.facets_default_order = FacetConstants.ORDER_RANDOM
+        settings.facets_default_order = FacetConstants.ORDER_ADDED_TO_COLLECTION
         settings.facets_enabled_order = [
             FacetConstants.ORDER_TITLE,
-            FacetConstants.ORDER_RANDOM,
+            FacetConstants.ORDER_ADDED_TO_COLLECTION,
         ]
         library_to_edit = library_fixture.library(
             "New York Public Library", "nypl", settings
@@ -610,7 +652,9 @@ class TestLibrarySettings:
                         "",
                     ),
                     (
-                        "facets_enabled_order" + "_" + FacetConstants.ORDER_RANDOM,
+                        "facets_enabled_order"
+                        + "_"
+                        + FacetConstants.ORDER_ADDED_TO_COLLECTION,
                         "",
                     ),
                 ]
@@ -636,7 +680,7 @@ class TestLibrarySettings:
         assert library.settings.facets_default_order == FacetConstants.ORDER_AUTHOR
         assert library.settings.facets_enabled_order == [
             FacetConstants.ORDER_AUTHOR,
-            FacetConstants.ORDER_RANDOM,
+            FacetConstants.ORDER_ADDED_TO_COLLECTION,
         ]
 
         # The library-wide logo was not updated and has been left alone.
@@ -773,18 +817,18 @@ class TestLibrarySettings:
         """Test successful import of multiple libraries."""
         libraries_data = {
             "libraries": [
-                {
-                    "name": "Test Library 1",
-                    "short_name": "lib1",
-                    "website_url": "https://library1.example.com",
-                    "patron_support_email": "support1@example.com",
-                },
-                {
-                    "name": "Test Library 2",
-                    "short_name": "lib2",
-                    "website_url": "https://library2.example.com",
-                    "patron_support_email": "support2@example.com",
-                },
+                self.import_library_payload(
+                    name="Test Library 1",
+                    short_name="lib1",
+                    website_url="https://library1.example.com",
+                    patron_support_email="support1@example.com",
+                ),
+                self.import_library_payload(
+                    name="Test Library 2",
+                    short_name="lib2",
+                    website_url="https://library2.example.com",
+                    patron_support_email="support2@example.com",
+                ),
             ]
         }
 
@@ -857,12 +901,12 @@ class TestLibrarySettings:
 
         libraries_data = {
             "libraries": [
-                {
-                    "name": "Updated Name",
-                    "short_name": "existing",
-                    "website_url": "https://updated.example.com",
-                    "patron_support_email": "updated@example.com",
-                }
+                self.import_library_payload(
+                    name="Updated Name",
+                    short_name="existing",
+                    website_url="https://updated.example.com",
+                    patron_support_email="updated@example.com",
+                )
             ]
         }
 
@@ -930,38 +974,51 @@ class TestLibrarySettings:
         db: DatabaseTransactionFixture,
     ):
         """Test that missing required fields in library data returns partial errors."""
+        valid_payload = self.import_library_payload(
+            name="Valid Library",
+            short_name="valid",
+            website_url="https://valid.example.com",
+            patron_support_email="valid@example.com",
+        )
+        missing_name_payload = self.import_library_payload(
+            name="Missing Name Entry",
+            short_name="missing_name",
+            website_url="https://example.com",
+            patron_support_email="support@example.com",
+        )
+        missing_name_payload.pop("name")
+
+        missing_short_name_payload = self.import_library_payload(
+            name="Missing Short Name",
+            short_name="missing_short_name",
+            website_url="https://example.com",
+            patron_support_email="support@example.com",
+        )
+        missing_short_name_payload.pop("short_name")
+
+        missing_website_payload = self.import_library_payload(
+            name="Missing Website",
+            short_name="missing_website",
+            website_url="https://example.com",
+            patron_support_email="support@example.com",
+        )
+        missing_website_payload.pop("website_url")
+
+        missing_email_payload = self.import_library_payload(
+            name="Missing Email",
+            short_name="missing_email",
+            website_url="https://example.com",
+            patron_support_email="support@example.com",
+        )
+        missing_email_payload.pop("patron_support_email")
+
         libraries_data = {
             "libraries": [
-                {
-                    "name": "Valid Library",
-                    "short_name": "valid",
-                    "website_url": "https://valid.example.com",
-                    "patron_support_email": "valid@example.com",
-                },
-                {
-                    # Missing name
-                    "short_name": "missing_name",
-                    "website_url": "https://example.com",
-                    "patron_support_email": "support@example.com",
-                },
-                {
-                    "name": "Missing Short Name",
-                    # Missing short_name
-                    "website_url": "https://example.com",
-                    "patron_support_email": "support@example.com",
-                },
-                {
-                    "name": "Missing Website",
-                    "short_name": "missing_website",
-                    # Missing website_url
-                    "patron_support_email": "support@example.com",
-                },
-                {
-                    "name": "Missing Email",
-                    "short_name": "missing_email",
-                    "website_url": "https://example.com",
-                    # Missing patron_support_email
-                },
+                valid_payload,
+                missing_name_payload,
+                missing_short_name_payload,
+                missing_website_payload,
+                missing_email_payload,
             ]
         }
 
@@ -1010,12 +1067,12 @@ class TestLibrarySettings:
         """Test that invalid email format is caught."""
         libraries_data = {
             "libraries": [
-                {
-                    "name": "Invalid Email Library",
-                    "short_name": "invalid_email",
-                    "website_url": "https://example.com",
-                    "patron_support_email": "not-an-email",
-                }
+                self.import_library_payload(
+                    name="Invalid Email Library",
+                    short_name="invalid_email",
+                    website_url="https://example.com",
+                    patron_support_email="not-an-email",
+                )
             ]
         }
 
@@ -1031,6 +1088,67 @@ class TestLibrarySettings:
             assert len(result["errors"]) == 1
             assert "Invalid settings" in result["errors"][0]["error"]
 
+    def test_import_libraries_invalid_large_collection_languages(
+        self,
+        flask_app_fixture: FlaskAppFixture,
+        controller: LibrarySettingsController,
+        db: DatabaseTransactionFixture,
+    ):
+        """Test that invalid large collection languages are rejected."""
+        payload = self.import_library_payload(
+            name="Invalid Large Languages",
+            short_name="invalid_large_lang",
+            website_url="https://example.com",
+            patron_support_email="lang@example.com",
+        )
+        payload["large_collection_languages"] = ["xx"]
+
+        libraries_data = {"libraries": [payload]}
+
+        with flask_app_fixture.test_request_context_system_admin(
+            "/", method="POST", json=libraries_data
+        ):
+            response = controller.import_libraries()
+            assert response.status_code == 207  # Multi-Status
+            result = response.json
+
+            assert len(result["created"]) == 0
+            assert len(result["errors"]) == 1
+            assert "Invalid Large Languages" in result["errors"][0]["error"]
+
+        # Verify library was not created
+        assert get_one(db.session, Library, short_name="invalid_large_lang") is None
+
+    def test_import_libraries_invalid_small_collection_languages(
+        self,
+        flask_app_fixture: FlaskAppFixture,
+        controller: LibrarySettingsController,
+        db: DatabaseTransactionFixture,
+    ):
+        """Test that invalid small collection languages are rejected."""
+        payload = self.import_library_payload(
+            name="Invalid Small Languages",
+            short_name="invalid_small_lang",
+            website_url="https://example.com",
+            patron_support_email="lang@example.com",
+        )
+        payload["small_collection_languages"] = ["xx"]
+
+        libraries_data = {"libraries": [payload]}
+
+        with flask_app_fixture.test_request_context_system_admin(
+            "/", method="POST", json=libraries_data
+        ):
+            response = controller.import_libraries()
+            assert response.status_code == 207  # Multi-Status
+            result = response.json
+
+            assert len(result["created"]) == 0
+            assert len(result["errors"]) == 1
+            assert "Invalid Small Languages" in result["errors"][0]["error"]
+
+        assert get_one(db.session, Library, short_name="invalid_small_lang") is None
+
     def test_import_libraries_invalid_followed_by_valid(
         self,
         flask_app_fixture: FlaskAppFixture,
@@ -1040,18 +1158,18 @@ class TestLibrarySettings:
         """Test that invalid email format is caught."""
         libraries_data = {
             "libraries": [
-                {
-                    "name": "Invalid Library",
-                    "short_name": "invalid",
-                    "website_url": "https://example.com",
-                    "patron_support_email": "not-an-email",
-                },
-                {
-                    "name": "Valid Library",
-                    "short_name": "valid",
-                    "website_url": "https://example.com",
-                    "patron_support_email": "email@example.com",
-                },
+                self.import_library_payload(
+                    name="Invalid Library",
+                    short_name="invalid",
+                    website_url="https://example.com",
+                    patron_support_email="not-an-email",
+                ),
+                self.import_library_payload(
+                    name="Valid Library",
+                    short_name="valid",
+                    website_url="https://example.com",
+                    patron_support_email="email@example.com",
+                ),
             ]
         }
 
@@ -1082,12 +1200,12 @@ class TestLibrarySettings:
         """Test that invalid URL format is caught."""
         libraries_data = {
             "libraries": [
-                {
-                    "name": "Valid Library",
-                    "short_name": "valid_short_name",
-                    "website_url": "invalid_url",
-                    "patron_support_email": "valid-support@example.com",
-                }
+                self.import_library_payload(
+                    name="Valid Library",
+                    short_name="valid_short_name",
+                    website_url="invalid_url",
+                    patron_support_email="valid-support@example.com",
+                )
             ]
         }
 
@@ -1103,6 +1221,66 @@ class TestLibrarySettings:
             assert len(result["errors"]) == 1
             assert "Invalid settings" in result["errors"][0]["error"]
 
+    def test_import_libraries_invalid_facets_default_order(
+        self,
+        flask_app_fixture: FlaskAppFixture,
+        controller: LibrarySettingsController,
+        db: DatabaseTransactionFixture,
+    ):
+        """Test that invalid facets default order is rejected."""
+        payload = self.import_library_payload(
+            name="Invalid Facets Library",
+            short_name="invalid_facets",
+            website_url="https://example.com",
+            patron_support_email="facets@example.com",
+        )
+        payload["facets_default_order"] = "invalid-order"
+
+        libraries_data = {"libraries": [payload]}
+
+        with flask_app_fixture.test_request_context_system_admin(
+            "/", method="POST", json=libraries_data
+        ):
+            response = controller.import_libraries()
+            assert response.status_code == 207
+            result = response.json
+
+            assert len(result["created"]) == 0
+            assert len(result["errors"]) == 1
+            assert "Invalid Facets" in result["errors"][0]["error"]
+
+        assert get_one(db.session, Library, short_name="invalid_facets") is None
+
+    def test_import_libraries_invalid_enabled_entry_points(
+        self,
+        flask_app_fixture: FlaskAppFixture,
+        controller: LibrarySettingsController,
+        db: DatabaseTransactionFixture,
+    ):
+        """Test that invalid entry points are rejected."""
+        payload = self.import_library_payload(
+            name="Invalid Entry Points",
+            short_name="invalid_entry_points",
+            website_url="https://example.com",
+            patron_support_email="entry@example.com",
+        )
+        payload["enabled_entry_points"] = ["All", "InvalidEntryPoint"]
+
+        libraries_data = {"libraries": [payload]}
+
+        with flask_app_fixture.test_request_context_system_admin(
+            "/", method="POST", json=libraries_data
+        ):
+            response = controller.import_libraries()
+            assert response.status_code == 207
+            result = response.json
+
+            assert len(result["created"]) == 0
+            assert len(result["errors"]) == 1
+            assert "Invalid Entry Points" in result["errors"][0]["error"]
+
+        assert get_one(db.session, Library, short_name="invalid_entry_points") is None
+
     def test_import_libraries_mixed_success_and_errors(
         self,
         flask_app_fixture: FlaskAppFixture,
@@ -1115,38 +1293,45 @@ class TestLibrarySettings:
         existing = library_fixture.library("Old Name", "existing")
         original_name = existing.name
 
+        new1_payload = self.import_library_payload(
+            name="New Library 1",
+            short_name="new1",
+            website_url="https://new1.example.com",
+            patron_support_email="new1@example.com",
+        )
+        missing_name_payload = self.import_library_payload(
+            name="Error Library Missing Name",
+            short_name="error1",
+            website_url="https://error1.example.com",
+            patron_support_email="error1@example.com",
+        )
+        missing_name_payload.pop("name")
+        existing_override_payload = self.import_library_payload(
+            name="Updated Library",
+            short_name="existing",
+            website_url="https://updated.example.com",
+            patron_support_email="updated@example.com",
+        )
+        new2_payload = self.import_library_payload(
+            name="New Library 2",
+            short_name="new2",
+            website_url="https://new2.example.com",
+            patron_support_email="new2@example.com",
+        )
+        invalid_email_payload = self.import_library_payload(
+            name="Invalid Email",
+            short_name="error2",
+            website_url="https://error2.example.com",
+            patron_support_email="not-an-email",
+        )
+
         libraries_data = {
             "libraries": [
-                {
-                    "name": "New Library 1",
-                    "short_name": "new1",
-                    "website_url": "https://new1.example.com",
-                    "patron_support_email": "new1@example.com",
-                },
-                {
-                    # Missing name - error
-                    "short_name": "error1",
-                    "website_url": "https://error1.example.com",
-                    "patron_support_email": "error1@example.com",
-                },
-                {
-                    "name": "Updated Library",
-                    "short_name": "existing",
-                    "website_url": "https://updated.example.com",
-                    "patron_support_email": "updated@example.com",
-                },
-                {
-                    "name": "New Library 2",
-                    "short_name": "new2",
-                    "website_url": "https://new2.example.com",
-                    "patron_support_email": "new2@example.com",
-                },
-                {
-                    "name": "Invalid Email",
-                    "short_name": "error2",
-                    "website_url": "https://error2.example.com",
-                    "patron_support_email": "not-an-email",
-                },
+                new1_payload,
+                missing_name_payload,
+                existing_override_payload,
+                new2_payload,
+                invalid_email_payload,
             ]
         }
 

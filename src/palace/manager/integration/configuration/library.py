@@ -547,6 +547,42 @@ class LibrarySettings(BaseSettings):
             )
         return self
 
+    @field_validator("facets_default_order")
+    @classmethod
+    def validate_facets_default_order(cls, value: str) -> str:
+        """Ensure the default sort order is one of the allowed options."""
+        valid_facets = set(FacetConstants.ORDER_FACETS)
+        if value not in valid_facets:
+            field_label = cls.get_form_field_label("facets_default_order")
+            valid_display = ", ".join(sorted(valid_facets))
+            raise SettingsValidationError(
+                problem_detail=INVALID_CONFIGURATION_OPTION.detailed(
+                    f"'{field_label}' must be one of: {valid_display}."
+                )
+            )
+        return value
+
+    @field_validator("enabled_entry_points")
+    @classmethod
+    def validate_enabled_entry_points(cls, value: list[str]) -> list[str]:
+        """Ensure all enabled entry points are recognized."""
+        invalid = [
+            entry_point
+            for entry_point in value
+            if entry_point not in EntryPoint.BY_INTERNAL_NAME
+        ]
+        if invalid:
+            field_label = cls.get_form_field_label("enabled_entry_points")
+            valid_options = ", ".join(sorted(EntryPoint.BY_INTERNAL_NAME.keys()))
+            invalid_list = ", ".join(sorted(invalid))
+            raise SettingsValidationError(
+                problem_detail=INVALID_CONFIGURATION_OPTION.detailed(
+                    f"'{field_label}' contains unsupported values: {invalid_list}. "
+                    f"Valid options are: {valid_options}."
+                )
+            )
+        return value
+
     @field_validator("web_primary_color", "web_secondary_color")
     @classmethod
     def validate_web_color_contrast(cls, value: str, info: ValidationInfo) -> str:
