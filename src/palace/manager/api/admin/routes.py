@@ -1,8 +1,10 @@
+from collections.abc import Callable
 from datetime import timedelta
 from functools import wraps
+from typing import ParamSpec, TypeVar
 
 import flask
-from flask import Response, make_response, redirect, url_for
+from flask import Response, make_response, redirect, request, url_for
 
 from palace.manager.api.admin.config import (
     Configuration as AdminClientConfig,
@@ -10,15 +12,23 @@ from palace.manager.api.admin.config import (
 )
 from palace.manager.api.admin.dashboard_stats import generate_statistics
 from palace.manager.api.admin.model.dashboard_statistics import StatisticsResponse
+from palace.manager.api.admin.problem_details import (
+    ADMIN_NOT_AUTHORIZED,
+    INVALID_ADMIN_CREDENTIALS,
+)
 from palace.manager.api.app import app
 from palace.manager.api.controller.static_file import StaticFileController
 from palace.manager.api.routes import allows_library, has_library, library_route
 from palace.manager.core.app_server import returns_problem_detail
+from palace.manager.sqlalchemy.model.admin import Admin
 from palace.manager.util.problem_detail import BaseProblemDetailException, ProblemDetail
 
 # An admin's session will expire after this amount of time and
 # the admin will have to log in again.
 app.permanent_session_lifetime = timedelta(hours=9)
+
+P = ParamSpec("P")
+T = TypeVar("T")
 
 
 def allows_admin_auth_setup(f):
@@ -28,6 +38,27 @@ def allows_admin_auth_setup(f):
         return f(*args, setting_up=setting_up, **kwargs)
 
     return decorated
+
+
+def requires_basic_auth[**P, T](func: Callable[P, T]) -> Callable[P, T | ProblemDetail]:
+    """Basic auth for stateless system admin only API calls."""
+
+    @wraps(func)
+    def wrapper(*args: P.args, **kwargs: P.kwargs) -> T | ProblemDetail:
+        auth = request.authorization
+        if not auth or auth.username is None or auth.password is None:
+            return INVALID_ADMIN_CREDENTIALS
+
+        admin = Admin.authenticate(app.manager._db, auth.username, auth.password)
+
+        if not admin:
+            return INVALID_ADMIN_CREDENTIALS
+
+        if not admin.is_system_admin():
+            return ADMIN_NOT_AUTHORIZED
+        return func(*args, **kwargs)
+
+    return wrapper
 
 
 def requires_admin(f):
@@ -728,6 +759,14 @@ def admin_view(collection=None, book=None, etc=None, **kwargs):
 @app.route("/admin/", strict_slashes=False)
 def admin_base(**kwargs):
     return redirect(url_for("admin_view", _external=True))
+
+
+@app.route("/admin/libraries/import", strict_slashes=False, methods=["POST"])
+@returns_json_or_response_or_problem_detail
+@requires_basic_auth
+def import_libraries():
+    """Import multiple libraries from a list of library configurations."""
+    return app.manager.admin_library_settings_controller.import_libraries()
 
 
 # This path is used only in debug mode to serve frontend assets.

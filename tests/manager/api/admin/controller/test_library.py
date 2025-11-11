@@ -90,6 +90,43 @@ class TestLibrarySettings:
         form = ImmutableMultiDict(form_data)
         return form
 
+    def import_library_payload(
+        self,
+        *,
+        name: str = "Test Library",
+        short_name: str = "lib",
+        website_url: str = "https://library.example.com",
+        patron_support_email: str = "support@example.com",
+        large_collection_languages: list[str] | None = None,
+        small_collection_languages: list[str] | None = None,
+        facets_default_order: str = "added",
+        enabled_entry_points: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Generate default JSON payload for library import tests."""
+        payload: dict[str, Any] = {
+            "name": name,
+            "short_name": short_name,
+            "website_url": website_url,
+            "patron_support_email": patron_support_email,
+            "large_collection_languages": (
+                large_collection_languages
+                if large_collection_languages is not None
+                else ["English"]
+            ),
+            "small_collection_languages": (
+                small_collection_languages
+                if small_collection_languages is not None
+                else ["Spanish"]
+            ),
+            "facets_default_order": facets_default_order,
+            "enabled_entry_points": (
+                enabled_entry_points
+                if enabled_entry_points is not None
+                else ["All", "Book", "Audio"]
+            ),
+        }
+        return payload
+
     def test_libraries_get_with_no_libraries(
         self,
         flask_app_fixture: FlaskAppFixture,
@@ -493,14 +530,16 @@ class TestLibrarySettings:
                     ("featured_lane_size", "5"),
                     (
                         "facets_default_order",
-                        FacetConstants.ORDER_RANDOM,
+                        FacetConstants.ORDER_ADDED_TO_COLLECTION,
                     ),
                     (
                         "facets_enabled_order" + "_" + FacetConstants.ORDER_TITLE,
                         "",
                     ),
                     (
-                        "facets_enabled_order" + "_" + FacetConstants.ORDER_RANDOM,
+                        "facets_enabled_order"
+                        + "_"
+                        + FacetConstants.ORDER_ADDED_TO_COLLECTION,
                         "",
                     ),
                 ]
@@ -523,10 +562,13 @@ class TestLibrarySettings:
         assert library.name == "The New York Public Library"
         assert library.short_name == "nypl"
         assert library.settings.featured_lane_size == 5
-        assert library.settings.facets_default_order == FacetConstants.ORDER_RANDOM
+        assert (
+            library.settings.facets_default_order
+            == FacetConstants.ORDER_ADDED_TO_COLLECTION
+        )
         assert library.settings.facets_enabled_order == [
             FacetConstants.ORDER_TITLE,
-            FacetConstants.ORDER_RANDOM,
+            FacetConstants.ORDER_ADDED_TO_COLLECTION,
         ]
         assert library.logo is not None
         assert expected_logo_data_url == library.logo.data_url
@@ -576,10 +618,10 @@ class TestLibrarySettings:
         # A library already exists.
         settings = library_fixture.mock_settings()
         settings.featured_lane_size = 5
-        settings.facets_default_order = FacetConstants.ORDER_RANDOM
+        settings.facets_default_order = FacetConstants.ORDER_ADDED_TO_COLLECTION
         settings.facets_enabled_order = [
             FacetConstants.ORDER_TITLE,
-            FacetConstants.ORDER_RANDOM,
+            FacetConstants.ORDER_ADDED_TO_COLLECTION,
         ]
         library_to_edit = library_fixture.library(
             "New York Public Library", "nypl", settings
@@ -610,7 +652,9 @@ class TestLibrarySettings:
                         "",
                     ),
                     (
-                        "facets_enabled_order" + "_" + FacetConstants.ORDER_RANDOM,
+                        "facets_enabled_order"
+                        + "_"
+                        + FacetConstants.ORDER_ADDED_TO_COLLECTION,
                         "",
                     ),
                 ]
@@ -636,7 +680,7 @@ class TestLibrarySettings:
         assert library.settings.facets_default_order == FacetConstants.ORDER_AUTHOR
         assert library.settings.facets_enabled_order == [
             FacetConstants.ORDER_AUTHOR,
-            FacetConstants.ORDER_RANDOM,
+            FacetConstants.ORDER_ADDED_TO_COLLECTION,
         ]
 
         # The library-wide logo was not updated and has been left alone.
@@ -763,3 +807,597 @@ class TestLibrarySettings:
             resp = controller.process_libraries()
         assert isinstance(resp, ProblemDetail)
         assert resp.detail == "test"
+
+    def test_import_libraries_success(
+        self,
+        flask_app_fixture: FlaskAppFixture,
+        controller: LibrarySettingsController,
+        db: DatabaseTransactionFixture,
+    ):
+        """Test successful import of multiple libraries."""
+        libraries_data = {
+            "libraries": [
+                self.import_library_payload(
+                    name="Test Library 1",
+                    short_name="lib1",
+                    website_url="https://library1.example.com",
+                    patron_support_email="support1@example.com",
+                ),
+                self.import_library_payload(
+                    name="Test Library 2",
+                    short_name="lib2",
+                    website_url="https://library2.example.com",
+                    patron_support_email="support2@example.com",
+                ),
+            ]
+        }
+
+        with flask_app_fixture.test_request_context_system_admin(
+            "/", method="POST", json=libraries_data
+        ):
+            response = controller.import_libraries()
+            assert response.status_code == 200
+            assert isinstance(response.json, dict)
+            result = response.json
+
+            assert result["result"] == "success"
+            assert len(result["created"]) == 2
+            assert len(result["skipped"]) == 0
+            assert len(result["errors"]) == 0
+
+            # Verify the created libraries are in the response
+            assert result["created"][0]["name"] == "Test Library 1"
+            assert result["created"][0]["short_name"] == "lib1"
+            assert result["created"][0]["is_new"] is True
+
+            assert result["created"][1]["name"] == "Test Library 2"
+            assert result["created"][1]["short_name"] == "lib2"
+            assert result["created"][1]["is_new"] is True
+
+        # Verify libraries were actually created in the database
+        lib1 = get_one(db.session, Library, short_name="lib1")
+        assert lib1 is not None
+        assert lib1.name == "Test Library 1"
+        assert lib1.settings.website == "https://library1.example.com"
+        assert lib1.settings.help_email == "support1@example.com"
+        assert lib1.settings.large_collection_languages == ["eng"]
+        assert lib1.settings.small_collection_languages == ["spa"]
+        assert lib1.settings.facets_default_order == "added"
+        assert lib1.settings.enabled_entry_points == ["All", "Book", "Audio"]
+
+        lib2 = get_one(db.session, Library, short_name="lib2")
+        assert lib2 is not None
+        assert lib2.name == "Test Library 2"
+        assert lib2.settings.website == "https://library2.example.com"
+        assert lib2.settings.help_email == "support2@example.com"
+        assert lib2.settings.large_collection_languages == ["eng"]
+        assert lib2.settings.small_collection_languages == ["spa"]
+        assert lib2.settings.facets_default_order == "added"
+        assert lib2.settings.enabled_entry_points == ["All", "Book", "Audio"]
+
+        # Verify default lanes were created
+        assert len(lib1.lanes) > 0
+        assert len(lib2.lanes) > 0
+
+    def test_import_libraries_skip_existing(
+        self,
+        flask_app_fixture: FlaskAppFixture,
+        controller: LibrarySettingsController,
+        db: DatabaseTransactionFixture,
+        library_fixture: LibraryFixture,
+    ):
+        """Test that importing an existing library skips it (doesn't update)."""
+        # Create an existing library
+        existing_lib = library_fixture.library("Old Name", "existing")
+        original_name = existing_lib.name
+        original_website = (
+            existing_lib.settings.website if existing_lib.settings.website else None
+        )
+        original_email = (
+            existing_lib.settings.help_email
+            if existing_lib.settings.help_email
+            else None
+        )
+
+        libraries_data = {
+            "libraries": [
+                self.import_library_payload(
+                    name="Updated Name",
+                    short_name="existing",
+                    website_url="https://updated.example.com",
+                    patron_support_email="updated@example.com",
+                )
+            ]
+        }
+
+        with flask_app_fixture.test_request_context_system_admin(
+            "/", method="POST", json=libraries_data
+        ):
+            response = controller.import_libraries()
+            assert response.status_code == 200
+            assert isinstance(response.json, dict)
+            result = response.json
+
+            assert result["result"] == "success"
+            assert len(result["created"]) == 0
+            assert len(result["skipped"]) == 1
+            assert len(result["errors"]) == 0
+
+            # Verify the skipped library info (returns existing name, not the new one)
+            assert result["skipped"][0]["name"] == original_name
+            assert result["skipped"][0]["short_name"] == "existing"
+            assert result["skipped"][0]["is_new"] is False
+
+        # Verify library was NOT updated in the database
+        db.session.refresh(existing_lib)
+        assert existing_lib.name == original_name  # Still has old name
+        # Settings should be unchanged (or whatever they were before)
+        if original_website:
+            assert existing_lib.settings.website == original_website
+        if original_email:
+            assert existing_lib.settings.help_email == original_email
+
+    def test_import_libraries_missing_libraries_field(
+        self,
+        flask_app_fixture: FlaskAppFixture,
+        controller: LibrarySettingsController,
+        db: DatabaseTransactionFixture,
+    ):
+        """Test that missing 'libraries' field returns error."""
+        with flask_app_fixture.test_request_context_system_admin(
+            "/", method="POST", json={}
+        ):
+            response = controller.import_libraries()
+            assert isinstance(response, ProblemDetail)
+            assert response.uri == INCOMPLETE_CONFIGURATION.uri
+            assert "libraries" in str(response.detail)
+
+    def test_import_libraries_not_a_list(
+        self,
+        flask_app_fixture: FlaskAppFixture,
+        controller: LibrarySettingsController,
+        db: DatabaseTransactionFixture,
+    ):
+        """Test that non-list 'libraries' field returns error."""
+        with flask_app_fixture.test_request_context_system_admin(
+            "/", method="POST", json={"libraries": "not a list"}
+        ):
+            response = controller.import_libraries()
+            assert isinstance(response, ProblemDetail)
+            assert response.uri == INCOMPLETE_CONFIGURATION.uri
+            assert "must be a list" in str(response.detail)
+
+    def test_import_libraries_missing_required_fields(
+        self,
+        flask_app_fixture: FlaskAppFixture,
+        controller: LibrarySettingsController,
+        db: DatabaseTransactionFixture,
+    ):
+        """Test that missing required fields in library data returns partial errors."""
+        valid_payload = self.import_library_payload(
+            name="Valid Library",
+            short_name="valid",
+            website_url="https://valid.example.com",
+            patron_support_email="valid@example.com",
+        )
+        missing_name_payload = self.import_library_payload(
+            name="Missing Name Entry",
+            short_name="missing_name",
+            website_url="https://example.com",
+            patron_support_email="support@example.com",
+        )
+        missing_name_payload.pop("name")
+
+        missing_short_name_payload = self.import_library_payload(
+            name="Missing Short Name",
+            short_name="missing_short_name",
+            website_url="https://example.com",
+            patron_support_email="support@example.com",
+        )
+        missing_short_name_payload.pop("short_name")
+
+        missing_website_payload = self.import_library_payload(
+            name="Missing Website",
+            short_name="missing_website",
+            website_url="https://example.com",
+            patron_support_email="support@example.com",
+        )
+        missing_website_payload.pop("website_url")
+
+        missing_email_payload = self.import_library_payload(
+            name="Missing Email",
+            short_name="missing_email",
+            website_url="https://example.com",
+            patron_support_email="support@example.com",
+        )
+        missing_email_payload.pop("patron_support_email")
+
+        libraries_data = {
+            "libraries": [
+                valid_payload,
+                missing_name_payload,
+                missing_short_name_payload,
+                missing_website_payload,
+                missing_email_payload,
+            ]
+        }
+
+        with flask_app_fixture.test_request_context_system_admin(
+            "/", method="POST", json=libraries_data
+        ):
+            response = controller.import_libraries()
+            assert response.status_code == 207  # Multi-Status
+            assert isinstance(response.json, dict)
+            result = response.json
+
+            assert result["result"] == "success"
+            assert len(result["created"]) == 1  # Only the valid one
+            assert len(result["skipped"]) == 0
+            assert len(result["errors"]) == 4  # Four errors
+
+            # Verify the valid library was created
+            assert result["created"][0]["name"] == "Valid Library"
+
+            # Verify all errors are reported
+            assert result["errors"][0]["index"] == 1
+            assert "name" in result["errors"][0]["error"]
+
+            assert result["errors"][1]["index"] == 2
+            assert "short_name" in result["errors"][1]["error"]
+
+            assert result["errors"][2]["index"] == 3
+            assert "website_url" in result["errors"][2]["error"]
+
+            assert result["errors"][3]["index"] == 4
+            assert "patron_support_email" in result["errors"][3]["error"]
+
+        # Verify only the valid library was created
+        valid_lib = get_one(db.session, Library, short_name="valid")
+        assert valid_lib is not None
+
+        invalid_lib = get_one(db.session, Library, short_name="missing_name")
+        assert invalid_lib is None
+
+    def test_import_libraries_invalid_email(
+        self,
+        flask_app_fixture: FlaskAppFixture,
+        controller: LibrarySettingsController,
+        db: DatabaseTransactionFixture,
+    ):
+        """Test that invalid email format is caught."""
+        libraries_data = {
+            "libraries": [
+                self.import_library_payload(
+                    name="Invalid Email Library",
+                    short_name="invalid_email",
+                    website_url="https://example.com",
+                    patron_support_email="not-an-email",
+                )
+            ]
+        }
+
+        with flask_app_fixture.test_request_context_system_admin(
+            "/", method="POST", json=libraries_data
+        ):
+            response = controller.import_libraries()
+            assert response.status_code == 207  # Multi-Status
+            assert isinstance(response.json, dict)
+            result = response.json
+
+            assert len(result["created"]) == 0
+            assert len(result["errors"]) == 1
+            assert "Invalid settings" in result["errors"][0]["error"]
+
+    def test_import_libraries_invalid_large_collection_languages(
+        self,
+        flask_app_fixture: FlaskAppFixture,
+        controller: LibrarySettingsController,
+        db: DatabaseTransactionFixture,
+    ):
+        """Test that invalid large collection languages are rejected."""
+        payload = self.import_library_payload(
+            name="Invalid Large Languages",
+            short_name="invalid_large_lang",
+            website_url="https://example.com",
+            patron_support_email="lang@example.com",
+        )
+        payload["large_collection_languages"] = ["xx"]
+
+        libraries_data = {"libraries": [payload]}
+
+        with flask_app_fixture.test_request_context_system_admin(
+            "/", method="POST", json=libraries_data
+        ):
+            response = controller.import_libraries()
+            assert response.status_code == 207  # Multi-Status
+            result = response.get_json()
+            assert isinstance(result, dict)
+
+            assert len(result["created"]) == 0
+            assert len(result["errors"]) == 1
+            assert "Invalid Large Languages" in result["errors"][0]["error"]
+
+        # Verify library was not created
+        assert get_one(db.session, Library, short_name="invalid_large_lang") is None
+
+    def test_import_libraries_invalid_small_collection_languages(
+        self,
+        flask_app_fixture: FlaskAppFixture,
+        controller: LibrarySettingsController,
+        db: DatabaseTransactionFixture,
+    ):
+        """Test that invalid small collection languages are rejected."""
+        payload = self.import_library_payload(
+            name="Invalid Small Languages",
+            short_name="invalid_small_lang",
+            website_url="https://example.com",
+            patron_support_email="lang@example.com",
+        )
+        payload["small_collection_languages"] = ["xx"]
+
+        libraries_data = {"libraries": [payload]}
+
+        with flask_app_fixture.test_request_context_system_admin(
+            "/", method="POST", json=libraries_data
+        ):
+            response = controller.import_libraries()
+            assert response.status_code == 207  # Multi-Status
+            result = response.get_json()
+            assert isinstance(result, dict)
+
+            assert len(result["created"]) == 0
+            assert len(result["errors"]) == 1
+            assert "Invalid Small Languages" in result["errors"][0]["error"]
+
+        assert get_one(db.session, Library, short_name="invalid_small_lang") is None
+
+    def test_import_libraries_invalid_followed_by_valid(
+        self,
+        flask_app_fixture: FlaskAppFixture,
+        controller: LibrarySettingsController,
+        db: DatabaseTransactionFixture,
+    ):
+        """Test that invalid email format is caught."""
+        libraries_data = {
+            "libraries": [
+                self.import_library_payload(
+                    name="Invalid Library",
+                    short_name="invalid",
+                    website_url="https://example.com",
+                    patron_support_email="not-an-email",
+                ),
+                self.import_library_payload(
+                    name="Valid Library",
+                    short_name="valid",
+                    website_url="https://example.com",
+                    patron_support_email="email@example.com",
+                ),
+            ]
+        }
+
+        with flask_app_fixture.test_request_context_system_admin(
+            "/", method="POST", json=libraries_data
+        ):
+            response = controller.import_libraries()
+            assert response.status_code == 207  # Multi-Status
+            result = response.get_json()
+            assert isinstance(result, dict)
+
+            assert len(result["created"]) == 1
+            assert len(result["errors"]) == 1
+            assert "Invalid settings" in result["errors"][0]["error"]
+
+            # The invalid library should not be in the database.
+            controller.check_short_name_unique(library=None, short_name="invalid")
+            # the valid library should be
+            with pytest.raises(ProblemDetailException):
+                controller.check_short_name_unique(library=None, short_name="valid")
+
+    def test_import_libraries_invalid_url(
+        self,
+        flask_app_fixture: FlaskAppFixture,
+        controller: LibrarySettingsController,
+        db: DatabaseTransactionFixture,
+    ):
+        """Test that invalid URL format is caught."""
+        libraries_data = {
+            "libraries": [
+                self.import_library_payload(
+                    name="Valid Library",
+                    short_name="valid_short_name",
+                    website_url="invalid_url",
+                    patron_support_email="valid-support@example.com",
+                )
+            ]
+        }
+
+        with flask_app_fixture.test_request_context_system_admin(
+            "/", method="POST", json=libraries_data
+        ):
+            response = controller.import_libraries()
+            assert response.status_code == 207  # Multi-Status
+            result = response.get_json()
+            assert isinstance(result, dict)
+
+            assert len(result["created"]) == 0
+            assert len(result["errors"]) == 1
+            assert "Invalid settings" in result["errors"][0]["error"]
+
+    def test_import_libraries_invalid_facets_default_order(
+        self,
+        flask_app_fixture: FlaskAppFixture,
+        controller: LibrarySettingsController,
+        db: DatabaseTransactionFixture,
+    ):
+        """Test that invalid facets default order is rejected."""
+        payload = self.import_library_payload(
+            name="Invalid Facets Library",
+            short_name="invalid_facets",
+            website_url="https://example.com",
+            patron_support_email="facets@example.com",
+        )
+        payload["facets_default_order"] = "invalid-order"
+
+        libraries_data = {"libraries": [payload]}
+
+        with flask_app_fixture.test_request_context_system_admin(
+            "/", method="POST", json=libraries_data
+        ):
+            response = controller.import_libraries()
+            assert response.status_code == 207
+            result = response.get_json()
+            assert isinstance(result, dict)
+
+            assert len(result["created"]) == 0
+            assert len(result["errors"]) == 1
+            assert "Invalid Facets" in result["errors"][0]["error"]
+
+        assert get_one(db.session, Library, short_name="invalid_facets") is None
+
+    def test_import_libraries_invalid_enabled_entry_points(
+        self,
+        flask_app_fixture: FlaskAppFixture,
+        controller: LibrarySettingsController,
+        db: DatabaseTransactionFixture,
+    ):
+        """Test that invalid entry points are rejected."""
+        payload = self.import_library_payload(
+            name="Invalid Entry Points",
+            short_name="invalid_entry_points",
+            website_url="https://example.com",
+            patron_support_email="entry@example.com",
+        )
+        payload["enabled_entry_points"] = ["All", "InvalidEntryPoint"]
+
+        libraries_data = {"libraries": [payload]}
+
+        with flask_app_fixture.test_request_context_system_admin(
+            "/", method="POST", json=libraries_data
+        ):
+            response = controller.import_libraries()
+            assert response.status_code == 207
+            result = response.get_json()
+            assert isinstance(result, dict)
+
+            assert len(result["created"]) == 0
+            assert len(result["errors"]) == 1
+            assert "Invalid Entry Points" in result["errors"][0]["error"]
+
+        assert get_one(db.session, Library, short_name="invalid_entry_points") is None
+
+    def test_import_libraries_mixed_success_and_errors(
+        self,
+        flask_app_fixture: FlaskAppFixture,
+        controller: LibrarySettingsController,
+        db: DatabaseTransactionFixture,
+        library_fixture: LibraryFixture,
+    ):
+        """Test importing multiple libraries with some successes, skips and errors."""
+        # Create an existing library to test skip
+        existing = library_fixture.library("Old Name", "existing")
+        original_name = existing.name
+
+        new1_payload = self.import_library_payload(
+            name="New Library 1",
+            short_name="new1",
+            website_url="https://new1.example.com",
+            patron_support_email="new1@example.com",
+        )
+        missing_name_payload = self.import_library_payload(
+            name="Error Library Missing Name",
+            short_name="error1",
+            website_url="https://error1.example.com",
+            patron_support_email="error1@example.com",
+        )
+        missing_name_payload.pop("name")
+        existing_override_payload = self.import_library_payload(
+            name="Updated Library",
+            short_name="existing",
+            website_url="https://updated.example.com",
+            patron_support_email="updated@example.com",
+        )
+        new2_payload = self.import_library_payload(
+            name="New Library 2",
+            short_name="new2",
+            website_url="https://new2.example.com",
+            patron_support_email="new2@example.com",
+        )
+        invalid_email_payload = self.import_library_payload(
+            name="Invalid Email",
+            short_name="error2",
+            website_url="https://error2.example.com",
+            patron_support_email="not-an-email",
+        )
+
+        libraries_data = {
+            "libraries": [
+                new1_payload,
+                missing_name_payload,
+                existing_override_payload,
+                new2_payload,
+                invalid_email_payload,
+            ]
+        }
+
+        with flask_app_fixture.test_request_context_system_admin(
+            "/", method="POST", json=libraries_data
+        ):
+            response = controller.import_libraries()
+            assert response.status_code == 207  # Multi-Status
+            assert isinstance(response.json, dict)
+            result = response.json
+
+            assert result["result"] == "success"
+            assert len(result["created"]) == 2  # new1 and new2
+            assert len(result["skipped"]) == 1  # existing
+            assert len(result["errors"]) == 2  # error1 and error2
+
+            # Verify created libraries
+            created_names = [lib["name"] for lib in result["created"]]
+            assert "New Library 1" in created_names
+            assert "New Library 2" in created_names
+
+            # Verify skipped library (returns existing name, not the new one)
+            assert result["skipped"][0]["name"] == original_name
+            assert result["skipped"][0]["short_name"] == "existing"
+
+            # Verify errors
+            assert result["errors"][0]["index"] == 1
+            assert result["errors"][1]["index"] == 4
+
+    def test_import_libraries_rollback_on_complete_failure(
+        self,
+        flask_app_fixture: FlaskAppFixture,
+        controller: LibrarySettingsController,
+        db: DatabaseTransactionFixture,
+    ):
+        """Test that when all imports fail, no libraries are created."""
+        libraries_data = {
+            "libraries": [
+                {
+                    # Missing all required fields except name
+                    "name": "Invalid 1",
+                },
+                {
+                    # Missing all required fields except name
+                    "name": "Invalid 2",
+                },
+            ]
+        }
+
+        with flask_app_fixture.test_request_context_system_admin(
+            "/", method="POST", json=libraries_data
+        ):
+            response = controller.import_libraries()
+            assert response.status_code == 207
+            assert isinstance(response.json, dict)
+            result = response.json
+
+            assert len(result["created"]) == 0
+            assert len(result["skipped"]) == 0
+            assert len(result["errors"]) == 2
+
+        # Verify no libraries were created
+        all_libs = db.session.query(Library).all()
+        # Should only have the default library from fixtures
+        assert all(lib.name not in ["Invalid 1", "Invalid 2"] for lib in all_libs)

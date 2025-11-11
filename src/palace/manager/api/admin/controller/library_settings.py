@@ -4,12 +4,14 @@ import base64
 import json
 import uuid
 from io import BytesIO
+from typing import Any
 
 import flask
 from flask import Response
 from flask_babel import lazy_gettext as _
 from PIL import Image, UnidentifiedImageError
 from PIL.Image import Resampling
+from pydantic import BaseModel, ValidationError
 from werkzeug.datastructures import FileStorage
 
 from palace.manager.api.admin.announcement_list_validator import (
@@ -38,6 +40,17 @@ from palace.manager.sqlalchemy.model.resource import Representation
 from palace.manager.sqlalchemy.util import create, get_one
 from palace.manager.util.json import json_serializer
 from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
+
+
+class LibraryImportInfo(BaseModel):
+    name: str
+    short_name: str
+    website_url: str
+    patron_support_email: str
+    large_collection_languages: list[str]
+    small_collection_languages: list[str]
+    facets_default_order: str
+    enabled_entry_points: list[str]
 
 
 class LibrarySettingsController(AdminPermissionsControllerMixin):
@@ -171,7 +184,6 @@ class LibrarySettingsController(AdminPermissionsControllerMixin):
             return Response(str(library.uuid), 200)
 
     def create_library(self, short_name: str) -> tuple[Library, bool]:
-        self.require_system_admin()
         public_key, private_key = Library.generate_keypair()
         library, is_new = create(
             self._db,
@@ -182,6 +194,153 @@ class LibrarySettingsController(AdminPermissionsControllerMixin):
             private_key=private_key,
         )
         return library, is_new
+
+    def import_libraries(self) -> Response | ProblemDetail:
+        """Import multiple libraries from JSON data. Libraries that already exist will not be updated.
+
+        Expected JSON format:
+        {
+            "libraries": [
+                {
+                    "name": "Library Name",
+                    "short_name": "lib_short",
+                    "website_url": "https://example.com",
+                    "patron_support_email": "support@example.com",
+                    "large_collection_languages": ["en"],
+                    "small_collection_languages": ["es"],
+                    "facets_default_order": "added",
+                    "enabled_entry_points": ["All", "Book", "Audio"]
+                },
+                ...
+            ]
+        }
+        """
+        try:
+            data = flask.request.json
+            if not data or "libraries" not in data:
+                raise ProblemDetailException(
+                    problem_detail=INCOMPLETE_CONFIGURATION.detailed(
+                        "Request must include 'libraries' field."
+                    )
+                )
+
+            libraries_data = data["libraries"]
+            if not isinstance(libraries_data, list):
+                raise ProblemDetailException(
+                    problem_detail=INCOMPLETE_CONFIGURATION.detailed(
+                        "'libraries' must be a list."
+                    )
+                )
+
+            created = []
+            skipped = []
+            errors = []
+            tx = self._db
+            for idx, library_data in enumerate(libraries_data):
+                with tx.begin_nested() as nested_tx:
+                    try:
+
+                        library_import_info = LibraryImportInfo(**library_data)
+                        result = self._import_single_library(library_import_info)
+                        if result["is_new"]:
+                            created.append(result)
+                        else:
+                            skipped.append(result)
+                    except ProblemDetailException as e:
+                        nested_tx.rollback()
+                        errors.append(
+                            {
+                                "index": idx,
+                                "data": library_data,
+                                "error": str(e.problem_detail.detail),
+                            }
+                        )
+                    except ValidationError as e:
+                        nested_tx.rollback()
+                        errors.append(
+                            {"index": idx, "data": library_data, "error": str(e)}
+                        )
+
+            # Commit if there were any successful imports
+            if created:
+                site_configuration_has_changed(self._db)
+
+            return Response(
+                json_serializer(
+                    {
+                        "result": "success",
+                        "created": created,
+                        "skipped": skipped,
+                        "errors": errors,
+                    }
+                ),
+                status=(
+                    200 if not errors else 207
+                ),  # 207 Multi-Status if there were any errors
+                mimetype="application/json",
+            )
+
+        except ProblemDetailException as e:
+            return e.problem_detail
+
+    def _import_single_library(
+        self, library_import_info: LibraryImportInfo
+    ) -> dict[str, Any]:
+        """Import a single library."""
+        # Check if library already exists
+        existing_library = get_one(
+            self._db, Library, short_name=library_import_info.short_name
+        )
+
+        if existing_library:
+            # Library already exists, skip it (don't update)
+            return {
+                "uuid": str(existing_library.uuid),
+                "name": existing_library.name,
+                "short_name": existing_library.short_name,
+                "is_new": False,
+            }
+
+        # Check that short_name is unique
+        self.check_short_name_unique(None, library_import_info.short_name)
+        # Create new library
+        library, is_new = self.create_library(library_import_info.short_name)
+
+        # Set library properties
+        library.name = library_import_info.name
+        library.short_name = library_import_info.short_name
+
+        # Build settings dictionary
+        settings_data = {
+            "website": library_import_info.website_url,
+            "help_email": library_import_info.patron_support_email,
+            "large_collection_languages": library_import_info.large_collection_languages,
+            "small_collection_languages": library_import_info.small_collection_languages,
+            "facets_default_order": library_import_info.facets_default_order,
+            "enabled_entry_points": library_import_info.enabled_entry_points,
+        }
+
+        # Validate settings using LibrarySettings model
+        try:
+            validated_settings = LibrarySettings(**settings_data)
+            library.settings_dict = validated_settings.model_dump()
+        except Exception as e:
+            raise ProblemDetailException(
+                problem_detail=INVALID_CONFIGURATION_OPTION.detailed(
+                    f"Invalid settings for library '{library_import_info.name}': {str(e)}"
+                )
+            )
+
+        # Create default lanes for new libraries
+        create_default_lanes(self._db, library)
+
+        return {
+            "uuid": str(library.uuid),
+            "name": library.name,
+            "short_name": library.short_name,
+            "website_url": library_import_info.website_url,
+            "is_new": is_new,
+        }
 
     def process_delete(self, library_uuid: str) -> Response:
         self.require_system_admin()

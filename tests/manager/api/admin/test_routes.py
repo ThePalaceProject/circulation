@@ -1,18 +1,24 @@
+import json
 import logging
 from collections.abc import Generator
+from contextlib import contextmanager
 from http import HTTPStatus
-from typing import Any
+from types import SimpleNamespace
+from typing import Any, cast
 from unittest.mock import MagicMock
 
 import flask
 import pytest
 from flask import Response
+from sqlalchemy.orm import Session
+from werkzeug.datastructures import Authorization
 from werkzeug.exceptions import MethodNotAllowed
 
 from palace.manager.api import routes as api_routes
 from palace.manager.api.admin import routes
 from palace.manager.api.admin.controller import setup_admin_controllers
 from palace.manager.api.admin.problem_details import (
+    ADMIN_NOT_AUTHORIZED,
     INVALID_ADMIN_CREDENTIALS,
     INVALID_CSRF_TOKEN,
 )
@@ -20,10 +26,13 @@ from palace.manager.api.controller.circulation_manager import (
     CirculationManagerController,
 )
 from palace.manager.sqlalchemy.constants import MediaTypes
+from palace.manager.sqlalchemy.model.admin import Admin, AdminRole
+from palace.manager.util import base64
 from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
 from tests.fixtures.api_controller import ControllerFixture
 from tests.fixtures.api_routes import MockApp, MockController, MockManager
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.flask import FlaskAppFixture
 from tests.fixtures.services import ServicesFixture
 from tests.mocks.circulation import MockCirculationManager
 
@@ -68,6 +77,127 @@ class MockAdminController(MockController):
 
     def bulk_circulation_events(self):
         return "data", "date", "date_end", "library"
+
+    def import_libraries(self):
+        return flask.Response(
+            '{"result": "success", "created": [], "skipped": [], "errors": []}',
+            200,
+            mimetype="application/json",
+        )
+
+
+class TestRequiresBasicAuth:
+    EMAIL = "test@gmail.com"
+    PASSWORD = "password"
+
+    @contextmanager
+    def _manager_context(self, db: DatabaseTransactionFixture):
+        app_obj = cast(Any, getattr(routes, "app"))
+        original_manager = getattr(app_obj, "manager", None)
+        setattr(app_obj, "manager", SimpleNamespace(_db=db.session))
+        try:
+            yield
+        finally:
+            if original_manager is None:
+                delattr(app_obj, "manager")
+            else:
+                setattr(app_obj, "manager", original_manager)
+
+    def test_missing_authorization_returns_invalid_credentials(
+        self, db: DatabaseTransactionFixture
+    ):
+        called = False
+
+        @routes.requires_basic_auth
+        def handler():
+            nonlocal called
+            called = True
+            return "ok"
+
+        assert handler.__name__ == "handler"
+
+        with self._manager_context(db):
+            with routes.app.test_request_context("/"):  # type: ignore[attr-defined]
+                result = handler()
+
+        assert result == INVALID_ADMIN_CREDENTIALS
+        assert called is False
+
+    def test_invalid_credentials_returns_invalid_credentials(
+        self, db: DatabaseTransactionFixture
+    ):
+        called = False
+
+        @routes.requires_basic_auth
+        def handler():
+            nonlocal called
+            called = True
+            return "ok"
+
+        self._create_admin(db.session)
+
+        with self._manager_context(db):
+            with routes.app.test_request_context("/"):  # type: ignore[attr-defined]
+                flask.request.authorization = self._create_auth("bad password")
+                result = handler()
+
+        assert result == INVALID_ADMIN_CREDENTIALS
+        assert called is False
+
+    def test_non_system_admin_returns_not_authorized(
+        self, db: DatabaseTransactionFixture
+    ):
+        called = False
+
+        @routes.requires_basic_auth
+        def handler():
+            nonlocal called
+            called = True
+            return "ok"
+
+        self._create_admin(db.session)
+        with self._manager_context(db):
+            with routes.app.test_request_context("/"):  # type: ignore[attr-defined]
+                flask.request.authorization = self._create_auth(self.PASSWORD)
+                result = handler()
+
+        assert result == ADMIN_NOT_AUTHORIZED
+        assert called is False
+
+    def test_valid_system_admin_returns_authorized(
+        self, db: DatabaseTransactionFixture
+    ):
+        called = False
+
+        @routes.requires_basic_auth
+        def handler():
+            nonlocal called
+            called = True
+            return "ok"
+
+        self._create_admin(db.session, is_system_admin=True)
+
+        with self._manager_context(db):
+            with routes.app.test_request_context("/"):  # type: ignore[attr-defined]
+                flask.request.authorization = self._create_auth(self.PASSWORD)
+                result = handler()
+
+        assert result == "ok"
+        assert called is True
+
+    def _create_auth(self, password: str):
+        return Authorization(
+            "basic",
+            {"username": self.EMAIL, "password": password},
+        )
+
+    def _create_admin(self, db: Session, is_system_admin: bool = False) -> Admin:
+        admin = Admin(email=self.EMAIL)
+        admin.password = self.PASSWORD
+        db.add(admin)
+        if is_system_admin:
+            admin.add_role(AdminRole.SYSTEM_ADMIN, None)
+        return admin
 
 
 class AdminRouteFixture:
@@ -124,7 +254,13 @@ class AdminRouteFixture:
         # CirculationManager.
         self.real_controller = getattr(self.REAL_CIRCULATION_MANAGER, name)
 
-    def request(self, url, method="GET"):
+    def request(
+        self,
+        url,
+        method="GET",
+        headers=None,
+        json=None,
+    ):
         """Simulate a request to a URL without triggering any code outside
         routes.py.
         """
@@ -135,7 +271,9 @@ class AdminRouteFixture:
         mock_function = getattr(self.routes, function_name)
 
         # Call it in the context of the mock app.
-        with self.controller_fixture.app.test_request_context():
+        with self.controller_fixture.app.test_request_context(
+            headers=headers, json=json
+        ):
             return mock_function(**kwargs)
 
     def assert_request_calls(self, url, method, *args, **kwargs):
@@ -501,6 +639,35 @@ class TestAdminLibrarySettings:
             http_method="DELETE",
         )
         fixture.assert_supported_methods(url, "DELETE")
+
+    def test_import_libraries_fails_if_unauthenticated(
+        self, fixture: AdminRouteFixture
+    ):
+        """Test that import_libraries succeeds for authenticated users."""
+        response = fixture.request("/admin/libraries/import", method="POST")
+        body, status_code, headers = response
+        assert status_code == INVALID_ADMIN_CREDENTIALS.status_code
+        payload = json.loads(body)
+        assert payload["type"] == INVALID_ADMIN_CREDENTIALS.uri
+
+    def test_import_libraries_succeeds_with_basic_auth(
+        self, fixture: AdminRouteFixture, flask_app_fixture: FlaskAppFixture
+    ):
+        admin_email = "test@email.com"
+        password = "password"
+        admin = flask_app_fixture.admin_user(email=admin_email)
+        admin.password = password
+
+        fixture.manager._db = fixture.db.session
+        credentials = base64.b64encode(f"{admin_email}:{password}")
+        response = fixture.request(
+            "/admin/libraries/import",
+            method="POST",
+            headers={"Authorization": f"Basic {credentials}"},
+            json={"libraries": []},
+        )
+        assert isinstance(response, flask.Response)
+        assert response.status_code == 200
 
 
 class TestAdminCollectionSettings:

@@ -73,6 +73,7 @@ from palace.manager.integration.settings import BaseSettings
 from palace.manager.opds.odl.info import LicenseStatus
 from palace.manager.service.integration_registry.base import IntegrationRegistry
 from palace.manager.sqlalchemy.constants import MediaTypes
+from palace.manager.sqlalchemy.model.admin import Admin, AdminRole
 from palace.manager.sqlalchemy.model.classification import (
     Classification,
     Genre,
@@ -1070,6 +1071,43 @@ class DatabaseTransactionFixture:
             external_identifier=external_identifier,
             library=library,
         )[0]
+
+    def admin(
+        self,
+        email: str | None = None,
+        password: str | None = None,
+        is_system_admin: bool = False,
+    ) -> Admin:
+        """Create an admin user with a properly hashed password.
+
+        :param email: The admin's email address. If not provided, a unique email is generated.
+        :param password: The admin's password. If provided, it will be properly hashed using bcrypt.
+                        If not provided, no password is set (password_hashed will be None).
+        :param is_system_admin: Whether the admin should be a system admin.
+        :return: The created or retrieved Admin object with the password properly hashed.
+
+        Example:
+
+            # Create admin with password
+            admin = db.admin(email="admin@example.com", password="password123")
+
+            # Create admin without password
+            admin = db.admin(email="admin@example.com")
+
+            # Create admin with auto-generated email
+            admin = db.admin(password="password123")
+        """
+        email = email or f"{self.fresh_str()}@example.com"
+        admin, _ = get_one_or_create(self.session, Admin, email=email)
+
+        # Set the password if provided - the setter will automatically hash it
+        if password is not None:
+            admin.password = password
+
+        if is_system_admin:
+            admin.add_role(AdminRole.SYSTEM_ADMIN)
+
+        return admin
 
     def license(
         self,
