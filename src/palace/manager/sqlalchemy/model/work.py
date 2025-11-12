@@ -1175,15 +1175,18 @@ class Work(Base, LoggerMixin):
             if collections and p.collection not in collections:
                 continue
 
+            if not p.active_status:
+                # Licensepools that are not active should not be considered
+                continue
+
             edition = p.presentation_edition
 
-            # Open access and unlimited access pools are always eligible
-            if p.open_access or p.unlimited_access:
+            # Unlimited access pools are always eligible
+            if p.unlimited_type:
                 eligible_pools.append(p)
+
             # Regular pools need valid edition and owned licenses
-            elif (
-                edition and edition.title and p.licenses_owned and p.licenses_owned > 0
-            ):
+            elif edition and edition.title and p.licenses_owned > 0:
                 eligible_pools.append(p)
 
         if not eligible_pools:
@@ -1197,7 +1200,7 @@ class Work(Base, LoggerMixin):
         eligible_pools.sort(
             key=lambda p: (
                 not p.open_access,
-                not p.unlimited_access,
+                not p.unlimited_type,
                 -p.licenses_available,
                 p.id,
             )
@@ -1586,6 +1589,9 @@ class Work(Base, LoggerMixin):
                 "availability_time",
                 "type",
                 "status",
+                "unlimited_type",
+                "metered_or_equivalent_type",
+                "active_status",
             ],
             "identifiers": ["type", "identifier"],
             "classifications": ["scheme", "term", "weight"],
@@ -1662,21 +1668,19 @@ class Work(Base, LoggerMixin):
         result["licensepools"] = []
         if doc.license_pools:
             for license_pool in doc.license_pools:
-                if not (
-                    license_pool.open_access
-                    or license_pool.unlimited_access
-                    or license_pool.licenses_owned > 0
-                ):
+                if not license_pool.active_status:
                     continue
 
                 lc: dict = {}
                 _set_value(license_pool, "licensepools", lc)
                 # lc["availability_time"] = getattr(item, "availability_time").timestamp()
-                lc["available"] = (
-                    license_pool.unlimited_access or license_pool.licenses_available > 0
+                lc["available"] = license_pool.unlimited_type or (
+                    license_pool.metered_or_equivalent_type
+                    and license_pool.licenses_available > 0
                 )
                 lc["licensed"] = (
-                    license_pool.unlimited_access or license_pool.licenses_owned > 0
+                    license_pool.metered_or_equivalent_type
+                    or license_pool.unlimited_non_open_access_type
                 )
                 if doc.presentation_edition:
                     lc["medium"] = doc.presentation_edition.medium

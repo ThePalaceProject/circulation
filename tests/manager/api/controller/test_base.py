@@ -23,7 +23,6 @@ from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.lane import Lane
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.licensing import (
-    LicensePool,
     LicensePoolDeliveryMechanism,
     LicensePoolType,
 )
@@ -416,8 +415,6 @@ class TestBaseController:
             [pool] = work.license_pools
             pool.open_access = False
             pool.type = LicensePoolType.UNLIMITED
-            pool.licenses_owned = LicensePool.UNLIMITED_ACCESS
-            pool.licenses_available = LicensePool.UNLIMITED_ACCESS
 
             # Act
             problem = circulation_fixture.controller.apply_borrowing_policy(
@@ -457,9 +454,9 @@ class TestBaseController:
             )
             assert None == problem
 
-            # If it weren't an open-access work, there'd be a big
+            # If it weren't an unlimited-access work, there'd be a big
             # problem.
-            pool.open_access = False
+            pool.type = LicensePoolType.METERED
             problem = circulation_fixture.controller.apply_borrowing_policy(
                 patron, pool
             )

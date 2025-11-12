@@ -21,6 +21,7 @@ from sqlalchemy import (
     and_,
     not_,
     or_,
+    true,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, INT4RANGE, JSON
 from sqlalchemy.ext.associationproxy import association_proxy
@@ -728,29 +729,40 @@ class Facets(FacetsWithEntryPoint):
         # Apply any superclass criteria
         qu = super().modify_database_query(_db, qu)
 
-        available_now = or_(
-            LicensePool.open_access == True,
-            LicensePool.unlimited_access,
-            LicensePool.licenses_available > 0,
+        active_metered_filter = and_(
+            LicensePool.metered_or_equivalent_type == true(),
+            LicensePool.active_status == true(),
+        )
+        active_unlimited_filter = and_(
+            LicensePool.unlimited_type == true(),
+            LicensePool.active_status == true(),
         )
 
         if self.availability == self.AVAILABLE_NOW:
-            availability_clause = available_now
+            availability_clause = or_(
+                and_(LicensePool.licenses_available > 0, active_metered_filter),
+                active_unlimited_filter,
+            )
         elif self.availability == self.AVAILABLE_ALL:
             availability_clause = or_(
-                LicensePool.open_access == True,
-                LicensePool.licenses_owned > 0,
-                LicensePool.unlimited_access,
+                active_metered_filter,
+                active_unlimited_filter,
             )
         elif self.availability == self.AVAILABLE_OPEN_ACCESS:
-            availability_clause = LicensePool.open_access == True
+            availability_clause = and_(
+                LicensePool.open_access == true(),
+                active_unlimited_filter,
+            )
         elif self.availability == self.AVAILABLE_NOT_NOW:
             # The book must be licensed but currently unavailable.
             availability_clause = and_(
-                not_(available_now), LicensePool.licenses_owned > 0
+                LicensePool.licenses_available == 0, active_metered_filter
             )
+        else:
+            availability_clause = None
 
-        qu = qu.filter(availability_clause)
+        if availability_clause is not None:
+            qu = qu.filter(availability_clause)
 
         return qu
 

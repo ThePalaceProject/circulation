@@ -12,6 +12,7 @@ from palace.manager.api.admin.model.dashboard_statistics import (
 )
 from palace.manager.sqlalchemy.model.admin import Admin, AdminRole
 from palace.manager.sqlalchemy.model.datasource import DataSource
+from palace.manager.sqlalchemy.model.licensing import LicensePoolStatus
 from palace.manager.sqlalchemy.util import create
 from palace.manager.util.datetime_helpers import utc_now
 
@@ -175,6 +176,7 @@ def test_stats_inventory(admin_statistics_session: AdminStatisticsSessionFixture
     pool1.open_access = False
     pool1.licenses_owned = 0
     pool1.licenses_available = 0
+    pool1.status = LicensePoolStatus.EXHAUSTED
 
     edition2, pool2 = db.edition(
         with_license_pool=True, with_open_access_download=False
@@ -396,6 +398,7 @@ def test_stats_collections(admin_statistics_session: AdminStatisticsSessionFixtu
     pool.open_access = False
     pool.licenses_owned = 0
     pool.licenses_available = 0
+    pool.status = LicensePoolStatus.EXHAUSTED
 
     # default collection adds a 0/3 metered license title.
     _, pool = db.edition(

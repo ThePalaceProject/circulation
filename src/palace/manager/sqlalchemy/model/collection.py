@@ -20,7 +20,7 @@ from sqlalchemy.ext.associationproxy import association_proxy
 from sqlalchemy.orm import Mapped, Query, aliased, relationship
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql import Select
-from sqlalchemy.sql.expression import and_, or_
+from sqlalchemy.sql.expression import and_, or_, true
 from sqlalchemy.sql.functions import count
 
 from palace.manager.core.exceptions import BasePalaceException
@@ -642,11 +642,30 @@ class Collection(Base, HasSessionCache, RedisKeyMixin):
         if not show_suppressed:
             query = query.filter(LicensePool.suppressed == False)
 
-        # Only find books with available licenses or unlimited access books (includes open access).
+        # Only find books that are
+        #  - Metered and active
+        #     - At least one owned license
+        #     - At least one available license (if holds are not allowed)
+        #  - Unlimited access (open access is a subset of this)
+        metered_filter = and_(  # type: ignore[type-var]
+            LicensePool.active_status == true(),
+            LicensePool.metered_or_equivalent_type == true(),
+        )
+        if not allow_holds:
+            metered_filter = and_(  # type: ignore[assignment]
+                metered_filter,
+                LicensePool.licenses_available > 0,
+            )
+
+        unlimited_filter = and_(  # type: ignore[type-var]
+            LicensePool.unlimited_type == true(),
+            LicensePool.active_status == true(),
+        )
+
         query = query.filter(
             or_(
-                LicensePool.licenses_owned > 0,
-                LicensePool.unlimited_access,
+                metered_filter,
+                unlimited_filter,
             )
         )
 
@@ -654,14 +673,6 @@ class Collection(Base, HasSessionCache, RedisKeyMixin):
         if collection_ids is not None:
             query = query.filter(LicensePool.collection_id.in_(collection_ids))
 
-        # If we don't allow holds, hide any books with no available copies.
-        if not allow_holds:
-            query = query.filter(
-                or_(
-                    LicensePool.licenses_available > 0,
-                    LicensePool.unlimited_access,
-                )
-            )
         return query
 
     @inject

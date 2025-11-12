@@ -80,7 +80,6 @@ class AcquisitionHelper:
         acquisition = {}
         # Generate a list of licensing tags. These should be inserted
         # into a <link> tag.
-        status = None
         since = None
         until = None
 
@@ -89,7 +88,7 @@ class AcquisitionHelper:
         default_loan_period = default_reservation_period = None
         collection = license_pool.collection
         obj: Loan | Hold
-        if (loan or hold) and not license_pool.open_access:
+        if (loan or hold) and not license_pool.unlimited_type:
             if loan:
                 obj = loan
             elif hold:
@@ -100,10 +99,10 @@ class AcquisitionHelper:
         if loan:
             status = "available"
             since = loan.start
-            if not loan.license_pool.unlimited_access:
+            if not loan.license_pool.unlimited_type:
                 until = loan.until(default_loan_period)
         elif hold:
-            if not license_pool.open_access:
+            if not license_pool.unlimited_type:
                 default_reservation_period = datetime.timedelta(
                     collection.default_reservation_period
                 )
@@ -114,10 +113,10 @@ class AcquisitionHelper:
             else:
                 status = "reserved"
                 since = hold.start
-        elif (
-            license_pool.open_access
-            or license_pool.unlimited_access
-            or (license_pool.licenses_available > 0 and license_pool.licenses_owned > 0)
+        elif license_pool.active_status and (
+            license_pool.unlimited_type
+            or license_pool.metered_or_equivalent_type
+            and license_pool.licenses_available > 0
         ):
             status = "available"
         else:
@@ -129,8 +128,8 @@ class AcquisitionHelper:
         if until:
             acquisition["availability_until"] = strftime(until)
 
-        # Open-access pools do not need to display <opds:holds> or <opds:copies>.
-        if license_pool.open_access or license_pool.unlimited_access:
+        # Unlimited-access pools do not need to display <opds:holds> or <opds:copies>.
+        if license_pool.unlimited_type:
             return acquisition
 
         total = license_pool.patrons_in_hold_queue or 0

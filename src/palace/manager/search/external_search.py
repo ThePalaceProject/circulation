@@ -47,6 +47,7 @@ from palace.manager.sqlalchemy.model.contributor import Contributor
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.lane import Pagination
 from palace.manager.sqlalchemy.model.library import Library
+from palace.manager.sqlalchemy.model.licensing import LicensePoolStatus
 from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.sqlalchemy.util import numericrange_to_tuple
 from palace.manager.util import Values
@@ -1912,10 +1913,8 @@ class Filter(SearchBase):
         not_suppressed = Term(**{"licensepools.suppressed": False})
         nested_filters["licensepools"].append(not_suppressed)
 
-        owns_licenses = Term(**{"licensepools.licensed": True})
-        open_access = Term(**{"licensepools.open_access": True})
-        currently_owned = Bool(should=[owns_licenses, open_access])
-        nested_filters["licensepools"].append(currently_owned)
+        active_status = Term(**{"licensepools.status": LicensePoolStatus.ACTIVE})
+        nested_filters["licensepools"].append(active_status)
 
         return nested_filters
 
