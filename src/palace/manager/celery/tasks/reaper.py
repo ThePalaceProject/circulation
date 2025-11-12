@@ -1,7 +1,7 @@
 from datetime import timedelta
 
 from celery import shared_task
-from sqlalchemy import and_, delete, func, select
+from sqlalchemy import and_, delete, func, select, true
 from sqlalchemy.orm import Session, defer, lazyload
 from sqlalchemy.sql import Delete
 from sqlalchemy.sql.elements import or_
@@ -228,8 +228,7 @@ def loan_reaper(task: Task) -> None:
     now = utc_now()
     deletion_query = delete(Loan).where(
         Loan.license_pool_id == LicensePool.id,
-        LicensePool.unlimited_access == False,  # type: ignore[comparison-overlap]
-        LicensePool.open_access == False,
+        LicensePool.metered_or_equivalent_type == true(),
         or_(
             Loan.end < now,
             and_(Loan.start < now - timedelta(days=90), Loan.end == None),

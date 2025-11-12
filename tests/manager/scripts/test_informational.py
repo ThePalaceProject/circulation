@@ -18,6 +18,7 @@ from palace.manager.scripts.informational import (
 from palace.manager.search.external_search import ExternalSearchIndex
 from palace.manager.sqlalchemy.model.coverage import CoverageRecord
 from palace.manager.sqlalchemy.model.datasource import DataSource
+from palace.manager.sqlalchemy.model.licensing import LicensePoolStatus
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.search import EndToEndSearchFixture
 
@@ -431,9 +432,9 @@ class TestWhereAreMyBooksScript:
         db: DatabaseTransactionFixture,
         end_to_end_search_fixture: EndToEndSearchFixture,
     ):
-        # This work has a license pool, but no licenses owned.
+        # This work has a license pool, but it is exhausted.
         work = db.work(with_license_pool=True)
-        work.license_pools[0].licenses_owned = 0
+        work.license_pools[0].status = LicensePoolStatus.EXHAUSTED
         end_to_end_search_fixture.populate_search_index()
         self.check_explanation(
             not_owned=1,

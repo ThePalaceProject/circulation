@@ -9,7 +9,7 @@ from typing import Any
 from sqlalchemy import not_, union
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import Select, func, select
-from sqlalchemy.sql.expression import and_, distinct, false, or_, true
+from sqlalchemy.sql.expression import and_, distinct, or_
 
 from palace.manager.api.admin.model.dashboard_statistics import (
     CollectionInventory,
@@ -33,15 +33,14 @@ def generate_statistics(admin: Admin, db: Session) -> StatisticsResponse:
 
 class Statistics:
     METERED_LICENSE_FILTER = and_(  # type: ignore[type-var]
-        LicensePool.licenses_owned > 0,
-        LicensePool.unlimited_access == false(),
-        LicensePool.open_access == false(),
+        LicensePool.metered_or_equivalent_type, LicensePool.active_status
     )
     UNLIMITED_LICENSE_FILTER = and_(  # type: ignore[type-var]
-        LicensePool.unlimited_access == true(),
-        LicensePool.open_access == false(),
+        LicensePool.unlimited_non_open_access_type, LicensePool.active_status
     )
-    OPEN_ACCESS_FILTER = LicensePool.open_access == true()
+    OPEN_ACCESS_FILTER = and_(  # type: ignore[type-var]
+        LicensePool.unlimited_open_access_type, LicensePool.active_status
+    )
     AT_LEAST_ONE_LOANABLE_FILTER = or_(
         UNLIMITED_LICENSE_FILTER,
         OPEN_ACCESS_FILTER,

@@ -46,7 +46,11 @@ from palace.manager.sqlalchemy.model.lane import (
     WorkList,
 )
 from palace.manager.sqlalchemy.model.library import Library
-from palace.manager.sqlalchemy.model.licensing import LicensePool
+from palace.manager.sqlalchemy.model.licensing import (
+    LicensePool,
+    LicensePoolStatus,
+    LicensePoolType,
+)
 from palace.manager.sqlalchemy.model.work import Work, WorkGenre
 from palace.manager.sqlalchemy.util import get_one_or_create, tuple_to_numericrange
 from palace.manager.util.datetime_helpers import utc_now
@@ -835,10 +839,24 @@ class TestFacets:
         pool.licenses_owned = 1
         pool.licenses_available = 0
 
-        not_licensed = db.work(with_license_pool=True, title="not licensed")
+        not_licensed = db.work(with_license_pool=True, title="exhausted license")
         [pool] = not_licensed.license_pools
         pool.licenses_owned = 0
         pool.licenses_available = 0
+        pool.status = LicensePoolStatus.EXHAUSTED
+
+        removed_oa = db.work(with_license_pool=True, title="removed open-access")
+        [pool] = removed_oa.license_pools
+        pool.status = LicensePoolStatus.REMOVED
+        pool.type = LicensePoolType.UNLIMITED
+        pool.open_access = True
+
+        removed_ua = db.work(with_license_pool=True, title="removed unlimited-access")
+        [pool] = removed_ua.license_pools
+        pool.status = LicensePoolStatus.REMOVED
+        pool.type = LicensePoolType.UNLIMITED
+        pool.open_access = False
+
         qu = (
             db.session.query(Work)
             .join(Work.license_pools)
@@ -848,20 +866,17 @@ class TestFacets:
         for availability, expect in [
             (
                 Facets.AVAILABLE_NOW,
-                [open_access, available, unlimited_access],
+                {open_access, available, unlimited_access},
             ),
             (
                 Facets.AVAILABLE_ALL,
-                [open_access, available, not_available, unlimited_access],
+                {open_access, available, not_available, unlimited_access},
             ),
-            (Facets.AVAILABLE_NOT_NOW, [not_available]),
+            (Facets.AVAILABLE_NOT_NOW, {not_available}),
         ]:
             facets = Facets(db.default_library(), availability, None, None, None)
             modified = facets.modify_database_query(db.session, qu)
-            assert (availability, sorted(x.title for x in modified)) == (
-                availability,
-                sorted(x.title for x in expect),
-            )
+            assert (availability, set(modified)) == (availability, expect)
 
 
 class TestDefaultSortOrderFacets:
@@ -2980,8 +2995,7 @@ class TestDatabaseBackedWorkList:
         ot_lp = oliver_twist.license_pools[0]
 
         # open access (thus available)
-        ot_lp.licenses_owned = LicensePool.UNLIMITED_ACCESS
-        ot_lp.licenses_available = LicensePool.UNLIMITED_ACCESS
+        ot_lp.type = LicensePoolType.UNLIMITED
         ot_lp.open_access = True
 
         facets.availability = Facets.AVAILABLE_ALL
@@ -2994,9 +3008,8 @@ class TestDatabaseBackedWorkList:
         assert 1 == wl.works_from_database(db.session, facets).count()
         assert [oliver_twist] == wl.works_from_database(db.session, facets).all()
 
-        # open access & unavailable
-        ot_lp.licenses_owned = 0
-        ot_lp.licenses_available = 0
+        # open access & removed
+        ot_lp.status = LicensePoolStatus.REMOVED
 
         facets.availability = Facets.AVAILABLE_ALL
         assert [barnaby_rudge] == wl.works_from_database(db.session, facets).all()
@@ -3007,8 +3020,10 @@ class TestDatabaseBackedWorkList:
         facets.availability = Facets.AVAILABLE_OPEN_ACCESS
         assert 0 == wl.works_from_database(db.session, facets).count()
 
-        # closed access & unavailable
+        # closed access & active but unavailable
+        ot_lp.type = LicensePoolType.METERED
         ot_lp.open_access = False
+        ot_lp.status = LicensePoolStatus.ACTIVE
         ot_lp.licenses_owned = 1
         ot_lp.licenses_available = 0
 

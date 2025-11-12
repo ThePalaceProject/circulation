@@ -229,8 +229,8 @@ class OPDS2WithODLApi(
             raise NotCheckedOut()
         loan_result = loan.one()
 
-        if licensepool.open_access or licensepool.unlimited_access:
-            # If this is an open-access or unlimited access book, we don't need to do anything.
+        if licensepool.unlimited_type:
+            # If this is an unlimited access book, we don't need to do anything.
             return
 
         self._checkin(loan_result)
@@ -303,7 +303,7 @@ class OPDS2WithODLApi(
         if loan.count() > 0:
             raise AlreadyCheckedOut()
 
-        if licensepool.open_access or licensepool.unlimited_access:
+        if licensepool.unlimited_type:
             return LoanInfo.from_license_pool(
                 licensepool,
                 end_date=None,
@@ -620,7 +620,7 @@ class OPDS2WithODLApi(
         loan: Loan,
         delivery_mechanism: LicensePoolDeliveryMechanism,
     ) -> Fulfillment:
-        if loan.license_pool.open_access or loan.license_pool.unlimited_access:
+        if loan.license_pool.unlimited_type:
             if (
                 delivery_mechanism.delivery_mechanism.drm_scheme
                 == DeliveryMechanism.BEARER_TOKEN
@@ -639,7 +639,7 @@ class OPDS2WithODLApi(
         notification_email_address: str | None,
     ) -> HoldInfo:
         """Create a new hold."""
-        if licensepool.open_access or licensepool.unlimited_access:
+        if licensepool.unlimited_type:
             raise HoldOnUnlimitedAccess()
 
         return self._place_hold(patron, licensepool)

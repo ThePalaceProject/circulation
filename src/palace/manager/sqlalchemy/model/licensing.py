@@ -21,12 +21,14 @@ from sqlalchemy import (
     Unicode,
     UniqueConstraint,
     and_,
+    false,
     or_,
     select,
     true,
 )
 from sqlalchemy.orm import Mapped, Query, lazyload, relationship
 from sqlalchemy.orm.session import Session
+from sqlalchemy.sql import ColumnElement
 
 from palace.manager.api.circulation.exceptions import CannotHold, CannotLoan
 from palace.manager.core.exceptions import BasePalaceException
@@ -244,8 +246,6 @@ class LicensePoolStatus(StrEnum):
 class LicensePool(Base):
     """A pool of undifferentiated licenses for a work from a given source."""
 
-    UNLIMITED_ACCESS = -1
-
     __tablename__ = "licensepools"
     __mapper_args__ = {"confirm_deleted_rows": False}
     id: Mapped[int] = Column(Integer, primary_key=True)
@@ -327,6 +327,9 @@ class LicensePool(Base):
     # that caused us to suppress it.
     license_exception = Column(Unicode, index=True)
 
+    # This field is only relevant when type is LicensePoolType.UNLIMITED. It indicates whether
+    # the unlimited pool is open access (publicly available) or requires authentication.
+    # For LicensePoolType.METERED and LicensePoolType.AGGREGATED pools, this field is not used.
     open_access: Mapped[bool] = Column(
         Boolean, index=True, default=False, nullable=False
     )
@@ -425,17 +428,6 @@ class LicensePool(Base):
                 self.patrons_in_hold_queue,
             )
         )
-
-    @hybrid_property
-    def unlimited_access(self) -> bool:
-        """Returns a Boolean value indicating whether this LicensePool allows unlimited access.
-        For example, in the case of LCP books without explicit licensing information
-
-        NOTE: This property is deprecated and will be replaced by LicensePool.type in the future.
-
-        :return: Boolean value indicating whether this LicensePool allows unlimited access
-        """
-        return self.licenses_owned == self.UNLIMITED_ACCESS
 
     @classmethod
     @overload
@@ -1340,6 +1332,44 @@ class LicensePool(Base):
         DeliveryMechanism.sort().
         """
         return DeliveryMechanism.sort(self.available_delivery_mechanisms)
+
+    # Helpful filters for querying LicensePools by type and status
+    @hybrid_property
+    def metered_or_equivalent_type(self) -> bool:
+        return self.type in (
+            LicensePoolType.METERED,
+            LicensePoolType.AGGREGATED,
+        )
+
+    @metered_or_equivalent_type.expression  # type: ignore[misc]
+    def metered_or_equivalent_type(cls) -> ColumnElement[Boolean]:
+        return cls.type.in_(  # type: ignore[attr-defined, no-any-return]
+            [LicensePoolType.METERED, LicensePoolType.AGGREGATED]
+        )
+
+    @hybrid_property
+    def unlimited_type(self) -> bool:
+        return self.type == LicensePoolType.UNLIMITED
+
+    @hybrid_property
+    def unlimited_non_open_access_type(self) -> bool:
+        return self.unlimited_type and not self.open_access
+
+    @unlimited_non_open_access_type.expression  # type: ignore[misc]
+    def unlimited_non_open_access_type(cls) -> ColumnElement[Boolean]:
+        return and_(cls.type == LicensePoolType.UNLIMITED, cls.open_access == false())  # type: ignore[type-var]
+
+    @hybrid_property
+    def unlimited_open_access_type(self) -> bool:
+        return self.unlimited_type and self.open_access
+
+    @unlimited_open_access_type.expression  # type: ignore[misc]
+    def unlimited_open_access_type(cls) -> ColumnElement[Boolean]:
+        return and_(cls.type == LicensePoolType.UNLIMITED, cls.open_access == true())  # type: ignore[type-var]
+
+    @hybrid_property
+    def active_status(self) -> bool:
+        return self.status == LicensePoolStatus.ACTIVE
 
 
 Index(

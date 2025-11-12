@@ -284,8 +284,6 @@ class TestImportCollection:
         for pool in pools:
             assert pool.open_access is True
             assert pool.type == LicensePoolType.UNLIMITED
-            assert pool.licenses_owned == LicensePool.UNLIMITED_ACCESS
-            assert pool.licenses_available == LicensePool.UNLIMITED_ACCESS
 
         # Test the works quality calculation
         # First we update the measurements datasource to be the metadata wrangler,

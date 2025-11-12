@@ -22,7 +22,11 @@ from palace.manager.sqlalchemy.model.contributor import Contributor
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
-from palace.manager.sqlalchemy.model.licensing import LicensePool, LicensePoolType
+from palace.manager.sqlalchemy.model.licensing import (
+    LicensePool,
+    LicensePoolStatus,
+    LicensePoolType,
+)
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation, Resource
 from palace.manager.sqlalchemy.model.work import (
     Work,
@@ -1154,11 +1158,12 @@ class TestWork:
         )  # .commit() changes this to exclusive upper
 
         # If a book stops being available through a collection
-        # (because its LicensePool loses all its licenses or stops
+        # (because its LicensePool becomes unavailable or stops
         # being open access), it will no longer be listed
         # in its Work's search document.
         [pool] = collection1.licensepools
         pool.licenses_owned = 0
+        pool.status = LicensePoolStatus.EXHAUSTED
         db.session.commit()
         search_doc = work.to_search_document()
         assert [collection2.id] == [
@@ -1168,7 +1173,7 @@ class TestWork:
         # If the book becomes available again, the collection will
         # start showing up again.
         pool.type = LicensePoolType.UNLIMITED
-        pool.open_access = True
+        pool.status = LicensePoolStatus.ACTIVE
         db.session.commit()
         search_doc = work.to_search_document()
         assert {collection1.id, collection2.id} == {
@@ -1462,8 +1467,6 @@ class TestWork:
 
         pool.open_access = False
         pool.type = LicensePoolType.UNLIMITED
-        pool.licenses_owned = LicensePool.UNLIMITED_ACCESS
-        pool.licenses_available = LicensePool.UNLIMITED_ACCESS
 
         # Make sure all of this will show up in a database query.
         db.session.flush()
@@ -1712,8 +1715,6 @@ class TestWork:
 
         # If a pool has unlimited_access, it should be preferred over regular pools
         pool1.type = LicensePoolType.UNLIMITED
-        pool1.licenses_available = LicensePool.UNLIMITED_ACCESS
-        pool1.licenses_owned = LicensePool.UNLIMITED_ACCESS
         assert pool1 == work.active_license_pool()
 
         # But open_access always wins
