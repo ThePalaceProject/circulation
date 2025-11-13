@@ -732,6 +732,8 @@ class TestImportCollection:
         )
         assert isinstance(moby_dick_license_pool, LicensePool)
         assert moby_dick_license_pool.open_access
+        assert moby_dick_license_pool.licenses_owned == LicensePool.UNLIMITED_ACCESS
+        assert moby_dick_license_pool.licenses_available == LicensePool.UNLIMITED_ACCESS
         assert moby_dick_license_pool.type == LicensePoolType.UNLIMITED
         assert moby_dick_license_pool.status == LicensePoolStatus.ACTIVE
 
@@ -766,6 +768,11 @@ class TestImportCollection:
         )
         assert isinstance(postmodernism_license_pool, LicensePool) is True
         assert postmodernism_license_pool.open_access is False
+        assert postmodernism_license_pool.licenses_owned == LicensePool.UNLIMITED_ACCESS
+        assert (
+            postmodernism_license_pool.licenses_available
+            == LicensePool.UNLIMITED_ACCESS
+        )
         assert postmodernism_license_pool.type == LicensePoolType.UNLIMITED
         assert postmodernism_license_pool.status == LicensePoolStatus.ACTIVE
 
