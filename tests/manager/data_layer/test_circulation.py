@@ -18,6 +18,7 @@ from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import (
     DeliveryMechanism,
     LicensePool,
+    LicensePoolStatus,
     LicensePoolType,
     RightsStatus,
 )
@@ -916,3 +917,139 @@ class TestCirculationData:
         # But if the pool was checked more recently than the data, nothing has changed
         pool.last_checked = today
         assert circulation.has_changed(db.session, collection=collection) is False
+
+    @pytest.mark.parametrize(
+        "initial_type,new_type,expected_type,description",
+        [
+            (
+                LicensePoolType.METERED,
+                LicensePoolType.UNLIMITED,
+                LicensePoolType.UNLIMITED,
+                "updates when changed",
+            ),
+            (
+                LicensePoolType.UNLIMITED,
+                LicensePoolType.AGGREGATED,
+                LicensePoolType.AGGREGATED,
+                "updates to different type",
+            ),
+            (
+                LicensePoolType.UNLIMITED,
+                None,
+                LicensePoolType.UNLIMITED,
+                "does not update when None",
+            ),
+            (
+                LicensePoolType.METERED,
+                LicensePoolType.METERED,
+                LicensePoolType.METERED,
+                "does not change when same",
+            ),
+        ],
+    )
+    def test_apply_license_pool_type(
+        self,
+        db: DatabaseTransactionFixture,
+        initial_type: LicensePoolType,
+        new_type: LicensePoolType | None,
+        expected_type: LicensePoolType,
+        description: str,
+    ):
+        """Test that CirculationData.apply() handles license pool type updates correctly."""
+        edition, pool = db.edition(with_license_pool=True)
+        pool.type = initial_type
+
+        circulation_data = CirculationData(
+            data_source_name=edition.data_source.name,
+            primary_identifier_data=IdentifierData.from_identifier(
+                edition.primary_identifier
+            ),
+            type=new_type,
+            licenses_owned=100,
+            licenses_available=50,
+        )
+
+        circulation_data.apply(db.session, pool.collection)
+
+        assert pool.type == expected_type
+
+    @pytest.mark.parametrize(
+        "initial_status,new_status,expected_status,description",
+        [
+            (
+                LicensePoolStatus.ACTIVE,
+                LicensePoolStatus.EXHAUSTED,
+                LicensePoolStatus.EXHAUSTED,
+                "updates when changed",
+            ),
+            (
+                LicensePoolStatus.EXHAUSTED,
+                LicensePoolStatus.REMOVED,
+                LicensePoolStatus.REMOVED,
+                "updates to different status",
+            ),
+            (
+                LicensePoolStatus.EXHAUSTED,
+                None,
+                LicensePoolStatus.EXHAUSTED,
+                "does not update when None",
+            ),
+            (
+                LicensePoolStatus.ACTIVE,
+                LicensePoolStatus.ACTIVE,
+                LicensePoolStatus.ACTIVE,
+                "does not change when same",
+            ),
+        ],
+    )
+    def test_apply_license_pool_status(
+        self,
+        db: DatabaseTransactionFixture,
+        initial_status: LicensePoolStatus,
+        new_status: LicensePoolStatus | None,
+        expected_status: LicensePoolStatus,
+        description: str,
+    ):
+        """Test that CirculationData.apply() handles license pool status updates correctly."""
+        edition, pool = db.edition(with_license_pool=True)
+        pool.status = initial_status
+
+        circulation_data = CirculationData(
+            data_source_name=edition.data_source.name,
+            primary_identifier_data=IdentifierData.from_identifier(
+                edition.primary_identifier
+            ),
+            status=new_status,
+            licenses_owned=100,
+            licenses_available=50,
+        )
+
+        circulation_data.apply(db.session, pool.collection)
+
+        assert pool.status == expected_status
+
+    def test_apply_updates_both_type_and_status(self, db: DatabaseTransactionFixture):
+        """Test that CirculationData.apply() can update both type and status simultaneously."""
+        edition, pool = db.edition(with_license_pool=True)
+
+        # Initial values
+        assert pool.type == LicensePoolType.METERED
+        assert pool.status == LicensePoolStatus.ACTIVE
+
+        # Apply circulation data with both type and status
+        circulation_data = CirculationData(
+            data_source_name=edition.data_source.name,
+            primary_identifier_data=IdentifierData.from_identifier(
+                edition.primary_identifier
+            ),
+            type=LicensePoolType.UNLIMITED,
+            status=LicensePoolStatus.REMOVED,
+            licenses_owned=0,
+            licenses_available=0,
+        )
+
+        circulation_data.apply(db.session, pool.collection)
+
+        # Both should be updated
+        assert pool.type == LicensePoolType.UNLIMITED
+        assert pool.status == LicensePoolStatus.REMOVED
