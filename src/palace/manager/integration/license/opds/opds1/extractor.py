@@ -32,7 +32,11 @@ from palace.manager.opds.odl.info import LicenseInfo
 from palace.manager.opds.odl.odl import License
 from palace.manager.sqlalchemy.model.classification import Subject
 from palace.manager.sqlalchemy.model.edition import Edition
-from palace.manager.sqlalchemy.model.licensing import LicensePool, RightsStatus
+from palace.manager.sqlalchemy.model.licensing import (
+    LicensePool,
+    LicensePoolType,
+    RightsStatus,
+)
 from palace.manager.sqlalchemy.model.measurement import Measurement
 from palace.manager.sqlalchemy.model.resource import Hyperlink
 from palace.manager.util import first_or_default
@@ -715,6 +719,7 @@ class Opds1Extractor(OpdsExtractor[OPDS1Feed, OPDS1Publication], BearerTokenDrmM
             primary_identifier_data=identifier,
             should_track_playtime=time_tracking,
             formats=formats,
+            type=LicensePoolType.UNLIMITED,
             licenses_owned=LicensePool.UNLIMITED_ACCESS,
             licenses_available=LicensePool.UNLIMITED_ACCESS,
         )

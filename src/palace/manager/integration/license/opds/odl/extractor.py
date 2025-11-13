@@ -41,6 +41,8 @@ from palace.manager.sqlalchemy.model.licensing import (
     DeliveryMechanism,
     DeliveryMechanismTuple,
     LicensePool,
+    LicensePoolStatus,
+    LicensePoolType,
     RightsStatus,
 )
 from palace.manager.sqlalchemy.model.resource import Hyperlink
@@ -717,9 +719,18 @@ class OPDS2WithODLExtractor[PublicationType: opds2.BasePublication](
                         )
                     )
 
+        status = (
+            LicensePoolStatus.ACTIVE
+            if publication_available
+            and any(l.status == LicenseStatus.available for l in licenses)
+            else LicensePoolStatus.REMOVED
+        )
+
         return CirculationData(
             data_source_name=self._data_source,
             primary_identifier_data=identifier,
+            type=LicensePoolType.AGGREGATED,
+            status=status,
             licenses=licenses,
             licenses_owned=None,
             licenses_available=None,
@@ -737,10 +748,13 @@ class OPDS2WithODLExtractor[PublicationType: opds2.BasePublication](
         # FIXME: It seems that OPDS 2.0 spec doesn't contain information about rights so we use the default one
         rights_uri = RightsStatus.rights_uri_from_string("")
 
+        license_type = LicensePoolType.UNLIMITED
         if publication.metadata.availability.available:
+            license_status = LicensePoolStatus.ACTIVE
             licenses_owned = LicensePool.UNLIMITED_ACCESS
             licenses_available = LicensePool.UNLIMITED_ACCESS
         else:
+            license_status = LicensePoolStatus.REMOVED
             licenses_owned = 0
             licenses_available = 0
 
@@ -761,6 +775,8 @@ class OPDS2WithODLExtractor[PublicationType: opds2.BasePublication](
             data_source_name=self._data_source,
             primary_identifier_data=identifier,
             links=links,
+            type=license_type,
+            status=license_status,
             licenses_owned=licenses_owned,
             licenses_available=licenses_available,
             licenses_reserved=0,

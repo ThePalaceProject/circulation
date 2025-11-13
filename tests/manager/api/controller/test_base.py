@@ -22,7 +22,11 @@ from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.lane import Lane
 from palace.manager.sqlalchemy.model.library import Library
-from palace.manager.sqlalchemy.model.licensing import LicensePoolDeliveryMechanism
+from palace.manager.sqlalchemy.model.licensing import (
+    LicensePool,
+    LicensePoolDeliveryMechanism,
+    LicensePoolType,
+)
 from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.sqlalchemy.model.resource import Representation
 from palace.manager.sqlalchemy.util import create, tuple_to_numericrange
@@ -411,7 +415,9 @@ class TestBaseController:
             )
             [pool] = work.license_pools
             pool.open_access = False
-            pool.unlimited_access = True
+            pool.type = LicensePoolType.UNLIMITED
+            pool.licenses_owned = LicensePool.UNLIMITED_ACCESS
+            pool.licenses_available = LicensePool.UNLIMITED_ACCESS
 
             # Act
             problem = circulation_fixture.controller.apply_borrowing_policy(
@@ -440,6 +446,8 @@ class TestBaseController:
             )
             [pool] = work.license_pools
             pool.licenses_available = 0
+            pool.licenses_owned = 0
+            assert pool.type is LicensePoolType.UNLIMITED
             assert True == pool.open_access
 
             # It can still be borrowed even though it has no

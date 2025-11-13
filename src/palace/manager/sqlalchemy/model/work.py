@@ -58,6 +58,7 @@ from palace.manager.sqlalchemy.model.identifier import (
     Identifier,
     RecursiveEquivalencyCache,
 )
+from palace.manager.sqlalchemy.model.licensing import LicensePool
 from palace.manager.sqlalchemy.model.measurement import Measurement
 from palace.manager.sqlalchemy.util import (
     flush,
@@ -74,7 +75,6 @@ if TYPE_CHECKING:
     from palace.manager.search.external_search import ExternalSearchIndex
     from palace.manager.sqlalchemy.model.customlist import CustomListEntry
     from palace.manager.sqlalchemy.model.library import Library
-    from palace.manager.sqlalchemy.model.licensing import LicensePool
     from palace.manager.sqlalchemy.model.resource import Resource
 
 
@@ -1584,6 +1584,8 @@ class Work(Base, LoggerMixin):
                 "open_access",
                 "suppressed",
                 "availability_time",
+                "type",
+                "status",
             ],
             "identifiers": ["type", "identifier"],
             "classifications": ["scheme", "term", "weight"],

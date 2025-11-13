@@ -50,7 +50,11 @@ from palace.manager.sqlalchemy.model.lane import (
     FacetsWithEntryPoint,
     Pagination,
 )
-from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism, RightsStatus
+from palace.manager.sqlalchemy.model.licensing import (
+    DeliveryMechanism,
+    LicensePoolType,
+    RightsStatus,
+)
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
 from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.util.datetime_helpers import utc_now
@@ -1146,6 +1150,7 @@ class TestLibraryAnnotator:
 
         # These numbers are impossible, but it doesn't matter for
         # purposes of this test.
+        pool.type = LicensePoolType.METERED
         pool.open_access = False
         pool.licenses_owned = 100
         pool.licenses_available = 50

@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime
 import logging
 from collections.abc import Sequence
-from enum import IntEnum, auto
+from enum import IntEnum, StrEnum, auto
 from typing import TYPE_CHECKING, Any, Literal, NamedTuple, overload
 
 from frozendict import frozendict
@@ -205,6 +205,38 @@ class License(Base, LicenseFunctions):
             logging.warning(f"Checking in expired license # {self.identifier}.")
 
 
+class LicensePoolType(StrEnum):
+    """The licensing model for a licensepool."""
+
+    METERED = auto()
+    # Library has finite copies/checkouts available
+
+    UNLIMITED = auto()
+    # Unlimited access while the license is active
+
+    AGGREGATED = auto()
+    # A licensepool that is aggregated from license
+    # records in the database, not directly from a vendor.
+
+
+class LicensePoolStatus(StrEnum):
+    """The operational status of a license or license pool."""
+
+    PRE_ORDER = auto()
+    # Not yet available for checkout, pre-ordered by the library
+
+    ACTIVE = auto()
+    # Normal operation - The license pool is active and operating according to
+    # its license terms.
+
+    EXHAUSTED = auto()
+    # The license pool has no remaining licenses available for checkout.
+
+    REMOVED = auto()
+    # Removal (copyright violation, vendor dispute)
+    # All loans/holds should be revoked immediately
+
+
 class LicensePool(Base):
     """A pool of undifferentiated licenses for a work from a given source."""
 
@@ -276,8 +308,10 @@ class LicensePool(Base):
     )
 
     # The date this LicensePool was first created in our db
-    # (the date we first discovered that ​we had that book in ​our collection).
+    # (the date we first discovered that we had that book in our collection).
     availability_time = Column(DateTime(timezone=True), index=True)
+
+    last_checked = Column(DateTime(timezone=True), index=True)
 
     # A LicensePool that seemingly looks fine may be manually suppressed
     # to be temporarily or permanently removed from the collection.
@@ -289,15 +323,38 @@ class LicensePool(Base):
     # that caused us to suppress it.
     license_exception = Column(Unicode, index=True)
 
-    open_access = Column(Boolean, index=True)
-    last_checked = Column(DateTime(timezone=True), index=True)
+    open_access: Mapped[bool] = Column(
+        Boolean, index=True, default=False, nullable=False
+    )
+
+    # These fields are used when tracking LicensePoolType.METERED and LicensePoolType.AGGREGATED
+    # license pools.
     licenses_owned: Mapped[int] = Column(Integer, default=0, index=True, nullable=False)
     licenses_available: Mapped[int] = Column(
         Integer, default=0, index=True, nullable=False
     )
     licenses_reserved: Mapped[int] = Column(Integer, default=0, nullable=False)
     patrons_in_hold_queue: Mapped[int] = Column(Integer, default=0, nullable=False)
+
     should_track_playtime: Mapped[bool] = Column(Boolean, default=False, nullable=False)
+
+    # NOTE: type and status have been added, and are being populated for new / updated licensepools
+    #  with the correct status, but they are not yet backfilled for old licensepools and are not
+    #  yet being used in any business logic.
+    type: Mapped[LicensePoolType] = Column(
+        AlchemyEnum(
+            LicensePoolType, values_callable=lambda obj: [e.value for e in obj]
+        ),
+        server_default=LicensePoolType.METERED,
+        nullable=False,
+    )
+    status: Mapped[LicensePoolStatus] = Column(
+        AlchemyEnum(
+            LicensePoolStatus, values_callable=lambda obj: [e.value for e in obj]
+        ),
+        server_default=LicensePoolStatus.ACTIVE,
+        nullable=False,
+    )
 
     # A Collection can not have more than one LicensePool for a given
     # Identifier from a given DataSource.
@@ -363,20 +420,6 @@ class LicensePool(Base):
         :return: Boolean value indicating whether this LicensePool allows unlimited access
         """
         return self.licenses_owned == self.UNLIMITED_ACCESS
-
-    @unlimited_access.setter
-    def unlimited_access(self, value: bool) -> None:
-        """Sets value of unlimited_access property.
-        If you set it to False, license_owned and license_available will be reset to 0
-
-        :param value: Boolean value indicating whether this LicensePool allows unlimited access
-        """
-        if value:
-            self.licenses_owned = self.UNLIMITED_ACCESS
-            self.licenses_available = self.UNLIMITED_ACCESS
-        else:
-            self.licenses_owned = 0
-            self.licenses_available = 0
 
     @classmethod
     @overload

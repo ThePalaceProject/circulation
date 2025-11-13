@@ -17,7 +17,7 @@ from palace.manager.opds.opds2 import Link
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.licensing import (
     DeliveryMechanism,
-    LicensePool,
+    LicensePoolType,
     RightsStatus,
 )
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
@@ -153,8 +153,7 @@ class TestImportCollection:
                 pool.delivery_mechanisms[0].delivery_mechanism.drm_scheme
                 == DeliveryMechanism.BEARER_TOKEN
             )
-            assert pool.licenses_owned == LicensePool.UNLIMITED_ACCESS
-            assert pool.licenses_available == LicensePool.UNLIMITED_ACCESS
+            assert pool.type == LicensePoolType.UNLIMITED
             assert pool.work.last_update_time == now
 
         # The ebooks have the correct delivery mechanism, and they don't track playtime

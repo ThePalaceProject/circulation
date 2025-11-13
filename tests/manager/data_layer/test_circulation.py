@@ -18,6 +18,7 @@ from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import (
     DeliveryMechanism,
     LicensePool,
+    LicensePoolType,
     RightsStatus,
 )
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
@@ -251,6 +252,7 @@ class TestCirculationData:
         )
 
         circulation_data = CirculationData(
+            type=LicensePoolType.AGGREGATED,
             licenses=[license_data],
             data_source_name=edition.data_source.name,
             primary_identifier_data=IdentifierData.from_identifier(
@@ -268,6 +270,7 @@ class TestCirculationData:
             license.identifier for license in pool.licenses
         }
         assert old_license == loan.license
+        assert pool.type == LicensePoolType.AGGREGATED
 
     def test_apply_updates_existing_licenses(self, db: DatabaseTransactionFixture):
         edition, pool = db.edition(with_license_pool=True)
@@ -299,6 +302,7 @@ class TestCirculationData:
             primary_identifier_data=IdentifierData.from_identifier(
                 edition.primary_identifier
             ),
+            type=LicensePoolType.AGGREGATED,
         )
 
         circulation_data.apply(db.session, pool.collection)
@@ -308,6 +312,7 @@ class TestCirculationData:
         new_license = pool.licenses[0]
         assert new_license.id == old_license.id
         assert old_license.status == LicenseStatus.unavailable
+        assert pool.type == LicensePoolType.AGGREGATED
 
     def test_apply_with_licenses_overrides_availability(
         self, db: DatabaseTransactionFixture
@@ -327,6 +332,7 @@ class TestCirculationData:
         # and licenses, it ignores the availability information and
         # instead uses the licenses to calculate availability.
         circulation_data = CirculationData(
+            type=LicensePoolType.AGGREGATED,
             licenses=[license_data],
             data_source_name=edition.data_source.name,
             primary_identifier_data=IdentifierData.from_identifier(
@@ -345,6 +351,7 @@ class TestCirculationData:
         assert pool.licenses_owned == 1
         assert pool.licenses_reserved == 0
         assert pool.patrons_in_hold_queue == 0
+        assert pool.type == LicensePoolType.AGGREGATED
 
     def test_apply_without_licenses_sets_availability(
         self, db: DatabaseTransactionFixture

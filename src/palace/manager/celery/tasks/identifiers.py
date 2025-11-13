@@ -17,7 +17,11 @@ from palace.manager.service.redis.models.set import (
 )
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.identifier import Identifier
-from palace.manager.sqlalchemy.model.licensing import LicensePool
+from palace.manager.sqlalchemy.model.licensing import (
+    LicensePool,
+    LicensePoolStatus,
+    LicensePoolType,
+)
 
 
 @shared_task(queue=QueueNames.default, bind=True)
@@ -129,6 +133,8 @@ def mark_identifiers_unavailable(
             data_source_name=data_source_name,
             licenses_owned=0,
             licenses_available=0,
+            type=LicensePoolType.UNLIMITED,
+            status=LicensePoolStatus.REMOVED,
         )
         identifiers_to_mark = existing_identifiers - active_identifiers
         for identifier in identifiers_to_mark:

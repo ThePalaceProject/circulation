@@ -31,6 +31,8 @@ from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.licensing import (
     DeliveryMechanism,
     LicensePool,
+    LicensePoolStatus,
+    LicensePoolType,
 )
 from palace.manager.sqlalchemy.model.patron import Loan
 from palace.manager.sqlalchemy.model.work import Work
@@ -419,6 +421,7 @@ class TestImportCollection:
         )
         assert isinstance(moby_dick_license_pool, LicensePool)
         assert moby_dick_license_pool.open_access
+        assert moby_dick_license_pool.type == LicensePoolType.UNLIMITED
         assert moby_dick_license_pool.licenses_owned == LicensePool.UNLIMITED_ACCESS
         assert moby_dick_license_pool.licenses_available == LicensePool.UNLIMITED_ACCESS
         assert moby_dick_license_pool.should_track_playtime == True
@@ -435,6 +438,7 @@ class TestImportCollection:
         )
         assert isinstance(huckleberry_finn_license_pool, LicensePool)
         assert huckleberry_finn_license_pool.open_access is False
+        assert huckleberry_finn_license_pool.type == LicensePoolType.UNLIMITED
         assert (
             huckleberry_finn_license_pool.licenses_owned == LicensePool.UNLIMITED_ACCESS
         )
@@ -457,6 +461,7 @@ class TestImportCollection:
         )
         assert isinstance(postmodernism_license_pool, LicensePool)
         assert postmodernism_license_pool.open_access is False
+        assert postmodernism_license_pool.type == LicensePoolType.UNLIMITED
         assert postmodernism_license_pool.licenses_owned == LicensePool.UNLIMITED_ACCESS
         assert (
             postmodernism_license_pool.licenses_available
@@ -643,6 +648,8 @@ class TestImportCollection:
         )
         assert isinstance(moby_dick_license_pool, LicensePool)
         assert moby_dick_license_pool.open_access
+        assert moby_dick_license_pool.type == LicensePoolType.UNLIMITED
+        assert moby_dick_license_pool.status == LicensePoolStatus.REMOVED
         assert moby_dick_license_pool.licenses_owned == 0
         assert moby_dick_license_pool.licenses_available == 0
 
@@ -660,6 +667,8 @@ class TestImportCollection:
         )
         assert isinstance(huckleberry_finn_license_pool, LicensePool)
         assert huckleberry_finn_license_pool.open_access is False
+        assert huckleberry_finn_license_pool.type == LicensePoolType.UNLIMITED
+        assert huckleberry_finn_license_pool.status == LicensePoolStatus.ACTIVE
         assert (
             huckleberry_finn_license_pool.licenses_owned == LicensePool.UNLIMITED_ACCESS
         )
@@ -681,6 +690,8 @@ class TestImportCollection:
         )
         assert isinstance(postmodernism_license_pool, LicensePool)
         assert postmodernism_license_pool.open_access is False
+        assert postmodernism_license_pool.type == LicensePoolType.UNLIMITED
+        assert postmodernism_license_pool.status == LicensePoolStatus.ACTIVE
         assert postmodernism_license_pool.licenses_owned == LicensePool.UNLIMITED_ACCESS
         assert (
             postmodernism_license_pool.licenses_available
@@ -721,8 +732,8 @@ class TestImportCollection:
         )
         assert isinstance(moby_dick_license_pool, LicensePool)
         assert moby_dick_license_pool.open_access
-        assert moby_dick_license_pool.licenses_owned == LicensePool.UNLIMITED_ACCESS
-        assert moby_dick_license_pool.licenses_available == LicensePool.UNLIMITED_ACCESS
+        assert moby_dick_license_pool.type == LicensePoolType.UNLIMITED
+        assert moby_dick_license_pool.status == LicensePoolStatus.ACTIVE
 
         # Adventures of Huckleberry Finn is imported and is now unavailable
         huckleberry_finn_edition = apply_task_fixture.get_edition_by_identifier(
@@ -740,6 +751,8 @@ class TestImportCollection:
         assert huckleberry_finn_license_pool.open_access is False
         assert huckleberry_finn_license_pool.licenses_owned == 0
         assert huckleberry_finn_license_pool.licenses_available == 0
+        assert huckleberry_finn_license_pool.type == LicensePoolType.UNLIMITED
+        assert huckleberry_finn_license_pool.status == LicensePoolStatus.REMOVED
 
         # Politics of postmodernism is still available
         postmodernism_edition = apply_task_fixture.get_edition_by_identifier(
@@ -753,11 +766,8 @@ class TestImportCollection:
         )
         assert isinstance(postmodernism_license_pool, LicensePool) is True
         assert postmodernism_license_pool.open_access is False
-        assert postmodernism_license_pool.licenses_owned == LicensePool.UNLIMITED_ACCESS
-        assert (
-            postmodernism_license_pool.licenses_available
-            == LicensePool.UNLIMITED_ACCESS
-        )
+        assert postmodernism_license_pool.type == LicensePoolType.UNLIMITED
+        assert postmodernism_license_pool.status == LicensePoolStatus.ACTIVE
 
     def test_auth_token_import_to_fulfillment(
         self,

@@ -16,6 +16,8 @@ from palace.manager.sqlalchemy.model.licensing import (
     DeliveryMechanism,
     LicensePool,
     LicensePoolDeliveryMechanism,
+    LicensePoolStatus,
+    LicensePoolType,
     RightsStatus,
 )
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
@@ -43,6 +45,9 @@ class CirculationData(BaseMutableData):
     licenses: list[LicenseData] | None = None
     last_checked: datetime.datetime | None = None
     should_track_playtime: bool = False
+
+    type: LicensePoolType = LicensePoolType.METERED
+    status: LicensePoolStatus = LicensePoolStatus.ACTIVE
 
     @model_validator(mode="after")
     def _filter_and_set_defaults(self) -> Self:
@@ -293,6 +298,12 @@ class CirculationData(BaseMutableData):
         ):
             # Update availability information. This may result in
             # the issuance of additional circulation events.
+            if pool.type != self.type:
+                pool.type = self.type
+
+            if pool.status != self.status:
+                pool.status = self.status
+
             if self.licenses is not None:
                 # If we have licenses set, use those to set our availability
                 old_licenses = list(pool.licenses or [])

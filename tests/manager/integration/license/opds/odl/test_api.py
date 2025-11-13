@@ -41,7 +41,9 @@ from palace.manager.opds.lcp.status import LoanStatus
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.licensing import (
     DeliveryMechanism,
+    LicensePool,
     LicensePoolDeliveryMechanism,
+    LicensePoolType,
     RightsStatus,
 )
 from palace.manager.sqlalchemy.model.patron import Hold, Loan
@@ -104,7 +106,14 @@ class TestOPDS2WithODLApi:
         # Create an open-access work
         pool = opds2_with_odl_api_fixture.work.license_pools[0]
         pool.open_access = open_access
-        pool.unlimited_access = unlimited_access
+        if unlimited_access:
+            pool.type = LicensePoolType.UNLIMITED
+            pool.licenses_owned = LicensePool.UNLIMITED_ACCESS
+            pool.licenses_available = LicensePool.UNLIMITED_ACCESS
+        else:
+            pool.type = LicensePoolType.METERED
+            pool.licenses_owned = 0
+            pool.licenses_available = 0
 
         with pytest.raises(HoldOnUnlimitedAccess):
             opds2_with_odl_api_fixture.place_hold(pool=pool)
