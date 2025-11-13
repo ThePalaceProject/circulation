@@ -146,7 +146,7 @@ class OverdriveImporter(LoggerMixin):
         # we need to check that there is metadata because it is possible that we attempted to fetch it, but we
         # didn't get anything back from overdrive (ie from the book list fetch above) or we did not attempt to
         # fetch it because it was already processed by the parent collection.
-        if book.get("metadata", None):
+        if book.get("metadata"):
             bibliographic = self._extractor.book_info_to_bibliographic(book)
             # The bibliographic should never be null here because there is a non-null entry for metadata in the
             # book dictionary.  Mypy complains without an assertion or type hints.
