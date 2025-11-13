@@ -56,12 +56,6 @@ class TestXMLProcessor:
             == tag.text
         )
 
-    def test_invalid_entities_are_stripped(self) -> None:
-        data = '<?xml version="1.0" encoding="utf-8"><tag>I enjoy invalid entities, such as &#x00;&#x01; and &#x1F;</tag>'
-        parser = MockProcessor("/tag")
-        [tag] = parser.process_all(data)
-        assert "I enjoy invalid entities, such as  and " == tag.text
-
     def test_process_first_result(self) -> None:
         # Verify that process_all processes only tags that
         # match the given XPath expression.

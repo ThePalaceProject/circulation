@@ -299,7 +299,7 @@ itsdangerous = "^2.1.2"
 jsonschema = "^4.22.0"
 jwcrypto = "^1.4.2"
 levenshtein = "^0.27"
-lxml = {extras = ["html-clean"], version = "6.0.0"}
+lxml = {extras = ["html-clean"], version = "6.0.2"}
 multipledispatch = "^1.0"
 nameparser = "^1.1"  # nameparser is for author name manipulations
 opensearch-py = "^3.0"
@@ -340,7 +340,7 @@ Werkzeug = "^3.0.0"
 # can control its version, since its version is linked to the version of
 # lxml we use.
 # See: https://github.com/xmlsec/python-xmlsec/issues/356
-xmlsec = "^1.3.16"
+xmlsec = "1.3.17"
 
 [tool.poetry.group.ci.dependencies]
 dunamai = "^1.16"
