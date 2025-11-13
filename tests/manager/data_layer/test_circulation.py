@@ -919,31 +919,31 @@ class TestCirculationData:
         assert circulation.has_changed(db.session, collection=collection) is False
 
     @pytest.mark.parametrize(
-        "initial_type,new_type,expected_type,description",
+        "initial_type,new_type,expected_type",
         [
-            (
+            pytest.param(
                 LicensePoolType.METERED,
                 LicensePoolType.UNLIMITED,
                 LicensePoolType.UNLIMITED,
-                "updates when changed",
+                id="updates when changed",
             ),
-            (
+            pytest.param(
                 LicensePoolType.UNLIMITED,
                 LicensePoolType.AGGREGATED,
                 LicensePoolType.AGGREGATED,
-                "updates to different type",
+                id="updates to different type",
             ),
-            (
+            pytest.param(
                 LicensePoolType.UNLIMITED,
                 None,
                 LicensePoolType.UNLIMITED,
-                "does not update when None",
+                id="does not update when None",
             ),
-            (
+            pytest.param(
                 LicensePoolType.METERED,
                 LicensePoolType.METERED,
                 LicensePoolType.METERED,
-                "does not change when same",
+                id="does not change when same",
             ),
         ],
     )
@@ -953,7 +953,6 @@ class TestCirculationData:
         initial_type: LicensePoolType,
         new_type: LicensePoolType | None,
         expected_type: LicensePoolType,
-        description: str,
     ):
         """Test that CirculationData.apply() handles license pool type updates correctly."""
         edition, pool = db.edition(with_license_pool=True)
@@ -974,31 +973,31 @@ class TestCirculationData:
         assert pool.type == expected_type
 
     @pytest.mark.parametrize(
-        "initial_status,new_status,expected_status,description",
+        "initial_status,new_status,expected_status",
         [
-            (
+            pytest.param(
                 LicensePoolStatus.ACTIVE,
                 LicensePoolStatus.EXHAUSTED,
                 LicensePoolStatus.EXHAUSTED,
-                "updates when changed",
+                id="updates when changed",
             ),
-            (
+            pytest.param(
                 LicensePoolStatus.EXHAUSTED,
                 LicensePoolStatus.REMOVED,
                 LicensePoolStatus.REMOVED,
-                "updates to different status",
+                id="updates to different status",
             ),
-            (
+            pytest.param(
                 LicensePoolStatus.EXHAUSTED,
                 None,
                 LicensePoolStatus.EXHAUSTED,
-                "does not update when None",
+                id="does not update when None",
             ),
-            (
+            pytest.param(
                 LicensePoolStatus.ACTIVE,
                 LicensePoolStatus.ACTIVE,
                 LicensePoolStatus.ACTIVE,
-                "does not change when same",
+                id="does not change when same",
             ),
         ],
     )
@@ -1008,7 +1007,6 @@ class TestCirculationData:
         initial_status: LicensePoolStatus,
         new_status: LicensePoolStatus | None,
         expected_status: LicensePoolStatus,
-        description: str,
     ):
         """Test that CirculationData.apply() handles license pool status updates correctly."""
         edition, pool = db.edition(with_license_pool=True)
