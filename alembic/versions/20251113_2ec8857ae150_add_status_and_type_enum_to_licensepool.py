@@ -16,12 +16,22 @@ branch_labels = None
 depends_on = None
 
 
+LICENSEPOOL_TYPE_ENUM = sa.Enum(
+    "metered", "unlimited", "aggregated", name="licensepooltype"
+)
+LICENSEPOOL_STATUS_ENUM = sa.Enum(
+    "pre_order", "active", "exhausted", "removed", name="licensepoolstatus"
+)
+
+
 def upgrade() -> None:
+    LICENSEPOOL_TYPE_ENUM.create(op.get_bind(), checkfirst=False)
+    LICENSEPOOL_STATUS_ENUM.create(op.get_bind(), checkfirst=False)
     op.add_column(
         "licensepools",
         sa.Column(
             "type",
-            sa.Enum("metered", "unlimited", "aggregated", name="licensepooltype"),
+            LICENSEPOOL_TYPE_ENUM,
             server_default="metered",
             nullable=False,
         ),
@@ -30,9 +40,7 @@ def upgrade() -> None:
         "licensepools",
         sa.Column(
             "status",
-            sa.Enum(
-                "pre_order", "active", "exhausted", "removed", name="licensepoolstatus"
-            ),
+            LICENSEPOOL_STATUS_ENUM,
             server_default="active",
             nullable=False,
         ),
@@ -53,5 +61,5 @@ def downgrade() -> None:
     )
     op.drop_column("licensepools", "status")
     op.drop_column("licensepools", "type")
-    sa.Enum(name="licensepoolstatus").drop(op.get_bind(), checkfirst=True)
-    sa.Enum(name="licensepooltype").drop(op.get_bind(), checkfirst=True)
+    LICENSEPOOL_TYPE_ENUM.drop(op.get_bind(), checkfirst=False)
+    LICENSEPOOL_STATUS_ENUM.drop(op.get_bind(), checkfirst=False)
