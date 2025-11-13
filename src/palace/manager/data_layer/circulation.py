@@ -46,8 +46,8 @@ class CirculationData(BaseMutableData):
     last_checked: datetime.datetime | None = None
     should_track_playtime: bool = False
 
-    type: LicensePoolType = LicensePoolType.METERED
-    status: LicensePoolStatus = LicensePoolStatus.ACTIVE
+    type: LicensePoolType | None = None
+    status: LicensePoolStatus | None = None
 
     @model_validator(mode="after")
     def _filter_and_set_defaults(self) -> Self:
@@ -298,10 +298,10 @@ class CirculationData(BaseMutableData):
         ):
             # Update availability information. This may result in
             # the issuance of additional circulation events.
-            if pool.type != self.type:
+            if self.type is not None and pool.type != self.type:
                 pool.type = self.type
 
-            if pool.status != self.status:
+            if self.status is not None and pool.status != self.status:
                 pool.status = self.status
 
             if self.licenses is not None:

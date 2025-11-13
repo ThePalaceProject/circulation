@@ -723,7 +723,7 @@ class OPDS2WithODLExtractor[PublicationType: opds2.BasePublication](
             LicensePoolStatus.ACTIVE
             if publication_available
             and any(l.status == LicenseStatus.available for l in licenses)
-            else LicensePoolStatus.REMOVED
+            else LicensePoolStatus.EXHAUSTED
         )
 
         return CirculationData(

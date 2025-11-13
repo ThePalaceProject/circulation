@@ -20,7 +20,6 @@ from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import (
     LicensePool,
     LicensePoolStatus,
-    LicensePoolType,
 )
 
 
@@ -133,7 +132,6 @@ def mark_identifiers_unavailable(
             data_source_name=data_source_name,
             licenses_owned=0,
             licenses_available=0,
-            type=LicensePoolType.UNLIMITED,
             status=LicensePoolStatus.REMOVED,
         )
         identifiers_to_mark = existing_identifiers - active_identifiers
