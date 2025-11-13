@@ -298,10 +298,21 @@ class CirculationData(BaseMutableData):
         ):
             # Update availability information. This may result in
             # the issuance of additional circulation events.
+
+            # Update license pool type if it differs from the incoming data.
             if self.type is not None and pool.type != self.type:
+                self.log.info(
+                    f"License pool type changing from {pool.type} to {self.type} for {pool.identifier!r}"
+                )
                 pool.type = self.type
 
+            # Update license pool status if it differs from the incoming data.
+            # Status changes track the operational state of the pool
+            # (e.g., active → removed when a title is withdrawn by the vendor).
             if self.status is not None and pool.status != self.status:
+                self.log.info(
+                    f"License pool status changing from {pool.status} to {self.status} for {pool.identifier!r}"
+                )
                 pool.status = self.status
 
             if self.licenses is not None:
