@@ -338,9 +338,11 @@ class LicensePool(Base):
 
     should_track_playtime: Mapped[bool] = Column(Boolean, default=False, nullable=False)
 
-    # NOTE: type and status have been added, and are being populated for new / updated licensepools
-    #  with the correct status, but they are not yet backfilled for old licensepools and are not
-    #  yet being used in any business logic.
+    # The licensing model for this pool, indicating how licenses are counted and managed.
+    #
+    # NOTE: This field is being populated for new/updated license pools but has not been backfilled
+    # for existing pools. It is not yet used in business logic. Once it is rolled out everywhere,
+    # it will replace the current implicit distinction between metered and unlimited license pools.
     type: Mapped[LicensePoolType] = Column(
         AlchemyEnum(
             LicensePoolType, values_callable=lambda obj: [e.value for e in obj]
@@ -348,6 +350,12 @@ class LicensePool(Base):
         server_default=LicensePoolType.METERED,
         nullable=False,
     )
+
+    # The operational status of this license pool, tracking its lifecycle state.
+    #
+    # NOTE: This field is being populated for new/updated license pools but has not been backfilled
+    # for existing pools. It is not yet used in business logic. Once it is rolled out everywhere,
+    # it will replace the current implicit distinction between active and exhausted license pools.
     status: Mapped[LicensePoolStatus] = Column(
         AlchemyEnum(
             LicensePoolStatus, values_callable=lambda obj: [e.value for e in obj]
@@ -416,6 +424,8 @@ class LicensePool(Base):
     def unlimited_access(self) -> bool:
         """Returns a Boolean value indicating whether this LicensePool allows unlimited access.
         For example, in the case of LCP books without explicit licensing information
+
+        NOTE: This property is deprecated and will be replaced by LicensePool.type in the future.
 
         :return: Boolean value indicating whether this LicensePool allows unlimited access
         """
