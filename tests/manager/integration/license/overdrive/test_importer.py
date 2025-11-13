@@ -12,6 +12,7 @@ from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.data_layer.bibliographic import BibliographicData
 from palace.manager.data_layer.circulation import CirculationData
 from palace.manager.data_layer.identifier import IdentifierData
+from palace.manager.data_layer.policy.replacement import ReplacementPolicy
 from palace.manager.integration.license.overdrive.api import (
     BookInfoEndpoint,
     OverdriveAPI,
@@ -158,6 +159,63 @@ class TestOverdriveImporter:
         # Second call should retrieve the same timestamp
         timestamp2 = importer.get_timestamp()
         assert timestamp1.id == timestamp2.id
+
+    def test_process_book_skips_metadata_update_if_identifier_in_parent_identifiers(
+        self,
+        db: DatabaseTransactionFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        services_fixture: ServicesFixture,
+    ):
+        """Ensure _process_book skips metadata update if identifier is in the parent identifier set."""
+
+        collection = overdrive_api_fixture.collection
+        registry = services_fixture.services.integration_registry.license_providers()
+        mock_api = Mock(spec=OverdriveAPI)
+        parent_identifier = IdentifierData(
+            type=Identifier.OVERDRIVE_ID, identifier="parent-id-123"
+        )
+        mock_parent_set = Mock(spec=IdentifierSet)
+        mock_parent_set.get.return_value = {parent_identifier}
+
+        importer = OverdriveImporter(
+            db=db.session,
+            collection=collection,
+            registry=registry,
+            api=mock_api,
+            parent_identifier_set=mock_parent_set,
+        )
+
+        bibliographic_mock = Mock()
+        bibliographic_mock.has_changed.return_value = False
+        circulation_mock = Mock()
+        circulation_mock.has_changed.return_value = False
+
+        extractor_mock = Mock(spec=OverdriveRepresentationExtractor)
+        extractor_mock.book_info_to_bibliographic.return_value = bibliographic_mock
+        extractor_mock.book_info_to_circulation.return_value = circulation_mock
+        importer._extractor = extractor_mock
+
+        book = {
+            "id": parent_identifier.identifier,
+            "availabilityV2": {"holds": 0},
+        }
+
+        apply_bibliographic = Mock()
+        apply_circulation = Mock()
+
+        identifier, changed = importer._process_book(
+            book=book,
+            fetch_metadata=False,
+            policy=ReplacementPolicy(),
+            apply_bibliographic=apply_bibliographic,
+            apply_circulation=apply_circulation,
+        )
+
+        assert isinstance(identifier, Identifier)
+        assert changed is False
+        mock_api.metadata_lookup.assert_not_called()
+        apply_bibliographic.assert_not_called()
+        apply_circulation.assert_not_called()
 
     def test_import_collection_basic(
         self,
