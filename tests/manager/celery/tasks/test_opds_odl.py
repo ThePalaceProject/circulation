@@ -52,6 +52,7 @@ from palace.manager.sqlalchemy.model.licensing import (
     License,
     LicensePool,
     LicensePoolDeliveryMechanism,
+    LicensePoolType,
 )
 from palace.manager.sqlalchemy.model.patron import Hold, Patron
 from palace.manager.sqlalchemy.model.resource import Hyperlink
@@ -1028,6 +1029,7 @@ class TestImportCollection:
         [license_pool] = pools
         assert license_pool.open_access is True
         assert license_pool.unlimited_access is True
+        assert license_pool.type is LicensePoolType.UNLIMITED
 
         assert 1 == len(license_pool.delivery_mechanisms)
 
@@ -1092,6 +1094,7 @@ class TestImportCollection:
         [license_pool] = pools
         assert license_pool.open_access is False
         assert license_pool.unlimited_access is True
+        assert license_pool.type is LicensePoolType.UNLIMITED
 
         assert 1 == len(license_pool.delivery_mechanisms)
 

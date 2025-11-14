@@ -98,6 +98,7 @@ from palace.manager.sqlalchemy.model.licensing import (
     License,
     LicensePool,
     LicensePoolDeliveryMechanism,
+    LicensePoolType,
     RightsStatus,
 )
 from palace.manager.sqlalchemy.model.patron import Patron
@@ -796,11 +797,11 @@ class DatabaseTransactionFixture:
             )
             if with_license_pool:
                 presentation_edition, pool = presentation_edition
-                if with_open_access_download:
-                    pool.open_access = True
-                if unlimited_access:
-                    pool.open_access = False
-                    pool.unlimited_access = True
+                if unlimited_access or with_open_access_download:
+                    pool.open_access = with_open_access_download
+                    pool.type = LicensePoolType.UNLIMITED
+                    pool.licenses_owned = LicensePool.UNLIMITED_ACCESS
+                    pool.licenses_available = LicensePool.UNLIMITED_ACCESS
 
                 pools = [pool]
         else:
@@ -925,8 +926,12 @@ class DatabaseTransactionFixture:
             data_source=source,
             collection=collection,
             availability_time=utc_now(),
-            unlimited_access=unlimited_access,
         )
+
+        if unlimited_access or with_open_access_download:
+            pool.type = LicensePoolType.UNLIMITED
+            pool.licenses_owned = LicensePool.UNLIMITED_ACCESS
+            pool.licenses_available = LicensePool.UNLIMITED_ACCESS
 
         if set_edition_as_presentation:
             pool.presentation_edition = edition

@@ -31,6 +31,7 @@ from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.identifier import Identifier
+from palace.manager.sqlalchemy.model.licensing import LicensePoolType
 from palace.manager.sqlalchemy.model.patron import Loan
 from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
@@ -657,6 +658,9 @@ class TestCirculationApiDispatcher:
         patron = circulation_api.db.patron(library=library)
         pool = MagicMock()
         pool.open_access = False
+        pool.type = LicensePoolType.METERED
+        pool.licenses_owned = 0
+        pool.licenses_available = 0
         pool.unlimited_access = False
         circulation.at_loan_limit = False
         circulation.at_hold_limit = False

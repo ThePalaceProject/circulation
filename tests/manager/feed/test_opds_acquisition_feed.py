@@ -39,7 +39,11 @@ from palace.manager.sqlalchemy.model.lane import (
     SearchFacets,
     WorkList,
 )
-from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism
+from palace.manager.sqlalchemy.model.licensing import (
+    DeliveryMechanism,
+    LicensePool,
+    LicensePoolType,
+)
 from palace.manager.sqlalchemy.model.resource import Representation
 from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.sqlalchemy.util import create
@@ -438,7 +442,9 @@ class TestOPDSAcquisitionFeed:
         # Arrange
         edition, pool = db.edition(with_license_pool=True)
         pool.open_access = False
-        pool.unlimited_access = True
+        pool.type = LicensePoolType.UNLIMITED
+        pool.licenses_available = LicensePool.UNLIMITED_ACCESS
+        pool.licenses_owned = LicensePool.UNLIMITED_ACCESS
 
         # Act
         tags = AcquisitionHelper.license_tags(pool, None, None)

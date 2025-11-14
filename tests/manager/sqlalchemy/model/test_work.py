@@ -22,7 +22,7 @@ from palace.manager.sqlalchemy.model.contributor import Contributor
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
-from palace.manager.sqlalchemy.model.licensing import LicensePool
+from palace.manager.sqlalchemy.model.licensing import LicensePool, LicensePoolType
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation, Resource
 from palace.manager.sqlalchemy.model.work import (
     Work,
@@ -1033,6 +1033,8 @@ class TestWork:
             assert pool.collection_id == match["collection_id"]
             assert pool.suppressed == match["suppressed"]
             assert pool.data_source_id == match["data_source_id"]
+            assert pool.type == match["type"]
+            assert pool.status == match["status"]
 
             assert isinstance(match["available"], bool)
             assert (pool.licenses_available > 0) == match["available"]
@@ -1165,6 +1167,7 @@ class TestWork:
 
         # If the book becomes available again, the collection will
         # start showing up again.
+        pool.type = LicensePoolType.UNLIMITED
         pool.open_access = True
         db.session.commit()
         search_doc = work.to_search_document()
@@ -1458,7 +1461,9 @@ class TestWork:
         work = db.work(presentation_edition=edition)
 
         pool.open_access = False
-        pool.unlimited_access = True
+        pool.type = LicensePoolType.UNLIMITED
+        pool.licenses_owned = LicensePool.UNLIMITED_ACCESS
+        pool.licenses_available = LicensePool.UNLIMITED_ACCESS
 
         # Make sure all of this will show up in a database query.
         db.session.flush()
@@ -1601,9 +1606,11 @@ class TestWork:
         # Start off with neither LicensePool being open-access. pool1
         # will become open-access later on, which is why we created an
         # open-access download for it.
+        pool1.type = LicensePoolType.METERED
         pool1.open_access = False
         pool1.licenses_owned = 1
 
+        pool2.type = LicensePoolType.METERED
         pool2.open_access = False
         pool2.licenses_owned = 1
 
@@ -1614,9 +1621,11 @@ class TestWork:
 
         # If one license pool is open-access and the other is not, the
         # open-access pool wins.
+        pool1.type = LicensePoolType.UNLIMITED
         pool1.open_access = True
         assert pool1 == work.active_license_pool()
         pool1.open_access = False
+        pool1.type = LicensePoolType.METERED
 
         # If one license pool has no owned licenses and the other has
         # owned licenses, the one with licenses wins.
@@ -1678,8 +1687,9 @@ class TestWork:
         # Set up all pools as non-open-access with different availability
         for pool in [pool1, pool2, pool3]:
             pool.open_access = False
-            pool.unlimited_access = False
+            pool.type = LicensePoolType.METERED
             pool.licenses_owned = 10
+            pool.licenses_available = 0
 
         # pool1 has 2 available
         pool1.licenses_available = 2
@@ -1701,7 +1711,9 @@ class TestWork:
         assert pool3 == work.active_license_pool()
 
         # If a pool has unlimited_access, it should be preferred over regular pools
-        pool1.unlimited_access = True
+        pool1.type = LicensePoolType.UNLIMITED
+        pool1.licenses_available = LicensePool.UNLIMITED_ACCESS
+        pool1.licenses_owned = LicensePool.UNLIMITED_ACCESS
         assert pool1 == work.active_license_pool()
 
         # But open_access always wins

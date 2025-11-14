@@ -30,6 +30,7 @@ from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import (
     DeliveryMechanism,
     LicensePool,
+    LicensePoolType,
     RightsStatus,
 )
 from palace.manager.sqlalchemy.model.measurement import Measurement
@@ -279,9 +280,10 @@ class TestImportCollection:
         assert crow_pool.work is not None
         assert mouse_pool.work is not None
 
-        # The pools are all open access
+        # The pools are all unlimited access
         for pool in pools:
             assert pool.open_access is True
+            assert pool.type == LicensePoolType.UNLIMITED
             assert pool.licenses_owned == LicensePool.UNLIMITED_ACCESS
             assert pool.licenses_available == LicensePool.UNLIMITED_ACCESS
 
