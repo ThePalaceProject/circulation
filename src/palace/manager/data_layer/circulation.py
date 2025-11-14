@@ -46,11 +46,11 @@ class CirculationData(BaseMutableData):
     last_checked: datetime.datetime | None = None
     should_track_playtime: bool = False
 
-    # The licensing model for the pool (METERED, UNLIMITED, or AGGREGATED).
+    # The licensing model for the pool (see enum for details).
     # If None, the existing pool type will not be updated.
     type: LicensePoolType | None = None
 
-    # The operational status of the pool (PRE_ORDER, ACTIVE, EXHAUSTED, or REMOVED).
+    # The operational status of the pool (see enum for details).
     # If None, the existing pool status will not be updated.
     status: LicensePoolStatus | None = None
 

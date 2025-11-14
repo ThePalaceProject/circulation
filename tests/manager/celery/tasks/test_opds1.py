@@ -280,7 +280,7 @@ class TestImportCollection:
         assert crow_pool.work is not None
         assert mouse_pool.work is not None
 
-        # The pools are all open access
+        # The pools are all unlimited access
         for pool in pools:
             assert pool.open_access is True
             assert pool.type == LicensePoolType.UNLIMITED

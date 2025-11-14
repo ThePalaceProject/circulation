@@ -206,17 +206,21 @@ class License(Base, LicenseFunctions):
 
 
 class LicensePoolType(StrEnum):
-    """The licensing model for a licensepool."""
+    """How this license pool's licenses are managed and accounted for."""
 
     METERED = auto()
-    # Library has finite copies/checkouts available
+    # Library has finite copies/checkouts available, and we only have
+    # availability information provided at the licensepool-level.
 
     UNLIMITED = auto()
-    # Unlimited access while the license is active
+    # Unlimited access to the title while the license is active
+    # (e.g. unlimited simultaneous use subscription content, open access
+    # content, etc.). Availability is not tracked at all.
 
     AGGREGATED = auto()
-    # A licensepool that is aggregated from license
-    # records in the database, not directly from a vendor.
+    # A metered licensepool where we have license-level availability information.
+    # The licensepool in this case is an aggregation of the availability
+    # information and constraints from the individual licenses.
 
 
 class LicensePoolStatus(StrEnum):

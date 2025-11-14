@@ -79,8 +79,8 @@ def mark_identifiers_unavailable(
     passed and exit without marking any identifiers as unavailable.
 
     Any identifiers present in the existing set but not in the active set will be marked as unavailable in
-    the collection. This is done by sending a circulation_apply task that sets both licenses_available and
-    licenses_owned to 0 for each identifier in the collection.
+    the collection. This is done by sending a circulation_apply task that creates CirculationData with
+    licenses_available and licenses_owned both set to 0, and status set to LicensePoolStatus.REMOVED.
 
     This function is designed to be used as the body of a chord created by `create_mark_unavailable_chord`.
 
