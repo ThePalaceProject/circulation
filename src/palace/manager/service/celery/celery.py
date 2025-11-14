@@ -252,6 +252,10 @@ def beat_schedule() -> dict[str, Any]:
                 day_of_week="2",
             ),  # Every Tuesday at midnight
         },
+        "overdrive_import_all_collections": {
+            "task": overdrive.import_all_collections.name,
+            "schedule": crontab(minute="*/15"),  # Run every 15 minutes
+        },
     }
 
 
