@@ -47,6 +47,7 @@ def beat_schedule() -> dict[str, Any]:
         opds2,
         opds_for_distributors,
         opds_odl,
+        overdrive,
         playtime_entries,
         reaper,
         rotate_jwe_key,
