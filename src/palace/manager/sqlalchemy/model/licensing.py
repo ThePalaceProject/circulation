@@ -344,9 +344,10 @@ class LicensePool(Base):
 
     # The licensing model for this pool, indicating how licenses are counted and managed.
     #
-    # NOTE: This field is being populated for new/updated license pools but has not been backfilled
-    # for existing pools. It is not yet used in business logic. Once it is rolled out everywhere,
-    # it will replace the current implicit distinction between metered and unlimited license pools.
+    # NOTE: This field has been backfilled for all existing license pools via migration
+    # 7c8e14813018. It is not yet used in business logic. Once business logic is updated to use
+    # this field, it will replace the current implicit distinction between metered and unlimited
+    # license pools.
     type: Mapped[LicensePoolType] = Column(
         AlchemyEnum(
             LicensePoolType, values_callable=lambda obj: [e.value for e in obj]
@@ -357,9 +358,10 @@ class LicensePool(Base):
 
     # The operational status of this license pool, tracking its lifecycle state.
     #
-    # NOTE: This field is being populated for new/updated license pools but has not been backfilled
-    # for existing pools. It is not yet used in business logic. Once it is rolled out everywhere,
-    # it will replace the current implicit distinction between active and exhausted license pools.
+    # NOTE: This field has been backfilled for all existing license pools via migration
+    # 7c8e14813018. It is not yet used in business logic. Once business logic is updated to use
+    # this field, it will replace the current implicit distinction between active and exhausted
+    # license pools.
     status: Mapped[LicensePoolStatus] = Column(
         AlchemyEnum(
             LicensePoolStatus, values_callable=lambda obj: [e.value for e in obj]
