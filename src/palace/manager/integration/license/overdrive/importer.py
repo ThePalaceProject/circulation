@@ -47,7 +47,6 @@ class OverdriveImporter(LoggerMixin):
         db: Session,
         collection: Collection,
         registry: LicenseProvidersRegistry,
-        import_all: bool = False,
         identifier_set: IdentifierSet | None = None,
         parent_identifier_set: IdentifierSet | None = None,
         api: OverdriveAPI | None = None,
@@ -145,8 +144,9 @@ class OverdriveImporter(LoggerMixin):
             book["metadata"] = self._api.metadata_lookup(identifier=identifier)
 
         # we need to check that there is metadata because it is possible that we attempted to fetch it, but we
-        # didn't get anything back from overdrive (ie from the book list fetch above).
-        if book["metadata"]:
+        # didn't get anything back from overdrive (ie from the book list fetch above) or we did not attempt to
+        # fetch it because it was already processed by the parent collection.
+        if book.get("metadata"):
             bibliographic = self._extractor.book_info_to_bibliographic(book)
             # The bibliographic should never be null here because there is a non-null entry for metadata in the
             # book dictionary.  Mypy complains without an assertion or type hints.
@@ -234,7 +234,7 @@ class OverdriveImporter(LoggerMixin):
         2. **Out-of-Scope Optimization**:
            - If all books in the current page were added before modified_since and there were no changes detected,
              stops pagination early to avoid processing old data
-           - Can be disabled with import_all=True
+           - Can be disabled when modified_since is None.
 
         3. **Change Detection**:
            - Only applies bibliographic updates if metadata has changed
@@ -327,6 +327,7 @@ class OverdriveImporter(LoggerMixin):
             and self._all_books_out_of_scope(modified_since, book_data)
         ):
             next_endpoint = None
+
         return FeedImportResult(
             next_page=next_endpoint,
             current_page=endpoint,
