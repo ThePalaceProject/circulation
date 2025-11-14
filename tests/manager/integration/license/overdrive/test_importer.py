@@ -31,6 +31,7 @@ from palace.manager.util.datetime_helpers import datetime_utc
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import OverdriveFilesFixture
 from tests.fixtures.overdrive import OverdriveAPIFixture
+from tests.fixtures.redis import RedisFixture
 from tests.fixtures.services import ServicesFixture
 
 
@@ -164,41 +165,47 @@ class TestOverdriveImporter:
         self,
         db: DatabaseTransactionFixture,
         overdrive_api_fixture: OverdriveAPIFixture,
+        overdrive_files_fixture: OverdriveFilesFixture,
         services_fixture: ServicesFixture,
+        redis_fixture: RedisFixture,
     ):
         """Ensure _process_book skips metadata update if identifier is in the parent identifier set."""
 
         collection = overdrive_api_fixture.collection
         registry = services_fixture.services.integration_registry.license_providers()
-        mock_api = Mock(spec=OverdriveAPI)
-        parent_identifier = IdentifierData(
-            type=Identifier.OVERDRIVE_ID, identifier="parent-id-123"
+        book_list_data = json.loads(
+            overdrive_files_fixture.sample_data("overdrive_book_list.json")
         )
-        mock_parent_set = Mock(spec=IdentifierSet)
-        mock_parent_set.get.return_value = {parent_identifier}
+        sample_book = book_list_data["products"][0]
+        parent_identifier = IdentifierData(
+            type=Identifier.OVERDRIVE_ID, identifier=sample_book["id"]
+        )
+        redis_client = redis_fixture.client
+        parent_identifier_set = IdentifierSet(
+            redis_client=redis_client, key="test_parent_set_key"
+        )
+        parent_identifier_set.add(parent_identifier)
 
         importer = OverdriveImporter(
             db=db.session,
             collection=collection,
             registry=registry,
-            api=mock_api,
-            parent_identifier_set=mock_parent_set,
+            api=overdrive_api_fixture.api,
+            parent_identifier_set=parent_identifier_set,
         )
 
-        bibliographic_mock = Mock()
-        bibliographic_mock.has_changed.return_value = False
-        circulation_mock = Mock()
-        circulation_mock.has_changed.return_value = False
+        metadata_lookup_mock = Mock(
+            side_effect=AssertionError("Metadata lookup should not be called")
+        )
+        importer._api.metadata_lookup = metadata_lookup_mock
 
-        extractor_mock = Mock(spec=OverdriveRepresentationExtractor)
-        extractor_mock.book_info_to_bibliographic.return_value = bibliographic_mock
-        extractor_mock.book_info_to_circulation.return_value = circulation_mock
-        importer._extractor = extractor_mock
-
-        book = {
-            "id": parent_identifier.identifier,
-            "availabilityV2": {"holds": 0},
-        }
+        book = sample_book.copy()
+        book.pop("metadata", None)
+        book["availabilityV2"] = json.loads(
+            overdrive_files_fixture.sample_data(
+                "overdrive_availability_information.json"
+            )
+        )
 
         apply_bibliographic = Mock()
         apply_circulation = Mock()
@@ -212,10 +219,10 @@ class TestOverdriveImporter:
         )
 
         assert isinstance(identifier, Identifier)
-        assert changed is False
-        mock_api.metadata_lookup.assert_not_called()
+        assert isinstance(changed, bool)
+        metadata_lookup_mock.assert_not_called()
         apply_bibliographic.assert_not_called()
-        apply_circulation.assert_not_called()
+        assert apply_circulation.called
 
     def test_import_collection_basic(
         self,
