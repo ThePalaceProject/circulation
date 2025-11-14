@@ -234,7 +234,7 @@ class OverdriveImporter(LoggerMixin):
         2. **Out-of-Scope Optimization**:
            - If all books in the current page were added before modified_since and there were no changes detected,
              stops pagination early to avoid processing old data
-           - Can be disabled with import_all=True
+           - Can be disabled when modified_since is None.
 
         3. **Change Detection**:
            - Only applies bibliographic updates if metadata has changed
