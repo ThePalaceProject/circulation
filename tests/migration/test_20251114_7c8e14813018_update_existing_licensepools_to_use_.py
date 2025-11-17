@@ -88,9 +88,15 @@ def test_licensepool_type_and_status_backfill(
         ds2, id6, opds_for_dist_collection, licenses_owned=0, licenses_available=0
     )
 
-    # Case 7: METERED pool with licenses_owned = 0 in non-OPDS collection (should stay METERED)
+    # Case 7: METERED pool with licenses_owned = 0 in non-OPDS collection (should be EXHAUSTED)
     pool7 = alembic_database.license_pool(
         ds2, id7, overdrive_collection, licenses_owned=0, licenses_available=0
+    )
+
+    # Case 8: METERED pool with licenses_owned > 0 in non-OPDS collection (should be ACTIVE)
+    id8 = alembic_database.identifier(identifier="test-id-8")
+    pool8 = alembic_database.license_pool(
+        ds2, id8, overdrive_collection, licenses_owned=5, licenses_available=3
     )
 
     # Create License records for the AGGREGATED pools
@@ -196,10 +202,18 @@ def test_licensepool_type_and_status_backfill(
         assert result.type == "unlimited"
         assert result.status == "removed"
 
-        # Case 7: METERED pool in non-OPDS collection should stay METERED with default ACTIVE
+        # Case 7: METERED pool with licenses_owned=0 → type=METERED, status=EXHAUSTED
         result = conn.execute(
             text("SELECT type, status FROM licensepools WHERE id = :id"),
             {"id": pool7},
+        ).one()
+        assert result.type == "metered"
+        assert result.status == "exhausted"
+
+        # Case 8: METERED pool with licenses_owned>0 → type=METERED, status=ACTIVE
+        result = conn.execute(
+            text("SELECT type, status FROM licensepools WHERE id = :id"),
+            {"id": pool8},
         ).one()
         assert result.type == "metered"
         assert result.status == "active"

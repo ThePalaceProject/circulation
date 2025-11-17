@@ -83,6 +83,21 @@ def upgrade() -> None:
         )
     )
 
+    # Update METERED licensepools with licenses_owned = 0 to EXHAUSTED
+    # All licensepools default to type='metered' and status='active'
+    # The previous updates have already set AGGREGATED and UNLIMITED pools
+    # So we only need to update METERED pools with no licenses to EXHAUSTED
+    op.execute(
+        sa.text(
+            """
+            UPDATE licensepools
+            SET status = 'exhausted'::licensepoolstatus
+            WHERE type = 'metered'
+            AND licenses_owned = 0
+            """
+        )
+    )
+
 
 def downgrade() -> None:
     pass
