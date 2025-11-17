@@ -10,7 +10,10 @@ from palace.manager.sqlalchemy.constants import LinkRelations, MediaTypes
 from palace.manager.sqlalchemy.model.classification import Subject
 from palace.manager.sqlalchemy.model.contributor import Contributor
 from palace.manager.sqlalchemy.model.edition import Edition
-from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism
+from palace.manager.sqlalchemy.model.licensing import (
+    DeliveryMechanism,
+    LicensePoolStatus,
+)
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
 from tests.fixtures.files import BoundlessFilesFixture
 
@@ -290,3 +293,36 @@ class TestBibliographicParser:
         assert av1.licenses_owned == 9
         assert av1.licenses_available == 9
         assert av1.patrons_in_hold_queue == 0
+        assert av1.status == LicensePoolStatus.ACTIVE
+
+        # Second book also has licenses, so it should be ACTIVE as well
+        assert av2.primary_identifier_data.identifier == "0012164897"
+        assert av2.licenses_owned == 10
+        assert av2.licenses_available == 10
+        assert av2.patrons_in_hold_queue == 0
+        assert av2.status == LicensePoolStatus.ACTIVE
+
+    def test_availability_parser_exhausted_status(
+        self, boundless_files_fixture: BoundlessFilesFixture
+    ):
+        """Test that status is set to EXHAUSTED when licenses_owned is 0."""
+        data = boundless_files_fixture.sample_data("tiny_collection.xml")
+
+        # Modify the data to set total_copies to 0 for both books
+        data = data.replace(
+            b"<totalCopies>9</totalCopies>", b"<totalCopies>0</totalCopies>"
+        )
+        data = data.replace(
+            b"<totalCopies>10</totalCopies>", b"<totalCopies>0</totalCopies>"
+        )
+
+        [bib1, av1], [bib2, av2] = list(
+            BibliographicParser().parse(AvailabilityResponse.from_xml(data))
+        )
+
+        # When licenses_owned is 0, status should be EXHAUSTED
+        assert av1.licenses_owned == 0
+        assert av1.status == LicensePoolStatus.EXHAUSTED
+
+        assert av2.licenses_owned == 0
+        assert av2.status == LicensePoolStatus.EXHAUSTED

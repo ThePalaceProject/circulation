@@ -23,6 +23,7 @@ from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.coverage import Timestamp
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.identifier import Identifier
+from palace.manager.sqlalchemy.model.licensing import LicensePoolStatus
 from palace.manager.sqlalchemy.util import get_one_or_create
 from palace.manager.util import chunks
 from palace.manager.util.datetime_helpers import datetime_utc
@@ -93,6 +94,7 @@ class BoundlessImporter(LoggerMixin):
             data_source_name=DataSource.BOUNDLESS,
             licenses_owned=0,
             licenses_available=0,
+            status=LicensePoolStatus.EXHAUSTED,
         )
 
         for title_id in inactive_title_ids:

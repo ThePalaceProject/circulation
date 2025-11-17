@@ -56,6 +56,7 @@ from palace.manager.sqlalchemy.model.licensing import (
     DeliveryMechanism,
     LicensePool,
     LicensePoolDeliveryMechanism,
+    LicensePoolStatus,
 )
 from palace.manager.sqlalchemy.model.measurement import Measurement
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
@@ -1857,6 +1858,48 @@ class TestItemListParser:
                 ("Hagon, Garrick", "Narrator"),
             ]
         ) == sorted(names_and_roles)
+
+    def test_circulation_data_status(
+        self, bibliotheca_fixture: BibliothecaAPITestFixture
+    ):
+        """Test that CirculationData from ItemListParser has correct status."""
+        data = bibliotheca_fixture.files.sample_data("item_metadata_list_mini.xml")
+        data_parsed = list(ItemListParser().process_all(data))
+
+        # Check the first book's circulation data
+        bibliographic1 = data_parsed[0]
+        circulation1 = bibliographic1.circulation
+
+        # This book has 1 license, so status should be ACTIVE
+        assert circulation1.licenses_owned == 1
+        assert circulation1.licenses_available == 1
+        assert circulation1.status == LicensePoolStatus.ACTIVE
+
+        # Check the second book's circulation data
+        bibliographic2 = data_parsed[1]
+        circulation2 = bibliographic2.circulation
+
+        # This book also has licenses, so status should be ACTIVE
+        assert circulation2.licenses_owned == 1
+        assert circulation2.status == LicensePoolStatus.ACTIVE
+
+    def test_circulation_data_status_exhausted(
+        self, bibliotheca_fixture: BibliothecaAPITestFixture
+    ):
+        """Test that CirculationData has EXHAUSTED status when licenses_owned is 0."""
+        data = bibliotheca_fixture.files.sample_data("item_metadata_list_mini.xml")
+        # Replace TotalCopies with 0 to test EXHAUSTED status
+        data = data.replace(
+            b"<TotalCopies>1</TotalCopies>", b"<TotalCopies>0</TotalCopies>"
+        )
+
+        data_parsed = list(ItemListParser().process_all(data))
+
+        # Both books should have EXHAUSTED status
+        for bibliographic in data_parsed:
+            circulation = bibliographic.circulation
+            assert circulation.licenses_owned == 0
+            assert circulation.status == LicensePoolStatus.EXHAUSTED
 
 
 class TestBibliographicCoverageProvider(TestBibliothecaAPI):

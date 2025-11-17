@@ -18,7 +18,10 @@ from palace.manager.sqlalchemy.model.classification import Subject
 from palace.manager.sqlalchemy.model.contributor import Contributor
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
-from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism
+from palace.manager.sqlalchemy.model.licensing import (
+    DeliveryMechanism,
+    LicensePoolStatus,
+)
 from palace.manager.sqlalchemy.model.measurement import Measurement
 from palace.manager.sqlalchemy.model.resource import Hyperlink
 from tests.fixtures.overdrive import OverdriveAPIFixture
@@ -85,6 +88,9 @@ class TestOverdriveRepresentationExtractor:
         assert 1 == circulationdata.licenses_available
         assert 10 == circulationdata.patrons_in_hold_queue
 
+        # Status should be ACTIVE since licenses_owned > 0
+        assert LicensePoolStatus.ACTIVE == circulationdata.status
+
         # Related IDs.
         identifier = circulationdata.load_primary_identifier(session)
         assert (Identifier.OVERDRIVE_ID, "2a005d55-a417-4053-b90d-7a38ca6d2065") == (
@@ -107,6 +113,7 @@ class TestOverdriveRepresentationExtractor:
         consortial_data = extractor.book_info_to_circulation(info)
         assert 10 == consortial_data.licenses_owned
         assert 10 == consortial_data.licenses_available
+        assert LicensePoolStatus.ACTIVE == consortial_data.status
 
         # Pretend to be an API for an Overdrive Advantage collection with
         # library ID 61.
@@ -114,6 +121,7 @@ class TestOverdriveRepresentationExtractor:
         advantage_data = extractor.book_info_to_circulation(info)
         assert 1 == advantage_data.licenses_owned
         assert 1 == advantage_data.licenses_available
+        assert LicensePoolStatus.ACTIVE == advantage_data.status
 
         # Both collections have the same information about active
         # holds, because that information is not split out by
@@ -169,6 +177,35 @@ class TestOverdriveRepresentationExtractor:
         assert 0 == data.licenses_owned
         assert 0 == data.licenses_available
         assert 0 == data.patrons_in_hold_queue
+        # Status should be EXHAUSTED since licenses_owned is 0
+        assert LicensePoolStatus.EXHAUSTED == data.status
+
+    def test_book_info_to_circulation_no_ownership_data(
+        self, overdrive_api_fixture: OverdriveAPIFixture
+    ):
+        """
+        Test that status is None when we don't have ownership information.
+
+        This test case is here since its possible for this to happen the way
+        the code is currently written, but it's not a situation that I have observed
+        in the wild.
+        """
+        fixture = overdrive_api_fixture
+        extractor = OverdriveRepresentationExtractor(fixture.api)
+
+        # Create a mock info object that has neither an error code nor isOwnedByCollections
+        info = {
+            "id": "test-id-12345",
+            "isOwnedByCollections": False,  # Not owned, no error code
+        }
+
+        data = extractor.book_info_to_circulation(info)
+
+        # When we don't own the book and there's no error, licenses_owned is None
+        assert data.licenses_owned is None
+        assert data.licenses_available is None
+        # Status should also be None when we don't have ownership information
+        assert data.status is None
 
     def test_book_info_with_metadata(self, overdrive_api_fixture: OverdriveAPIFixture):
         # Tests that can convert an overdrive json block into a Metadata object.
