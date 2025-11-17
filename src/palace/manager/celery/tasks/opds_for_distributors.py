@@ -15,7 +15,11 @@ from palace.manager.integration.license.opds.for_distributors.importer import (
 from palace.manager.service.celery.celery import QueueNames
 from palace.manager.service.redis.models.set import IdentifierSet
 from palace.manager.sqlalchemy.model.collection import Collection
-from palace.manager.util.http.exception import BadResponseException
+from palace.manager.util.http.exception import (
+    BadResponseException,
+    RemoteIntegrationException,
+    RequestTimedOut,
+)
 
 
 @shared_task(queue=QueueNames.default, bind=True)
@@ -55,7 +59,8 @@ def reap_all(task: Task, force: bool = False) -> None:
     queue=QueueNames.default,
     bind=True,
     max_retries=4,
-    autoretry_for=(BadResponseException,),
+    autoretry_for=(BadResponseException, RequestTimedOut),
+    throws=(RemoteIntegrationException,),
     retry_backoff=60,
 )
 def import_collection(

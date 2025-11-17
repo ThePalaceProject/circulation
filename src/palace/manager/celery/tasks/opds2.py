@@ -16,7 +16,11 @@ from palace.manager.service.redis.models.set import IdentifierSet
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.resource import Hyperlink
 from palace.manager.util.datetime_helpers import utc_now
-from palace.manager.util.http.exception import BadResponseException
+from palace.manager.util.http.exception import (
+    BadResponseException,
+    RemoteIntegrationException,
+    RequestTimedOut,
+)
 from palace.manager.util.log import pluralize
 
 
@@ -104,7 +108,8 @@ def update_last_reap_time(task: Task, result: bool, *, collection_id: int) -> No
     queue=QueueNames.default,
     bind=True,
     max_retries=4,
-    autoretry_for=(BadResponseException,),
+    autoretry_for=(BadResponseException, RequestTimedOut),
+    throws=(RemoteIntegrationException,),
     retry_backoff=60,
 )
 def import_collection(
