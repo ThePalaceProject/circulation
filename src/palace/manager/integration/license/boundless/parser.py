@@ -24,7 +24,10 @@ from palace.manager.sqlalchemy.model.contributor import Contributor
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
-from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism
+from palace.manager.sqlalchemy.model.licensing import (
+    DeliveryMechanism,
+    LicensePoolStatus,
+)
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
 from palace.manager.util.log import LoggerMixin
 
@@ -236,15 +239,23 @@ class BibliographicParser(LoggerMixin):
         medium = cls._extract_medium(title)
         formats = cls._extract_formats(title, medium)
 
+        licenses_owned = title.availability.total_copies
+        license_status = (
+            LicensePoolStatus.ACTIVE
+            if licenses_owned > 0
+            else LicensePoolStatus.EXHAUSTED
+        )
+
         circulationdata = CirculationData(
             data_source_name=DataSource.BOUNDLESS,
             primary_identifier_data=primary_identifier,
             formats=formats,
-            licenses_owned=title.availability.total_copies,
+            licenses_owned=licenses_owned,
             licenses_available=title.availability.available_copies,
             licenses_reserved=0,
             patrons_in_hold_queue=title.availability.holds_queue_size,
             last_checked=title.availability.update_date,
+            status=license_status,
         )
 
         bibliographic = BibliographicData(

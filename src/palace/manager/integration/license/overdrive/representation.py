@@ -25,7 +25,10 @@ from palace.manager.sqlalchemy.model.contributor import Contributor
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
-from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism
+from palace.manager.sqlalchemy.model.licensing import (
+    DeliveryMechanism,
+    LicensePoolStatus,
+)
 from palace.manager.sqlalchemy.model.measurement import Measurement
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
 from palace.manager.util.datetime_helpers import strptime_utc
@@ -281,6 +284,13 @@ class OverdriveRepresentationExtractor(LoggerMixin):
                     patrons_in_hold_queue = 0
                 patrons_in_hold_queue += book["numberOfHolds"]
 
+        if licenses_owned is None:
+            license_status = None
+        elif licenses_owned > 0:
+            license_status = LicensePoolStatus.ACTIVE
+        else:
+            license_status = LicensePoolStatus.EXHAUSTED
+
         return CirculationData(
             data_source_name=DataSource.OVERDRIVE,
             primary_identifier_data=primary_identifier,
@@ -288,6 +298,7 @@ class OverdriveRepresentationExtractor(LoggerMixin):
             licenses_available=licenses_available,
             licenses_reserved=licenses_reserved,
             patrons_in_hold_queue=patrons_in_hold_queue,
+            status=license_status,
         )
 
     def _get_applicable_accounts(

@@ -90,6 +90,7 @@ from palace.manager.sqlalchemy.model.licensing import (
     DeliveryMechanism,
     LicensePool,
     LicensePoolDeliveryMechanism,
+    LicensePoolStatus,
 )
 from palace.manager.sqlalchemy.model.measurement import Measurement
 from palace.manager.sqlalchemy.model.patron import Patron
@@ -849,6 +850,12 @@ class ItemListParser(XMLProcessor[BibliographicData], LoggerMixin):
         patrons_in_hold_queue = intvalue("OnHoldCount")
         licenses_reserved = 0
 
+        license_status = (
+            LicensePoolStatus.ACTIVE
+            if licenses_owned > 0
+            else LicensePoolStatus.EXHAUSTED
+        )
+
         circulation = CirculationData(
             data_source_name=DataSource.BIBLIOTHECA,
             primary_identifier_data=primary_identifier,
@@ -857,6 +864,7 @@ class ItemListParser(XMLProcessor[BibliographicData], LoggerMixin):
             licenses_reserved=licenses_reserved,
             patrons_in_hold_queue=patrons_in_hold_queue,
             formats=formats,
+            status=license_status,
         )
         return circulation, medium
 
