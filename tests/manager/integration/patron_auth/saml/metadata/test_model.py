@@ -414,6 +414,47 @@ class TestSAMLSubjectPatronIDExtractor:
                 saml_strings.PATRON_ID_REGULAR_EXPRESSION_COM,
                 id="patron_id_regular_expression_not_matching_saml_attributes_but_matching_name_id",
             ),
+            pytest.param(
+                SAMLSubject(
+                    "http://idp.example.com",
+                    SAMLNameID(SAMLNameIDFormat.UNSPECIFIED.value, "", "", "1"),
+                    SAMLAttributeStatement(
+                        [
+                            SAMLAttribute(
+                                name=SAMLAttributeType.pairwiseId.name,
+                                values=["abc123def456@university.org"],
+                            )
+                        ]
+                    ),
+                ),
+                "abc123def456@university.org",
+                False,
+                [SAMLAttributeType.pairwiseId.name],
+                None,
+                id="subject-with-pairwise-id-attribute",
+            ),
+            pytest.param(
+                SAMLSubject(
+                    "http://idp.example.com",
+                    SAMLNameID(SAMLNameIDFormat.UNSPECIFIED.value, "", "", "1"),
+                    SAMLAttributeStatement(
+                        [
+                            SAMLAttribute(
+                                name=SAMLAttributeType.pairwiseId.name,
+                                values=["xyz789abc@university.org"],
+                            ),
+                            SAMLAttribute(
+                                name=SAMLAttributeType.uid.name, values=["2"]
+                            ),
+                        ]
+                    ),
+                ),
+                "xyz789abc",
+                False,
+                [SAMLAttributeType.pairwiseId.name],
+                saml_strings.PATRON_ID_REGULAR_EXPRESSION_ORG,
+                id="pairwise-id-with-regex-extraction",
+            ),
         ],
     )
     def test(
