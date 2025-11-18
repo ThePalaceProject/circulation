@@ -902,6 +902,8 @@ class SAMLAttributeType(Enum):
     eduOrgSuperiorURI = "urn:oid:1.3.6.1.4.1.5923.1.2.1.5"
     eduOrgWhitePagesURI = "urn:oid:1.3.6.1.4.1.5923.1.2.1.6"
 
+    pairwiseId = "urn:oasis:names:tc:SAML:attribute:pairwise-id"
+
 
 class SAMLAttribute:
     """Represents saml2:Attribute"""

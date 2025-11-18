@@ -883,6 +883,32 @@ class TestSAMLSubjectParser:
                 ),
                 id="edu_person_principal_name_as_name_id",
             ),
+            pytest.param(
+                "http://idp.example.com",
+                SAMLNameIDFormat.PERSISTENT.value,
+                saml_strings.IDP_1_ENTITY_ID,
+                saml_strings.SP_ENTITY_ID,
+                "12345",
+                {SAMLAttributeType.pairwiseId.value: ["abc123def@example.org"]},
+                SAMLSubject(
+                    "http://idp.example.com",
+                    SAMLNameID(
+                        SAMLNameIDFormat.PERSISTENT.value,
+                        saml_strings.IDP_1_ENTITY_ID,
+                        saml_strings.SP_ENTITY_ID,
+                        "12345",
+                    ),
+                    SAMLAttributeStatement(
+                        [
+                            SAMLAttribute(
+                                SAMLAttributeType.pairwiseId.name,
+                                ["abc123def@example.org"],
+                            )
+                        ]
+                    ),
+                ),
+                id="pairwise-id-attribute",
+            ),
         ],
     )
     def test_parse(
