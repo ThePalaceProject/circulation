@@ -472,7 +472,7 @@ class Edition(Base, EditionConstants):
         old_cover_thumbnail_url = self.cover_thumbnail_url
         new_cover = resource
         new_cover_full_url = resource.representation.public_url
-        new_cover_thumbnail_url = old_cover_thumbnail_url
+        new_cover_thumbnail_url = None
         # TODO: In theory there could be multiple scaled-down
         # versions of this representation and we need some way of
         # choosing between them. Right now we just pick the first one
@@ -489,7 +489,7 @@ class Edition(Base, EditionConstants):
             if best_thumbnail:
                 new_cover_thumbnail_url = best_thumbnail.public_url
         if (
-            not self.cover_thumbnail_url
+            not new_cover_thumbnail_url
             and resource.representation.image_height
             and resource.representation.image_height
             <= self.MAX_FALLBACK_THUMBNAIL_HEIGHT
@@ -878,6 +878,17 @@ class Edition(Base, EditionConstants):
                 # it needs to be removed.
                 if self.cover_thumbnail_url:
                     self.cover_thumbnail_url = None
+
+        # After exhausting all options for finding a thumbnail, fall back to
+        # using the full-size image as thumbnail if we have a cover but no thumbnail.
+        if not self.cover_thumbnail_url and self.cover_full_url:
+            # We don't have any thumbnail, so fall back to the full size image.
+            # TODO: We may want to scale and generate a thumbnail in this case, instead
+            #   of serving up the full-size image as a thumbnail.
+            logging.info(
+                f"Using full-size image as thumbnail fallback for {self.primary_identifier!r}",
+            )
+            self.cover_thumbnail_url = self.cover_full_url
 
 
 Index(

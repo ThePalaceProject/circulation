@@ -283,13 +283,11 @@ class TestBibliographicData:
         assert None == thumbnail.resource.representation
         assert [] == image.resource.representation.thumbnails
 
-        # The edition ends up with a full-sized image but no
-        # thumbnail. This could potentially be improved, since we know
-        # the two Resources are associated with the same Identifier.
-        # But we lose track of the fact that the two Resources are
-        # _the same image_ at different resolutions.
+        # The edition ends up with a full-sized image. Since no thumbnail
+        # representation exists, the fallback behavior uses the full-size
+        # image as the thumbnail.
         assert "http://largeimage.com/" == edition.cover_full_url
-        assert None == edition.cover_thumbnail_url
+        assert "http://largeimage.com/" == edition.cover_thumbnail_url
 
     def test_process_thumbnails_skips_missing_links(
         self, db: DatabaseTransactionFixture
