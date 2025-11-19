@@ -2,11 +2,13 @@ import random
 import string
 from datetime import timedelta
 
+import pytest
 from freezegun import freeze_time
 
 from palace.manager.data_layer.policy.presentation import (
     PresentationCalculationPolicy,
 )
+from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.contributor import Contributor
 from palace.manager.sqlalchemy.model.datasource import DataSource
@@ -681,3 +683,41 @@ class TestEdition:
         # possibly unrelated thumbnail.
         assert main_image.resource.url == edition.cover_full_url
         assert thumbnail_2.resource.url == edition.cover_thumbnail_url
+
+    def test_choose_cover_uses_full_image_as_thumbnail_fallback(
+        self, db: DatabaseTransactionFixture, caplog: pytest.LogCaptureFixture
+    ):
+        """When choose_cover finds a full-size image but no thumbnail,
+        it falls back to using the full-size image as the thumbnail.
+        """
+        caplog.set_level(LogLevel.info)
+
+        edition = db.edition()
+
+        # Create a full-size image without any thumbnail
+        main_image, ignore = edition.primary_identifier.add_link(
+            Hyperlink.IMAGE,
+            "http://example.com/cover.jpg",
+            edition.data_source,
+            Representation.JPEG_MEDIA_TYPE,
+        )
+
+        # Give it a representation so choose_cover can use it
+        main_image.resource.representation, _ = db.representation(
+            media_type=Representation.JPEG_MEDIA_TYPE, url=main_image.resource.url
+        )
+
+        # Initially no cover is set
+        assert None == edition.cover_full_url
+        assert None == edition.cover_thumbnail_url
+
+        # choose_cover should find the image and use it for both
+        edition.choose_cover()
+
+        # The full-size image should be used for both full and thumbnail
+        assert main_image.resource.url == edition.cover_full_url
+        assert main_image.resource.url == edition.cover_thumbnail_url
+
+        # An info-level log message should indicate that the full-size image
+        # is being used as the thumbnail
+        assert "Using full-size image as thumbnail fallback" in caplog.text

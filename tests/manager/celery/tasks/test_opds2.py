@@ -503,6 +503,55 @@ class TestImportCollection:
             "December 1884 and in the United States in February 1885."
         )
 
+    def test_correctly_imports_tandf_opds2_feed(
+        self,
+        db: DatabaseTransactionFixture,
+        apply_task_fixture: ApplyTaskFixture,
+        opds2_import_fixture: OPDS2ImportFixture,
+        opds2_files_fixture: OPDS2FilesFixture,
+    ):
+        content_server_feed_text = opds2_files_fixture.sample_text("tf.json")
+        opds2_import_fixture.client.queue_response(
+            200, content=content_server_feed_text
+        )
+
+        imported_editions = opds2_import_fixture.do_import()
+
+        assert isinstance(imported_editions, list)
+        assert len(imported_editions) == 4
+
+        edition = apply_task_fixture.get_edition_by_identifier(
+            imported_editions, "urn:isbn:9780203992104"
+        )
+        assert isinstance(edition, Edition)
+
+        assert edition.title == "The Economic Consequences of the Gulf War"
+        assert edition.language == "eng"
+        assert edition.medium == EditionConstants.BOOK_MEDIUM
+        assert edition.author == "Kamran Mofid"
+        assert edition.duration is None
+
+        [author] = edition.author_contributors
+        assert isinstance(author, Contributor)
+        assert author.display_name == "Kamran Mofid"
+        assert author.sort_name == "Mofid, Kamran"
+
+        [author_contribution] = author.contributions
+        assert isinstance(author_contribution, Contribution)
+        assert author_contribution.contributor == author
+        assert author_contribution.edition == edition
+        assert author_contribution.role == Contributor.Role.AUTHOR
+
+        assert edition.data_source == opds2_import_fixture.data_source
+
+        assert edition.publisher == "Routledge"
+        assert edition.published == datetime.date(2005, 10, 26)
+
+        expected_url = "https://images.tandf.co.uk/common/jackets/crclarge/978020399/9780203992104.jpg"
+
+        assert edition.cover_full_url == expected_url
+        assert edition.cover_thumbnail_url == expected_url
+
     @pytest.mark.parametrize(
         "this_identifier_type,ignore_identifier_type,identifier",
         [
