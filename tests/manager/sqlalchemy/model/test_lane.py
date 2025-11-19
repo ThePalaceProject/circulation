@@ -2999,10 +2999,10 @@ class TestDatabaseBackedWorkList:
         ot_lp.licenses_available = 0
 
         facets.availability = Facets.AVAILABLE_ALL
-        assert 1 == wl.works_from_database(db.session, facets).count()
+        assert [barnaby_rudge] == wl.works_from_database(db.session, facets).all()
 
         facets.availability = Facets.AVAILABLE_NOW
-        assert 1 == wl.works_from_database(db.session, facets).count()
+        assert [barnaby_rudge] == wl.works_from_database(db.session, facets).all()
 
         facets.availability = Facets.AVAILABLE_OPEN_ACCESS
         assert 0 == wl.works_from_database(db.session, facets).count()
