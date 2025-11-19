@@ -642,11 +642,10 @@ class Collection(Base, HasSessionCache, RedisKeyMixin):
         if not show_suppressed:
             query = query.filter(LicensePool.suppressed == False)
 
-        # Only find books with available licenses or books from self-hosted collections using MirrorUploader
+        # Only find books with available licenses or unlimited access books (includes open access).
         query = query.filter(
             or_(
                 LicensePool.licenses_owned > 0,
-                LicensePool.open_access,
                 LicensePool.unlimited_access,
             )
         )
@@ -660,7 +659,6 @@ class Collection(Base, HasSessionCache, RedisKeyMixin):
             query = query.filter(
                 or_(
                     LicensePool.licenses_available > 0,
-                    LicensePool.open_access,
                     LicensePool.unlimited_access,
                 )
             )

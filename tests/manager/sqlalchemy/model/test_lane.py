@@ -2980,6 +2980,8 @@ class TestDatabaseBackedWorkList:
         ot_lp = oliver_twist.license_pools[0]
 
         # open access (thus available)
+        ot_lp.licenses_owned = LicensePool.UNLIMITED_ACCESS
+        ot_lp.licenses_available = LicensePool.UNLIMITED_ACCESS
         ot_lp.open_access = True
 
         facets.availability = Facets.AVAILABLE_ALL
@@ -2991,6 +2993,19 @@ class TestDatabaseBackedWorkList:
         facets.availability = Facets.AVAILABLE_OPEN_ACCESS
         assert 1 == wl.works_from_database(db.session, facets).count()
         assert [oliver_twist] == wl.works_from_database(db.session, facets).all()
+
+        # open access & unavailable
+        ot_lp.licenses_owned = 0
+        ot_lp.licenses_available = 0
+
+        facets.availability = Facets.AVAILABLE_ALL
+        assert 1 == wl.works_from_database(db.session, facets).count()
+
+        facets.availability = Facets.AVAILABLE_NOW
+        assert 1 == wl.works_from_database(db.session, facets).count()
+
+        facets.availability = Facets.AVAILABLE_OPEN_ACCESS
+        assert 0 == wl.works_from_database(db.session, facets).count()
 
         # closed access & unavailable
         ot_lp.open_access = False
