@@ -1223,3 +1223,107 @@ class TestBibliographicData:
         )
         with pytest.raises(PalaceValueError, match="primary identifier"):
             bibliographic_wrong.apply(db.session, edition, None)
+
+    def test_thumbnail_already_linked_no_error(self, db: DatabaseTransactionFixture):
+        """Test that no error is logged when thumbnail relationship is already correctly set.
+
+        This tests the fix for the bug where the thumbnail linking logic incorrectly
+        logged an error when the thumbnail's representation already had its thumbnail_of
+        relationship correctly set to the parent image's representation.
+        """
+        edition = db.edition()
+
+        # Create an image link with a thumbnail
+        thumbnail_link = LinkData(
+            rel=Hyperlink.THUMBNAIL_IMAGE,
+            href="http://thumbnail.com/thumb.jpg",
+            media_type=Representation.JPEG_MEDIA_TYPE,
+        )
+        image_link = LinkData(
+            rel=Hyperlink.IMAGE,
+            href="http://example.com/image.jpg",
+            thumbnail=thumbnail_link,
+            media_type=Representation.JPEG_MEDIA_TYPE,
+        )
+
+        bibliographic = BibliographicData(
+            links=[image_link], data_source_name=edition.data_source.name
+        )
+
+        # First application - creates the thumbnail and sets up the relationship
+        with LogCaptureHandler(logging.root) as logs:
+            bibliographic.apply(db.session, edition, None)
+            # No errors should be logged on first application
+            assert len(logs.error) == 0
+
+        # Verify the thumbnail was created and linked correctly
+        [image, thumbnail] = sorted(
+            edition.primary_identifier.links, key=lambda x: x.rel
+        )
+        assert Hyperlink.IMAGE == image.rel
+        assert Hyperlink.THUMBNAIL_IMAGE == thumbnail.rel
+        assert (
+            thumbnail.resource.representation
+            in image.resource.representation.thumbnails
+        )
+
+        # Second application with the same data - the thumbnail relationship already exists
+        bibliographic2 = BibliographicData(
+            links=[image_link], data_source_name=edition.data_source.name
+        )
+        with LogCaptureHandler(logging.root) as logs:
+            bibliographic2.apply(db.session, edition, None)
+            # THIS IS THE KEY TEST: No error should be logged when the relationship
+            # is already correctly set. Before the fix, this would log an error.
+            assert len(logs.error) == 0
+
+        # Verify the relationship is still correct
+        assert (
+            thumbnail.resource.representation
+            in image.resource.representation.thumbnails
+        )
+
+    def test_thumbnail_without_representation_logs_error(
+        self, db: DatabaseTransactionFixture
+    ):
+        """Test that an error IS logged when thumbnail genuinely lacks a Representation.
+
+        This ensures that the fix for the false-positive error doesn't break
+        the legitimate error case where a thumbnail truly cannot be linked
+        because it has no Representation.
+        """
+        edition = db.edition()
+
+        # Create a thumbnail link with no media type and URL that can't be guessed
+        thumbnail_link = LinkData(
+            rel=Hyperlink.THUMBNAIL_IMAGE,
+            href="http://tinyimage.com/",  # No extension to guess media type
+            # No media_type specified
+        )
+
+        # Create an image link with this problematic thumbnail
+        image_link = LinkData(
+            rel=Hyperlink.IMAGE,
+            href="http://largeimage.com/",
+            thumbnail=thumbnail_link,
+            media_type=Representation.JPEG_MEDIA_TYPE,
+        )
+
+        bibliographic = BibliographicData(
+            links=[image_link], data_source_name=edition.data_source.name
+        )
+
+        # Apply the data
+        with LogCaptureHandler(logging.root) as logs:
+            bibliographic.apply(db.session, edition, None)
+            # An error SHOULD be logged because the thumbnail has no Representation
+            assert len(logs.error) == 1
+            assert "cannot be marked as a thumbnail" in str(logs.error[0])
+            assert "has no Representation" in str(logs.error[0])
+
+        # Verify the thumbnail was created but not linked
+        [image, thumbnail] = sorted(
+            edition.primary_identifier.links, key=lambda x: x.rel
+        )
+        assert thumbnail.resource.representation is None
+        assert [] == image.resource.representation.thumbnails
