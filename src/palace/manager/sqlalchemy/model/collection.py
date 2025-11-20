@@ -642,11 +642,11 @@ class Collection(Base, HasSessionCache, RedisKeyMixin):
         if not show_suppressed:
             query = query.filter(LicensePool.suppressed == False)
 
-        # Only find books that are
-        #  - Metered and active
-        #     - At least one owned license
+        # Only find books that are either:
+        #  - Metered or equivalent type and active
         #     - At least one available license (if holds are not allowed)
-        #  - Unlimited access (open access is a subset of this)
+        #  - Unlimited type and active
+        #     - Open access are a subset of unlimited
         metered_filter = and_(  # type: ignore[type-var]
             LicensePool.active_status == true(),
             LicensePool.metered_or_equivalent_type == true(),
