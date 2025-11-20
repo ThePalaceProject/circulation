@@ -1334,6 +1334,13 @@ class LicensePool(Base):
     # Helpful filters for querying LicensePools by type and status
     @hybrid_property
     def metered_or_equivalent_type(self) -> bool:
+        """Check if this license pool has a metered or equivalent type.
+
+        An equivalent type is a type like AGGREGATED that uses the same availability
+        model as METERED.
+
+        :return: True if the pool type is METERED or AGGREGATED.
+        """
         return self.type in (
             LicensePoolType.METERED,
             LicensePoolType.AGGREGATED,
@@ -1347,10 +1354,18 @@ class LicensePool(Base):
 
     @hybrid_property
     def unlimited_type(self) -> bool:
+        """Check if this license pool has an unlimited type.
+
+        :return: True if the pool type is UNLIMITED.
+        """
         return self.type == LicensePoolType.UNLIMITED
 
     @hybrid_property
     def unlimited_non_open_access_type(self) -> bool:
+        """Check if this license pool is unlimited but not open access.
+
+        :return: True if the pool type is UNLIMITED and open_access is False.
+        """
         return self.unlimited_type and not self.open_access
 
     @unlimited_non_open_access_type.expression  # type: ignore[misc]
@@ -1359,6 +1374,10 @@ class LicensePool(Base):
 
     @hybrid_property
     def unlimited_open_access_type(self) -> bool:
+        """Check if this license pool is unlimited and open access.
+
+        :return: True if the pool type is UNLIMITED and open_access is True.
+        """
         return self.unlimited_type and self.open_access
 
     @unlimited_open_access_type.expression  # type: ignore[misc]
@@ -1367,6 +1386,10 @@ class LicensePool(Base):
 
     @hybrid_property
     def active_status(self) -> bool:
+        """Check if this license pool has an active status.
+
+        :return: True if the pool status is ACTIVE.
+        """
         return self.status == LicensePoolStatus.ACTIVE
 
 
