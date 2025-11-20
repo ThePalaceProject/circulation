@@ -298,6 +298,8 @@ class CirculationData(BaseMutableData):
         # Finally, if we have data for a specific Collection's license
         # for this book, find its LicensePool and update it.
         changed_availability = False
+        changed_lp_type = False
+        changed_lp_status = False
         if pool and (
             replace.even_if_not_apparently_updated or self.has_changed(_db, pool=pool)
         ):
@@ -310,6 +312,7 @@ class CirculationData(BaseMutableData):
                     f"License pool type changing from {pool.type} to {self.type} for {pool.identifier!r}"
                 )
                 pool.type = self.type
+                changed_lp_type = True
 
             # Update license pool status if it differs from the incoming data.
             # Status changes track the operational state of the pool
@@ -319,6 +322,7 @@ class CirculationData(BaseMutableData):
                     f"License pool status changing from {pool.status} to {self.status} for {pool.identifier!r}"
                 )
                 pool.status = self.status
+                changed_lp_status = True
 
             if pool.type == LicensePoolType.AGGREGATED:
                 # If this is an aggregated pool, update based on the licenses associated.
@@ -364,6 +368,8 @@ class CirculationData(BaseMutableData):
         made_changes = (
             made_changes
             or changed_availability
+            or changed_lp_type
+            or changed_lp_status
             or open_access_status_changed
             or work_changed
         )
