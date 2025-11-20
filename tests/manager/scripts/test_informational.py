@@ -434,6 +434,7 @@ class TestWhereAreMyBooksScript:
     ):
         # This work has a license pool, but it is exhausted.
         work = db.work(with_license_pool=True)
+        work.license_pools[0].licenses_owned = 0
         work.license_pools[0].status = LicensePoolStatus.EXHAUSTED
         end_to_end_search_fixture.populate_search_index()
         self.check_explanation(
