@@ -335,7 +335,7 @@ class CirculationData(BaseMutableData):
                     as_of=self.last_checked,
                 )
             elif pool.type == LicensePoolType.UNLIMITED:
-                pool.update_availability(
+                changed_availability = pool.update_availability(
                     new_licenses_owned=0,
                     new_licenses_available=0,
                     new_licenses_reserved=0,
