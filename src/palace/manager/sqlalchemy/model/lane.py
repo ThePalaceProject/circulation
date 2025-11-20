@@ -39,6 +39,7 @@ from sqlalchemy.sql import select
 from palace.manager.core.classifier import Classifier
 from palace.manager.core.config import Configuration, ConfigurationAttributeValue
 from palace.manager.core.entrypoint import EntryPoint, EverythingEntryPoint
+from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.core.facets import FacetConfig, FacetConstants
 from palace.manager.core.problem_details import INVALID_INPUT
 from palace.manager.sqlalchemy.constants import EditionConstants
@@ -759,10 +760,9 @@ class Facets(FacetsWithEntryPoint):
                 LicensePool.licenses_available == 0, active_metered_filter
             )
         else:
-            availability_clause = None
+            raise PalaceValueError(f"Unknown availability facet: {self.availability}")
 
-        if availability_clause is not None:
-            qu = qu.filter(availability_clause)
+        qu = qu.filter(availability_clause)
 
         return qu
 
