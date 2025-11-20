@@ -335,7 +335,7 @@ class LicensePool(Base):
     )
 
     # These fields are used when tracking LicensePoolType.METERED and LicensePoolType.AGGREGATED
-    # license pools.
+    # license pools. Pools where LicensePool.metered_or_equivalent_type is True.
     licenses_owned: Mapped[int] = Column(Integer, default=0, index=True, nullable=False)
     licenses_available: Mapped[int] = Column(
         Integer, default=0, index=True, nullable=False
@@ -346,10 +346,6 @@ class LicensePool(Base):
     should_track_playtime: Mapped[bool] = Column(Boolean, default=False, nullable=False)
 
     # The licensing model for this pool, indicating how licenses are counted and managed.
-    #
-    # NOTE: This field is being populated for new/updated license pools but has not been backfilled
-    # for existing pools. It is not yet used in business logic. Once it is rolled out everywhere,
-    # it will replace the current implicit distinction between metered and unlimited license pools.
     type: Mapped[LicensePoolType] = Column(
         AlchemyEnum(
             LicensePoolType, values_callable=lambda obj: [e.value for e in obj]
@@ -359,10 +355,6 @@ class LicensePool(Base):
     )
 
     # The operational status of this license pool, tracking its lifecycle state.
-    #
-    # NOTE: This field is being populated for new/updated license pools but has not been backfilled
-    # for existing pools. It is not yet used in business logic. Once it is rolled out everywhere,
-    # it will replace the current implicit distinction between active and exhausted license pools.
     status: Mapped[LicensePoolStatus] = Column(
         AlchemyEnum(
             LicensePoolStatus, values_callable=lambda obj: [e.value for e in obj]
