@@ -3,11 +3,18 @@ from typing import Any
 
 from celery import chain, chord, group, shared_task
 
-from palace.manager.celery.importer import import_key, import_lock
+from palace.manager.celery.importer import (
+    import_all as create_import_tasks,
+    import_key,
+    import_lock,
+)
 from palace.manager.celery.task import Task
 from palace.manager.celery.tasks import apply
 from palace.manager.celery.utils import load_from_id
-from palace.manager.integration.license.overdrive.api import BookInfoEndpoint
+from palace.manager.integration.license.overdrive.api import (
+    BookInfoEndpoint,
+    OverdriveAPI,
+)
 from palace.manager.integration.license.overdrive.importer import OverdriveImporter
 from palace.manager.service.celery.celery import QueueNames
 from palace.manager.service.redis.models.set import IdentifierSet
@@ -329,3 +336,23 @@ def remove_identifier_set(task: Task, identifier_set_info: dict[str, Any]) -> No
         )
     else:
         identifier_set.delete()
+
+
+@shared_task(queue=QueueNames.default, bind=True)
+def import_all_collections(task: Task, *, import_all: bool = False) -> None:
+    """
+    A shared task that loops through all OverDrive parent collections and kick off an
+    import task for each.
+    """
+    with task.session() as session:
+        registry = task.services.integration_registry().license_providers()
+        collection_query = Collection.select_by_protocol(
+            OverdriveAPI, registry=registry
+        ).where(Collection.parent == None)
+        create_import_tasks(
+            session.scalars(collection_query).all(),
+            import_collection_group.s(
+                import_all=import_all,
+            ),
+            task.log,
+        )

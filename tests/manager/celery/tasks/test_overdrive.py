@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import MagicMock, Mock, call, patch
 
 import pytest
 
@@ -18,6 +18,7 @@ from palace.manager.integration.license.overdrive.importer import (
     FeedImportResult,
     OverdriveImporter,
 )
+from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.service.redis.models.set import IdentifierSet
 from palace.manager.sqlalchemy.constants import IdentifierType
 from palace.manager.sqlalchemy.model.collection import Collection
@@ -714,6 +715,34 @@ class TestRemoveIdentifierSet:
 
         # Verify the set still doesn't exist (no error was raised)
         assert not identifier_set.exists()
+
+
+class TestImportAllCollections:
+    def test_import_all_collections(
+        self,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        import_all = True
+        caplog.set_level(LogLevel.info)
+        decoy_collection = db.default_collection()
+        collection1 = db.collection(protocol=OverdriveAPI)
+        collection2 = db.collection(protocol=OverdriveAPI)
+        child_collection = db.collection(protocol=OverdriveAPI)
+        child_collection.parent = collection1
+
+        with patch.object(
+            overdrive, "import_collection_group"
+        ) as import_collection_group:
+            overdrive.import_all_collections.delay(import_all=import_all).wait()
+
+        import_collection_group.s.assert_called_once_with(import_all=import_all)
+        import_collection_group.s.return_value.delay.assert_has_calls(
+            [call(collection_id=collection1.id), call(collection_id=collection2.id)],
+            any_order=True,
+        )
+        assert "Queued 2 collections for import." in caplog.text
 
 
 class TestIntegration:
