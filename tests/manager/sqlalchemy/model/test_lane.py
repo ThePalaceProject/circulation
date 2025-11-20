@@ -18,6 +18,7 @@ from palace.manager.core.entrypoint import (
     EntryPoint,
     EverythingEntryPoint,
 )
+from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.core.facets import FacetConstants
 from palace.manager.core.problem_details import INVALID_INPUT
 from palace.manager.integration.license.bibliotheca import BibliothecaAPI
@@ -877,6 +878,16 @@ class TestFacets:
             facets = Facets(db.default_library(), availability, None, None, None)
             modified = facets.modify_database_query(db.session, qu)
             assert (availability, set(modified)) == (availability, expect)
+
+        # Test the case where there is an unknown availability facet.
+        facets = Facets(
+            db.default_library(), "invalid_availability_value", None, None, None
+        )
+        with pytest.raises(
+            PalaceValueError,
+            match="Unknown availability facet: invalid_availability_value",
+        ):
+            facets.modify_database_query(db.session, qu)
 
 
 class TestDefaultSortOrderFacets:
