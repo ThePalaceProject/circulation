@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
 from bidict import frozenbidict
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from palace.manager.api.circulation.exceptions import CannotHold, CannotLoan
@@ -22,6 +23,8 @@ from palace.manager.sqlalchemy.model.licensing import (
     DeliveryMechanismTuple,
     LicensePool,
     LicensePoolDeliveryMechanism,
+    LicensePoolStatus,
+    LicensePoolType,
     RightsStatus,
 )
 from palace.manager.sqlalchemy.model.patron import Hold, Loan
@@ -1398,6 +1401,141 @@ class TestLicensePool:
         # The properties should reflect the new state.
         assert set(pool.delivery_mechanisms) == {lpdm1, lpmd2, lpmd3, lpmd4}
         assert set(pool.available_delivery_mechanisms) == {lpmd2, lpmd3}
+
+    @pytest.mark.parametrize(
+        "pool_type,expected",
+        [
+            (LicensePoolType.METERED, True),
+            (LicensePoolType.AGGREGATED, True),
+            (LicensePoolType.UNLIMITED, False),
+        ],
+    )
+    def test_metered_or_equivalent_type(
+        self, db: DatabaseTransactionFixture, pool_type: LicensePoolType, expected: bool
+    ) -> None:
+        """Test metered_or_equivalent_type hybrid property."""
+        pool = db.licensepool(None)
+        pool.type = pool_type
+
+        # Test the instance property
+        assert pool.metered_or_equivalent_type == expected
+
+        # Test the hybrid property in SQL context
+        assert db.session.scalars(
+            select(LicensePool).where(
+                LicensePool.metered_or_equivalent_type == expected
+            )
+        ).unique().all() == [pool]
+
+    @pytest.mark.parametrize(
+        "pool_type,expected",
+        [
+            (LicensePoolType.METERED, False),
+            (LicensePoolType.AGGREGATED, False),
+            (LicensePoolType.UNLIMITED, True),
+        ],
+    )
+    def test_unlimited_type(
+        self, db: DatabaseTransactionFixture, pool_type: LicensePoolType, expected: bool
+    ) -> None:
+        """Test unlimited_type hybrid property."""
+        pool = db.licensepool(None)
+        pool.type = pool_type
+
+        # Test the instance property
+        assert pool.unlimited_type == expected
+
+        # Test the hybrid property in SQL context
+        assert db.session.scalars(
+            select(LicensePool).where(LicensePool.unlimited_type == expected)
+        ).unique().all() == [pool]
+
+    @pytest.mark.parametrize(
+        "pool_type,open_access,expected",
+        [
+            (LicensePoolType.UNLIMITED, False, True),
+            (LicensePoolType.UNLIMITED, True, False),
+            (LicensePoolType.METERED, False, False),
+            (LicensePoolType.METERED, True, False),
+            (LicensePoolType.AGGREGATED, False, False),
+        ],
+    )
+    def test_unlimited_non_open_access_type(
+        self,
+        db: DatabaseTransactionFixture,
+        pool_type: LicensePoolType,
+        open_access: bool,
+        expected: bool,
+    ) -> None:
+        """Test unlimited_non_open_access_type hybrid property."""
+        pool = db.licensepool(None)
+        pool.type = pool_type
+        pool.open_access = open_access
+
+        # Test the instance property
+        assert pool.unlimited_non_open_access_type == expected
+
+        # Test the hybrid property in SQL context
+        assert db.session.scalars(
+            select(LicensePool).where(
+                LicensePool.unlimited_non_open_access_type == expected
+            )
+        ).unique().all() == [pool]
+
+    @pytest.mark.parametrize(
+        "pool_type,open_access,expected",
+        [
+            (LicensePoolType.UNLIMITED, True, True),
+            (LicensePoolType.UNLIMITED, False, False),
+            (LicensePoolType.METERED, True, False),
+            (LicensePoolType.METERED, False, False),
+            (LicensePoolType.AGGREGATED, True, False),
+        ],
+    )
+    def test_unlimited_open_access_type(
+        self,
+        db: DatabaseTransactionFixture,
+        pool_type: LicensePoolType,
+        open_access: bool,
+        expected: bool,
+    ) -> None:
+        """Test unlimited_open_access_type hybrid property."""
+        pool = db.licensepool(None)
+        pool.type = pool_type
+        pool.open_access = open_access
+
+        # Test the instance property
+        assert pool.unlimited_open_access_type == expected
+
+        # Test the hybrid property in SQL context
+        assert db.session.scalars(
+            select(LicensePool).where(
+                LicensePool.unlimited_open_access_type == expected
+            )
+        ).unique().all() == [pool]
+
+    @pytest.mark.parametrize(
+        "status,expected",
+        [
+            (LicensePoolStatus.ACTIVE, True),
+            (LicensePoolStatus.REMOVED, False),
+            (LicensePoolStatus.EXHAUSTED, False),
+        ],
+    )
+    def test_active_status(
+        self, db: DatabaseTransactionFixture, status: LicensePoolStatus, expected: bool
+    ) -> None:
+        """Test active_status hybrid property."""
+        pool = db.licensepool(None)
+        pool.status = status
+
+        # Test the instance property
+        assert pool.active_status == expected
+
+        # Test the hybrid property in SQL context
+        assert db.session.scalars(
+            select(LicensePool).where(LicensePool.active_status == expected)
+        ).unique().all() == [pool]
 
 
 class TestLicensePoolDeliveryMechanism:
