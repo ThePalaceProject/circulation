@@ -245,10 +245,10 @@ def loan_reaper(task: Task) -> None:
 
 
 def _removed_license_pool_reaper[LoanHoldT: type[Loan | Hold]](
-    task: Task, loan_or_hold: LoanHoldT
+    task: Task, item_cls: LoanHoldT
 ) -> int:
-    deletion_query = delete(loan_or_hold).where(
-        loan_or_hold.license_pool_id == LicensePool.id,
+    deletion_query = delete(item_cls).where(
+        item_cls.license_pool_id == LicensePool.id,
         LicensePool.status == LicensePoolStatus.REMOVED,
     )
 
@@ -256,7 +256,7 @@ def _removed_license_pool_reaper[LoanHoldT: type[Loan | Hold]](
         rows_removed = _execute_delete(session, deletion_query)
 
     task.log.info(
-        f"Deleted {pluralize(rows_removed, loan_or_hold.__name__.lower())} on "
+        f"Deleted {pluralize(rows_removed, item_cls.__name__.lower())} on "
         f"license pools that have been removed."
     )
 
