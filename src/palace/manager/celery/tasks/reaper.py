@@ -1,9 +1,10 @@
+from collections.abc import Callable
 from datetime import timedelta
 from typing import Any
 
 from celery import shared_task
 from sqlalchemy import and_, delete, func, select, true
-from sqlalchemy.orm import Session, defer, lazyload
+from sqlalchemy.orm import Session, defer, lazyload, raiseload, selectinload
 from sqlalchemy.sql import Delete
 from sqlalchemy.sql.elements import or_
 
@@ -18,6 +19,7 @@ from palace.manager.service.celery.celery import QueueNames
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.credential import Credential
+from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.integration import IntegrationLibraryConfiguration
 from palace.manager.sqlalchemy.model.licensing import (
     LicensePool,
@@ -253,7 +255,7 @@ def loan_reaper(task: Task) -> None:
 def _removed_license_pool_reaper_with_notifications[ItemT: type[Loan | Hold]](
     task: Task,
     item_cls: ItemT,
-    notification_task: Any,  # Celery task with .delay() method
+    notification_task: Callable[[RemovedItemNotificationData], Any],
     batch_size: int,
 ) -> int:
     """
@@ -269,10 +271,21 @@ def _removed_license_pool_reaper_with_notifications[ItemT: type[Loan | Hold]](
         return 0
 
     # Build query for items with REMOVED license pools
+    # Eagerly load all relationships needed by RemovedItemNotificationData.from_item()
     query = (
         select(item_cls)
         .join(LicensePool, item_cls.license_pool_id == LicensePool.id)
         .where(LicensePool.status == LicensePoolStatus.REMOVED)
+        .options(
+            selectinload(item_cls.patron),
+            selectinload(item_cls.license_pool).selectinload(LicensePool.identifier),
+            selectinload(item_cls.license_pool).selectinload(LicensePool.work),
+            selectinload(item_cls.license_pool)
+            .selectinload(LicensePool.presentation_edition)
+            .selectinload(Edition.work),
+            # Prevent any other lazy loading - fail fast if we missed something
+            raiseload("*"),
+        )
         .order_by(item_cls.id)
         .limit(batch_size)
     )
@@ -300,7 +313,7 @@ def _removed_license_pool_reaper_with_notifications[ItemT: type[Loan | Hold]](
     if notification_data:
         for data in notification_data:
             # Queue the notification task with data
-            notification_task.delay(data=data)
+            notification_task(data)
             task.log.info(
                 f"Queued {item_cls.__name__.lower()} removed notification for patron {data.patron_id}"
             )
@@ -324,7 +337,7 @@ def removed_license_pool_hold_loan_reaper(task: Task, batch_size: int = 100) -> 
     items_deleted = _removed_license_pool_reaper_with_notifications(
         task,
         Hold,
-        send_hold_removed_notification,
+        send_hold_removed_notification.delay,
         batch_size,
     )
 
@@ -332,7 +345,7 @@ def removed_license_pool_hold_loan_reaper(task: Task, batch_size: int = 100) -> 
     items_deleted += _removed_license_pool_reaper_with_notifications(
         task,
         Loan,
-        send_loan_removed_notification,
+        send_loan_removed_notification.delay,
         batch_size - items_deleted,
     )
 
