@@ -13,7 +13,11 @@ from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.credential import Credential
 from palace.manager.sqlalchemy.model.integration import IntegrationLibraryConfiguration
-from palace.manager.sqlalchemy.model.licensing import LicensePool
+from palace.manager.sqlalchemy.model.licensing import (
+    LicensePool,
+    LicensePoolStatus,
+    LicensePoolType,
+)
 from palace.manager.sqlalchemy.model.measurement import Measurement
 from palace.manager.sqlalchemy.model.patron import Annotation, Hold, Loan, Patron
 from palace.manager.sqlalchemy.model.work import Work
@@ -239,6 +243,27 @@ def loan_reaper(task: Task) -> None:
         rows_removed = _execute_delete(session, deletion_query)
 
     task.log.info(f"Deleted {pluralize(rows_removed, 'expired loan')}.")
+
+
+@shared_task(queue=QueueNames.default, bind=True)
+def reap_loans_removed_unlimited_license_pools(task: Task) -> None:
+    """
+    Remove loans from database whose license pools have been marked
+    as removed.
+    """
+    deletion_query = delete(Loan).where(
+        Loan.license_pool_id == LicensePool.id,
+        LicensePool.type == LicensePoolType.UNLIMITED,
+        LicensePool.status == LicensePoolStatus.REMOVED,
+    )
+
+    with task.transaction() as session:
+        rows_removed = _execute_delete(session, deletion_query)
+
+    task.log.info(
+        f"Deleted {pluralize(rows_removed, 'loan')} on "
+        f"unlimited access license pools that had been removed."
+    )
 
 
 @shared_task(queue=QueueNames.default, bind=True)
