@@ -1,4 +1,5 @@
 from datetime import timedelta
+from typing import Any
 
 from celery import shared_task
 from sqlalchemy import and_, delete, func, select, true
@@ -7,6 +8,11 @@ from sqlalchemy.sql import Delete
 from sqlalchemy.sql.elements import or_
 
 from palace.manager.celery.task import Task
+from palace.manager.celery.tasks.notifications import (
+    RemovedItemNotificationData,
+    send_hold_removed_notification,
+    send_loan_removed_notification,
+)
 from palace.manager.service.analytics.eventdata import AnalyticsEventData
 from palace.manager.service.celery.celery import QueueNames
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
@@ -244,35 +250,97 @@ def loan_reaper(task: Task) -> None:
     task.log.info(f"Deleted {pluralize(rows_removed, 'expired loan')}.")
 
 
-def _removed_license_pool_reaper[LoanHoldT: type[Loan | Hold]](
-    task: Task, item_cls: LoanHoldT
+def _removed_license_pool_reaper_with_notifications[ItemT: type[Loan | Hold]](
+    task: Task,
+    item_cls: ItemT,
+    notification_task: Any,  # Celery task with .delay() method
+    batch_size: int,
 ) -> int:
-    deletion_query = delete(item_cls).where(
-        item_cls.license_pool_id == LicensePool.id,
-        LicensePool.status == LicensePoolStatus.REMOVED,
+    """
+    Remove loans or holds from REMOVED license pools and queue notification tasks.
+
+    :param task: The Celery task instance
+    :param item_cls: Either Loan or Hold class
+    :param notification_task: Celery task to queue for sending notifications
+    :param batch_size: Number of items to process in one batch
+    :return: Number of items deleted in this batch
+    """
+    # Build query for items with REMOVED license pools
+    query = (
+        select(item_cls)
+        .join(LicensePool, item_cls.license_pool_id == LicensePool.id)
+        .where(LicensePool.status == LicensePoolStatus.REMOVED)
+        .order_by(item_cls.id)
+        .limit(batch_size)
     )
 
+    # Collect notification data and delete items
+    notification_data = []
     with task.transaction() as session:
-        rows_removed = _execute_delete(session, deletion_query)
+        items = session.execute(query).scalars().all()
+        for item in items:
+            # Extract notification data before deletion
+            data = RemovedItemNotificationData.from_item(item)
+            if data:
+                notification_data.append(data)
 
+            # Delete the item
+            session.delete(item)
+
+    count = len(items)
     task.log.info(
-        f"Deleted {pluralize(rows_removed, item_cls.__name__.lower())} on "
+        f"Deleted {pluralize(count, item_cls.__name__.lower())} on "
         f"license pools that have been removed."
     )
 
-    return rows_removed
+    # Queue notification tasks AFTER transaction commits
+    if notification_data:
+        for data in notification_data:
+            # Queue the notification task with data
+            notification_task.delay(data=data)
+            task.log.info(
+                f"Queued {item_cls.__name__.lower()} removed notification for patron {data.patron_id}"
+            )
+
+    return count
 
 
 @shared_task(queue=QueueNames.default, bind=True)
-def removed_license_pool_hold_loan_reaper(task: Task) -> None:
+def removed_license_pool_hold_loan_reaper(task: Task, batch_size: int = 100) -> None:
     """
     Remove loans and holds from license pools that have been marked as removed.
 
-    TODO: We may eventually want to send a notification to patrons when
-      this happens, so they know where their holds and loans went.
+    Queues push notification tasks to inform patrons that their loans/holds
+    have been removed and are no longer available. Notifications are sent
+    asynchronously by separate worker tasks.
+
+    :param task: The Celery task instance
+    :param batch_size: Number of items to process per batch (default 100)
     """
-    _removed_license_pool_reaper(task, Hold)
-    _removed_license_pool_reaper(task, Loan)
+    # Process holds first
+    holds_deleted = _removed_license_pool_reaper_with_notifications(
+        task,
+        Hold,
+        send_hold_removed_notification,
+        batch_size,
+    )
+
+    # Process loans
+    loans_deleted = _removed_license_pool_reaper_with_notifications(
+        task,
+        Loan,
+        send_loan_removed_notification,
+        batch_size,
+    )
+
+    # Re-queue if we hit the batch limit (more items may exist)
+    if holds_deleted == batch_size or loans_deleted == batch_size:
+        task.log.info(
+            "Batch size reached. There may be more items to delete. Re-queueing the reaper."
+        )
+        raise task.replace(
+            removed_license_pool_hold_loan_reaper.s(batch_size=batch_size)
+        )
 
 
 @shared_task(queue=QueueNames.default, bind=True)
