@@ -244,19 +244,11 @@ def loan_reaper(task: Task) -> None:
     task.log.info(f"Deleted {pluralize(rows_removed, 'expired loan')}.")
 
 
-@shared_task(queue=QueueNames.default, bind=True)
-def loan_reaper_removed_license_pools(task: Task) -> None:
-    """
-    Remove loans from license pools that have been marked as removed.
-
-    TODO: We may want to extend this to remove holds as well in the future.
-
-    Right now, the removed status is only used on UNLIMITED license pools,
-    so there shouldn't be holds on them, but if we ever use REMOVED on other
-    license pool types, we may want to remove holds too.
-    """
-    deletion_query = delete(Loan).where(
-        Loan.license_pool_id == LicensePool.id,
+def _removed_license_pool_reaper[LoanHoldT: type[Loan | Hold]](
+    task: Task, loan_or_hold: LoanHoldT
+) -> int:
+    deletion_query = delete(loan_or_hold).where(
+        loan_or_hold.license_pool_id == LicensePool.id,
         LicensePool.status == LicensePoolStatus.REMOVED,
     )
 
@@ -264,9 +256,23 @@ def loan_reaper_removed_license_pools(task: Task) -> None:
         rows_removed = _execute_delete(session, deletion_query)
 
     task.log.info(
-        f"Deleted {pluralize(rows_removed, 'loan')} on "
+        f"Deleted {pluralize(rows_removed, loan_or_hold.__name__.lower())} on "
         f"license pools that have been removed."
     )
+
+    return rows_removed
+
+
+@shared_task(queue=QueueNames.default, bind=True)
+def removed_license_pool_hold_loan_reaper(task: Task) -> None:
+    """
+    Remove loans and holds from license pools that have been marked as removed.
+
+    TODO: We may eventually want to send a notification to patrons when
+      this happens, so they know where their holds and loans went.
+    """
+    _removed_license_pool_reaper(task, Hold)
+    _removed_license_pool_reaper(task, Loan)
 
 
 @shared_task(queue=QueueNames.default, bind=True)
