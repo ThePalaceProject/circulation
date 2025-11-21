@@ -1,7 +1,6 @@
 import datetime
 import logging
 import math
-from dataclasses import dataclass
 from enum import StrEnum
 from operator import and_
 from typing import Literal, Self
@@ -27,7 +26,6 @@ from palace.manager.util.log import LoggerMixin
 log = logging.getLogger(__name__)
 
 
-@dataclass
 class RemovedItemNotificationData(BaseFrozenData, LoggerMixin):
     """Data needed to send a notification about a removed loan or hold."""
 
@@ -46,14 +44,6 @@ class RemovedItemNotificationData(BaseFrozenData, LoggerMixin):
         :return: RemovedItemNotificationData if all required data is present, None otherwise
         """
         item_type = item.__class__.__name__.lower()
-
-        tokens = item.patron.device_tokens
-        if not tokens:
-            cls.logger().info(
-                f"Patron {item.patron.authorization_identifier or item.patron.username} has no device tokens. "
-                f"Cannot send {item_type} removed notification."
-            )
-            return None
 
         work = item.work
         if work is None or work.title is None:

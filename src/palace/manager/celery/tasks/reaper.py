@@ -265,6 +265,9 @@ def _removed_license_pool_reaper_with_notifications[ItemT: type[Loan | Hold]](
     :param batch_size: Number of items to process in one batch
     :return: Number of items deleted in this batch
     """
+    if batch_size <= 0:
+        return 0
+
     # Build query for items with REMOVED license pools
     query = (
         select(item_cls)
@@ -318,7 +321,7 @@ def removed_license_pool_hold_loan_reaper(task: Task, batch_size: int = 100) -> 
     :param batch_size: Number of items to process per batch (default 100)
     """
     # Process holds first
-    holds_deleted = _removed_license_pool_reaper_with_notifications(
+    items_deleted = _removed_license_pool_reaper_with_notifications(
         task,
         Hold,
         send_hold_removed_notification,
@@ -326,15 +329,15 @@ def removed_license_pool_hold_loan_reaper(task: Task, batch_size: int = 100) -> 
     )
 
     # Process loans
-    loans_deleted = _removed_license_pool_reaper_with_notifications(
+    items_deleted += _removed_license_pool_reaper_with_notifications(
         task,
         Loan,
         send_loan_removed_notification,
-        batch_size,
+        batch_size - items_deleted,
     )
 
     # Re-queue if we hit the batch limit (more items may exist)
-    if holds_deleted == batch_size or loans_deleted == batch_size:
+    if items_deleted == batch_size:
         task.log.info(
             "Batch size reached. There may be more items to delete. Re-queueing the reaper."
         )
