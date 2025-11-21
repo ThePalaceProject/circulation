@@ -753,7 +753,7 @@ class TestLoanReaperRemovedLicensePools:
         # Create removed metered pool (loans should be reaped)
         _, removed_metered = db.edition(
             with_license_pool=True,
-            unlimited_access=True,
+            unlimited_access=False,
             data_source_name=DataSource.AMAZON,
         )
         removed_metered.status = LicensePoolStatus.REMOVED
@@ -761,7 +761,7 @@ class TestLoanReaperRemovedLicensePools:
 
         # Create exhausted metered pool (loans should NOT be reaped - wrong status)
         exhausted_metered = db.licensepool(
-            db.edition(), open_access=False, data_source_name=DataSource.OVERDRIVE
+            db.edition(), unlimited_access=False, data_source_name=DataSource.OVERDRIVE
         )
         exhausted_metered.status = LicensePoolStatus.EXHAUSTED
         kept_metered_loan, _ = exhausted_metered.loan_to(patron, start=past, end=future)
