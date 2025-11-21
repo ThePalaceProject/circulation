@@ -317,6 +317,7 @@ class AlembicDatabaseFixture:
         patrons_in_hold_queue: int = 0,
         suppressed: bool = False,
         should_track_playtime: bool = False,
+        open_access: bool = False,
     ) -> int:
         """Create a license pool record."""
         with self._engine.begin() as connection:
@@ -326,11 +327,13 @@ class AlembicDatabaseFixture:
                     INSERT INTO licensepools (
                         data_source_id, identifier_id, collection_id,
                         licenses_owned, licenses_available, licenses_reserved,
-                        patrons_in_hold_queue, suppressed, should_track_playtime
+                        patrons_in_hold_queue, suppressed, should_track_playtime,
+                        open_access
                     )
                     VALUES (:data_source_id, :identifier_id, :collection_id,
                             :licenses_owned, :licenses_available, :licenses_reserved,
-                            :patrons_in_hold_queue, :suppressed, :should_track_playtime)
+                            :patrons_in_hold_queue, :suppressed, :should_track_playtime,
+                            :open_access)
                     RETURNING id
                 """
                 ),
@@ -344,6 +347,7 @@ class AlembicDatabaseFixture:
                     "patrons_in_hold_queue": patrons_in_hold_queue,
                     "suppressed": suppressed,
                     "should_track_playtime": should_track_playtime,
+                    "open_access": open_access,
                 },
             ).fetchone()
 
