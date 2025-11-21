@@ -175,6 +175,13 @@ def beat_schedule() -> dict[str, Any]:
                 hour="2",
             ),  # Once a day at 2:40 AM
         },
+        "removed_license_pool_hold_loan_reaper": {
+            "task": reaper.removed_license_pool_hold_loan_reaper.name,
+            "schedule": crontab(
+                minute="24",
+                hour="6",
+            ),  # Every day at 6:24 AM (After OPDS2 and OPDS2+ODL imports are complete)
+        },
         "reap_unassociated_loans": {
             "task": reaper.reap_unassociated_loans.name,
             "schedule": crontab(
