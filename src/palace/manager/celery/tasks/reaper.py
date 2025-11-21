@@ -248,6 +248,12 @@ def loan_reaper(task: Task) -> None:
 def loan_reaper_removed_license_pools(task: Task) -> None:
     """
     Remove loans from license pools that have been marked as removed.
+
+    TODO: We may want to extend this to remove holds as well in the future.
+
+    Right now, the removed status is only used on UNLIMITED license pools,
+    so there shouldn't be holds on them, but if we ever use REMOVED on other
+    license pool types, we may want to remove holds too.
     """
     deletion_query = delete(Loan).where(
         Loan.license_pool_id == LicensePool.id,
