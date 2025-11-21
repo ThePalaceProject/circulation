@@ -5,7 +5,7 @@ from contextlib import contextmanager
 from http import HTTPStatus
 from types import SimpleNamespace
 from typing import Any, cast
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import flask
 import pytest
@@ -755,6 +755,87 @@ class TestAdminPatronAuthServices:
             "<identifier>",
         )
         fixture.assert_supported_methods(url, "GET", "POST")
+
+    def test_patron_auth_service_create_cli_fails_if_unauthenticated(
+        self, fixture: AdminRouteFixture
+    ):
+        """Test that patron_auth_service_create_cli fails for unauthenticated requests."""
+        response = fixture.request("/admin/cli/patron_auth_services", method="POST")
+        body, status_code, headers = response
+        assert status_code == INVALID_ADMIN_CREDENTIALS.status_code
+        payload = json.loads(body)
+        assert payload["type"] == INVALID_ADMIN_CREDENTIALS.uri
+
+    def test_patron_auth_service_create_cli_succeeds_with_basic_auth(
+        self,
+        fixture: AdminRouteFixture,
+        flask_app_fixture: FlaskAppFixture,
+        db: DatabaseTransactionFixture,
+    ):
+        """Test that patron_auth_service_create_cli succeeds for authenticated requests."""
+        credentials = self._setup_valid_credentials(fixture, flask_app_fixture)
+
+        with patch.object(
+            routes.app.manager.admin_patron_auth_services_controller,
+            "process_patron_auth_services",
+        ) as mock_process_patron_auth_services:
+            mock_process_patron_auth_services.return_value = Response(status=201)
+            response = fixture.request(
+                "/admin/cli/patron_auth_services",
+                method="POST",
+                headers={"Authorization": f"Basic {credentials}"},
+            )
+        mock_process_patron_auth_services.assert_called()
+        assert isinstance(response, flask.Response)
+        assert response.status_code == 201
+
+    def _setup_valid_credentials(self, fixture, flask_app_fixture):
+        admin_email = "test@email.com"
+        password = "password"
+        admin = flask_app_fixture.admin_user(email=admin_email)
+        admin.password = password
+        fixture.manager._db = fixture.db.session
+        credentials = base64.b64encode(f"{admin_email}:{password}")
+        return credentials
+
+    def test_patron_auth_service_delete_cli_fails_if_unauthenticated(
+        self, fixture: AdminRouteFixture, db: DatabaseTransactionFixture
+    ):
+        """Test that patron_auth_service_delete_cli fails for unauthenticated requests."""
+        # Create an auth service to delete
+        library = db.default_library()
+        auth_service = db.simple_auth_integration(library, "test_user", "test_pass")
+
+        response = fixture.request(
+            f"/admin/cli/patron_auth_service/{auth_service.id}", method="DELETE"
+        )
+        body, status_code, headers = response
+        assert status_code == INVALID_ADMIN_CREDENTIALS.status_code
+        payload = json.loads(body)
+        assert payload["type"] == INVALID_ADMIN_CREDENTIALS.uri
+
+    def test_patron_auth_service_delete_cli_succeeds_with_basic_auth(
+        self,
+        fixture: AdminRouteFixture,
+        flask_app_fixture: FlaskAppFixture,
+        db: DatabaseTransactionFixture,
+    ):
+        """Test that patron_auth_service_delete_cli succeeds for authenticated requests."""
+        credentials = self._setup_valid_credentials(fixture, flask_app_fixture)
+        with patch.object(
+            routes.app.manager.admin_patron_auth_services_controller, "process_delete"
+        ) as mock_process_delete:
+            mock_process_delete.return_value = Response(status=200)
+
+            response = fixture.request(
+                f"/admin/cli/patron_auth_service/1",
+                method="DELETE",
+                headers={"Authorization": f"Basic {credentials}"},
+            )
+
+            mock_process_delete.assert_called_with("1")
+            assert isinstance(response, flask.Response)
+            assert response.status_code == 200
 
 
 class TestAdminPatron:
