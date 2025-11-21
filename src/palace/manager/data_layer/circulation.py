@@ -298,6 +298,8 @@ class CirculationData(BaseMutableData):
         # Finally, if we have data for a specific Collection's license
         # for this book, find its LicensePool and update it.
         changed_availability = False
+        changed_lp_type = False
+        changed_lp_status = False
         if pool and (
             replace.even_if_not_apparently_updated or self.has_changed(_db, pool=pool)
         ):
@@ -310,6 +312,7 @@ class CirculationData(BaseMutableData):
                     f"License pool type changing from {pool.type} to {self.type} for {pool.identifier!r}"
                 )
                 pool.type = self.type
+                changed_lp_type = True
 
             # Update license pool status if it differs from the incoming data.
             # Status changes track the operational state of the pool
@@ -319,12 +322,13 @@ class CirculationData(BaseMutableData):
                     f"License pool status changing from {pool.status} to {self.status} for {pool.identifier!r}"
                 )
                 pool.status = self.status
+                changed_lp_status = True
 
-            if self.licenses is not None:
-                # If we have licenses set, use those to set our availability
+            if pool.type == LicensePoolType.AGGREGATED:
+                # If this is an aggregated pool, update based on the licenses associated.
                 old_licenses = list(pool.licenses or [])
                 new_licenses = [
-                    license.add_to_pool(_db, pool) for license in self.licenses
+                    license.add_to_pool(_db, pool) for license in self.licenses or []
                 ]
                 for license in old_licenses:
                     if license not in new_licenses:
@@ -334,8 +338,16 @@ class CirculationData(BaseMutableData):
                 changed_availability = pool.update_availability_from_licenses(
                     as_of=self.last_checked,
                 )
-            else:
-                # Otherwise update the availability directly
+            elif pool.type == LicensePoolType.UNLIMITED:
+                changed_availability = pool.update_availability(
+                    new_licenses_owned=0,
+                    new_licenses_available=0,
+                    new_licenses_reserved=0,
+                    new_patrons_in_hold_queue=0,
+                    as_of=self.last_checked,
+                )
+            elif pool.type == LicensePoolType.METERED:
+                # This is a metered pool, update the availability counts directly.
                 changed_availability = pool.update_availability(
                     new_licenses_owned=self.licenses_owned,
                     new_licenses_available=self.licenses_available,
@@ -356,6 +368,8 @@ class CirculationData(BaseMutableData):
         made_changes = (
             made_changes
             or changed_availability
+            or changed_lp_type
+            or changed_lp_status
             or open_access_status_changed
             or work_changed
         )

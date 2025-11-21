@@ -268,8 +268,7 @@ class CirculationManagerController(BaseCirculationManagerController):
         if (
             not patron.library.settings.allow_holds
             and license_pool.licenses_available == 0
-            and not license_pool.open_access
-            and not license_pool.unlimited_access
+            and license_pool.metered_or_equivalent_type
         ):
             return FORBIDDEN_BY_POLICY.detailed(
                 _("Library policy prohibits the placement of holds."), status_code=403

@@ -40,7 +40,6 @@ from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.licensing import (
     DeliveryMechanism,
     DeliveryMechanismTuple,
-    LicensePool,
     LicensePoolStatus,
     LicensePoolType,
     RightsStatus,
@@ -751,12 +750,8 @@ class OPDS2WithODLExtractor[PublicationType: opds2.BasePublication](
         license_type = LicensePoolType.UNLIMITED
         if publication.metadata.availability.available:
             license_status = LicensePoolStatus.ACTIVE
-            licenses_owned = LicensePool.UNLIMITED_ACCESS
-            licenses_available = LicensePool.UNLIMITED_ACCESS
         else:
             license_status = LicensePoolStatus.REMOVED
-            licenses_owned = 0
-            licenses_available = 0
 
         formats = self._extract_opds2_formats(publication.links, rights_uri)
         links = [
@@ -777,10 +772,6 @@ class OPDS2WithODLExtractor[PublicationType: opds2.BasePublication](
             links=links,
             type=license_type,
             status=license_status,
-            licenses_owned=licenses_owned,
-            licenses_available=licenses_available,
-            licenses_reserved=0,
-            patrons_in_hold_queue=0,
             formats=formats,
             should_track_playtime=time_tracking,
         )

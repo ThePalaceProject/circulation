@@ -194,6 +194,13 @@ class CirculationApiDispatcher(LoggerMixin):
             # with a collection that this library doesn't have access to.
             raise NoLicenses()
 
+        if licensepool.unlimited_type and not licensepool.active_status:
+            # The license pool is of unlimited type but is not currently active.
+            # This means that although there are no limits on the number of
+            # simultaneous users, the licensepool is not currently available
+            # for borrowing for some reason.
+            raise NoLicenses()
+
         must_set_delivery_mechanism = (
             api.SET_DELIVERY_MECHANISM_AT == BaseCirculationAPI.BORROW_STEP
         )
@@ -404,9 +411,8 @@ class CirculationApiDispatcher(LoggerMixin):
         :raises PatronHoldLimitReached: If `pool` is currently
             unavailable and the patron is at their hold limit.
         """
-        if pool.open_access or pool.unlimited_access:
-            # Open-access books and books with unlimited access
-            # are able to be checked out even if the patron is
+        if pool.unlimited_type:
+            # Unlimited-access books are able to be checked out even if the patron is
             # at their loan limit.
             return
 
@@ -450,14 +456,14 @@ class CirculationApiDispatcher(LoggerMixin):
         if not loan_limit:
             return False
 
-        # Open-access loans, and loans of indefinite duration, don't count towards the loan limit
+        # Unlimited-access loans, and loans of indefinite duration, don't count towards the loan limit
         # because they don't block anyone else.
-        non_open_access_loans_with_end_date = [
+        non_unlimited_access_loans_with_end_date = [
             loan
             for loan in patron.loans
-            if loan.license_pool and loan.license_pool.open_access == False and loan.end
+            if loan.license_pool and not loan.license_pool.unlimited_type and loan.end
         ]
-        return len(non_open_access_loans_with_end_date) >= loan_limit
+        return len(non_unlimited_access_loans_with_end_date) >= loan_limit
 
     def patron_at_hold_limit(self, patron: Patron) -> bool:
         """Is the given patron at their hold limit?
@@ -509,7 +515,7 @@ class CirculationApiDispatcher(LoggerMixin):
         delivery_mechanism: LicensePoolDeliveryMechanism,
         **kwargs: Unpack[BaseCirculationAPI.FulfillKwargs],
     ) -> Fulfillment:
-        """Fulfil a book that a patron has previously checked out.
+        """Fulfill a book that a patron has previously checked out.
 
         :param delivery_mechanism: A LicensePoolDeliveryMechanism
             explaining how the patron wants the book to be delivered. If

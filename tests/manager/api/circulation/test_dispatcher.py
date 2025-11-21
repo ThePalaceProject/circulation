@@ -31,7 +31,7 @@ from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.identifier import Identifier
-from palace.manager.sqlalchemy.model.licensing import LicensePoolType
+from palace.manager.sqlalchemy.model.licensing import LicensePool, LicensePoolType
 from palace.manager.sqlalchemy.model.patron import Loan
 from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
@@ -471,6 +471,43 @@ class TestCirculationApiDispatcher:
         # so that we don't keep offering the book.
         assert [circulation_api.pool] == circulation_api.remote.availability_updated_for
 
+    def test_borrow_with_no_api_raises_no_licenses(
+        self, circulation_api: CirculationApiDispatcherFixture
+    ):
+        """Test that NoLicenses is raised when no API is available for the pool."""
+        # Mock api_for_license_pool to return None, simulating a situation
+        # where the pool is associated with a collection that the library
+        # doesn't have access to.
+        circulation_api.circulation.api_for_license_pool = MagicMock(return_value=None)
+
+        # Attempting to borrow should raise NoLicenses
+        with pytest.raises(NoLicenses):
+            self.borrow(circulation_api)
+
+    def test_borrow_with_unlimited_inactive_pool_raises_no_licenses(
+        self,
+        circulation_api: CirculationApiDispatcherFixture,
+        db: DatabaseTransactionFixture,
+    ):
+        """Test that NoLicenses is raised when unlimited pool is not active."""
+        # Create a new collection and pool that's unlimited but not active
+        from palace.manager.sqlalchemy.model.licensing import LicensePoolStatus
+
+        # Set the pool to be unlimited type
+        circulation_api.pool.type = LicensePoolType.UNLIMITED
+        circulation_api.pool.open_access = False
+
+        # Set the status to something that makes active_status False
+        circulation_api.pool.status = LicensePoolStatus.EXHAUSTED
+
+        # Verify that the pool is unlimited_type but not active_status
+        assert circulation_api.pool.unlimited_type is True
+        assert circulation_api.pool.active_status is False
+
+        # Attempting to borrow should raise NoLicenses
+        with pytest.raises(NoLicenses):
+            self.borrow(circulation_api)
+
     def test_borrow_calls_enforce_limits(
         self, circulation_api: CirculationApiDispatcherFixture
     ):
@@ -656,12 +693,8 @@ class TestCirculationApiDispatcher:
         # Sub-test 1: patron has reached neither limit.
         #
         patron = circulation_api.db.patron(library=library)
-        pool = MagicMock()
-        pool.open_access = False
+        pool = LicensePool()
         pool.type = LicensePoolType.METERED
-        pool.licenses_owned = 0
-        pool.licenses_available = 0
-        pool.unlimited_access = False
         circulation.at_loan_limit = False
         circulation.at_hold_limit = False
 

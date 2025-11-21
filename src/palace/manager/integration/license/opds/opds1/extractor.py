@@ -33,7 +33,6 @@ from palace.manager.opds.odl.odl import License
 from palace.manager.sqlalchemy.model.classification import Subject
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.licensing import (
-    LicensePool,
     LicensePoolType,
     RightsStatus,
 )
@@ -720,8 +719,6 @@ class Opds1Extractor(OpdsExtractor[OPDS1Feed, OPDS1Publication], BearerTokenDrmM
             should_track_playtime=time_tracking,
             formats=formats,
             type=LicensePoolType.UNLIMITED,
-            licenses_owned=LicensePool.UNLIMITED_ACCESS,
-            licenses_available=LicensePool.UNLIMITED_ACCESS,
         )
 
         bibliographic = BibliographicData(

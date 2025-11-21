@@ -25,7 +25,11 @@ from palace.manager.sqlalchemy.model.customlist import CustomList
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.integration import IntegrationLibraryConfiguration
-from palace.manager.sqlalchemy.model.licensing import License, LicensePool
+from palace.manager.sqlalchemy.model.licensing import (
+    License,
+    LicensePool,
+    LicensePoolType,
+)
 from palace.manager.sqlalchemy.model.patron import Hold, Loan
 from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.sqlalchemy.util import get_one_or_create
@@ -815,3 +819,94 @@ class TestCollection:
         registry.from_collection.assert_called_once_with(
             example_collection_fixture.database_fixture.session, collection
         )
+
+    def test_restrict_to_ready_deliverable_works_show_suppressed(
+        self, db: DatabaseTransactionFixture
+    ) -> None:
+        """Test that show_suppressed parameter correctly filters suppressed pools."""
+        # Create a normal work with unsuppressed pool
+        normal_work = db.work(with_license_pool=True, title="normal work")
+        [normal_pool] = normal_work.license_pools
+        normal_pool.suppressed = False
+        normal_pool.licenses_owned = 1
+        normal_pool.licenses_available = 1
+        # Add delivery mechanism
+        db.add_generic_delivery_mechanism(normal_pool)
+
+        # Create a work with suppressed pool
+        suppressed_work = db.work(with_license_pool=True, title="suppressed work")
+        [suppressed_pool] = suppressed_work.license_pools
+        suppressed_pool.suppressed = True
+        suppressed_pool.licenses_owned = 1
+        suppressed_pool.licenses_available = 1
+        # Add delivery mechanism
+        db.add_generic_delivery_mechanism(suppressed_pool)
+
+        # Base query
+        qu = (
+            db.session.query(Work)
+            .join(Work.license_pools)
+            .join(LicensePool.presentation_edition)
+        )
+
+        # With show_suppressed=False (default), suppressed works should be filtered out
+        filtered = Collection.restrict_to_ready_deliverable_works(
+            qu, show_suppressed=False
+        )
+        results = set(filtered.all())
+        assert results == {normal_work}
+
+        # With show_suppressed=True, suppressed works should be included
+        filtered = Collection.restrict_to_ready_deliverable_works(
+            qu, show_suppressed=True
+        )
+        results = set(filtered.all())
+        assert results == {normal_work, suppressed_work}
+
+    def test_restrict_to_ready_deliverable_works_allow_holds(
+        self, db: DatabaseTransactionFixture
+    ) -> None:
+        """Test that allow_holds parameter correctly filters works with no available copies."""
+        # Create a work with available copies
+        available_work = db.work(with_license_pool=True, title="available work")
+        [available_pool] = available_work.license_pools
+        available_pool.licenses_owned = 5
+        available_pool.licenses_available = 3
+        available_pool.type = LicensePoolType.METERED
+        # Add delivery mechanism
+        db.add_generic_delivery_mechanism(available_pool)
+
+        # Create a work with no available copies (all checked out)
+        unavailable_work = db.work(with_license_pool=True, title="unavailable work")
+        [unavailable_pool] = unavailable_work.license_pools
+        unavailable_pool.licenses_owned = 5
+        unavailable_pool.licenses_available = 0
+        unavailable_pool.type = LicensePoolType.METERED
+        # Add delivery mechanism
+        db.add_generic_delivery_mechanism(unavailable_pool)
+
+        # Create an unlimited work (should always be included)
+        unlimited_work = db.work(with_license_pool=True, title="unlimited work")
+        [unlimited_pool] = unlimited_work.license_pools
+        unlimited_pool.type = LicensePoolType.UNLIMITED
+        unlimited_pool.licenses_owned = 0
+        unlimited_pool.licenses_available = 0
+        # Add delivery mechanism
+        db.add_generic_delivery_mechanism(unlimited_pool)
+
+        # Base query
+        qu = (
+            db.session.query(Work)
+            .join(Work.license_pools)
+            .join(LicensePool.presentation_edition)
+        )
+
+        # With allow_holds=True (default), all works should be included
+        filtered = Collection.restrict_to_ready_deliverable_works(qu, allow_holds=True)
+        results = set(filtered.all())
+        assert results == {available_work, unavailable_work, unlimited_work}
+
+        # With allow_holds=False, only works with available copies or unlimited should be included
+        filtered = Collection.restrict_to_ready_deliverable_works(qu, allow_holds=False)
+        results = set(filtered.all())
+        assert results == {available_work, unlimited_work}

@@ -54,7 +54,7 @@ from palace.manager.sqlalchemy.model.lane import (
     SearchFacets,
     WorkList,
 )
-from palace.manager.sqlalchemy.model.licensing import LicensePool
+from palace.manager.sqlalchemy.model.licensing import LicensePool, LicensePoolStatus
 from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.sqlalchemy.util import get_one_or_create
 from palace.manager.util.cache import CachedData
@@ -475,15 +475,16 @@ class TestExternalSearchWithWorks:
         # never show up in results.
 
         # We own no copies of this book.
-        result.no_copies = _work(title="Moby Dick 2")
+        result.no_copies = _work(title="Moby Dick ii")
         result.no_copies.license_pools[0].licenses_owned = 0
+        result.no_copies.license_pools[0].status = LicensePoolStatus.EXHAUSTED
 
         # This book's only license pool has been suppressed.
-        result.suppressed = _work(title="Moby Dick 2")
+        result.suppressed = _work(title="Moby Dick iii")
         result.suppressed.license_pools[0].suppressed = True
 
         # This book is not presentation_ready.
-        result.not_presentation_ready = _work(title="Moby Dick 2")
+        result.not_presentation_ready = _work(title="Moby Dick iv")
         result.not_presentation_ready.presentation_ready = False
         return result
 
@@ -4547,7 +4548,7 @@ class TestFilter:
 
         # Currently all nested filters operate on the 'licensepools'
         # subdocument.
-        [not_suppressed, currently_owned] = nested.pop("licensepools")
+        [not_suppressed, active_status] = nested.pop("licensepools")
         assert {} == nested
 
         # Let's look at those filters.
@@ -4556,13 +4557,10 @@ class TestFilter:
         # suppressed.
         assert Term(**{"licensepools.suppressed": False}) == not_suppressed
 
-        # The second one is a little more complex
-        owned = Term(**{"licensepools.licensed": True})
-        open_access = Term(**{"licensepools.open_access": True})
-
-        # We only count license pools that are open-access _or_ that have
-        # currently owned licenses.
-        assert Bool(should=[owned, open_access]) == currently_owned
+        # The second one is the the licensepool must be active status
+        assert (
+            Term(**{"licensepools.status": LicensePoolStatus.ACTIVE}) == active_status
+        )
 
     def _mock_chain(self, filters, new_filter):
         """A mock of _chain_filters so we don't have to check

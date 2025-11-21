@@ -800,8 +800,6 @@ class DatabaseTransactionFixture:
                 if unlimited_access or with_open_access_download:
                     pool.open_access = with_open_access_download
                     pool.type = LicensePoolType.UNLIMITED
-                    pool.licenses_owned = LicensePool.UNLIMITED_ACCESS
-                    pool.licenses_available = LicensePool.UNLIMITED_ACCESS
 
                 pools = [pool]
         else:
@@ -930,8 +928,6 @@ class DatabaseTransactionFixture:
 
         if unlimited_access or with_open_access_download:
             pool.type = LicensePoolType.UNLIMITED
-            pool.licenses_owned = LicensePool.UNLIMITED_ACCESS
-            pool.licenses_available = LicensePool.UNLIMITED_ACCESS
 
         if set_edition_as_presentation:
             pool.presentation_edition = edition
