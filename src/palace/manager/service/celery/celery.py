@@ -196,8 +196,8 @@ def beat_schedule() -> dict[str, Any]:
                 hour="2",
             ),  # Once a day at 2:55 AM
         },
-        "reap_loans_removed_unlimited_license_pools": {
-            "task": reaper.reap_loans_removed_unlimited_license_pools.name,
+        "loan_reaper_removed_license_pools": {
+            "task": reaper.loan_reaper_removed_license_pools.name,
             "schedule": crontab(
                 minute="*/20",
             ),  # Every 20 minutes

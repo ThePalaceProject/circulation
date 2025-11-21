@@ -9,11 +9,11 @@ from palace.manager.celery.tasks.reaper import (
     credential_reaper,
     hold_reaper,
     loan_reaper,
+    loan_reaper_removed_license_pools,
     measurement_reaper,
     patron_reaper,
     reap_holds_in_inactive_collections,
     reap_loans_in_inactive_collections,
-    reap_loans_removed_unlimited_license_pools,
     reap_unassociated_holds,
     reap_unassociated_loans,
     work_reaper,
@@ -717,150 +717,155 @@ def test_reap_holds_in_inactive_collections(
     assert not patron.holds
 
 
-def test_reap_loans_removed_unlimited_license_pools(
-    db: DatabaseTransactionFixture,
-    celery_fixture: CeleryFixture,
-    caplog: pytest.LogCaptureFixture,
-):
-    """Test that only loans on removed unlimited pools are reaped."""
-    caplog.set_level(LogLevel.info)
+class TestLoanReaperRemovedLicensePools:
+    def test_reaps_removed_unlimited_pools(
+        self,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        """Test that only loans on removed unlimited pools are reaped."""
+        caplog.set_level(LogLevel.info)
 
-    patron = db.patron()
-    now = utc_now()
-    future = now + datetime.timedelta(days=14)
+        patron = db.patron()
+        now = utc_now()
+        future = now + datetime.timedelta(days=14)
 
-    # Create removed unlimited pool (loans should be reaped)
-    _, removed_unlimited = db.edition(
-        with_license_pool=True,
-        unlimited_access=True,
-        data_source_name=DataSource.AMAZON,
-    )
-    removed_unlimited.status = LicensePoolStatus.REMOVED
-    removed_unlimited.loan_to(patron, start=now, end=future)
-    removed_unlimited.loan_to(db.patron(), start=now, end=future)  # Multiple loans
+        # Create removed unlimited pool (loans should be reaped)
+        _, removed_unlimited = db.edition(
+            with_license_pool=True,
+            unlimited_access=True,
+            data_source_name=DataSource.AMAZON,
+        )
+        removed_unlimited.status = LicensePoolStatus.REMOVED
+        removed_unlimited.loan_to(patron, start=now, end=future)
+        removed_unlimited.loan_to(db.patron(), start=now, end=future)  # Multiple loans
 
-    # Create active unlimited pool (loans should NOT be reaped)
-    _, active_unlimited = db.edition(
-        with_license_pool=True,
-        unlimited_access=True,
-        data_source_name=DataSource.AMAZON,
-    )
-    kept_unlimited_loan, _ = active_unlimited.loan_to(patron, start=now, end=future)
+        # Create active unlimited pool (loans should NOT be reaped)
+        _, active_unlimited = db.edition(
+            with_license_pool=True,
+            unlimited_access=True,
+            data_source_name=DataSource.AMAZON,
+        )
+        kept_unlimited_loan, _ = active_unlimited.loan_to(patron, start=now, end=future)
 
-    # Create removed metered pool (loans should NOT be reaped - wrong type)
-    removed_metered = db.licensepool(
-        db.edition(), open_access=False, data_source_name=DataSource.OVERDRIVE
-    )
-    removed_metered.status = LicensePoolStatus.REMOVED
-    kept_metered_loan, _ = removed_metered.loan_to(patron, start=now, end=future)
+        # Create removed metered pool (loans should NOT be reaped - wrong type)
+        removed_metered = db.licensepool(
+            db.edition(), open_access=False, data_source_name=DataSource.OVERDRIVE
+        )
+        removed_metered.status = LicensePoolStatus.REMOVED
+        kept_metered_loan, _ = removed_metered.loan_to(patron, start=now, end=future)
 
-    # Run the reaper
-    reap_loans_removed_unlimited_license_pools.delay().wait()
+        # Run the reaper
+        loan_reaper_removed_license_pools.delay().wait()
 
-    # Verify only the 2 loans on removed unlimited pool were deleted
-    assert set(db.session.query(Loan).all()) == {kept_unlimited_loan, kept_metered_loan}
-    assert (
-        "Deleted 2 loans on unlimited access license pools that had been removed."
-        in caplog.messages
-    )
+        # Verify only the 2 loans on removed unlimited pool were deleted
+        assert set(db.session.query(Loan).all()) == {
+            kept_unlimited_loan,
+            kept_metered_loan,
+        }
+        assert (
+            "Deleted 2 loans on unlimited access license pools that had been removed."
+            in caplog.messages
+        )
 
+    def test_no_loans_to_reap(
+        self,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        """Test the reaper when there are no loans to reap."""
+        caplog.set_level(LogLevel.info)
 
-def test_reap_loans_removed_unlimited_license_pools_no_loans(
-    db: DatabaseTransactionFixture,
-    celery_fixture: CeleryFixture,
-    caplog: pytest.LogCaptureFixture,
-):
-    """Test the reaper when there are no loans to reap."""
-    caplog.set_level(LogLevel.info)
+        # Create an active unlimited pool with a loan
+        _, pool = db.edition(
+            with_license_pool=True,
+            unlimited_access=True,
+            data_source_name=DataSource.AMAZON,
+        )
+        loan, _ = pool.loan_to(
+            db.patron(), start=utc_now(), end=utc_now() + datetime.timedelta(days=14)
+        )
 
-    # Create an active unlimited pool with a loan
-    _, pool = db.edition(
-        with_license_pool=True,
-        unlimited_access=True,
-        data_source_name=DataSource.AMAZON,
-    )
-    loan, _ = pool.loan_to(
-        db.patron(), start=utc_now(), end=utc_now() + datetime.timedelta(days=14)
-    )
+        loan_reaper_removed_license_pools.delay().wait()
 
-    reap_loans_removed_unlimited_license_pools.delay().wait()
+        assert db.session.query(Loan).all() == [loan]
+        assert (
+            "Deleted 0 loans on unlimited access license pools that had been removed."
+            in caplog.messages
+        )
 
-    assert db.session.query(Loan).all() == [loan]
-    assert (
-        "Deleted 0 loans on unlimited access license pools that had been removed."
-        in caplog.messages
-    )
+    def test_only_unlimited_type_reaped(
+        self,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+    ):
+        """Test that only loans on pools with type UNLIMITED are reaped."""
+        patron = db.patron()
+        now = utc_now()
+        future = now + datetime.timedelta(days=14)
 
+        # All pools are marked as removed - only UNLIMITED type should be reaped
+        _, unlimited = db.edition(
+            with_license_pool=True,
+            unlimited_access=True,
+            data_source_name=DataSource.AMAZON,
+        )
+        unlimited.status = LicensePoolStatus.REMOVED
+        unlimited.loan_to(patron, start=now, end=future)
 
-def test_reap_loans_removed_unlimited_license_pools_verify_pool_types(
-    db: DatabaseTransactionFixture,
-    celery_fixture: CeleryFixture,
-):
-    """Test that only loans on pools with type UNLIMITED are reaped."""
-    patron = db.patron()
-    now = utc_now()
-    future = now + datetime.timedelta(days=14)
+        metered = db.licensepool(
+            db.edition(), open_access=False, data_source_name=DataSource.OVERDRIVE
+        )
+        metered.status = LicensePoolStatus.REMOVED
+        metered_loan, _ = metered.loan_to(patron, start=now, end=future)
 
-    # All pools are marked as removed - only UNLIMITED type should be reaped
-    _, unlimited = db.edition(
-        with_license_pool=True,
-        unlimited_access=True,
-        data_source_name=DataSource.AMAZON,
-    )
-    unlimited.status = LicensePoolStatus.REMOVED
-    unlimited.loan_to(patron, start=now, end=future)
+        aggregated = db.licensepool(
+            db.edition(), open_access=False, data_source_name=DataSource.BOUNDLESS
+        )
+        aggregated.type = LicensePoolType.AGGREGATED
+        aggregated.status = LicensePoolStatus.REMOVED
+        aggregated_loan, _ = aggregated.loan_to(patron, start=now, end=future)
 
-    metered = db.licensepool(
-        db.edition(), open_access=False, data_source_name=DataSource.OVERDRIVE
-    )
-    metered.status = LicensePoolStatus.REMOVED
-    metered_loan, _ = metered.loan_to(patron, start=now, end=future)
+        loan_reaper_removed_license_pools.delay().wait()
 
-    aggregated = db.licensepool(
-        db.edition(), open_access=False, data_source_name=DataSource.BOUNDLESS
-    )
-    aggregated.type = LicensePoolType.AGGREGATED
-    aggregated.status = LicensePoolStatus.REMOVED
-    aggregated_loan, _ = aggregated.loan_to(patron, start=now, end=future)
+        assert set(db.session.query(Loan).all()) == {metered_loan, aggregated_loan}
 
-    reap_loans_removed_unlimited_license_pools.delay().wait()
+    def test_only_removed_status_reaped(
+        self,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+    ):
+        """Test that only loans on pools with status REMOVED are reaped."""
+        patron = db.patron()
+        now = utc_now()
+        future = now + datetime.timedelta(days=14)
 
-    assert set(db.session.query(Loan).all()) == {metered_loan, aggregated_loan}
+        # All pools are UNLIMITED type - only REMOVED status should be reaped
+        _, removed = db.edition(
+            with_license_pool=True,
+            unlimited_access=True,
+            data_source_name=DataSource.AMAZON,
+        )
+        removed.status = LicensePoolStatus.REMOVED
+        removed.loan_to(patron, start=now, end=future)
 
+        _, active = db.edition(
+            with_license_pool=True,
+            unlimited_access=True,
+            data_source_name=DataSource.AMAZON,
+        )
+        active_loan, _ = active.loan_to(patron, start=now, end=future)
 
-def test_reap_loans_removed_unlimited_license_pools_verify_pool_status(
-    db: DatabaseTransactionFixture,
-    celery_fixture: CeleryFixture,
-):
-    """Test that only loans on pools with status REMOVED are reaped."""
-    patron = db.patron()
-    now = utc_now()
-    future = now + datetime.timedelta(days=14)
+        _, exhausted = db.edition(
+            with_license_pool=True,
+            unlimited_access=True,
+            data_source_name=DataSource.AMAZON,
+        )
+        exhausted.status = LicensePoolStatus.EXHAUSTED
+        exhausted_loan, _ = exhausted.loan_to(patron, start=now, end=future)
 
-    # All pools are UNLIMITED type - only REMOVED status should be reaped
-    _, removed = db.edition(
-        with_license_pool=True,
-        unlimited_access=True,
-        data_source_name=DataSource.AMAZON,
-    )
-    removed.status = LicensePoolStatus.REMOVED
-    removed.loan_to(patron, start=now, end=future)
+        loan_reaper_removed_license_pools.delay().wait()
 
-    _, active = db.edition(
-        with_license_pool=True,
-        unlimited_access=True,
-        data_source_name=DataSource.AMAZON,
-    )
-    active_loan, _ = active.loan_to(patron, start=now, end=future)
-
-    _, exhausted = db.edition(
-        with_license_pool=True,
-        unlimited_access=True,
-        data_source_name=DataSource.AMAZON,
-    )
-    exhausted.status = LicensePoolStatus.EXHAUSTED
-    exhausted_loan, _ = exhausted.loan_to(patron, start=now, end=future)
-
-    reap_loans_removed_unlimited_license_pools.delay().wait()
-
-    assert set(db.session.query(Loan).all()) == {active_loan, exhausted_loan}
+        assert set(db.session.query(Loan).all()) == {active_loan, exhausted_loan}
