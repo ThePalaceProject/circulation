@@ -16,7 +16,6 @@ from palace.manager.sqlalchemy.model.integration import IntegrationLibraryConfig
 from palace.manager.sqlalchemy.model.licensing import (
     LicensePool,
     LicensePoolStatus,
-    LicensePoolType,
 )
 from palace.manager.sqlalchemy.model.measurement import Measurement
 from palace.manager.sqlalchemy.model.patron import Annotation, Hold, Loan, Patron
@@ -248,11 +247,10 @@ def loan_reaper(task: Task) -> None:
 @shared_task(queue=QueueNames.default, bind=True)
 def loan_reaper_removed_license_pools(task: Task) -> None:
     """
-    Remove loans from unlimited access license pools that have been marked as removed.
+    Remove loans from license pools that have been marked as removed.
     """
     deletion_query = delete(Loan).where(
         Loan.license_pool_id == LicensePool.id,
-        LicensePool.type == LicensePoolType.UNLIMITED,
         LicensePool.status == LicensePoolStatus.REMOVED,
     )
 
@@ -261,7 +259,7 @@ def loan_reaper_removed_license_pools(task: Task) -> None:
 
     task.log.info(
         f"Deleted {pluralize(rows_removed, 'loan')} on "
-        f"unlimited access license pools that had been removed."
+        f"license pools that have been removed."
     )
 
 
