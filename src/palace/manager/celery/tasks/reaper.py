@@ -246,10 +246,9 @@ def loan_reaper(task: Task) -> None:
 
 
 @shared_task(queue=QueueNames.default, bind=True)
-def reap_loans_removed_unlimited_license_pools(task: Task) -> None:
+def loan_reaper_removed_license_pools(task: Task) -> None:
     """
-    Remove loans from database whose license pools have been marked
-    as removed.
+    Remove loans from unlimited access license pools that have been marked as removed.
     """
     deletion_query = delete(Loan).where(
         Loan.license_pool_id == LicensePool.id,
