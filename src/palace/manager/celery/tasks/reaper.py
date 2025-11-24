@@ -279,7 +279,7 @@ def _removed_license_pool_reaper_with_notifications[ItemT: type[Loan | Hold]](
         .join(LicensePool, item_cls.license_pool_id == LicensePool.id)
         .where(LicensePool.status == LicensePoolStatus.REMOVED)
         .options(
-            selectinload(item_cls.patron),
+            selectinload(item_cls.patron).selectinload(Patron.library),
             selectinload(item_cls.license_pool).selectinload(LicensePool.identifier),
             selectinload(item_cls.license_pool).selectinload(LicensePool.work),
             selectinload(item_cls.license_pool)
