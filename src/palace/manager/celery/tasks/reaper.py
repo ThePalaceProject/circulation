@@ -282,7 +282,9 @@ def _removed_license_pool_reaper_with_notifications[ItemT: type[Loan | Hold]](
         .options(
             selectinload(item_cls.patron).selectinload(Patron.library),
             selectinload(item_cls.license_pool).selectinload(LicensePool.identifier),
-            selectinload(item_cls.license_pool).selectinload(LicensePool.work),
+            selectinload(item_cls.license_pool)
+            .selectinload(LicensePool.work)
+            .selectinload(Work.presentation_edition),
             selectinload(item_cls.license_pool)
             .selectinload(LicensePool.presentation_edition)
             .selectinload(Edition.work),
