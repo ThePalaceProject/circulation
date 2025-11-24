@@ -2,13 +2,18 @@ from __future__ import annotations
 
 import datetime
 from functools import partial
-from unittest.mock import ANY, MagicMock, call, patch
+from unittest.mock import ANY, MagicMock, call, create_autospec, patch
 
 import pytest
+from dependency_injector import providers
 from freezegun import freeze_time
 
 from palace.manager.celery.tasks import notifications
-from palace.manager.celery.tasks.notifications import NotificationType
+from palace.manager.celery.tasks.notifications import (
+    NotificationType,
+    RemovedItemNotificationData,
+)
+from palace.manager.service.fcm.fcm import send_notifications
 from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.devicetokens import DeviceToken, DeviceTokenTypes
@@ -26,14 +31,15 @@ class NotificationsFixture:
         self, db: DatabaseTransactionFixture, services_fixture: ServicesFixture
     ) -> None:
         self.db = db
-        self.services_fixture = services_fixture
-        self.services = services_fixture.services
 
         self.mock_app = MagicMock()
-        self.mock_send_notifications = MagicMock()
 
-        self.services.fcm.app.override(self.mock_app)
-        self.services.fcm.send_notifications.override(self.mock_send_notifications)
+        services_fixture.services.fcm.app.override(self.mock_app)
+        self.mock_send_notifications = create_autospec(send_notifications)
+        services_fixture.services.fcm.send_notifications.override(
+            providers.Callable(self.mock_send_notifications, app=self.mock_app)
+        )
+        services_fixture.set_base_url("http://test.cm")
 
     def create_loan(
         self,
@@ -592,3 +598,339 @@ def test_hold_available_task_exception(
     assert hold1.patron_last_notified is not None
     assert hold2.patron_last_notified is not None
     assert hold3.patron_last_notified is None
+
+
+class TestRemovedItemNotificationData:
+    """Tests for RemovedItemNotificationData.from_item()"""
+
+    def test_from_loan_success(
+        self,
+        db: DatabaseTransactionFixture,
+        notifications_fixture: NotificationsFixture,
+    ) -> None:
+        """Test successful extraction of notification data from a loan."""
+        patron = db.patron()
+        patron.authorization_identifier = "auth123"
+        notifications_fixture.create_device_token(patron, "test-token")
+
+        loan = notifications_fixture.create_loan(patron=patron)
+        work = loan.work
+        library = loan.library
+
+        assert work is not None
+        assert work.title is not None
+        assert library.name is not None
+
+        # Extract notification data
+        data = RemovedItemNotificationData.from_item(loan)
+
+        # Verify data was extracted correctly
+        assert data is not None
+        assert data.patron_id == patron.id
+        assert data.work_title == work.title
+        assert data.library_name == library.name
+        assert data.library_short_name == library.short_name
+        assert data.identifier.type == loan.license_pool.identifier.type
+        assert data.identifier.identifier == loan.license_pool.identifier.identifier
+
+    def test_from_hold_success(
+        self,
+        db: DatabaseTransactionFixture,
+        notifications_fixture: NotificationsFixture,
+    ) -> None:
+        """Test successful extraction of notification data from a hold."""
+        patron = db.patron()
+        patron.authorization_identifier = "auth456"
+        notifications_fixture.create_device_token(patron, "test-token")
+
+        hold = notifications_fixture.create_hold(patron=patron)
+        work = hold.work
+        library = hold.library
+
+        assert work is not None
+        assert work.title is not None
+        assert library.name is not None
+
+        # Extract notification data
+        data = RemovedItemNotificationData.from_item(hold)
+
+        # Verify data was extracted correctly
+        assert data is not None
+        assert data.patron_id == patron.id
+        assert data.work_title == work.title
+        assert data.library_name == library.name
+        assert data.library_short_name == library.short_name
+        assert data.identifier.type == hold.license_pool.identifier.type
+        assert data.identifier.identifier == hold.license_pool.identifier.identifier
+
+    def test_from_item_no_work(
+        self,
+        db: DatabaseTransactionFixture,
+        notifications_fixture: NotificationsFixture,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Test that from_item returns None when work is missing."""
+        caplog.set_level(LogLevel.error)
+
+        patron = db.patron()
+        notifications_fixture.create_device_token(patron)
+        loan = notifications_fixture.create_loan(patron=patron)
+
+        # Remove the work
+        loan.license_pool.work = None
+        loan.license_pool.presentation_edition = None
+
+        data = RemovedItemNotificationData.from_item(loan)
+
+        assert data is None
+        assert "work is missing" in caplog.text
+
+    def test_from_item_no_work_title(
+        self,
+        db: DatabaseTransactionFixture,
+        notifications_fixture: NotificationsFixture,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Test that from_item returns None when work title is missing."""
+        caplog.set_level(LogLevel.error)
+
+        patron = db.patron()
+        notifications_fixture.create_device_token(patron)
+        loan = notifications_fixture.create_loan(patron=patron)
+
+        # Remove the work title
+        work = loan.work
+        assert work is not None
+        work.presentation_edition = None
+
+        data = RemovedItemNotificationData.from_item(loan)
+
+        assert data is None
+        assert "title is missing" in caplog.text
+
+    def test_from_item_no_library_name(
+        self,
+        db: DatabaseTransactionFixture,
+        notifications_fixture: NotificationsFixture,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Test that from_item returns None when library name is missing."""
+        caplog.set_level(LogLevel.error)
+
+        patron = db.patron()
+        notifications_fixture.create_device_token(patron)
+        loan = notifications_fixture.create_loan(patron=patron)
+
+        # Remove library name
+        loan.library.name = None
+
+        data = RemovedItemNotificationData.from_item(loan)
+
+        assert data is None
+        assert "library name is missing" in caplog.text
+
+
+class TestSendItemRemovedNotification:
+    """Tests for send_item_removed_notification task."""
+
+    def test_send_loan_removed_notification(
+        self,
+        db: DatabaseTransactionFixture,
+        notifications_fixture: NotificationsFixture,
+        celery_fixture: CeleryFixture,
+    ) -> None:
+        """Test sending a loan removed notification."""
+        patron = db.patron()
+        patron.authorization_identifier = "auth123"
+        patron.external_identifier = "ext456"
+        token1 = notifications_fixture.create_device_token(patron, "token1")
+        token2 = notifications_fixture.create_device_token(patron, "token2")
+
+        loan = notifications_fixture.create_loan(patron=patron)
+        work = loan.work
+        library = loan.library
+
+        assert work is not None
+        assert library.name is not None
+
+        # Extract notification data
+        data = RemovedItemNotificationData.from_item(loan)
+        assert data is not None
+
+        # Queue the task
+        notifications.send_item_removed_notification.delay(
+            data,
+            NotificationType.LOAN_REMOVED,
+        ).wait()
+
+        # Verify notification was sent
+        mock_send_notifications = notifications_fixture.mock_send_notifications
+        mock_send_notifications.assert_called_once()
+
+        call_args = mock_send_notifications.call_args
+        sent_tokens, title, body, notification_data = call_args.args
+
+        # Verify tokens
+        assert sent_tokens == [token1, token2]
+
+        # Verify title and body
+        assert f'"{work.title}" No Longer Available' == title
+        assert "One of your current loans" in body
+        assert library.name in body
+
+        # Verify notification data
+        assert notification_data["event_type"] == NotificationType.LOAN_REMOVED
+        assert notification_data["external_identifier"] == patron.external_identifier
+        assert (
+            notification_data["authorization_identifier"]
+            == patron.authorization_identifier
+        )
+        assert notification_data["type"] == loan.license_pool.identifier.type
+        assert (
+            notification_data["identifier"] == loan.license_pool.identifier.identifier
+        )
+        assert notification_data["library"] == library.short_name
+        assert library.short_name in notification_data["loans_endpoint"]
+
+    def test_send_hold_removed_notification(
+        self,
+        db: DatabaseTransactionFixture,
+        notifications_fixture: NotificationsFixture,
+        celery_fixture: CeleryFixture,
+    ) -> None:
+        """Test sending a hold removed notification."""
+        patron = db.patron()
+        patron.authorization_identifier = "auth789"
+        token = notifications_fixture.create_device_token(patron, "token3")
+
+        hold = notifications_fixture.create_hold(patron=patron)
+        work = hold.work
+        library = hold.library
+
+        assert work is not None
+        assert library.name is not None
+
+        # Extract notification data
+        data = RemovedItemNotificationData.from_item(hold)
+        assert data is not None
+
+        # Queue the task
+        notifications.send_item_removed_notification.delay(
+            data,
+            NotificationType.HOLD_REMOVED,
+        ).wait()
+
+        # Verify notification was sent
+        mock_send_notifications = notifications_fixture.mock_send_notifications
+        mock_send_notifications.assert_called_once()
+
+        call_args = mock_send_notifications.call_args
+        sent_tokens, title, body, notification_data = call_args.args
+
+        # Verify tokens
+        assert sent_tokens == [token]
+
+        # Verify title and body
+        assert f'"{work.title}" No Longer Available' == title
+        assert "One of your current holds" in body
+        assert library.name in body
+
+        # Verify notification data
+        assert notification_data["event_type"] == NotificationType.HOLD_REMOVED
+        assert notification_data["type"] == hold.license_pool.identifier.type
+        assert (
+            notification_data["identifier"] == hold.license_pool.identifier.identifier
+        )
+
+    def test_send_notification_no_device_tokens(
+        self,
+        db: DatabaseTransactionFixture,
+        notifications_fixture: NotificationsFixture,
+        celery_fixture: CeleryFixture,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Test that no notification is sent when patron has no device tokens."""
+        caplog.set_level(LogLevel.info)
+
+        patron = db.patron()
+        patron.authorization_identifier = "auth999"
+
+        loan = notifications_fixture.create_loan(patron=patron)
+
+        # Extract notification data
+        data = RemovedItemNotificationData.from_item(loan)
+        assert data is not None
+
+        # Queue the task
+        notifications.send_item_removed_notification.delay(
+            data,
+            NotificationType.LOAN_REMOVED,
+        ).wait()
+
+        # Verify no notification was sent
+        mock_send_notifications = notifications_fixture.mock_send_notifications
+        mock_send_notifications.assert_not_called()
+
+        # Verify log message
+        assert "has no device tokens" in caplog.text
+        assert "auth999" in caplog.text
+
+    def test_send_notification_without_external_identifier(
+        self,
+        db: DatabaseTransactionFixture,
+        notifications_fixture: NotificationsFixture,
+        celery_fixture: CeleryFixture,
+    ) -> None:
+        """Test notification is sent correctly when patron has no external_identifier."""
+        patron = db.patron()
+        patron.authorization_identifier = "auth_only"
+        patron.external_identifier = None
+        notifications_fixture.create_device_token(patron)
+
+        loan = notifications_fixture.create_loan(patron=patron)
+        data = RemovedItemNotificationData.from_item(loan)
+        assert data is not None
+
+        # Queue the task
+        notifications.send_item_removed_notification.delay(
+            data,
+            NotificationType.LOAN_REMOVED,
+        ).wait()
+
+        # Verify notification was sent
+        mock_send_notifications = notifications_fixture.mock_send_notifications
+        mock_send_notifications.assert_called_once()
+
+        notification_data = mock_send_notifications.call_args.args[3]
+        assert "external_identifier" not in notification_data
+        assert notification_data["authorization_identifier"] == "auth_only"
+
+    def test_send_notification_without_authorization_identifier(
+        self,
+        db: DatabaseTransactionFixture,
+        notifications_fixture: NotificationsFixture,
+        celery_fixture: CeleryFixture,
+    ) -> None:
+        """Test notification is sent correctly when patron has no authorization_identifier."""
+        patron = db.patron()
+        patron.authorization_identifier = None
+        patron.external_identifier = "ext_only"
+        notifications_fixture.create_device_token(patron)
+
+        loan = notifications_fixture.create_loan(patron=patron)
+        data = RemovedItemNotificationData.from_item(loan)
+        assert data is not None
+
+        # Queue the task
+        notifications.send_item_removed_notification.delay(
+            data,
+            NotificationType.LOAN_REMOVED,
+        ).wait()
+
+        # Verify notification was sent
+        mock_send_notifications = notifications_fixture.mock_send_notifications
+        mock_send_notifications.assert_called_once()
+
+        notification_data = mock_send_notifications.call_args.args[3]
+        assert "authorization_identifier" not in notification_data
+        assert notification_data["external_identifier"] == "ext_only"

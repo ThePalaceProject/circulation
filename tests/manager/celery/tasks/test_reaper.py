@@ -1,8 +1,13 @@
 import datetime
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, call, patch
 
 import pytest
 
+from palace.manager.celery.tasks.notifications import (
+    NotificationType,
+    RemovedItemNotificationData,
+    send_item_removed_notification,
+)
 from palace.manager.celery.tasks.reaper import (
     annotation_reaper,
     collection_reaper,
@@ -732,39 +737,61 @@ class TestRemovedLicensePoolHoldLoanReaper:
         future = past + datetime.timedelta(days=14)
 
         # Create removed unlimited pool (loans should be reaped)
-        _, removed_unlimited = db.edition(
+        removed_unlimited = db.work(
             with_license_pool=True,
             unlimited_access=True,
             data_source_name=DataSource.AMAZON,
-        )
+        ).active_license_pool()
         removed_unlimited.status = LicensePoolStatus.REMOVED
-        removed_unlimited.loan_to(patron1, start=past, end=future)
-        removed_unlimited.loan_to(patron2, start=past, end=future)
+        removed_unlimited_loan_1, _ = removed_unlimited.loan_to(
+            patron1, start=past, end=future
+        )
+        removed_unlimited_loan_1_data = RemovedItemNotificationData.from_item(
+            removed_unlimited_loan_1
+        )
+        removed_unlimited_loan_2, _ = removed_unlimited.loan_to(
+            patron2, start=past, end=future
+        )
+        removed_unlimited_loan_2_data = RemovedItemNotificationData.from_item(
+            removed_unlimited_loan_2
+        )
 
         # Create active unlimited pool (loans should NOT be reaped)
-        _, active_unlimited = db.edition(
+        active_unlimited = db.work(
             with_license_pool=True,
             unlimited_access=True,
             data_source_name=DataSource.AMAZON,
-        )
+        ).active_license_pool()
         kept_unlimited_loan, _ = active_unlimited.loan_to(
             patron1, start=past, end=future
         )
 
         # Create removed metered pool (loans and holds should be reaped)
-        _, removed_metered = db.edition(
+        removed_metered = db.work(
             with_license_pool=True,
             unlimited_access=False,
             data_source_name=DataSource.AMAZON,
-        )
+        ).active_license_pool()
         removed_metered.status = LicensePoolStatus.REMOVED
-        removed_metered.loan_to(patron1, start=past, end=future)
-        removed_metered.on_hold_to(patron2, start=past, end=future)
+        removed_metered_loan, _ = removed_metered.loan_to(
+            patron1, start=past, end=future
+        )
+        removed_metered_loan_data = RemovedItemNotificationData.from_item(
+            removed_metered_loan
+        )
+        removed_metered_hold, _ = removed_metered.on_hold_to(
+            patron2, start=past, end=future
+        )
+        removed_metered_hold_data = RemovedItemNotificationData.from_item(
+            removed_metered_hold
+        )
 
         # Create exhausted metered pool (loans and holds should NOT be reaped - wrong status)
-        exhausted_metered = db.licensepool(
-            db.edition(), unlimited_access=False, data_source_name=DataSource.OVERDRIVE
-        )
+        exhausted_metered = db.work(
+            with_license_pool=True,
+            unlimited_access=False,
+            data_source_name=DataSource.OVERDRIVE,
+        ).active_license_pool()
         exhausted_metered.status = LicensePoolStatus.EXHAUSTED
         kept_metered_loan, _ = exhausted_metered.loan_to(
             patron1, start=past, end=future
@@ -774,7 +801,20 @@ class TestRemovedLicensePoolHoldLoanReaper:
         )
 
         # Run the reaper
-        removed_license_pool_hold_loan_reaper.delay().wait()
+        with patch.object(send_item_removed_notification, "delay") as mock_notify:
+            removed_license_pool_hold_loan_reaper.delay().wait()
+
+        # Notifications were sent for each reaped loan and hold
+        # 1 hold removed + 3 loans removed = 4 total notifications
+        mock_notify.assert_has_calls(
+            [
+                call(removed_metered_hold_data, NotificationType.HOLD_REMOVED),
+                call(removed_unlimited_loan_1_data, NotificationType.LOAN_REMOVED),
+                call(removed_unlimited_loan_2_data, NotificationType.LOAN_REMOVED),
+                call(removed_metered_loan_data, NotificationType.LOAN_REMOVED),
+            ],
+            any_order=True,
+        )
 
         # Verify only the active and exhausted pool loans/holds remain
         assert set(db.session.query(Loan).all()) == {
@@ -816,7 +856,11 @@ class TestRemovedLicensePoolHoldLoanReaper:
             db.patron(), start=utc_now(), end=utc_now() + datetime.timedelta(days=14)
         )
 
-        removed_license_pool_hold_loan_reaper.delay().wait()
+        with patch.object(send_item_removed_notification, "delay") as mock_notify:
+            removed_license_pool_hold_loan_reaper.delay().wait()
+
+        # Notifications were send for each reaped loan and hold
+        assert mock_notify.call_count == 0
 
         assert db.session.query(Loan).all() == [loan]
         assert db.session.query(Hold).all() == [hold]

@@ -10,9 +10,10 @@ from sqlalchemy.sql.elements import or_
 
 from palace.manager.celery.task import Task
 from palace.manager.celery.tasks.notifications import (
+    NotificationType,
+    NotificationTypeT,
     RemovedItemNotificationData,
-    send_hold_removed_notification,
-    send_loan_removed_notification,
+    send_item_removed_notification,
 )
 from palace.manager.service.analytics.eventdata import AnalyticsEventData
 from palace.manager.service.celery.celery import QueueNames
@@ -255,7 +256,8 @@ def loan_reaper(task: Task) -> None:
 def _removed_license_pool_reaper_with_notifications[ItemT: type[Loan | Hold]](
     task: Task,
     item_cls: ItemT,
-    notification_task: Callable[[RemovedItemNotificationData], Any],
+    notification_task: Callable[[RemovedItemNotificationData, NotificationTypeT], Any],
+    notification_type: NotificationTypeT,
     batch_size: int,
 ) -> int:
     """
@@ -310,13 +312,12 @@ def _removed_license_pool_reaper_with_notifications[ItemT: type[Loan | Hold]](
     )
 
     # Queue notification tasks AFTER transaction commits
-    if notification_data:
-        for data in notification_data:
-            # Queue the notification task with data
-            notification_task(data)
-            task.log.info(
-                f"Queued {item_cls.__name__.lower()} removed notification for patron {data.patron_id}"
-            )
+    for data in notification_data:
+        # Queue the notification task with data
+        notification_task(data, notification_type)
+        task.log.info(
+            f"Queued {item_cls.__name__.lower()} removed notification for patron {data.patron_id}"
+        )
 
     return count
 
@@ -337,7 +338,8 @@ def removed_license_pool_hold_loan_reaper(task: Task, batch_size: int = 100) -> 
     items_deleted = _removed_license_pool_reaper_with_notifications(
         task,
         Hold,
-        send_hold_removed_notification.delay,
+        send_item_removed_notification.delay,
+        NotificationType.HOLD_REMOVED,
         batch_size,
     )
 
@@ -345,7 +347,8 @@ def removed_license_pool_hold_loan_reaper(task: Task, batch_size: int = 100) -> 
     items_deleted += _removed_license_pool_reaper_with_notifications(
         task,
         Loan,
-        send_loan_removed_notification.delay,
+        send_item_removed_notification.delay,
+        NotificationType.LOAN_REMOVED,
         batch_size - items_deleted,
     )
 

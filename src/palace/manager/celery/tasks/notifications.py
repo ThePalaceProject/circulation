@@ -47,8 +47,10 @@ class RemovedItemNotificationData(BaseFrozenData, LoggerMixin):
 
         work = item.work
         if work is None or work.title is None:
+            detail = "work is missing" if work is None else "title is missing"
+
             cls.logger().error(
-                f"Failed to extract {item_type} notification data because work/title is missing for "
+                f"Failed to extract {item_type} notification data because {detail} for "
                 f"{item_type} '{item.id}', patron '{item.patron.authorization_identifier}'"
             )
             return None
@@ -286,115 +288,65 @@ def send_hold_notification(
     return send_notifications(tokens, title, body, data)
 
 
-def _send_removed_item_notification(
-    session: Session,
-    send_notifications: SendNotificationsCallable,
-    base_url: str,
+NotificationTypeT = Literal[
+    NotificationType.HOLD_REMOVED, NotificationType.LOAN_REMOVED
+]
+
+
+@shared_task(queue=QueueNames.default, bind=True)
+def send_item_removed_notification(
+    task: Task,
     data: RemovedItemNotificationData,
-    item_type: Literal["loan", "hold"],
-    notification_type: NotificationType,
+    notification_type: NotificationTypeT,
 ) -> None:
     """
-    Helper function to send a notification about a removed loan or hold.
+    Celery task to send a notification to a patron that an item on their shelf has been removed.
 
-    :param session: Database session (must persist for the entire transaction)
-    :param send_notifications: FCM notification sending callable
-    :param base_url: Base URL for the application
+    :param task: The Celery task instance
     :param data: Notification data extracted before deletion
-    :param item_type: Type of item being removed ("loan" or "hold")
-    :param notification_type: The notification type enum value
+    :param notification_type: Type of notification to send (hold removed or loan removed)
     """
-    patron = load_from_id(session, Patron, data.patron_id)
-    device_tokens = patron.device_tokens
-    patron_auth_id = patron.authorization_identifier
-    patron_external_id = patron.external_identifier
+    send_notifications = task.services.fcm.send_notifications
+    base_url = task.services.config.sitewide.base_url()
 
-    if not device_tokens:
+    with task.session() as session:
+        patron = load_from_id(session, Patron, data.patron_id)
+        device_tokens = patron.device_tokens
+        patron_auth_id = patron.authorization_identifier
+        item_type = notification_type.replace("Removed", "").lower()
+
+        if not device_tokens:
+            log.info(
+                f"Patron {patron_auth_id or data.patron_id} has no device tokens. "
+                f"Cannot send {item_type} removed notification."
+            )
+            return
+
+        title = f'"{data.work_title}" No Longer Available'
+        body = (
+            f"One of your current {item_type}s has been removed from your shelf and is "
+            f"no longer available through {data.library_name}."
+        )
+
+        notification_data = dict(
+            event_type=notification_type,
+            loans_endpoint=f"{base_url}/{data.library_short_name}/loans",
+            type=data.identifier.type,
+            identifier=data.identifier.identifier,
+            library=data.library_short_name,
+        )
+
+        if patron.external_identifier:
+            notification_data["external_identifier"] = patron.external_identifier
+        if patron_auth_id:
+            notification_data["authorization_identifier"] = patron_auth_id
+
         log.info(
-            f"Patron {patron_auth_id or data.patron_id} has no device tokens. "
-            f"Cannot send {item_type} removed notification."
-        )
-        return
-
-    title = f'"{data.work_title}" No Longer Available'
-    body = (
-        f"One of your current {item_type}s has been removed from your shelf and is "
-        f"no longer available through {data.library_name}."
-    )
-
-    notification_data = dict(
-        event_type=notification_type,
-        loans_endpoint=f"{base_url}/{data.library_short_name}/loans",
-        type=data.identifier.type,
-        identifier=data.identifier.identifier,
-        library=data.library_short_name,
-    )
-
-    if patron_external_id:
-        notification_data["external_identifier"] = patron_external_id
-    if patron_auth_id:
-        notification_data["authorization_identifier"] = patron_auth_id
-
-    log.info(
-        f"Sending {item_type} removed notification for '{data.work_title}' to patron "
-        f"{patron_auth_id or data.patron_id}. {len(device_tokens)} device tokens."
-    )
-
-    send_notifications(device_tokens, title, body, notification_data)
-
-
-@shared_task(queue=QueueNames.default, bind=True)
-def send_loan_removed_notification(
-    task: Task,
-    data: RemovedItemNotificationData,
-) -> None:
-    """
-    Celery task to send a notification to a patron that their loan has been removed.
-
-    This task is queued by the reaper after deleting loans from REMOVED license pools.
-
-    :param task: The Celery task instance
-    :param data: Notification data extracted before deletion
-    """
-    send_notifications = task.services.fcm.send_notifications
-    base_url = task.services.config.sitewide.base_url()
-
-    with task.session() as session:
-        _send_removed_item_notification(
-            session,
-            send_notifications,
-            base_url,
-            data,
-            "loan",
-            NotificationType.LOAN_REMOVED,
+            f"Sending {item_type} removed notification for '{data.work_title}' to patron "
+            f"{patron_auth_id or data.patron_id}. {len(device_tokens)} device tokens."
         )
 
-
-@shared_task(queue=QueueNames.default, bind=True)
-def send_hold_removed_notification(
-    task: Task,
-    data: RemovedItemNotificationData,
-) -> None:
-    """
-    Celery task to send a notification to a patron that their hold has been removed.
-
-    This task is queued by the reaper after deleting holds from REMOVED license pools.
-
-    :param task: The Celery task instance
-    :param data: Notification data extracted before deletion
-    """
-    send_notifications = task.services.fcm.send_notifications
-    base_url = task.services.config.sitewide.base_url()
-
-    with task.session() as session:
-        _send_removed_item_notification(
-            session,
-            send_notifications,
-            base_url,
-            data,
-            "hold",
-            NotificationType.HOLD_REMOVED,
-        )
+        send_notifications(device_tokens, title, body, notification_data)
 
 
 @shared_task(queue=QueueNames.default, bind=True)
