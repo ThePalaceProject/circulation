@@ -266,6 +266,7 @@ def _removed_license_pool_reaper_with_notifications[ItemT: type[Loan | Hold]](
     :param task: The Celery task instance
     :param item_cls: Either Loan or Hold class
     :param notification_task: Celery task to queue for sending notifications
+    :param notification_type: Type of notification to send (hold removed or loan removed)
     :param batch_size: Number of items to process in one batch
     :return: Number of items deleted in this batch
     """
@@ -313,10 +314,12 @@ def _removed_license_pool_reaper_with_notifications[ItemT: type[Loan | Hold]](
 
     # Queue notification tasks AFTER transaction commits
     for data in notification_data:
-        # Queue the notification task with data
         notification_task(data, notification_type)
+
+    if notification_data:
         task.log.info(
-            f"Queued {item_cls.__name__.lower()} removed notification for patron {data.patron_id}"
+            f"Queued {len(notification_data)} {item_cls.__name__.lower()} "
+            f"removed notifications"
         )
 
     return count
@@ -344,12 +347,13 @@ def removed_license_pool_hold_loan_reaper(task: Task, batch_size: int = 100) -> 
     )
 
     # Process loans
+    remaining_batch_size = max(0, batch_size - items_deleted)
     items_deleted += _removed_license_pool_reaper_with_notifications(
         task,
         Loan,
         send_item_removed_notification.delay,
         NotificationType.LOAN_REMOVED,
-        batch_size - items_deleted,
+        remaining_batch_size,
     )
 
     # Re-queue if we hit the batch limit (more items may exist)

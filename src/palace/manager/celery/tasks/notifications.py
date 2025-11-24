@@ -313,12 +313,14 @@ def send_item_removed_notification(
         patron = load_from_id(session, Patron, data.patron_id)
         device_tokens = patron.device_tokens
         patron_auth_id = patron.authorization_identifier
-        item_type = notification_type.replace("Removed", "").lower()
+        item_type = (
+            "loan" if notification_type == NotificationType.LOAN_REMOVED else "hold"
+        )
 
         if not device_tokens:
             log.info(
                 f"Patron {patron_auth_id or data.patron_id} has no device tokens. "
-                f"Cannot send {item_type} removed notification."
+                f"Cannot send {item_type} removed notification for '{data.work_title}'."
             )
             return
 
