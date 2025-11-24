@@ -309,7 +309,7 @@ def send_item_removed_notification(
     send_notifications = task.services.fcm.send_notifications
     base_url = task.services.config.sitewide.base_url()
 
-    with task.session() as session:
+    with task.transaction() as session:
         patron = load_from_id(session, Patron, data.patron_id)
         device_tokens = patron.device_tokens
         patron_auth_id = patron.authorization_identifier
