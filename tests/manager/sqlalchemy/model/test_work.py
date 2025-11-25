@@ -1781,13 +1781,13 @@ class TestWork:
         work = db.work(with_license_pool=True)
         [pool1] = work.license_pools
 
+        # Create multiple pools with different priority levels.
         # Pool 1: Regular metered with low availability
         pool1.type = LicensePoolType.METERED
         pool1.open_access = False
         pool1.licenses_owned = 10
         pool1.licenses_available = 2
 
-        # Create additional pools with different priority levels
         # Pool 2: Regular metered with medium availability
         edition2, pool2 = db.edition(with_license_pool=True)
         work.license_pools.append(pool2)
