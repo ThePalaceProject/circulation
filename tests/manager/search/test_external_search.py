@@ -4557,7 +4557,7 @@ class TestFilter:
         # suppressed.
         assert Term(**{"licensepools.suppressed": False}) == not_suppressed
 
-        # The second one is the the licensepool must be active status
+        # For the second one, the licensepool must be active status
         assert (
             Term(**{"licensepools.status": LicensePoolStatus.ACTIVE}) == active_status
         )
