@@ -17,8 +17,8 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # Update AGGREGATED licensepools (those with License records)
-    # Status is ACTIVE if any license has status='available', otherwise EXHAUSTED
+    # Update AGGREGATED licensepools (those with License records).
+    # Status is ACTIVE if any license has status='available', otherwise EXHAUSTED.
     op.execute(
         sa.text(
             """
@@ -40,33 +40,30 @@ def upgrade() -> None:
         )
     )
 
-    # Update UNLIMITED licensepools with licenses_owned = -1
-    # These are always ACTIVE
+    # Update UNLIMITED licensepools with licenses_owned = -1.
+    # Skips pools already set to AGGREGATED. Status is always ACTIVE.
     op.execute(
         sa.text(
             """
             UPDATE licensepools
             SET type = 'unlimited'::licensepooltype,
                 status = 'active'::licensepoolstatus
-            WHERE licenses_owned = -1
+            WHERE type = 'metered'
+            AND licenses_owned = -1
             """
         )
     )
 
-    # Update UNLIMITED licensepools with licenses_owned = 0 in OPDS collections
-    # These have no licenses and are in OPDS collections, so they are REMOVED
-    # Must check that no License records exist to avoid conflicts with AGGREGATED
+    # Update UNLIMITED licensepools with licenses_owned = 0 in OPDS collections.
+    # Skips pools already set to AGGREGATED. Status is REMOVED.
     op.execute(
         sa.text(
             """
             UPDATE licensepools
             SET type = 'unlimited'::licensepooltype,
                 status = 'removed'::licensepoolstatus
-            WHERE licenses_owned = 0
-            AND NOT EXISTS (
-                SELECT 1 FROM licenses
-                WHERE licenses.license_pool_id = licensepools.id
-            )
+            WHERE type = 'metered'
+            AND licenses_owned = 0
             AND collection_id IN (
                 SELECT collections.id
                 FROM collections
@@ -83,10 +80,8 @@ def upgrade() -> None:
         )
     )
 
-    # Update METERED licensepools with licenses_owned = 0 to EXHAUSTED
-    # All licensepools default to type='metered' and status='active'
-    # The previous updates have already set AGGREGATED and UNLIMITED pools
-    # So we only need to update METERED pools with no licenses to EXHAUSTED
+    # Update remaining METERED licensepools with licenses_owned = 0 to EXHAUSTED.
+    # These pools have no available licenses.
     op.execute(
         sa.text(
             """
