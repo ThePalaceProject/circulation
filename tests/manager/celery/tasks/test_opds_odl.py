@@ -1028,7 +1028,6 @@ class TestImportCollection:
 
         [license_pool] = pools
         assert license_pool.open_access is True
-        assert license_pool.unlimited_access is True
         assert license_pool.type is LicensePoolType.UNLIMITED
 
         assert 1 == len(license_pool.delivery_mechanisms)
@@ -1093,7 +1092,6 @@ class TestImportCollection:
 
         [license_pool] = pools
         assert license_pool.open_access is False
-        assert license_pool.unlimited_access is True
         assert license_pool.type is LicensePoolType.UNLIMITED
 
         assert 1 == len(license_pool.delivery_mechanisms)

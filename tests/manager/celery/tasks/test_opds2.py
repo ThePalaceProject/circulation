@@ -422,8 +422,6 @@ class TestImportCollection:
         assert isinstance(moby_dick_license_pool, LicensePool)
         assert moby_dick_license_pool.open_access
         assert moby_dick_license_pool.type == LicensePoolType.UNLIMITED
-        assert moby_dick_license_pool.licenses_owned == LicensePool.UNLIMITED_ACCESS
-        assert moby_dick_license_pool.licenses_available == LicensePool.UNLIMITED_ACCESS
         assert moby_dick_license_pool.should_track_playtime == True
 
         assert apply_task_fixture.get_delivery_mechanisms_from_license_pool(
@@ -439,13 +437,6 @@ class TestImportCollection:
         assert isinstance(huckleberry_finn_license_pool, LicensePool)
         assert huckleberry_finn_license_pool.open_access is False
         assert huckleberry_finn_license_pool.type == LicensePoolType.UNLIMITED
-        assert (
-            huckleberry_finn_license_pool.licenses_owned == LicensePool.UNLIMITED_ACCESS
-        )
-        assert (
-            huckleberry_finn_license_pool.licenses_available
-            == LicensePool.UNLIMITED_ACCESS
-        )
         assert huckleberry_finn_license_pool.should_track_playtime is False
 
         assert apply_task_fixture.get_delivery_mechanisms_from_license_pool(
@@ -462,11 +453,6 @@ class TestImportCollection:
         assert isinstance(postmodernism_license_pool, LicensePool)
         assert postmodernism_license_pool.open_access is False
         assert postmodernism_license_pool.type == LicensePoolType.UNLIMITED
-        assert postmodernism_license_pool.licenses_owned == LicensePool.UNLIMITED_ACCESS
-        assert (
-            postmodernism_license_pool.licenses_available
-            == LicensePool.UNLIMITED_ACCESS
-        )
 
         assert apply_task_fixture.get_delivery_mechanisms_from_license_pool(
             postmodernism_license_pool
@@ -718,13 +704,6 @@ class TestImportCollection:
         assert huckleberry_finn_license_pool.open_access is False
         assert huckleberry_finn_license_pool.type == LicensePoolType.UNLIMITED
         assert huckleberry_finn_license_pool.status == LicensePoolStatus.ACTIVE
-        assert (
-            huckleberry_finn_license_pool.licenses_owned == LicensePool.UNLIMITED_ACCESS
-        )
-        assert (
-            huckleberry_finn_license_pool.licenses_available
-            == LicensePool.UNLIMITED_ACCESS
-        )
 
         # Politics of postmodernism is unavailable, but it is past the until date, so it
         # should be available
@@ -741,11 +720,6 @@ class TestImportCollection:
         assert postmodernism_license_pool.open_access is False
         assert postmodernism_license_pool.type == LicensePoolType.UNLIMITED
         assert postmodernism_license_pool.status == LicensePoolStatus.ACTIVE
-        assert postmodernism_license_pool.licenses_owned == LicensePool.UNLIMITED_ACCESS
-        assert (
-            postmodernism_license_pool.licenses_available
-            == LicensePool.UNLIMITED_ACCESS
-        )
 
         # We harvest the feed again but this time the availability has changed
         moby_dick_metadata["availability"]["state"] = "available"
@@ -781,8 +755,6 @@ class TestImportCollection:
         )
         assert isinstance(moby_dick_license_pool, LicensePool)
         assert moby_dick_license_pool.open_access
-        assert moby_dick_license_pool.licenses_owned == LicensePool.UNLIMITED_ACCESS
-        assert moby_dick_license_pool.licenses_available == LicensePool.UNLIMITED_ACCESS
         assert moby_dick_license_pool.type == LicensePoolType.UNLIMITED
         assert moby_dick_license_pool.status == LicensePoolStatus.ACTIVE
 
@@ -817,11 +789,6 @@ class TestImportCollection:
         )
         assert isinstance(postmodernism_license_pool, LicensePool) is True
         assert postmodernism_license_pool.open_access is False
-        assert postmodernism_license_pool.licenses_owned == LicensePool.UNLIMITED_ACCESS
-        assert (
-            postmodernism_license_pool.licenses_available
-            == LicensePool.UNLIMITED_ACCESS
-        )
         assert postmodernism_license_pool.type == LicensePoolType.UNLIMITED
         assert postmodernism_license_pool.status == LicensePoolStatus.ACTIVE
 

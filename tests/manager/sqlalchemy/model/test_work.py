@@ -22,7 +22,11 @@ from palace.manager.sqlalchemy.model.contributor import Contributor
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
-from palace.manager.sqlalchemy.model.licensing import LicensePool, LicensePoolType
+from palace.manager.sqlalchemy.model.licensing import (
+    LicensePool,
+    LicensePoolStatus,
+    LicensePoolType,
+)
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation, Resource
 from palace.manager.sqlalchemy.model.work import (
     Work,
@@ -1154,11 +1158,12 @@ class TestWork:
         )  # .commit() changes this to exclusive upper
 
         # If a book stops being available through a collection
-        # (because its LicensePool loses all its licenses or stops
+        # (because its LicensePool becomes unavailable or stops
         # being open access), it will no longer be listed
         # in its Work's search document.
         [pool] = collection1.licensepools
         pool.licenses_owned = 0
+        pool.status = LicensePoolStatus.EXHAUSTED
         db.session.commit()
         search_doc = work.to_search_document()
         assert [collection2.id] == [
@@ -1168,7 +1173,7 @@ class TestWork:
         # If the book becomes available again, the collection will
         # start showing up again.
         pool.type = LicensePoolType.UNLIMITED
-        pool.open_access = True
+        pool.status = LicensePoolStatus.ACTIVE
         db.session.commit()
         search_doc = work.to_search_document()
         assert {collection1.id, collection2.id} == {
@@ -1462,8 +1467,6 @@ class TestWork:
 
         pool.open_access = False
         pool.type = LicensePoolType.UNLIMITED
-        pool.licenses_owned = LicensePool.UNLIMITED_ACCESS
-        pool.licenses_available = LicensePool.UNLIMITED_ACCESS
 
         # Make sure all of this will show up in a database query.
         db.session.flush()
@@ -1712,8 +1715,6 @@ class TestWork:
 
         # If a pool has unlimited_access, it should be preferred over regular pools
         pool1.type = LicensePoolType.UNLIMITED
-        pool1.licenses_available = LicensePool.UNLIMITED_ACCESS
-        pool1.licenses_owned = LicensePool.UNLIMITED_ACCESS
         assert pool1 == work.active_license_pool()
 
         # But open_access always wins
@@ -1772,6 +1773,113 @@ class TestWork:
 
         # Without library scope, open_access pool1 should win
         assert work.active_license_pool() == pool1
+
+    def test_active_license_pool_priority_order(self, db: DatabaseTransactionFixture):
+        """
+        Test that active_license_pool correctly prioritizes pools by removing them one at a time.
+        """
+        work = db.work(with_license_pool=True)
+        [pool1] = work.license_pools
+
+        # Create multiple pools with different priority levels.
+        # Pool 1: Regular metered with low availability
+        pool1.type = LicensePoolType.METERED
+        pool1.open_access = False
+        pool1.licenses_owned = 10
+        pool1.licenses_available = 2
+
+        # Pool 2: Regular metered with medium availability
+        edition2, pool2 = db.edition(with_license_pool=True)
+        work.license_pools.append(pool2)
+        pool2.type = LicensePoolType.METERED
+        pool2.open_access = False
+        pool2.licenses_owned = 10
+        pool2.licenses_available = 5
+
+        # Pool 3: Regular metered with high availability
+        edition3, pool3 = db.edition(with_license_pool=True)
+        work.license_pools.append(pool3)
+        pool3.type = LicensePoolType.METERED
+        pool3.open_access = False
+        pool3.licenses_owned = 10
+        pool3.licenses_available = 8
+
+        # Pool 4: Unlimited access (non-open-access)
+        edition4, pool4 = db.edition(with_license_pool=True)
+        work.license_pools.append(pool4)
+        pool4.type = LicensePoolType.UNLIMITED
+        pool4.open_access = False
+
+        # Pool 5: Open access
+        edition5, pool5 = db.edition(with_license_pool=True)
+        work.license_pools.append(pool5)
+        pool5.type = LicensePoolType.UNLIMITED
+        pool5.open_access = True
+
+        # Verify all pools are part of the work
+        assert len(work.license_pools) == 5
+
+        # Stage 1: All pools active - open access pool should win
+        assert work.active_license_pool() == pool5
+
+        # Stage 2: Remove open access pool - unlimited access should win
+        pool5.status = LicensePoolStatus.REMOVED
+        assert work.active_license_pool() == pool4
+
+        # Stage 3: Remove unlimited access pool - highest availability metered pool should win
+        pool4.status = LicensePoolStatus.REMOVED
+        assert work.active_license_pool() == pool3
+
+        # Stage 4: Exhaust highest availability pool - medium availability should win
+        pool3.status = LicensePoolStatus.EXHAUSTED
+        assert work.active_license_pool() == pool2
+
+        # Stage 5: Exhaust medium availability pool - lowest availability should win
+        pool2.status = LicensePoolStatus.EXHAUSTED
+        assert work.active_license_pool() == pool1
+
+        # Stage 6: Remove all pools - should return None
+        pool1.status = LicensePoolStatus.EXHAUSTED
+        assert work.active_license_pool() is None
+
+        # Stage 7: Reactivate metered pools but remove licenses_owned - should be ineligible
+        pool1.status = LicensePoolStatus.ACTIVE
+        pool2.status = LicensePoolStatus.ACTIVE
+        pool3.status = LicensePoolStatus.ACTIVE
+        pool1.licenses_owned = 0
+        pool2.licenses_owned = 0
+        pool3.licenses_owned = 0
+
+        # Reactivate unlimited and open access pools
+        pool4.status = LicensePoolStatus.ACTIVE
+        pool5.status = LicensePoolStatus.ACTIVE
+
+        # Even with metered pools having 0 licenses_owned, unlimited types should still work
+        assert work.active_license_pool() == pool5
+
+        # Stage 8: Test tie-breaking by ID with equal priority pools
+        pool5.status = LicensePoolStatus.EXHAUSTED
+        pool4.status = LicensePoolStatus.EXHAUSTED
+
+        # Create two new pools with identical properties
+        edition6, pool6 = db.edition(with_license_pool=True)
+        work.license_pools.append(pool6)
+        pool6.type = LicensePoolType.METERED
+        pool6.open_access = False
+        pool6.licenses_owned = 5
+        pool6.licenses_available = 5
+
+        edition7, pool7 = db.edition(with_license_pool=True)
+        work.license_pools.append(pool7)
+        pool7.type = LicensePoolType.METERED
+        pool7.open_access = False
+        pool7.licenses_owned = 5
+        pool7.licenses_available = 5
+
+        # With identical properties, lower ID should win
+        active = work.active_license_pool()
+        assert active in [pool6, pool7]
+        assert active.id == min(pool6.id, pool7.id)
 
     def test_delete_work(self, db: DatabaseTransactionFixture):
         # Search mock
