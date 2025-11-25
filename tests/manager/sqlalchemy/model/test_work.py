@@ -1842,7 +1842,7 @@ class TestWork:
         pool1.status = LicensePoolStatus.EXHAUSTED
         assert work.active_license_pool() is None
 
-        # Stage 7: Reactivate pools but remove licenses_owned - should be ineligible
+        # Stage 7: Reactivate metered pools but remove licenses_owned - should be ineligible
         pool1.status = LicensePoolStatus.ACTIVE
         pool2.status = LicensePoolStatus.ACTIVE
         pool3.status = LicensePoolStatus.ACTIVE
