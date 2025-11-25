@@ -3,27 +3,80 @@ import logging
 import math
 from enum import StrEnum
 from operator import and_
+from typing import Literal, Self
 
 from celery import shared_task
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from palace.manager.celery.task import Task
+from palace.manager.celery.utils import load_from_id
 from palace.manager.core.exceptions import PalaceValueError
+from palace.manager.data_layer.base.frozen import BaseFrozenData
+from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.service.celery.celery import QueueNames
 from palace.manager.service.fcm.fcm import SendNotificationsCallable
 from palace.manager.service.redis.models.lock import TaskLock
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.licensing import LicensePool
-from palace.manager.sqlalchemy.model.patron import Hold, Loan
+from palace.manager.sqlalchemy.model.patron import Hold, Loan, Patron
 from palace.manager.util.datetime_helpers import utc_now
+from palace.manager.util.log import LoggerMixin
 
 log = logging.getLogger(__name__)
+
+
+class RemovedItemNotificationData(BaseFrozenData, LoggerMixin):
+    """Data needed to send a notification about a removed loan or hold."""
+
+    patron_id: int
+    work_title: str
+    library_name: str
+    library_short_name: str
+    identifier: IdentifierData
+
+    @classmethod
+    def from_item(cls, item: Loan | Hold) -> Self | None:
+        """
+        Extract notification data from a Loan or Hold object before deletion.
+
+        :param item: The loan or hold object to extract data from
+        :return: RemovedItemNotificationData if all required data is present, None otherwise
+        """
+        item_type = item.__class__.__name__.lower()
+
+        work = item.work
+        if work is None or work.title is None:
+            detail = "work is missing" if work is None else "title is missing"
+
+            cls.logger().error(
+                f"Failed to extract {item_type} notification data because {detail} for "
+                f"{item_type} '{item.id}', patron '{item.patron.authorization_identifier}'"
+            )
+            return None
+
+        library_name = item.library.name
+        if library_name is None:
+            cls.logger().error(
+                f"Failed to extract {item_type} notification data because library name is missing for "
+                f"{item_type} '{item.id}', patron '{item.patron.authorization_identifier}'"
+            )
+            return None
+
+        return cls(
+            patron_id=item.patron.id,
+            work_title=work.title,
+            library_name=library_name,
+            library_short_name=item.library.short_name,
+            identifier=IdentifierData.from_identifier(item.license_pool.identifier),
+        )
 
 
 class NotificationType(StrEnum):
     LOAN_EXPIRY = "LoanExpiry"
     HOLD_AVAILABLE = "HoldAvailable"
+    LOAN_REMOVED = "LoanRemoved"
+    HOLD_REMOVED = "HoldRemoved"
 
 
 def get_expiring_loans(
@@ -233,6 +286,69 @@ def send_hold_notification(
         data["authorization_identifier"] = patron.authorization_identifier
 
     return send_notifications(tokens, title, body, data)
+
+
+NotificationTypeT = Literal[
+    NotificationType.HOLD_REMOVED, NotificationType.LOAN_REMOVED
+]
+
+
+@shared_task(queue=QueueNames.default, bind=True)
+def send_item_removed_notification(
+    task: Task,
+    data: RemovedItemNotificationData,
+    notification_type: NotificationTypeT,
+) -> None:
+    """
+    Celery task to send a notification to a patron that an item on their shelf has been removed.
+
+    :param task: The Celery task instance
+    :param data: Notification data extracted before deletion
+    :param notification_type: Type of notification to send (hold removed or loan removed)
+    """
+    send_notifications = task.services.fcm.send_notifications
+    base_url = task.services.config.sitewide.base_url()
+
+    with task.transaction() as session:
+        patron = load_from_id(session, Patron, data.patron_id)
+        device_tokens = patron.device_tokens
+        patron_auth_id = patron.authorization_identifier
+        item_type = (
+            "loan" if notification_type == NotificationType.LOAN_REMOVED else "hold"
+        )
+
+        if not device_tokens:
+            log.info(
+                f"Patron {patron_auth_id or data.patron_id} has no device tokens. "
+                f"Cannot send {item_type} removed notification for '{data.work_title}'."
+            )
+            return
+
+        title = f'"{data.work_title}" No Longer Available'
+        body = (
+            f"One of your current {item_type}s has been removed from your shelf and is "
+            f"no longer available through {data.library_name}."
+        )
+
+        notification_data = dict(
+            event_type=notification_type,
+            loans_endpoint=f"{base_url}/{data.library_short_name}/loans",
+            type=data.identifier.type,
+            identifier=data.identifier.identifier,
+            library=data.library_short_name,
+        )
+
+        if patron.external_identifier:
+            notification_data["external_identifier"] = patron.external_identifier
+        if patron_auth_id:
+            notification_data["authorization_identifier"] = patron_auth_id
+
+        log.info(
+            f"Sending {item_type} removed notification for '{data.work_title}' to patron "
+            f"{patron_auth_id or data.patron_id}. {len(device_tokens)} device tokens."
+        )
+
+        send_notifications(device_tokens, title, body, notification_data)
 
 
 @shared_task(queue=QueueNames.default, bind=True)
