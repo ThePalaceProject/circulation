@@ -13,7 +13,10 @@ from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.credential import Credential
 from palace.manager.sqlalchemy.model.integration import IntegrationLibraryConfiguration
-from palace.manager.sqlalchemy.model.licensing import LicensePool
+from palace.manager.sqlalchemy.model.licensing import (
+    LicensePool,
+    LicensePoolStatus,
+)
 from palace.manager.sqlalchemy.model.measurement import Measurement
 from palace.manager.sqlalchemy.model.patron import Annotation, Hold, Loan, Patron
 from palace.manager.sqlalchemy.model.work import Work
@@ -239,6 +242,37 @@ def loan_reaper(task: Task) -> None:
         rows_removed = _execute_delete(session, deletion_query)
 
     task.log.info(f"Deleted {pluralize(rows_removed, 'expired loan')}.")
+
+
+def _removed_license_pool_reaper[LoanHoldT: type[Loan | Hold]](
+    task: Task, item_cls: LoanHoldT
+) -> int:
+    deletion_query = delete(item_cls).where(
+        item_cls.license_pool_id == LicensePool.id,
+        LicensePool.status == LicensePoolStatus.REMOVED,
+    )
+
+    with task.transaction() as session:
+        rows_removed = _execute_delete(session, deletion_query)
+
+    task.log.info(
+        f"Deleted {pluralize(rows_removed, item_cls.__name__.lower())} on "
+        f"license pools that have been removed."
+    )
+
+    return rows_removed
+
+
+@shared_task(queue=QueueNames.default, bind=True)
+def removed_license_pool_hold_loan_reaper(task: Task) -> None:
+    """
+    Remove loans and holds from license pools that have been marked as removed.
+
+    TODO: We may eventually want to send a notification to patrons when
+      this happens, so they know where their holds and loans went.
+    """
+    _removed_license_pool_reaper(task, Hold)
+    _removed_license_pool_reaper(task, Loan)
 
 
 @shared_task(queue=QueueNames.default, bind=True)

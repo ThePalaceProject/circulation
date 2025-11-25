@@ -15,6 +15,7 @@ from palace.manager.celery.tasks.reaper import (
     reap_loans_in_inactive_collections,
     reap_unassociated_holds,
     reap_unassociated_loans,
+    removed_license_pool_hold_loan_reaper,
     work_reaper,
 )
 from palace.manager.integration.license.opds.opds2.api import OPDS2API
@@ -26,7 +27,10 @@ from palace.manager.sqlalchemy.model.credential import Credential
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.devicetokens import DeviceToken, DeviceTokenTypes
 from palace.manager.sqlalchemy.model.edition import Edition
-from palace.manager.sqlalchemy.model.licensing import LicensePool
+from palace.manager.sqlalchemy.model.licensing import (
+    LicensePool,
+    LicensePoolStatus,
+)
 from palace.manager.sqlalchemy.model.measurement import Measurement
 from palace.manager.sqlalchemy.model.patron import Annotation, Hold, Loan, Patron
 from palace.manager.sqlalchemy.model.work import Work
@@ -710,3 +714,117 @@ def test_reap_holds_in_inactive_collections(
     assert "deleted 1 hold" in caplog.text
     db.session.refresh(patron)
     assert not patron.holds
+
+
+class TestRemovedLicensePoolHoldLoanReaper:
+    def test_reaps_loans_and_holds_on_removed_pools(
+        self,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        """Test that loans and holds on removed pools are reaped, but not on active/exhausted pools."""
+        caplog.set_level(LogLevel.info)
+
+        patron1 = db.patron()
+        patron2 = db.patron()
+        past = utc_now() - datetime.timedelta(days=7)
+        future = past + datetime.timedelta(days=14)
+
+        # Create removed unlimited pool (loans should be reaped)
+        _, removed_unlimited = db.edition(
+            with_license_pool=True,
+            unlimited_access=True,
+            data_source_name=DataSource.AMAZON,
+        )
+        removed_unlimited.status = LicensePoolStatus.REMOVED
+        removed_unlimited.loan_to(patron1, start=past, end=future)
+        removed_unlimited.loan_to(patron2, start=past, end=future)
+
+        # Create active unlimited pool (loans should NOT be reaped)
+        _, active_unlimited = db.edition(
+            with_license_pool=True,
+            unlimited_access=True,
+            data_source_name=DataSource.AMAZON,
+        )
+        kept_unlimited_loan, _ = active_unlimited.loan_to(
+            patron1, start=past, end=future
+        )
+
+        # Create removed metered pool (loans and holds should be reaped)
+        _, removed_metered = db.edition(
+            with_license_pool=True,
+            unlimited_access=False,
+            data_source_name=DataSource.AMAZON,
+        )
+        removed_metered.status = LicensePoolStatus.REMOVED
+        removed_metered.loan_to(patron1, start=past, end=future)
+        removed_metered.on_hold_to(patron2, start=past, end=future)
+
+        # Create exhausted metered pool (loans and holds should NOT be reaped - wrong status)
+        exhausted_metered = db.licensepool(
+            db.edition(), unlimited_access=False, data_source_name=DataSource.OVERDRIVE
+        )
+        exhausted_metered.status = LicensePoolStatus.EXHAUSTED
+        kept_metered_loan, _ = exhausted_metered.loan_to(
+            patron1, start=past, end=future
+        )
+        kept_metered_hold, _ = exhausted_metered.on_hold_to(
+            patron2, start=past, end=future
+        )
+
+        # Run the reaper
+        removed_license_pool_hold_loan_reaper.delay().wait()
+
+        # Verify only the active and exhausted pool loans/holds remain
+        assert set(db.session.query(Loan).all()) == {
+            kept_unlimited_loan,
+            kept_metered_loan,
+        }
+        assert set(db.session.query(Hold).all()) == {
+            kept_metered_hold,
+        }
+
+        # Verify log messages
+        assert (
+            "Deleted 1 hold on license pools that have been removed." in caplog.messages
+        )
+        assert (
+            "Deleted 3 loans on license pools that have been removed."
+            in caplog.messages
+        )
+
+    def test_no_loans_or_holds_to_reap(
+        self,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        """Test the reaper when there are no loans or holds to reap."""
+        caplog.set_level(LogLevel.info)
+
+        # Create an active unlimited pool with a loan and hold
+        _, pool = db.edition(
+            with_license_pool=True,
+            unlimited_access=True,
+            data_source_name=DataSource.AMAZON,
+        )
+        loan, _ = pool.loan_to(
+            db.patron(), start=utc_now(), end=utc_now() + datetime.timedelta(days=14)
+        )
+        hold, _ = pool.on_hold_to(
+            db.patron(), start=utc_now(), end=utc_now() + datetime.timedelta(days=14)
+        )
+
+        removed_license_pool_hold_loan_reaper.delay().wait()
+
+        assert db.session.query(Loan).all() == [loan]
+        assert db.session.query(Hold).all() == [hold]
+        assert (
+            "Deleted 0 holds on license pools that have been removed."
+            in caplog.messages
+        )
+        assert (
+            "Deleted 0 loans on license pools that have been removed."
+            in caplog.messages
+        )
