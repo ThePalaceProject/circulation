@@ -1673,7 +1673,6 @@ class Work(Base, LoggerMixin):
 
                 lc: dict = {}
                 _set_value(license_pool, "licensepools", lc)
-                # lc["availability_time"] = getattr(item, "availability_time").timestamp()
                 lc["available"] = license_pool.unlimited_type or (
                     license_pool.metered_or_equivalent_type
                     and license_pool.licenses_available > 0
