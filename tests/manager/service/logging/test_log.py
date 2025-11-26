@@ -371,6 +371,8 @@ class TestJSONFormatter:
             assert data["celery"] == {
                 "request_id": "request_id",
                 "task_name": "task_name",
+                "retries": 0,
+                "replaced_task_nesting": 0,
             }
 
     def test_extra_palace_context(self, caplog: pytest.LogCaptureFixture) -> None:
