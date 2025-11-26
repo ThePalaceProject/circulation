@@ -16,9 +16,11 @@ class BasePalaceException(Exception):
         return {"dict": self.__dict__, "args": self.args}
 
     def __setstate__(self, state: dict[str, Any] | None) -> None:
-        # state is always a dict from __getstate__, but the signature must
-        # accept None to match BaseException.__setstate__
-        assert state is not None
+        # The signature must accept None to match BaseException.__setstate__ for mypy.
+        # In practice, state is always a dict from our __getstate__ implementation.
+        assert (
+            state is not None
+        ), "__setstate__ received None; expected dict from __getstate__"
         self.__dict__.update(state["dict"])
         self.args = state["args"]
 
