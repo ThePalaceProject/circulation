@@ -11,7 +11,7 @@ import requests
 from flask_babel import lazy_gettext as _
 from httpx import Headers
 
-from palace.manager.core.exceptions import IntegrationException, PalaceValueError
+from palace.manager.core.exceptions import IntegrationException
 from palace.manager.core.problem_details import INTEGRATION_ERROR
 from palace.manager.util.problem_detail import BaseProblemDetailException, ProblemDetail
 
@@ -155,22 +155,6 @@ class BadResponseException(RemoteIntegrationException):
             message,
             response,
         )
-
-    def __getstate__(self) -> dict[str, Any]:
-        return {"dict": self.__dict__, "args": self.args}
-
-    def __setstate__(self, state: dict[str, Any] | None) -> None:
-        if state is None:
-            raise PalaceValueError(
-                "Cannot deserialize BadResponseException with no state"
-            )
-
-        self.__dict__.update(state["dict"])
-        self.args = state["args"]
-
-    def __reduce__(self) -> tuple[Any, ...]:
-        state = self.__getstate__()
-        return self.__class__.__new__, (self.__class__,), state
 
 
 class RequestNetworkException(RemoteIntegrationException):

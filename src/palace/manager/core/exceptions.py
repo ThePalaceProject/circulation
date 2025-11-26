@@ -1,3 +1,6 @@
+from typing import Any
+
+
 class BasePalaceException(Exception):
     """Base class for all Exceptions in the Palace manager."""
 
@@ -8,6 +11,22 @@ class BasePalaceException(Exception):
         """
         super().__init__(message)
         self.message = message
+
+    def __getstate__(self) -> dict[str, Any]:
+        return {"dict": self.__dict__, "args": self.args}
+
+    def __setstate__(self, state: dict[str, Any] | None) -> None:
+        if state is None:
+            raise PalaceValueError(
+                f"Cannot deserialize {self.__class__.__name__} with no state"
+            )
+
+        self.__dict__.update(state["dict"])
+        self.args = state["args"]
+
+    def __reduce__(self) -> tuple[Any, ...]:
+        state = self.__getstate__()
+        return self.__class__.__new__, (self.__class__,), state
 
 
 class PalaceValueError(BasePalaceException, ValueError): ...
