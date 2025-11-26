@@ -10,10 +10,12 @@ from functools import partial
 from unittest.mock import MagicMock, PropertyMock, create_autospec, patch
 
 import pytest
+from celery import shared_task
 from freezegun import freeze_time
 from sqlalchemy.exc import SQLAlchemyError
 from watchtower import CloudWatchLogHandler
 
+from palace.manager.celery.task import Task
 from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.service.logging.log import (
     JSONFormatter,
@@ -25,6 +27,7 @@ from palace.manager.service.logging.log import (
 from palace.manager.sqlalchemy.model.admin import Admin
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.util import get_one_or_create
+from tests.fixtures.celery import CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.flask import FlaskAppFixture
 
@@ -324,11 +327,51 @@ class TestJSONFormatter:
 
         # If we are in a celery task, the worker data is included
         with patch("palace.manager.service.logging.log.celery_task") as mock_celery:
-            mock_celery.configure_mock(**{"name": "name", "request.id": "id"})
+            mock_celery.configure_mock(
+                **{
+                    "name": "task_name",
+                    "request.id": "request_id",
+                    "request.root_id": "root_id",
+                    "request.parent_id": "parent_id",
+                    "request.correlation_id": "correlation_id",
+                    "request.retries": 3,
+                    "request.group": "group_id",
+                    "request.replaced_task_nesting": 1,
+                }
+            )
             data = json.loads(formatter.format(record))
             assert "celery" in data
-            assert data["celery"]["request_id"] == "id"
-            assert data["celery"]["task_name"] == "name"
+            assert data["celery"] == {
+                "request_id": "request_id",
+                "root_id": "root_id",
+                "parent_id": "parent_id",
+                "correlation_id": "correlation_id",
+                "task_name": "task_name",
+                "retries": 3,
+                "group": "group_id",
+                "replaced_task_nesting": 1,
+            }
+
+        # None values are filtered out
+        with patch("palace.manager.service.logging.log.celery_task") as mock_celery:
+            mock_celery.configure_mock(
+                **{
+                    "name": "task_name",
+                    "request.id": "request_id",
+                    "request.retries": 0,
+                    "request.replaced_task_nesting": 0,
+                    "request.root_id": None,
+                    "request.parent_id": None,
+                    "request.correlation_id": None,
+                    "request.group": None,
+                }
+            )
+            data = json.loads(formatter.format(record))
+            assert "celery" in data
+            assert data["celery"] == {
+                "request_id": "request_id",
+                "task_name": "task_name",
+            }
 
     def test_extra_palace_context(self, caplog: pytest.LogCaptureFixture) -> None:
         caplog.set_level(LogLevel.info)
@@ -447,3 +490,46 @@ def test_setup_logging_cloudwatch_disabled() -> None:
 
         setup(cloudwatch_enabled=True)
         assert mock_cloudwatch_callable.call_count == 1
+
+
+@shared_task(bind=True)
+def celery_logging_test_task(task: Task) -> str:
+    """A simple test task that logs a message."""
+    task.log.info("Test log message from celery task")
+    return task.request.id
+
+
+def test_celery_task_logging_integration(
+    celery_fixture: CeleryFixture,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """
+    Test that logging from within a real Celery task includes the expected
+    Celery context data when formatted with JSONFormatter.
+
+    We set the JSONFormatter on caplog's handler so records are formatted
+    immediately when emitted, while the Celery task context is still active.
+    """
+    caplog.set_level(LogLevel.info)
+    caplog.handler.setFormatter(JSONFormatter())
+
+    task = celery_logging_test_task.delay()
+    task.wait()
+
+    assert len(caplog.records) == 1
+    data = json.loads(caplog.text)
+
+    assert "celery" in data
+    celery_data = data["celery"]
+
+    # These should always be present
+    assert celery_data["request_id"] == task.id
+    assert "celery_logging_test_task" in celery_data["task_name"]
+    # retries should be 0 for a task that hasn't been retried
+    assert celery_data["retries"] == 0
+    # replaced_task_nesting should be 0 for a task that hasn't been replaced
+    assert celery_data["replaced_task_nesting"] == 0
+
+    # These are optional, and will not be set for a standalone task
+    for key in ["root_id", "parent_id", "correlation_id", "group"]:
+        assert key not in celery_data
