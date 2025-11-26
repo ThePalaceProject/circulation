@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import random
 from collections.abc import Sequence
 from typing import Any
 
@@ -90,9 +91,13 @@ def search_reindex(task: Task, offset: int = 0, batch_size: int = 500) -> None:
 
         if len(documents) == batch_size:
             # This task is complete, but there are more works waiting to be indexed. Requeue ourselves
-            # to process the next batch.
+            # to process the next batch. We add a random delay to avoid hammering the search service
+            # when this task is running in parallel on multiple workers.
+            delay = random.uniform(5, 15)
             raise task.replace(
-                search_reindex.s(offset=offset + batch_size, batch_size=batch_size)
+                search_reindex.s(offset=offset + batch_size, batch_size=batch_size).set(
+                    countdown=delay
+                )
             )
 
     task.log.info("Finished search reindex.")
