@@ -289,6 +289,35 @@ class TestRequestNetworkException:
             == "Network error contacting http://url/: Colossal failure"
         )
 
+    def test_pickle_preserves_type(self):
+        """Test that RequestNetworkException maintains its type when pickled/unpickled.
+
+        This test ensures that when exceptions are serialized (e.g., during Celery
+        retry handling), they maintain their type information and attributes.
+        """
+        original_exc = RequestNetworkException(
+            "http://api.example.com/endpoint",
+            "Connection refused",
+            debug_message="Unable to establish connection",
+        )
+
+        # Pickle and unpickle (simulates what Celery does during autoretry)
+        pickled = pickle.dumps(original_exc)
+        unpickled_exc = pickle.loads(pickled)
+
+        # Verify type is preserved
+        assert type(unpickled_exc).__name__ == "RequestNetworkException"
+        assert isinstance(unpickled_exc, RequestNetworkException)
+
+        # Verify attributes are preserved
+        assert unpickled_exc.url == "http://api.example.com/endpoint"
+        assert unpickled_exc.service == "api.example.com"
+        assert unpickled_exc.message == "Connection refused"
+        assert unpickled_exc.debug_message == "Unable to establish connection"
+
+        # Verify string representation is preserved
+        assert str(unpickled_exc) == str(original_exc)
+
 
 class TestResponseData:
     """Tests for the TestResponseData dataclass."""
