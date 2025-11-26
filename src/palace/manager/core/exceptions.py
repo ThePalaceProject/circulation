@@ -15,7 +15,10 @@ class BasePalaceException(Exception):
     def __getstate__(self) -> dict[str, Any]:
         return {"dict": self.__dict__, "args": self.args}
 
-    def __setstate__(self, state: dict[str, Any]) -> None:
+    def __setstate__(self, state: dict[str, Any] | None) -> None:
+        # state is always a dict from __getstate__, but the signature must
+        # accept None to match BaseException.__setstate__
+        assert state is not None
         self.__dict__.update(state["dict"])
         self.args = state["args"]
 
