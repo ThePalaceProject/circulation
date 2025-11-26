@@ -18,6 +18,7 @@ from palace.manager.service.integration_registry.base import LookupException
 from palace.manager.service.integration_registry.license_providers import (
     LicenseProvidersRegistry,
 )
+from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.coverage import CoverageRecord
@@ -798,6 +799,7 @@ class TestCollection:
     ) -> None:
         """Test that a collection with an unknown protocol logs a warning and raises LookupException."""
         collection = example_collection_fixture.collection
+        caplog.set_level(LogLevel.warning)
 
         # Mock the registry to raise LookupException
         registry = create_autospec(LicenseProvidersRegistry)

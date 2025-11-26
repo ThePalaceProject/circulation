@@ -3,6 +3,7 @@ from unittest.mock import patch
 import pytest
 
 from palace.manager.core.config import Configuration
+from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.sqlalchemy.model.coverage import Timestamp
 from palace.manager.sqlalchemy.session import (
     SessionManager,
@@ -37,6 +38,8 @@ class TestSessionManager:
     def test_engine(
         self, mock_database_url, mock_create_engine, caplog: pytest.LogCaptureFixture
     ):
+        caplog.set_level(LogLevel.warning)
+
         expected_args = {
             "echo": False,
             "json_serializer": json_serializer,

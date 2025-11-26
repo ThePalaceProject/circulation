@@ -157,10 +157,26 @@ class JSONFormatter(logging.Formatter):
         # the Celery log formatter, but we are not using that formatter in our code.
         # See https://docs.celeryq.dev/en/stable/reference/celery.app.log.html#celery.app.log.TaskFormatter
         if celery_task:
-            data["celery"] = {
-                "request_id": celery_task.request.id,
+            celery_request = celery_task.request
+            celery_data = {
+                "request_id": celery_request.id,
                 "task_name": celery_task.name,
+                "retries": celery_request.retries,
+                "replaced_task_nesting": celery_request.replaced_task_nesting,
             }
+            # Add helpful data for correlating tasks in a workflow, if the data is present.
+            if celery_request.root_id and celery_request.root_id != celery_request.id:
+                celery_data["root_id"] = celery_request.root_id
+            if (
+                celery_request.correlation_id
+                and celery_request.correlation_id != celery_request.id
+            ):
+                celery_data["correlation_id"] = celery_request.correlation_id
+            if celery_request.parent_id:
+                celery_data["parent_id"] = celery_request.parent_id
+            if celery_request.group:
+                celery_data["group"] = celery_request.group
+            data["celery"] = celery_data
 
         # Include any custom Palace-specific ('palace_' prefixed) attributes that have been added to
         # the LogRecord in our json output with the 'palace_' prefix removed.
