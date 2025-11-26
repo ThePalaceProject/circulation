@@ -90,9 +90,13 @@ def search_reindex(task: Task, offset: int = 0, batch_size: int = 500) -> None:
 
         if len(documents) == batch_size:
             # This task is complete, but there are more works waiting to be indexed. Requeue ourselves
-            # to process the next batch.
+            # to process the next batch. We add a small countdown, with some jitter to avoid hammering
+            # the search service when this is running in parallel on multiple workers.
+            delay = exponential_backoff(0, factor=10, jitter=0.5)
             raise task.replace(
-                search_reindex.s(offset=offset + batch_size, batch_size=batch_size)
+                search_reindex.s(offset=offset + batch_size, batch_size=batch_size).set(
+                    countdown=delay
+                )
             )
 
     task.log.info("Finished search reindex.")
