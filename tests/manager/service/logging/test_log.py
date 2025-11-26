@@ -5,7 +5,7 @@ import json
 import logging
 import os
 import sys
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Generator, Mapping
 from functools import partial
 from unittest.mock import MagicMock, PropertyMock, create_autospec, patch
 
@@ -494,6 +494,21 @@ def test_setup_logging_cloudwatch_disabled() -> None:
         assert mock_cloudwatch_callable.call_count == 1
 
 
+@pytest.fixture
+def json_caplog(
+    caplog: pytest.LogCaptureFixture,
+) -> Generator[pytest.LogCaptureFixture]:
+    """
+    Capture logs formatted as JSON without affecting other test fixtures.
+    """
+    original_formatter = caplog.handler.formatter
+    caplog.handler.setFormatter(JSONFormatter())
+
+    yield caplog
+
+    caplog.handler.setFormatter(original_formatter)
+
+
 @shared_task(bind=True)
 def celery_logging_test_task(task: Task) -> str:
     """A simple test task that logs a message."""
@@ -503,23 +518,19 @@ def celery_logging_test_task(task: Task) -> str:
 
 def test_celery_task_logging_integration(
     celery_fixture: CeleryFixture,
-    caplog: pytest.LogCaptureFixture,
+    json_caplog: pytest.LogCaptureFixture,
 ) -> None:
     """
     Test that logging from within a real Celery task includes the expected
     Celery context data when formatted with JSONFormatter.
-
-    We set the JSONFormatter on caplog's handler so records are formatted
-    immediately when emitted, while the Celery task context is still active.
     """
-    caplog.set_level(LogLevel.info)
-    caplog.handler.setFormatter(JSONFormatter())
+    json_caplog.set_level(LogLevel.info)
 
     task = celery_logging_test_task.delay()
     task.wait()
 
-    assert len(caplog.records) == 1
-    data = json.loads(caplog.text)
+    assert len(json_caplog.records) == 1
+    data = json.loads(json_caplog.text)
 
     assert "celery" in data
     celery_data = data["celery"]
