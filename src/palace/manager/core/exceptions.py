@@ -15,12 +15,7 @@ class BasePalaceException(Exception):
     def __getstate__(self) -> dict[str, Any]:
         return {"dict": self.__dict__, "args": self.args}
 
-    def __setstate__(self, state: dict[str, Any] | None) -> None:
-        if state is None:
-            raise PalaceValueError(
-                f"Cannot deserialize {self.__class__.__name__} with no state"
-            )
-
+    def __setstate__(self, state: dict[str, Any]) -> None:
         self.__dict__.update(state["dict"])
         self.args = state["args"]
 
