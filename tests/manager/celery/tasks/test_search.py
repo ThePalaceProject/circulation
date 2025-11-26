@@ -183,17 +183,51 @@ def test_search_reindex_failures(
     assert search_reindex_task_lock_fixture.task_lock.locked() is False
 
 
+@patch("palace.manager.celery.tasks.search.random.uniform")
+@patch("palace.manager.celery.tasks.search.exponential_backoff")
+@patch("palace.manager.celery.tasks.search.get_work_search_documents")
+def test_search_reindex_requeue_delay(
+    mock_get_work_search_documents: MagicMock,
+    mock_backoff: MagicMock,
+    mock_random_uniform: MagicMock,
+    celery_fixture: CeleryFixture,
+    search_reindex_task_lock_fixture: SearchReindexTaskLockFixture,
+    services_fixture: ServicesFixture,
+) -> None:
+    """Verify that the task requeues with a random delay to avoid hammering the search service."""
+    mock_backoff.return_value = 0
+    mock_random_uniform.return_value = 0
+
+    # Return a full batch to trigger requeueing, then an empty batch to stop
+    mock_get_work_search_documents.side_effect = [
+        [{"_id": 1}, {"_id": 2}],
+        [],
+    ]
+
+    # Ensure add_documents succeeds (returns no failed documents)
+    services_fixture.search_index.add_documents.return_value = None
+
+    search_reindex.delay(batch_size=2).wait()
+
+    # Verify random.uniform was called with the expected range (5-15 seconds)
+    mock_random_uniform.assert_called_once_with(5, 15)
+    assert search_reindex_task_lock_fixture.task_lock.locked() is False
+
+
+@patch("palace.manager.celery.tasks.search.random.uniform")
 @patch("palace.manager.celery.tasks.search.exponential_backoff")
 @patch("palace.manager.celery.tasks.search.get_work_search_documents")
 def test_search_reindex_failures_multiple_batch(
     mock_get_work_search_documents: MagicMock,
     mock_backoff: MagicMock,
+    mock_random_uniform: MagicMock,
     celery_fixture: CeleryFixture,
     search_reindex_task_lock_fixture: SearchReindexTaskLockFixture,
     services_fixture: ServicesFixture,
 ):
     # When a batch succeeds, the retry count is reset.
     mock_backoff.return_value = 0
+    mock_random_uniform.return_value = 0
     search_documents = [
         {"_id": 1},
         {"_id": 2},
