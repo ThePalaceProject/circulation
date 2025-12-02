@@ -40,7 +40,7 @@ class FeedImportResult:
 
 
 class OverdriveImporter(LoggerMixin):
-    DEFAULT_PAGE_SIZE = 100
+    DEFAULT_PAGE_SIZE = 25
 
     def __init__(
         self,
