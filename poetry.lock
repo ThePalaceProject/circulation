@@ -4219,14 +4219,14 @@ testing = ["covdefaults (>=2.3)", "pytest (>=8.3.5)", "pytest-cov (>=6.1.1)", "p
 
 [[package]]
 name = "pyspellchecker"
-version = "0.8.3"
+version = "0.8.4"
 description = "Pure python spell checker based on work by Peter Norvig"
 optional = false
 python-versions = ">=3.8"
 groups = ["main"]
 files = [
-    {file = "pyspellchecker-0.8.3-py3-none-any.whl", hash = "sha256:e993076e98b0da5a99b7cc31085c3022c77a9dc37c5e95f5cf6304b5dbb8b9d2"},
-    {file = "pyspellchecker-0.8.3.tar.gz", hash = "sha256:cb06eeafe124837f321e0d02f8e21deab713e966e28e0360319a28a089c43978"},
+    {file = "pyspellchecker-0.8.4-py3-none-any.whl", hash = "sha256:20c53d119568011bbaef68608aceb956b888bcd9d563798f7770721a112b8255"},
+    {file = "pyspellchecker-0.8.4.tar.gz", hash = "sha256:48cafa76d65c30ce4d81d0831938f25e8f34ede243c1cc6840014b0eb51ad629"},
 ]
 
 [[package]]
@@ -5868,4 +5868,4 @@ lxml = ">=3.8"
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12,<4"
-content-hash = "b478570b00e9102c0c9deddc9b882b52ebb28ba6a82ae0e6f8800506faf6d088"
+content-hash = "0bc3bb529649e11cc7312cd5589d77e2303557dbd8a495d89b2ee76013d12041"
