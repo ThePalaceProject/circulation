@@ -321,7 +321,7 @@ python-dateutil = "2.9.0.post0"
 python3-saml = "^1.16"  # python-saml is required for SAML authentication
 pytz = "^2025.1"
 pyyaml = "^6.0"
-redis = "^5.0.5"
+redis = "^6.4.0"
 redmail = "^0.6.0"
 requests = "^2.29"
 sqlalchemy = {version = "^1.4", extras = ["mypy"]}
