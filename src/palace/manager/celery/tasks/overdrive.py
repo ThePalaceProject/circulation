@@ -91,6 +91,13 @@ def import_collection(
             else None
         )
 
+        if collection.marked_for_deletion:
+            task.log.warning(
+                f"This collection is marked for deletion. "
+                f"Skipping import of '{collection_name}'."
+            )
+            return identifier_set
+
         parent_identifier_set = (
             rehydrate_identifier_set(task, parent_identifiers)
             if parent_identifiers
