@@ -1,0 +1,9 @@
+#!/usr/bin/env python
+"""Monitor the Overdrive collections using Overdrive's search feature"""
+
+from palace.manager.integration.license.overdrive.monitor import (
+    OverdriveCirculationMonitor,
+)
+from palace.manager.scripts.monitor import RunCollectionMonitorScript
+
+RunCollectionMonitorScript(OverdriveCirculationMonitor).run()

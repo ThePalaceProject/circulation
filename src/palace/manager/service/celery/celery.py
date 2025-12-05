@@ -47,7 +47,6 @@ def beat_schedule() -> dict[str, Any]:
         opds2,
         opds_for_distributors,
         opds_odl,
-        overdrive,
         playtime_entries,
         reaper,
         rotate_jwe_key,
@@ -259,10 +258,6 @@ def beat_schedule() -> dict[str, Any]:
                 hour="0",
                 day_of_week="2",
             ),  # Every Tuesday at midnight
-        },
-        "overdrive_import_all_collections": {
-            "task": overdrive.import_all_collections.name,
-            "schedule": crontab(minute="*/15"),  # Run every 15 minutes
         },
     }
 
