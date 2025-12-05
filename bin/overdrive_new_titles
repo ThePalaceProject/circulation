@@ -1,0 +1,9 @@
+#!/usr/bin/env python
+"""Look for new titles added to Overdrive collections which slipped through the cracks."""
+
+from palace.manager.integration.license.overdrive.monitor import (
+    NewTitlesOverdriveCollectionMonitor,
+)
+from palace.manager.scripts.monitor import RunCollectionMonitorScript
+
+RunCollectionMonitorScript(NewTitlesOverdriveCollectionMonitor).run()
