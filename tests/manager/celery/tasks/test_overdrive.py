@@ -385,6 +385,35 @@ class TestImportCollection:
         # Result should be None when not tracking identifiers
         assert result is None
 
+    @patch("palace.manager.celery.tasks.overdrive.OverdriveImporter")
+    def test_import_collection_marked_for_deletion(
+        self,
+        mock_importer_class: MagicMock,
+        overdrive_import_fixture: OverdriveImportFixture,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        """Test import_collection skips import when collection is marked for deletion."""
+        collection = overdrive_import_fixture.collection
+        collection.marked_for_deletion = True
+
+        # Set up logging capture
+        caplog.set_level(LogLevel.warning)
+
+        # Run the task
+        result = overdrive.import_collection.delay(
+            collection.id, return_identifiers=False
+        ).wait()
+
+        # Verify result is None
+        assert result is None
+
+        # Verify warning log message was logged
+        assert "This collection is marked for deletion" in caplog.text
+        assert f"Skipping import of '{collection.name}'" in caplog.text
+
+        # Verify importer was NOT created or called
+        mock_importer_class.assert_not_called()
+
 
 class TestImportCollectionGroup:
     """Tests for the import_collection_group Celery task."""
