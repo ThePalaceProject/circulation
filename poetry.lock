@@ -5412,14 +5412,14 @@ telegram = ["requests"]
 
 [[package]]
 name = "types-aws-xray-sdk"
-version = "2.14.0.20250516"
+version = "2.15.0.20251206"
 description = "Typing stubs for aws-xray-sdk"
 optional = false
 python-versions = ">=3.9"
 groups = ["dev"]
 files = [
-    {file = "types_aws_xray_sdk-2.14.0.20250516-py3-none-any.whl", hash = "sha256:62521066148c0b08c3b2a92be4d3b11c2e8e8d3bf2d665248e57308b40fc0e15"},
-    {file = "types_aws_xray_sdk-2.14.0.20250516.tar.gz", hash = "sha256:7d837339671af79d481ac242ff50c3f67151956b06fb916f0707e462f7a05833"},
+    {file = "types_aws_xray_sdk-2.15.0.20251206-py3-none-any.whl", hash = "sha256:1c73b3737027a5607450e6e0313c54947801faa2be3906b10d75602b94cee7f8"},
+    {file = "types_aws_xray_sdk-2.15.0.20251206.tar.gz", hash = "sha256:c4283920a0933f0452f0fc01e9f047b5e385767d66a70dc6ed5fad34dc91b803"},
 ]
 
 [[package]]
@@ -5970,4 +5970,4 @@ lxml = ">=3.8"
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12,<4"
-content-hash = "22202408ea5abade1d032afe89643382747b244320c083c75d5661f8395ced2d"
+content-hash = "fc5e6c0443f2cf97cb8fadbc09dfa71629de4f44d271bd6cdf66a28ca2bdcc33"
