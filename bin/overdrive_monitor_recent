@@ -1,0 +1,9 @@
+#!/usr/bin/env python
+"""Monitor the Overdrive collections by going through the recently changed list."""
+
+from palace.manager.integration.license.overdrive.monitor import (
+    RecentOverdriveCollectionMonitor,
+)
+from palace.manager.scripts.monitor import RunCollectionMonitorScript
+
+RunCollectionMonitorScript(RecentOverdriveCollectionMonitor).run()
