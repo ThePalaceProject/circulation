@@ -18,6 +18,7 @@ from palace.manager.integration.license.overdrive.importer import (
     FeedImportResult,
     OverdriveImporter,
 )
+from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.service.redis.models.set import IdentifierSet
 from palace.manager.sqlalchemy.constants import IdentifierType
 from palace.manager.sqlalchemy.model.collection import Collection
