@@ -62,12 +62,19 @@ class OPDS2WithODLExtractor[PublicationType: opds2.BasePublication](
         | {role.lower(): role for role in Contributor.Role}
     )
 
+    # Special handling for license formats that need explicit DRM mapping.
+    # Formats in this mapping bypass the normal `protection.format` logic
+    # and use the specified DRM scheme instead.
     _LICENSE_FORMATS_MAPPING = frozendict(
         {
             FEEDBOOKS_AUDIO: DeliveryMechanismTuple(
                 MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE,
                 DeliveryMechanism.FEEDBOOKS_AUDIOBOOK_DRM,
-            )
+            ),
+            MediaTypes.TEXT_HTML_MEDIA_TYPE: DeliveryMechanismTuple(
+                MediaTypes.TEXT_HTML_MEDIA_TYPE,
+                DeliveryMechanism.NO_DRM,
+            ),
         }
     )
 
