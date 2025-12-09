@@ -106,7 +106,8 @@ def test_only_active_collections_are_included(
         (
             inventory_report_query,
             (
-                "status",
+                "item_status",
+                "license_status",
                 "title",
                 "author",
                 "identifier",
@@ -459,13 +460,13 @@ def test_generate_report(
                     r
                     for r in inventory_report_csv
                     if r["identifier"] == identifier_value
-                    and r["status"] == str(LicenseStatus.available)
+                    and r["license_status"] == str(LicenseStatus.available)
                 )
                 book1_unavailable_row = next(
                     r
                     for r in inventory_report_csv
                     if r["identifier"] == identifier_value
-                    and r["status"] == str(LicenseStatus.unavailable)
+                    and r["license_status"] == str(LicenseStatus.unavailable)
                 )
                 book2_row = next(
                     r
@@ -479,7 +480,9 @@ def test_generate_report(
                 )
 
                 # >> Book 1 - Available License Row
-                assert book1_available_row["status"] == str(LicenseStatus.available)
+                assert book1_available_row["license_status"] == str(
+                    LicenseStatus.available
+                )
                 assert book1_available_row["title"] == title
                 assert book1_available_row["author"] == author
                 assert book1_available_row["identifier"] == identifier_value
@@ -504,7 +507,9 @@ def test_generate_report(
                 )
 
                 # >> Book 1 - Unavailable License Row
-                assert book1_unavailable_row["status"] == str(LicenseStatus.unavailable)
+                assert book1_unavailable_row["license_status"] == str(
+                    LicenseStatus.unavailable
+                )
                 assert book1_unavailable_row["title"] == title
                 assert book1_unavailable_row["author"] == author
                 assert book1_unavailable_row["identifier"] == identifier_value
@@ -523,7 +528,7 @@ def test_generate_report(
                 assert float(book1_unavailable_row["days_remaining_on_license"]) <= 0
 
                 # >> Book 2 - No Licenses Owned (but has 1 available license)
-                assert book2_row["status"] == str(LicenseStatus.available)
+                assert book2_row["license_status"] == str(LicenseStatus.available)
                 assert book2_row["title"] == title2
                 assert book2_row["author"] == author2
                 assert book2_row["identifier"] == identifier2_value
@@ -551,7 +556,7 @@ def test_generate_report(
                 # We didn't set a language, so we get the default.
                 assert book3_no_holds_row["language"] == "eng"
                 # No licenses exist, so license-specific fields should be empty.
-                assert book3_no_holds_row["status"] == ""
+                assert book3_no_holds_row["license_status"] == ""
                 assert book3_no_holds_row["license_expiration"] == ""
                 assert book3_no_holds_row["days_remaining_on_license"] == ""
                 assert book3_no_holds_row["remaining_loans"] == ""
