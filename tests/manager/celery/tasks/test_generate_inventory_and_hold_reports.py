@@ -28,6 +28,7 @@ from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.sqlalchemy.model.classification import Genre
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.library import Library
+from palace.manager.sqlalchemy.model.licensing import LicensePoolStatus
 from palace.manager.sqlalchemy.model.patron import Hold
 from palace.manager.sqlalchemy.util import get_one_or_create
 from palace.manager.util.datetime_helpers import utc_now
@@ -480,6 +481,9 @@ def test_generate_report(
                 )
 
                 # >> Book 1 - Available License Row
+                assert book1_available_row["item_status"] == str(
+                    LicensePoolStatus.ACTIVE
+                )
                 assert book1_available_row["license_status"] == str(
                     LicenseStatus.available
                 )
@@ -507,6 +511,9 @@ def test_generate_report(
                 )
 
                 # >> Book 1 - Unavailable License Row
+                assert book1_unavailable_row["item_status"] == str(
+                    LicensePoolStatus.ACTIVE
+                )
                 assert book1_unavailable_row["license_status"] == str(
                     LicenseStatus.unavailable
                 )
@@ -528,6 +535,7 @@ def test_generate_report(
                 assert float(book1_unavailable_row["days_remaining_on_license"]) <= 0
 
                 # >> Book 2 - No Licenses Owned (but has 1 available license)
+                assert book2_row["item_status"] == str(LicensePoolStatus.ACTIVE)
                 assert book2_row["license_status"] == str(LicenseStatus.available)
                 assert book2_row["title"] == title2
                 assert book2_row["author"] == author2
@@ -549,6 +557,9 @@ def test_generate_report(
 
                 # >> Book 3 - No Holds Book.
                 # This has a licensepool but no licenses, so license fields are empty.
+                assert book3_no_holds_row["item_status"] == str(
+                    LicensePoolStatus.ACTIVE
+                )
                 assert book3_no_holds_row is not None
                 assert book3_no_holds_row["identifier"] == no_holds_identifier_value
                 assert book3_no_holds_row["data_source"] == data_source
@@ -686,6 +697,96 @@ def test_generate_report(
                 assert int(row["library_active_hold_count"]) == 1
     finally:
         os.remove(reports_zip)
+
+
+@pytest.mark.parametrize(
+    "status,licenses_owned,licenses_available,license_exception",
+    [
+        pytest.param(
+            LicensePoolStatus.ACTIVE,
+            5,
+            3,
+            None,
+            id="active-with-licenses",
+        ),
+        pytest.param(
+            LicensePoolStatus.PRE_ORDER,
+            5,
+            0,
+            None,
+            id="pre-order",
+        ),
+        pytest.param(
+            LicensePoolStatus.EXHAUSTED,
+            0,
+            0,
+            None,
+            id="exhausted-no-licenses",
+        ),
+        pytest.param(
+            LicensePoolStatus.REMOVED,
+            3,
+            0,
+            "Copyright violation",
+            id="removed-copyright-violation",
+        ),
+        pytest.param(
+            LicensePoolStatus.ACTIVE,
+            0,
+            0,
+            None,
+            id="active-but-no-licenses",
+        ),
+    ],
+)
+def test_inventory_report_item_status(
+    db: DatabaseTransactionFixture,
+    services_fixture: ServicesFixture,
+    status: LicensePoolStatus,
+    licenses_owned: int,
+    licenses_available: int,
+    license_exception: str | None,
+):
+    """Verify that item_status in inventory report reflects LicensePool status correctly."""
+    library = db.library(short_name="test_lib")
+    collection = create_test_opds_collection(
+        "Test Collection", "TestSource", db, library
+    )
+    ds = collection.data_source
+    assert ds is not None
+
+    # Create a license pool with the specified status
+    work = db.work(
+        data_source_name=ds.name, collection=collection, with_license_pool=True
+    )
+    pool = work.active_license_pool()
+    assert pool is not None
+    pool.status = status
+    pool.licenses_owned = licenses_owned
+    pool.licenses_available = licenses_available
+    if license_exception:
+        pool.license_exception = license_exception
+
+    # Generate the inventory report
+    integration_ids = [collection.integration_configuration.id]
+    sql_params = {"library_id": library.id, "integration_ids": tuple(integration_ids)}
+
+    csv_file = io.StringIO()
+    csv_file.name = "test_item_status_report.csv"
+
+    generate_csv_report(
+        db=db.session,
+        csv_file=csv_file,
+        sql_params=sql_params,
+        query=inventory_report_query(),
+    )
+
+    csv_file.seek(0)
+    reader = csv.DictReader(csv_file)
+    [item_row] = list(reader)
+
+    # Check the status
+    assert item_row["item_status"] == str(status)
 
 
 def zip_csv_entry_to_dict(zip_entry: IO[bytes]):
