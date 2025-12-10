@@ -295,6 +295,78 @@ class TestWorkController:
         assert expect.data == response.get_data()
         assert OPDSFeed.ENTRY_TYPE == response.headers["Content-Type"]
 
+    def test_permalink_filtered_by_audience(self, work_fixture: WorkFixture):
+        """Test that permalink returns 404 for works filtered by audience."""
+        library = work_fixture.db.default_library()
+        work = work_fixture.english_1
+        work.audience = Classifier.AUDIENCE_ADULT
+        identifier = work_fixture.identifier
+
+        # Set up audience filtering
+        library.settings_dict["filtered_audiences"] = ["Adult"]
+        if hasattr(library, "_settings"):
+            delattr(library, "_settings")
+
+        with work_fixture.request_context_with_library("/"):
+            response = work_fixture.manager.work_controller.permalink(
+                identifier.type, identifier.identifier
+            )
+
+        # Work is filtered, should return 404
+        assert isinstance(response, ProblemDetail)
+        assert response.status_code == 404
+        assert response.uri == NOT_FOUND_ON_REMOTE.uri
+
+    def test_permalink_filtered_by_genre(self, work_fixture: WorkFixture):
+        """Test that permalink returns 404 for works filtered by genre."""
+        library = work_fixture.db.default_library()
+        work = work_fixture.english_1
+        identifier = work_fixture.identifier
+
+        # Add a genre to the work
+        from palace.manager.sqlalchemy.model.classification import Genre
+
+        romance_genre, _ = Genre.lookup(work_fixture.db.session, "Romance")
+        work.genres = [romance_genre]
+
+        # Set up genre filtering
+        library.settings_dict["filtered_genres"] = ["Romance"]
+        if hasattr(library, "_settings"):
+            delattr(library, "_settings")
+
+        with work_fixture.request_context_with_library("/"):
+            response = work_fixture.manager.work_controller.permalink(
+                identifier.type, identifier.identifier
+            )
+
+        # Work is filtered, should return 404
+        assert isinstance(response, ProblemDetail)
+        assert response.status_code == 404
+        assert response.uri == NOT_FOUND_ON_REMOTE.uri
+
+    def test_permalink_not_filtered_when_settings_dont_match(
+        self, work_fixture: WorkFixture
+    ):
+        """Test that permalink works normally when work doesn't match filters."""
+        library = work_fixture.db.default_library()
+        work = work_fixture.english_1
+        work.audience = Classifier.AUDIENCE_ADULT
+        identifier = work_fixture.identifier
+
+        # Set up filtering for a different audience
+        library.settings_dict["filtered_audiences"] = ["Young Adult"]
+        if hasattr(library, "_settings"):
+            delattr(library, "_settings")
+
+        with work_fixture.request_context_with_library("/"):
+            response = work_fixture.manager.work_controller.permalink(
+                identifier.type, identifier.identifier
+            )
+
+        # Work doesn't match filter, should return normally
+        assert response.status_code == 200
+        assert OPDSFeed.ENTRY_TYPE == response.headers["Content-Type"]
+
     def test_permalink_does_not_return_fulfillment_links_for_authenticated_patrons_without_loans(
         self, work_fixture: WorkFixture
     ):
