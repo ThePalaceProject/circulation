@@ -164,6 +164,11 @@ class CirculationManagerController(BaseCirculationManagerController):
             )
             return NOT_FOUND_ON_REMOTE
 
+        if work.is_filtered_for_library(library):
+            # This work is filtered by library content settings.
+            # Treat it as if it doesn't exist.
+            return NOT_FOUND_ON_REMOTE
+
         if work and not work.age_appropriate_for_patron(self.request_patron):
             # This work is not age-appropriate for the authenticated
             # patron. Don't show it.

@@ -312,12 +312,19 @@ class URNLookupController:
         """
         self._db = _db
 
-    def work_lookup(self, annotator, route_name="lookup", **process_urn_kwargs):
-        """Generate an OPDS feed describing works identified by identifier."""
+    def work_lookup(
+        self, annotator, route_name="lookup", library=None, **process_urn_kwargs
+    ):
+        """Generate an OPDS feed describing works identified by identifier.
+
+        :param annotator: The annotator to use for generating OPDS entries.
+        :param route_name: The name of the route for generating URLs.
+        :param library: Optional Library to filter works against.
+        """
         urns = flask.request.args.getlist("urn")
 
         this_url = url_for(route_name, _external=True, urn=urns)
-        handler = self.process_urns(urns, **process_urn_kwargs)
+        handler = self.process_urns(urns, library=library, **process_urn_kwargs)
 
         if isinstance(handler, ProblemDetail):
             # In a subclass, self.process_urns may return a ProblemDetail
@@ -332,17 +339,19 @@ class URNLookupController:
         opds_feed.generate_feed(annotate=False)
         return opds_feed.as_response(mime_types=flask.request.accept_mimetypes)
 
-    def process_urns(self, urns, **process_urn_kwargs):
+    def process_urns(self, urns, library=None, **process_urn_kwargs):
         """Process a number of URNs by instantiating a URNLookupHandler
         and having it do the work.
 
         The information gathered by the URNLookupHandler can be used
         by the caller to generate an OPDS feed.
 
+        :param urns: List of URNs to look up.
+        :param library: Optional Library to filter works against.
         :return: A URNLookupHandler, or a ProblemDetail if
             there's a problem with the request.
         """
-        handler = URNLookupHandler(self._db)
+        handler = URNLookupHandler(self._db, library=library)
         handler.process_urns(urns, **process_urn_kwargs)
         return handler
 
@@ -382,8 +391,15 @@ class URNLookupHandler:
     WORK_NOT_PRESENTATION_READY = "Work created but not yet presentation-ready."
     WORK_NOT_CREATED = "Identifier resolved but work not yet created."
 
-    def __init__(self, _db):
+    def __init__(self, _db, library=None):
+        """
+        :param _db: A database session.
+        :param library: Optional Library to filter works against. If provided,
+            works matching the library's filtered_audiences or filtered_genres
+            will be excluded from results.
+        """
         self._db = _db
+        self.library = library
         self.works = []
         self.precomposed_entries = []
         self.unresolved_identifiers = []
@@ -422,6 +438,12 @@ class URNLookupHandler:
         if not work.presentation_ready:
             # There is a work but it's not presentation ready.
             return self.add_message(urn, 202, self.WORK_NOT_PRESENTATION_READY)
+
+        # Check library content filtering
+        if self.library and work.is_filtered_for_library(self.library):
+            # This work is filtered by the library's content settings.
+            # Treat it as if it doesn't exist.
+            return self.add_message(urn, 404, self.UNRECOGNIZED_IDENTIFIER)
 
         # The work is ready for use in an OPDS feed!
         return self.add_work(identifier, work)

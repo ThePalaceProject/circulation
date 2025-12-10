@@ -807,6 +807,30 @@ class Work(Base, LoggerMixin):
             return True
         return patron.work_is_age_appropriate(self.audience, self.target_age)
 
+    def is_filtered_for_library(self, library: Library) -> bool:
+        """Check if this Work should be filtered (hidden) for the given Library.
+
+        A work is filtered if its audience or any of its genres match the
+        library's configured filtered_audiences or filtered_genres settings.
+
+        :param library: The Library to check filtering for.
+        :return: True if the work should be filtered (hidden), False otherwise.
+        """
+        settings = library.settings
+
+        # Check audience filtering
+        if self.audience and settings.filtered_audiences:
+            if self.audience in settings.filtered_audiences:
+                return True
+
+        # Check genre filtering
+        if settings.filtered_genres:
+            work_genre_names = {wg.genre.name for wg in self.work_genres}
+            if work_genre_names & set(settings.filtered_genres):
+                return True
+
+        return False
+
     def set_presentation_edition(self, new_presentation_edition):
         """Sets presentation edition and lets owned pools and editions know.
         Raises exception if edition to set to is None.
