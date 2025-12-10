@@ -424,39 +424,105 @@ class TestSirsiDynixAuthenticationProvider:
             assert patrondata.block_reason == PatronData.NO_VALUE
 
     @pytest.mark.parametrize(
-        "standing_key, approved, expected_blocked",
+        "standing_key, approved, blocks_enforced, expected_blocked",
         [
-            pytest.param("OK", True, False, id="approved_and_standing_OK_not_blocked"),
             pytest.param(
-                "ok", True, False, id="approved_and_standing_ok_lowercase_not_blocked"
+                "OK",
+                True,
+                True,
+                False,
+                id="approved_and_standing_OK_not_blocked",
             ),
             pytest.param(
-                "Ok", True, False, id="approved_and_standing_Ok_mixedcase_not_blocked"
+                "ok",
+                True,
+                True,
+                False,
+                id="approved_and_standing_ok_lowercase_not_blocked",
+            ),
+            pytest.param(
+                "Ok",
+                True,
+                True,
+                False,
+                id="approved_and_standing_Ok_mixedcase_not_blocked",
             ),
             pytest.param(
                 "DELINQUENT",
+                True,
                 True,
                 False,
                 id="approved_true_standing_delinquent_not_blocked",
             ),
             pytest.param(
-                "", True, False, id="approved_true_standing_empty_not_blocked"
+                "",
+                True,
+                True,
+                False,
+                id="approved_true_standing_empty_not_blocked",
             ),
             pytest.param(
-                "OK", False, False, id="standing_ok_approved_false_not_blocked"
+                "OK",
+                False,
+                True,
+                False,
+                id="standing_OK_approved_false_not_blocked",
             ),
             pytest.param(
-                None, True, False, id="approved_true_no_standing_field_not_blocked"
+                None,
+                True,
+                True,
+                False,
+                id="approved_true_no_standing_field_not_blocked",
             ),
             pytest.param(
-                "ok", False, False, id="standing_ok_approved_false_not_blocked"
+                "ok",
+                False,
+                True,
+                False,
+                id="standing_ok_approved_false_not_blocked",
             ),
             pytest.param(
-                "DELINQUENT", False, True, id="not_approved_standing_delinquent_blocked"
+                "DELINQUENT",
+                False,
+                True,
+                True,
+                id="not_approved_standing_delinquent_blocked",
             ),
-            pytest.param("", False, True, id="not_approved_standing_empty_blocked"),
             pytest.param(
-                None, False, True, id="not_approved_no_standing_field_blocked"
+                "",
+                False,
+                True,
+                True,
+                id="not_approved_standing_empty_blocked",
+            ),
+            pytest.param(
+                "DELINQUENT",
+                False,
+                False,
+                False,
+                id="not_approved_standing_delinquent_not_enforced_not_blocked",
+            ),
+            pytest.param(
+                "",
+                False,
+                False,
+                False,
+                id="not_approved_standing_empty_not_enforced_not_blocked",
+            ),
+            pytest.param(
+                None,
+                False,
+                True,
+                True,
+                id="not_approved_no_standing_field_blocked",
+            ),
+            pytest.param(
+                None,
+                False,
+                False,
+                False,
+                id="not_approved_no_standing_field_not_enforced_not_blocked",
             ),
         ],
     )
@@ -465,16 +531,16 @@ class TestSirsiDynixAuthenticationProvider:
         sirsi_auth_fixture: SirsiAuthFixture,
         standing_key: str | None,
         approved: bool,
+        blocks_enforced: bool,
         expected_blocked: bool,
     ):
-        """Test patron approval requires EITHER 'approved=True' OR 'standing.key=ok' (case-insensitive).
-
-        The logic is: block if NOT (approved OR standing=="ok")
-        Which means patron is unblocked if EITHER:
-        - approved=True (regardless of standing), OR
-        - standing.key.lower()=="ok" (regardless of approved)
         """
-        provider_mock = sirsi_auth_fixture.provider_mocked_api()
+        Test patron approval requires EITHER 'approved=True' OR 'standing.key=ok' (case-insensitive) if
+        blocks are enforced.
+        """
+        settings = sirsi_auth_fixture.settings(patron_blocks_enforced=blocks_enforced)
+        provider = sirsi_auth_fixture.provider(settings=settings)
+        provider_mock = sirsi_auth_fixture.provider_mocked_api(provider=provider)
 
         # Build patron response with standing field
         patron_fields = {
