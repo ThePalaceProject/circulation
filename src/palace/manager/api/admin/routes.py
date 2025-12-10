@@ -458,6 +458,27 @@ def patron_auth_service(service_id):
     return app.manager.admin_patron_auth_services_controller.process_delete(service_id)
 
 
+@app.route("/admin/cli/patron_auth_services", methods=["POST"])
+@returns_json_or_response_or_problem_detail
+@requires_basic_auth
+def patron_auth_service_create_cli():
+    """A patron auth creation endpoint to be used by a CLI application
+    for automating setup of auth services."""
+
+    return (
+        app.manager.admin_patron_auth_services_controller.process_patron_auth_services()
+    )
+
+
+@app.route("/admin/cli/patron_auth_service/<service_id>", methods=["DELETE"])
+@returns_json_or_response_or_problem_detail
+@requires_basic_auth
+def patron_auth_service_delete_cli(service_id):
+    """A patron auth deletion endpoint to be used by a CLI application
+    for automating setup of auth services."""
+    return app.manager.admin_patron_auth_services_controller.process_delete(service_id)
+
+
 @app.route(
     "/admin/patron_auth_service_self_tests/<identifier>", methods=["GET", "POST"]
 )
