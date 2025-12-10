@@ -3,6 +3,7 @@ from functools import partial
 
 import pytest
 
+from palace.manager.core.classifier import Classifier
 from palace.manager.integration.configuration.library import LibrarySettings
 from palace.manager.util.problem_detail import ProblemDetailException
 
@@ -94,3 +95,72 @@ def test_minimum_featured_quality_constraints(
         library_settings(minimum_featured_quality=1.1)
     assert excinfo.value.problem_detail.detail is not None
     assert "less than or equal to 1" in excinfo.value.problem_detail.detail
+
+
+class TestFilteredAudiences:
+    def test_filtered_audiences_valid(
+        self, library_settings: LibrarySettingsFixture
+    ) -> None:
+        """Valid audience values are accepted."""
+        settings = library_settings(filtered_audiences=["Adult", "Young Adult"])
+        assert settings.filtered_audiences == ["Adult", "Young Adult"]
+
+    def test_filtered_audiences_empty(
+        self, library_settings: LibrarySettingsFixture
+    ) -> None:
+        """Empty list is valid (no filtering)."""
+        settings = library_settings(filtered_audiences=[])
+        assert settings.filtered_audiences == []
+
+    def test_filtered_audiences_invalid(
+        self, library_settings: LibrarySettingsFixture
+    ) -> None:
+        """Invalid audience values raise validation error."""
+        with pytest.raises(ProblemDetailException) as excinfo:
+            library_settings(filtered_audiences=["Adult", "InvalidAudience"])
+        assert excinfo.value.problem_detail.detail is not None
+        assert "InvalidAudience" in excinfo.value.problem_detail.detail
+        assert "invalid values" in excinfo.value.problem_detail.detail
+
+    def test_filtered_audiences_all_valid_values(
+        self, library_settings: LibrarySettingsFixture
+    ) -> None:
+        """All defined audience values are accepted."""
+        all_audiences = list(Classifier.AUDIENCES)
+        settings = library_settings(filtered_audiences=all_audiences)
+        assert set(settings.filtered_audiences) == Classifier.AUDIENCES
+
+
+class TestFilteredGenres:
+    def test_filtered_genres_valid(
+        self, library_settings: LibrarySettingsFixture
+    ) -> None:
+        """Valid genre names are accepted."""
+        settings = library_settings(filtered_genres=["Romance", "Horror"])
+        assert settings.filtered_genres == ["Romance", "Horror"]
+
+    def test_filtered_genres_empty(
+        self, library_settings: LibrarySettingsFixture
+    ) -> None:
+        """Empty list is valid (no filtering)."""
+        settings = library_settings(filtered_genres=[])
+        assert settings.filtered_genres == []
+
+    def test_filtered_genres_invalid(
+        self, library_settings: LibrarySettingsFixture
+    ) -> None:
+        """Invalid genre names raise validation error."""
+        with pytest.raises(ProblemDetailException) as excinfo:
+            library_settings(filtered_genres=["Romance", "NotARealGenre"])
+        assert excinfo.value.problem_detail.detail is not None
+        assert "NotARealGenre" in excinfo.value.problem_detail.detail
+        assert "invalid values" in excinfo.value.problem_detail.detail
+
+    def test_filtered_genres_case_sensitive(
+        self, library_settings: LibrarySettingsFixture
+    ) -> None:
+        """Genre validation is case-sensitive (must match exactly)."""
+        with pytest.raises(ProblemDetailException) as excinfo:
+            library_settings(filtered_genres=["romance"])  # lowercase
+        assert excinfo.value.problem_detail.detail is not None
+        assert "romance" in excinfo.value.problem_detail.detail
