@@ -186,6 +186,8 @@ web_secondary_color='#D53F34'
 web_header_links='[]'
 web_header_labels='[]'
 hidden_content_types='[]'
+filtered_audiences='[]'
+filtered_genres='[]'
 """
         actual = library.explain()
         assert expect == "\n".join(actual)
