@@ -5,14 +5,19 @@ from functools import partial
 
 import pytest
 
+from palace.manager.data_layer.identifier import IdentifierData
+from palace.manager.integration.license.opds.odl.constants import FEEDBOOKS_AUDIO
 from palace.manager.integration.license.opds.odl.extractor import OPDS2WithODLExtractor
 from palace.manager.opds import opds2, rwpm
 from palace.manager.opds.lcp.status import LoanStatus
 from palace.manager.opds.odl.info import Checkouts, LicenseInfo, LicenseStatus
-from palace.manager.opds.odl.odl import License, LicenseMetadata
+from palace.manager.opds.odl.odl import License, LicenseMetadata, Publication
+from palace.manager.opds.odl.protection import Protection
 from palace.manager.opds.odl.terms import Terms
 from palace.manager.opds.opds2 import PublicationFeedNoValidation, StrictLink
+from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.contributor import Contributor
+from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism
 from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.files import OPDS2FilesFixture
 
@@ -173,3 +178,108 @@ class TestOPDS2WithODLExtractor:
             OPDS2WithODLExtractor.feed_next_url(feed)
             == "http://bookshelf-feed-demo.us-east-1.elasticbeanstalk.com/v1/publications?page=2&limit=100"
         )
+
+    @pytest.mark.parametrize(
+        "license_format, expected_drm, expected_content_type",
+        [
+            pytest.param(
+                FEEDBOOKS_AUDIO,
+                DeliveryMechanism.FEEDBOOKS_AUDIOBOOK_DRM,
+                MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE,
+                id="feedbooks-audio",
+            ),
+            pytest.param(
+                MediaTypes.TEXT_HTML_MEDIA_TYPE,
+                DeliveryMechanism.NO_DRM,
+                MediaTypes.TEXT_HTML_MEDIA_TYPE,
+                id="text-html",
+            ),
+        ],
+    )
+    def test__extract_odl_circulation_data_license_formats_mapping(
+        self,
+        license_format: str,
+        expected_drm: str | None,
+        expected_content_type: str,
+    ) -> None:
+        """
+        Test that license formats in _LICENSE_FORMATS_MAPPING are correctly mapped
+        to specified DRM scheme (including no DRM), ignoring any protection formats.
+        """
+        # Create a minimal ODL publication with a license that has:
+        # - A format that should be mapped (e.g., FEEDBOOKS_AUDIO or "text/html").
+        # - A protection field with multiple DRM schemes to verify they're ignored.
+        license_identifier = "test-license-123"
+        publication_identifier = "urn:isbn:9780306406157"
+
+        license_links = [
+            StrictLink(
+                rel=rwpm.LinkRelations.self,
+                type=LicenseInfo.content_type(),
+                href="http://example.org/license",
+            ),
+            StrictLink(
+                rel=opds2.AcquisitionLinkRelations.borrow,
+                type=LoanStatus.content_type(),
+                href="http://example.org/borrow",
+            ),
+        ]
+
+        # Create a license with the format we're testing
+        # and a protection field with multiple DRM schemes
+        license = License(
+            metadata=LicenseMetadata(
+                identifier=license_identifier,
+                created=utc_now(),
+                format=license_format,
+                terms=Terms(concurrency=1),
+                protection=Protection(
+                    # These should be IGNORED for mapped formats
+                    format=[
+                        DeliveryMechanism.LCP_DRM,
+                        DeliveryMechanism.ADOBE_DRM,
+                    ]
+                ),
+            ),
+            links=license_links,
+        )
+
+        publication = Publication(
+            metadata=opds2.PublicationMetadata(
+                type="http://schema.org/Book",
+                identifier=publication_identifier,
+                title="Test Book",
+            ),
+            images=[
+                opds2.Link(
+                    href="http://example.org/cover.jpg",
+                    type="image/jpeg",
+                )
+            ],
+            links=[],
+            licenses=[license],
+        )
+
+        extractor: OPDS2WithODLExtractor[Publication] = OPDS2WithODLExtractor(
+            parse_publication=lambda x: x,  # type: ignore[arg-type, return-value]
+            base_url="http://example.org",
+            data_source="Test Source",
+        )
+        license_info = LicenseInfo(
+            identifier=license_identifier,
+            status=LicenseStatus.available,
+            checkouts=Checkouts(available=1),
+            terms=Terms(concurrency=1),
+            format=license_format,
+        )
+        identifier_data = IdentifierData.parse_urn(publication_identifier)
+        circulation_data = extractor._extract_odl_circulation_data(
+            publication=publication,
+            license_info_documents={license_identifier: license_info},
+            identifier=identifier_data,
+        )
+
+        # Ensure that we got one correct format.
+        [format_data] = circulation_data.formats
+        assert format_data.content_type == expected_content_type
+        assert format_data.drm_scheme == expected_drm
