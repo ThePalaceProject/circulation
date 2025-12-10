@@ -238,10 +238,11 @@ class SirsiDynixHorizonAuthenticationProvider(
         # Basic block reasons
 
         # Some Symphony installations appear to use "standing" to indicate approval.
-        # TODO we may want to make the approval mechanism configurable.
-        if not (
-            fields.get("approved", False)
-            or fields.get("standing", {}).get("key", "").lower() == "ok"
+        # TODO we may want to make the field used for approval configurable in the future.
+        if (
+            self.patron_blocks_enforced
+            and not fields.get("approved", False)
+            and fields.get("standing", {}).get("key", "").lower() != "ok"
         ):
             patrondata.block_reason = SirsiBlockReasons.NOT_APPROVED
             return patrondata
