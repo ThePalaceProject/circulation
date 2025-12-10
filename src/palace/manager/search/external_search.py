@@ -1632,8 +1632,19 @@ class Filter(SearchBase):
 
         self.lane_building = kwargs.pop("lane_building", False)
 
-        library = kwargs.pop("library", None)
-        self.library_id = library.id if library else None
+        # Store library-related filtering information.
+        # We store the ID and settings values rather than the Library ORM object
+        # to avoid session detachment issues if the Filter outlives the session.
+        library: Library | None = kwargs.pop("library", None)
+        self.library_id: int | None = library.id if library else None
+        # Store content filtering settings from the library
+        if library:
+            settings = library.settings
+            self.filtered_audiences: list[str] = settings.filtered_audiences
+            self.filtered_genres: list[str] = settings.filtered_genres
+        else:
+            self.filtered_audiences = []
+            self.filtered_genres = []
 
         # At this point there should be no keyword arguments -- you can't pass
         # whatever you want into this method.
@@ -1763,6 +1774,19 @@ class Filter(SearchBase):
             f = chain(
                 f, Bool(must_not=[Terms(**{"suppressed_for": [self.library_id]})])
             )
+
+        # Apply library-level content filtering based on library settings.
+        # This excludes works matching filtered audiences or genres.
+        if self.filtered_audiences:
+            excluded_audiences = scrub_list(self.filtered_audiences)
+            f = chain(f, Bool(must_not=[Terms(audience=excluded_audiences)]))
+        if self.filtered_genres:
+            # Genres are nested documents, so we need a Nested query
+            genre_exclusion = Nested(
+                path="genres",
+                query=Terms(**{"genres.name": self.filtered_genres}),
+            )
+            f = chain(f, Bool(must_not=[genre_exclusion]))
 
         if self.media:
             f = chain(f, Terms(medium=scrub_list(self.media)))
