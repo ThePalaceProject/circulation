@@ -324,7 +324,8 @@ def inventory_report_query() -> Select:
 
     return (
         select(
-            lic.c.status,
+            LicensePool.status.label("item_status"),
+            lic.c.status.label("license_status"),
             Edition.title,
             Edition.author,
             Identifier.identifier,
