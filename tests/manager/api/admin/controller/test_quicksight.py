@@ -239,6 +239,64 @@ class TestQuicksightController:
                 == "Error while fetching the Quicksight Embed url."
             )
 
+    def test_generate_quicksight_url_without_library_uuids_param(
+        self,
+        db: DatabaseTransactionFixture,
+        quicksight_fixture: QuickSightControllerFixture,
+        flask_app_fixture: FlaskAppFixture,
+    ):
+        """Test that when library_uuids is not provided, all allowed libraries are used."""
+        library = db.library()
+        admin, _ = create(db.session, Admin, email="admin@email.com")
+        admin.add_role(AdminRole.LIBRARY_MANAGER, library=library)
+
+        ctrl = quicksight_fixture.controller()
+        with flask_app_fixture.test_request_context(
+            "/",
+            admin=admin,
+        ):
+            response = ctrl.generate_quicksight_url("primary")
+
+        # Assert the right client was created, with a region
+        assert quicksight_fixture.mock_boto.client.call_args == mock.call(
+            "quicksight", region_name="us-west-1"
+        )
+        # Assert the request and response formats
+        assert response["embedUrl"] == "https://embed"
+        # Assert that the one allowable library was used
+        assert quicksight_fixture.mock_generate.call_args == mock.call(
+            AwsAccountId="aws-account-id",
+            Namespace="default",
+            AuthorizedResourceArns=quicksight_fixture.arns["primary"],
+            ExperienceConfiguration={"Dashboard": {"InitialDashboardId": "uuid1"}},
+            SessionTags=[
+                dict(
+                    Key="library_short_name_0",
+                    Value=str(library.short_name),
+                )
+            ],
+        )
+
+    def test_generate_quicksight_url_empty_library_uuids_param(
+        self,
+        db: DatabaseTransactionFixture,
+        quicksight_fixture: QuickSightControllerFixture,
+        flask_app_fixture: FlaskAppFixture,
+    ):
+        """Test that when an empty library_uuids is not provided a value error occurs"""
+        library = db.library()
+        admin, _ = create(db.session, Admin, email="admin@email.com")
+        admin.add_role(AdminRole.LIBRARY_MANAGER, library=library)
+
+        ctrl = quicksight_fixture.controller()
+
+        with pytest.raises(ValueError):
+            with flask_app_fixture.test_request_context(
+                "/?library_uuids=",
+                admin=admin,
+            ):
+                ctrl.generate_quicksight_url("primary")
+
     def test_get_dashboard_names(self, quicksight_fixture: QuickSightControllerFixture):
         ctrl = quicksight_fixture.controller(
             authorized_arns=dict(primary=[], secondary=[], tertiary=[])
