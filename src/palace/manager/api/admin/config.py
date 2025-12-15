@@ -85,7 +85,7 @@ class OperationalMode(str, Enum):
 class Configuration(LoggerMixin):
     APP_NAME = "Palace Collection Manager"
     PACKAGE_NAME = "@thepalaceproject/circulation-admin"
-    PACKAGE_VERSION = "1.33.0"
+    PACKAGE_VERSION = "1.34.0"
 
     STATIC_ASSETS = {
         "admin_js": "circulation-admin.js",
