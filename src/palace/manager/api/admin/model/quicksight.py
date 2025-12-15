@@ -7,9 +7,9 @@ from palace.manager.util.flask_util import CustomBaseModel, str_comma_list_valid
 
 
 class QuicksightGenerateUrlRequest(CustomBaseModel):
-    library_uuids: list[UUID] | None = Field(
+    library_uuids: list[UUID] = Field(
         description="The list of libraries to include in the dataset, an empty list is equivalent to all the libraries the user is allowed to access.",
-        default=None,
+        default=[],
     )
 
     @field_validator("library_uuids", mode="before")
