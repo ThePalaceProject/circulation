@@ -1743,9 +1743,9 @@ class DeliveryMechanism(Base, HasSessionCache):
                         MediaTypes.OVERDRIVE_AUDIOBOOK_MANIFEST_MEDIA_TYPE, LIBBY_DRM
                     ),
                     DeliveryMechanismTuple(None, FINDAWAY_DRM),
-                    # We prioritize web readers last, since they will lack
-                    # some features (e.g., bookmark support).
-                    DeliveryMechanismTuple(MediaTypes.TEXT_HTML_MEDIA_TYPE, NO_DRM),
+                    # We prioritize streaming readers last, since they provide a
+                    # worse user experience than downloadable formats.
+                    DeliveryMechanismTuple(STREAMING_TEXT_CONTENT_TYPE, STREAMING_DRM),
                 )
             )
         }

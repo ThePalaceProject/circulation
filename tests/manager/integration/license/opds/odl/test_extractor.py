@@ -190,8 +190,8 @@ class TestOPDS2WithODLExtractor:
             ),
             pytest.param(
                 MediaTypes.TEXT_HTML_MEDIA_TYPE,
-                DeliveryMechanism.NO_DRM,
-                MediaTypes.TEXT_HTML_MEDIA_TYPE,
+                DeliveryMechanism.STREAMING_DRM,
+                DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE,
                 id="text-html",
             ),
         ],

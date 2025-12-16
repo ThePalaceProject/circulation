@@ -283,6 +283,10 @@ class TestDeliveryMechanism:
         bearer_token = create_lpdm(
             Representation.EPUB_MEDIA_TYPE, DeliveryMechanism.BEARER_TOKEN
         )
+        streaming = create_lpdm(
+            DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE,
+            DeliveryMechanism.STREAMING_DRM,
+        )
         unknown_drm_1 = create_lpdm(Representation.EPUB_MEDIA_TYPE, "unknown_drm_1")
         unknown_drm_2 = create_lpdm(Representation.EPUB_MEDIA_TYPE, "unknown_drm_2")
 
@@ -295,11 +299,19 @@ class TestDeliveryMechanism:
             adobe_drm,
         ]
 
-        # If all three are present, no DRM comes first, then bearer token, then Adobe DRM.
+        # If three are present, no DRM comes first, then bearer token, then Adobe DRM.
         assert DeliveryMechanism.sort([no_drm, adobe_drm, bearer_token]) == [
             no_drm,
             bearer_token,
             adobe_drm,
+        ]
+
+        # If all four known schemes are present, they are sorted in the expected order.
+        assert DeliveryMechanism.sort([streaming, adobe_drm, bearer_token, no_drm]) == [
+            no_drm,
+            bearer_token,
+            adobe_drm,
+            streaming,
         ]
 
         # If we have unknown DRM schemes, they are sorted last, but maintain their relative order.
