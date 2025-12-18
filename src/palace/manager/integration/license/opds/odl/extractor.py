@@ -72,8 +72,8 @@ class OPDS2WithODLExtractor[PublicationType: opds2.BasePublication](
                 DeliveryMechanism.FEEDBOOKS_AUDIOBOOK_DRM,
             ),
             MediaTypes.TEXT_HTML_MEDIA_TYPE: DeliveryMechanismTuple(
-                MediaTypes.TEXT_HTML_MEDIA_TYPE,
-                DeliveryMechanism.NO_DRM,
+                DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE,
+                DeliveryMechanism.STREAMING_DRM,
             ),
         }
     )
