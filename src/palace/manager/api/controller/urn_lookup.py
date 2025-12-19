@@ -16,8 +16,11 @@ class URNLookupController(CoreURNLookupController):
         """Build a CirculationManagerAnnotor based on the current library's
         top-level WorkList, and use it to generate an OPDS lookup
         feed.
+
+        Works are filtered based on the library's content filtering settings
+        (filtered_audiences and filtered_genres).
         """
         library = get_request_library()
         top_level_worklist = self.manager.top_level_lanes[library.id]
         annotator = CirculationManagerAnnotator(top_level_worklist)
-        return super().work_lookup(annotator, route_name)
+        return super().work_lookup(annotator, route_name, library=library)
