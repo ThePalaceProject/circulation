@@ -1350,20 +1350,22 @@ class SAMLSubjectPatronIDExtractor:
         self._logger.info(f"Trying to extract a unique patron ID from {repr(subject)}")
 
         patron_id = None
+        source_attribute = None
 
         if subject.attribute_statement:
-            for patron_id_attribute in self._patron_id_attributes:
-                if patron_id_attribute in subject.attribute_statement.attributes:
-                    patron_id_attribute = subject.attribute_statement.attributes[
-                        patron_id_attribute
+            for patron_id_attribute_name in self._patron_id_attributes:
+                if patron_id_attribute_name in subject.attribute_statement.attributes:
+                    patron_id_attribute_obj = subject.attribute_statement.attributes[
+                        patron_id_attribute_name
                     ]
 
                     # NOTE: It takes the first value.
                     # TODO: Any reason not to handle multiple values here?
-                    patron_id_candidate = patron_id_attribute.values[0]
+                    patron_id_candidate = patron_id_attribute_obj.values[0]
                     patron_id = self._extract_patron_id(patron_id_candidate)
 
                     if patron_id is not None:
+                        source_attribute = patron_id_attribute_name
                         break
 
         # If we haven't found a patron id in the other attributes,
@@ -1377,15 +1379,19 @@ class SAMLSubjectPatronIDExtractor:
             patron_id_candidate = subject.name_id.name_id
             patron_id = self._extract_patron_id(patron_id_candidate)
 
+            if patron_id is not None:
+                source_attribute = "NameID"
+
         # Log an appropriate message, depending on the outcome.
-        attribute_origin = f"from {repr(subject)}"
+        attribute_origin = repr(subject)
         if patron_id is None:
             self._logger.error(
-                f"Failed to extract a unique patron ID {attribute_origin}"
+                f"Failed to extract a unique patron ID from {attribute_origin}"
             )
         else:
             self._logger.info(
-                f"Extracted a unique patron ID '{patron_id}' {attribute_origin}"
+                f"Extracted unique patron ID '{patron_id}' from attribute '{source_attribute}' "
+                f"in {attribute_origin}"
             )
 
         return patron_id
