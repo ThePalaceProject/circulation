@@ -1352,6 +1352,8 @@ class SAMLSubjectPatronIDExtractor:
         patron_id = None
         source_attribute = None
 
+        # Check for matching attributes if (1) we got any and
+        # (2) we've configured any to match.
         if subject.attribute_statement:
             for patron_id_attribute_name in self._patron_id_attributes:
                 if patron_id_attribute_name in subject.attribute_statement.attributes:

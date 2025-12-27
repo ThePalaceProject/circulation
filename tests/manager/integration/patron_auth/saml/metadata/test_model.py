@@ -276,6 +276,33 @@ class TestSAMLSubjectPatronIDExtractor:
             pytest.param(
                 SAMLSubject(
                     "http://idp.example.com",
+                    None,
+                    SAMLAttributeStatement(
+                        [
+                            SAMLAttribute(
+                                name=SAMLAttributeType.eduPersonTargetedID.name,
+                                values=["2"],
+                            ),
+                            SAMLAttribute(
+                                name=SAMLAttributeType.eduPersonUniqueId.name,
+                                values=["3"],
+                            ),
+                            SAMLAttribute(
+                                name=SAMLAttributeType.uid.name, values=["4"]
+                            ),
+                        ]
+                    ),
+                ),
+                None,
+                True,
+                [SAMLAttributeType.givenName.name],
+                None,
+                None,
+                id="no-match-no-nameid",
+            ),
+            pytest.param(
+                SAMLSubject(
+                    "http://idp.example.com",
                     SAMLNameID(SAMLNameIDFormat.UNSPECIFIED.value, "", "", "1"),
                     SAMLAttributeStatement(
                         [
@@ -393,6 +420,26 @@ class TestSAMLSubjectPatronIDExtractor:
                 saml_strings.PATRON_ID_REGULAR_EXPRESSION_COM,
                 None,
                 id="regex-no-match",
+            ),
+            pytest.param(
+                SAMLSubject(
+                    "http://idp.example.com",
+                    SAMLNameID(SAMLNameIDFormat.UNSPECIFIED.value, "", "", "1"),
+                    SAMLAttributeStatement(
+                        [
+                            SAMLAttribute(
+                                name=SAMLAttributeType.eduPersonPrincipalName.name,
+                                values=["patron@university.org"],
+                            ),
+                        ]
+                    ),
+                ),
+                None,
+                True,
+                [SAMLAttributeType.mail.name],
+                saml_strings.PATRON_ID_REGULAR_EXPRESSION_COM,
+                None,
+                id="regex-no-match-fallback-to-nameid",
             ),
             pytest.param(
                 SAMLSubject(
