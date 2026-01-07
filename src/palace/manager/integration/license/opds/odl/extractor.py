@@ -696,8 +696,10 @@ class OPDS2WithODLExtractor[PublicationType: opds2.BasePublication](
                         )
                     )
                 elif license_format == MediaTypes.TEXT_HTML_MEDIA_TYPE:
-                    # Handle the case of a web reader. Web readers are assumed to have a content type of
-                    # MediaTypes.TEXT_HTML_MEDIA_TYPE and not to be protected with DRM.
+                    # Handle web reader content. When the license format is text/html, we ignore any
+                    # protection.formats and instead use the streaming delivery mechanism, which has
+                    # its own access control (STREAMING_DRM). The content type is determined by the
+                    # publication medium (audio vs. text).
                     streaming_content_type = (
                         DeliveryMechanism.STREAMING_AUDIO_CONTENT_TYPE
                         if medium == Edition.AUDIO_MEDIUM
@@ -716,6 +718,9 @@ class OPDS2WithODLExtractor[PublicationType: opds2.BasePublication](
                         )
                     )
                 else:
+                    # Standard format handling: create a format entry for each DRM scheme
+                    # in protection.formats, using the license format as the content type.
+                    # If no DRM schemes are specified, create one entry with no DRM.
                     drm_schemes: Sequence[str | None] = (
                         odl_license.metadata.protection.formats or [None]
                     )

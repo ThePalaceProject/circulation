@@ -122,7 +122,7 @@ class ODLExtractorTestFixture:
         return IdentifierData.parse_urn(self.publication_identifier)
 
 
-@pytest.fixture
+@pytest.fixture(scope="class")
 def odl_extractor_fixture() -> ODLExtractorTestFixture:
     """Fixture providing factory functions for ODL extractor tests."""
     return ODLExtractorTestFixture()
