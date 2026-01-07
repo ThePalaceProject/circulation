@@ -539,7 +539,6 @@ class OPDS2WithODLApi(
         self, loan: Loan, delivery_mechanism: LicensePoolDeliveryMechanism
     ) -> Fulfillment:
         # We are unable to fulfill a loan that doesn't have its external identifier set,
-        # We are unable to fulfill a loan that doesn't have its external identifier set,
         # since we use this to get to the checkout link. It shouldn't be possible to get
         # into this state.
         license_status_url = loan.external_identifier
@@ -556,13 +555,33 @@ class OPDS2WithODLApi(
             db.delete(loan)
             raise CannotFulfill()
 
+        content_type = delivery_mechanism.delivery_mechanism.content_type
         drm_scheme = delivery_mechanism.delivery_mechanism.drm_scheme
         fulfill_cls: Callable[[str, str | None], UrlFulfillment]
         if drm_scheme == DeliveryMechanism.NO_DRM:
             # If we have no DRM, we can just redirect to the content link and let the patron download the book.
             fulfill_link = doc.links.get(
                 rel="publication",
-                type=delivery_mechanism.delivery_mechanism.content_type,
+                type=content_type,
+            )
+            fulfill_cls = RedirectFulfillment
+        elif drm_scheme == DeliveryMechanism.STREAMING_DRM:
+            # Streaming DRM is handled similarly to NO_DRM, we find the appropriate link and redirect the
+            # patron to the streaming reader.
+            link_content_type = (
+                DeliveryMechanism.MEDIA_TYPES_FOR_STREAMING.get(content_type)
+                if content_type
+                else None
+            )
+            if link_content_type is None:
+                self.log.error(
+                    f"Unsupported streaming content type: {content_type!r}. "
+                    f"Supported types: {list(DeliveryMechanism.MEDIA_TYPES_FOR_STREAMING.keys())}."
+                )
+                raise CannotFulfill("The requested streaming format is not available.")
+            fulfill_link = doc.links.get(
+                rel="publication",
+                type=link_content_type,
             )
             fulfill_cls = RedirectFulfillment
         elif drm_scheme == DeliveryMechanism.FEEDBOOKS_AUDIOBOOK_DRM:

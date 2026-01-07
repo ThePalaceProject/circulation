@@ -955,9 +955,10 @@ class TestOPDS2WithODLApi:
         assert 0 == db.session.query(Loan).count()
 
     @pytest.mark.parametrize(
-        "drm_scheme, correct_type, correct_link, links",
+        "content_type, drm_scheme, correct_type, correct_link, links",
         [
             pytest.param(
+                "ignored/format",
                 DeliveryMechanism.ADOBE_DRM,
                 DeliveryMechanism.ADOBE_DRM,
                 "http://acsm",
@@ -971,6 +972,7 @@ class TestOPDS2WithODLApi:
                 id="adobe drm",
             ),
             pytest.param(
+                "ignored/format",
                 DeliveryMechanism.LCP_DRM,
                 DeliveryMechanism.LCP_DRM,
                 "http://lcp",
@@ -984,6 +986,7 @@ class TestOPDS2WithODLApi:
                 id="lcp drm",
             ),
             pytest.param(
+                "application/epub+zip",
                 DeliveryMechanism.NO_DRM,
                 "application/epub+zip",
                 "http://publication",
@@ -997,6 +1000,7 @@ class TestOPDS2WithODLApi:
                 id="no drm",
             ),
             pytest.param(
+                "ignored/format",
                 DeliveryMechanism.FEEDBOOKS_AUDIOBOOK_DRM,
                 FEEDBOOKS_AUDIO,
                 "http://correct",
@@ -1014,12 +1018,27 @@ class TestOPDS2WithODLApi:
                 ],
                 id="feedbooks audio",
             ),
+            pytest.param(
+                DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE,
+                DeliveryMechanism.STREAMING_DRM,
+                MediaTypes.TEXT_HTML_MEDIA_TYPE,
+                "http://streaming",
+                [
+                    {
+                        "rel": "publication",
+                        "href": "http://streaming",
+                        "type": MediaTypes.TEXT_HTML_MEDIA_TYPE,
+                    }
+                ],
+                id="streaming drm",
+            ),
         ],
     )
     def test_fulfill_success(
         self,
         opds2_with_odl_api_fixture: OPDS2WithODLApiFixture,
         db: DatabaseTransactionFixture,
+        content_type: str,
         drm_scheme: str,
         correct_type: str,
         correct_link: str,
@@ -1031,9 +1050,7 @@ class TestOPDS2WithODLApi:
 
         lpdm = MagicMock(spec=LicensePoolDeliveryMechanism)
         lpdm.delivery_mechanism = MagicMock(spec=DeliveryMechanism)
-        lpdm.delivery_mechanism.content_type = (
-            "ignored/format" if drm_scheme != DeliveryMechanism.NO_DRM else correct_type
-        )
+        lpdm.delivery_mechanism.content_type = content_type
         lpdm.delivery_mechanism.drm_scheme = drm_scheme
 
         lsd = opds2_with_odl_api_fixture.loan_status_document("active", links=links)
@@ -1046,15 +1063,43 @@ class TestOPDS2WithODLApi:
             opds2_with_odl_api_fixture.pool,
             lpdm,
         )
-        assert (
-            isinstance(fulfillment, FetchFulfillment)
-            if drm_scheme != DeliveryMechanism.NO_DRM
-            else isinstance(fulfillment, RedirectFulfillment)
-        )
-        assert correct_link == fulfillment.content_link  # type: ignore[attr-defined]
-        assert correct_type == fulfillment.content_type  # type: ignore[attr-defined]
-        if isinstance(fulfillment, FetchFulfillment):
+        if drm_scheme in (DeliveryMechanism.NO_DRM, DeliveryMechanism.STREAMING_DRM):
+            assert isinstance(fulfillment, RedirectFulfillment)
+        else:
+            assert isinstance(fulfillment, FetchFulfillment)
             assert fulfillment.allowed_response_codes == ["2xx"]
+
+        assert correct_link == fulfillment.content_link
+        assert correct_type == fulfillment.content_type
+
+    def test_fulfill_streaming_unsupported_content_type(
+        self,
+        opds2_with_odl_api_fixture: OPDS2WithODLApiFixture,
+    ) -> None:
+        """Test that an unsupported streaming content type raises CannotFulfill."""
+        opds2_with_odl_api_fixture.setup_license(concurrency=1, available=1)
+        opds2_with_odl_api_fixture.checkout(create_loan=True)
+
+        lpdm = MagicMock(spec=LicensePoolDeliveryMechanism)
+        lpdm.delivery_mechanism = MagicMock(spec=DeliveryMechanism)
+        lpdm.delivery_mechanism.content_type = "unsupported/content-type"
+        lpdm.delivery_mechanism.drm_scheme = DeliveryMechanism.STREAMING_DRM
+
+        lsd = opds2_with_odl_api_fixture.loan_status_document("active", links=[])
+        opds2_with_odl_api_fixture.mock_http.queue_response(
+            200, content=lsd.model_dump_json()
+        )
+
+        with pytest.raises(CannotFulfill) as exc_info:
+            opds2_with_odl_api_fixture.api.fulfill(
+                opds2_with_odl_api_fixture.patron,
+                "pin",
+                opds2_with_odl_api_fixture.pool,
+                lpdm,
+            )
+        assert (
+            exc_info.value.message == "The requested streaming format is not available."
+        )
 
     def test_fulfill_open_access(
         self,
