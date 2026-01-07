@@ -717,10 +717,8 @@ class OPDS2WithODLExtractor[PublicationType: opds2.BasePublication](
                     )
                 else:
                     drm_schemes: Sequence[str | None] = (
-                        odl_license.metadata.protection.formats
+                        odl_license.metadata.protection.formats or [None]
                     )
-                    if not drm_schemes:
-                        drm_schemes = [None]
                     for drm_scheme in drm_schemes:
                         formats.append(
                             FormatData(
