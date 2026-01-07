@@ -1907,8 +1907,7 @@ def add_work_to_customlists_for_collection(pool_or_work: LicensePool | Work) -> 
         # Process customlists in ascending ID order for consistent lock ordering
         for customlist_id in sorted(all_customlists.keys()):
             customlist = all_customlists[customlist_id]
-            # Since the work was just created, we can assume that
-            # there's already a pending registration for updating the
-            # work's internal index, and decide not to create a
-            # second one.
+            # This function is intended to be called during initial work setup,
+            # when an index update will already be triggered by the work's
+            # creation or configuration. We skip the redundant index update here.
             customlist.add_entry(work, featured=True, update_external_index=False)
