@@ -411,4 +411,5 @@ class TestOPDS2WithODLExtractor:
         )
 
         assert circulation_data.formats == []
+        assert circulation_data.licenses is not None
         assert len(circulation_data.licenses) == 1
