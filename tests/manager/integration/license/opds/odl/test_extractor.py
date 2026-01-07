@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import datetime
-from functools import partial
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -22,77 +22,145 @@ from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.files import OPDS2FilesFixture
 
 
-class TestOPDS2WithODLExtractor:
-    def test__extract_odl_license_data(self) -> None:
-        create_metadata = partial(
-            LicenseMetadata,
-            identifier="identifier",
-            created=utc_now(),
-        )
+class ODLExtractorTestFixture:
+    """Factory functions for creating ODL extractor test objects."""
 
-        links = [
+    def __init__(self) -> None:
+        self.license_identifier: str = "test-license-123"
+        self.publication_identifier: str = "urn:isbn:9780306406157"
+
+    def license_links(self) -> list[StrictLink]:
+        """Create standard license links for testing."""
+        return [
             StrictLink(
                 rel=rwpm.LinkRelations.self,
                 type=LicenseInfo.content_type(),
-                href="self link",
+                href="http://example.org/license",
             ),
             StrictLink(
                 rel=opds2.AcquisitionLinkRelations.borrow,
                 type=LoanStatus.content_type(),
-                href="checkout link",
+                href="http://example.org/borrow",
             ),
         ]
 
-        create_license = partial(
-            License,
-            metadata=create_metadata(),
-            links=links,
-        )
-
-        create_license_info = partial(
-            LicenseInfo,
-            identifier="identifier",
-            status=LicenseStatus.available,
-            checkouts=Checkouts(
-                available=10,
-            ),
-        )
-
-        # Expiry mismatch makes license unavailable
-        license_info = create_license_info(
-            terms=Terms(
-                expires=utc_now() + datetime.timedelta(days=1),
+    def license(
+        self,
+        license_format: str = "",
+        protection: Protection | None = None,
+        terms: Terms | None = None,
+    ) -> License:
+        """Create a License with the given format, protection, and terms."""
+        if protection is None:
+            protection = Protection(
+                format=[DeliveryMechanism.LCP_DRM, DeliveryMechanism.ADOBE_DRM]
             )
-        )
-        license = create_license(
-            metadata=create_metadata(
-                terms=Terms(
-                    expires=utc_now() + datetime.timedelta(days=2),
-                )
+        if terms is None:
+            terms = Terms(concurrency=1)
+        return License(
+            metadata=LicenseMetadata(
+                identifier=self.license_identifier,
+                created=utc_now(),
+                format=license_format,
+                terms=terms,
+                protection=protection,
             ),
+            links=self.license_links(),
         )
+
+    def publication(self, license: License) -> Publication:
+        """Create a Publication with the given license."""
+        return Publication(
+            metadata=opds2.PublicationMetadata(
+                type="http://schema.org/Book",
+                identifier=self.publication_identifier,
+                title="Test Book",
+            ),
+            images=[
+                opds2.Link(
+                    href="http://example.org/cover.jpg",
+                    type="image/jpeg",
+                )
+            ],
+            links=[],
+            licenses=[license],
+        )
+
+    def extractor(
+        self,
+        skipped_license_formats: set[str] | None = None,
+    ) -> OPDS2WithODLExtractor[Publication]:
+        """Create an OPDS2WithODLExtractor for testing."""
+        return OPDS2WithODLExtractor(
+            parse_publication=MagicMock(),
+            base_url="http://example.org",
+            data_source="Test Source",
+            skipped_license_formats=skipped_license_formats,
+        )
+
+    def license_info(
+        self,
+        license_format: str = "",
+        terms: Terms | None = None,
+        checkouts: Checkouts | None = None,
+    ) -> LicenseInfo:
+        """Create a LicenseInfo document for testing."""
+        if terms is None:
+            terms = Terms(concurrency=1)
+        if checkouts is None:
+            checkouts = Checkouts(available=1)
+        return LicenseInfo(
+            identifier=self.license_identifier,
+            status=LicenseStatus.available,
+            checkouts=checkouts,
+            terms=terms,
+            format=license_format,
+        )
+
+    def identifier_data(self) -> IdentifierData:
+        """Create IdentifierData from the publication identifier."""
+        return IdentifierData.parse_urn(self.publication_identifier)
+
+
+@pytest.fixture
+def odl_extractor_fixture() -> ODLExtractorTestFixture:
+    """Fixture providing factory functions for ODL extractor tests."""
+    return ODLExtractorTestFixture()
+
+
+class TestOPDS2WithODLExtractor:
+    def test__extract_odl_license_data(
+        self,
+        odl_extractor_fixture: ODLExtractorTestFixture,
+    ) -> None:
+        # Expiry mismatch makes license unavailable
+        info_terms = Terms(expires=utc_now() + datetime.timedelta(days=1))
+        license_terms = Terms(expires=utc_now() + datetime.timedelta(days=2))
+        license_info = odl_extractor_fixture.license_info(terms=info_terms)
+        odl_license = odl_extractor_fixture.license(terms=license_terms)
+
         license_data = OPDS2WithODLExtractor._extract_odl_license_data(
-            license_info, license
+            license_info, odl_license
         )
         assert license_data is not None
         assert license_data.status == LicenseStatus.unavailable
 
         # Concurrency mismatch makes license unavailable
-        license_info = create_license_info(terms=Terms(concurrency=12))
-        license = create_license(
-            metadata=create_metadata(terms=Terms(concurrency=11)),
-        )
+        license_info = odl_extractor_fixture.license_info(terms=Terms(concurrency=12))
+        odl_license = odl_extractor_fixture.license(terms=Terms(concurrency=11))
+
         license_data = OPDS2WithODLExtractor._extract_odl_license_data(
-            license_info, license
+            license_info, odl_license
         )
         assert license_data is not None
         assert license_data.status == LicenseStatus.unavailable
 
         # Good data returns LicenseData
-        license_info = create_license_info()
-        license = create_license()
+        license_info = odl_extractor_fixture.license_info()
+        odl_license = odl_extractor_fixture.license()
+
         license_data = OPDS2WithODLExtractor._extract_odl_license_data(
-            license_info, license
+            license_info, odl_license
         )
         assert license_data is not None
         assert license_data.status == LicenseStatus.available
@@ -214,6 +282,7 @@ class TestOPDS2WithODLExtractor:
     )
     def test__extract_odl_circulation_data_license_formats_mapping(
         self,
+        odl_extractor_fixture: ODLExtractorTestFixture,
         medium: str | None,
         license_format: str,
         expected_drm: str | None,
@@ -224,77 +293,20 @@ class TestOPDS2WithODLExtractor:
         mapped to their appropriate content types and DRM schemes based on the
         publication medium, ignoring any protection formats specified in the license.
         """
-        # Create a minimal ODL publication with a license that has:
-        # - A special format (e.g., FEEDBOOKS_AUDIO or "text/html").
-        # - A protection field with multiple DRM schemes to verify they're ignored.
-        license_identifier = "test-license-123"
-        publication_identifier = "urn:isbn:9780306406157"
+        # The fixture's default protection includes multiple DRM schemes that should
+        # be IGNORED for these special mapped formats.
+        odl_license = odl_extractor_fixture.license(license_format)
+        publication = odl_extractor_fixture.publication(odl_license)
+        extractor = odl_extractor_fixture.extractor()
 
-        license_links = [
-            StrictLink(
-                rel=rwpm.LinkRelations.self,
-                type=LicenseInfo.content_type(),
-                href="http://example.org/license",
-            ),
-            StrictLink(
-                rel=opds2.AcquisitionLinkRelations.borrow,
-                type=LoanStatus.content_type(),
-                href="http://example.org/borrow",
-            ),
-        ]
-
-        # Create a license with the format we're testing
-        # and a protection field with multiple DRM schemes
-        license = License(
-            metadata=LicenseMetadata(
-                identifier=license_identifier,
-                created=utc_now(),
-                format=license_format,
-                terms=Terms(concurrency=1),
-                protection=Protection(
-                    # These should be IGNORED for mapped formats
-                    format=[
-                        DeliveryMechanism.LCP_DRM,
-                        DeliveryMechanism.ADOBE_DRM,
-                    ]
-                ),
-            ),
-            links=license_links,
-        )
-
-        publication = Publication(
-            metadata=opds2.PublicationMetadata(
-                type="http://schema.org/Book",
-                identifier=publication_identifier,
-                title="Test Book",
-            ),
-            images=[
-                opds2.Link(
-                    href="http://example.org/cover.jpg",
-                    type="image/jpeg",
-                )
-            ],
-            links=[],
-            licenses=[license],
-        )
-
-        extractor: OPDS2WithODLExtractor[Publication] = OPDS2WithODLExtractor(
-            parse_publication=lambda x: x,  # type: ignore[arg-type, return-value]
-            base_url="http://example.org",
-            data_source="Test Source",
-        )
-        license_info = LicenseInfo(
-            identifier=license_identifier,
-            status=LicenseStatus.available,
-            checkouts=Checkouts(available=1),
-            terms=Terms(concurrency=1),
-            format=license_format,
-        )
-        identifier_data = IdentifierData.parse_urn(publication_identifier)
         circulation_data = extractor._extract_odl_circulation_data(
             publication=publication,
-            license_info_documents={license_identifier: license_info},
-            identifier=identifier_data,
+            license_info_documents={
+                odl_extractor_fixture.license_identifier: odl_extractor_fixture.license_info(
+                    license_format
+                )
+            },
+            identifier=odl_extractor_fixture.identifier_data(),
             medium=medium,
         )
 
@@ -334,6 +346,7 @@ class TestOPDS2WithODLExtractor:
     )
     def test__extract_odl_circulation_data_skipped_license_formats(
         self,
+        odl_extractor_fixture: ODLExtractorTestFixture,
         medium: str,
         license_format: str,
         skipped_formats: set[str],
@@ -341,72 +354,20 @@ class TestOPDS2WithODLExtractor:
         """
         Test that skipped license formats are omitted from circulation data formats.
         """
-        license_identifier = "test-license-123"
-        publication_identifier = "urn:isbn:9780306406157"
-
-        license_links = [
-            StrictLink(
-                rel=rwpm.LinkRelations.self,
-                type=LicenseInfo.content_type(),
-                href="http://example.org/license",
-            ),
-            StrictLink(
-                rel=opds2.AcquisitionLinkRelations.borrow,
-                type=LoanStatus.content_type(),
-                href="http://example.org/borrow",
-            ),
-        ]
-
-        license = License(
-            metadata=LicenseMetadata(
-                identifier=license_identifier,
-                created=utc_now(),
-                format=license_format,
-                terms=Terms(concurrency=1),
-                protection=Protection(
-                    format=[
-                        DeliveryMechanism.LCP_DRM,
-                        DeliveryMechanism.ADOBE_DRM,
-                    ]
-                ),
-            ),
-            links=license_links,
+        odl_license = odl_extractor_fixture.license(license_format)
+        publication = odl_extractor_fixture.publication(odl_license)
+        extractor = odl_extractor_fixture.extractor(
+            skipped_license_formats=skipped_formats
         )
 
-        publication = Publication(
-            metadata=opds2.PublicationMetadata(
-                type="http://schema.org/Book",
-                identifier=publication_identifier,
-                title="Test Book",
-            ),
-            images=[
-                opds2.Link(
-                    href="http://example.org/cover.jpg",
-                    type="image/jpeg",
-                )
-            ],
-            links=[],
-            licenses=[license],
-        )
-
-        extractor: OPDS2WithODLExtractor[Publication] = OPDS2WithODLExtractor(
-            parse_publication=lambda x: x,  # type: ignore[arg-type, return-value]
-            base_url="http://example.org",
-            data_source="Test Source",
-            skipped_license_formats=skipped_formats,
-        )
-        license_info = LicenseInfo(
-            identifier=license_identifier,
-            status=LicenseStatus.available,
-            checkouts=Checkouts(available=1),
-            terms=Terms(concurrency=1),
-            format=license_format,
-        )
-        identifier_data = IdentifierData.parse_urn(publication_identifier)
         circulation_data = extractor._extract_odl_circulation_data(
             publication=publication,
-            license_info_documents={license_identifier: license_info},
-            identifier=identifier_data,
+            license_info_documents={
+                odl_extractor_fixture.license_identifier: odl_extractor_fixture.license_info(
+                    license_format
+                )
+            },
+            identifier=odl_extractor_fixture.identifier_data(),
             medium=medium,
         )
 
@@ -414,72 +375,30 @@ class TestOPDS2WithODLExtractor:
         assert circulation_data.licenses is not None
         assert len(circulation_data.licenses) == 1
 
-    def test__extract_odl_circulation_data_empty_protection_formats(self) -> None:
+    def test__extract_odl_circulation_data_empty_protection_formats(
+        self,
+        odl_extractor_fixture: ODLExtractorTestFixture,
+    ) -> None:
         """
         Test that when protection.formats is empty, the format is added with drm_scheme=None.
         """
-        license_identifier = "test-license-123"
-        publication_identifier = "urn:isbn:9780306406157"
         license_format = MediaTypes.EPUB_MEDIA_TYPE
 
-        license_links = [
-            StrictLink(
-                rel=rwpm.LinkRelations.self,
-                type=LicenseInfo.content_type(),
-                href="http://example.org/license",
-            ),
-            StrictLink(
-                rel=opds2.AcquisitionLinkRelations.borrow,
-                type=LoanStatus.content_type(),
-                href="http://example.org/borrow",
-            ),
-        ]
+        # Explicitly pass empty protection to test the no-DRM case
+        odl_license = odl_extractor_fixture.license(
+            license_format, protection=Protection(format=[])
+        )
+        publication = odl_extractor_fixture.publication(odl_license)
+        extractor = odl_extractor_fixture.extractor()
 
-        license = License(
-            metadata=LicenseMetadata(
-                identifier=license_identifier,
-                created=utc_now(),
-                format=license_format,
-                terms=Terms(concurrency=1),
-                # Empty protection formats - should result in drm_scheme=None
-                protection=Protection(format=[]),
-            ),
-            links=license_links,
-        )
-
-        publication = Publication(
-            metadata=opds2.PublicationMetadata(
-                type="http://schema.org/Book",
-                identifier=publication_identifier,
-                title="Test Book",
-            ),
-            images=[
-                opds2.Link(
-                    href="http://example.org/cover.jpg",
-                    type="image/jpeg",
-                )
-            ],
-            links=[],
-            licenses=[license],
-        )
-
-        extractor: OPDS2WithODLExtractor[Publication] = OPDS2WithODLExtractor(
-            parse_publication=lambda x: x,  # type: ignore[arg-type, return-value]
-            base_url="http://example.org",
-            data_source="Test Source",
-        )
-        license_info = LicenseInfo(
-            identifier=license_identifier,
-            status=LicenseStatus.available,
-            checkouts=Checkouts(available=1),
-            terms=Terms(concurrency=1),
-            format=license_format,
-        )
-        identifier_data = IdentifierData.parse_urn(publication_identifier)
         circulation_data = extractor._extract_odl_circulation_data(
             publication=publication,
-            license_info_documents={license_identifier: license_info},
-            identifier=identifier_data,
+            license_info_documents={
+                odl_extractor_fixture.license_identifier: odl_extractor_fixture.license_info(
+                    license_format
+                )
+            },
+            identifier=odl_extractor_fixture.identifier_data(),
             medium=EditionConstants.BOOK_MEDIUM,
         )
 
