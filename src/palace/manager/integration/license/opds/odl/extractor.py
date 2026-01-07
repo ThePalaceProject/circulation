@@ -39,7 +39,6 @@ from palace.manager.sqlalchemy.model.contributor import Contributor
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.licensing import (
     DeliveryMechanism,
-    DeliveryMechanismTuple,
     LicensePoolStatus,
     LicensePoolType,
     RightsStatus,
@@ -60,22 +59,6 @@ class OPDS2WithODLExtractor[PublicationType: opds2.BasePublication](
             for role, code in reversed(Contributor.MARC_ROLE_CODES.items())
         }
         | {role.lower(): role for role in Contributor.Role}
-    )
-
-    # Special handling for license formats that need explicit DRM mapping.
-    # Formats in this mapping bypass the normal `protection.format` logic
-    # and use the specified DRM scheme instead.
-    _LICENSE_FORMATS_MAPPING = frozendict(
-        {
-            FEEDBOOKS_AUDIO: DeliveryMechanismTuple(
-                MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE,
-                DeliveryMechanism.FEEDBOOKS_AUDIOBOOK_DRM,
-            ),
-            MediaTypes.TEXT_HTML_MEDIA_TYPE: DeliveryMechanismTuple(
-                DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE,
-                DeliveryMechanism.STREAMING_DRM,
-            ),
-        }
     )
 
     def __init__(
@@ -653,6 +636,7 @@ class OPDS2WithODLExtractor[PublicationType: opds2.BasePublication](
         publication: odl.Publication,
         license_info_documents: dict[str, LicenseInfo],
         identifier: IdentifierData,
+        medium: str | None,
     ) -> CirculationData:
         formats = []
         licenses = []
@@ -698,32 +682,57 @@ class OPDS2WithODLExtractor[PublicationType: opds2.BasePublication](
                 if license_format in self._skipped_license_formats:
                     continue
 
-                drm_schemes: Sequence[str | None]
-                if (
-                    updated_format := self._LICENSE_FORMATS_MAPPING.get(license_format)
-                ) is not None and updated_format.content_type is not None:
-                    # Special case to handle DeMarque audiobooks which include the protection
+                drm_schemes: Sequence[str | None] = (
+                    odl_license.metadata.protection.formats
+                )
+                if not drm_schemes:
+                    drm_schemes = [None]
+
+                if license_format == FEEDBOOKS_AUDIO:
+                    # Handle DeMarque audiobooks which include the protection
                     # in the content type. When we see a license format of
                     # application/audiobook+json; protection=http://www.feedbooks.com/audiobooks/access-restriction
                     # it means that this audiobook title is available through the DeMarque streaming manifest
                     # endpoint.
-                    drm_schemes = [updated_format.drm_scheme]
-                    license_format = updated_format.content_type
-                else:
-                    drm_schemes = (
-                        odl_license.metadata.protection.formats
-                        if odl_license.metadata.protection
-                        else []
-                    )
-
-                for drm_scheme in drm_schemes or [None]:
                     formats.append(
                         FormatData(
-                            content_type=license_format,
-                            drm_scheme=drm_scheme,
+                            content_type=MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE,
+                            drm_scheme=DeliveryMechanism.FEEDBOOKS_AUDIOBOOK_DRM,
                             rights_uri=RightsStatus.IN_COPYRIGHT,
                         )
                     )
+                elif license_format == MediaTypes.TEXT_HTML_MEDIA_TYPE:
+                    # Handle the case of a web reader. Web readers are assumed to have a content type of
+                    # MediaTypes.TEXT_HTML_MEDIA_TYPE and not to be protected with DRM.
+                    if medium == Edition.AUDIO_MEDIUM:
+                        streaming_content_type = (
+                            DeliveryMechanism.STREAMING_AUDIO_CONTENT_TYPE
+                        )
+                    else:
+                        streaming_content_type = (
+                            DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE
+                        )
+
+                    # Handle the case where we want to skip the derived license format
+                    if streaming_content_type in self._skipped_license_formats:
+                        continue
+
+                    formats.append(
+                        FormatData(
+                            content_type=streaming_content_type,
+                            drm_scheme=DeliveryMechanism.STREAMING_DRM,
+                            rights_uri=RightsStatus.IN_COPYRIGHT,
+                        )
+                    )
+                else:
+                    for drm_scheme in drm_schemes:
+                        formats.append(
+                            FormatData(
+                                content_type=license_format,
+                                drm_scheme=drm_scheme,
+                                rights_uri=RightsStatus.IN_COPYRIGHT,
+                            )
+                        )
 
         status = (
             LicensePoolStatus.ACTIVE
@@ -932,7 +941,7 @@ class OPDS2WithODLExtractor[PublicationType: opds2.BasePublication](
         medium = self._extract_medium(publication)
         if isinstance(publication, odl.Publication):
             circulation = self._extract_odl_circulation_data(
-                publication, license_info_documents, identifier
+                publication, license_info_documents, identifier, medium
             )
         else:
             circulation = self._extract_opds2_circulation_data(

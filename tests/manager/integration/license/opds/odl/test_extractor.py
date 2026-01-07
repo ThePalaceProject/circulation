@@ -15,7 +15,7 @@ from palace.manager.opds.odl.odl import License, LicenseMetadata, Publication
 from palace.manager.opds.odl.protection import Protection
 from palace.manager.opds.odl.terms import Terms
 from palace.manager.opds.opds2 import PublicationFeedNoValidation, StrictLink
-from palace.manager.sqlalchemy.constants import MediaTypes
+from palace.manager.sqlalchemy.constants import EditionConstants, MediaTypes
 from palace.manager.sqlalchemy.model.contributor import Contributor
 from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism
 from palace.manager.util.datetime_helpers import utc_now
@@ -180,15 +180,24 @@ class TestOPDS2WithODLExtractor:
         )
 
     @pytest.mark.parametrize(
-        "license_format, expected_drm, expected_content_type",
+        "medium, license_format, expected_drm, expected_content_type",
         [
             pytest.param(
+                EditionConstants.AUDIO_MEDIUM,
                 FEEDBOOKS_AUDIO,
                 DeliveryMechanism.FEEDBOOKS_AUDIOBOOK_DRM,
                 MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE,
                 id="feedbooks-audio",
             ),
             pytest.param(
+                EditionConstants.AUDIO_MEDIUM,
+                MediaTypes.TEXT_HTML_MEDIA_TYPE,
+                DeliveryMechanism.STREAMING_DRM,
+                DeliveryMechanism.STREAMING_AUDIO_CONTENT_TYPE,
+                id="audio-html",
+            ),
+            pytest.param(
+                EditionConstants.BOOK_MEDIUM,
                 MediaTypes.TEXT_HTML_MEDIA_TYPE,
                 DeliveryMechanism.STREAMING_DRM,
                 DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE,
@@ -198,6 +207,7 @@ class TestOPDS2WithODLExtractor:
     )
     def test__extract_odl_circulation_data_license_formats_mapping(
         self,
+        medium: str,
         license_format: str,
         expected_drm: str | None,
         expected_content_type: str,
@@ -277,6 +287,7 @@ class TestOPDS2WithODLExtractor:
             publication=publication,
             license_info_documents={license_identifier: license_info},
             identifier=identifier_data,
+            medium=medium,
         )
 
         # Ensure that we got one correct format.
