@@ -698,14 +698,11 @@ class OPDS2WithODLExtractor[PublicationType: opds2.BasePublication](
                 elif license_format == MediaTypes.TEXT_HTML_MEDIA_TYPE:
                     # Handle the case of a web reader. Web readers are assumed to have a content type of
                     # MediaTypes.TEXT_HTML_MEDIA_TYPE and not to be protected with DRM.
-                    if medium == Edition.AUDIO_MEDIUM:
-                        streaming_content_type = (
-                            DeliveryMechanism.STREAMING_AUDIO_CONTENT_TYPE
-                        )
-                    else:
-                        streaming_content_type = (
-                            DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE
-                        )
+                    streaming_content_type = (
+                        DeliveryMechanism.STREAMING_AUDIO_CONTENT_TYPE
+                        if medium == Edition.AUDIO_MEDIUM
+                        else DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE
+                    )
 
                     # Handle the case where we want to skip the derived license format
                     if streaming_content_type in self._skipped_license_formats:
