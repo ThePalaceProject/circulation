@@ -73,7 +73,7 @@ from palace.manager.util.log import LoggerMixin
 
 if TYPE_CHECKING:
     from palace.manager.search.external_search import ExternalSearchIndex
-    from palace.manager.sqlalchemy.model.customlist import CustomListEntry
+    from palace.manager.sqlalchemy.model.customlist import CustomList, CustomListEntry
     from palace.manager.sqlalchemy.model.library import Library
     from palace.manager.sqlalchemy.model.resource import Resource
 
@@ -1873,6 +1873,13 @@ work_library_suppressions = Table(
 
 
 def add_work_to_customlists_for_collection(pool_or_work: LicensePool | Work) -> None:
+    """Add a work to all customlists associated with its collection(s).
+
+    This function collects all customlists from all license pools and processes
+    them in a consistent order (by customlist ID) to prevent deadlocks when
+    multiple concurrent Celery tasks are adding different works to overlapping
+    customlists.
+    """
     work: Work | None
     if isinstance(pool_or_work, Work):
         work = pool_or_work
@@ -1882,15 +1889,25 @@ def add_work_to_customlists_for_collection(pool_or_work: LicensePool | Work) -> 
         pools = [pool_or_work]
 
     if work and work.presentation_edition:
+        # Collect all unique customlists from all pools first, then sort by ID.
+        # This ensures a consistent lock acquisition order across all concurrent
+        # workers, preventing deadlocks. Without this, workers processing works
+        # with pools from different collections might iterate customlists in
+        # different orders, causing circular lock dependencies.
+        all_customlists: dict[int, CustomList] = {}
         for pool in pools:
             if not pool.collection:
                 # This shouldn't happen, but don't crash if it does --
                 # the correct behavior is that the work not be added to
                 # any CustomLists.
                 continue
-            for list in pool.collection.customlists:
-                # Since the work was just created, we can assume that
-                # there's already a pending registration for updating the
-                # work's internal index, and decide not to create a
-                # second one.
-                list.add_entry(work, featured=True, update_external_index=False)
+            for customlist in pool.collection.customlists:
+                all_customlists[customlist.id] = customlist
+
+        # Process customlists in ascending ID order for consistent lock ordering
+        for customlist_id in sorted(all_customlists.keys()):
+            customlist = all_customlists[customlist_id]
+            # This function is intended to be called during initial work setup,
+            # when an index update will already be triggered by the work's
+            # creation or configuration. We skip the redundant index update here.
+            customlist.add_entry(work, featured=True, update_external_index=False)
