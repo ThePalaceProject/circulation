@@ -294,3 +294,113 @@ class TestOPDS2WithODLExtractor:
         [format_data] = circulation_data.formats
         assert format_data.content_type == expected_content_type
         assert format_data.drm_scheme == expected_drm
+
+    @pytest.mark.parametrize(
+        "medium, license_format, skipped_formats",
+        [
+            pytest.param(
+                EditionConstants.AUDIO_MEDIUM,
+                FEEDBOOKS_AUDIO,
+                {FEEDBOOKS_AUDIO},
+                id="skip-feedbooks-audio",
+            ),
+            pytest.param(
+                EditionConstants.AUDIO_MEDIUM,
+                MediaTypes.TEXT_HTML_MEDIA_TYPE,
+                {DeliveryMechanism.STREAMING_AUDIO_CONTENT_TYPE},
+                id="skip-streaming-audio",
+            ),
+            pytest.param(
+                EditionConstants.BOOK_MEDIUM,
+                MediaTypes.TEXT_HTML_MEDIA_TYPE,
+                {DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE},
+                id="skip-streaming-text",
+            ),
+            pytest.param(
+                EditionConstants.AUDIO_MEDIUM,
+                MediaTypes.TEXT_HTML_MEDIA_TYPE,
+                {MediaTypes.TEXT_HTML_MEDIA_TYPE},
+                id="skip-text-html",
+            ),
+        ],
+    )
+    def test__extract_odl_circulation_data_skipped_license_formats(
+        self,
+        medium: str,
+        license_format: str,
+        skipped_formats: set[str],
+    ) -> None:
+        """
+        Test that skipped license formats are omitted from circulation data formats.
+        """
+        license_identifier = "test-license-123"
+        publication_identifier = "urn:isbn:9780306406157"
+
+        license_links = [
+            StrictLink(
+                rel=rwpm.LinkRelations.self,
+                type=LicenseInfo.content_type(),
+                href="http://example.org/license",
+            ),
+            StrictLink(
+                rel=opds2.AcquisitionLinkRelations.borrow,
+                type=LoanStatus.content_type(),
+                href="http://example.org/borrow",
+            ),
+        ]
+
+        license = License(
+            metadata=LicenseMetadata(
+                identifier=license_identifier,
+                created=utc_now(),
+                format=license_format,
+                terms=Terms(concurrency=1),
+                protection=Protection(
+                    format=[
+                        DeliveryMechanism.LCP_DRM,
+                        DeliveryMechanism.ADOBE_DRM,
+                    ]
+                ),
+            ),
+            links=license_links,
+        )
+
+        publication = Publication(
+            metadata=opds2.PublicationMetadata(
+                type="http://schema.org/Book",
+                identifier=publication_identifier,
+                title="Test Book",
+            ),
+            images=[
+                opds2.Link(
+                    href="http://example.org/cover.jpg",
+                    type="image/jpeg",
+                )
+            ],
+            links=[],
+            licenses=[license],
+        )
+
+        extractor: OPDS2WithODLExtractor[Publication] = OPDS2WithODLExtractor(
+            parse_publication=lambda x: x,  # type: ignore[arg-type, return-value]
+            base_url="http://example.org",
+            data_source="Test Source",
+            skipped_license_formats=skipped_formats,
+        )
+        license_info = LicenseInfo(
+            identifier=license_identifier,
+            status=LicenseStatus.available,
+            checkouts=Checkouts(available=1),
+            terms=Terms(concurrency=1),
+            format=license_format,
+        )
+        identifier_data = IdentifierData.parse_urn(publication_identifier)
+        circulation_data = extractor._extract_odl_circulation_data(
+            publication=publication,
+            license_info_documents={license_identifier: license_info},
+            identifier=identifier_data,
+            medium=medium,
+        )
+
+        assert circulation_data.formats == []
+        assert len(circulation_data.licenses) == 1
