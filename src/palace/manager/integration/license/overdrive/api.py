@@ -42,6 +42,7 @@ from palace.manager.api.circulation.fulfillment import (
     FetchFulfillment,
     Fulfillment,
     RedirectFulfillment,
+    StreamingFulfillment,
 )
 from palace.manager.api.selftest import HasCollectionSelfTests
 from palace.manager.core.config import CannotLoadConfiguration, Configuration
@@ -1260,21 +1261,23 @@ class OverdriveAPI(
         result = download_response.links["contentlink"]
         url = result.href
         media_type = result.type
-        # TODO: we should return a different type of fulfillment for streaming formats
-        #   so we don't have to override this in the circulation API later.
+        # Streaming formats return an OPDS entry containing the streaming reader link.
         if internal_format in OVERDRIVE_STREAMING_FORMATS:
-            media_type += DeliveryMechanism.STREAMING_PROFILE
-        # In case we are a non-drm asset, we should just redirect the client to the asset directly
+            return StreamingFulfillment(
+                content_link=url,
+                content_type=media_type,
+            )
+        # Open formats can redirect the client directly to the asset.
         if internal_format in OVERDRIVE_OPEN_FORMATS:
             return RedirectFulfillment(
                 content_link=url,
                 content_type=media_type,
             )
-        else:
-            return FetchFulfillment(
-                content_link=url,
-                content_type=media_type,
-            )
+        # Other formats need to be fetched by the server.
+        return FetchFulfillment(
+            content_link=url,
+            content_type=media_type,
+        )
 
     def _manifest_fulfillment(
         self, patron: Patron, pin: str | None, format_info: Format

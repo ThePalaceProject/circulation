@@ -38,6 +38,7 @@ from palace.manager.api.circulation.fulfillment import (
     FetchFulfillment,
     Fulfillment,
     RedirectFulfillment,
+    StreamingFulfillment,
     UrlFulfillment,
 )
 from palace.manager.api.lcp.hash import Hasher, HasherFactory
@@ -566,8 +567,7 @@ class OPDS2WithODLApi(
             )
             fulfill_cls = RedirectFulfillment
         elif drm_scheme == DeliveryMechanism.STREAMING_DRM:
-            # Streaming DRM is handled similarly to NO_DRM, we find the appropriate link and redirect the
-            # patron to the streaming reader.
+            # Streaming DRM returns an OPDS entry containing the streaming reader link.
             link_content_type = (
                 DeliveryMechanism.MEDIA_TYPES_FOR_STREAMING.get(content_type)
                 if content_type
@@ -583,7 +583,7 @@ class OPDS2WithODLApi(
                 rel="publication",
                 type=link_content_type,
             )
-            fulfill_cls = RedirectFulfillment
+            fulfill_cls = StreamingFulfillment
         elif drm_scheme == DeliveryMechanism.FEEDBOOKS_AUDIOBOOK_DRM:
             # For DeMarque audiobook content using "FEEDBOOKS_AUDIOBOOK_DRM", the link
             # we are looking for is stored in the 'manifest' rel.
@@ -598,14 +598,7 @@ class OPDS2WithODLApi(
         if fulfill_link is None:
             raise CannotFulfill()
 
-        fulfill_link_type = fulfill_link.type
-        if (
-            drm_scheme == DeliveryMechanism.STREAMING_DRM
-            and fulfill_link_type is not None
-        ):
-            fulfill_link_type += DeliveryMechanism.STREAMING_PROFILE
-
-        return fulfill_cls(fulfill_link.href, fulfill_link_type)
+        return fulfill_cls(fulfill_link.href, fulfill_link.type)
 
     def _bearer_token_fulfill(
         self, loan: Loan, delivery_mechanism: LicensePoolDeliveryMechanism

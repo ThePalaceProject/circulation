@@ -22,6 +22,7 @@ from palace.manager.api.circulation.exceptions import (
 from palace.manager.api.circulation.fulfillment import (
     FetchFulfillment,
     RedirectFulfillment,
+    StreamingFulfillment,
 )
 from palace.manager.api.config import Configuration
 from palace.manager.core.config import CannotLoadConfiguration
@@ -1327,7 +1328,7 @@ class TestOverdriveAPI:
         fulfill = api.fulfill(
             patron, "pin", work.active_license_pool(), delivery_mechanism
         )
-        assert isinstance(fulfill, FetchFulfillment)
+        assert isinstance(fulfill, StreamingFulfillment)
         assert fulfill.content_type == "text/html" + DeliveryMechanism.STREAMING_PROFILE
         assert (
             fulfill.content_link

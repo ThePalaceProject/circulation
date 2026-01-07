@@ -1,3 +1,5 @@
+from unittest.mock import MagicMock, patch
+
 import pytest
 from flask import Response
 
@@ -5,7 +7,9 @@ from palace.manager.api.circulation.fulfillment import (
     DirectFulfillment,
     FetchFulfillment,
     RedirectFulfillment,
+    StreamingFulfillment,
 )
+from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism
 from palace.manager.util.http.exception import BadResponseException
 from tests.fixtures.http import MockHttpClientFixture
 
@@ -152,4 +156,47 @@ class TestFetchFulfillment:
         assert (
             fulfillment.__repr__()
             == "<FetchFulfillment: content_link: http://some.location, content_type: foo/bar>"
+        )
+
+
+class TestStreamingFulfillment:
+    def test_response(self) -> None:
+        """Test that response() generates OPDS feed."""
+        fulfillment = StreamingFulfillment("http://streaming.reader", "text/html")
+        mock_circulation = MagicMock()
+        mock_loan = MagicMock()
+        mock_response = MagicMock(spec=Response)
+
+        with patch("palace.manager.feed.acquisition.OPDSAcquisitionFeed") as mock_feed:
+            mock_feed.single_entry_loans_feed.return_value = mock_response
+            response = fulfillment.response(mock_circulation, mock_loan)
+
+        mock_feed.single_entry_loans_feed.assert_called_once_with(
+            mock_circulation, mock_loan, fulfillment=fulfillment
+        )
+        assert response is mock_response
+
+    def test_streaming_profile_appended(self) -> None:
+        """Test that the streaming profile is automatically appended to content type."""
+        fulfillment = StreamingFulfillment("http://streaming.reader", "text/html")
+        expected_content_type = "text/html" + DeliveryMechanism.STREAMING_PROFILE
+        assert fulfillment.content_type == expected_content_type
+
+    def test_streaming_profile_not_appended_when_no_content_type(self) -> None:
+        """Test that no content type is set when None is passed."""
+        fulfillment = StreamingFulfillment("http://streaming.reader")
+        assert fulfillment.content_type is None
+
+    def test__repr__(self) -> None:
+        fulfillment = StreamingFulfillment("http://streaming.reader")
+        assert (
+            fulfillment.__repr__()
+            == "<StreamingFulfillment: content_link: http://streaming.reader>"
+        )
+
+        fulfillment = StreamingFulfillment("http://streaming.reader", "text/html")
+        expected_content_type = "text/html" + DeliveryMechanism.STREAMING_PROFILE
+        assert (
+            fulfillment.__repr__()
+            == f"<StreamingFulfillment: content_link: http://streaming.reader, content_type: {expected_content_type}>"
         )

@@ -30,6 +30,7 @@ from palace.manager.api.circulation.fulfillment import (
     FetchFulfillment,
     Fulfillment,
     RedirectFulfillment,
+    StreamingFulfillment,
 )
 from palace.manager.api.problem_details import (
     BAD_DELIVERY_MECHANISM,
@@ -541,10 +542,9 @@ class TestLoanController:
             # Now let's try to fulfill the loan using the streaming mechanism.
             loan_fixture.manager.d_circulation.queue_fulfill(
                 pool,
-                RedirectFulfillment(
+                StreamingFulfillment(
                     "http://streaming-content-link",
-                    Representation.TEXT_HTML_MEDIA_TYPE
-                    + DeliveryMechanism.STREAMING_PROFILE,
+                    Representation.TEXT_HTML_MEDIA_TYPE,
                 ),
             )
             fulfill_response = loan_fixture.manager.loans.fulfill(
@@ -599,10 +599,9 @@ class TestLoanController:
             # But we can still fulfill the streaming mechanism again.
             loan_fixture.manager.d_circulation.queue_fulfill(
                 pool,
-                RedirectFulfillment(
+                StreamingFulfillment(
                     "http://streaming-content-link",
-                    Representation.TEXT_HTML_MEDIA_TYPE
-                    + DeliveryMechanism.STREAMING_PROFILE,
+                    Representation.TEXT_HTML_MEDIA_TYPE,
                 ),
             )
 
@@ -894,23 +893,16 @@ class TestLoanController:
     ):
         # When CirculationAPI.fulfill returns a Fulfillment, we
         # simply return the result of Fulfillment.response()
-        class MockFulfillment(Fulfillment):
-            def __init__(self):
-                self.response_called = False
+        mock_fulfillment = create_autospec(Fulfillment)
+        mock_fulfillment.response.return_value = response_value
 
-            def response(self) -> Response:
-                self.response_called = True
-                return response_value
-
-        fulfillment = MockFulfillment()
-
-        class MockCirculationAPI:
-            def fulfill(self, *args, **kwargs):
-                return fulfillment
+        mock_circ_api = create_autospec(BaseCirculationAPI)
+        mock_circ_api.fulfill.return_value = mock_fulfillment
 
         controller = loan_fixture.manager.loans
-        mock = MockCirculationAPI()
-        controller.manager.circulation_apis[loan_fixture.db.default_library().id] = mock
+        controller.manager.circulation_apis[loan_fixture.db.default_library().id] = (
+            mock_circ_api
+        )
 
         with loan_fixture.request_context_with_library(
             "/", headers=dict(Authorization=loan_fixture.valid_auth)
@@ -924,9 +916,11 @@ class TestLoanController:
                 loan_fixture.pool_id, loan_fixture.mech2.delivery_mechanism.id
             )
 
-            # The result of MockFulfillment.response was
-            # returned directly.
-            assert response_value == result
+        # The result of MockFulfillment.response was
+        # returned directly.
+        assert response_value == result
+
+        mock_fulfillment.response.assert_called_once_with(mock_circ_api, loan)
 
     def test_fulfill_without_active_loan(self, loan_fixture: LoanFixture):
         controller = loan_fixture.manager.loans
@@ -1005,24 +999,27 @@ class TestLoanController:
             authenticated = controller.authenticated_patron_from_request()
             assert isinstance(authenticated, Patron)
             loan_fixture.pool.loan_to(authenticated)
-            with (
-                patch(
-                    "palace.manager.api.controller.opds_feed.OPDSAcquisitionFeed.single_entry_loans_feed"
-                ) as feed,
-                patch.object(circulation, "fulfill") as fulfill,
-            ):
-                fulfill.return_value = MagicMock(spec=RedirectFulfillment)
-                # The single_item_feed must return this error
-                feed.return_value = NOT_FOUND_ON_REMOTE
+            with patch.object(circulation, "fulfill") as fulfill:
+                # Use StreamingFulfillment which will call single_entry_loans_feed internally
+                fulfill.return_value = StreamingFulfillment(
+                    "http://streaming-link", "text/html"
+                )
                 # The content type needs to be streaming
                 loan_fixture.mech1.delivery_mechanism.content_type = (
                     DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE
                 )
 
-                response = controller.fulfill(
-                    loan_fixture.pool_id, loan_fixture.mech1.delivery_mechanism.id
-                )
-                assert response == NOT_FOUND_ON_REMOTE
+                # Mock the feed method to return NOT_FOUND_ON_REMOTE
+                with patch(
+                    "palace.manager.feed.acquisition.OPDSAcquisitionFeed.single_entry_loans_feed"
+                ) as feed:
+                    feed.return_value = NOT_FOUND_ON_REMOTE
+                    response = controller.fulfill(
+                        loan_fixture.pool_id, loan_fixture.mech1.delivery_mechanism.id
+                    )
+                    # StreamingFulfillment.response() raises ProblemDetailException
+                    # which is caught by the controller and returns the problem_detail
+                    assert response == NOT_FOUND_ON_REMOTE
 
     def test_no_drm_fulfill(self, loan_fixture: LoanFixture):
         """In case a work does not have DRM for it's fulfillment.

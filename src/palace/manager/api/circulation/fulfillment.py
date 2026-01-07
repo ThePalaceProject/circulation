@@ -1,14 +1,21 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING
 
 import requests
 from flask import Response
 
+from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism
 from palace.manager.util.http.base import ResponseCodesTypes
 from palace.manager.util.http.exception import BadResponseException
 from palace.manager.util.http.http import HTTP
 from palace.manager.util.log import LoggerMixin
+from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
+
+if TYPE_CHECKING:
+    from palace.manager.api.circulation.dispatcher import CirculationApiDispatcher
+    from palace.manager.sqlalchemy.model.patron import Loan
 
 
 class Fulfillment(ABC):
@@ -17,7 +24,11 @@ class Fulfillment(ABC):
     """
 
     @abstractmethod
-    def response(self) -> Response:
+    def response(
+        self,
+        circulation: CirculationApiDispatcher | None = None,
+        loan: Loan | None = None,
+    ) -> Response:
         """
         Return a Flask Response object that can be used to fulfill a loan.
         """
@@ -50,7 +61,11 @@ class DirectFulfillment(Fulfillment):
         self.content = content
         self.content_type = content_type
 
-    def response(self) -> Response:
+    def response(
+        self,
+        circulation: CirculationApiDispatcher | None = None,
+        loan: Loan | None = None,
+    ) -> Response:
         return Response(self.content, content_type=self.content_type)
 
     def __repr__(self) -> str:
@@ -63,7 +78,11 @@ class RedirectFulfillment(UrlFulfillment):
     Fulfill a loan by redirecting the client to a URL.
     """
 
-    def response(self) -> Response:
+    def response(
+        self,
+        circulation: CirculationApiDispatcher | None = None,
+        loan: Loan | None = None,
+    ) -> Response:
         return Response(
             f"Redirecting to {self.content_link} ...",
             status=302,
@@ -111,7 +130,11 @@ class FetchFulfillment(UrlFulfillment, LoggerMixin):
             allow_redirects=True,
         )
 
-    def response(self) -> Response:
+    def response(
+        self,
+        circulation: CirculationApiDispatcher | None = None,
+        loan: Loan | None = None,
+    ) -> Response:
         try:
             response = self.get(self.content_link)
         except BadResponseException as ex:
@@ -133,3 +156,38 @@ class FetchFulfillment(UrlFulfillment, LoggerMixin):
         return FetchResponse(
             response.content, status=response.status_code, headers=headers
         )
+
+
+class StreamingFulfillment(UrlFulfillment):
+    """
+    Fulfillment for streaming content that returns an OPDS feed entry containing the fulfillment link.
+
+    Used for streaming delivery mechanisms where clients need an OPDS entry
+    rather than a direct redirect.
+
+    The streaming profile is automatically appended to the content type if provided.
+    """
+
+    def __init__(self, content_link: str, content_type: str | None = None) -> None:
+        if content_type is not None:
+            content_type += DeliveryMechanism.STREAMING_PROFILE
+        super().__init__(content_link, content_type)
+
+    def response(
+        self,
+        circulation: CirculationApiDispatcher | None = None,
+        loan: Loan | None = None,
+    ) -> Response:
+        """
+        Generate an OPDS entry response containing the fulfillment link.
+
+        :raises ProblemDetailException: If the OPDS feed cannot be generated.
+        """
+        from palace.manager.feed.acquisition import OPDSAcquisitionFeed
+
+        result = OPDSAcquisitionFeed.single_entry_loans_feed(
+            circulation, loan, fulfillment=self
+        )
+        if isinstance(result, ProblemDetail):
+            raise ProblemDetailException(result)
+        return result
