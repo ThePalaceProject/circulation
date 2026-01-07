@@ -17,7 +17,7 @@ from palace.manager.opds.odl.terms import Terms
 from palace.manager.opds.opds2 import PublicationFeedNoValidation, StrictLink
 from palace.manager.sqlalchemy.constants import EditionConstants, MediaTypes
 from palace.manager.sqlalchemy.model.contributor import Contributor
-from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism
+from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism, RightsStatus
 from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.files import OPDS2FilesFixture
 
@@ -413,3 +413,79 @@ class TestOPDS2WithODLExtractor:
         assert circulation_data.formats == []
         assert circulation_data.licenses is not None
         assert len(circulation_data.licenses) == 1
+
+    def test__extract_odl_circulation_data_empty_protection_formats(self) -> None:
+        """
+        Test that when protection.formats is empty, the format is added with drm_scheme=None.
+        """
+        license_identifier = "test-license-123"
+        publication_identifier = "urn:isbn:9780306406157"
+        license_format = MediaTypes.EPUB_MEDIA_TYPE
+
+        license_links = [
+            StrictLink(
+                rel=rwpm.LinkRelations.self,
+                type=LicenseInfo.content_type(),
+                href="http://example.org/license",
+            ),
+            StrictLink(
+                rel=opds2.AcquisitionLinkRelations.borrow,
+                type=LoanStatus.content_type(),
+                href="http://example.org/borrow",
+            ),
+        ]
+
+        license = License(
+            metadata=LicenseMetadata(
+                identifier=license_identifier,
+                created=utc_now(),
+                format=license_format,
+                terms=Terms(concurrency=1),
+                # Empty protection formats - should result in drm_scheme=None
+                protection=Protection(format=[]),
+            ),
+            links=license_links,
+        )
+
+        publication = Publication(
+            metadata=opds2.PublicationMetadata(
+                type="http://schema.org/Book",
+                identifier=publication_identifier,
+                title="Test Book",
+            ),
+            images=[
+                opds2.Link(
+                    href="http://example.org/cover.jpg",
+                    type="image/jpeg",
+                )
+            ],
+            links=[],
+            licenses=[license],
+        )
+
+        extractor: OPDS2WithODLExtractor[Publication] = OPDS2WithODLExtractor(
+            parse_publication=lambda x: x,  # type: ignore[arg-type, return-value]
+            base_url="http://example.org",
+            data_source="Test Source",
+        )
+        license_info = LicenseInfo(
+            identifier=license_identifier,
+            status=LicenseStatus.available,
+            checkouts=Checkouts(available=1),
+            terms=Terms(concurrency=1),
+            format=license_format,
+        )
+        identifier_data = IdentifierData.parse_urn(publication_identifier)
+        circulation_data = extractor._extract_odl_circulation_data(
+            publication=publication,
+            license_info_documents={license_identifier: license_info},
+            identifier=identifier_data,
+            medium=EditionConstants.BOOK_MEDIUM,
+        )
+
+        # Ensure we got exactly one format with no DRM
+        assert len(circulation_data.formats) == 1
+        [format_data] = circulation_data.formats
+        assert format_data.content_type == MediaTypes.EPUB_MEDIA_TYPE
+        assert format_data.drm_scheme is None
+        assert format_data.rights_uri == RightsStatus.IN_COPYRIGHT
