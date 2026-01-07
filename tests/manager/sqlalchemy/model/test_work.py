@@ -1,7 +1,7 @@
 import datetime
 from contextlib import nullcontext
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import opensearchpy
 import pytest
@@ -19,6 +19,7 @@ from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.service.redis.models.search import WaitingForIndexing
 from palace.manager.sqlalchemy.model.classification import Genre, Subject
 from palace.manager.sqlalchemy.model.contributor import Contributor
+from palace.manager.sqlalchemy.model.customlist import CustomList
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
@@ -31,6 +32,7 @@ from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation, 
 from palace.manager.sqlalchemy.model.work import (
     Work,
     WorkGenre,
+    add_work_to_customlists_for_collection,
     work_library_suppressions,
 )
 from palace.manager.sqlalchemy.util import (
@@ -1985,6 +1987,97 @@ class TestWork:
 
         Work.queue_indexing(None)
         assert waiting.pop(1) == []
+
+
+class TestAddWorkToCustomlistsForCollection:
+    """Tests for add_work_to_customlists_for_collection function."""
+
+    def test_customlists_processed_in_id_order(self, db: DatabaseTransactionFixture):
+        """Verify that customlists are processed in ascending ID order.
+
+        This is critical for preventing deadlocks when multiple concurrent
+        workers process works with overlapping customlists. By ensuring all
+        workers acquire locks in the same order, we prevent circular lock
+        dependencies.
+        """
+
+        # Create multiple customlists with specific IDs (they may not be
+        # sequential due to DB auto-increment)
+        list1, _ = db.customlist(num_entries=0, name="List A")
+        list2, _ = db.customlist(num_entries=0, name="List B")
+        list3, _ = db.customlist(num_entries=0, name="List C")
+
+        # Create two collections with overlapping customlists in different orders
+        collection1 = db.collection(name="Collection 1")
+        collection2 = db.collection(name="Collection 2")
+
+        # Add customlists to collections in non-ID order
+        # Collection 1: list3, list1 (highest ID first)
+        # Collection 2: list2, list3 (middle ID first)
+        collection1.customlists = [list3, list1]
+        collection2.customlists = [list2, list3]
+
+        # Create a work with license pools in both collections
+        edition1, pool1 = db.edition(with_license_pool=True, collection=collection1)
+        work = db.work(presentation_edition=edition1)
+        pool1.work = work
+
+        edition2, pool2 = db.edition(with_license_pool=True, collection=collection2)
+        pool2.work = work
+        pool2.presentation_edition = edition2
+
+        # Track the order in which add_entry is called
+        add_entry_order: list[int] = []
+        original_add_entry = CustomList.add_entry
+
+        def tracking_add_entry(self, *args, **kwargs):
+            add_entry_order.append(self.id)
+            return original_add_entry(self, *args, **kwargs)
+
+        with patch.object(CustomList, "add_entry", tracking_add_entry):
+            add_work_to_customlists_for_collection(work)
+
+        # Verify customlists were processed in ascending ID order
+        # Note: list3 appears in both collections but should only be processed once
+        expected_ids = sorted([list1.id, list2.id, list3.id])
+        assert add_entry_order == expected_ids, (
+            f"Expected customlists to be processed in ID order {expected_ids}, "
+            f"but got {add_entry_order}"
+        )
+
+    def test_work_without_presentation_edition_does_nothing(
+        self, db: DatabaseTransactionFixture
+    ):
+        """A work without a presentation edition should not be added to any lists."""
+
+        collection = db.collection()
+        customlist, _ = db.customlist(num_entries=0)
+        collection.customlists = [customlist]
+
+        edition, pool = db.edition(with_license_pool=True, collection=collection)
+        # Create a work without a presentation edition
+        work, _ = get_one_or_create(db.session, Work)
+        work.presentation_edition = None
+        pool.work = work
+
+        add_work_to_customlists_for_collection(work)
+
+        # No entries should have been added
+        assert customlist.size == 0
+
+    def test_pool_without_collection_is_skipped(self, db: DatabaseTransactionFixture):
+        """A license pool without a collection should be skipped gracefully."""
+
+        # Create a work with a presentation edition but a pool without collection
+        edition, pool = db.edition(with_license_pool=True)
+        work = pool.calculate_work()[0]
+
+        # Remove the collection from the pool
+        pool.collection = None
+        db.session.flush()
+
+        # This should not raise an exception
+        add_work_to_customlists_for_collection(pool)
 
 
 class TestWorkConsolidation:
