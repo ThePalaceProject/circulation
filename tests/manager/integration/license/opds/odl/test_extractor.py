@@ -203,21 +203,29 @@ class TestOPDS2WithODLExtractor:
                 DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE,
                 id="text-html",
             ),
+            pytest.param(
+                None,
+                MediaTypes.TEXT_HTML_MEDIA_TYPE,
+                DeliveryMechanism.STREAMING_DRM,
+                DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE,
+                id="none-medium-defaults-to-text",
+            ),
         ],
     )
     def test__extract_odl_circulation_data_license_formats_mapping(
         self,
-        medium: str,
+        medium: str | None,
         license_format: str,
         expected_drm: str | None,
         expected_content_type: str,
     ) -> None:
         """
-        Test that license formats in _LICENSE_FORMATS_MAPPING are correctly mapped
-        to specified DRM scheme (including no DRM), ignoring any protection formats.
+        Test that special license formats (FEEDBOOKS_AUDIO, text/html) are correctly
+        mapped to their appropriate content types and DRM schemes based on the
+        publication medium, ignoring any protection formats specified in the license.
         """
         # Create a minimal ODL publication with a license that has:
-        # - A format that should be mapped (e.g., FEEDBOOKS_AUDIO or "text/html").
+        # - A special format (e.g., FEEDBOOKS_AUDIO or "text/html").
         # - A protection field with multiple DRM schemes to verify they're ignored.
         license_identifier = "test-license-123"
         publication_identifier = "urn:isbn:9780306406157"

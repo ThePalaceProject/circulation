@@ -682,12 +682,6 @@ class OPDS2WithODLExtractor[PublicationType: opds2.BasePublication](
                 if license_format in self._skipped_license_formats:
                     continue
 
-                drm_schemes: Sequence[str | None] = (
-                    odl_license.metadata.protection.formats
-                )
-                if not drm_schemes:
-                    drm_schemes = [None]
-
                 if license_format == FEEDBOOKS_AUDIO:
                     # Handle DeMarque audiobooks which include the protection
                     # in the content type. When we see a license format of
@@ -725,6 +719,11 @@ class OPDS2WithODLExtractor[PublicationType: opds2.BasePublication](
                         )
                     )
                 else:
+                    drm_schemes: Sequence[str | None] = (
+                        odl_license.metadata.protection.formats
+                    )
+                    if not drm_schemes:
+                        drm_schemes = [None]
                     for drm_scheme in drm_schemes:
                         formats.append(
                             FormatData(
