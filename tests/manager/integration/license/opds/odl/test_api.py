@@ -1021,7 +1021,7 @@ class TestOPDS2WithODLApi:
             pytest.param(
                 DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE,
                 DeliveryMechanism.STREAMING_DRM,
-                MediaTypes.TEXT_HTML_MEDIA_TYPE,
+                MediaTypes.TEXT_HTML_MEDIA_TYPE + DeliveryMechanism.STREAMING_PROFILE,
                 "http://streaming",
                 [
                     {
