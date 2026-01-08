@@ -32,6 +32,7 @@ from palace.manager.api.circulation.fulfillment import (
     DirectFulfillment,
     FetchFulfillment,
     RedirectFulfillment,
+    StreamingFulfillment,
 )
 from palace.manager.api.model.token import OAuthTokenResponse
 from palace.manager.integration.license.opds.odl.api import OPDS2WithODLApi
@@ -1063,8 +1064,10 @@ class TestOPDS2WithODLApi:
             opds2_with_odl_api_fixture.pool,
             lpdm,
         )
-        if drm_scheme in (DeliveryMechanism.NO_DRM, DeliveryMechanism.STREAMING_DRM):
+        if drm_scheme == DeliveryMechanism.NO_DRM:
             assert isinstance(fulfillment, RedirectFulfillment)
+        elif drm_scheme == DeliveryMechanism.STREAMING_DRM:
+            assert isinstance(fulfillment, StreamingFulfillment)
         else:
             assert isinstance(fulfillment, FetchFulfillment)
             assert fulfillment.allowed_response_codes == ["2xx"]

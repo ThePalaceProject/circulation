@@ -6,8 +6,10 @@ from urllib.parse import urlparse
 
 import certifi
 
+from palace.manager.api.circulation.dispatcher import CirculationApiDispatcher
 from palace.manager.api.circulation.fulfillment import UrlFulfillment
 from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism
+from palace.manager.sqlalchemy.model.patron import Loan
 from palace.manager.util.flask_util import Response
 from palace.manager.util.http.exception import RemoteIntegrationException
 from palace.manager.util.log import LoggerMixin
@@ -54,7 +56,11 @@ class BoundlessAcsFulfillment(UrlFulfillment, LoggerMixin):
         super().__init__(content_link, content_type)
         self.verify = verify
 
-    def response(self) -> Response:
+    def response(
+        self,
+        circulation: CirculationApiDispatcher | None = None,
+        loan: Loan | None = None,
+    ) -> Response:
         service_name = urlparse(str(self.content_link)).netloc
         try:
             if self.verify:

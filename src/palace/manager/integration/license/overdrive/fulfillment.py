@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import flask
 
+from palace.manager.api.circulation.dispatcher import CirculationApiDispatcher
 from palace.manager.api.circulation.fulfillment import RedirectFulfillment
+from palace.manager.sqlalchemy.model.patron import Loan
 
 
 class OverdriveManifestFulfillment(RedirectFulfillment):
@@ -11,7 +13,11 @@ class OverdriveManifestFulfillment(RedirectFulfillment):
         self.scope_string = scope_string
         self.access_token = access_token
 
-    def response(self) -> flask.Response:
+    def response(
+        self,
+        circulation: CirculationApiDispatcher | None = None,
+        loan: Loan | None = None,
+    ) -> flask.Response:
         headers = {
             "Location": self.content_link,
             "X-Overdrive-Scope": self.scope_string,
