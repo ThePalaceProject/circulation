@@ -459,6 +459,7 @@ class OPDS2WithODLExtractor[PublicationType: opds2.BasePublication](
             checkouts_left=license_info_document.checkouts.left,
             checkouts_available=license_info_document.checkouts.available,
             status=status,
+            terms_checkouts=license_info_document.terms.checkouts,
             terms_concurrency=license_info_document.terms.concurrency,
             content_types=license_info_document.formats,
         )

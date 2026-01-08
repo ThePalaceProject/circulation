@@ -509,6 +509,58 @@ class TestLicense:
         assert total_remaining_loans == license.total_remaining_loans
         assert currently_available_loans == license.currently_available_loans
 
+    def test_terms_checkouts_set_and_retrieved(
+        self, db: DatabaseTransactionFixture
+    ) -> None:
+        """That terms_checkouts can be set and retrieved on License."""
+        pool = db.licensepool(None, collection=db.default_collection())
+        license = db.license(
+            pool,
+            checkouts_available=5,
+            terms_checkouts=10,
+        )
+        assert license.terms_checkouts == 10
+
+    def test_terms_checkouts_defaults_to_none(
+        self, db: DatabaseTransactionFixture
+    ) -> None:
+        """That terms_checkouts defaults to None when not provided."""
+        pool = db.licensepool(None, collection=db.default_collection())
+        license = db.license(
+            pool,
+            checkouts_available=5,
+        )
+        assert license.terms_checkouts is None
+
+    def test_terms_checkouts_can_be_none(self, db: DatabaseTransactionFixture) -> None:
+        """That terms_checkouts can be explicitly set to None."""
+        pool = db.licensepool(None, collection=db.default_collection())
+        license = db.license(
+            pool,
+            checkouts_available=5,
+            terms_checkouts=None,
+        )
+        assert license.terms_checkouts is None
+
+    def test_terms_checkouts_persists_after_update(
+        self, db: DatabaseTransactionFixture
+    ) -> None:
+        """That terms_checkouts persists after updating other fields."""
+        pool = db.licensepool(None, collection=db.default_collection())
+        license = db.license(
+            pool,
+            checkouts_available=5,
+            terms_checkouts=15,
+        )
+        assert license.terms_checkouts == 15
+
+        # Update another field
+        license.checkouts_available = 10
+        db.session.commit()
+
+        # terms_checkouts should still be 15
+        assert license.terms_checkouts == 15
+
     @pytest.mark.parametrize(
         "license_type,left,available",
         [
