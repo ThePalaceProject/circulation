@@ -598,7 +598,14 @@ class OPDS2WithODLApi(
         if fulfill_link is None:
             raise CannotFulfill()
 
-        return fulfill_cls(fulfill_link.href, fulfill_link.type)
+        fulfill_link_type = fulfill_link.type
+        if (
+            drm_scheme == DeliveryMechanism.STREAMING_DRM
+            and fulfill_link_type is not None
+        ):
+            fulfill_link_type += DeliveryMechanism.STREAMING_PROFILE
+
+        return fulfill_cls(fulfill_link.href, fulfill_link_type)
 
     def _bearer_token_fulfill(
         self, loan: Loan, delivery_mechanism: LicensePoolDeliveryMechanism
