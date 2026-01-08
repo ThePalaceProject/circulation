@@ -160,12 +160,12 @@ class FetchFulfillment(UrlFulfillment, LoggerMixin):
 
 class StreamingFulfillment(UrlFulfillment):
     """
-    Fulfillment for streaming content that returns an OPDS feed entry containing the fulfillment link.
+    Fulfill a loan by returning an OPDS feed entry containing the streaming link.
 
-    Used for streaming delivery mechanisms where clients need an OPDS entry
-    rather than a direct redirect.
+    Used for streaming delivery mechanisms where clients expect an OPDS entry
+    rather than a direct redirect to the content.
 
-    The streaming profile is automatically appended to the content type if provided.
+    If a content type is provided, the streaming profile is automatically appended.
     """
 
     def __init__(self, content_link: str, content_type: str | None = None) -> None:
