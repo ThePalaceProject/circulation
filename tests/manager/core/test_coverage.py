@@ -705,7 +705,7 @@ class TestIdentifierCoverageProvider:
         assert True == provider.replacement_policy.identifiers
         assert False == provider.replacement_policy.formats
 
-        policy = ReplacementPolicy.from_license_source(db.session)
+        policy = ReplacementPolicy.from_license_source()
         provider = AlwaysSuccessfulCoverageProvider(
             db.session, replacement_policy=policy
         )

@@ -667,7 +667,7 @@ class BoundlessApi(
             patrons_in_hold_queue=0,
         )
         availability.apply(
-            self._db, collection, ReplacementPolicy.from_license_source(self._db)
+            self._db, collection, ReplacementPolicy.from_license_source()
         )
 
     def availability_by_title_ids(

@@ -1246,7 +1246,7 @@ class BibliothecaCirculationSweep(IdentifierSweepMonitor):
             self.api = api_class
         else:
             self.api = api_class(_db, collection)
-        self.replacement_policy = ReplacementPolicy.from_license_source(_db)
+        self.replacement_policy = ReplacementPolicy.from_license_source()
         self.analytics = self.services.analytics.analytics()
 
     def process_items(self, identifiers: CollectionT[Identifier]) -> None:
@@ -1339,7 +1339,7 @@ class BibliothecaTimelineMonitor(CollectionMonitor, TimelineMonitor):
             self.api = api_class
         else:
             self.api = api_class(_db, collection)
-        self.replacement_policy = ReplacementPolicy.from_license_source(_db)
+        self.replacement_policy = ReplacementPolicy.from_license_source()
         self.bibliographic_coverage_provider = BibliothecaBibliographicCoverageProvider(
             collection, self.api, replacement_policy=self.replacement_policy
         )
