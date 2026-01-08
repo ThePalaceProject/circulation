@@ -44,6 +44,7 @@ from palace.manager.api.problem_details import (
     OUTSTANDING_FINES,
 )
 from palace.manager.core.problem_details import INTEGRATION_ERROR, INVALID_INPUT
+from palace.manager.feed.acquisition import OPDSAcquisitionFeed
 from palace.manager.feed.serializer.opds2 import OPDS2Serializer
 from palace.manager.integration.license.bibliotheca import BibliothecaAPI
 from palace.manager.integration.license.opds.opds1.api import OPDSAPI
@@ -992,34 +993,36 @@ class TestLoanController:
     def test_fulfill_without_single_item_feed(self, loan_fixture: LoanFixture):
         """A streaming fulfillment fails due to the feed method failing"""
         controller = loan_fixture.manager.loans
-        with loan_fixture.request_context_with_library(
-            "/", headers=dict(Authorization=loan_fixture.valid_auth)
+        with (
+            loan_fixture.request_context_with_library(
+                "/", headers=dict(Authorization=loan_fixture.valid_auth)
+            ),
+            patch.object(controller.circulation, "fulfill") as mock_fulfill,
+            patch.object(
+                OPDSAcquisitionFeed, "single_entry_loans_feed"
+            ) as mock_single_entry_loans_feed,
         ):
-            circulation = controller.circulation
             authenticated = controller.authenticated_patron_from_request()
             assert isinstance(authenticated, Patron)
             loan_fixture.pool.loan_to(authenticated)
-            with patch.object(circulation, "fulfill") as fulfill:
-                # Use StreamingFulfillment which will call single_entry_loans_feed internally
-                fulfill.return_value = StreamingFulfillment(
-                    "http://streaming-link", "text/html"
-                )
-                # The content type needs to be streaming
-                loan_fixture.mech1.delivery_mechanism.content_type = (
-                    DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE
-                )
 
-                # Mock the feed method to return NOT_FOUND_ON_REMOTE
-                with patch(
-                    "palace.manager.feed.acquisition.OPDSAcquisitionFeed.single_entry_loans_feed"
-                ) as feed:
-                    feed.return_value = NOT_FOUND_ON_REMOTE
-                    response = controller.fulfill(
-                        loan_fixture.pool_id, loan_fixture.mech1.delivery_mechanism.id
-                    )
-                    # StreamingFulfillment.response() raises ProblemDetailException
-                    # which is caught by the controller and returns the problem_detail
-                    assert response == NOT_FOUND_ON_REMOTE
+            # Use StreamingFulfillment which will call single_entry_loans_feed internally
+            mock_fulfill.return_value = StreamingFulfillment(
+                "http://streaming-link", "text/html"
+            )
+            # The content type needs to be streaming
+            loan_fixture.mech1.delivery_mechanism.content_type = (
+                DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE
+            )
+
+            # Mock the feed method to return NOT_FOUND_ON_REMOTE
+            mock_single_entry_loans_feed.return_value = NOT_FOUND_ON_REMOTE
+            response = controller.fulfill(
+                loan_fixture.pool_id, loan_fixture.mech1.delivery_mechanism.id
+            )
+            # StreamingFulfillment.response() raises ProblemDetailException
+            # which is caught by the controller and returns the problem_detail
+            assert response == NOT_FOUND_ON_REMOTE
 
     def test_no_drm_fulfill(self, loan_fixture: LoanFixture):
         """In case a work does not have DRM for it's fulfillment.
