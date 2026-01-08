@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import Self, Unpack
 
 from pydantic import Field
-from sqlalchemy.orm import Session
 from typing_extensions import TypedDict
 
 from palace.manager.data_layer.base.frozen import BaseFrozenData
@@ -38,7 +37,6 @@ class ReplacementPolicy(BaseFrozenData):
     @classmethod
     def from_license_source(
         cls,
-        _db: Session,
         **kwargs: Unpack[_ReplacementPolicyKwargs],
     ) -> Self:
         """When gathering data from the license source, overwrite all old data

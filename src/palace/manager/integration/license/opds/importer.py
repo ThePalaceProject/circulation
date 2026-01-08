@@ -368,7 +368,7 @@ class OpdsImporter[FeedType, PublicationType](LoggerMixin):
         next_url = self._extractor.feed_next_url(feed)
         results = {}
 
-        replacement_policy = ReplacementPolicy(
+        replacement_policy = ReplacementPolicy.from_license_source(
             even_if_not_apparently_updated=import_even_if_unchanged
         )
 

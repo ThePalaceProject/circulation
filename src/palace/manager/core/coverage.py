@@ -1126,7 +1126,7 @@ class CollectionCoverageProvider(IdentifierCoverageProvider):
         this data from a reliable source of both bibliographic and circulation
         information.
         """
-        return ReplacementPolicy.from_license_source(_db)
+        return ReplacementPolicy.from_license_source()
 
     @classmethod
     def collections(cls, _db):

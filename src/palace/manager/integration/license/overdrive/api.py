@@ -1653,7 +1653,7 @@ class OverdriveAPI(
 
         edition, ignore = self._edition(licensepool)
 
-        replace = ReplacementPolicy.from_license_source(self._db)
+        replace = ReplacementPolicy.from_license_source()
         bibliographic.apply(self._db, edition, self.collection, replace=replace)
 
     def update_licensepool(
