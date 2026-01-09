@@ -136,6 +136,13 @@ NOT_FOUND_ON_REMOTE = pd(
     _("This book was recently removed from the collection."),
 )
 
+FILTERED_BY_LIBRARY_POLICY = pd(
+    "http://palaceproject.io/terms/problem/filtered-by-library-policy",
+    404,
+    _("Not available at this library."),
+    _("This title is not available at your library due to content restrictions."),
+)
+
 NO_ACTIVE_LOAN = pd(
     "http://librarysimplified.org/terms/problem/no-active-loan",
     400,
