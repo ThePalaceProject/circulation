@@ -15,6 +15,7 @@ from werkzeug.exceptions import HTTPException
 
 from palace import manager
 from palace.manager.api.admin.config import Configuration as AdminUiConfig
+from palace.manager.api.problem_details import FILTERED_BY_LIBRARY_POLICY
 from palace.manager.api.util.flask import PalaceFlask, get_request_library
 from palace.manager.core.problem_details import INVALID_URN
 from palace.manager.feed.acquisition import LookupAcquisitionFeed, OPDSAcquisitionFeed
@@ -452,7 +453,7 @@ class URNLookupHandler:
         if self.library and work.is_filtered_for_library(self.library):
             # This work is filtered by the library's content settings.
             # Treat it as if it doesn't exist.
-            return self.add_message(urn, 404, self.UNRECOGNIZED_IDENTIFIER)
+            return self.add_message(urn, 404, FILTERED_BY_LIBRARY_POLICY.detail)
 
         # The work is ready for use in an OPDS feed!
         return self.add_work(identifier, work)

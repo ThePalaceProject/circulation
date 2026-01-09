@@ -21,7 +21,11 @@ from palace.manager.api.lanes import (
     SeriesFacets,
     SeriesLane,
 )
-from palace.manager.api.problem_details import NO_SUCH_LANE, NOT_FOUND_ON_REMOTE
+from palace.manager.api.problem_details import (
+    FILTERED_BY_LIBRARY_POLICY,
+    NO_SUCH_LANE,
+    NOT_FOUND_ON_REMOTE,
+)
 from palace.manager.core.classifier import Classifier
 from palace.manager.core.entrypoint import AudiobooksEntryPoint
 from palace.manager.core.problem_details import INVALID_INPUT
@@ -32,6 +36,7 @@ from palace.manager.feed.annotator.circulation import LibraryAnnotator
 from palace.manager.feed.types import WorkEntry
 from palace.manager.integration.metadata.novelist import NoveListAPI
 from palace.manager.search.external_search import SortKeyPagination
+from palace.manager.sqlalchemy.model.classification import Genre
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.lane import Facets, FeaturedFacets
 from palace.manager.sqlalchemy.model.licensing import LicensePool
@@ -312,10 +317,10 @@ class TestWorkController:
                 identifier.type, identifier.identifier
             )
 
-        # Work is filtered, should return 404
+        # Work is filtered, should return 404 with FILTERED_BY_LIBRARY_POLICY
         assert isinstance(response, ProblemDetail)
         assert response.status_code == 404
-        assert response.uri == NOT_FOUND_ON_REMOTE.uri
+        assert response.uri == FILTERED_BY_LIBRARY_POLICY.uri
 
     def test_permalink_filtered_by_genre(self, work_fixture: WorkFixture):
         """Test that permalink returns 404 for works filtered by genre."""
@@ -324,8 +329,6 @@ class TestWorkController:
         identifier = work_fixture.identifier
 
         # Add a genre to the work
-        from palace.manager.sqlalchemy.model.classification import Genre
-
         romance_genre, _ = Genre.lookup(work_fixture.db.session, "Romance")
         work.genres = [romance_genre]
 
@@ -339,10 +342,10 @@ class TestWorkController:
                 identifier.type, identifier.identifier
             )
 
-        # Work is filtered, should return 404
+        # Work is filtered, should return 404 with FILTERED_BY_LIBRARY_POLICY
         assert isinstance(response, ProblemDetail)
         assert response.status_code == 404
-        assert response.uri == NOT_FOUND_ON_REMOTE.uri
+        assert response.uri == FILTERED_BY_LIBRARY_POLICY.uri
 
     def test_permalink_not_filtered_when_settings_dont_match(
         self, work_fixture: WorkFixture
