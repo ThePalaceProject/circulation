@@ -49,6 +49,7 @@ from palace.manager.util.opds_writer import OPDSFeed
 from palace.manager.util.problem_detail import ProblemDetail
 from tests.fixtures.api_controller import CirculationControllerFixture
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.library import LibraryFixture
 from tests.fixtures.services import ServicesFixture
 
 
@@ -300,7 +301,9 @@ class TestWorkController:
         assert expect.data == response.get_data()
         assert OPDSFeed.ENTRY_TYPE == response.headers["Content-Type"]
 
-    def test_permalink_filtered_by_audience(self, work_fixture: WorkFixture):
+    def test_permalink_filtered_by_audience(
+        self, work_fixture: WorkFixture, library_fixture: LibraryFixture
+    ):
         """Test that permalink returns 404 for works filtered by audience."""
         library = work_fixture.db.default_library()
         work = work_fixture.english_1
@@ -308,9 +311,8 @@ class TestWorkController:
         identifier = work_fixture.identifier
 
         # Set up audience filtering
-        library.settings_dict["filtered_audiences"] = ["Adult"]
-        if hasattr(library, "_settings"):
-            delattr(library, "_settings")
+        settings = library_fixture.settings(library)
+        settings.filtered_audiences = ["Adult"]
 
         with work_fixture.request_context_with_library("/"):
             response = work_fixture.manager.work_controller.permalink(
@@ -322,7 +324,9 @@ class TestWorkController:
         assert response.status_code == 404
         assert response.uri == FILTERED_BY_LIBRARY_POLICY.uri
 
-    def test_permalink_filtered_by_genre(self, work_fixture: WorkFixture):
+    def test_permalink_filtered_by_genre(
+        self, work_fixture: WorkFixture, library_fixture: LibraryFixture
+    ):
         """Test that permalink returns 404 for works filtered by genre."""
         library = work_fixture.db.default_library()
         work = work_fixture.english_1
@@ -333,9 +337,8 @@ class TestWorkController:
         work.genres = [romance_genre]
 
         # Set up genre filtering
-        library.settings_dict["filtered_genres"] = ["Romance"]
-        if hasattr(library, "_settings"):
-            delattr(library, "_settings")
+        settings = library_fixture.settings(library)
+        settings.filtered_genres = ["Romance"]
 
         with work_fixture.request_context_with_library("/"):
             response = work_fixture.manager.work_controller.permalink(
@@ -348,7 +351,7 @@ class TestWorkController:
         assert response.uri == FILTERED_BY_LIBRARY_POLICY.uri
 
     def test_permalink_not_filtered_when_settings_dont_match(
-        self, work_fixture: WorkFixture
+        self, work_fixture: WorkFixture, library_fixture: LibraryFixture
     ):
         """Test that permalink works normally when work doesn't match filters."""
         library = work_fixture.db.default_library()
@@ -357,9 +360,8 @@ class TestWorkController:
         identifier = work_fixture.identifier
 
         # Set up filtering for a different audience
-        library.settings_dict["filtered_audiences"] = ["Young Adult"]
-        if hasattr(library, "_settings"):
-            delattr(library, "_settings")
+        settings = library_fixture.settings(library)
+        settings.filtered_audiences = ["Young Adult"]
 
         with work_fixture.request_context_with_library("/"):
             response = work_fixture.manager.work_controller.permalink(
