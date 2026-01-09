@@ -1221,6 +1221,7 @@ class TestLibraryContentFiltering:
         self,
         end_to_end_search_fixture: EndToEndSearchFixture,
         library_content_filtering_data: LibraryContentFilteringData,
+        library_fixture: LibraryFixture,
     ):
         """End-to-end test verifying that library content filters are applied
         correctly when querying OpenSearch.
@@ -1229,18 +1230,16 @@ class TestLibraryContentFiltering:
         data = library_content_filtering_data
         transaction = fixture.external_search.db
         library = transaction.default_library()
+        settings = library_fixture.settings(library)
 
         # Helper to create a filter with library and expect results
         def expect_with_filter(expected_works: list[Work], query: str = ""):
-            # Clear cached settings before creating filter
-            if hasattr(library, "_settings"):
-                delattr(library, "_settings")
             f = Filter(library=library)
             fixture.expect_results(expected_works, query, filter=f, ordered=False)
 
         # Test 1: No filtering - all works returned
-        library.settings_dict["filtered_audiences"] = []
-        library.settings_dict["filtered_genres"] = []
+        settings.filtered_audiences = []
+        settings.filtered_genres = []
         expect_with_filter(
             [
                 data.adult_book,
@@ -1254,8 +1253,8 @@ class TestLibraryContentFiltering:
         )
 
         # Test 2: Filter out Adult audience
-        library.settings_dict["filtered_audiences"] = ["Adult"]
-        library.settings_dict["filtered_genres"] = []
+        settings.filtered_audiences = ["Adult"]
+        settings.filtered_genres = []
         expect_with_filter(
             [
                 data.ya_book,
@@ -1266,8 +1265,8 @@ class TestLibraryContentFiltering:
         )
 
         # Test 3: Filter out Young Adult audience
-        library.settings_dict["filtered_audiences"] = ["Young Adult"]
-        library.settings_dict["filtered_genres"] = []
+        settings.filtered_audiences = ["Young Adult"]
+        settings.filtered_genres = []
         expect_with_filter(
             [
                 data.adult_book,
@@ -1280,8 +1279,8 @@ class TestLibraryContentFiltering:
         )
 
         # Test 4: Filter out Romance genre
-        library.settings_dict["filtered_audiences"] = []
-        library.settings_dict["filtered_genres"] = ["Romance"]
+        settings.filtered_audiences = []
+        settings.filtered_genres = ["Romance"]
         expect_with_filter(
             [
                 data.adult_book,
@@ -1295,8 +1294,8 @@ class TestLibraryContentFiltering:
         )
 
         # Test 5: Filter out Horror genre
-        library.settings_dict["filtered_audiences"] = []
-        library.settings_dict["filtered_genres"] = ["Horror"]
+        settings.filtered_audiences = []
+        settings.filtered_genres = ["Horror"]
         expect_with_filter(
             [
                 data.adult_book,
@@ -1311,8 +1310,8 @@ class TestLibraryContentFiltering:
 
         # Test 6: Filter both audience and genre (AND logic)
         # Filter Adult audience AND Romance genre
-        library.settings_dict["filtered_audiences"] = ["Adult"]
-        library.settings_dict["filtered_genres"] = ["Romance"]
+        settings.filtered_audiences = ["Adult"]
+        settings.filtered_genres = ["Romance"]
         expect_with_filter(
             [
                 # adult_book filtered (Adult)
@@ -1326,8 +1325,8 @@ class TestLibraryContentFiltering:
         )
 
         # Test 7: Multiple audiences filtered
-        library.settings_dict["filtered_audiences"] = ["Adult", "Young Adult"]
-        library.settings_dict["filtered_genres"] = []
+        settings.filtered_audiences = ["Adult", "Young Adult"]
+        settings.filtered_genres = []
         expect_with_filter(
             [
                 # adult_book filtered
@@ -1341,8 +1340,8 @@ class TestLibraryContentFiltering:
         )
 
         # Test 8: Multiple genres filtered
-        library.settings_dict["filtered_audiences"] = []
-        library.settings_dict["filtered_genres"] = ["Romance", "Horror"]
+        settings.filtered_audiences = []
+        settings.filtered_genres = ["Romance", "Horror"]
         expect_with_filter(
             [
                 data.adult_book,
@@ -4307,13 +4306,14 @@ class TestFilter:
         assert {"term": {"series.keyword": ""}} in built.to_dict()["bool"]["must_not"]
 
     def test_build_library_content_filtering(
-        self, filter_fixture: FilterFixture
+        self, filter_fixture: FilterFixture, library_fixture: LibraryFixture
     ) -> None:
         """Test that library-level content filtering excludes works
         matching filtered audiences or genres.
         """
         transaction = filter_fixture.transaction
         library = transaction.default_library()
+        settings = library_fixture.settings(library)
 
         # Test 1: No filtering - empty settings don't affect results
         # Library with no filtered audiences or genres
@@ -4329,10 +4329,7 @@ class TestFilter:
         assert len(must_not) == 2
 
         # Test 2: Filter by audiences
-        library.settings_dict["filtered_audiences"] = ["Adult", "Adults Only"]
-        # Clear cached settings
-        if hasattr(library, "_settings"):
-            delattr(library, "_settings")
+        settings.filtered_audiences = ["Adult", "Adults Only"]
         filter = Filter(library=library)
         built, nested = filter.build()
         must_not = built.to_dict()["bool"]["must_not"]
@@ -4340,10 +4337,8 @@ class TestFilter:
         assert {"terms": {"audience": ["adult", "adultsonly"]}} in must_not
 
         # Test 3: Filter by genres
-        library.settings_dict["filtered_audiences"] = []
-        library.settings_dict["filtered_genres"] = ["Romance", "Horror"]
-        if hasattr(library, "_settings"):
-            delattr(library, "_settings")
+        settings.filtered_audiences = []
+        settings.filtered_genres = ["Romance", "Horror"]
         filter = Filter(library=library)
         built, nested = filter.build()
         must_not = built.to_dict()["bool"]["must_not"]
@@ -4357,10 +4352,8 @@ class TestFilter:
         assert genre_filter in must_not
 
         # Test 4: Both filters applied (AND logic)
-        library.settings_dict["filtered_audiences"] = ["Young Adult"]
-        library.settings_dict["filtered_genres"] = ["Horror"]
-        if hasattr(library, "_settings"):
-            delattr(library, "_settings")
+        settings.filtered_audiences = ["Young Adult"]
+        settings.filtered_genres = ["Horror"]
         filter = Filter(library=library)
         built, nested = filter.build()
         must_not = built.to_dict()["bool"]["must_not"]

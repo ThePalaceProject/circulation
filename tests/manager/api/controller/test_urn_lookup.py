@@ -5,6 +5,7 @@ from palace.manager.sqlalchemy.constants import LinkRelations
 from palace.manager.sqlalchemy.model.classification import Genre
 from palace.manager.util.opds_writer import OPDSFeed
 from tests.fixtures.api_controller import ControllerFixture
+from tests.fixtures.library import LibraryFixture
 
 
 class TestURNLookupController:
@@ -45,7 +46,7 @@ class TestURNLookupController:
             assert LinkRelations.OPEN_ACCESS_DOWNLOAD == link["rel"]
 
     def test_work_lookup_filtered_by_audience(
-        self, controller_fixture: ControllerFixture
+        self, controller_fixture: ControllerFixture, library_fixture: LibraryFixture
     ):
         """Test that URN lookup excludes works filtered by audience."""
         library = controller_fixture.db.default_library()
@@ -55,9 +56,8 @@ class TestURNLookupController:
         urn = pool.identifier.urn
 
         # Set up audience filtering
-        library.settings_dict["filtered_audiences"] = ["Adult"]
-        if hasattr(library, "_settings"):
-            delattr(library, "_settings")
+        settings = library_fixture.settings(library)
+        settings.filtered_audiences = ["Adult"]
 
         with controller_fixture.request_context_with_library("/?urn=%s" % urn):
             response = controller_fixture.manager.urn_lookup.work_lookup("work")
@@ -67,7 +67,9 @@ class TestURNLookupController:
         feed = feedparser.parse(response.data)
         assert 0 == len(feed["entries"])
 
-    def test_work_lookup_filtered_by_genre(self, controller_fixture: ControllerFixture):
+    def test_work_lookup_filtered_by_genre(
+        self, controller_fixture: ControllerFixture, library_fixture: LibraryFixture
+    ):
         """Test that URN lookup excludes works filtered by genre."""
         library = controller_fixture.db.default_library()
         work = controller_fixture.db.work(with_open_access_download=True)
@@ -79,9 +81,8 @@ class TestURNLookupController:
         work.genres = [romance_genre]
 
         # Set up genre filtering
-        library.settings_dict["filtered_genres"] = ["Romance"]
-        if hasattr(library, "_settings"):
-            delattr(library, "_settings")
+        settings = library_fixture.settings(library)
+        settings.filtered_genres = ["Romance"]
 
         with controller_fixture.request_context_with_library("/?urn=%s" % urn):
             response = controller_fixture.manager.urn_lookup.work_lookup("work")
@@ -92,7 +93,7 @@ class TestURNLookupController:
         assert 0 == len(feed["entries"])
 
     def test_work_lookup_not_filtered_when_settings_dont_match(
-        self, controller_fixture: ControllerFixture
+        self, controller_fixture: ControllerFixture, library_fixture: LibraryFixture
     ):
         """Test that URN lookup works normally when work doesn't match filters."""
         library = controller_fixture.db.default_library()
@@ -102,9 +103,8 @@ class TestURNLookupController:
         urn = pool.identifier.urn
 
         # Set up filtering for a different audience
-        library.settings_dict["filtered_audiences"] = ["Young Adult"]
-        if hasattr(library, "_settings"):
-            delattr(library, "_settings")
+        settings = library_fixture.settings(library)
+        settings.filtered_audiences = ["Young Adult"]
 
         with controller_fixture.request_context_with_library("/?urn=%s" % urn):
             response = controller_fixture.manager.urn_lookup.work_lookup("work")
@@ -116,7 +116,7 @@ class TestURNLookupController:
         assert work.title == feed["entries"][0]["title"]
 
     def test_work_lookup_multiple_urns_with_filtering(
-        self, controller_fixture: ControllerFixture
+        self, controller_fixture: ControllerFixture, library_fixture: LibraryFixture
     ):
         """Test that URN lookup correctly filters some works while returning others."""
         library = controller_fixture.db.default_library()
@@ -137,9 +137,8 @@ class TestURNLookupController:
         ya_urn = ya_pool.identifier.urn
 
         # Filter Adult audience
-        library.settings_dict["filtered_audiences"] = ["Adult"]
-        if hasattr(library, "_settings"):
-            delattr(library, "_settings")
+        settings = library_fixture.settings(library)
+        settings.filtered_audiences = ["Adult"]
 
         # Request both works
         with controller_fixture.request_context_with_library(
