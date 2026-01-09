@@ -3096,6 +3096,60 @@ class TestDatabaseBackedWorkList:
         results = set(wl.works_from_database(db.session).all())
         assert results == {horror, no_genre}
 
+    def test_works_from_database_filters_combined_audience_and_genre(
+        self, db: DatabaseTransactionFixture, library_fixture: LibraryFixture
+    ):
+        """Test that both audience and genre filters are applied together."""
+        library = db.default_library()
+        settings = library_fixture.settings(library)
+        settings.filtered_audiences = [Classifier.AUDIENCE_ADULT]
+        settings.filtered_genres = ["Romance"]
+
+        romance_genre, _ = Genre.lookup(db.session, "Romance")
+        horror_genre, _ = Genre.lookup(db.session, "Horror")
+
+        # Filtered by audience
+        adult_horror = db.work(
+            title="Adult Horror",
+            audience=Classifier.AUDIENCE_ADULT,
+            with_license_pool=True,
+        )
+        adult_horror.genres = [horror_genre]
+
+        # Filtered by genre
+        ya_romance = db.work(
+            title="YA Romance",
+            audience=Classifier.AUDIENCE_YOUNG_ADULT,
+            with_license_pool=True,
+        )
+        ya_romance.genres = [romance_genre]
+
+        # Filtered by both audience and genre
+        adult_romance = db.work(
+            title="Adult Romance",
+            audience=Classifier.AUDIENCE_ADULT,
+            with_license_pool=True,
+        )
+        adult_romance.genres = [romance_genre]
+
+        # Not filtered - passes both checks
+        ya_horror = db.work(
+            title="YA Horror",
+            audience=Classifier.AUDIENCE_YOUNG_ADULT,
+            with_license_pool=True,
+        )
+        ya_horror.genres = [horror_genre]
+
+        # Not filtered - no audience or genre
+        plain_work = db.work(title="Plain Work", with_license_pool=True)
+        plain_work.audience = None
+
+        wl = DatabaseBackedWorkList()
+        wl.initialize(library)
+
+        results = set(wl.works_from_database(db.session).all())
+        assert results == {ya_horror, plain_work}
+
     def test_base_query(self, db: DatabaseTransactionFixture):
         # Verify that base_query makes the query we expect and then
         # calls some optimization methods (not tested).

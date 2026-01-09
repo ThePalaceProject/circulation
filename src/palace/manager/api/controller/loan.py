@@ -226,6 +226,9 @@ class LoanController(CirculationManagerController):
             # those loans instead of an error.
             return existing_loans[0]
 
+        # Check library content filtering. This check comes after the existing
+        # loan check above so that patrons can still access works they already
+        # have on loan, even if filtering rules change after the loan was made.
         work = next((pool.work for pool in pools if pool.work), None)
         if work and work.is_filtered_for_library(library):
             return FILTERED_BY_LIBRARY_POLICY

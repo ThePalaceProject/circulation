@@ -52,6 +52,7 @@ from palace.manager.integration.license.bibliotheca import BibliothecaAPI
 from palace.manager.integration.license.opds.opds1.api import OPDSAPI
 from palace.manager.service.redis.models.patron_activity import PatronActivity
 from palace.manager.sqlalchemy.constants import MediaTypes
+from palace.manager.sqlalchemy.model.classification import Genre
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.identifier import Identifier
@@ -508,6 +509,30 @@ class TestLoanController:
 
         assert isinstance(response, OPDSEntryResponse)
         assert response.status_code == 200
+
+    def test_borrow_filtered_by_genre_blocks_new_loan(
+        self, loan_fixture: LoanFixture, library_fixture: LibraryFixture
+    ) -> None:
+        work = loan_fixture.english_1
+        romance_genre, _ = Genre.lookup(loan_fixture.db.session, "Romance")
+        work.genres = [romance_genre]
+
+        settings = library_fixture.settings(loan_fixture.library)
+        settings.filtered_genres = ["Romance"]
+
+        headers = {"Authorization": loan_fixture.valid_auth}
+        with loan_fixture.request_context_with_library("/", headers=headers):
+            loan_fixture.manager.loans.authenticated_patron_from_request()
+            response = loan_fixture.manager.loans.borrow(
+                loan_fixture.identifier_type, loan_fixture.identifier_identifier
+            )
+
+        assert isinstance(response, ProblemDetail)
+        assert response.status_code == FILTERED_BY_LIBRARY_POLICY.status_code
+        assert response.uri == FILTERED_BY_LIBRARY_POLICY.uri
+
+        loan = get_one(loan_fixture.db.session, Loan, license_pool=loan_fixture.pool)
+        assert loan is None
 
     def test_borrow_and_fulfill_with_streaming_delivery_mechanism(
         self,
