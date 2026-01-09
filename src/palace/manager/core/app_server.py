@@ -6,6 +6,7 @@ import gzip
 from collections.abc import Callable
 from functools import wraps
 from io import BytesIO
+from typing import TYPE_CHECKING
 
 import flask
 from flask import Response, make_response, url_for
@@ -22,6 +23,11 @@ from palace.manager.sqlalchemy.model.lane import Facets, Pagination
 from palace.manager.util.log import LoggerMixin
 from palace.manager.util.opds_writer import OPDSMessage
 from palace.manager.util.problem_detail import BaseProblemDetailException, ProblemDetail
+
+if TYPE_CHECKING:
+    from palace.manager.sqlalchemy.model.library import Library
+    from palace.manager.sqlalchemy.model.work import Work
+    from palace.manager.util.flask_util import OPDSEntryResponse
 
 
 def load_facets_from_request(
@@ -313,7 +319,11 @@ class URNLookupController:
         self._db = _db
 
     def work_lookup(
-        self, annotator, route_name="lookup", library=None, **process_urn_kwargs
+        self,
+        annotator,
+        route_name="lookup",
+        library: Library | None = None,
+        **process_urn_kwargs,
     ):
         """Generate an OPDS feed describing works identified by identifier.
 
@@ -339,7 +349,7 @@ class URNLookupController:
         opds_feed.generate_feed(annotate=False)
         return opds_feed.as_response(mime_types=flask.request.accept_mimetypes)
 
-    def process_urns(self, urns, library=None, **process_urn_kwargs):
+    def process_urns(self, urns, library: Library | None = None, **process_urn_kwargs):
         """Process a number of URNs by instantiating a URNLookupHandler
         and having it do the work.
 
@@ -391,7 +401,7 @@ class URNLookupHandler:
     WORK_NOT_PRESENTATION_READY = "Work created but not yet presentation-ready."
     WORK_NOT_CREATED = "Identifier resolved but work not yet created."
 
-    def __init__(self, _db, library=None):
+    def __init__(self, _db, library: Library | None = None):
         """
         :param _db: A database session.
         :param library: Optional Library to filter works against. If provided,
@@ -400,9 +410,8 @@ class URNLookupHandler:
         """
         self._db = _db
         self.library = library
-        self.works = []
-        self.precomposed_entries = []
-        self.unresolved_identifiers = []
+        self.works: list[tuple[Identifier, Work]] = []
+        self.precomposed_entries: list[OPDSMessage | OPDSEntryResponse] = []
 
     def process_urns(self, urns, **process_urn_kwargs):
         """Processes a list of URNs for a lookup request.
