@@ -122,6 +122,7 @@ def test_only_active_collections_are_included(
                 "collection_name",
                 "license_expiration",
                 "days_remaining_on_license",
+                "initial_loans",
                 "remaining_loans",
                 "allowed_concurrent_users",
             ),
@@ -316,12 +317,14 @@ def test_generate_report(
 
     days_remaining = 10
     expiration = utc_now() + timedelta(days=days_remaining)
+    initial_loans = 20
     db.license(
         pool=licensepool,
         status=LicenseStatus.available,
         checkouts_left=checkouts_left,
         terms_concurrency=terms_concurrency,
         expires=expiration,
+        terms_checkouts=initial_loans,
     )
     db.license(
         pool=licensepool,
@@ -329,12 +332,14 @@ def test_generate_report(
         checkouts_left=1,
         terms_concurrency=1,
         expires=utc_now(),
+        terms_checkouts=5,
     )
 
     db.license(
         pool=licensepool_no_licenses_owned,
         status=LicenseStatus.available,
         terms_concurrency=1,
+        terms_checkouts=None,
     )
     patron1 = db.patron(library=library)
     patron2 = db.patron(library=library)
@@ -501,6 +506,7 @@ def test_generate_report(
                 assert float(book1_available_row["days_remaining_on_license"]) == float(
                     days_remaining
                 )
+                assert book1_available_row["initial_loans"] == str(initial_loans)
                 assert book1_available_row["remaining_loans"] == str(checkouts_left)
                 assert book1_available_row["allowed_concurrent_users"] == str(
                     terms_concurrency
@@ -528,7 +534,8 @@ def test_generate_report(
                 assert book1_unavailable_row["format"] == edition.BOOK_MEDIUM
                 assert book1_unavailable_row["data_source"] == data_source
                 assert book1_unavailable_row["collection_name"] == collection_name
-                # Unavailable license has checkouts_left=1, terms_concurrency=1
+                # Unavailable license has checkouts_left=1, terms_concurrency=1, terms_checkouts=5
+                assert book1_unavailable_row["initial_loans"] == "5"
                 assert book1_unavailable_row["remaining_loans"] == "1"
                 assert book1_unavailable_row["allowed_concurrent_users"] == "1"
                 # expires=utc_now() so days_remaining should be <= 0
@@ -553,6 +560,8 @@ def test_generate_report(
                 # No expiration means license_expiration and days_remaining should be empty or None
                 assert book2_row["license_expiration"] in ("", "None")
                 assert book2_row["days_remaining_on_license"] in ("", "None")
+                # terms_checkouts was not set, so initial_loans should be empty/None
+                assert book2_row["initial_loans"] in ("", "None")
                 assert book2_row["remaining_loans"] in ("", "None")
 
                 # >> Book 3 - No Holds Book.
@@ -570,6 +579,7 @@ def test_generate_report(
                 assert book3_no_holds_row["license_status"] == ""
                 assert book3_no_holds_row["license_expiration"] == ""
                 assert book3_no_holds_row["days_remaining_on_license"] == ""
+                assert book3_no_holds_row["initial_loans"] == ""
                 assert book3_no_holds_row["remaining_loans"] == ""
                 assert book3_no_holds_row["allowed_concurrent_users"] == ""
 
