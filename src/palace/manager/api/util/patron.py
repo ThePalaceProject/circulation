@@ -18,7 +18,7 @@ class PatronUtility:
     """Apply circulation-specific logic to Patron model objects."""
 
     @classmethod
-    def needs_external_sync(cls, patron):
+    def needs_external_sync(cls, patron: Patron) -> bool:
         """Could this patron stand to have their metadata synced with the
         remote?
 
@@ -48,7 +48,7 @@ class PatronUtility:
         return False
 
     @classmethod
-    def has_borrowing_privileges(cls, patron):
+    def has_borrowing_privileges(cls, patron: Patron) -> bool:
         """Is the given patron allowed to check out books?
 
         :return: A boolean
@@ -60,7 +60,7 @@ class PatronUtility:
             return False
 
     @classmethod
-    def assert_borrowing_privileges(cls, patron):
+    def assert_borrowing_privileges(cls, patron: Patron) -> None:
         """Raise an exception unless the patron currently has borrowing
         privileges.
 
@@ -80,9 +80,6 @@ class PatronUtility:
         if patron.block_reason is None:
             return
 
-        if patron.block_reason == PatronData.NO_VALUE:
-            return
-
         if patron.block_reason is PatronData.EXCESSIVE_FINES:
             # The authentication mechanism itself may know that
             # the patron has outstanding fines, even if the circulation
@@ -92,7 +89,7 @@ class PatronUtility:
         raise AuthorizationBlocked()
 
     @classmethod
-    def has_excess_fines(cls, patron):
+    def has_excess_fines(cls, patron: Patron) -> bool:
         """Does this patron have fines in excess of the maximum fine amount set for their library?
 
         :param a Patron:
@@ -108,7 +105,7 @@ class PatronUtility:
         return False
 
     @classmethod
-    def authorization_is_active(cls, patron):
+    def authorization_is_active(cls, patron: Patron) -> bool:
         """Return True unless the patron's authorization has expired."""
         # Unlike pretty much every other place in this app, we use
         # (server) local time here instead of UTC. This is to make it
@@ -122,7 +119,7 @@ class PatronUtility:
         return True
 
     @classmethod
-    def _to_date(cls, x):
+    def _to_date(cls, x: datetime.datetime | datetime.date) -> datetime.date:
         """Convert a datetime into a date. Leave a date alone."""
         if isinstance(x, datetime.datetime):
             return x.date()
