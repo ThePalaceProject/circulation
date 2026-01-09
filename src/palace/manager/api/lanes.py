@@ -21,7 +21,6 @@ from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.lane import (
-    DatabaseBackedWorkList,
     DefaultSortOrderFacets,
     Facets,
     Lane,
@@ -952,13 +951,6 @@ def create_lane_for_tiny_collection(_db, library, parent, languages, priority=0)
 class DynamicLane(WorkList):
     """A WorkList that's used to from an OPDS lane, but isn't a Lane
     in the database."""
-
-
-class DatabaseExclusiveWorkList(DatabaseBackedWorkList):
-    """A DatabaseBackedWorkList that can _only_ get Works through the database."""
-
-    def works(self, *args, **kwargs):
-        return self.works_from_database(*args, **kwargs)
 
 
 class WorkBasedLane(DynamicLane):
