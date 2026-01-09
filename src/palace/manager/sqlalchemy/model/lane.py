@@ -2146,17 +2146,6 @@ class WorkList:
             return
 
         # Ask the search engine for works from every lane we're given.
-
-        # NOTE: At the moment, every WorkList in the system can be
-        # generated using an Opensearch query. That is, there are
-        # no subclasses of the DatabaseExclusiveWorkList class defined
-        # in circulation/api/lanes.py. If that ever changes, we'll
-        # need to change this code.
-        #
-        # The simplest change would probably be to return a dictionary
-        # mapping WorkList to Works and let the caller figure out the
-        # ordering. In fact, we could start doing that now.
-
         queries = []
         for lane in lanes:
             overview_facets = lane.overview_facets(_db, facets)
