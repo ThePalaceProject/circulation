@@ -834,7 +834,7 @@ class Work(Base, LoggerMixin):
         return False
 
     def is_filtered_for_library(self, library: Library) -> bool:
-        """Check if this Work should be filtered (hidden) for the given Library.
+        """Return whether this Work should be filtered (hidden) for the given Library.
 
         A work is filtered if its audience or any of its genres match the
         library's configured filtered_audiences or filtered_genres settings.
