@@ -54,8 +54,6 @@ class TestLicense:
         self, db: DatabaseTransactionFixture
     ) -> None:
         """That add_to_pool properly transfers terms_checkouts from LicenseData to License."""
-        from palace.manager.data_layer.license import LicenseData
-        from palace.manager.opds.odl.info import LicenseStatus
 
         pool = db.licensepool(None, collection=db.default_collection())
         license_data = LicenseData(
@@ -78,9 +76,6 @@ class TestLicense:
         self, db: DatabaseTransactionFixture
     ) -> None:
         """That add_to_pool properly transfers None terms_checkouts from LicenseData to License."""
-        from palace.manager.data_layer.license import LicenseData
-        from palace.manager.opds.odl.info import LicenseStatus
-
         pool = db.licensepool(None, collection=db.default_collection())
         license_data = LicenseData(
             identifier="test-license-456",
@@ -102,9 +97,6 @@ class TestLicense:
         self, db: DatabaseTransactionFixture
     ) -> None:
         """That add_to_pool updates terms_checkouts on an existing License."""
-        from palace.manager.data_layer.license import LicenseData
-        from palace.manager.opds.odl.info import LicenseStatus
-
         pool = db.licensepool(None, collection=db.default_collection())
         # Create an existing license
         existing_license = db.license(
