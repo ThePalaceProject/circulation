@@ -113,7 +113,6 @@ module = [
     "palace.manager.api.lanes",
     "palace.manager.api.local_analytics_exporter",
     "palace.manager.api.routes",
-    "palace.manager.api.util.patron",
     "palace.manager.api.util.profilers",
     "palace.manager.api.util.xray",
     "palace.manager.api.web_publication_manifest",
