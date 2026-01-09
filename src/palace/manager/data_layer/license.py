@@ -23,6 +23,7 @@ class LicenseData(BaseFrozenData, LicenseFunctions):
     checkouts_available: NonNegativeInt
     expires: datetime.datetime | None = None
     checkouts_left: int | None = None
+    terms_checkouts: NonNegativeInt | None = None
     terms_concurrency: int | None = None
     content_types: tuple[str, ...] = tuple()
 

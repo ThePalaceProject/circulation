@@ -249,6 +249,7 @@ class TestCirculationData:
             checkouts_left=None,
             checkouts_available=1,
             terms_concurrency=1,
+            terms_checkouts=1,
             status=LicenseStatus.available,
         )
 

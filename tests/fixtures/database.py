@@ -1121,6 +1121,7 @@ class DatabaseTransactionFixture:
         checkouts_available=0,
         status=LicenseStatus.available,
         terms_concurrency=None,
+        terms_checkouts=None,
     ) -> License:
         identifier = identifier or self.fresh_str()
         checkout_url = checkout_url or self.fresh_str()
@@ -1137,6 +1138,7 @@ class DatabaseTransactionFixture:
             checkouts_available=checkouts_available,
             status=status,
             terms_concurrency=terms_concurrency,
+            terms_checkouts=terms_checkouts,
         )
         return license
 

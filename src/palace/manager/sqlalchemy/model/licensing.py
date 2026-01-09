@@ -145,6 +145,9 @@ class License(Base, LicenseFunctions):
     # License info document terms.concurrency field
     terms_concurrency = Column(Integer)
 
+    # License info document terms.checkouts field (number of checkouts before a license expires).
+    terms_checkouts = Column(Integer)
+
     # A License belongs to one LicensePool.
     license_pool_id: Mapped[int] = Column(
         Integer, ForeignKey("licensepools.id"), index=True, nullable=False
