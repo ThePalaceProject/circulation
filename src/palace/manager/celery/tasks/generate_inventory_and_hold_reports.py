@@ -347,6 +347,7 @@ def inventory_report_query() -> Select:
             func.date_part("day", lic.c.expires - func.now()).label(
                 "days_remaining_on_license"
             ),
+            lic.c.terms_checkouts.label("initial_loans"),
             lic.c.checkouts_left.label("remaining_loans"),
             lic.c.terms_concurrency.label("allowed_concurrent_users"),
         )
