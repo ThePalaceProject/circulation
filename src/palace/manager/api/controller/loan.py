@@ -16,6 +16,7 @@ from palace.manager.api.controller.circulation_manager import (
 from palace.manager.api.problem_details import (
     BAD_DELIVERY_MECHANISM,
     CANNOT_RELEASE_HOLD,
+    FILTERED_BY_LIBRARY_POLICY,
     HOLD_FAILED,
     NO_ACTIVE_LOAN,
     NO_ACTIVE_LOAN_OR_HOLD,
@@ -224,6 +225,10 @@ class LoanController(CirculationManagerController):
             # To make the "borrow" operation idempotent, return one of
             # those loans instead of an error.
             return existing_loans[0]
+
+        work = next((pool.work for pool in pools if pool.work), None)
+        if work and work.is_filtered_for_library(library):
+            return FILTERED_BY_LIBRARY_POLICY
 
         # We found a number of LicensePools. Try to locate one that
         # we can actually loan to the patron.
