@@ -3048,6 +3048,54 @@ class TestDatabaseBackedWorkList:
         facets.availability = Facets.AVAILABLE_OPEN_ACCESS
         assert 0 == wl.works_from_database(db.session, facets).count()
 
+    def test_works_from_database_filters_library_audiences(
+        self, db: DatabaseTransactionFixture, library_fixture: LibraryFixture
+    ):
+        library = db.default_library()
+        settings = library_fixture.settings(library)
+        settings.filtered_audiences = [Classifier.AUDIENCE_ADULT]
+
+        adult = db.work(
+            title="Adults Only",
+            audience=Classifier.AUDIENCE_ADULT,
+            with_license_pool=True,
+        )
+        young_adult = db.work(
+            title="Teens",
+            audience=Classifier.AUDIENCE_YOUNG_ADULT,
+            with_license_pool=True,
+        )
+        no_audience = db.work(title="Mystery", with_license_pool=True)
+        no_audience.audience = None
+
+        wl = DatabaseBackedWorkList()
+        wl.initialize(library)
+
+        results = set(wl.works_from_database(db.session).all())
+        assert results == {young_adult, no_audience}
+
+    def test_works_from_database_filters_library_genres(
+        self, db: DatabaseTransactionFixture, library_fixture: LibraryFixture
+    ):
+        library = db.default_library()
+        settings = library_fixture.settings(library)
+        settings.filtered_genres = ["Romance"]
+
+        romance_genre, _ = Genre.lookup(db.session, "Romance")
+        horror_genre, _ = Genre.lookup(db.session, "Horror")
+
+        romance = db.work(title="Hearts", with_license_pool=True)
+        romance.genres = [romance_genre]
+        horror = db.work(title="Screams", with_license_pool=True)
+        horror.genres = [horror_genre]
+        no_genre = db.work(title="Untitled", with_license_pool=True)
+
+        wl = DatabaseBackedWorkList()
+        wl.initialize(library)
+
+        results = set(wl.works_from_database(db.session).all())
+        assert results == {horror, no_genre}
+
     def test_base_query(self, db: DatabaseTransactionFixture):
         # Verify that base_query makes the query we expect and then
         # calls some optimization methods (not tested).

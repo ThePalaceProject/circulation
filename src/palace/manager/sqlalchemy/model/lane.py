@@ -34,7 +34,7 @@ from sqlalchemy.orm import (
     relationship,
 )
 from sqlalchemy.orm.session import Session
-from sqlalchemy.sql import select
+from sqlalchemy.sql import exists, select
 
 from palace.manager.core.classifier import Classifier
 from palace.manager.core.config import Configuration, ConfigurationAttributeValue
@@ -2424,6 +2424,28 @@ class DatabaseBackedWorkList(WorkList):
         if self.customlist_ids:
             qu, customlist_clauses = self.customlist_filter_clauses(qu)
             clauses.extend(customlist_clauses)
+
+        library = self.get_library(_db)
+        if library:
+            settings = library.settings
+            if settings.filtered_audiences:
+                clauses.append(
+                    or_(
+                        Work.audience.is_(None),
+                        not_(Work.audience.in_(settings.filtered_audiences)),
+                    )
+                )
+            if settings.filtered_genres:
+                genre_filter = (
+                    select(1)
+                    .select_from(WorkGenre)
+                    .join(Genre, WorkGenre.genre_id == Genre.id)
+                    .where(
+                        WorkGenre.work_id == Work.id,
+                        Genre.name.in_(settings.filtered_genres),
+                    )
+                )
+                clauses.append(not_(exists(genre_filter)))
 
         clauses.extend(self.age_range_filter_clauses())
 
