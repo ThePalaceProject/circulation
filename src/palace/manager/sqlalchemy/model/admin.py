@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING, Any
+
 import bcrypt
 from flask_babel import lazy_gettext as _
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
@@ -16,7 +18,7 @@ from sqlalchemy import (
     or_,
     select,
 )
-from sqlalchemy.orm import Mapped, relationship, validates
+from sqlalchemy.orm import Mapped, Query, relationship, validates
 from sqlalchemy.orm.exc import NoResultFound
 from sqlalchemy.orm.session import Session
 
@@ -27,6 +29,9 @@ from palace.manager.sqlalchemy.model.base import Base
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.util import get_one, get_one_or_create
 from palace.manager.util.problem_detail import ProblemDetail
+
+if TYPE_CHECKING:
+    from palace.manager.sqlalchemy.model.collection import Collection
 
 
 class Admin(Base, HasSessionCache):
@@ -46,16 +51,16 @@ class Admin(Base, HasSessionCache):
     # Token age is max 30 minutes, in seconds
     RESET_PASSWORD_TOKEN_MAX_AGE = 1800
 
-    def cache_key(self):
+    def cache_key(self) -> str:
         return self.email
 
-    @validates("email")
-    def validate_email(self, key, address):
+    @validates("email")  # type: ignore[untyped-decorator]
+    def validate_email(self, key: str, address: str) -> str:
         # strip any whitespace from email address
         return address.strip()
 
     @hybrid_property
-    def password(self):
+    def password(self) -> Any:
         raise NotImplementedError("Password comparison is only with Admin.authenticate")
 
     @password.setter
@@ -68,12 +73,12 @@ class Admin(Base, HasSessionCache):
         return bcrypt.checkpw(password.encode(), self.password_hashed.encode())
 
     @classmethod
-    def authenticate(cls, _db, email: str, password: str) -> Admin | None:
+    def authenticate(cls, _db: Session, email: str, password: str) -> Admin | None:
         """Finds an authenticated Admin by email and password
         :return: Admin or None
         """
 
-        def lookup_hook():
+        def lookup_hook() -> tuple[Admin | None, bool]:
             try:
                 return (
                     _db.query(Admin)
@@ -85,39 +90,39 @@ class Admin(Base, HasSessionCache):
             except NoResultFound:
                 return None, False
 
-        match, ignore = Admin.by_cache_key(_db, str(email), lookup_hook)
+        match, _ = Admin.by_cache_key(_db, str(email), lookup_hook)
         if match and not match.has_password(password):
             # Admin with this email was found, but password is invalid.
             match = None
         return match
 
     @classmethod
-    def with_password(cls, _db):
+    def with_password(cls, _db: Session) -> Query[Admin]:
         """Get Admins that have a password."""
-        return _db.query(Admin).filter(Admin.password_hashed != None)
+        return _db.query(Admin).filter(Admin.password_hashed != None)  # noqa: E711
 
-    def is_system_admin(self):
+    def is_system_admin(self) -> bool:
         _db = Session.object_session(self)
 
-        def lookup_hook():
+        def lookup_hook() -> tuple[AdminRole | None, bool]:
             return (
                 get_one(_db, AdminRole, admin=self, role=AdminRole.SYSTEM_ADMIN),
                 False,
             )
 
-        role, ignore = AdminRole.by_cache_key(
+        role, _ = AdminRole.by_cache_key(
             _db, (self.id, None, AdminRole.SYSTEM_ADMIN), lookup_hook
         )
         if role:
             return True
         return False
 
-    def is_sitewide_library_manager(self):
+    def is_sitewide_library_manager(self) -> bool:
         _db = Session.object_session(self)
         if self.is_system_admin():
             return True
 
-        def lookup_hook():
+        def lookup_hook() -> tuple[AdminRole | None, bool]:
             return (
                 get_one(
                     _db, AdminRole, admin=self, role=AdminRole.SITEWIDE_LIBRARY_MANAGER
@@ -125,39 +130,43 @@ class Admin(Base, HasSessionCache):
                 False,
             )
 
-        role, ignore = AdminRole.by_cache_key(
+        role, _ = AdminRole.by_cache_key(
             _db, (self.id, None, AdminRole.SITEWIDE_LIBRARY_MANAGER), lookup_hook
         )
         if role:
             return True
         return False
 
-    def is_sitewide_librarian(self):
+    def is_sitewide_librarian(self) -> bool:
         _db = Session.object_session(self)
         if self.is_sitewide_library_manager():
             return True
 
-        def lookup_hook():
+        def lookup_hook() -> tuple[AdminRole | None, bool]:
             return (
                 get_one(_db, AdminRole, admin=self, role=AdminRole.SITEWIDE_LIBRARIAN),
                 False,
             )
 
-        role, ignore = AdminRole.by_cache_key(
+        role, _ = AdminRole.by_cache_key(
             _db, (self.id, None, AdminRole.SITEWIDE_LIBRARIAN), lookup_hook
         )
         if role:
             return True
         return False
 
-    def is_library_manager(self, library):
+    def is_library_manager(self, library: Library | None) -> bool:
         _db = Session.object_session(self)
         # First check if the admin is a manager of _all_ libraries.
         if self.is_sitewide_library_manager():
             return True
 
+        # If library is None (sitewide role), only sitewide managers can manage it
+        if library is None:
+            return False
+
         # If not, they could still be a manager of _this_ library.
-        def lookup_hook():
+        def lookup_hook() -> tuple[AdminRole | None, bool]:
             return (
                 get_one(
                     _db,
@@ -169,14 +178,14 @@ class Admin(Base, HasSessionCache):
                 False,
             )
 
-        role, ignore = AdminRole.by_cache_key(
+        role, _ = AdminRole.by_cache_key(
             _db, (self.id, library.id, AdminRole.LIBRARY_MANAGER), lookup_hook
         )
         if role:
             return True
         return False
 
-    def is_librarian(self, library):
+    def is_librarian(self, library: Library | None) -> bool:
         _db = Session.object_session(self)
         # If the admin is a library manager, they can do everything a librarian can do.
         if self.is_library_manager(library):
@@ -185,8 +194,12 @@ class Admin(Base, HasSessionCache):
         if self.is_sitewide_librarian():
             return True
 
+        # If library is None (sitewide role), only sitewide librarians can access it
+        if library is None:
+            return False
+
         # If not, they might be a librarian of _this_ library.
-        def lookup_hook():
+        def lookup_hook() -> tuple[AdminRole | None, bool]:
             return (
                 get_one(
                     _db,
@@ -198,14 +211,14 @@ class Admin(Base, HasSessionCache):
                 False,
             )
 
-        role, ignore = AdminRole.by_cache_key(
+        role, _ = AdminRole.by_cache_key(
             _db, (self.id, library.id, AdminRole.LIBRARIAN), lookup_hook
         )
         if role:
             return True
         return False
 
-    def can_see_collection(self, collection):
+    def can_see_collection(self, collection: Collection) -> bool:
         if self.is_system_admin():
             return True
         for library in collection.associated_libraries:
@@ -228,18 +241,18 @@ class Admin(Base, HasSessionCache):
             )
         ).all()
 
-    def add_role(self, role, library=None):
+    def add_role(self, role: str, library: Library | None = None) -> AdminRole:
         _db = Session.object_session(self)
-        role, is_new = get_one_or_create(
+        admin_role, _ = get_one_or_create(
             _db, AdminRole, admin=self, role=role, library=library
         )
-        return role
+        return admin_role
 
-    def remove_role(self, role, library=None):
+    def remove_role(self, role: str, library: Library | None = None) -> None:
         _db = Session.object_session(self)
-        role = get_one(_db, AdminRole, admin=self, role=role, library=library)
-        if role:
-            _db.delete(role)
+        admin_role = get_one(_db, AdminRole, admin=self, role=role, library=library)
+        if admin_role:
+            _db.delete(admin_role)
 
     def generate_reset_password_token(self, secret_key: str) -> str:
         serializer = URLSafeTimedSerializer(secret_key)
@@ -281,7 +294,7 @@ class Admin(Base, HasSessionCache):
 
         return possible_admin
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "<Admin: email=%s>" % self.email
 
 
@@ -318,18 +331,18 @@ class AdminRole(Base, HasSessionCache):
     EQUAL = 0
     GREATER_THAN = 1
 
-    def cache_key(self):
+    def cache_key(self) -> tuple[int, int | None, str]:
         return (self.admin_id, self.library_id, self.role)
 
-    def to_dict(self):
+    def to_dict(self) -> dict[str, str]:
         if self.library:
             return dict(role=self.role, library=self.library.short_name)
         return dict(role=self.role)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "<AdminRole: role={} library={} admin={}>".format(
             self.role,
-            (self.library and self.library.short_name),
+            self.library and self.library.short_name,
             self.admin.email,
         )
 
