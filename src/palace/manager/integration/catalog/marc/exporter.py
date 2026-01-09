@@ -47,6 +47,8 @@ class LibraryInfo(BaseModel):
     include_summary: bool
     include_genres: bool
     web_client_urls: tuple[str, ...]
+    filtered_audiences: tuple[str, ...] = ()
+    filtered_genres: tuple[str, ...] = ()
 
     model_config = ConfigDict(frozen=True)
 
@@ -192,21 +194,25 @@ class MarcExporter(
             update_frequency = cls.settings_load(
                 library_integration.parent
             ).update_frequency
-            library_settings = cls.library_settings_load(library_integration)
+            marc_settings = cls.library_settings_load(library_integration)
             needs_update = cls._needs_update(last_updated_time, update_frequency)
             web_client_urls = cls._web_client_urls(
-                session, library, library_settings.web_client_url
+                session, library, marc_settings.web_client_url
             )
+            # Get library content filtering settings
+            library_settings = library.settings
             library_info.append(
                 LibraryInfo(
                     library_id=library_id,
                     library_short_name=library_short_name,
                     last_updated=last_updated_time,
                     needs_update=needs_update,
-                    organization_code=library_settings.organization_code,
-                    include_summary=library_settings.include_summary,
-                    include_genres=library_settings.include_genres,
+                    organization_code=marc_settings.organization_code,
+                    include_summary=marc_settings.include_summary,
+                    include_genres=marc_settings.include_genres,
                     web_client_urls=web_client_urls,
+                    filtered_audiences=tuple(library_settings.filtered_audiences),
+                    filtered_genres=tuple(library_settings.filtered_genres),
                 )
             )
         library_info.sort(key=lambda info: info.library_id)
@@ -295,11 +301,16 @@ class MarcExporter(
                 delta,
             ).as_marc()
             for library_info in libraries_info
-            if not delta
-            or (
-                work.last_update_time
-                and library_info.last_updated
-                and work.last_update_time > library_info.last_updated
+            if not work.is_filtered_by(
+                library_info.filtered_audiences, library_info.filtered_genres
+            )
+            and (
+                not delta
+                or (
+                    work.last_update_time
+                    and library_info.last_updated
+                    and work.last_update_time > library_info.last_updated
+                )
             )
         }
 
