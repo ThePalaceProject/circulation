@@ -54,7 +54,7 @@ class Admin(Base, HasSessionCache):
     def cache_key(self) -> str:
         return self.email
 
-    @validates("email")  # type: ignore[misc]
+    @validates("email")  # type: ignore[untyped-decorator]
     def validate_email(self, key: str, address: str) -> str:
         # strip any whitespace from email address
         return address.strip()
