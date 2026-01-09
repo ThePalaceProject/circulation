@@ -8,6 +8,7 @@ from palace.manager.api.circulation.dispatcher import CirculationApiDispatcher
 from palace.manager.api.controller.base import BaseCirculationManagerController
 from palace.manager.api.problem_details import (
     BAD_DELIVERY_MECHANISM,
+    FILTERED_BY_LIBRARY_POLICY,
     FORBIDDEN_BY_POLICY,
     NO_LICENSES,
     NO_SUCH_LANE,
@@ -163,6 +164,11 @@ class CirculationManagerController(BaseCirculationManagerController):
                 identifier,
             )
             return NOT_FOUND_ON_REMOTE
+
+        if work.is_filtered_for_library(library):
+            # This work is filtered by library content settings.
+            # Return an appropriate 404 response.
+            return FILTERED_BY_LIBRARY_POLICY
 
         if work and not work.age_appropriate_for_patron(self.request_patron):
             # This work is not age-appropriate for the authenticated

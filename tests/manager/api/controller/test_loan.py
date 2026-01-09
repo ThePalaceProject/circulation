@@ -36,6 +36,7 @@ from palace.manager.api.problem_details import (
     BAD_DELIVERY_MECHANISM,
     CANNOT_RELEASE_HOLD,
     COULD_NOT_MIRROR_TO_REMOTE,
+    FILTERED_BY_LIBRARY_POLICY,
     HOLD_LIMIT_REACHED,
     HOLDS_NOT_PERMITTED,
     NO_ACTIVE_LOAN,
@@ -43,6 +44,7 @@ from palace.manager.api.problem_details import (
     NOT_FOUND_ON_REMOTE,
     OUTSTANDING_FINES,
 )
+from palace.manager.core.classifier import Classifier
 from palace.manager.core.problem_details import INTEGRATION_ERROR, INVALID_INPUT
 from palace.manager.feed.acquisition import OPDSAcquisitionFeed
 from palace.manager.feed.serializer.opds2 import OPDS2Serializer
@@ -50,6 +52,7 @@ from palace.manager.integration.license.bibliotheca import BibliothecaAPI
 from palace.manager.integration.license.opds.opds1.api import OPDSAPI
 from palace.manager.service.redis.models.patron_activity import PatronActivity
 from palace.manager.sqlalchemy.constants import MediaTypes
+from palace.manager.sqlalchemy.model.classification import Genre
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.identifier import Identifier
@@ -462,6 +465,74 @@ class TestLoanController:
             fulfill_response = loan_fixture.manager.loans.fulfill(loan_fixture.pool_id)
             assert isinstance(fulfill_response, ProblemDetail)
             assert 502 == fulfill_response.status_code
+
+    def test_borrow_filtered_blocks_new_loan(
+        self, loan_fixture: LoanFixture, library_fixture: LibraryFixture
+    ) -> None:
+        work = loan_fixture.english_1
+        work.audience = Classifier.AUDIENCE_ADULT
+
+        settings = library_fixture.settings(loan_fixture.library)
+        settings.filtered_audiences = ["Adult"]
+
+        headers = {"Authorization": loan_fixture.valid_auth}
+        with loan_fixture.request_context_with_library("/", headers=headers):
+            loan_fixture.manager.loans.authenticated_patron_from_request()
+            response = loan_fixture.manager.loans.borrow(
+                loan_fixture.identifier_type, loan_fixture.identifier_identifier
+            )
+
+        assert isinstance(response, ProblemDetail)
+        assert response.status_code == FILTERED_BY_LIBRARY_POLICY.status_code
+        assert response.uri == FILTERED_BY_LIBRARY_POLICY.uri
+
+        loan = get_one(loan_fixture.db.session, Loan, license_pool=loan_fixture.pool)
+        assert loan is None
+
+    def test_borrow_filtered_allows_existing_loan(
+        self, loan_fixture: LoanFixture, library_fixture: LibraryFixture
+    ) -> None:
+        work = loan_fixture.english_1
+        work.audience = Classifier.AUDIENCE_ADULT
+
+        loan_fixture.pool.loan_to(loan_fixture.default_patron)
+
+        settings = library_fixture.settings(loan_fixture.library)
+        settings.filtered_audiences = ["Adult"]
+
+        headers = {"Authorization": loan_fixture.valid_auth}
+        with loan_fixture.request_context_with_library("/", headers=headers):
+            loan_fixture.manager.loans.authenticated_patron_from_request()
+            response = loan_fixture.manager.loans.borrow(
+                loan_fixture.identifier_type, loan_fixture.identifier_identifier
+            )
+
+        assert isinstance(response, OPDSEntryResponse)
+        assert response.status_code == 200
+
+    def test_borrow_filtered_by_genre_blocks_new_loan(
+        self, loan_fixture: LoanFixture, library_fixture: LibraryFixture
+    ) -> None:
+        work = loan_fixture.english_1
+        romance_genre, _ = Genre.lookup(loan_fixture.db.session, "Romance")
+        work.genres = [romance_genre]
+
+        settings = library_fixture.settings(loan_fixture.library)
+        settings.filtered_genres = ["Romance"]
+
+        headers = {"Authorization": loan_fixture.valid_auth}
+        with loan_fixture.request_context_with_library("/", headers=headers):
+            loan_fixture.manager.loans.authenticated_patron_from_request()
+            response = loan_fixture.manager.loans.borrow(
+                loan_fixture.identifier_type, loan_fixture.identifier_identifier
+            )
+
+        assert isinstance(response, ProblemDetail)
+        assert response.status_code == FILTERED_BY_LIBRARY_POLICY.status_code
+        assert response.uri == FILTERED_BY_LIBRARY_POLICY.uri
+
+        loan = get_one(loan_fixture.db.session, Loan, license_pool=loan_fixture.pool)
+        assert loan is None
 
     def test_borrow_and_fulfill_with_streaming_delivery_mechanism(
         self,

@@ -44,6 +44,7 @@ from palace.manager.sqlalchemy.util import (
 from palace.manager.util.datetime_helpers import datetime_utc, from_timestamp, utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import SampleCoversFixture
+from tests.fixtures.library import LibraryFixture
 from tests.fixtures.redis import RedisFixture
 from tests.fixtures.search import (
     EndToEndSearchFixture,
@@ -1453,6 +1454,64 @@ class TestWork:
         # age-appropriate.
         work.audience = Classifier.AUDIENCE_ADULT
         assert False == work.age_appropriate_for_patron(patron)
+
+    def test_is_filtered_for_library(
+        self, db: DatabaseTransactionFixture, library_fixture: LibraryFixture
+    ):
+        """Test that is_filtered_for_library correctly identifies works
+        that should be hidden based on library content filtering settings.
+        """
+        library = db.default_library()
+        work = db.work()
+        work.audience = Classifier.AUDIENCE_ADULT
+        settings = library_fixture.settings(library)
+
+        # With no filtering configured, the work is not filtered
+        assert work.is_filtered_for_library(library) is False
+
+        # Filter by audience - matching audience should filter
+        settings.filtered_audiences = ["Adult"]
+        assert work.is_filtered_for_library(library) is True
+
+        # Non-matching audience should not filter
+        settings.filtered_audiences = ["Young Adult"]
+        assert work.is_filtered_for_library(library) is False
+
+        # Filter by genre - add a genre to the work
+        romance_genre, _ = Genre.lookup(db.session, "Romance")
+        work.genres = [romance_genre]
+
+        # Matching genre should filter
+        settings.filtered_audiences = []
+        settings.filtered_genres = ["Romance"]
+        assert work.is_filtered_for_library(library) is True
+
+        # Non-matching genre should not filter
+        settings.filtered_genres = ["Horror"]
+        assert work.is_filtered_for_library(library) is False
+
+        # Multiple genres - any match should filter
+        horror_genre, _ = Genre.lookup(db.session, "Horror")
+        work.genres = [romance_genre, horror_genre]
+        settings.filtered_genres = ["Horror"]
+        assert work.is_filtered_for_library(library) is True
+
+        # Combined audience AND genre filtering (both apply independently)
+        settings.filtered_audiences = ["Adult"]
+        settings.filtered_genres = []
+        # Audience matches, so filtered
+        assert work.is_filtered_for_library(library) is True
+
+        settings.filtered_audiences = []
+        settings.filtered_genres = ["Romance"]
+        # Genre matches, so filtered
+        assert work.is_filtered_for_library(library) is True
+
+        # Work with no audience set should not be filtered by audience
+        work.audience = None
+        settings.filtered_audiences = ["Adult"]
+        settings.filtered_genres = []
+        assert work.is_filtered_for_library(library) is False
 
     def test_unlimited_access_books_are_available_by_default(
         self, db: DatabaseTransactionFixture

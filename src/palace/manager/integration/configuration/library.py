@@ -21,6 +21,7 @@ from palace.manager.api.admin.problem_details import (
     INVALID_CONFIGURATION_OPTION,
     UNKNOWN_LANGUAGE,
 )
+from palace.manager.core.classifier import Classifier, genres
 from palace.manager.core.config import Configuration
 from palace.manager.core.entrypoint import EntryPoint
 from palace.manager.core.facets import FacetConstants
@@ -393,6 +394,28 @@ class LibrarySettings(BaseSettings):
             level=Level.SYS_ADMIN_ONLY,
         ),
     ] = []
+    filtered_audiences: Annotated[
+        list[str],
+        LibraryFormMetadata(
+            label="Filtered audiences",
+            description="Content for these audiences will be hidden from catalog browse and search results.",
+            type=FormFieldType.MENU,
+            options={audience: audience for audience in sorted(Classifier.AUDIENCES)},
+            category="Content Filtering",
+            level=Level.SYS_ADMIN_OR_MANAGER,
+        ),
+    ] = []
+    filtered_genres: Annotated[
+        list[str],
+        LibraryFormMetadata(
+            label="Filtered genres",
+            description="Content in these genres will be hidden from catalog browse and search results.",
+            type=FormFieldType.MENU,
+            options=lambda _db: {name: name for name in sorted(genres.keys())},
+            category="Content Filtering",
+            level=Level.SYS_ADMIN_OR_MANAGER,
+        ),
+    ] = []
     max_outstanding_fines: Annotated[
         PositiveFloat | None,
         LibraryFormMetadata(
@@ -579,6 +602,46 @@ class LibrarySettings(BaseSettings):
                 problem_detail=INVALID_CONFIGURATION_OPTION.detailed(
                     f"'{field_label}' contains unsupported values: {invalid_list}. "
                     f"Valid options are: {valid_options}."
+                )
+            )
+        return value
+
+    @field_validator("filtered_audiences")
+    @classmethod
+    def validate_filtered_audiences(cls, value: list[str]) -> list[str]:
+        """Ensure all filtered audiences are valid."""
+        if not value:
+            return value
+        invalid = [
+            audience for audience in value if audience not in Classifier.AUDIENCES
+        ]
+        if invalid:
+            field_label = cls.get_form_field_label("filtered_audiences")
+            valid_options = ", ".join(sorted(Classifier.AUDIENCES))
+            invalid_list = ", ".join(sorted(invalid))
+            raise SettingsValidationError(
+                problem_detail=INVALID_CONFIGURATION_OPTION.detailed(
+                    f"'{field_label}' contains invalid values: {invalid_list}. "
+                    f"Valid options are: {valid_options}."
+                )
+            )
+        return value
+
+    @field_validator("filtered_genres")
+    @classmethod
+    def validate_filtered_genres(cls, value: list[str]) -> list[str]:
+        """Ensure all filtered genres are valid."""
+        if not value:
+            return value
+        valid_genres = set(genres.keys())
+        invalid = [genre for genre in value if genre not in valid_genres]
+        if invalid:
+            field_label = cls.get_form_field_label("filtered_genres")
+            invalid_list = ", ".join(sorted(invalid))
+            raise SettingsValidationError(
+                problem_detail=INVALID_CONFIGURATION_OPTION.detailed(
+                    f"'{field_label}' contains invalid values: {invalid_list}. "
+                    f"Please select from the available genre options."
                 )
             )
         return value
