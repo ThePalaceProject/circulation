@@ -144,9 +144,7 @@ class Edition(Base, EditionConstants):
     # A Project Gutenberg text was likely `published` long before being `issued`.
     published = Column(Date)
 
-    MEDIUM_ENUM = Enum(*EditionConstants.KNOWN_MEDIA, name="medium")
-
-    medium = Column(MEDIUM_ENUM, index=True)
+    medium = Column(Enum(*EditionConstants.KNOWN_MEDIA, name="medium"), index=True)
 
     # The playtime duration of an audiobook (seconds)
     # https://github.com/readium/webpub-manifest/tree/master/contexts/default#duration-and-number-of-pages
@@ -690,8 +688,8 @@ class Edition(Base, EditionConstants):
 
     def calculate_permanent_work_id(self, debug: bool = False) -> None:
         title = self.title_for_permanent_work_id
-        medium: str | None = self.medium_for_permanent_work_id.get(
-            str(self.medium) if self.medium else "", None
+        medium: str | None = (
+            self.medium_for_permanent_work_id.get(self.medium) if self.medium else None
         )
         if not title or not medium:
             # If a book has no title or medium, it has no permanent work ID.
