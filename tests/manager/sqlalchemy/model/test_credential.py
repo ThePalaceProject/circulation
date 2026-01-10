@@ -27,6 +27,8 @@ class TestCredentials:
         assert data_source == token.data_source
         assert "some random type" == token.type
         assert patron == token.patron
+        assert token.expires is not None
+        assert token.credential is not None
         expires_difference = abs((token.expires - expect_expires).seconds)
         assert expires_difference < 2
 
@@ -42,6 +44,8 @@ class TestCredentials:
             db.session, data_source, token.type, token.credential
         )
         assert new_token == token
+        assert new_token is not None
+        assert new_token.expires is not None
         assert new_token.expires < now
 
         new_token = Credential.lookup_by_token(
@@ -118,6 +122,7 @@ class TestCredentials:
         assert data_source == token.data_source
         assert "some random type" == token.type
         assert patron == token.patron
+        assert token.credential is not None
 
         # Now try to look up the credential based solely on the UUID.
         new_token = Credential.lookup_by_token(
@@ -158,6 +163,7 @@ class TestCredentials:
             db.session, data_source, "i am empty", None
         )
         token.credential = None
+        assert token.type is not None
 
         # If allow_empty_token is true, the token is returned as-is
         # and the refresher method is not called.
