@@ -9,7 +9,7 @@ from abc import ABC, abstractmethod
 from collections import defaultdict
 from collections.abc import Iterable, Mapping
 from functools import total_ordering
-from typing import TYPE_CHECKING, Literal, NamedTuple, overload
+from typing import TYPE_CHECKING, Any, Literal, NamedTuple, overload
 from urllib.parse import quote, unquote
 
 import isbnlib
@@ -28,7 +28,7 @@ from sqlalchemy.exc import MultipleResultsFound, NoResultFound
 from sqlalchemy.orm import Mapped, Query, joinedload, relationship, selectinload
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql import Select, select
-from sqlalchemy.sql.elements import ClauseElement
+from sqlalchemy.sql.elements import ClauseElement, ColumnElement
 from sqlalchemy.sql.expression import and_, or_
 
 from palace.manager.core.exceptions import BasePalaceException, PalaceValueError
@@ -755,7 +755,7 @@ class Identifier(Base, IdentifierConstants, LoggerMixin):
     @classmethod
     def recursively_equivalent_identifier_ids_query(
         cls,
-        identifier_id_column: str,
+        identifier_id_column: ColumnElement[Any] | int,
         policy: PresentationCalculationPolicy | None = None,
     ) -> Select:
         """Get a SQL statement that will return all Identifier IDs
@@ -773,7 +773,7 @@ class Identifier(Base, IdentifierConstants, LoggerMixin):
     @classmethod
     def _recursively_equivalent_identifier_ids_query(
         cls,
-        identifier_id_column: str,
+        identifier_id_column: ColumnElement[Any] | int,
         policy: PresentationCalculationPolicy | None = None,
     ) -> ClauseElement:
         policy = policy or PresentationCalculationPolicy()

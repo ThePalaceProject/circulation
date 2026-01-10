@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 from collections import defaultdict
+from collections.abc import Iterator, Sequence
 from typing import TYPE_CHECKING, Literal, overload
 
 from sqlalchemy import (
@@ -19,7 +20,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.ext.mutable import MutableDict
-from sqlalchemy.orm import Mapped, relationship
+from sqlalchemy.orm import Mapped, Query, relationship
 from sqlalchemy.orm.session import Session
 
 from palace.manager.data_layer.policy.presentation import (
@@ -173,7 +174,7 @@ class Edition(Base, EditionConstants):
     created_at = Column(DateTime(timezone=True), default=utc_now)
     updated_at = Column(DateTime(timezone=True), default=None)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         id_repr = repr(self.primary_identifier)
         return "Edition {} [{!r}] ({}/{}/{})".format(
             self.id,
@@ -184,18 +185,21 @@ class Edition(Base, EditionConstants):
         )
 
     @property
-    def language_code(self):
+    def language_code(self) -> str | None:
         """A single BCP47 language code for display purposes."""
         if not self.language:
             return None
-        return LanguageCodes.bcp47_for_locale(self.language, default=self.language)
+        result: str | None = LanguageCodes.bcp47_for_locale(
+            self.language, default=self.language
+        )
+        return result
 
     @property
-    def contributors(self):
+    def contributors(self) -> set[Contributor]:
         return {x.contributor for x in self.contributions}
 
     @property
-    def author_contributors(self):
+    def author_contributors(self) -> list[Contributor]:
         """All distinct 'author'-type contributors, with the primary author
         first, other authors sorted by sort name.
         Basically, we're trying to figure out what would go on the
@@ -210,10 +214,10 @@ class Edition(Base, EditionConstants):
         etc. However it happens, your name only shows up once on the
         front of the book.
         """
-        seen_authors = set()
-        primary_author = None
-        other_authors = []
-        acceptable_substitutes = defaultdict(list)
+        seen_authors: set[Contributor] = set()
+        primary_author: Contributor | None = None
+        other_authors: list[Contributor] = []
+        acceptable_substitutes: defaultdict[str, list[Contributor]] = defaultdict(list)
         if not self.contributions:
             return []
 
@@ -239,13 +243,13 @@ class Edition(Base, EditionConstants):
                 if x.contributor not in l:
                     l.append(x.contributor)
 
-        def dedupe(l):
+        def dedupe(contributors: list[Contributor]) -> list[Contributor]:
             """If an item shows up multiple times in a list,
             keep only the first occurence.
             """
-            seen = set()
-            deduped = []
-            for i in l:
+            seen: set[Contributor] = set()
+            deduped: list[Contributor] = []
+            for i in contributors:
                 if i in seen:
                     continue
                 deduped.append(i)
@@ -371,7 +375,7 @@ class Edition(Base, EditionConstants):
         return edition, is_new
 
     @property
-    def license_pools(self):
+    def license_pools(self) -> list[LicensePool]:
         """The LicensePools that provide access to the book described
         by this Edition.
         """
@@ -385,7 +389,11 @@ class Edition(Base, EditionConstants):
             .all()
         )
 
-    def equivalent_identifiers(self, type=None, policy=None):
+    def equivalent_identifiers(
+        self,
+        type: str | list[str] | None = None,
+        policy: PresentationCalculationPolicy | None = None,
+    ) -> list[Identifier]:
         """All Identifiers equivalent to this
         Edition's primary identifier, according to the given
         PresentationCalculationPolicy
@@ -402,7 +410,9 @@ class Edition(Base, EditionConstants):
                 q = q.filter(Identifier.type == type)
         return q.all()
 
-    def equivalent_editions(self, policy=None):
+    def equivalent_editions(
+        self, policy: PresentationCalculationPolicy | None = None
+    ) -> Query[Edition]:
         """All Editions whose primary ID is equivalent to this Edition's
         primary ID, according to the given PresentationCalculationPolicy.
         """
@@ -415,13 +425,15 @@ class Edition(Base, EditionConstants):
         )
 
     @classmethod
-    def sort_by_priority(cls, editions, license_source=None):
+    def sort_by_priority(
+        cls, editions: list[Edition], license_source: DataSource | None = None
+    ) -> list[Edition]:
         """Return all Editions that describe the Identifier associated with
         this LicensePool, in the order they should be used to create a
         presentation Edition for the LicensePool.
         """
 
-        def sort_key(edition):
+        def sort_key(edition: Edition) -> float:
             """Return a numeric ordering of this edition."""
             source = edition.data_source
             if not source:
@@ -454,49 +466,53 @@ class Edition(Base, EditionConstants):
         return sorted(editions, key=sort_key)
 
     @classmethod
-    def _content(cls, content, is_html=False):
+    def _content(
+        cls, content: str | None, is_html: bool = False
+    ) -> dict[str, str] | None:
         """Represent content that might be plain-text or HTML.
         e.g. a book's summary.
         """
         if not content:
             return None
         if is_html:
-            type = "html"
+            content_type = "html"
         else:
-            type = "text"
-        return dict(type=type, value=content)
+            content_type = "text"
+        return dict(type=content_type, value=content)
 
-    def set_cover(self, resource):
+    def set_cover(self, resource: Resource) -> None:
         old_cover = self.cover
         old_cover_full_url = self.cover_full_url
         old_cover_thumbnail_url = self.cover_thumbnail_url
         new_cover = resource
-        new_cover_full_url = resource.representation.public_url
-        new_cover_thumbnail_url = None
+        representation = resource.representation
+        if representation is None:
+            return
+        new_cover_full_url = representation.public_url
+        new_cover_thumbnail_url: str | None = None
         # TODO: In theory there could be multiple scaled-down
         # versions of this representation and we need some way of
         # choosing between them. Right now we just pick the first one
         # that works.
         if (
-            resource.representation.image_height
-            and resource.representation.image_height <= self.MAX_THUMBNAIL_HEIGHT
+            representation.image_height
+            and representation.image_height <= self.MAX_THUMBNAIL_HEIGHT
         ):
             # This image doesn't need a thumbnail.
-            new_cover_thumbnail_url = resource.representation.public_url
+            new_cover_thumbnail_url = representation.public_url
         else:
             # Use the best available thumbnail for this image.
-            best_thumbnail = resource.representation.best_thumbnail
+            best_thumbnail = representation.best_thumbnail
             if best_thumbnail:
                 new_cover_thumbnail_url = best_thumbnail.public_url
         if (
             not new_cover_thumbnail_url
-            and resource.representation.image_height
-            and resource.representation.image_height
-            <= self.MAX_FALLBACK_THUMBNAIL_HEIGHT
+            and representation.image_height
+            and representation.image_height <= self.MAX_FALLBACK_THUMBNAIL_HEIGHT
         ):
             # The full-sized image is too large to be a thumbnail, but it's
             # not huge, and there is no other thumbnail, so use it.
-            new_cover_thumbnail_url = resource.representation.public_url
+            new_cover_thumbnail_url = representation.public_url
         if (
             old_cover != new_cover
             or old_cover_full_url != new_cover_full_url
@@ -514,17 +530,24 @@ class Edition(Base, EditionConstants):
                 self.cover_thumbnail_url,
             )
 
-    def add_contributor(self, name, roles, aliases=None, lc=None, viaf=None, **kwargs):
+    def add_contributor(
+        self,
+        name: Contributor | str | None,
+        roles: Sequence[str] | str,
+        aliases: Sequence[str] | None = None,
+        lc: str | None = None,
+        viaf: str | None = None,
+    ) -> Contributor:
         """Assign a contributor to this Edition."""
         _db = Session.object_session(self)
-        if isinstance(roles, (bytes, str)):
+        if isinstance(roles, str):
             roles = [roles]
 
         # First find or create the Contributor.
         if isinstance(name, Contributor):
             contributor = name
         else:
-            contributor, was_new = Contributor.lookup(_db, name, lc, viaf, aliases)
+            contributor, _ = Contributor.lookup(_db, name, lc, viaf, aliases)
             if isinstance(contributor, list):
                 # Contributor was looked up/created by name,
                 # which returns a list.
@@ -532,12 +555,12 @@ class Edition(Base, EditionConstants):
 
         # Then add their Contributions.
         for role in roles:
-            contribution, was_new = get_one_or_create(
+            get_one_or_create(
                 _db, Contribution, edition=self, contributor=contributor, role=role
             )
         return contributor
 
-    def similarity_to(self, other_record):
+    def similarity_to(self, other_record: Edition) -> float:
         """How likely is it that this record describes the same book as the
         given record?
         1 indicates very strong similarity, 0 indicates no similarity
@@ -563,6 +586,7 @@ class Edition(Base, EditionConstants):
             # A record is always identical to itself.
             return 1
 
+        language_factor: float
         if other_record.language == self.language:
             # The books are in the same language. Hooray!
             language_factor = 1
@@ -598,9 +622,14 @@ class Edition(Base, EditionConstants):
         # We weight title more heavily because it's much more likely
         # that one author wrote two different books than that two
         # books with the same title have different authors.
-        return language_factor * ((title_quotient * 0.80) + (author_quotient * 0.20))
+        result: float = language_factor * (
+            (title_quotient * 0.80) + (author_quotient * 0.20)
+        )
+        return result
 
-    def apply_similarity_threshold(self, candidates, threshold=0.5):
+    def apply_similarity_threshold(
+        self, candidates: list[Edition], threshold: float = 0.5
+    ) -> Iterator[Edition]:
         """Yield the Editions from the given list that are similar
         enough to this one.
         """
@@ -612,9 +641,14 @@ class Edition(Base, EditionConstants):
                 if similarity >= threshold:
                     yield candidate
 
-    def best_cover_within_distance(self, distance, rel=None, policy=None):
+    def best_cover_within_distance(
+        self,
+        distance: int,
+        rel: str | None = None,
+        policy: PresentationCalculationPolicy | None = None,
+    ) -> tuple[Resource | None, list[Resource]]:
         _db = Session.object_session(self)
-        identifier_ids = [self.primary_identifier.id]
+        identifier_ids: list[int] = [self.primary_identifier.id]
 
         if distance > 0:
             if policy is None:
@@ -634,15 +668,16 @@ class Edition(Base, EditionConstants):
         return Identifier.best_cover_for(_db, identifier_ids, rel=rel)
 
     @property
-    def title_for_permanent_work_id(self):
+    def title_for_permanent_work_id(self) -> str | None:
         title = self.title
         if self.subtitle:
-            title += ": " + self.subtitle
+            title = (title or "") + ": " + self.subtitle
         return title
 
     @property
-    def author_for_permanent_work_id(self):
+    def author_for_permanent_work_id(self) -> str | None:
         authors = self.author_contributors
+        author: str | None
         if authors:
             # Use the sort name of the primary author.
             author = authors[0].sort_name
@@ -653,9 +688,11 @@ class Edition(Base, EditionConstants):
             author = self.sort_author or self.author
         return author
 
-    def calculate_permanent_work_id(self, debug=False):
+    def calculate_permanent_work_id(self, debug: bool = False) -> None:
         title = self.title_for_permanent_work_id
-        medium = self.medium_for_permanent_work_id.get(self.medium, None)
+        medium: str | None = self.medium_for_permanent_work_id.get(
+            str(self.medium) if self.medium else "", None
+        )
         if not title or not medium:
             # If a book has no title or medium, it has no permanent work ID.
             if self.permanent_work_id != None:
@@ -693,16 +730,21 @@ class Edition(Base, EditionConstants):
             logging.info(*args)
 
     @classmethod
-    def calculate_permanent_work_id_for_title_and_author(cls, title, author, medium):
+    def calculate_permanent_work_id_for_title_and_author(
+        cls, title: str, author: str | None, medium: str
+    ) -> str:
         w = WorkIDCalculator
         norm_title = w.normalize_title(title)
         norm_author = w.normalize_author(author)
 
-        return WorkIDCalculator.permanent_id(norm_title, norm_author, medium)
+        result: str = WorkIDCalculator.permanent_id(norm_title, norm_author, medium)
+        return result
 
     UNKNOWN_AUTHOR = "[Unknown]"
 
-    def calculate_presentation(self, policy=None):
+    def calculate_presentation(
+        self, policy: PresentationCalculationPolicy | None = None
+    ) -> bool:
         """Make sure the presentation of this Edition is up-to-date."""
         _db = Session.object_session(self)
         changed = False
@@ -773,20 +815,30 @@ class Edition(Base, EditionConstants):
             level(msg, *args)
         return changed
 
-    def calculate_author(self):
+    def calculate_author(self) -> tuple[str, str]:
         """Turn the list of Contributors into string values for .author
         and .sort_author.
         """
 
-        sort_names = []
-        display_names = []
-        for author in self.author_contributors:
-            if author.sort_name and not author.display_name or not author.family_name:
-                default_family, default_display = author.default_names()
-            display_name = author.display_name or default_display or author.sort_name
-            family_name = author.family_name or default_family or author.sort_name
-            display_names.append([family_name, display_name])
-            sort_names.append(author.sort_name)
+        sort_names: list[str] = []
+        display_names: list[list[str]] = []
+        for contributor in self.author_contributors:
+            default_family: str | None = None
+            default_display: str | None = None
+            if (
+                contributor.sort_name
+                and not contributor.display_name
+                or not contributor.family_name
+            ):
+                default_family, default_display = contributor.default_names()
+            display_name = (
+                contributor.display_name or default_display or contributor.sort_name
+            )
+            family_name = (
+                contributor.family_name or default_family or contributor.sort_name
+            )
+            display_names.append([family_name or "", display_name or ""])
+            sort_names.append(contributor.sort_name or "")
         if display_names:
             author = ", ".join([x[1] for x in sorted(display_names)])
         else:
@@ -796,7 +848,7 @@ class Edition(Base, EditionConstants):
         else:
             sort_author = self.UNKNOWN_AUTHOR
 
-        def truncate_string(mystr: str):
+        def truncate_string(mystr: str) -> str:
             if len(mystr) > self.SAFE_AUTHOR_FIELD_LENGTH_TO_AVOID_PG_INDEX_ERROR:
                 return (
                     mystr[: (self.SAFE_AUTHOR_FIELD_LENGTH_TO_AVOID_PG_INDEX_ERROR - 3)]
@@ -810,7 +862,7 @@ class Edition(Base, EditionConstants):
         sort_author = truncate_string(sort_author)
         return author, sort_author
 
-    def choose_cover(self, policy=None):
+    def choose_cover(self, policy: PresentationCalculationPolicy | None = None) -> None:
         """Try to find a cover that can be used for this Edition."""
 
         for distance in (0, 5):
@@ -870,14 +922,8 @@ class Edition(Base, EditionConstants):
                         )
                     else:
                         rep = best_thumbnail.representation
-                        if rep:
-                            self.cover_thumbnail_url = rep.public_url
-                        break
-            else:
-                # No thumbnail was found. If the Edition references a thumbnail,
-                # it needs to be removed.
-                if self.cover_thumbnail_url:
-                    self.cover_thumbnail_url = None
+                        self.cover_thumbnail_url = rep.public_url
+                    break
 
         # After exhausting all options for finding a thumbnail, fall back to
         # using the full-size image as thumbnail if we have a cover but no thumbnail.
