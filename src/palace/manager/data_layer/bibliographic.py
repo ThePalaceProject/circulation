@@ -190,12 +190,15 @@ class BibliographicData(BaseMutableData):
         if not primary_author:
             return None
 
+        if not self.title:
+            return None
+
         sort_author = primary_author.sort_name
         pwid = Edition.calculate_permanent_work_id_for_title_and_author(
             self.title, sort_author, "book"
         )
         self.permanent_work_id = pwid
-        return pwid  # type: ignore[no-any-return]
+        return pwid
 
     def associate_with_identifiers_based_on_permanent_work_id(
         self, _db: Session
@@ -959,7 +962,7 @@ class BibliographicData(BaseMutableData):
                     contributor.biography = contributor_data.biography
                 if (
                     contributor_data.aliases
-                    and contributor_data.aliases != contributor.aliases
+                    and list(contributor_data.aliases) != contributor.aliases
                 ):
                     contributor.aliases = contributor_data.aliases
                 if contributor_data.lc and contributor_data.lc != contributor.lc:

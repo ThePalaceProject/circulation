@@ -169,7 +169,7 @@ class TestAnnotators:
         edition = db.edition()
         [c_orig] = list(edition.contributors)
 
-        c1 = edition.add_contributor("c1", Contributor.Role.AUTHOR, _sort_name="c1")
+        c1 = edition.add_contributor("c1", Contributor.Role.AUTHOR)
         # No name contributor
         c_none = edition.add_contributor("c2", Contributor.Role.AUTHOR)
         c_none.display_name = ""
