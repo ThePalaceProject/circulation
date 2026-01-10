@@ -191,7 +191,6 @@ module = [
     "palace.manager.sqlalchemy.model.admin",
     "palace.manager.sqlalchemy.model.contributor",
     "palace.manager.sqlalchemy.model.coverage",
-    "palace.manager.sqlalchemy.model.credential",
     "palace.manager.sqlalchemy.model.customlist",
     "palace.manager.sqlalchemy.model.edition",
     "palace.manager.sqlalchemy.model.lane",

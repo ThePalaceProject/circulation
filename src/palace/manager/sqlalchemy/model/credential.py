@@ -161,7 +161,7 @@ class Credential(Base):
         cls,
         _db: Session,
         data_source: DataSource | None,
-        token_type: str | None,
+        token_type: str,
         token: str,
         allow_persistent_token: bool = False,
         *,
@@ -244,9 +244,15 @@ class Credential(Base):
         )
 
     @classmethod
-    def lookup_and_expire_temporary_token(cls, _db, data_source, type, token):
+    def lookup_and_expire_temporary_token(
+        cls,
+        _db: Session,
+        data_source: DataSource | None,
+        token_type: str,
+        token: str,
+    ) -> Credential | None:
         """Look up a temporary token and expire it immediately."""
-        credential = cls.lookup_by_token(_db, data_source, type, token)
+        credential = cls.lookup_by_token(_db, data_source, token_type, token)
         if not credential:
             return None
         credential.expires = utc_now() - datetime.timedelta(seconds=5)
@@ -254,8 +260,14 @@ class Credential(Base):
 
     @classmethod
     def temporary_token_create(
-        cls, _db, data_source, token_type, patron, duration, value=None
-    ):
+        cls,
+        _db: Session,
+        data_source: DataSource | None,
+        token_type: str,
+        patron: Patron,
+        duration: datetime.timedelta,
+        value: str | None = None,
+    ) -> tuple[Credential, bool]:
         """Create a temporary token for the given data_source/type/patron.
         The token will be good for the specified `duration`.
         """
@@ -272,8 +284,13 @@ class Credential(Base):
 
     @classmethod
     def persistent_token_create(
-        self, _db, data_source, type, patron, token_string=None
-    ):
+        cls,
+        _db: Session,
+        data_source: DataSource | None,
+        token_type: str,
+        patron: Patron | None,
+        token_string: str | None = None,
+    ) -> tuple[Credential, bool]:
         """Create or retrieve a persistent token for the given
         data_source/type/patron.
         """
@@ -283,14 +300,14 @@ class Credential(Base):
             _db,
             Credential,
             data_source=data_source,
-            type=type,
+            type=token_type,
             patron=patron,
             create_method_kwargs=dict(credential=token_string),
         )
         credential.expires = None
         return credential, is_new
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return (
             "<Credential("
             "data_source_id={}, "
