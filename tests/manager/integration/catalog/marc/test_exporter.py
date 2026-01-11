@@ -5,15 +5,19 @@ import pytest
 from freezegun import freeze_time
 from sqlalchemy.exc import InvalidRequestError
 
+from palace.manager.core.classifier import Classifier
 from palace.manager.integration.catalog.marc.exporter import LibraryInfo, MarcExporter
 from palace.manager.integration.catalog.marc.settings import MarcExporterLibrarySettings
+from palace.manager.sqlalchemy.model.classification import Genre
 from palace.manager.sqlalchemy.model.discovery_service_registration import (
     DiscoveryServiceRegistration,
 )
 from palace.manager.sqlalchemy.model.marcfile import MarcFile
-from palace.manager.sqlalchemy.util import create
+from palace.manager.sqlalchemy.model.work import WorkGenre
+from palace.manager.sqlalchemy.util import create, get_one_or_create
 from palace.manager.util.datetime_helpers import datetime_utc, utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.library import LibraryFixture
 from tests.fixtures.marc import MarcExporterFixture
 
 
@@ -455,3 +459,173 @@ class TestMarcExporter:
             for d in range(20)
         }
         assert set(files_for_cleanup()) == outdated
+
+    def test_process_work_with_filtering(
+        self, marc_exporter_fixture: MarcExporterFixture
+    ) -> None:
+        """Test that process_work excludes works based on library content filtering."""
+        marc_exporter_fixture.configure_export()
+
+        collection = marc_exporter_fixture.collection1
+        work = marc_exporter_fixture.work(collection)
+        work.audience = Classifier.AUDIENCE_ADULT
+        pool = work.license_pools[0]
+
+        # Get enabled libraries - these won't have filtering configured yet
+        enabled_libraries = list(marc_exporter_fixture.enabled_libraries(collection))
+        assert len(enabled_libraries) == 2
+
+        # Process work without filtering - both libraries should get the work
+        processed_works = MarcExporter.process_work(
+            work, pool, None, enabled_libraries, "http://base.url", False
+        )
+        assert len(processed_works) == 2
+
+        # Now create library info with filtering for one library
+        library1_info = enabled_libraries[0]
+        library2_info = enabled_libraries[1]
+
+        # Create a filtered version of library1 that filters Adult content
+        library1_filtered = LibraryInfo(
+            library_id=library1_info.library_id,
+            library_short_name=library1_info.library_short_name,
+            last_updated=library1_info.last_updated,
+            needs_update=library1_info.needs_update,
+            organization_code=library1_info.organization_code,
+            include_summary=library1_info.include_summary,
+            include_genres=library1_info.include_genres,
+            web_client_urls=library1_info.web_client_urls,
+            filtered_audiences=("Adult",),
+            filtered_genres=(),
+        )
+
+        # Process work with one filtered library - only unfiltered library should get the work
+        processed_works = MarcExporter.process_work(
+            work,
+            pool,
+            None,
+            [library1_filtered, library2_info],
+            "http://base.url",
+            False,
+        )
+        assert len(processed_works) == 1
+        assert list(processed_works.keys())[0].library_id == library2_info.library_id
+
+        # If both libraries filter the work, no records should be generated
+        library2_filtered = LibraryInfo(
+            library_id=library2_info.library_id,
+            library_short_name=library2_info.library_short_name,
+            last_updated=library2_info.last_updated,
+            needs_update=library2_info.needs_update,
+            organization_code=library2_info.organization_code,
+            include_summary=library2_info.include_summary,
+            include_genres=library2_info.include_genres,
+            web_client_urls=library2_info.web_client_urls,
+            filtered_audiences=("Adult",),
+            filtered_genres=(),
+        )
+        processed_works = MarcExporter.process_work(
+            work,
+            pool,
+            None,
+            [library1_filtered, library2_filtered],
+            "http://base.url",
+            False,
+        )
+        assert len(processed_works) == 0
+
+    def test_process_work_with_genre_filtering(
+        self,
+        db: DatabaseTransactionFixture,
+        marc_exporter_fixture: MarcExporterFixture,
+    ) -> None:
+        """Test that process_work excludes works based on genre filtering."""
+        marc_exporter_fixture.configure_export()
+
+        collection = marc_exporter_fixture.collection1
+        work = marc_exporter_fixture.work(collection)
+        work.audience = Classifier.AUDIENCE_CHILDREN  # Not filtered by audience
+        pool = work.license_pools[0]
+
+        # Add a Horror genre to the work
+        horror_genre, _ = Genre.lookup(db.session, "Horror", autocreate=True)
+        assert horror_genre is not None
+        get_one_or_create(
+            db.session, WorkGenre, work=work, genre=horror_genre, affinity=1
+        )
+
+        # Get enabled libraries
+        enabled_libraries = list(marc_exporter_fixture.enabled_libraries(collection))
+        assert len(enabled_libraries) == 2
+        library1_info = enabled_libraries[0]
+        library2_info = enabled_libraries[1]
+
+        # Process work without genre filtering - both libraries should get the work
+        processed_works = MarcExporter.process_work(
+            work, pool, None, enabled_libraries, "http://base.url", False
+        )
+        assert len(processed_works) == 2
+
+        # Create a filtered version of library1 that filters Horror genre
+        library1_filtered = LibraryInfo(
+            library_id=library1_info.library_id,
+            library_short_name=library1_info.library_short_name,
+            last_updated=library1_info.last_updated,
+            needs_update=library1_info.needs_update,
+            organization_code=library1_info.organization_code,
+            include_summary=library1_info.include_summary,
+            include_genres=library1_info.include_genres,
+            web_client_urls=library1_info.web_client_urls,
+            filtered_audiences=(),
+            filtered_genres=("Horror",),
+        )
+
+        # Process work with genre-filtered library - only unfiltered library should get the work
+        processed_works = MarcExporter.process_work(
+            work,
+            pool,
+            None,
+            [library1_filtered, library2_info],
+            "http://base.url",
+            False,
+        )
+        assert len(processed_works) == 1
+        assert list(processed_works.keys())[0].library_id == library2_info.library_id
+
+    def test_enabled_libraries_includes_filtering_settings(
+        self,
+        db: DatabaseTransactionFixture,
+        marc_exporter_fixture: MarcExporterFixture,
+        library_fixture: LibraryFixture,
+    ) -> None:
+        """Test that enabled_libraries includes the library's content filtering settings."""
+        marc_exporter_fixture.configure_export()
+
+        # Set up filtering on library1
+        settings = library_fixture.settings(marc_exporter_fixture.library1)
+        settings.filtered_audiences = ["Adult"]
+        settings.filtered_genres = ["Romance", "Horror"]
+
+        enabled_libraries = marc_exporter_fixture.enabled_libraries(
+            marc_exporter_fixture.collection1
+        )
+
+        # Find library1 in the results
+        library1_info = next(
+            lib
+            for lib in enabled_libraries
+            if lib.library_id == marc_exporter_fixture.library1.id
+        )
+        library2_info = next(
+            lib
+            for lib in enabled_libraries
+            if lib.library_id == marc_exporter_fixture.library2.id
+        )
+
+        # Library1 should have filtering settings
+        assert library1_info.filtered_audiences == ("Adult",)
+        assert library1_info.filtered_genres == ("Romance", "Horror")
+
+        # Library2 should have no filtering
+        assert library2_info.filtered_audiences == ()
+        assert library2_info.filtered_genres == ()
