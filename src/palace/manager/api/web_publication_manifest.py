@@ -4,7 +4,10 @@ from collections.abc import Sequence
 
 from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism, LicensePool
 from palace.manager.sqlalchemy.model.resource import Representation
-from palace.manager.util.web_publication_manifest import AudiobookManifest
+from palace.manager.util.web_publication_manifest import (
+    AudiobookManifest,
+    JSONLDContext,
+)
 
 
 class SpineItem:
@@ -88,7 +91,7 @@ class FindawayManifest(AudiobookManifest):
         with the names of these variables in the JSON-LD documents.
         """
 
-        context_with_extension = [
+        context_with_extension: JSONLDContext = [
             "http://readium.org/webpub/default.jsonld",
             {"findaway": self.FINDAWAY_EXTENSION_CONTEXT},
         ]

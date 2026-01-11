@@ -16,41 +16,34 @@ mdFix = re.compile(r"((. +)|(, ?))M\.? *D(\.| |$){1}")
 trailingPunctuation = re.compile(r"(.*)(\w{4,})([?:.,;]*?)\Z")
 
 
-def _replace_md(match):
+def _replace_md(match: re.Match[str]) -> str:
     """
     If the "MD" professional title was matched, make sure it's got no punctuation in it.
     :param match: a regular expression matched to a string
     """
-    if not match or len(match.groups()) < 1:
-        return match
-
     return match.groups()[0] + "MD"
 
 
-def _replace_phd(match):
+def _replace_phd(match: re.Match[str]) -> str:
     """
     If the "PhD" professional title was matched, make sure it's got no punctuation in it.
     :param match: a regular expression matched to a string
     """
-    if not match or len(match.groups()) < 1:
-        return match
-
     return match.groups()[0] + "PhD"
 
 
-def _replace_end_punctuation(match):
+def _replace_end_punctuation(match: re.Match[str]) -> str:
     """
     If there was found to be improper punctuation at the end of the name string,
     clean it off.
     :param match: a regular expression matched to a string
     """
-    if not match or len(match.groups()) < 3:
-        return match
-
     return match.groups()[0] + match.groups()[1]
 
 
-def contributor_name_match_ratio(name1, name2, normalize_names=True):
+def contributor_name_match_ratio(
+    name1: str, name2: str, normalize_names: bool = True
+) -> int:
     """
     Returns a number between 0 and 100, representing the percent
     match (Levenshtein Distance) between name1 and name2,
@@ -59,11 +52,11 @@ def contributor_name_match_ratio(name1, name2, normalize_names=True):
     if normalize_names:
         name1 = normalize_contributor_name_for_matching(name1)
         name2 = normalize_contributor_name_for_matching(name2)
-    match_ratio = fuzz.ratio(name1, name2)
+    match_ratio: int = fuzz.ratio(name1, name2)
     return match_ratio
 
 
-def is_corporate_name(display_name):
+def is_corporate_name(display_name: str) -> bool:
     """Does this display name look like a corporate name?"""
 
     corporations = [
@@ -143,7 +136,7 @@ def is_corporate_name(display_name):
     return False
 
 
-def display_name_to_sort_name(display_name):
+def display_name_to_sort_name(display_name: str | None) -> str | None:
     """
     Take the "First Name Last Name"-formatted display_name, and convert it
     to a "Last Name, First Name" format appropriate for searching and sorting by.
@@ -199,7 +192,7 @@ def display_name_to_sort_name(display_name):
     return sort_name
 
 
-def name_tidy(name):
+def name_tidy(name: str) -> str:
     """
     * Converts to NFKD unicode.
     * Strips excessive whitespace and trailing punctuation.
@@ -227,7 +220,7 @@ def name_tidy(name):
     return name.strip()
 
 
-def normalize_contributor_name_for_matching(name):
+def normalize_contributor_name_for_matching(name: str) -> str:
     """
     Used to standardize author names before matching them to each other to identify best results
     in VIAF author search feeds.
@@ -248,17 +241,24 @@ def normalize_contributor_name_for_matching(name):
     joiner_fix = re.compile("of the", re.IGNORECASE)
     name = joiner_fix.sub("of", name)
 
-    name = HumanName(name)
+    name_obj = HumanName(name)
     # name has title, first, middle, last, suffix, nickname
     name = " ".join(
-        [name.title, name.first, name.middle, name.last, name.suffix, name.nickname]
+        [
+            name_obj.title,
+            name_obj.first,
+            name_obj.middle,
+            name_obj.last,
+            name_obj.suffix,
+            name_obj.nickname,
+        ]
     )
 
     name = WorkIDCalculator.normalize_author(name)
     return name
 
 
-def sort_name_to_display_name(sort_name):
+def sort_name_to_display_name(sort_name: str | None) -> str | None:
     """
     Take the "Last Name, First Name"-formatted sort_name, and convert it
     to a "First Name Last Name" format appropriate for displaying to patrons in a catalog listing.

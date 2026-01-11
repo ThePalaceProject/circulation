@@ -4,22 +4,25 @@ from __future__ import annotations
 
 import re
 from collections import Counter
-from collections.abc import Generator, Iterable, Sequence
+from collections.abc import Generator, Iterable, Mapping, Sequence
 from decimal import Decimal, InvalidOperation
-from typing import overload
+from typing import TYPE_CHECKING, Any, overload
 
 import sqlalchemy
 
 import palace.manager.sqlalchemy.flask_sqlalchemy_session
+
+if TYPE_CHECKING:
+    from palace.manager.sqlalchemy.model.contributor import Contributor
 
 
 class MetadataSimilarity:
     """Estimate how similar two bits of metadata are."""
 
     @classmethod
-    def most_common(cls, maximum_size, *items):
+    def most_common(cls, maximum_size: int, *items: str | None) -> str | None:
         """Return the most common item that's not longer than the max."""
-        c = Counter()
+        c: Counter[str] = Counter()
         for i in items:
             if i and len(i) <= maximum_size:
                 c[i] += 1
@@ -34,7 +37,7 @@ class TitleProcessor:
     title_stopwords = ["The ", "A ", "An "]
 
     @classmethod
-    def sort_title_for(cls, title):
+    def sort_title_for(cls, title: str | None) -> str | None:
         if not title:
             return title
         for stopword in cls.title_stopwords:
@@ -47,9 +50,9 @@ class TitleProcessor:
 class Bigrams:
     all_letters = re.compile("^[a-z]+$")
 
-    def __init__(self, bigrams):
+    def __init__(self, bigrams: Counter[str]) -> None:
         self.bigrams = bigrams
-        self.proportional = Counter()
+        self.proportional: dict[str, float] = {}
         total = float(sum(bigrams.values()))
         for bigram, quantity in self.bigrams.most_common():
             proportion = quantity / total
@@ -57,10 +60,10 @@ class Bigrams:
                 break
             self.proportional[bigram] = proportion
 
-    def difference_from(self, other_bigrams):
-        total_difference = 0
+    def difference_from(self, other_bigrams: Bigrams) -> float:
+        total_difference = 0.0
         for bigram, proportion in list(self.proportional.items()):
-            other_proportion = other_bigrams.proportional[bigram]
+            other_proportion = other_bigrams.proportional.get(bigram, 0.0)
             difference = abs(other_proportion - proportion)
             total_difference += difference
             # print("%s %.4f-%.4f = %.4f => %.4f" % (bigram, other_proportion, proportion, difference, total_difference))
@@ -71,20 +74,20 @@ class Bigrams:
         return total_difference
 
     @classmethod
-    def from_text_files(cls, paths):
-        bigrams = Counter()
+    def from_text_files(cls, paths: list[str]) -> Bigrams:
+        bigrams: Counter[str] = Counter()
         for path in paths:
             cls.process_data(open(path).read(), bigrams)
         return Bigrams(bigrams)
 
     @classmethod
-    def from_string(cls, string):
-        bigrams = Counter()
+    def from_string(cls, string: str) -> Bigrams:
+        bigrams: Counter[str] = Counter()
         cls.process_data(string, bigrams)
         return Bigrams(bigrams)
 
     @classmethod
-    def process_data(cls, data, bigrams):
+    def process_data(cls, data: str, bigrams: Counter[str]) -> None:
         for i in range(0, len(data) - 1):
             bigram = data[i : i + 2].strip()
             if len(bigram) == 2 and cls.all_letters.match(bigram):
@@ -299,7 +302,7 @@ english_bigram_frequencies = {
     "ys": 0.0013649683669317988,
 }
 english_bigrams = Bigrams(Counter())
-english_bigrams.proportional = Counter(english_bigram_frequencies)
+english_bigrams.proportional = dict(english_bigram_frequencies)
 
 
 class MoneyUtility:
@@ -375,13 +378,13 @@ def chunks[T](
 class ValuesMeta(type):
     """Metaclass to allow operators on simple constants defining classes"""
 
-    def __contains__(cls, value):
+    def __contains__(cls, value: Any) -> bool:
         """Does the values exist in the constants of this class"""
         return value in cls.values()
 
-    def values(cls):
+    def values(cls) -> set[Any]:
         """Fetch the values of constants defined in the class"""
-        values = set()
+        values: set[Any] = set()
         for key in dir(cls):
             val = getattr(cls, key)
             if not key.startswith("_") and not callable(val):

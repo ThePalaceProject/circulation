@@ -1,6 +1,7 @@
 import logging
 import re
 from collections import Counter
+from re import Pattern
 
 from textblob import TextBlob
 from textblob.exceptions import MissingCorpusError
@@ -47,7 +48,7 @@ class SummaryEvaluator:
         "all rights reserved",
     }
 
-    bad_res = {
+    bad_res: set[Pattern[str]] = {
         re.compile("the [^ ]+ Collection"),
         re.compile("Includes"),
         re.compile("This is"),
@@ -58,23 +59,23 @@ class SummaryEvaluator:
 
     def __init__(
         self,
-        optimal_number_of_sentences=4,
-        noun_phrases_to_consider=10,
-        bad_phrases=None,
-    ):
+        optimal_number_of_sentences: int = 4,
+        noun_phrases_to_consider: int = 10,
+        bad_phrases: set[str] | None = None,
+    ) -> None:
         self.optimal_number_of_sentences = optimal_number_of_sentences
-        self.summaries = []
-        self.noun_phrases = Counter()
-        self.blobs = dict()
-        self.scores = dict()
+        self.summaries: list[str] = []
+        self.noun_phrases: Counter[str] = Counter()
+        self.blobs: dict[str, TextBlob] = {}
+        self.scores: dict[str, float] = {}
         self.noun_phrases_to_consider = float(noun_phrases_to_consider)
-        self.top_noun_phrases = None
+        self.top_noun_phrases: set[str] | None = None
         if bad_phrases is None:
             self.bad_phrases = self.default_bad_phrases
         else:
             self.bad_phrases = bad_phrases
 
-    def add(self, summary, parser=None):
+    def add(self, summary: str | bytes, parser: type[TextBlob] | None = None) -> None:
         parser_class = parser or TextBlob
         if isinstance(summary, bytes):
             summary = summary.decode("utf8")
@@ -93,7 +94,7 @@ class SummaryEvaluator:
                 self._nltk_installed = False
                 self.log.error("Summary cannot be evaluated: NLTK not installed %r" % e)
 
-    def ready(self):
+    def ready(self) -> None:
         """We are done adding to the corpus and ready to start evaluating."""
         self.top_noun_phrases = {
             k
@@ -102,21 +103,21 @@ class SummaryEvaluator:
             )
         }
 
-    def best_choice(self):
+    def best_choice(self) -> tuple[str, float] | tuple[None, None]:
         c = self.best_choices(1)
         if c:
             return c[0]
         else:
             return None, None
 
-    def best_choices(self, n=3):
+    def best_choices(self, n: int = 3) -> list[tuple[str, float]]:
         """Choose the best `n` choices among the current summaries."""
-        scores = Counter()
+        scores: dict[str, float] = {}
         for summary in self.summaries:
             scores[summary] = self.score(summary)
-        return scores.most_common(n)
+        return sorted(scores.items(), key=lambda item: item[1], reverse=True)[:n]
 
-    def score(self, summary, apply_language_penalty=True):
+    def score(self, summary: str | bytes, apply_language_penalty: bool = True) -> float:
         """Score a summary relative to our current view of the dataset."""
         if not self._nltk_installed:
             # Without NLTK, there's no need to evaluate the score.
@@ -126,11 +127,14 @@ class SummaryEvaluator:
             summary = summary.decode("utf8")
         if summary in self.scores:
             return self.scores[summary]
-        score = 1
+        score = 1.0
         blob = self.blobs[summary]
 
+        if self.top_noun_phrases is None:
+            self.ready()
+        top_noun_phrases = self.top_noun_phrases or set()
         top_noun_phrases_used = len(
-            [p for p in self.top_noun_phrases if p in blob.noun_phrases]
+            [p for p in top_noun_phrases if p in blob.noun_phrases]
         )
         score = 1 * (top_noun_phrases_used / self.noun_phrases_to_consider)
 
@@ -140,7 +144,9 @@ class SummaryEvaluator:
             # Can't parse into sentences for whatever reason.
             # Make a really bad guess.
             sentences = summary.count(". ") + 1
-        off_from_optimal = abs(sentences - self.optimal_number_of_sentences)
+        off_from_optimal: int | float = abs(
+            sentences - self.optimal_number_of_sentences
+        )
         if off_from_optimal == 1:
             off_from_optimal = 1.5
         if off_from_optimal:
@@ -149,12 +155,12 @@ class SummaryEvaluator:
 
         bad_phrases = 0
         l = summary.lower()
-        for i in self.bad_phrases:
-            if i in l:
+        for phrase in self.bad_phrases:
+            if phrase in l:
                 bad_phrases += 1
 
-        for i in self.bad_res:
-            if i.search(summary):
+        for pattern in self.bad_res:
+            if pattern.search(summary):
                 bad_phrases += 1
 
         if l.count(" -- ") > 3:

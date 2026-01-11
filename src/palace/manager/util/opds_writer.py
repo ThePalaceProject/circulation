@@ -1,7 +1,9 @@
 import datetime
+from typing import Any, cast
 
 import pytz
 from lxml import builder, etree
+from lxml.etree import _Element
 
 from palace.manager.util.datetime_helpers import utc_now
 
@@ -9,12 +11,12 @@ from palace.manager.util.datetime_helpers import utc_now
 class ElementMaker(builder.ElementMaker):  # type: ignore[misc]
     """A helper object for creating etree elements."""
 
-    def __dict__(self):
+    def __getstate__(self) -> dict[str, Any]:
         # Remove default_typemap from the dictionary -- it contains functions
         # that can't be pickled.
         return {
             k: v
-            for k, v in super(ElementMaker, self).__dict__
+            for k, v in super(ElementMaker, self).__dict__.items()
             if k != "default_typemap"
         }
 
@@ -74,7 +76,7 @@ class AtomFeed:
     ODL = ElementMaker(nsmap=nsmap, namespace=ODL_NS)
 
     @classmethod
-    def _strftime(cls, date):
+    def _strftime(cls, date: datetime.date | datetime.datetime) -> str:
         """
         Format a date the way Atom likes it.
 
@@ -94,7 +96,9 @@ class AtomFeed:
         return date.strftime(fmt)
 
     @classmethod
-    def add_link_to_entry(cls, entry, children=None, **kwargs):
+    def add_link_to_entry(
+        cls, entry: _Element, children: list[_Element] | None = None, **kwargs: Any
+    ) -> None:
         if "title" in kwargs:
             kwargs["title"] = str(kwargs["title"])
         link = cls.E.link(**kwargs)
@@ -104,28 +108,28 @@ class AtomFeed:
                 link.append(i)
 
     @classmethod
-    def link(cls, *args, **kwargs):
+    def link(cls, *args: Any, **kwargs: Any) -> _Element:
         return cls.E.link(*args, **kwargs)
 
     @classmethod
-    def tlink(cls, *args, **kwargs):
+    def tlink(cls, *args: Any, **kwargs: Any) -> _Element:
         return cls.ODL.tlink(*args, **kwargs)
 
     @classmethod
-    def category(cls, *args, **kwargs):
+    def category(cls, *args: Any, **kwargs: Any) -> _Element:
         return cls.E.category(*args, **kwargs)
 
     @classmethod
-    def entry(cls, *args, **kwargs):
+    def entry(cls, *args: Any, **kwargs: Any) -> _Element:
         return cls.E.entry(*args, **kwargs)
 
-    def __init__(self, title, url, **kwargs):
+    def __init__(self, title: str, url: str, **kwargs: Any) -> None:
         """Constructor.
 
         :param title: The title of this feed.
         :param url: The URL at which clients can expect to find this feed.
         """
-        self.feed = self.E.feed(
+        self.feed: _Element = self.E.feed(
             self.E.id(url),
             self.E.title(str(title)),
             self.E.updated(self._strftime(utc_now())),
@@ -133,10 +137,13 @@ class AtomFeed:
         )
         super().__init__(**kwargs)
 
-    def __str__(self):
+    def __str__(self) -> str:
         if self.feed is None:
-            return None
-        return etree.tostring(self.feed, encoding="unicode", pretty_print=True)
+            return ""
+        # etree.tostring with encoding="unicode" returns str
+        return cast(
+            str, etree.tostring(self.feed, encoding="unicode", pretty_print=True)
+        )
 
 
 class OPDSFeed(AtomFeed):
@@ -163,7 +170,7 @@ class OPDSFeed(AtomFeed):
     # minutes.
     DEFAULT_MAX_AGE = 60 * 10
 
-    def __init__(self, title, url):
+    def __init__(self, title: str, url: str) -> None:
         super().__init__(title, url)
 
 
@@ -174,20 +181,20 @@ class OPDSMessage:
     Inserted into an OPDS feed as an extension tag.
     """
 
-    def __init__(self, urn, status_code, message):
+    def __init__(self, urn: str, status_code: int | str | None, message: str) -> None:
         self.urn = urn
-        if status_code:
-            status_code = int(status_code)
-        self.status_code = status_code
+        self.status_code: int | None = int(status_code) if status_code else None
         self.message = message
 
-    def __str__(self):
-        return etree.tostring(self.tag, encoding="unicode")
+    def __str__(self) -> str:
+        # etree.tostring with encoding="unicode" returns str
+        return cast(str, etree.tostring(self.tag, encoding="unicode"))
 
-    def __repr__(self):
-        return etree.tostring(self.tag)
+    def __repr__(self) -> str:
+        # etree.tostring with default encoding returns bytes
+        return str(etree.tostring(self.tag))
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
         if self is other:
             return True
 
@@ -203,7 +210,7 @@ class OPDSMessage:
         return True
 
     @property
-    def tag(self):
+    def tag(self) -> _Element:
         message_tag = AtomFeed.SIMPLIFIED.message()
         identifier_tag = AtomFeed.E.id()
         identifier_tag.text = self.urn

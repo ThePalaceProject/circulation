@@ -195,16 +195,6 @@ module = [
     "palace.manager.sqlalchemy.model.saml",
     "palace.manager.sqlalchemy.model.work",
     "palace.manager.sqlalchemy.session",
-    "palace.manager.util",
-    "palace.manager.util.aes",
-    "palace.manager.util.flask_util",
-    "palace.manager.util.languages",
-    "palace.manager.util.opds_writer",
-    "palace.manager.util.permanent_work_id",
-    "palace.manager.util.personal_names",
-    "palace.manager.util.summary",
-    "palace.manager.util.titles",
-    "palace.manager.util.web_publication_manifest",
 ]
 warn_return_any = false
 

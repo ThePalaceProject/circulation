@@ -26,18 +26,18 @@ class CryptAESCBC(CryptBase):
         self.key = key
 
     @classmethod
-    def generate_key(cls):
+    def generate_key(cls) -> bytes:
         """Generate a random bytes key of a set length"""
         return get_random_bytes(cls.KEY_LENGTH)
 
     @property
-    def iv(self):
+    def iv(self) -> bytes:
         if self._iv is None:
             self._iv = get_random_bytes(self.IV_LENGTH)
         return self._iv
 
     @iv.setter
-    def iv(self, value):
+    def iv(self, value: bytes) -> None:
         if len(value) != self.IV_LENGTH:
             raise ValueError(f"IV length must be {self.IV_LENGTH} bytes.")
         self._iv = value
@@ -66,7 +66,8 @@ class CryptAESCBC(CryptBase):
         """
         cipher = AES.new(self.key, AES.MODE_CBC, iv=self.iv)
         padded = self._pad_content(content)
-        encrypted = cipher.encrypt(padded)
+        # Crypto library doesn't have type hints, but encrypt() always returns bytes
+        encrypted: bytes = cipher.encrypt(padded)
         return self.iv + encrypted
 
     def decrypt(self, content: bytes) -> bytes:

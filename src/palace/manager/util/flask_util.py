@@ -18,17 +18,37 @@ from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.opds_writer import OPDSFeed
 
 
-def problem_raw(type, status, title, detail=None, instance=None, headers={}):
+def problem_raw(
+    type: str,
+    status: int,
+    title: str,
+    detail: str | None = None,
+    instance: str | None = None,
+    headers: dict[str, str] | None = None,
+) -> tuple[int, dict[str, str], str]:
+    if headers is None:
+        headers = {}
     data = problem_detail.json(type, status, title, detail, instance)
-    final_headers = {"Content-Type": problem_detail.JSON_MEDIA_TYPE}
+    final_headers: dict[str, str] = {"Content-Type": problem_detail.JSON_MEDIA_TYPE}
     final_headers.update(headers)
     return status, final_headers, data
 
 
-def problem(type, status, title, detail=None, instance=None, headers={}):
+def problem(
+    type: str,
+    status: int,
+    title: str,
+    detail: str | None = None,
+    instance: str | None = None,
+    headers: dict[str, str] | None = None,
+) -> FlaskResponse:
     """Create a Response that includes a Problem Detail Document."""
-    status, headers, data = problem_raw(type, status, title, detail, instance, headers)
-    return FlaskResponse(data, status, headers)
+    if headers is None:
+        headers = {}
+    status_code, response_headers, data = problem_raw(
+        type, status, title, detail, instance, headers
+    )
+    return FlaskResponse(data, status_code, response_headers)
 
 
 class Response(FlaskResponse):
@@ -43,15 +63,15 @@ class Response(FlaskResponse):
 
     def __init__(
         self,
-        response=None,
-        status=None,
-        headers=None,
-        mimetype=None,
-        content_type=None,
-        direct_passthrough=False,
-        max_age=0,
-        private=None,
-    ):
+        response: Any = None,
+        status: int | None = None,
+        headers: dict[str, Any] | None = None,
+        mimetype: str | None = None,
+        content_type: str | None = None,
+        direct_passthrough: bool = False,
+        max_age: int | str = 0,
+        private: bool | None = None,
+    ) -> None:
         """Constructor.
 
         All parameters are the same as for the Flask/Werkzeug Response class,
@@ -94,15 +114,17 @@ class Response(FlaskResponse):
             direct_passthrough=direct_passthrough,
         )
 
-    def __str__(self):
+    def __str__(self) -> str:
         """This object can be treated as a string, e.g. in tests.
 
         :return: The entity-body portion of the response.
         """
         return self.get_data(as_text=True)
 
-    def _headers(self, headers={}):
+    def _headers(self, headers: dict[str, Any] | None = None) -> dict[str, str]:
         """Build an appropriate set of HTTP response headers."""
+        if headers is None:
+            headers = {}
         # Don't modify the underlying dictionary; it came from somewhere else.
         headers = dict(headers)
 
@@ -148,15 +170,15 @@ class OPDSFeedResponse(Response):
 
     def __init__(
         self,
-        response=None,
-        status=None,
-        headers=None,
-        mimetype=None,
-        content_type=None,
-        direct_passthrough=False,
-        max_age=None,
-        private=None,
-    ):
+        response: Any = None,
+        status: int | None = None,
+        headers: dict[str, Any] | None = None,
+        mimetype: str | None = None,
+        content_type: str | None = None,
+        direct_passthrough: bool = False,
+        max_age: int | str | None = None,
+        private: bool | None = None,
+    ) -> None:
         mimetype = mimetype or OPDSFeed.ACQUISITION_FEED_TYPE
         status = status or 200
         if max_age is None:
@@ -176,7 +198,7 @@ class OPDSFeedResponse(Response):
 class OPDSEntryResponse(Response):
     """A convenience specialization of Response for typical OPDS entries."""
 
-    def __init__(self, response=None, **kwargs):
+    def __init__(self, response: Any = None, **kwargs: Any) -> None:
         kwargs.setdefault("mimetype", OPDSFeed.ENTRY_TYPE)
         super().__init__(response, **kwargs)
 
@@ -218,7 +240,7 @@ def str_comma_list_validator(value: int | float | str) -> list[str]:
 
 # This code is borrowed from `flask-pydantic-spec
 # - https://github.com/turner-townsend/flask-pydantic-spec/blob/2d29e45f428b7e7bee60c1bc3657e95ee1f3a866/flask_pydantic_spec/utils.py#L200-L211
-def parse_multi_dict(input: MultiDict) -> dict[str, Any]:
+def parse_multi_dict(input: MultiDict[str, Any]) -> dict[str, Any]:
     result = {}
     for key, value in input.to_dict(flat=False).items():
         if len(value) == 1:

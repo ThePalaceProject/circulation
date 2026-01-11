@@ -5,7 +5,7 @@ from fuzzywuzzy import fuzz
 from palace.manager.util.permanent_work_id import WorkIDCalculator
 
 
-def normalize_title_for_matching(title):
+def normalize_title_for_matching(title: str) -> str:
     """
     Used to standardize book titles before matching them to each other to identify best results
     in VIAF author search feeds.
@@ -17,7 +17,7 @@ def normalize_title_for_matching(title):
     return title
 
 
-def title_match_ratio(title1, title2):
+def title_match_ratio(title1: str, title2: str) -> int:
     """
     Returns a number between 0 and 100, representing the percent
     match (Levenshtein Distance) between book title1 and book title2,
@@ -25,11 +25,11 @@ def title_match_ratio(title1, title2):
     """
     title1 = normalize_title_for_matching(title1)
     title2 = normalize_title_for_matching(title2)
-    match_ratio = fuzz.ratio(title1, title2)
+    match_ratio: int = fuzz.ratio(title1, title2)
     return match_ratio
 
 
-def unfluff_title(title):
+def unfluff_title(title: str) -> str:
     """
     Removes parts of the title that are deemed to be add-ons, like imprint information,
     inserted subtitles and corporate names.
