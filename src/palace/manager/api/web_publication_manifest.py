@@ -1,6 +1,8 @@
 """Vendor-specific variants of the standard Web Publication Manifest classes."""
 
-from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism
+from collections.abc import Sequence
+
+from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism, LicensePool
 from palace.manager.sqlalchemy.model.resource import Representation
 from palace.manager.util.web_publication_manifest import AudiobookManifest
 
@@ -9,12 +11,17 @@ class SpineItem:
     """Metadata about a piece of playable audio from an audiobook."""
 
     def __init__(
-        self, title, duration, part, sequence, media_type=Representation.MP3_MEDIA_TYPE
-    ):
+        self,
+        title: str,
+        duration: float,
+        part: int,
+        sequence: int,
+        media_type: str = Representation.MP3_MEDIA_TYPE,
+    ) -> None:
         """Constructor.
 
         :param title: The title of this spine item.
-        :param duration: The duration of this spine item, in milliseconds.
+        :param duration: The duration of this spine item, in seconds.
         :param part: The part number of this spine item, roughly equivalent
            to 'Part X' in a book.
         :param sequence: The sequence number of this spine item within its
@@ -28,7 +35,7 @@ class SpineItem:
         self.media_type = media_type
 
     @classmethod
-    def sort_key(self, o):
+    def sort_key(cls, o: "SpineItem") -> tuple[int, int]:
         """Used to sort a list of SpineItem objects in reading
         order.
         """
@@ -46,14 +53,14 @@ class FindawayManifest(AudiobookManifest):
 
     def __init__(
         self,
-        license_pool,
-        accountId=None,
-        checkoutId=None,
-        fulfillmentId=None,
-        licenseId=None,
-        sessionKey=None,
-        spine_items=[],
-    ):
+        license_pool: LicensePool,
+        accountId: str | None = None,
+        checkoutId: str | None = None,
+        fulfillmentId: str | None = None,
+        licenseId: str | None = None,
+        sessionKey: str | None = None,
+        spine_items: Sequence[SpineItem] | None = None,
+    ) -> None:
         """Create a FindawayManifest object from raw data.
 
         :param license_pool: A LicensePool for the title being fulfilled.
@@ -113,9 +120,9 @@ class FindawayManifest(AudiobookManifest):
         # picture of the structure of the timeline.
         part_key = "findaway:part"
         sequence_key = "findaway:sequence"
-        total_duration = 0
-        spine_items.sort(key=SpineItem.sort_key)
-        for item in spine_items:
+        total_duration = 0.0
+        sorted_spine_items = sorted(spine_items or [], key=SpineItem.sort_key)
+        for item in sorted_spine_items:
             kwargs = {part_key: item.part, sequence_key: item.sequence}
             self.add_reading_order(
                 href=None,
@@ -126,5 +133,5 @@ class FindawayManifest(AudiobookManifest):
             )
             total_duration += item.duration
 
-        if spine_items:
+        if sorted_spine_items:
             self.metadata["duration"] = total_duration

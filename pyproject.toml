@@ -115,7 +115,6 @@ module = [
     "palace.manager.api.routes",
     "palace.manager.api.util.profilers",
     "palace.manager.api.util.xray",
-    "palace.manager.api.web_publication_manifest",
     "palace.manager.core.app_server",
     "palace.manager.core.classifier",
     "palace.manager.core.classifier.age",
