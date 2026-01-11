@@ -187,7 +187,6 @@ module = [
     "palace.manager.sqlalchemy.bulk_operation",
     "palace.manager.sqlalchemy.flask_sqlalchemy_session",
     "palace.manager.sqlalchemy.listeners",
-    "palace.manager.sqlalchemy.model.admin",
     "palace.manager.sqlalchemy.model.contributor",
     "palace.manager.sqlalchemy.model.coverage",
     "palace.manager.sqlalchemy.model.customlist",
