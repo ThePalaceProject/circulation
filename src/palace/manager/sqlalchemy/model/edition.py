@@ -483,8 +483,7 @@ class Edition(Base, EditionConstants):
         old_cover_full_url = self.cover_full_url
         old_cover_thumbnail_url = self.cover_thumbnail_url
         new_cover = resource
-        representation = resource.representation
-        if representation is None:
+        if (representation := resource.representation) is None:
             return
         new_cover_full_url = representation.public_url
         new_cover_thumbnail_url: str | None = None
