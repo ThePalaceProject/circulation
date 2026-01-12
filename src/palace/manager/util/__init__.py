@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from collections import Counter
-from collections.abc import Generator, Iterable, Mapping, Sequence
+from collections.abc import Generator, Iterable, Sequence
 from decimal import Decimal, InvalidOperation
 from typing import TYPE_CHECKING, Any, overload
 
@@ -13,7 +13,7 @@ import sqlalchemy
 import palace.manager.sqlalchemy.flask_sqlalchemy_session
 
 if TYPE_CHECKING:
-    from palace.manager.sqlalchemy.model.contributor import Contributor
+    pass
 
 
 class MetadataSimilarity:
@@ -384,6 +384,9 @@ class ValuesMeta(type):
 
     def values(cls) -> set[Any]:
         """Fetch the values of constants defined in the class"""
+        # Using Any because the constant types vary by class and are determined
+        # at runtime through introspection. Different classes using this metaclass
+        # may define constants of different types (str, int, etc.).
         values: set[Any] = set()
         for key in dir(cls):
             val = getattr(cls, key)
