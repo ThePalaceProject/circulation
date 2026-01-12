@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 from collections import defaultdict
-from collections.abc import Iterator, Sequence
+from collections.abc import Sequence
 from typing import TYPE_CHECKING, Literal, overload
 
 from sqlalchemy import (
@@ -38,7 +38,7 @@ from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism, LicensePool
 from palace.manager.sqlalchemy.util import get_one, get_one_or_create
-from palace.manager.util import MetadataSimilarity, TitleProcessor
+from palace.manager.util import TitleProcessor
 from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.languages import LanguageCodes
 from palace.manager.util.permanent_work_id import WorkIDCalculator
@@ -556,87 +556,6 @@ class Edition(Base, EditionConstants):
                 _db, Contribution, edition=self, contributor=contributor, role=role
             )
         return contributor
-
-    def similarity_to(self, other_record: Edition) -> float:
-        """How likely is it that this record describes the same book as the
-        given record?
-        1 indicates very strong similarity, 0 indicates no similarity
-        at all.
-        For now we just compare the sets of words used in the titles
-        and the authors' names. This should be good enough for most
-        cases given that there is usually some preexisting reason to
-        suppose that the two records are related (e.g. OCLC said
-        they were).
-        Most of the Editions are from OCLC Classify, and we expect
-        to get some of them wrong (e.g. when a single OCLC work is a
-        compilation of several novels by the same author). That's okay
-        because those Editions aren't backed by
-        LicensePools. They're purely informative. We will have some
-        bad information in our database, but the clear-cut cases
-        should outnumber the fuzzy cases, so we we should still group
-        the Editions that really matter--the ones backed by
-        LicensePools--together correctly.
-        TODO: apply much more lenient terms if the two Editions are
-        identified by the same ISBN or other unique identifier.
-        """
-        if other_record == self:
-            # A record is always identical to itself.
-            return 1
-
-        language_factor: float
-        if other_record.language == self.language:
-            # The books are in the same language. Hooray!
-            language_factor = 1
-        else:
-            if other_record.language and self.language:
-                # Each record specifies a different set of languages. This
-                # is an immediate disqualification.
-                return 0
-            else:
-                # One record specifies a language and one does not. This
-                # is a little tricky. We're going to apply a penalty, but
-                # since the majority of records we're getting from OCLC are in
-                # English, the penalty will be less if one of the
-                # languages is English. It's more likely that an unlabeled
-                # record is in English than that it's in some other language.
-                if self.language == "eng" or other_record.language == "eng":
-                    language_factor = 0.80
-                else:
-                    language_factor = 0.50
-
-        title_quotient = MetadataSimilarity.title_similarity(
-            self.title, other_record.title
-        )
-
-        author_quotient = MetadataSimilarity.author_similarity(
-            self.author_contributors, other_record.author_contributors
-        )
-        if author_quotient == 0:
-            # The two works have no authors in common. Immediate
-            # disqualification.
-            return 0
-
-        # We weight title more heavily because it's much more likely
-        # that one author wrote two different books than that two
-        # books with the same title have different authors.
-        result: float = language_factor * (
-            (title_quotient * 0.80) + (author_quotient * 0.20)
-        )
-        return result
-
-    def apply_similarity_threshold(
-        self, candidates: list[Edition], threshold: float = 0.5
-    ) -> Iterator[Edition]:
-        """Yield the Editions from the given list that are similar
-        enough to this one.
-        """
-        for candidate in candidates:
-            if self == candidate:
-                yield candidate
-            else:
-                similarity = self.similarity_to(candidate)
-                if similarity >= threshold:
-                    yield candidate
 
     def best_cover_within_distance(
         self,

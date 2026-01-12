@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import re
-import string
 from collections import Counter
 from collections.abc import Generator, Iterable, Sequence
 from decimal import Decimal, InvalidOperation
@@ -16,82 +15,6 @@ import palace.manager.sqlalchemy.flask_sqlalchemy_session
 
 class MetadataSimilarity:
     """Estimate how similar two bits of metadata are."""
-
-    SEPARATOR = re.compile(r"\W")
-
-    @classmethod
-    def _wordbag(cls, s):
-        return set(cls._wordlist(s))
-
-    @classmethod
-    def _wordlist(cls, s):
-        return [x.strip().lower() for x in cls.SEPARATOR.split(s) if x.strip()]
-
-    @classmethod
-    def histogram(cls, strings, stopwords=None):
-        """Create a histogram of word frequencies across the given list of
-        strings.
-        """
-        histogram = Counter()
-        words = 0
-        for string in strings:
-            for word in cls._wordlist(string):
-                if not stopwords or word not in stopwords:
-                    histogram[word] += 1
-                    words += 1
-
-        return cls.normalize_histogram(histogram, words)
-
-    @classmethod
-    def normalize_histogram(cls, histogram, total=None):
-        if not total:
-            total = sum(histogram.values())
-        total = float(total)
-        for k, v in list(histogram.items()):
-            histogram[k] = v / total
-        return histogram
-
-    @classmethod
-    def histogram_distance(cls, strings_1, strings_2, stopwords=None):
-        """Calculate the histogram distance between two sets of strings.
-
-        The histogram distance is the sum of the word distance for
-        every word that occurs in either histogram.
-
-        If a word appears in one histogram but not the other, its word
-        distance is its frequency of appearance. If a word appears in
-        both histograms, its word distance is the absolute value of
-        the difference between that word's frequency of appearance in
-        histogram A, and its frequency of appearance in histogram B.
-
-        If the strings use the same words at exactly the same
-        frequency, the difference will be 0. If the strings use
-        completely different words, the difference will be 1.
-
-        """
-        if not stopwords:
-            stopwords = {"the", "a", "an"}
-
-        histogram_1 = cls.histogram(strings_1, stopwords=stopwords)
-        histogram_2 = cls.histogram(strings_2, stopwords=stopwords)
-        return cls.counter_distance(histogram_1, histogram_2)
-
-    @classmethod
-    def counter_distance(cls, counter1, counter2):
-        differences = []
-        # For every item that appears in histogram 1, compare its
-        # frequency against the frequency of that item in histogram 2.
-        for k, v in list(counter1.items()):
-            difference = abs(v - counter2.get(k, 0))
-            differences.append(difference)
-
-        # Add the frequency of every item that appears in histogram 2
-        # titles but not in histogram 1.
-        for k, v in list(counter2.items()):
-            if k not in counter1:
-                differences.append(abs(v))
-
-        return sum(differences) / 2
 
     @classmethod
     def most_common(cls, maximum_size, *items):
@@ -106,71 +29,6 @@ class MetadataSimilarity:
             return None
         return common[0][0]
 
-    @classmethod
-    def _wordbags_for_author(cls, author):
-        bags = [cls._wordbag(author.sort_name)]
-        for alias in author.aliases:
-            bags.append(cls._wordbag(alias))
-        return bags
-
-    @classmethod
-    def _matching_author_in(cls, to_match, authors):
-        for author in authors:
-            for name in author:
-                if name in to_match:
-                    return name
-        return None
-
-    @classmethod
-    def _word_match_proportion(cls, s1, s2, stopwords):
-        """What proportion of words do s1 and s2 share, considered as wordbags?"""
-        b1 = cls._wordbag(s1) - stopwords
-        b2 = cls._wordbag(s2) - stopwords
-        return b1, b2, cls._proportion(b1, b2)
-
-    @classmethod
-    def _proportion(cls, s1, s2):
-        if s1 == s2:
-            return 1
-        total = len(s1.union(s2))
-        shared = len(s1.intersection(s2))
-        if not total:
-            return 0
-        return shared / float(total)
-
-    @classmethod
-    def title_similarity(cls, title1, title2):
-        if title1 == title2:
-            return 1
-        if title1 == None or title2 == None:
-            return 0
-        b1, b2, proportion = cls._word_match_proportion(
-            title1, title2, {"a", "the", "an"}
-        )
-        if not b1.union(b2) in (b1, b2):
-            # Penalize titles where one title is not a subset of the
-            # other. "Tom Sawyer Abroad" will not face an extra
-            # penalty vis-a-vis "Tom Sawyer", but it will face an
-            # extra penalty vis-a-vis "Tom Sawyer, Detective".
-            proportion *= 0.4
-        return proportion
-
-    @classmethod
-    def author_similarity(cls, authors1, authors2):
-        """What percentage of the total number of authors in the two sets
-        are present in both sets?
-        """
-        return cls._proportion(set(authors1), set(authors2))
-
-    @classmethod
-    def author_name_similarity(cls, authors1, authors2):
-        """What percentage of the total number of authors in the two sets
-        are present in both sets?
-        """
-        return cls._proportion(
-            {x.sort_name for x in authors1}, {x.sort_name for x in authors2}
-        )
-
 
 class TitleProcessor:
     title_stopwords = ["The ", "A ", "An "]
@@ -184,23 +42,6 @@ class TitleProcessor:
                 title = title[len(stopword) :] + ", " + stopword.strip()
                 break
         return title
-
-    @classmethod
-    def extract_subtitle(cls, main_title, subtitled_title):
-        """Extracts a subtitle given a shorter and longer title version
-
-        :return: subtitle or None
-        """
-        if not subtitled_title:
-            return None
-        subtitle = subtitled_title.replace(main_title, "")
-        while subtitle and (subtitle[0] in string.whitespace + ":."):
-            # Trim any leading whitespace or colons
-            subtitle = subtitle[1:]
-        if not subtitle:
-            # The main title and the full title were the same.
-            return None
-        return subtitle
 
 
 class Bigrams:
