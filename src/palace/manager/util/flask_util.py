@@ -13,42 +13,8 @@ from pydantic import BaseModel, ConfigDict
 from pydantic.alias_generators import to_camel
 from werkzeug.datastructures import MultiDict
 
-from palace.manager.util import problem_detail
 from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.opds_writer import OPDSFeed
-
-
-def problem_raw(
-    type: str,
-    status: int,
-    title: str,
-    detail: str | None = None,
-    instance: str | None = None,
-    headers: dict[str, str] | None = None,
-) -> tuple[int, dict[str, str], str]:
-    if headers is None:
-        headers = {}
-    data = problem_detail.json(type, status, title, detail, instance)
-    final_headers: dict[str, str] = {"Content-Type": problem_detail.JSON_MEDIA_TYPE}
-    final_headers.update(headers)
-    return status, final_headers, data
-
-
-def problem(
-    type: str,
-    status: int,
-    title: str,
-    detail: str | None = None,
-    instance: str | None = None,
-    headers: dict[str, str] | None = None,
-) -> FlaskResponse:
-    """Create a Response that includes a Problem Detail Document."""
-    if headers is None:
-        headers = {}
-    status_code, response_headers, data = problem_raw(
-        type, status, title, detail, instance, headers
-    )
-    return FlaskResponse(data, status_code, response_headers)
 
 
 class Response(FlaskResponse):
