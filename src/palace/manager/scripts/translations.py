@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 import os
 
 from palace.manager.api.config import Configuration
@@ -14,15 +13,15 @@ class CompileTranslationsScript(Script):
     support multiple domains yet.
     """
 
-    def run(self):
+    def run(self) -> None:
         languages = Configuration.localization_languages()
         for language in languages:
-            base_path = "translations/%s/LC_MESSAGES" % language
+            base_path = f"translations/{language}/LC_MESSAGES"
             if not os.path.exists(base_path):
-                logging.warn("No translations for configured language %s" % language)
+                self.log.warning("No translations for configured language %s", language)
                 continue
 
-            os.system("rm %(path)s/messages.po" % dict(path=base_path))
-            os.system("cat %(path)s/*.po > %(path)s/messages.po" % dict(path=base_path))
+            os.system(f"rm {base_path}/messages.po")
+            os.system(f"cat {base_path}/*.po > {base_path}/messages.po")
 
         os.system("pybabel compile -f -d translations")

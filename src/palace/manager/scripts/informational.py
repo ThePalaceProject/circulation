@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import argparse
 import sys
-from collections.abc import Sequence
-from typing import TextIO
+from collections.abc import Iterator, Sequence
+from datetime import datetime
+from decimal import Decimal
+from typing import Any, TextIO
 
 from sqlalchemy import and_, exists, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Query, Session
 
 from palace.manager.integration.goals import Goals
 from palace.manager.scripts.base import Script
@@ -14,10 +16,13 @@ from palace.manager.scripts.input import (
     CollectionInputScript,
     IdentifierInputScript,
     LibraryInputScript,
+    SupportsReadlines,
 )
 from palace.manager.search.external_search import ExternalSearchIndex, Filter
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.collection import Collection
+from palace.manager.sqlalchemy.model.coverage import CoverageRecord
+from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.integration import IntegrationConfiguration
@@ -38,7 +43,7 @@ class ShowLibrariesScript(Script):
     name = "List the libraries on this server."
 
     @classmethod
-    def arg_parser(cls):
+    def arg_parser(cls, _db: Session) -> argparse.ArgumentParser:
         parser = argparse.ArgumentParser()
         parser.add_argument(
             "--short-name",
@@ -51,11 +56,21 @@ class ShowLibrariesScript(Script):
         )
         return parser
 
-    def do_run(self, _db=None, cmd_args=None, output=sys.stdout):
+    def do_run(
+        self,
+        _db: Session | None = None,
+        cmd_args: Sequence[str | None] | None = None,
+        output: TextIO = sys.stdout,
+    ) -> None:
         _db = _db or self._db
         args = self.parse_command_line(_db, cmd_args=cmd_args)
         if args.short_name:
             library = get_one(_db, Library, short_name=args.short_name)
+            if not library:
+                output.write(
+                    f"Could not locate library by short name: {args.short_name}\n"
+                )
+                return
             libraries = [library]
         else:
             libraries = _db.query(Library).order_by(Library.name).all()
@@ -72,7 +87,7 @@ class ShowCollectionsScript(Script):
     name = "List the collections on this server."
 
     @classmethod
-    def arg_parser(cls):
+    def arg_parser(cls, _db: Session) -> argparse.ArgumentParser:
         parser = argparse.ArgumentParser()
         parser.add_argument(
             "--name",
@@ -85,7 +100,12 @@ class ShowCollectionsScript(Script):
         )
         return parser
 
-    def do_run(self, _db=None, cmd_args=None, output=sys.stdout):
+    def do_run(
+        self,
+        _db: Session | None = None,
+        cmd_args: Sequence[str | None] | None = None,
+        output: TextIO = sys.stdout,
+    ) -> None:
         _db = _db or self._db
         args = self.parse_command_line(_db, cmd_args=cmd_args)
         if args.name:
@@ -94,7 +114,7 @@ class ShowCollectionsScript(Script):
             if collection:
                 collections = [collection]
             else:
-                output.write("Could not locate collection by name: %s" % name)
+                output.write(f"Could not locate collection by name: {name}")
                 collections = []
         else:
             collections = (
@@ -122,7 +142,7 @@ class ShowIntegrationsScript(Script):
     name = "List the integrations on this server."
 
     @classmethod
-    def arg_parser(cls) -> argparse.ArgumentParser:
+    def arg_parser(cls, _db: Session) -> argparse.ArgumentParser:
         parser = argparse.ArgumentParser()
         parser.add_argument(
             "--name",
@@ -138,7 +158,7 @@ class ShowIntegrationsScript(Script):
     def do_run(
         self,
         _db: Session | None = None,
-        cmd_args: Sequence[str] | None = None,
+        cmd_args: Sequence[str | None] | None = None,
         output: TextIO = sys.stdout,
     ) -> None:
         _db = _db or self._db
@@ -174,7 +194,7 @@ class ShowLanesScript(Script):
     name = "List the lanes on this server."
 
     @classmethod
-    def arg_parser(cls):
+    def arg_parser(cls, _db: Session) -> argparse.ArgumentParser:
         parser = argparse.ArgumentParser()
         parser.add_argument(
             "--id",
@@ -182,7 +202,12 @@ class ShowLanesScript(Script):
         )
         return parser
 
-    def do_run(self, _db=None, cmd_args=None, output=sys.stdout):
+    def do_run(
+        self,
+        _db: Session | None = None,
+        cmd_args: Sequence[str | None] | None = None,
+        output: TextIO = sys.stdout,
+    ) -> None:
         _db = _db or self._db
         args = self.parse_command_line(_db, cmd_args=cmd_args)
         if args.id:
@@ -191,7 +216,7 @@ class ShowLanesScript(Script):
             if lane:
                 lanes = [lane]
             else:
-                output.write("Could not locate lane with id: %s" % id)
+                output.write(f"Could not locate lane with id: {id}")
                 lanes = []
         else:
             lanes = _db.query(Lane).order_by(Lane.id).all()
@@ -211,7 +236,12 @@ class Explain(IdentifierInputScript):
     METADATA_URL_TEMPLATE = "http://metadata.librarysimplified.org/lookup?urn=%s"
     TIME_FORMAT = "%Y-%m-%d %H:%M"
 
-    def do_run(self, cmd_args=None, stdin=sys.stdin, stdout=sys.stdout):
+    def do_run(
+        self,
+        cmd_args: Sequence[str | None] | None = None,
+        stdin: SupportsReadlines = sys.stdin,
+        stdout: TextIO = sys.stdout,
+    ) -> None:
         param_args = self.parse_command_line(self._db, cmd_args=cmd_args, stdin=stdin)
         identifier_ids = [x.id for x in param_args.identifiers]
         editions = self._db.query(Edition).filter(
@@ -224,13 +254,18 @@ class Explain(IdentifierInputScript):
             self.explain(self._db, edition, policy)
             self.write("-" * 80)
 
-    def write(self, s):
+    def write(self, s: str) -> None:
         """Write a string to self.stdout."""
         if not s.endswith("\n"):
             s += "\n"
         self.stdout.write(s)
 
-    def explain(self, _db, edition, presentation_calculation_policy=None):
+    def explain(
+        self,
+        _db: Session,
+        edition: Edition,
+        presentation_calculation_policy: Any | None = None,
+    ) -> None:
         if edition.medium not in ("Book", "Audio"):
             # we haven't yet decided what to display for you
             return
@@ -249,7 +284,7 @@ class Explain(IdentifierInputScript):
             % (self.METADATA_URL_TEMPLATE % edition.primary_identifier.urn)
         )
 
-        seen = set()
+        seen: set[int] = set()
         self.explain_identifier(edition.primary_identifier, True, seen, 1, 0)
 
         # Find all contributions, and tell about the contributors.
@@ -281,7 +316,7 @@ class Explain(IdentifierInputScript):
             print("After recalculating presentation:")
             self.explain_work(work)
 
-    def explain_contribution(self, contribution):
+    def explain_contribution(self, contribution: Any) -> None:
         contributor_id = contribution.contributor.id
         contributor_sort_name = contribution.contributor.sort_name
         contributor_display_name = contribution.contributor.display_name
@@ -290,7 +325,14 @@ class Explain(IdentifierInputScript):
             % (contributor_id, contributor_sort_name, contributor_display_name)
         )
 
-    def explain_identifier(self, identifier, primary, seen, strength, level):
+    def explain_identifier(
+        self,
+        identifier: Identifier,
+        primary: bool,
+        seen: set[int],
+        strength: float | int | Decimal | None,
+        level: int,
+    ) -> None:
         indent = "  " * level
         if primary:
             ident = "Primary identifier"
@@ -309,16 +351,12 @@ class Explain(IdentifierInputScript):
         )
         for classification in classifications:
             subject = classification.subject
-            genre = subject.genre
-            if genre:
-                genre = genre.name
-            else:
-                genre = "(!genre)"
+            genre_name = subject.genre.name if subject.genre else "(!genre)"
             # print("%s  %s says: %s/%s %s w=%s" % (
             #    indent, classification.data_source.name,
-            #    subject.identifier, subject.name, genre, classification.weight
+            #    subject.identifier, subject.name, genre_name, classification.weight
             # ))
-        seen.add(identifier)
+        seen.add(identifier.id)
         for equivalency in identifier.equivalencies:
             if equivalency.id in seen:
                 continue
@@ -331,15 +369,17 @@ class Explain(IdentifierInputScript):
             crs = identifier.coverage_records
             if crs:
                 self.write("  %d coverage records:" % len(crs))
-                for cr in sorted(crs, key=lambda x: x.timestamp):
+                for cr in sorted(crs, key=lambda x: x.timestamp or datetime.min):
                     self.explain_coverage_record(cr)
 
-    def explain_license_pool(self, pool):
+    def explain_license_pool(self, pool: LicensePool) -> None:
         self.write("Licensepool info:")
         if pool.collection:
             self.write(" Collection: %r" % pool.collection)
             libraries = [
-                library.name for library in pool.collection.associated_libraries
+                library.name
+                for library in pool.collection.associated_libraries
+                if library.name
             ]
             if libraries:
                 self.write(" Available to libraries: %s" % ", ".join(libraries))
@@ -371,7 +411,7 @@ class Explain(IdentifierInputScript):
             )
         )
 
-    def explain_work(self, work):
+    def explain_work(self, work: Work) -> None:
         self.write("Work info:")
         if work.presentation_edition:
             self.write(
@@ -394,30 +434,43 @@ class Explain(IdentifierInputScript):
                 collection = "!collection"
             self.write(f"  ACTIVE: {pool.identifier!r} {collection}")
 
-    def explain_coverage_record(self, cr):
+    def explain_coverage_record(self, cr: CoverageRecord) -> None:
+        if cr.timestamp is None:
+            return
+        status_value = str(cr.status) if cr.status is not None else None
+        operation_value = str(cr.operation) if cr.operation is not None else None
         self._explain_coverage_record(
-            cr.timestamp, cr.data_source, cr.operation, cr.status, cr.exception
+            cr.timestamp, cr.data_source, operation_value, status_value, cr.exception
         )
 
     def _explain_coverage_record(
-        self, timestamp, data_source, operation, status, exception
-    ):
-        timestamp = timestamp.strftime(self.TIME_FORMAT)
+        self,
+        timestamp: datetime,
+        data_source: DataSource | None,
+        operation: str | None,
+        status: str | None,
+        exception: str | None,
+    ) -> None:
+        timestamp_string = timestamp.strftime(self.TIME_FORMAT)
         if data_source:
-            data_source = data_source.name + " | "
+            data_source_value = data_source.name + " | "
         else:
-            data_source = ""
+            data_source_value = ""
         if operation:
-            operation = operation + " | "
+            operation_value = operation + " | "
         else:
-            operation = ""
+            operation_value = ""
         if exception:
-            exception = " | " + exception
+            exception_value = " | " + exception
         else:
-            exception = ""
+            exception_value = ""
         self.write(
             "   {} | {}{}{}{}".format(
-                timestamp, data_source, operation, status, exception
+                timestamp_string,
+                data_source_value,
+                operation_value,
+                status,
+                exception_value,
             )
         )
 
@@ -430,19 +483,22 @@ class WhereAreMyBooksScript(CollectionInputScript):
     """
 
     def __init__(
-        self, _db=None, output=None, search: ExternalSearchIndex | None = None
-    ):
+        self,
+        _db: Session | None = None,
+        output: TextIO | None = None,
+        search: ExternalSearchIndex | None = None,
+    ) -> None:
         _db = _db or self._db
         super().__init__(_db)
         self.output = output or sys.stdout
         self.search = search or self.services.search.index()
 
-    def out(self, s, *args):
+    def out(self, s: str, *args: Any) -> None:
         if not s.endswith("\n"):
             s += "\n"
         self.output.write(s % args)
 
-    def run(self, cmd_args=None):
+    def run(self, cmd_args: Sequence[str | None] | None = None) -> None:
         parsed = self.parse_command_line(self._db, cmd_args=cmd_args or [])
 
         # Check each library.
@@ -459,7 +515,7 @@ class WhereAreMyBooksScript(CollectionInputScript):
             self.explain_collection(collection)
             self.out("\n")
 
-    def check_library(self, library):
+    def check_library(self, library: Library) -> None:
         """Make sure a library is properly set up to show works."""
         self.out("Checking library %s", library.name)
 
@@ -479,7 +535,7 @@ class WhereAreMyBooksScript(CollectionInputScript):
         else:
             self.out(" Associated with %s lanes.", len(library.lanes))
 
-    def explain_collection(self, collection):
+    def explain_collection(self, collection: Collection) -> None:
         self.out('Examining collection "%s"', collection.name)
 
         base = (
@@ -541,12 +597,12 @@ class LanguageListScript(LibraryInputScript):
     in the collection.
     """
 
-    def process_library(self, library):
+    def process_library(self, library: Library) -> None:
         print(library.short_name)
         for item in self.languages(library):
             print(item)
 
-    def languages(self, library):
+    def languages(self, library: Library) -> Iterator[str]:
         ":yield: A list of output lines, one per language."
         for abbreviation, count in library.estimated_holdings_by_language(
             include_open_access=False
@@ -560,7 +616,7 @@ class DisappearingBookReportScript(Script):
     collection, or should be in the collection, but aren't.
     """
 
-    def do_run(self):
+    def do_run(self) -> None:
         qu = (
             self._db.query(LicensePool)
             .filter(LicensePool.open_access == False)
@@ -584,7 +640,9 @@ class DisappearingBookReportScript(Script):
         for pool in qu:
             self.explain(pool)
 
-    def investigate(self, licensepool):
+    def investigate(
+        self, licensepool: LicensePool
+    ) -> tuple[datetime | None, Query[CirculationEvent], Query[CirculationEvent]]:
         """Find when the given LicensePool might have disappeared from the
         collection.
 
@@ -605,9 +663,6 @@ class DisappearingBookReportScript(Script):
         from having a positive number to being zero or a negative
         number.
         """
-        first_activity = None
-        most_recent_activity = None
-
         # If we have absolutely no information about the book ever
         # circulating, we act like we lost track of the book
         # immediately after seeing it for the first time.
@@ -617,7 +672,9 @@ class DisappearingBookReportScript(Script):
         # push up the last time the book was known to be circulating.
         for l in (licensepool.loans, licensepool.holds):
             for item in l:
-                if not last_seen or item.start > last_seen:
+                if item.start is None:
+                    continue
+                if last_seen is None or item.start > last_seen:
                     last_seen = item.start
 
         # Now we look for relevant circulation events. First, an event
@@ -633,7 +690,7 @@ class DisappearingBookReportScript(Script):
         )
         if title_removal_events.count():
             candidate = title_removal_events[-1].start
-            if not last_seen or candidate > last_seen:
+            if last_seen is None or candidate > last_seen:
                 last_seen = candidate
 
         # Also look for an event where the title went from a nonzero
@@ -648,38 +705,40 @@ class DisappearingBookReportScript(Script):
         )
         if license_removal_events.count():
             candidate = license_removal_events[-1].start
-            if not last_seen or candidate > last_seen:
+            if last_seen is None or candidate > last_seen:
                 last_seen = candidate
 
         return last_seen, title_removal_events, license_removal_events
 
     format = "%Y-%m-%d"
 
-    def explain(self, licensepool):
+    def explain(self, licensepool: LicensePool) -> None:
         edition = licensepool.presentation_edition
         identifier = licensepool.identifier
         last_seen, title_removal_events, license_removal_events = self.investigate(
             licensepool
         )
 
-        data = [f"{identifier.type} {identifier.identifier}"]
+        data: list[str] = [f"{identifier.type} {identifier.identifier}"]
         if edition:
-            data.extend([edition.title, edition.author])
+            data.extend([edition.title or "", edition.author or ""])
         if licensepool.availability_time:
             first_seen = licensepool.availability_time.strftime(self.format)
         else:
             first_seen = ""
         data.append(first_seen)
         if last_seen:
-            last_seen = last_seen.strftime(self.format)
+            last_seen_value = last_seen.strftime(self.format)
         else:
-            last_seen = ""
-        data.append(last_seen)
-        data.append(licensepool.licenses_owned)
-        data.append(licensepool.licenses_available)
+            last_seen_value = ""
+        data.append(last_seen_value)
+        data.append(str(licensepool.licenses_owned))
+        data.append(str(licensepool.licenses_available))
 
-        license_removals = []
+        license_removals: list[str] = []
         for event in license_removal_events:
+            if event.start is None:
+                continue
             description = "{}: {}→{}".format(
                 event.start.strftime(self.format),
                 event.old_value,
@@ -689,7 +748,9 @@ class DisappearingBookReportScript(Script):
         data.append(", ".join(license_removals))
 
         title_removals = [
-            event.start.strftime(self.format) for event in title_removal_events
+            event.start.strftime(self.format)
+            for event in title_removal_events
+            if event.start is not None
         ]
         data.append(", ".join(title_removals))
 

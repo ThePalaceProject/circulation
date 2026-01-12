@@ -32,8 +32,8 @@ class OpdsTaskScript(CollectionInputScript):
         self._all_task = all_task
 
     @classmethod
-    def arg_parser(cls) -> argparse.ArgumentParser:
-        parser = super().arg_parser()
+    def arg_parser(cls, _db: Session) -> argparse.ArgumentParser:
+        parser = super().arg_parser(_db)
         parser.add_argument(
             "--force",
             help="Import the feed from scratch, even if it seems like it was already imported.",

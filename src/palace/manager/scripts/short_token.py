@@ -1,12 +1,18 @@
 from __future__ import annotations
 
+import argparse
 import sys
+from collections.abc import Sequence
+from typing import TextIO
+
+from sqlalchemy.orm import Session
 
 from palace.manager.api.adobe_vendor_id import AuthdataUtility
 from palace.manager.api.authenticator import LibraryAuthenticator
 from palace.manager.scripts.input import LibraryInputScript
 from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.sqlalchemy.util import get_one
+from palace.manager.util.problem_detail import ProblemDetail
 
 
 class GenerateShortTokenScript(LibraryInputScript):
@@ -16,8 +22,10 @@ class GenerateShortTokenScript(LibraryInputScript):
     """
 
     @classmethod
-    def arg_parser(cls, _db):
-        parser = super().arg_parser(_db, multiple_libraries=False)
+    def arg_parser(
+        cls, _db: Session, multiple_libraries: bool = False
+    ) -> argparse.ArgumentParser:
+        parser = super().arg_parser(_db, multiple_libraries=multiple_libraries)
         parser.add_argument(
             "--barcode",
             help="The patron barcode.",
@@ -42,7 +50,13 @@ class GenerateShortTokenScript(LibraryInputScript):
         )
         return parser
 
-    def do_run(self, _db=None, cmd_args=None, output=sys.stdout, authdata=None):
+    def do_run(
+        self,
+        _db: Session | None = None,
+        cmd_args: Sequence[str | None] | None = None,
+        output: TextIO = sys.stdout,
+        authdata: AuthdataUtility | None = None,
+    ) -> None:
         _db = _db or self._db
         args = self.parse_command_line(_db, cmd_args=cmd_args)
 
@@ -52,7 +66,9 @@ class GenerateShortTokenScript(LibraryInputScript):
         library = args.libraries[0]
 
         # First try to shortcut full authentication, by just looking up patron directly
-        patron = get_one(_db, Patron, authorization_identifier=args.barcode)
+        patron: Patron | ProblemDetail | None = get_one(
+            _db, Patron, authorization_identifier=args.barcode
+        )
         if patron is None:
             # Fall back to a full patron lookup
             auth = LibraryAuthenticator.from_config(
@@ -64,24 +80,26 @@ class GenerateShortTokenScript(LibraryInputScript):
             patron = auth.authenticate(
                 _db, credentials={"username": args.barcode, "password": args.pin}
             )
-            if not isinstance(patron, Patron):
-                output.write(f"Patron not found {args.barcode}!\n")
-                sys.exit(-1)
+        if not isinstance(patron, Patron):
+            output.write(f"Patron not found {args.barcode}!\n")
+            sys.exit(-1)
 
-        authdata = authdata or AuthdataUtility.from_config(library, _db)
-        if authdata is None:
+        authdata_util = authdata
+        if authdata_util is None:
+            authdata_util = AuthdataUtility.from_config(library, _db)
+        if authdata_util is None:
             output.write(
                 "Library not registered with library registry! Please register and try again."
             )
             sys.exit(-1)
 
-        patron_identifier = authdata._adobe_patron_identifier(patron)
+        patron_identifier = authdata_util._adobe_patron_identifier(patron)
         expires = {
             k: v
             for (k, v) in vars(args).items()
             if k in ["days", "hours", "minutes"] and v is not None
         }
-        vendor_id, token = authdata.encode_short_client_token(
+        vendor_id, token = authdata_util.encode_short_client_token(
             patron_identifier, expires=expires
         )
         username, password = token.rsplit("|", 1)

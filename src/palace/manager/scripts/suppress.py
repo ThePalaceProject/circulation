@@ -1,9 +1,12 @@
 import argparse
+from collections.abc import Sequence
+from typing import cast
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from palace.manager.scripts.base import Script
+from palace.manager.core.exceptions import PalaceValueError
+from palace.manager.scripts.base import Script, _normalize_cmd_args
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.library import Library
 
@@ -14,10 +17,8 @@ class SuppressWorkForLibraryScript(Script):
     BY_DATABASE_ID = "Database ID"
 
     @classmethod
-    def arg_parser(cls, _db: Session | None) -> argparse.ArgumentParser:  # type: ignore[override]
+    def arg_parser(cls, _db: Session) -> argparse.ArgumentParser:
         parser = argparse.ArgumentParser()
-        if _db is None:
-            raise ValueError("No database session provided.")
         library_name_list = sorted(str(l.short_name) for l in _db.query(Library))
         library_names = '"' + '", "'.join(library_name_list) + '"'
         parser.add_argument(
@@ -45,18 +46,23 @@ class SuppressWorkForLibraryScript(Script):
 
     @classmethod
     def parse_command_line(
-        cls, _db: Session | None = None, cmd_args: list[str] | None = None
-    ):
+        cls,
+        _db: Session,
+        cmd_args: Sequence[str | None] | None = None,
+    ) -> argparse.Namespace:
         parser = cls.arg_parser(_db)
-        return parser.parse_known_args(cmd_args)[0]
+        return parser.parse_known_args(_normalize_cmd_args(cmd_args))[0]
 
     def load_library(self, library_short_name: str) -> Library:
         library_short_name = library_short_name.strip()
-        library = self._db.scalars(
-            select(Library).where(Library.short_name == library_short_name)
-        ).one_or_none()
+        library = cast(
+            Library | None,
+            self._db.scalars(
+                select(Library).where(Library.short_name == library_short_name)
+            ).one_or_none(),
+        )
         if not library:
-            raise ValueError(f"Unknown library: {library_short_name}")
+            raise PalaceValueError(f"Unknown library: {library_short_name}")
         return library
 
     def load_identifier(self, identifier_type: str, identifier: str) -> Identifier:
@@ -70,9 +76,13 @@ class SuppressWorkForLibraryScript(Script):
                 Identifier.identifier == identifier
             )
 
-        identifier_obj = self._db.scalars(query).unique().one_or_none()
+        identifier_obj = cast(
+            Identifier | None, self._db.scalars(query).unique().one_or_none()
+        )
         if not identifier_obj:
-            raise ValueError(f"Unknown identifier: {identifier_type}/{identifier}")
+            raise PalaceValueError(
+                f"Unknown identifier: {identifier_type}/{identifier}"
+            )
 
         return identifier_obj
 

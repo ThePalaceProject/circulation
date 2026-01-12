@@ -11,8 +11,9 @@ from urllib.parse import urlparse
 import pytz
 import yaml
 from OpenSSL.crypto import FILETYPE_PEM, X509, load_certificate
+from sqlalchemy.orm import Session
 
-from palace.manager.core.exceptions import BasePalaceException
+from palace.manager.core.exceptions import BasePalaceException, PalaceValueError
 from palace.manager.scripts.base import Script
 from palace.manager.util.aes import CryptAESCBC
 from palace.manager.util.datetime_helpers import utc_now
@@ -33,14 +34,14 @@ class IntegrationTestDetails:
     name: str
     endpoint: str
     method: str = "GET"
-    request_headers: dict | None = None
+    request_headers: dict[str, str] | None = None
     request_body: Any | None = None
-    request_json: dict | None = None
-    expected_json: dict | None = None
+    request_json: dict[str, Any] | None = None
+    expected_json: dict[str, Any] | None = None
     expected_status_code: int = 200
 
 
-def read_file_bytes(filepath):
+def read_file_bytes(filepath: str) -> bytes:
     with open(filepath, "rb") as fp:
         return fp.read()
 
@@ -69,7 +70,7 @@ The config file format is a YML file of the form:
     SSL_EXPIRY_THRESHOLD_DAYS = 7
 
     @classmethod
-    def arg_parser(cls):  # pragma: no cover
+    def arg_parser(cls, _db: Session) -> ArgumentParser:
         parser = ArgumentParser(
             "Test API Integrations",
             description=cls.CMDLINE_DESCRIPTION,
@@ -100,7 +101,7 @@ The config file format is a YML file of the form:
 
     def _read_config(
         self, filepath: str, key_file: str | None = None, raw: bool = False
-    ) -> list | bytes:
+    ) -> list[dict[str, Any]] | bytes:
         """Read the config yml from a source.
         The file should be a yml with a list of IntegrationTestDetails as the content.
         :param filepath: The path to the file, could be an URL or a file on the local directory
@@ -110,7 +111,9 @@ The config file format is a YML file of the form:
         if filepath.startswith("http"):
             response = HTTP.get_with_timeout(filepath)
             if response.status_code != 200:
-                raise Exception(f"Could not read remote file: {response.content!r}")
+                raise PalaceValueError(
+                    f"Could not read remote file: {response.content!r}"
+                )
             content = response.content
         else:
             content = read_file_bytes(filepath)
@@ -122,11 +125,11 @@ The config file format is a YML file of the form:
 
         if not raw:
             yml = yaml.load(content, yaml.Loader)
-            return yml
+            return cast(list[dict[str, Any]], yml)
 
         return content
 
-    def _generate_key_file(self, filepath: str):
+    def _generate_key_file(self, filepath: str) -> None:
         """Generate a 32 byte random key file"""
         key = CryptAESCBC.generate_key()
         with open(filepath, "wb") as wfp:
@@ -135,7 +138,7 @@ The config file format is a YML file of the form:
             f"Successfully wrote a {CryptAESCBC.KEY_LENGTH} byte key into {filepath}"
         )
 
-    def _encrypt(self, filepath: str, key_file: str, encrypt_file: str):
+    def _encrypt(self, filepath: str, key_file: str, encrypt_file: str) -> None:
         """Encrypt a textfile and write it to the encrypt_file.
         :param filepath: The file to encrypt
         :param key_file: The key file to use for the encryption
@@ -150,7 +153,7 @@ The config file format is a YML file of the form:
         self.log.info(f"Wrote the encrypted file to {encrypt_file}")
 
     def do_run(self) -> None:
-        args = self.parse_command_line()
+        args = self.parse_command_line(self._db)
 
         if args.generate_key_file:
             self._generate_key_file(args.generate_key_file)
@@ -160,7 +163,9 @@ The config file format is a YML file of the form:
             self._encrypt(args.config, args.key_file, args.encrypt_file)
             return
 
-        data = cast(list[dict], self._read_config(args.config, key_file=args.key_file))
+        data = cast(
+            list[dict[str, Any]], self._read_config(args.config, key_file=args.key_file)
+        )
 
         for datapoint in data:
             test = IntegrationTestDetails(**datapoint)
@@ -213,7 +218,7 @@ The config file format is a YML file of the form:
 
         self.log.info(f"Test run successful {test.name} {test.endpoint}")
 
-    def _test_ssl_validity(self, test: IntegrationTestDetails):
+    def _test_ssl_validity(self, test: IntegrationTestDetails) -> None:
         """Test the SSL certificate validity for the near future"""
         url = test.endpoint
 

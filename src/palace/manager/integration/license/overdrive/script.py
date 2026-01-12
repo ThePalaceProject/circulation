@@ -107,7 +107,7 @@ class GenerateOverdriveAdvantageAccountList(InputScript):
                 writer.writerow(i)
 
     @classmethod
-    def arg_parser(cls) -> argparse.ArgumentParser:
+    def arg_parser(cls, _db: Session) -> argparse.ArgumentParser:
         parser = argparse.ArgumentParser()
         parser.add_argument(
             "--output-file-path",
@@ -182,7 +182,7 @@ class ImportCollection(Script):
     """A convenient script for manually kicking off an OverDrive collection import"""
 
     @classmethod
-    def arg_parser(cls) -> argparse.ArgumentParser:
+    def arg_parser(cls, _db: Session) -> argparse.ArgumentParser:
         parser = argparse.ArgumentParser()
         parser.add_argument(
             "--collection-name",
@@ -215,7 +215,7 @@ class ImportCollectionGroup(Script):
     an import for each of the child OverDrive Advantage collections in parallel."""
 
     @classmethod
-    def arg_parser(cls) -> argparse.ArgumentParser:
+    def arg_parser(cls, _db: Session) -> argparse.ArgumentParser:
         parser = argparse.ArgumentParser()
         parser.add_argument(
             "--collection-name",

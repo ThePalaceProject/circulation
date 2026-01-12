@@ -1,16 +1,27 @@
+from __future__ import annotations
+
+from datetime import datetime
+from typing import Any
+
 from palace.manager.core.monitor import TimestampData
 from palace.manager.scripts.base import Script
+from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.coverage import Timestamp
 
 
 class TimestampScript(Script):
     """A script that automatically records a timestamp whenever it runs."""
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        self.timestamp_collection = None
+        self.timestamp_collection: Collection | None = None
 
-    def update_timestamp(self, timestamp_data, start, exception):
+    def update_timestamp(
+        self,
+        timestamp_data: TimestampData | None,
+        start: datetime,
+        exception: str | None,
+    ) -> None:
         """Update the appropriate Timestamp for this script.
 
         :param timestamp_data: A TimestampData representing what the script

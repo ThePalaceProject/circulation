@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+from typing import Any, TextIO
 
 from palace.manager.celery.tasks.novelist import update_novelists_by_library
 from palace.manager.integration.metadata.novelist import NoveListAPI
@@ -9,7 +10,7 @@ from palace.manager.scripts.timestamp import TimestampScript
 
 
 class NovelistSnapshotScript(TimestampScript, LibraryInputScript):
-    def do_run(self, output=sys.stdout, *args, **kwargs):
+    def do_run(self, output: TextIO = sys.stdout, *args: Any, **kwargs: Any) -> None:
         parsed = self.parse_command_line(self._db, *args, **kwargs)
         for library in parsed.libraries:
             if not NoveListAPI.is_configured_db_check(library):

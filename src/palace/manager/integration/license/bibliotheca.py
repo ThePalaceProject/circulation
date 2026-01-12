@@ -11,7 +11,7 @@ import time
 import urllib.parse
 from abc import ABC
 from argparse import ArgumentParser, Namespace
-from collections.abc import Collection as CollectionT, Generator, Iterable
+from collections.abc import Collection as CollectionT, Generator, Iterable, Sequence
 from datetime import datetime, timedelta
 from io import BytesIO
 from typing import Annotated, Any, Literal, Optional, Unpack, overload
@@ -1731,8 +1731,8 @@ class RunBibliothecaPurchaseMonitorScript(RunCollectionMonitorScript):
     """
 
     @classmethod
-    def arg_parser(cls) -> ArgumentParser:
-        parser = super().arg_parser()
+    def arg_parser(cls, _db: Session) -> ArgumentParser:
+        parser = super().arg_parser(_db)
         parser.add_argument(
             "--default-start",
             metavar="DATETIME",
@@ -1752,14 +1752,18 @@ class RunBibliothecaPurchaseMonitorScript(RunCollectionMonitorScript):
 
     @classmethod
     def parse_command_line(
-        cls, _db: Session | None = None, cmd_args: str | None = None, **kwargs: Any
+        cls,
+        _db: Session,
+        cmd_args: Sequence[str | None] | None = None,
+        *args: Any,
+        **kwargs: Any,
     ) -> Namespace:
-        parsed = super().parse_command_line(_db=_db, cmd_args=cmd_args, **kwargs)
+        parsed = super().parse_command_line(_db, cmd_args, *args, **kwargs)
         if parsed.override_timestamp and not parsed.default_start:
-            cls.arg_parser().error(
+            cls.arg_parser(_db).error(
                 '"--override-timestamp" is valid only when "--default-start" is also specified.'
             )
-        return parsed  # type: ignore[no-any-return]
+        return parsed
 
 
 class BibliothecaBibliographicCoverageProvider(BibliographicCoverageProvider):

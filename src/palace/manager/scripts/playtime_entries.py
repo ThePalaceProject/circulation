@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import argparse
+from collections.abc import Sequence
 from datetime import datetime
 
 import dateutil.parser
 import pytz
+from sqlalchemy.orm import Session
 
 from palace.manager.celery.tasks.playtime_entries import (
     REPORT_DATE_FORMAT,
@@ -16,14 +18,14 @@ from palace.manager.util.datetime_helpers import previous_months
 
 
 class PlaytimeEntriesSummationScript(Script):
-    def do_run(self):
+    def do_run(self) -> None:
         sum_playtime_entries.delay()
 
 
 class PlaytimeEntriesReportsScript(Script):
 
     @classmethod
-    def arg_parser(cls):
+    def arg_parser(cls, _db: Session) -> argparse.ArgumentParser:
         # The default `start` and `until` dates encompass the previous month.
         # We convert them to strings here so that they are handled the same way
         # as non-default dates specified as arguments.
@@ -53,12 +55,16 @@ class PlaytimeEntriesReportsScript(Script):
         return parser
 
     @classmethod
-    def parse_command_line(cls, _db=None, cmd_args=None, *args, **kwargs):
-        parsed = super().parse_command_line(_db=_db, cmd_args=cmd_args, *args, **kwargs)
+    def parse_command_line(
+        cls,
+        _db: Session,
+        cmd_args: Sequence[str | None] | None = None,
+    ) -> argparse.Namespace:
+        parsed = super().parse_command_line(_db, cmd_args)
         utc_start = pytz.utc.localize(parsed.start)
         utc_until = pytz.utc.localize(parsed.until)
         if utc_start >= utc_until:
-            cls.arg_parser().error(
+            cls.arg_parser(_db).error(
                 f"start date ({utc_start.strftime(REPORT_DATE_FORMAT)}) must be before "
                 f"until date ({utc_until.strftime(REPORT_DATE_FORMAT)})."
             )
@@ -66,10 +72,10 @@ class PlaytimeEntriesReportsScript(Script):
             **{**vars(parsed), **dict(start=utc_start, until=utc_until)}
         )
 
-    def do_run(self):
+    def do_run(self) -> None:
         """Produce a report for the given (or default) date range."""
 
-        parsed = self.parse_command_line()
+        parsed = self.parse_command_line(self._db)
         start: datetime = parsed.start
         until: datetime = parsed.until
 

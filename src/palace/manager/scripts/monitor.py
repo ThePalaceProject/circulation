@@ -1,29 +1,48 @@
 import logging
+from collections.abc import Callable, Sequence
+from typing import Any, cast
 
 from sqlalchemy.orm import Session
 
-from palace.manager.core.monitor import CollectionMonitor
+from palace.manager.core.monitor import CollectionMonitor, Monitor
 from palace.manager.scripts.base import Script
 from palace.manager.scripts.input import CollectionArgumentsScript
 from palace.manager.sqlalchemy.session import production_session
 
 
 class RunMonitorScript(Script):
-    def __init__(self, monitor, _db=None, **kwargs):
+    def __init__(
+        self,
+        monitor: type[CollectionMonitor] | Monitor | Callable[[Session], Monitor],
+        _db: Session | None = None,
+        **kwargs: Any,
+    ) -> None:
         super().__init__(_db)
-        if issubclass(monitor, CollectionMonitor):
+        self.collection_monitor: type[CollectionMonitor] | None
+        self.monitor: Monitor | None
+        self.collection_monitor_kwargs: dict[str, Any] = {}
+        if isinstance(monitor, type) and issubclass(monitor, CollectionMonitor):
             self.collection_monitor = monitor
             self.collection_monitor_kwargs = kwargs
             self.monitor = None
-            self.name = self.collection_monitor.SERVICE_NAME
+            self.name = (
+                self.collection_monitor.SERVICE_NAME or self.collection_monitor.__name__
+            )
         else:
             self.collection_monitor = None
-            if callable(monitor):
-                monitor = monitor(self._db, **kwargs)
-            self.monitor = monitor
-            self.name = self.monitor.service_name
+            if isinstance(monitor, Monitor):
+                monitor_instance = monitor
+            else:
+                monitor_factory = cast(Callable[[Session], Monitor], monitor)
+                monitor_instance = monitor_factory(self._db, **kwargs)
+            self.monitor = monitor_instance
+            self.name = (
+                self.monitor.service_name or self.monitor.__class__.__name__
+                if self.monitor
+                else self.__class__.__name__
+            )
 
-    def do_run(self):
+    def do_run(self) -> None:
         if self.monitor:
             self.monitor.run()
         elif self.collection_monitor:
@@ -46,7 +65,7 @@ class RunMultipleMonitorsScript(Script):
     system.
     """
 
-    def __init__(self, _db=None, **kwargs):
+    def __init__(self, _db: Session | None = None, **kwargs: Any) -> None:
         """Constructor.
 
         :param kwargs: Keyword arguments to pass into the `monitors` method
@@ -54,15 +73,16 @@ class RunMultipleMonitorsScript(Script):
         """
         super().__init__(_db)
         self.kwargs = kwargs
+        self.name = self.__class__.__name__
 
-    def monitors(self, **kwargs):
+    def monitors(self, **kwargs: Any) -> Sequence[Monitor]:
         """Find all the Monitors that need to be run.
 
         :return: A list of Monitor objects.
         """
         raise NotImplementedError()
 
-    def do_run(self):
+    def do_run(self) -> None:
         for monitor in self.monitors(**self.kwargs):
             try:
                 monitor.run()
@@ -94,7 +114,13 @@ class RunCollectionMonitorScript(RunMultipleMonitorsScript, CollectionArgumentsS
             self._session = production_session(self.monitor_class)
         return self._session
 
-    def __init__(self, monitor_class, _db=None, cmd_args=None, **kwargs):
+    def __init__(
+        self,
+        monitor_class: type[CollectionMonitor],
+        _db: Session | None = None,
+        cmd_args: Sequence[str | None] | None = None,
+        **kwargs: Any,
+    ) -> None:
         """Constructor.
 
         :param monitor_class: A class object that derives from
@@ -111,11 +137,13 @@ class RunCollectionMonitorScript(RunMultipleMonitorsScript, CollectionArgumentsS
         """
         super().__init__(_db, **kwargs)
         self.monitor_class = monitor_class
-        self.name = self.monitor_class.SERVICE_NAME
+        self.name = self.monitor_class.SERVICE_NAME or self.monitor_class.__name__
         parsed = vars(self.parse_command_line(self._db, cmd_args=cmd_args))
         parsed.pop("collection_names", None)
         self.collections = parsed.pop("collections", None)
         self.kwargs.update(parsed)
 
-    def monitors(self, **kwargs):
-        return self.monitor_class.all(self._db, collections=self.collections, **kwargs)
+    def monitors(self, **kwargs: Any) -> Sequence[Monitor]:
+        return list(
+            self.monitor_class.all(self._db, collections=self.collections, **kwargs)
+        )

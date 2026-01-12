@@ -1,24 +1,27 @@
 import datetime
 import json
+from typing import Any
 
+from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.core.query.customlist import CustomListQueries
 from palace.manager.scripts.base import Script
 from palace.manager.scripts.input import LibraryInputScript
 from palace.manager.sqlalchemy.model.customlist import CustomList
 from palace.manager.sqlalchemy.model.datasource import DataSource
+from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.util import get_one_or_create
 
 
 class CustomListSweeperScript(LibraryInputScript):
     """Do something to each custom list in a library."""
 
-    def process_library(self, library):
+    def process_library(self, library: Library) -> None:
         lists = self._db.query(CustomList).filter(CustomList.library_id == library.id)
         for l in lists:
             self.process_custom_list(l)
         self._db.commit()
 
-    def process_custom_list(self, custom_list):
+    def process_custom_list(self, custom_list: CustomList) -> None:
         pass
 
 
@@ -29,15 +32,17 @@ class CustomListManagementScript(Script):
 
     def __init__(
         self,
-        manager_class,
-        data_source_name,
-        list_identifier,
-        list_name,
-        primary_language,
-        description,
-        **manager_kwargs,
-    ):
+        manager_class: type[Any],
+        data_source_name: str,
+        list_identifier: str,
+        list_name: str,
+        primary_language: str | None,
+        description: str | None,
+        **manager_kwargs: Any,
+    ) -> None:
         data_source = DataSource.lookup(self._db, data_source_name)
+        if data_source is None:
+            raise PalaceValueError(f"Unknown data source: {data_source_name}")
         self.custom_list, is_new = get_one_or_create(
             self._db,
             CustomList,
@@ -48,20 +53,20 @@ class CustomListManagementScript(Script):
         self.custom_list.description = description
         self.membership_manager = manager_class(self.custom_list, **manager_kwargs)
 
-    def run(self):
+    def run(self) -> None:
         self.membership_manager.update()
         self._db.commit()
 
 
 class UpdateCustomListSizeScript(CustomListSweeperScript):
-    def process_custom_list(self, custom_list):
+    def process_custom_list(self, custom_list: CustomList) -> None:
         custom_list.update_size(self._db)
 
 
 class CustomListUpdateEntriesScript(CustomListSweeperScript):
     """Traverse all entries and update lists if they have auto_update_enabled"""
 
-    def process_custom_list(self, custom_list: CustomList):
+    def process_custom_list(self, custom_list: CustomList) -> None:
         if not custom_list.auto_update_enabled:
             return
         try:
@@ -70,7 +75,7 @@ class CustomListUpdateEntriesScript(CustomListSweeperScript):
         except Exception:
             self.log.exception(f"Could not auto update {custom_list.name}")
 
-    def _update_list_with_new_entries(self, custom_list: CustomList):
+    def _update_list_with_new_entries(self, custom_list: CustomList) -> None:
         """Run a search on a custom list, assuming we have auto_update_enabled with a valid query
         Only json type queries are supported right now, without any support for additional facets
         """

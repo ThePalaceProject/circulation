@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
+from unittest.mock import MagicMock
 
 import pytest
 import pytz
@@ -88,8 +89,12 @@ class TestPlaytimeEntriesReportScript:
         until_args = ["--until", until_arg] if until_arg else []
         cmd_args = start_args + until_args
 
+        mock_db_session = MagicMock()
+
         with freeze_time(current_utc_time):
-            parsed = PlaytimeEntriesReportsScript.parse_command_line(cmd_args=cmd_args)
+            parsed = PlaytimeEntriesReportsScript.parse_command_line(
+                mock_db_session, cmd_args=cmd_args
+            )
         assert expected_start == parsed.start
         assert expected_until == parsed.until
         assert pytz.UTC == parsed.start.tzinfo
@@ -154,8 +159,12 @@ class TestPlaytimeEntriesReportScript:
         until_args = ["--until", until_arg] if until_arg else []
         cmd_args = start_args + until_args
 
+        mock_db_session = MagicMock()
+
         with freeze_time(current_utc_time), pytest.raises(SystemExit) as excinfo:
-            parsed = PlaytimeEntriesReportsScript.parse_command_line(cmd_args=cmd_args)
+            parsed = PlaytimeEntriesReportsScript.parse_command_line(
+                mock_db_session, cmd_args=cmd_args
+            )
         _, err = capsys.readouterr()
         assert 2 == excinfo.value.code
         assert re.search(r"start date \(.*\) must be before until date \(.*\).", err)

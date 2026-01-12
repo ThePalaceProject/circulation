@@ -1,10 +1,14 @@
 import argparse
 import sys
 import uuid
+from collections.abc import Sequence
+from typing import TextIO
 
 from sqlalchemy.orm.attributes import flag_modified
+from sqlalchemy.orm.session import Session
 
-from palace.manager.scripts.base import Script
+from palace.manager.core.exceptions import PalaceValueError
+from palace.manager.scripts.base import Script, _normalize_cmd_args
 from palace.manager.service.integration_registry.license_providers import (
     LicenseProvidersRegistry,
 )
@@ -17,16 +21,17 @@ from palace.manager.sqlalchemy.util import create, get_one
 
 class ConfigurationSettingScript(Script):
     @classmethod
-    def _parse_setting(self, setting):
+    def _parse_setting(cls, setting: str) -> tuple[str, str]:
         """Parse a command-line setting option into a key-value pair."""
-        if not "=" in setting:
-            raise ValueError(
-                'Incorrect format for setting: "%s". Should be "key=value"' % setting
+        if "=" not in setting:
+            raise PalaceValueError(
+                f'Incorrect format for setting: "{setting}". Should be "key=value"'
             )
-        return setting.split("=", 1)
+        key, value = setting.split("=", 1)
+        return key, value
 
     @classmethod
-    def add_setting_argument(self, parser, help):
+    def add_setting_argument(cls, parser: argparse.ArgumentParser, help: str) -> None:
         """Modify an ArgumentParser to indicate that the script takes
         command-line settings.
         """
@@ -39,7 +44,7 @@ class ConfigureLibraryScript(ConfigurationSettingScript):
     name = "Change a library's settings"
 
     @classmethod
-    def arg_parser(cls):
+    def arg_parser(cls, _db: Session) -> argparse.ArgumentParser:
         parser = argparse.ArgumentParser()
         parser.add_argument(
             "--name",
@@ -55,22 +60,27 @@ class ConfigureLibraryScript(ConfigurationSettingScript):
         )
         return parser
 
-    def apply_settings(self, settings, library):
+    def apply_settings(self, settings: Sequence[str] | None, library: Library) -> None:
         """Treat `settings` as a list of command-line argument settings,
         and apply each one to `obj`.
         """
         if not settings:
-            return None
+            return
         for setting in settings:
             key, value = self._parse_setting(setting)
             library.settings_dict[key] = value
         flag_modified(library, "settings_dict")
 
-    def do_run(self, _db=None, cmd_args=None, output=sys.stdout):
+    def do_run(
+        self,
+        _db: Session | None = None,
+        cmd_args: Sequence[str | None] | None = None,
+        output: TextIO = sys.stdout,
+    ) -> None:
         _db = _db or self._db
         args = self.parse_command_line(_db, cmd_args=cmd_args)
         if not args.short_name:
-            raise ValueError("You must identify the library by its short name.")
+            raise PalaceValueError("You must identify the library by its short name.")
 
         # Are we talking about an existing library?
         libraries = _db.query(Library).all()
@@ -79,7 +89,7 @@ class ConfigureLibraryScript(ConfigurationSettingScript):
             # Currently there can only be one library, and one already exists.
             [library] = libraries
             if args.short_name and library.short_name != args.short_name:
-                raise ValueError("Could not locate library '%s'" % args.short_name)
+                raise PalaceValueError(f"Could not locate library '{args.short_name}'")
         else:
             # No existing library. Make one.
             public_key, private_key = Library.generate_keypair()
@@ -110,12 +120,16 @@ class ConfigureCollectionScript(ConfigurationSettingScript):
     name = "Change a collection's settings"
 
     @classmethod
-    def parse_command_line(cls, _db=None, cmd_args=None):
+    def parse_command_line(
+        cls,
+        _db: Session,
+        cmd_args: Sequence[str | None] | None = None,
+    ) -> argparse.Namespace:
         parser = cls.arg_parser(_db)
-        return parser.parse_known_args(cmd_args)[0]
+        return parser.parse_known_args(_normalize_cmd_args(cmd_args))[0]
 
     @classmethod
-    def arg_parser(cls, _db):
+    def arg_parser(cls, _db: Session) -> argparse.ArgumentParser:
         registry = LicenseProvidersRegistry()
         protocols = [protocol for protocol, _ in registry]
 
@@ -158,16 +172,21 @@ class ConfigureCollectionScript(ConfigurationSettingScript):
         return parser
 
     @classmethod
-    def _library_names(self, _db):
+    def _library_names(cls, _db: Session) -> str:
         """Return a string that lists known library names."""
         library_names = [
             x.short_name for x in _db.query(Library).order_by(Library.short_name)
         ]
         if library_names:
-            return '"' + '", "'.join(library_names) + '"'
+            return f'"{"\", \"".join(library_names)}"'
         return ""
 
-    def do_run(self, _db=None, cmd_args=None, output=sys.stdout):
+    def do_run(
+        self,
+        _db: Session | None = None,
+        cmd_args: Sequence[str | None] | None = None,
+        output: TextIO = sys.stdout,
+    ) -> None:
         _db = _db or self._db
         args = self.parse_command_line(_db, cmd_args=cmd_args)
 
@@ -184,9 +203,8 @@ class ConfigureCollectionScript(ConfigurationSettingScript):
             else:
                 # We didn't find a Collection, and we don't have a protocol,
                 # so we can't create a new Collection.
-                raise ValueError(
-                    'No collection called "%s". You can create it, but you must specify a protocol.'
-                    % name
+                raise PalaceValueError(
+                    f'No collection called "{name}". You can create it, but you must specify a protocol.'
                 )
         config = collection.integration_configuration
         settings = config.settings_dict.copy()
@@ -211,10 +229,10 @@ class ConfigureCollectionScript(ConfigurationSettingScript):
                 library = get_one(_db, Library, short_name=name)
                 if not library:
                     library_names = self._library_names(_db)
-                    message = 'No such library: "%s".' % name
+                    message = f'No such library: "{name}".'
                     if library_names:
-                        message += " I only know about: %s" % library_names
-                    raise ValueError(message)
+                        message += f" I only know about: {library_names}"
+                    raise PalaceValueError(message)
                 if collection not in library.associated_collections:
                     collection.associated_libraries.append(library)
         site_configuration_has_changed(_db)
@@ -230,12 +248,16 @@ class ConfigureLaneScript(ConfigurationSettingScript):
     name = "Change a lane's settings"
 
     @classmethod
-    def parse_command_line(cls, _db=None, cmd_args=None):
+    def parse_command_line(
+        cls,
+        _db: Session,
+        cmd_args: Sequence[str | None] | None = None,
+    ) -> argparse.Namespace:
         parser = cls.arg_parser(_db)
-        return parser.parse_known_args(cmd_args)[0]
+        return parser.parse_known_args(_normalize_cmd_args(cmd_args))[0]
 
     @classmethod
-    def arg_parser(cls, _db):
+    def arg_parser(cls, _db: Session) -> argparse.ArgumentParser:
         parser = argparse.ArgumentParser()
         parser.add_argument(
             "--id",
@@ -261,16 +283,21 @@ class ConfigureLaneScript(ConfigurationSettingScript):
         return parser
 
     @classmethod
-    def _library_names(self, _db):
+    def _library_names(cls, _db: Session) -> str:
         """Return a string that lists known library names."""
         library_names = [
             x.short_name for x in _db.query(Library).order_by(Library.short_name)
         ]
         if library_names:
-            return '"' + '", "'.join(library_names) + '"'
+            return f'"{"\", \"".join(library_names)}"'
         return ""
 
-    def do_run(self, _db=None, cmd_args=None, output=sys.stdout):
+    def do_run(
+        self,
+        _db: Session | None = None,
+        cmd_args: Sequence[str | None] | None = None,
+        output: TextIO = sys.stdout,
+    ) -> None:
         _db = _db or self._db
         args = self.parse_command_line(_db, cmd_args=cmd_args)
 
@@ -281,14 +308,18 @@ class ConfigureLaneScript(ConfigurationSettingScript):
             if args.library_short_name and args.display_name:
                 library = get_one(_db, Library, short_name=args.library_short_name)
                 if not library:
-                    raise ValueError('No such library: "%s".' % args.library_short_name)
+                    raise PalaceValueError(
+                        f'No such library: "{args.library_short_name}".'
+                    )
                 lane, is_new = create(
                     _db, Lane, library=library, display_name=args.display_name
                 )
             else:
-                raise ValueError(
+                raise PalaceValueError(
                     "Library short name and lane display name are required to create a new lane."
                 )
+        if lane is None:
+            raise PalaceValueError("Unable to locate or create a lane.")
 
         if args.parent_id:
             lane.parent_id = args.parent_id

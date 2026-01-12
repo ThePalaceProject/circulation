@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from sqlalchemy.orm import Query
+
 from palace.manager.scripts.base import Script
 from palace.manager.sqlalchemy.model.contributor import Contribution
 from palace.manager.sqlalchemy.model.edition import Edition
@@ -20,19 +22,18 @@ class MetadataCalculationScript(Script):
 
     name = "Metadata calculation script"
 
-    def q(self):
+    def q(self) -> Query[Edition]:
         raise NotImplementedError()
 
-    def run(self):
+    def run(self) -> None:
         q = self.q()
-        search_index_client = self.services.search.index()
         self.log.info("Attempting to repair metadata for %d works" % q.count())
 
         success = 0
         failure = 0
         also_created_work = 0
 
-        def checkpoint():
+        def checkpoint() -> None:
             self._db.commit()
             self.log.info(
                 "%d successes, %d failures, %d new works.",
@@ -46,13 +47,13 @@ class MetadataCalculationScript(Script):
             edition.calculate_presentation()
             if edition.sort_author:
                 success += 1
-                work, is_new = edition.license_pool.calculate_work(
-                    search_index_client=search_index_client
-                )
-                if work:
-                    work.calculate_presentation()
-                    if is_new:
-                        also_created_work += 1
+                license_pool = next(iter(edition.license_pools))
+                if license_pool:
+                    work, is_new = license_pool.calculate_work()
+                    if work:
+                        work.calculate_presentation()
+                        if is_new:
+                            also_created_work += 1
             else:
                 failure += 1
             i += 1
@@ -71,7 +72,7 @@ class FillInAuthorScript(MetadataCalculationScript):
 
     name = "Fill in missing authors"
 
-    def q(self):
+    def q(self) -> Query[Edition]:
         return (
             self._db.query(Edition)
             .join(Edition.contributions)
