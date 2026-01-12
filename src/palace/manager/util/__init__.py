@@ -6,14 +6,11 @@ import re
 from collections import Counter
 from collections.abc import Generator, Iterable, Sequence
 from decimal import Decimal, InvalidOperation
-from typing import TYPE_CHECKING, Any, overload
+from typing import Any, overload
 
 import sqlalchemy
 
 import palace.manager.sqlalchemy.flask_sqlalchemy_session
-
-if TYPE_CHECKING:
-    pass
 
 
 class MetadataSimilarity:

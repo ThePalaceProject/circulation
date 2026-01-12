@@ -139,7 +139,7 @@ class AtomFeed:
 
     def __str__(self) -> str:
         if self.feed is None:
-            return "None"
+            return ""
         # etree.tostring with encoding="unicode" returns str
         return cast(
             str, etree.tostring(self.feed, encoding="unicode", pretty_print=True)
