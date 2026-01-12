@@ -64,6 +64,19 @@ class TestShowLibrariesScript:
         expect_2 = "\n".join(l2.explain(include_secrets=True))
         assert expect_1 + "\n" + expect_2 + "\n" == output.getvalue()
 
+    def test_with_nonexistent_library(self, db: DatabaseTransactionFixture):
+        # Create a library to ensure the database has some data
+        db.library(name="Library 1", short_name="L1")
+
+        # Try to show a library that doesn't exist
+        output = StringIO()
+        ShowLibrariesScript().do_run(
+            db.session, cmd_args=["--short-name=NONEXISTENT"], output=output
+        )
+        assert (
+            "Could not locate library by short name: NONEXISTENT\n" == output.getvalue()
+        )
+
 
 class TestShowCollectionsScript:
     def test_with_no_collections(self, db: DatabaseTransactionFixture):
@@ -99,6 +112,20 @@ class TestShowCollectionsScript:
         expect_1 = "\n".join(c1.explain(include_secrets=True))
         expect_2 = "\n".join(c2.explain(include_secrets=True))
         assert expect_1 + "\n" + expect_2 + "\n" == output.getvalue()
+
+    def test_with_nonexistent_collection(self, db: DatabaseTransactionFixture):
+        # Create a collection to ensure the database has some data
+        db.collection(name="Collection 1", protocol=OverdriveAPI)
+
+        # Try to show a collection that doesn't exist
+        output = StringIO()
+        ShowCollectionsScript().do_run(
+            db.session, cmd_args=["--name=NONEXISTENT"], output=output
+        )
+        assert (
+            "Could not locate collection by name: NONEXISTENT\n"
+            "No collections found.\n" == output.getvalue()
+        )
 
 
 class TestShowIntegrationsScript:

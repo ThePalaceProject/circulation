@@ -114,7 +114,7 @@ class ShowCollectionsScript(Script):
             if collection:
                 collections = [collection]
             else:
-                output.write(f"Could not locate collection by name: {name}")
+                output.write(f"Could not locate collection by name: {name}\n")
                 collections = []
         else:
             collections = (
