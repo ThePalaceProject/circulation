@@ -139,7 +139,7 @@ class AtomFeed:
 
     def __str__(self) -> str:
         if self.feed is None:
-            return ""
+            return "None"
         # etree.tostring with encoding="unicode" returns str
         return cast(
             str, etree.tostring(self.feed, encoding="unicode", pretty_print=True)
@@ -191,8 +191,7 @@ class OPDSMessage:
         return cast(str, etree.tostring(self.tag, encoding="unicode"))
 
     def __repr__(self) -> str:
-        # etree.tostring with default encoding returns bytes
-        return str(etree.tostring(self.tag))
+        return self.__str__()
 
     def __eq__(self, other: object) -> bool:
         if self is other:
