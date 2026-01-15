@@ -338,6 +338,7 @@ def inventory_report_query() -> Select:
             ).label("isbn"),
             Edition.language,
             Edition.publisher,
+            func.to_char(Edition.published, "YYYY-MM-DD").label("published_date"),
             Edition.medium.label("format"),
             Work.audience,
             func.coalesce(wg_subquery.c.genres, "").label("genres"),

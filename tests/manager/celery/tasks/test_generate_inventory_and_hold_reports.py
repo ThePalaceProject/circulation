@@ -3,7 +3,7 @@ import io
 import os
 import zipfile
 from collections.abc import Callable
-from datetime import timedelta
+from datetime import date, timedelta
 from typing import IO, BinaryIO
 from unittest.mock import MagicMock, create_autospec
 
@@ -115,6 +115,7 @@ def test_only_active_collections_are_included(
                 "isbn",
                 "language",
                 "publisher",
+                "published_date",
                 "format",
                 "audience",
                 "genres",
@@ -235,11 +236,13 @@ def test_generate_report(
     author = "Laura Goering"
     language = "eng"
     publisher = "My Publisher"
+    published_date = date(2019, 5, 17)
     checkouts_left = 10
     terms_concurrency = 5
     edition = db.edition(data_source_name=ds.name)
     edition.language = language
     edition.publisher = publisher
+    edition.published = published_date
     edition.title = title
     edition.medium = edition.BOOK_MEDIUM
     edition.author = author
@@ -279,9 +282,11 @@ def test_generate_report(
     # Add a second book with no copies
     title2 = "Test Book 2"
     author2 = "Tom Pen"
+    published_date2 = date(2020, 10, 5)
     edition2 = db.edition(data_source_name=ds.name)
     edition2.language = language
     edition2.publisher = publisher
+    edition2.published = published_date2
     edition2.title = title2
     edition2.medium = edition.BOOK_MEDIUM
     edition2.author = author2
@@ -498,6 +503,7 @@ def test_generate_report(
                 assert book1_available_row["isbn"] == isbn
                 assert book1_available_row["language"] == language
                 assert book1_available_row["publisher"] == publisher
+                assert book1_available_row["published_date"] == "2019-05-17"
                 assert book1_available_row["audience"] == "young adult"
                 assert book1_available_row["genres"] == "genre_a,genre_z"
                 assert book1_available_row["format"] == edition.BOOK_MEDIUM
@@ -529,6 +535,7 @@ def test_generate_report(
                 assert book1_unavailable_row["isbn"] == isbn
                 assert book1_unavailable_row["language"] == language
                 assert book1_unavailable_row["publisher"] == publisher
+                assert book1_unavailable_row["published_date"] == "2019-05-17"
                 assert book1_unavailable_row["audience"] == "young adult"
                 assert book1_unavailable_row["genres"] == "genre_a,genre_z"
                 assert book1_unavailable_row["format"] == edition.BOOK_MEDIUM
@@ -550,6 +557,7 @@ def test_generate_report(
                 assert book2_row["isbn"] == isbn2
                 assert book2_row["language"] == language
                 assert book2_row["publisher"] == publisher
+                assert book2_row["published_date"] == "2020-10-05"
                 assert book2_row["audience"] == "Adult"  # Default audience
                 assert book2_row["genres"] == "genre_z"
                 assert book2_row["format"] == edition.BOOK_MEDIUM
@@ -579,6 +587,7 @@ def test_generate_report(
                 assert book3_no_holds_row["license_status"] == ""
                 assert book3_no_holds_row["license_expiration"] == ""
                 assert book3_no_holds_row["days_remaining_on_license"] == ""
+                assert book3_no_holds_row["published_date"] == ""
                 assert book3_no_holds_row["initial_loans"] == ""
                 assert book3_no_holds_row["remaining_loans"] == ""
                 assert book3_no_holds_row["allowed_concurrent_users"] == ""
