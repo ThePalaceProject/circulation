@@ -253,7 +253,9 @@ class Annotator(LoggerMixin):
         # 35-37 Language
         language = "eng"
         if edition and edition.language:
-            language = LanguageCodes.string_to_alpha_3(edition.language)
+            lang_code = LanguageCodes.string_to_alpha_3(edition.language)
+            if lang_code is not None:
+                language = lang_code
         data += language
         # 38 Modified record
         data += " "

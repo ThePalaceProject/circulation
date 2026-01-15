@@ -5,12 +5,12 @@ from collections import defaultdict
 from re import Pattern
 
 
-class LookupTable(dict):
+class LookupTable(dict[str, str | None]):
     """Return None on x[key] when 'key' isn't in the dictionary,
     rather than raising a ValueError.
     """
 
-    def __getitem__(self, k):
+    def __getitem__(self, k: str) -> str | None:
         if k in self:
             return super().__getitem__(k)
         else:
@@ -564,13 +564,17 @@ zza|||Zaza; Dimili; Dimli; Kirdki; Kirmanjki; Zazaki|zaza; dimili; dimli; kirdki
 
     for raw_native_name_data in NATIVE_NAMES_RAW_DATA:
         alpha_2 = raw_native_name_data["code"]
-        alpha_3 = two_to_three[alpha_2]
+        alpha_3_value = two_to_three[alpha_2]
+        if alpha_3_value is None:
+            continue
         names = [x.strip() for x in raw_native_name_data["nativeName"].split(",")]
         native_names[alpha_2] = names
-        native_names[alpha_3] = names
+        native_names[alpha_3_value] = names
 
     @classmethod
-    def iso_639_2_for_locale(cls, locale, default=None):
+    def iso_639_2_for_locale(
+        cls, locale: str, default: str | None = None
+    ) -> str | None:
         """Turn a locale code into an ISO-639-2 alpha-3 language code."""
         if "-" in locale:
             language, place = locale.lower().split("-", 1)
@@ -592,13 +596,16 @@ zza|||Zaza; Dimili; Dimli; Kirdki; Kirmanjki; Zazaki|zaza; dimili; dimli; kirdki
         return default
 
     @classmethod
-    def bcp47_for_locale(cls, locale, default=None):
+    def bcp47_for_locale(cls, locale: str, default: str | None = None) -> str | None:
         """Turn a locale code into an ISO-639-2 code preferring alpha-2 if available, then alpha-3"""
         alpha3 = cls.iso_639_2_for_locale(locale, default=default)
-        return cls.three_to_two.get(alpha3, alpha3)
+        if alpha3 is None:
+            return None
+        alpha2_value = cls.three_to_two.get(alpha3)
+        return alpha2_value if alpha2_value is not None else alpha3
 
     @classmethod
-    def string_to_alpha_3(cls, s):
+    def string_to_alpha_3(cls, s: str | None) -> str | None:
         """Try really hard to convert a string to an ISO-639-2 alpha-3 language code."""
         if not s:
             return None
@@ -610,21 +617,23 @@ zza|||Zaza; Dimili; Dimli; Kirdki; Kirmanjki; Zazaki|zaza; dimili; dimli; kirdki
         return cls.iso_639_2_for_locale(s)
 
     @classmethod
-    def name_for_languageset(cls, languages):
+    def name_for_languageset(cls, languages: str | list[str]) -> str:
         if isinstance(languages, str):
             languages = languages.split(",")
-        all_names = []
+        all_names: list[str] = []
         if not languages:
             return ""
         for l in languages:
             normalized = cls.string_to_alpha_3(l)
+            if normalized is None:
+                raise ValueError("No native or English name for %s" % l)
             native_names = cls.native_names.get(normalized, [])
             if native_names:
                 all_names.append(native_names[0])
             else:
                 names = cls.english_names.get(normalized, [])
                 if not names:
-                    if normalized and LanguageCodes.RESERVED_CODES.match(normalized):
+                    if LanguageCodes.RESERVED_CODES.match(normalized):
                         names.append(LanguageCodes.RESERVED_CODE_LABEL)
                     else:
                         raise ValueError("No native or English name for %s" % l)
@@ -652,11 +661,13 @@ class LanguageNames:
     number = re.compile("[0-9]")
     parentheses = re.compile(r"\([^)]+\)")
 
-    name_to_codes: dict[str, list[str]]
-    name_re: Pattern
+    name_to_codes: defaultdict[str, set[str]]
+    name_re: Pattern[str]
 
     @classmethod
-    def _process(cls, human_readable_name, alpha):
+    def _process(
+        cls, human_readable_name: str, alpha: str
+    ) -> tuple[str | None, str | None]:
         if not alpha or human_readable_name in cls.ignore:
             # Some names should be ignored altogether.
             return None, None
@@ -669,7 +680,10 @@ class LanguageNames:
             return None, None
 
         if len(alpha) == 2:
-            alpha = LanguageCodes.two_to_three[alpha]
+            alpha_3 = LanguageCodes.two_to_three[alpha]
+            if alpha_3 is None:
+                return None, None
+            alpha = alpha_3
 
         # Remove parentheses, e.g. turning "Bantu (Other)" into "Bantu"
         human_readable_name = cls.parentheses.sub("", human_readable_name)
@@ -683,14 +697,14 @@ class LanguageNames:
         return human_readable_name.strip().lower(), alpha
 
     @classmethod
-    def _build_name_to_codes(cls):
-        name_to_codes = defaultdict(set)
+    def _build_name_to_codes(cls) -> defaultdict[str, set[str]]:
+        name_to_codes: defaultdict[str, set[str]] = defaultdict(set)
 
-        def add(name, alpha):
+        def add(name: str, alpha: str) -> None:
             """Helper to add a language to name_to_codes."""
-            name, alpha = cls._process(name, alpha)
-            if name:
-                name_to_codes[name].add(alpha)
+            processed_name, processed_alpha = cls._process(name, alpha)
+            if processed_name and processed_alpha:
+                name_to_codes[processed_name].add(processed_alpha)
 
         # Process the English-language names found in the ISO spec.
         for alpha, name_list in list(LanguageCodes.english_names.items()):
@@ -719,7 +733,7 @@ class LanguageNames:
         return name_to_codes
 
     @classmethod
-    def _build_name_re(cls):
+    def _build_name_re(cls) -> Pattern[str]:
         return re.compile(
             r"(\b%s\b)" % r"\b|\b".join(list(cls.name_to_codes.keys())), re.I
         )

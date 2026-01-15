@@ -5,7 +5,12 @@ from hashlib import md5
 
 class WorkIDCalculator:
     @classmethod
-    def permanent_id(self, normalized_title, normalized_author, grouping_category):
+    def permanent_id(
+        cls,
+        normalized_title: str | None,
+        normalized_author: str | None,
+        grouping_category: str | None,
+    ) -> str:
         digest = md5()
         for i in (normalized_title, normalized_author, grouping_category):
             if i == "" or i is None:
@@ -133,7 +138,7 @@ class WorkIDCalculator:
     }
 
     @classmethod
-    def normalize_author(cls, author):
+    def normalize_author(cls, author: str | None) -> str:
         """
         Converts to NFKD unicode.
         Strips bracket, special characters, dots out.
@@ -209,7 +214,7 @@ class WorkIDCalculator:
         numerics.append((re.compile(find), replace))
 
     @classmethod
-    def normalize_subtitle(cls, original_title):
+    def normalize_subtitle(cls, original_title: str) -> str:
         if original_title == "":
             return original_title
 
@@ -238,7 +243,9 @@ class WorkIDCalculator:
     subtitleIndicator = re.compile("[:;/=]")
 
     @classmethod
-    def normalize_title(cls, full_title, num_non_filing_characters=0):
+    def normalize_title(
+        cls, full_title: str | None, num_non_filing_characters: int = 0
+    ) -> str:
         """
         Converts to NFKD unicode.
         Strips bracket, special characters.
@@ -311,7 +318,7 @@ class WorkIDCalculator:
     sortTrimmingPattern = re.compile("(?i)^(?:(?:a|an|the|el|la|\"|')\\s)(.*)$")
 
     @classmethod
-    def make_value_sortable(cls, curtitle):
+    def make_value_sortable(cls, curtitle: str | None) -> str:
         if not curtitle:
             return ""
         sort_title = curtitle.lower()
