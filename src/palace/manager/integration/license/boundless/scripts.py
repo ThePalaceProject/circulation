@@ -1,5 +1,7 @@
 import argparse
 
+from sqlalchemy.orm import Session
+
 from palace.manager.celery.tasks import boundless
 from palace.manager.scripts.base import Script
 from palace.manager.sqlalchemy.model.collection import Collection
@@ -9,7 +11,7 @@ class ImportCollection(Script):
     """A convenient script for manually kicking off a Boundless collection import"""
 
     @classmethod
-    def arg_parser(cls) -> argparse.ArgumentParser:
+    def arg_parser(cls, _db: Session) -> argparse.ArgumentParser:
         parser = argparse.ArgumentParser()
         parser.add_argument(
             "--collection-name",

@@ -1,19 +1,25 @@
+import argparse
 import sys
+from collections.abc import Sequence
 
+from sqlalchemy.orm import Session
+
+from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.data_layer.policy.presentation import (
     PresentationCalculationPolicy,
 )
-from palace.manager.scripts.input import IdentifierInputScript
+from palace.manager.scripts.input import IdentifierInputScript, SupportsReadlines
 from palace.manager.sqlalchemy.model.classification import Subject
 from palace.manager.sqlalchemy.model.datasource import DataSource
+from palace.manager.sqlalchemy.model.identifier import Identifier
 
 
 class AddClassificationScript(IdentifierInputScript):
     name = "Add a classification to an identifier"
 
     @classmethod
-    def arg_parser(cls):
-        parser = IdentifierInputScript.arg_parser()
+    def arg_parser(cls, _db: Session) -> argparse.ArgumentParser:
+        parser = IdentifierInputScript.arg_parser(_db)
         parser.add_argument(
             "--subject-type",
             help="The type of the subject to add to each identifier.",
@@ -45,19 +51,27 @@ class AddClassificationScript(IdentifierInputScript):
         )
         return parser
 
-    def __init__(self, _db=None, cmd_args=None, stdin=sys.stdin):
+    def __init__(
+        self,
+        _db: Session | None = None,
+        cmd_args: Sequence[str | None] | None = None,
+        stdin: SupportsReadlines = sys.stdin,
+    ) -> None:
         super().__init__(_db=_db)
         args = self.parse_command_line(self._db, cmd_args=cmd_args, stdin=stdin)
         self.identifier_type = args.identifier_type
-        self.identifiers = args.identifiers
+        self.identifiers: list[Identifier] = args.identifiers
         subject_type = args.subject_type
         subject_identifier = args.subject_identifier
         subject_name = args.subject_name
         if not subject_name and not subject_identifier:
-            raise ValueError(
+            raise PalaceValueError(
                 "Either subject-name or subject-identifier must be provided."
             )
-        self.data_source = DataSource.lookup(self._db, args.data_source)
+        data_source = DataSource.lookup(self._db, args.data_source)
+        if data_source is None:
+            raise PalaceValueError(f"Unknown data source: {args.data_source}")
+        self.data_source = data_source
         self.weight = args.weight
         self.subject, ignore = Subject.lookup(
             self._db,
@@ -67,7 +81,7 @@ class AddClassificationScript(IdentifierInputScript):
             autocreate=args.create_subject,
         )
 
-    def do_run(self):
+    def do_run(self) -> None:
         policy = PresentationCalculationPolicy(
             choose_edition=False,
             set_edition_metadata=False,

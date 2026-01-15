@@ -2,10 +2,14 @@ import argparse
 import logging
 import os
 import sys
+from collections.abc import Sequence
+from typing import Any, Protocol
 
 from sqlalchemy.exc import MultipleResultsFound, NoResultFound
+from sqlalchemy.orm import Session
 
-from palace.manager.scripts.base import Script
+from palace.manager.core.exceptions import PalaceValueError
+from palace.manager.scripts.base import Script, _normalize_cmd_args
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.identifier import Identifier
@@ -15,9 +19,16 @@ from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.sqlalchemy.util import get_one
 
 
+class SupportsReadlines(Protocol):
+    """Minimal stdin-like interface for script input helpers."""
+
+    def readlines(self) -> list[str]:
+        """Return remaining lines from a text stream."""
+
+
 class InputScript(Script):
     @classmethod
-    def read_stdin_lines(self, stdin):
+    def read_stdin_lines(cls, stdin: SupportsReadlines) -> list[str]:
         """Read lines from a (possibly mocked, possibly empty) standard input."""
         if stdin is not sys.stdin or not os.isatty(0):
             # A file has been redirected into standard input. Grab its
@@ -35,21 +46,31 @@ class IdentifierInputScript(InputScript):
 
     @classmethod
     def parse_command_line(
-        cls, _db=None, cmd_args=None, stdin=sys.stdin, *args, **kwargs
-    ):
-        parser = cls.arg_parser()
-        parsed = parser.parse_args(cmd_args)
-        stdin = cls.read_stdin_lines(stdin)
-        return cls.look_up_identifiers(_db, parsed, stdin, *args, **kwargs)
+        cls,
+        _db: Session,
+        cmd_args: Sequence[str | None] | None = None,
+        stdin: SupportsReadlines = sys.stdin,
+        *args: Any,
+        **kwargs: Any,
+    ) -> argparse.Namespace:
+        parser = cls.arg_parser(_db)
+        parsed = parser.parse_args(_normalize_cmd_args(cmd_args))
+        stdin_lines = cls.read_stdin_lines(stdin)
+        return cls.look_up_identifiers(_db, parsed, stdin_lines, *args, **kwargs)
 
     @classmethod
     def look_up_identifiers(
-        cls, _db, parsed, stdin_identifier_strings, *args, **kwargs
-    ):
+        cls,
+        _db: Session,
+        parsed: argparse.Namespace,
+        stdin_identifier_strings: list[str] | None,
+        *args: Any,
+        **kwargs: Any,
+    ) -> argparse.Namespace:
         """Turn identifiers as specified on the command line into
         real database Identifier objects.
         """
-        data_source = None
+        data_source: DataSource | None = None
         if parsed.identifier_data_source:
             data_source = DataSource.lookup(_db, parsed.identifier_data_source)
         if _db and parsed.identifier_type:
@@ -72,7 +93,7 @@ class IdentifierInputScript(InputScript):
         return parsed
 
     @classmethod
-    def arg_parser(cls):
+    def arg_parser(cls, _db: Session) -> argparse.ArgumentParser:
         parser = argparse.ArgumentParser()
         parser.add_argument(
             "--identifier-type",
@@ -92,8 +113,13 @@ class IdentifierInputScript(InputScript):
 
     @classmethod
     def parse_identifier_list(
-        cls, _db, identifier_type, data_source, arguments, autocreate=False
-    ):
+        cls,
+        _db: Session,
+        identifier_type: str | None,
+        data_source: DataSource | None,
+        arguments: Sequence[str | int | None],
+        autocreate: bool = False,
+    ) -> list[Identifier]:
         """Turn a list of identifiers into a list of Identifier objects.
 
         The list of arguments is probably derived from a command-line
@@ -107,11 +133,12 @@ class IdentifierInputScript(InputScript):
 
         a b c
         """
-        identifiers = []
+        identifiers: list[Identifier] = []
 
         if not identifier_type:
-            raise ValueError(
-                "No identifier type specified! Use '--identifier-type=\"Database ID\"' to name identifiers by database ID."
+            raise PalaceValueError(
+                "No identifier type specified! Use '--identifier-type=\"Database ID\"' "
+                "to name identifiers by database ID."
             )
 
         if len(arguments) == 0:
@@ -128,17 +155,21 @@ class IdentifierInputScript(InputScript):
             return identifiers
 
         for arg in arguments:
+            identifier: Identifier | None = None
             if identifier_type == cls.DATABASE_ID:
+                identifier_id: int | None
                 try:
-                    arg = int(arg)
-                except ValueError as e:
+                    identifier_id = int(arg) if arg is not None else None
+                except (TypeError, ValueError):
                     # We'll print out a warning later.
-                    arg = None
-                if arg:
-                    identifier = get_one(_db, Identifier, id=arg)
+                    identifier_id = None
+                if identifier_id is not None:
+                    identifier = get_one(_db, Identifier, id=identifier_id)
             else:
+                if arg is None:
+                    continue
                 identifier, ignore = Identifier.for_foreign_id(
-                    _db, identifier_type, arg, autocreate=autocreate
+                    _db, identifier_type, str(arg), autocreate=autocreate
                 )
             if not identifier:
                 logging.warning("Could not load identifier %s/%s", identifier_type, arg)
@@ -151,27 +182,44 @@ class LibraryInputScript(InputScript):
     """A script that operates on one or more Libraries."""
 
     @classmethod
-    def parse_command_line(cls, _db=None, cmd_args=None, *args, **kwargs):
+    def parse_command_line(
+        cls,
+        _db: Session,
+        cmd_args: Sequence[str | None] | None = None,
+        *args: Any,
+        **kwargs: Any,
+    ) -> argparse.Namespace:
         parser = cls.arg_parser(_db)
-        parsed = parser.parse_args(cmd_args)
+        parsed = parser.parse_args(_normalize_cmd_args(cmd_args))
         return cls.look_up_libraries(_db, parsed, *args, **kwargs)
 
     @classmethod
-    def arg_parser(cls, _db, multiple_libraries=True):
+    def arg_parser(
+        cls, _db: Session, multiple_libraries: bool = True
+    ) -> argparse.ArgumentParser:
         parser = argparse.ArgumentParser()
-        library_names = sorted(l.short_name for l in _db.query(Library))
-        library_names = '"' + '", "'.join(library_names) + '"'
+        library_name_list = sorted(str(l.short_name) for l in _db.query(Library))
+        library_names = '", "'.join(library_name_list)
+        library_names = f'"{library_names}"'
         parser.add_argument(
             "libraries",
-            help="Name of a specific library to process. Libraries on this system: %s"
-            % library_names,
+            help=(
+                "Name of a specific library to process. Libraries on this system: "
+                f"{library_names}"
+            ),
             metavar="SHORT_NAME",
             nargs="*" if multiple_libraries else 1,
         )
         return parser
 
     @classmethod
-    def look_up_libraries(cls, _db, parsed, *args, **kwargs):
+    def look_up_libraries(
+        cls,
+        _db: Session | None,
+        parsed: argparse.Namespace,
+        *args: Any,
+        **kwargs: Any,
+    ) -> argparse.Namespace:
         """Turn library names as specified on the command line into real
         Library objects.
         """
@@ -192,7 +240,9 @@ class LibraryInputScript(InputScript):
         return parsed
 
     @classmethod
-    def parse_library_list(cls, _db, arguments):
+    def parse_library_list(
+        cls, _db: Session, arguments: Sequence[str | None]
+    ) -> list[Library]:
         """Turn a list of library short names into a list of Library objects.
 
         The list of arguments is probably derived from a command-line
@@ -219,15 +269,15 @@ class LibraryInputScript(InputScript):
                 logging.warning("Could not find library %s", arg)
         return libraries
 
-    def do_run(self, *args, **kwargs):
+    def do_run(self, *args: Any, **kwargs: Any) -> Any:
         parsed = self.parse_command_line(self._db, *args, **kwargs)
         self.process_libraries(parsed.libraries)
 
-    def process_libraries(self, libraries):
+    def process_libraries(self, libraries: Sequence[Library]) -> None:
         for library in libraries:
             self.process_library(library)
 
-    def process_library(self, library):
+    def process_library(self, library: Library) -> None:
         raise NotImplementedError()
 
 
@@ -236,18 +286,26 @@ class PatronInputScript(LibraryInputScript):
 
     @classmethod
     def parse_command_line(
-        cls, _db=None, cmd_args=None, stdin=sys.stdin, *args, **kwargs
-    ):
+        cls,
+        _db: Session,
+        cmd_args: Sequence[str | None] | None = None,
+        stdin: SupportsReadlines | None = sys.stdin,
+        *args: Any,
+        **kwargs: Any,
+    ) -> argparse.Namespace:
         parser = cls.arg_parser(_db)
-        parsed = parser.parse_args(cmd_args)
+        parsed = parser.parse_args(_normalize_cmd_args(cmd_args))
+        stdin_lines = None
         if stdin:
-            stdin = cls.read_stdin_lines(stdin)
+            stdin_lines = cls.read_stdin_lines(stdin)
         parsed = super().look_up_libraries(_db, parsed, *args, **kwargs)
-        return cls.look_up_patrons(_db, parsed, stdin, *args, **kwargs)
+        return cls.look_up_patrons(_db, parsed, stdin_lines, *args, **kwargs)
 
     @classmethod
-    def arg_parser(cls, _db):
-        parser = super().arg_parser(_db, multiple_libraries=False)
+    def arg_parser(
+        cls, _db: Session, multiple_libraries: bool = False
+    ) -> argparse.ArgumentParser:
+        parser = super().arg_parser(_db, multiple_libraries=multiple_libraries)
         parser.add_argument(
             "identifiers",
             help="A specific patron identifier to process.",
@@ -257,7 +315,14 @@ class PatronInputScript(LibraryInputScript):
         return parser
 
     @classmethod
-    def look_up_patrons(cls, _db, parsed, stdin_patron_strings, *args, **kwargs):
+    def look_up_patrons(
+        cls,
+        _db: Session | None,
+        parsed: argparse.Namespace,
+        stdin_patron_strings: list[str] | None,
+        *args: Any,
+        **kwargs: Any,
+    ) -> argparse.Namespace:
         """Turn patron identifiers as specified on the command line into real
         Patron objects.
         """
@@ -276,7 +341,9 @@ class PatronInputScript(LibraryInputScript):
         return parsed
 
     @classmethod
-    def parse_patron_list(cls, _db, library, arguments):
+    def parse_patron_list(
+        cls, _db: Session, library: Library, arguments: Sequence[str | None]
+    ) -> list[Patron]:
         """Turn a list of patron identifiers into a list of Patron objects.
 
         The list of arguments is probably derived from a command-line
@@ -312,15 +379,15 @@ class PatronInputScript(LibraryInputScript):
                 logging.warning("Could not find patron %s", arg)
         return patrons
 
-    def do_run(self, *args, **kwargs):
+    def do_run(self, *args: Any, **kwargs: Any) -> None:
         parsed = self.parse_command_line(self._db, *args, **kwargs)
         self.process_patrons(parsed.patrons)
 
-    def process_patrons(self, patrons):
+    def process_patrons(self, patrons: Sequence[Patron]) -> None:
         for patron in patrons:
             self.process_patron(patron)
 
-    def process_patron(self, patron):
+    def process_patron(self, patron: Patron) -> None:
         raise NotImplementedError()
 
 
@@ -328,13 +395,25 @@ class CollectionInputScript(Script):
     """A script that takes collection names as command line inputs."""
 
     @classmethod
-    def parse_command_line(cls, _db=None, cmd_args=None, *args, **kwargs):
-        parser = cls.arg_parser()
-        parsed = parser.parse_args(cmd_args)
+    def parse_command_line(
+        cls,
+        _db: Session,
+        cmd_args: Sequence[str | None] | None = None,
+        *args: Any,
+        **kwargs: Any,
+    ) -> argparse.Namespace:
+        parser = cls.arg_parser(_db)
+        parsed = parser.parse_args(_normalize_cmd_args(cmd_args))
         return cls.look_up_collections(_db, parsed, *args, **kwargs)
 
     @classmethod
-    def look_up_collections(cls, _db, parsed, *args, **kwargs):
+    def look_up_collections(
+        cls,
+        _db: Session,
+        parsed: argparse.Namespace,
+        *args: Any,
+        **kwargs: Any,
+    ) -> argparse.Namespace:
         """Turn collection names as specified on the command line into
         real database Collection objects.
         """
@@ -343,12 +422,12 @@ class CollectionInputScript(Script):
             collection = Collection.by_name(_db, name)
 
             if not collection:
-                raise ValueError("Unknown collection: %s" % name)
+                raise PalaceValueError(f"Unknown collection: {name}")
             parsed.collections.append(collection)
         return parsed
 
     @classmethod
-    def arg_parser(cls) -> argparse.ArgumentParser:
+    def arg_parser(cls, _db: Session) -> argparse.ArgumentParser:
         parser = argparse.ArgumentParser()
         parser.add_argument(
             "--collection",
@@ -363,7 +442,7 @@ class CollectionInputScript(Script):
 
 class CollectionArgumentsScript(CollectionInputScript):
     @classmethod
-    def arg_parser(cls) -> argparse.ArgumentParser:
+    def arg_parser(cls, _db: Session) -> argparse.ArgumentParser:
         parser = argparse.ArgumentParser()
         parser.add_argument(
             "collection_names",

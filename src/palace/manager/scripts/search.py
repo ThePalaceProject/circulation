@@ -26,7 +26,7 @@ class RebuildSearchIndexScript(Script):
         self.migration: bool = args.migration
 
     @classmethod
-    def arg_parser(cls) -> argparse.ArgumentParser:
+    def arg_parser(cls, _db: Session) -> argparse.ArgumentParser:
         parser = argparse.ArgumentParser(
             description="Rebuild the search index from scratch."
         )

@@ -138,7 +138,8 @@ class TestImportCollection:
 
     def test_arg_parser_creates_correct_arguments(self):
         """Test arg_parser creates parser with collection-name and import-all arguments."""
-        parser = ImportCollection.arg_parser()
+        mock_db_session = MagicMock()
+        parser = ImportCollection.arg_parser(mock_db_session)
 
         # Parse with both arguments
         args = parser.parse_args(
@@ -154,7 +155,8 @@ class TestImportCollection:
 
     def test_arg_parser_import_all_defaults_to_false(self):
         """Test that import_all flag defaults to False when not provided."""
-        parser = ImportCollection.arg_parser()
+        mock_db_session = MagicMock()
+        parser = ImportCollection.arg_parser(mock_db_session)
 
         args = parser.parse_args(["--collection-name", "My Collection"])
 
@@ -304,7 +306,8 @@ class TestImportCollectionGroup:
 
     def test_arg_parser_creates_correct_arguments(self):
         """Test arg_parser creates parser with collection-name and import-all arguments."""
-        parser = ImportCollectionGroup.arg_parser()
+        mock_db_session = MagicMock()
+        parser = ImportCollectionGroup.arg_parser(mock_db_session)
 
         # Parse with both arguments
         args = parser.parse_args(
@@ -320,7 +323,8 @@ class TestImportCollectionGroup:
 
     def test_arg_parser_import_all_defaults_to_false(self):
         """Test that import_all flag defaults to False when not provided."""
-        parser = ImportCollectionGroup.arg_parser()
+        mock_db_session = MagicMock()
+        parser = ImportCollectionGroup.arg_parser(mock_db_session)
 
         args = parser.parse_args(["--collection-name", "My Collection"])
 

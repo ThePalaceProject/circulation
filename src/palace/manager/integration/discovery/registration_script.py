@@ -44,8 +44,10 @@ class LibraryRegistrationScript(LibraryInputScript):
             )
 
     @classmethod
-    def arg_parser(cls, _db: Session) -> ArgumentParser:  # type: ignore[override]
-        parser = LibraryInputScript.arg_parser(_db)
+    def arg_parser(
+        cls, _db: Session, multiple_libraries: bool = True
+    ) -> ArgumentParser:
+        parser = super().arg_parser(_db, multiple_libraries=multiple_libraries)
         parser.add_argument(
             "--registry-url",
             help="Register libraries with the given registry.",
@@ -56,7 +58,7 @@ class LibraryRegistrationScript(LibraryInputScript):
             help="Register these libraries in the 'testing' stage or the 'production' stage.",
             choices=[stage.value for stage in RegistrationStage],
         )
-        return parser  # type: ignore[no-any-return]
+        return parser
 
     def do_run(
         self,

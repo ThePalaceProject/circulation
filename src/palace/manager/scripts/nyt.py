@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import argparse
+from typing import Any
+
+from sqlalchemy.orm import Session
 
 from palace.manager.celery.tasks.nyt import update_nyt_best_sellers_lists
 from palace.manager.scripts.base import Script
@@ -10,7 +13,7 @@ class NYTBestSellerListsScript(Script):
     name = "Update New York Times best-seller lists by kicking off an asynchronous task"
 
     @classmethod
-    def arg_parser(cls) -> argparse.ArgumentParser:
+    def arg_parser(cls, _db: Session) -> argparse.ArgumentParser:
         parser = argparse.ArgumentParser(
             description="Rebuild the search index from scratch."
         )
@@ -22,7 +25,7 @@ class NYTBestSellerListsScript(Script):
         )
         return parser
 
-    def do_run(self, *args, **kwargs):
+    def do_run(self, *args: Any, **kwargs: Any) -> None:
         parsed = self.parse_command_line(self._db, *args, **kwargs)
         update_nyt_best_sellers_lists.delay(include_history=parsed.include_history)
         self.log.info(

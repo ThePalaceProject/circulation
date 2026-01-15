@@ -1,11 +1,18 @@
+from __future__ import annotations
+
 import sys
+from collections.abc import Iterator, Sequence
+from typing import Any
+
+from sqlalchemy.orm import Query, Session
 
 from palace.manager.celery.tasks.work import classify_unchecked_subjects
+from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.data_layer.policy.presentation import (
     PresentationCalculationPolicy,
 )
 from palace.manager.scripts.base import Script
-from palace.manager.scripts.input import IdentifierInputScript
+from palace.manager.scripts.input import IdentifierInputScript, SupportsReadlines
 from palace.manager.scripts.timestamp import TimestampScript
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.identifier import Identifier
@@ -17,20 +24,32 @@ class WorkProcessingScript(IdentifierInputScript):
     name = "Work processing script"
 
     def __init__(
-        self, force=False, batch_size=10, _db=None, cmd_args=None, stdin=sys.stdin
-    ):
+        self,
+        force: bool = False,
+        batch_size: int = 10,
+        _db: Session | None = None,
+        cmd_args: Sequence[str | None] | None = None,
+        stdin: SupportsReadlines = sys.stdin,
+    ) -> None:
         super().__init__(_db=_db)
 
         args = self.parse_command_line(self._db, cmd_args=cmd_args, stdin=stdin)
-        self.identifier_type = args.identifier_type
-        self.data_source = args.identifier_data_source
+        self.identifier_type: str | None = args.identifier_type
+        self.data_source: str | None = args.identifier_data_source
 
-        self.identifiers = self.parse_identifier_list(
-            self._db, self.identifier_type, self.data_source, args.identifier_strings
-        )
+        if args.identifier_strings and not self.identifier_type:
+            raise PalaceValueError(
+                "No identifier type specified! Use '--identifier-type=\"Database ID\"' "
+                "to name identifiers by database ID."
+            )
+
+        if args.identifiers is not None:
+            self.identifiers: list[Identifier] = args.identifiers
+        else:
+            self.identifiers = []
 
         self.batch_size = batch_size
-        self.query = self.make_query(
+        self.query: Query[Work] | Query[LicensePool] = self.make_query(
             self._db,
             self.identifier_type,
             self.identifiers,
@@ -39,11 +58,20 @@ class WorkProcessingScript(IdentifierInputScript):
         )
         self.force = force
 
-    def paginate_query(self, query):
+    def paginate_query(
+        self, query: Query[Work] | Query[LicensePool]
+    ) -> Iterator[list[Work | LicensePool]]:
         raise NotImplementedError()
 
     @classmethod
-    def make_query(cls, _db, identifier_type, identifiers, data_source, log=None):
+    def make_query(
+        cls,
+        _db: Session,
+        identifier_type: str | None,
+        identifiers: Sequence[Identifier] | None,
+        data_source: str | None,
+        log: Any | None = None,
+    ) -> Query[Work] | Query[LicensePool]:
         query = _db.query(Work)
         if identifiers or identifier_type:
             query = query.join(Work.license_pools).join(LicensePool.identifier)
@@ -69,9 +97,9 @@ class WorkProcessingScript(IdentifierInputScript):
             log.info("Processing %d works.", query.count())
         return query.order_by(Work.id)
 
-    def do_run(self):
-        works = True
+    def do_run(self) -> None:
         offset = 0
+        paged_query: Iterator[list[Work | LicensePool]] | None = None
 
         # Does this script class allow uniquely paged queries
         # If not we will default to OFFSET paging
@@ -80,11 +108,14 @@ class WorkProcessingScript(IdentifierInputScript):
         except NotImplementedError:
             paged_query = None
 
-        while works:
-            if not paged_query:
+        while True:
+            works: Sequence[Work | LicensePool]
+            if paged_query is None:
                 works = self.query.offset(offset).limit(self.batch_size).all()
             else:
                 works = next(paged_query, [])
+            if not works:
+                break
 
             for work in works:
                 self.process_work(work)
@@ -92,7 +123,7 @@ class WorkProcessingScript(IdentifierInputScript):
             self._db.commit()
         self._db.commit()
 
-    def process_work(self, work):
+    def process_work(self, work: Work | LicensePool) -> None:
         raise NotImplementedError()
 
 
@@ -108,7 +139,15 @@ class WorkConsolidationScript(WorkProcessingScript):
 
     name = "Work consolidation script"
 
-    def make_query(self, _db, identifier_type, identifiers, data_source, log=None):
+    @classmethod
+    def make_query(
+        cls,
+        _db: Session,
+        identifier_type: str | None,
+        identifiers: Sequence[Identifier] | None,
+        data_source: str | None,
+        log: Any | None = None,
+    ) -> Query[LicensePool]:
         # We actually process LicensePools, not Works.
         qu = _db.query(LicensePool).join(LicensePool.identifier)
         if identifier_type:
@@ -119,13 +158,14 @@ class WorkConsolidationScript(WorkProcessingScript):
             )
         return qu
 
-    def process_work(self, work):
+    def process_work(self, work: Work | LicensePool) -> None:
         # We call it 'work' for signature compatibility with the superclass,
         # but it's actually a LicensePool.
-        licensepool = work
-        licensepool.calculate_work()
+        if not isinstance(work, LicensePool):
+            return
+        work.calculate_work()
 
-    def do_run(self):
+    def do_run(self) -> None:
         super().do_run()
         qu = (
             self._db.query(Work)
@@ -146,7 +186,9 @@ class WorkPresentationScript(TimestampScript, WorkProcessingScript):
     # Do a complete recalculation of the presentation.
     policy = PresentationCalculationPolicy()
 
-    def process_work(self, work):
+    def process_work(self, work: Work | LicensePool) -> None:
+        if not isinstance(work, Work):
+            return
         work.calculate_presentation(policy=self.policy)
 
 
@@ -176,7 +218,7 @@ class ReclassifyWorksForUncheckedSubjectsScript(Script):
 
     name = "Reclassify works that use unchecked subjects." ""
 
-    def run(self):
+    def run(self) -> None:
 
         classify_unchecked_subjects.delay()
         self.log.info(

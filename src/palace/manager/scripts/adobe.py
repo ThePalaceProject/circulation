@@ -1,15 +1,22 @@
 from __future__ import annotations
 
+import argparse
 import time
+from typing import Any
+
+from sqlalchemy.orm import Session
 
 from palace.manager.api.adobe_vendor_id import AuthdataUtility
 from palace.manager.scripts.input import PatronInputScript
+from palace.manager.sqlalchemy.model.patron import Patron
 
 
 class AdobeAccountIDResetScript(PatronInputScript):
     @classmethod
-    def arg_parser(cls, _db):
-        parser = super().arg_parser(_db)
+    def arg_parser(
+        cls, _db: Session, multiple_libraries: bool = False
+    ) -> argparse.ArgumentParser:
+        parser = super().arg_parser(_db, multiple_libraries=multiple_libraries)
         parser.add_argument(
             "--delete",
             help="Actually delete credentials as opposed to showing what would happen.",
@@ -17,7 +24,7 @@ class AdobeAccountIDResetScript(PatronInputScript):
         )
         return parser
 
-    def do_run(self, *args, **kwargs):
+    def do_run(self, *args: Any, **kwargs: Any) -> None:
         parsed = self.parse_command_line(self._db, *args, **kwargs)
         patrons = parsed.patrons
         self.delete = parsed.delete
@@ -43,7 +50,7 @@ You'll get another chance to back out before the database session is committed."
             time.sleep(5)
             self._db.commit()
 
-    def process_patron(self, patron):
+    def process_patron(self, patron: Patron) -> None:
         """Delete all of a patron's Credentials that contain an Adobe account
         ID _or_ connect the patron to a DelegatedPatronIdentifier that
         contains an Adobe account ID.
