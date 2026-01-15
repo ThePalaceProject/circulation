@@ -255,7 +255,9 @@ def _bisac_subjects_subquery() -> Subquery:
             ).label("bisac_subjects"),
             func.array_to_string(
                 func.array_agg(
-                    aggregate_order_by(age_range_value, age_range_value.asc())
+                    aggregate_order_by(
+                        age_range_value.distinct(), age_range_value.asc()
+                    )
                 ),
                 ",",
             ).label("age_ranges"),
