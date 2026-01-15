@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, create_autospec
 
 import pytest
 from pytest import LogCaptureFixture
-from sqlalchemy import select
+from sqlalchemy import String, cast, select
 from sqlalchemy.sql import Select
 
 from palace.manager.celery.tasks.generate_inventory_and_hold_reports import (
@@ -25,12 +25,12 @@ from palace.manager.integration.license.opds.opds1.settings import OPDSImporterS
 from palace.manager.integration.license.overdrive.api import OverdriveAPI
 from palace.manager.opds.odl.info import LicenseStatus
 from palace.manager.service.logging.configuration import LogLevel
-from palace.manager.sqlalchemy.model.classification import Genre
+from palace.manager.sqlalchemy.model.classification import Genre, Subject
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.licensing import LicensePoolStatus
 from palace.manager.sqlalchemy.model.patron import Hold
-from palace.manager.sqlalchemy.util import get_one_or_create
+from palace.manager.sqlalchemy.util import get_one_or_create, tuple_to_numericrange
 from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.celery import CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
@@ -119,6 +119,8 @@ def test_only_active_collections_are_included(
                 "format",
                 "audience",
                 "genres",
+                "age_ranges",
+                "bisac_subjects",
                 "data_source",
                 "collection_name",
                 "license_expiration",
@@ -269,6 +271,36 @@ def test_generate_report(
     genre, ignore = Genre.lookup(db.session, "genre_a", autocreate=True)
     work.genres.append(genre)
     work.audience = "young adult"
+
+    bisac_subject_one = db.subject(Subject.BISAC, "BISAC_ONE")
+    bisac_subject_one.name = "BISAC Subject One"
+    bisac_subject_one.target_age = tuple_to_numericrange((7, 9))
+    bisac_subject_two = db.subject(Subject.BISAC, "BISAC_TWO")
+    bisac_subject_two.name = "BISAC Subject Two"
+    bisac_subject_two.target_age = tuple_to_numericrange((10, 12))
+    non_bisac_subject = db.subject(Subject.LCSH, "NON_BISAC")
+    non_bisac_subject.name = "Non-BISAC Subject"
+    non_bisac_subject.target_age = tuple_to_numericrange((13, 15))
+
+    db.classification(identifier, bisac_subject_one, ds)
+    db.classification(identifier, bisac_subject_two, ds)
+    db.classification(identifier, non_bisac_subject, ds)
+
+    expected_age_range_one = db.session.scalar(
+        select(cast(Subject.target_age, String)).where(
+            Subject.id == bisac_subject_one.id
+        )
+    )
+    expected_age_range_two = db.session.scalar(
+        select(cast(Subject.target_age, String)).where(
+            Subject.id == bisac_subject_two.id
+        )
+    )
+    expected_non_bisac_age_range = db.session.scalar(
+        select(cast(Subject.target_age, String)).where(
+            Subject.id == non_bisac_subject.id
+        )
+    )
 
     licensepool = db.licensepool(
         edition=edition,
@@ -506,6 +538,15 @@ def test_generate_report(
                 assert book1_available_row["published_date"] == "2019-05-17"
                 assert book1_available_row["audience"] == "young adult"
                 assert book1_available_row["genres"] == "genre_a,genre_z"
+                assert "BISAC Subject One" in book1_available_row["bisac_subjects"]
+                assert "BISAC Subject Two" in book1_available_row["bisac_subjects"]
+                assert "Non-BISAC Subject" not in book1_available_row["bisac_subjects"]
+                assert expected_age_range_one in book1_available_row["age_ranges"]
+                assert expected_age_range_two in book1_available_row["age_ranges"]
+                assert (
+                    expected_non_bisac_age_range
+                    not in book1_available_row["age_ranges"]
+                )
                 assert book1_available_row["format"] == edition.BOOK_MEDIUM
                 assert book1_available_row["data_source"] == data_source
                 assert book1_available_row["collection_name"] == collection_name

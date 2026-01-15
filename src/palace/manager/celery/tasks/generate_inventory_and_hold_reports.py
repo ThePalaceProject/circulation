@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import IO, Any
 
 from celery import shared_task
-from sqlalchemy import bindparam, case, func, lateral, not_, select, true
+from sqlalchemy import String, bindparam, case, cast, func, lateral, not_, select, true
 from sqlalchemy.dialects.postgresql import aggregate_order_by
 from sqlalchemy.orm import Session, aliased
 from sqlalchemy.sql import Select, Subquery
@@ -25,7 +25,11 @@ from palace.manager.service.integration_registry.license_providers import (
     LicenseProvidersRegistry,
 )
 from palace.manager.service.storage.s3 import S3Service
-from palace.manager.sqlalchemy.model.classification import Genre
+from palace.manager.sqlalchemy.model.classification import (
+    Classification,
+    Genre,
+    Subject,
+)
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
@@ -235,6 +239,37 @@ def _comma_separated_sorted_work_genre_list_subquery() -> Subquery:
     )
 
 
+def _bisac_subjects_subquery() -> Subquery:
+    """Comma-separated BISAC subjects and age ranges for an identifier."""
+    classification_alias = aliased(Classification)
+    subject_alias = aliased(Subject)
+    bisac_value = func.coalesce(subject_alias.name, subject_alias.identifier)
+    age_range_value = cast(subject_alias.target_age, String)
+    return (
+        select(
+            classification_alias.identifier_id.label("identifier_id"),
+            classification_alias.data_source_id.label("data_source_id"),
+            func.array_to_string(
+                func.array_agg(aggregate_order_by(bisac_value, bisac_value.asc())),
+                ",",
+            ).label("bisac_subjects"),
+            func.array_to_string(
+                func.array_agg(
+                    aggregate_order_by(age_range_value, age_range_value.asc())
+                ),
+                ",",
+            ).label("age_ranges"),
+        )
+        .join(subject_alias, classification_alias.subject_id == subject_alias.id)
+        .where(subject_alias.type == Subject.BISAC)
+        .group_by(
+            classification_alias.identifier_id,
+            classification_alias.data_source_id,
+        )
+        .subquery()
+    )
+
+
 def _best_isbn_lateral() -> Lateral:
     """Best ISBN for an identifier, if available."""
     id_isbn = aliased(Identifier)
@@ -319,6 +354,7 @@ def inventory_report_query() -> Select:
 
     isbn = _best_isbn_lateral()
     wg_subquery = _comma_separated_sorted_work_genre_list_subquery()
+    bisac_subquery = _bisac_subjects_subquery()
     collection_sharing = _is_shared_collection_lateral()
     lic = _licenses_lateral()
 
@@ -342,6 +378,8 @@ def inventory_report_query() -> Select:
             Edition.medium.label("format"),
             Work.audience,
             func.coalesce(wg_subquery.c.genres, "").label("genres"),
+            func.coalesce(bisac_subquery.c.age_ranges, "").label("age_ranges"),
+            func.coalesce(bisac_subquery.c.bisac_subjects, "").label("bisac_subjects"),
             DataSource.name.label("data_source"),
             IntegrationConfiguration.name.label("collection_name"),
             lic.c.expires.label("license_expiration"),
@@ -369,6 +407,11 @@ def inventory_report_query() -> Select:
         )
         .join(Library, IntegrationLibraryConfiguration.library_id == Library.id)
         .outerjoin(wg_subquery, Work.id == wg_subquery.c.work_id)
+        .outerjoin(
+            bisac_subquery,
+            (bisac_subquery.c.data_source_id == DataSource.id)
+            & (bisac_subquery.c.identifier_id == Edition.primary_identifier_id),
+        )
         .join(collection_sharing, true())
         .outerjoin(lic, true())
         .where(
