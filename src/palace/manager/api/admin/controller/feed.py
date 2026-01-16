@@ -57,7 +57,7 @@ class FeedController(CirculationManagerController, AdminPermissionsControllerMix
         annotator = AdminSuppressedAnnotator(self.circulation, library)
         query = flask.request.args.get("q")
 
-        # Generate URL for search endpoint
+        # Generate base URL for OpenSearch description document.
         search_url = url_for(
             "suppressed_search",
             library_short_name=library.short_name,
@@ -74,7 +74,7 @@ class FeedController(CirculationManagerController, AdminPermissionsControllerMix
         result = AdminSuppressedFeed.suppressed_search(
             _db=self._db,
             title="Search Hidden Books",
-            url=search_url,
+            url=annotator.suppressed_search_url(query, pagination),
             annotator=annotator,
             search_engine=search_engine,
             query=query,
