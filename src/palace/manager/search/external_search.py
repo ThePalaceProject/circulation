@@ -2319,6 +2319,68 @@ class Filter(SearchBase):
         return new
 
 
+class SuppressedWorkFilter(Filter):
+    """A Filter that matches ONLY works that are suppressed or policy-filtered for a library.
+
+    This inverts the normal Filter behavior, which excludes suppressed/filtered works.
+    Used by the admin suppressed feed search to search within hidden works.
+    """
+
+    def build(
+        self, _chain_filters: None = None
+    ) -> tuple[BaseQuery | None, defaultdict]:
+        """Build filter that matches suppressed/filtered works.
+
+        This overrides the parent build() to use 'should' clauses (inclusion)
+        instead of 'must_not' (exclusion) for suppression and policy filtering.
+
+        :return: A 2-tuple (filter, nested_filters) as described in parent class.
+        """
+        chain = _chain_filters or self._chain_filters
+        nested_filters: defaultdict[str, list] = defaultdict(list)
+
+        if self.match_nothing:
+            return MatchNone(), nested_filters
+
+        f = None
+
+        # Collection filtering - scope to library's collections (standard behavior)
+        collection_ids = self._filter_ids(self.collection_ids)
+        if collection_ids:
+            collection_match = Terms(**{"licensepools.collection_id": collection_ids})
+            nested_filters["licensepools"].append(collection_match)
+
+        # Build 'should' clauses to INCLUDE suppressed/filtered works
+        # (opposite of normal Filter behavior which excludes them)
+        should_clauses: list[BaseQuery] = []
+
+        # Match manually suppressed works for this library
+        if self.library_id:
+            should_clauses.append(Terms(**{"suppressed_for": [self.library_id]}))
+
+        # Match audience-filtered works
+        if self.filtered_audiences:
+            excluded_audiences = self._scrub_list(self.filtered_audiences)
+            should_clauses.append(Terms(audience=excluded_audiences))
+
+        # Match genre-filtered works (genres are nested documents)
+        if self.filtered_genres:
+            genre_match = Nested(
+                path="genres",
+                query=Terms(**{"genres.name": self.filtered_genres}),
+            )
+            should_clauses.append(genre_match)
+
+        # At least one condition must match for work to be included
+        if should_clauses:
+            f = chain(f, Bool(should=should_clauses, minimum_should_match=1))
+        else:
+            # No suppression/filtering conditions - match nothing
+            return MatchNone(), nested_filters
+
+        return f, nested_filters
+
+
 class SortKeyPagination(Pagination):
     """An Opensearch-specific implementation of Pagination that
     paginates search results by tracking where in a sorted list the
