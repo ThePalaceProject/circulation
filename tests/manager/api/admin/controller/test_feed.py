@@ -132,3 +132,36 @@ class TestFeedController:
             assert response.status_code == 200
             feed = feedparser.parse(response.get_data(as_text=True))
             assert len(feed["entries"]) == 0
+
+    def test_suppressed_search_invalid_pagination(self, admin_librarian_fixture):
+        """Search returns error for invalid pagination parameters."""
+        from palace.manager.util.problem_detail import ProblemDetail
+
+        with admin_librarian_fixture.request_context_with_library_and_admin(
+            "/?q=test&size=invalid"
+        ):
+            response = (
+                admin_librarian_fixture.manager.admin_feed_controller.suppressed_search()
+            )
+
+            # Should return a problem detail for invalid input
+            assert isinstance(response, ProblemDetail)
+            assert response.status_code == 400
+            assert "Invalid page size" in response.detail
+
+    def test_suppressed_search_no_search_engine(self, admin_librarian_fixture):
+        """Search returns error when search engine is not configured."""
+        from palace.manager.util.problem_detail import ProblemDetail
+
+        # Remove the search engine by setting it to None on the manager
+        admin_librarian_fixture.manager.external_search = None
+
+        with admin_librarian_fixture.request_context_with_library_and_admin("/?q=test"):
+            response = (
+                admin_librarian_fixture.manager.admin_feed_controller.suppressed_search()
+            )
+
+            # Should return a problem detail for missing search engine
+            assert isinstance(response, ProblemDetail)
+            assert response.status_code == 502
+            assert "search index" in response.detail.lower()
