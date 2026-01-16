@@ -47,7 +47,14 @@ class VisibilityFilter(StrEnum):
 
 @dataclass(frozen=True)
 class FacetGroup:
-    """Represents a single facet option for OPDS facet links."""
+    """Represents a single facet option for OPDS facet links.
+
+    :param group_name: Name of the facet group (e.g., "Visibility").
+    :param filter_value: The VisibilityFilter value this facet represents.
+    :param facets: SuppressedFacets instance with this filter applied.
+    :param is_selected: Whether this facet is currently selected.
+    :param is_default: Whether this is the default facet value.
+    """
 
     group_name: str
     filter_value: VisibilityFilter

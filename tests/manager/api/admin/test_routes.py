@@ -595,6 +595,12 @@ class TestAdminFeed:
         url = "/admin/suppressed"
         fixture.assert_authenticated_request_calls(url, fixture.controller.suppressed)
 
+    def test_suppressed_search(self, fixture: AdminRouteFixture):
+        url = "/admin/suppressed/search"
+        fixture.assert_authenticated_request_calls(
+            url, fixture.controller.suppressed_search
+        )
+
     def test_genres(self, fixture: AdminRouteFixture):
         url = "/admin/genres"
         fixture.assert_authenticated_request_calls(url, fixture.controller.genres)

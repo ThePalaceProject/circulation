@@ -2324,6 +2324,16 @@ class SuppressedWorkFilter(Filter):
 
     This inverts the normal Filter behavior, which excludes suppressed/filtered works.
     Used by the admin suppressed feed search to search within hidden works.
+
+    This filter intentionally only uses a subset of Filter properties:
+    - collection_ids: Scopes results to the library's collections
+    - library_id: Matches works manually suppressed for this library
+    - filtered_audiences: Matches works with excluded audiences
+    - filtered_genres: Matches works with excluded genres
+
+    Other Filter properties (languages, media, audiences, etc.) are intentionally
+    ignored since the admin suppressed feed should show all hidden works regardless
+    of other filtering criteria.
     """
 
     def build(
