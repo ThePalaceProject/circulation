@@ -1113,6 +1113,108 @@ class TestAdminSuppressedFeed:
         assert "up" in links_by_rel
         assert links_by_rel["up"].title == "Hidden Books"
 
+    def test_search_pagination_next_link(
+        self,
+        end_to_end_search_fixture: EndToEndSearchFixture,
+        patch_url_for: PatchedUrlFor,
+    ):
+        """Search results include 'next' link when there might be more results."""
+        fixture = end_to_end_search_fixture
+        db = fixture.db
+        library = db.default_library()
+
+        # Create multiple suppressed works to trigger pagination
+        works = []
+        for i in range(5):
+            work = db.work(
+                title=f"Pagination Test Book {i}",
+                with_open_access_download=True,
+            )
+            work.suppressed_for.append(library)
+            works.append(work)
+
+        fixture.populate_search_index()
+
+        # Use a small page size to trigger pagination
+        pagination = Pagination(offset=0, size=3)
+
+        annotator = AdminSuppressedAnnotator(None, library)
+        result = AdminSuppressedFeed.suppressed_search(
+            _db=db.session,
+            title="Search Results",
+            url="http://test/search",
+            annotator=annotator,
+            search_engine=fixture.external_search_index,
+            query="Pagination Test",
+            pagination=pagination,
+        )
+
+        assert not isinstance(result, ProblemDetail)
+
+        # Should have a "next" link since we have more results
+        links_by_rel = {link.rel: link for link in result._feed.links}
+        assert "next" in links_by_rel
+        assert links_by_rel["next"].href is not None
+        assert "after=3" in links_by_rel["next"].href
+
+        # Should not have "first" or "previous" links on first page
+        assert "first" not in links_by_rel
+        assert "previous" not in links_by_rel
+
+    def test_search_pagination_previous_and_first_links(
+        self,
+        end_to_end_search_fixture: EndToEndSearchFixture,
+        patch_url_for: PatchedUrlFor,
+    ):
+        """Search results include 'first' and 'previous' links on later pages."""
+        fixture = end_to_end_search_fixture
+        db = fixture.db
+        library = db.default_library()
+
+        # Create multiple suppressed works
+        works = []
+        for i in range(10):
+            work = db.work(
+                title=f"Paging Test Book {i}",
+                with_open_access_download=True,
+            )
+            work.suppressed_for.append(library)
+            works.append(work)
+
+        fixture.populate_search_index()
+
+        # Request the second page
+        pagination = Pagination(offset=3, size=3)
+
+        annotator = AdminSuppressedAnnotator(None, library)
+        result = AdminSuppressedFeed.suppressed_search(
+            _db=db.session,
+            title="Search Results",
+            url="http://test/search",
+            annotator=annotator,
+            search_engine=fixture.external_search_index,
+            query="Paging Test",
+            pagination=pagination,
+        )
+
+        assert not isinstance(result, ProblemDetail)
+
+        links_by_rel = {link.rel: link for link in result._feed.links}
+
+        # Should have "first" link pointing to offset 0
+        assert "first" in links_by_rel
+        assert links_by_rel["first"].href is not None
+        # First page should not have "after" parameter or have after=0
+        first_href = links_by_rel["first"].href
+        assert "after=0" in first_href or "after=" not in first_href
+
+        # Should have "previous" link
+        assert "previous" in links_by_rel
+        assert links_by_rel["previous"].href is not None
+
+        # Should still have "next" link since there are more results
+        assert "next" in links_by_rel
+
 
 class TestSuppressedFacets:
     """Tests for the SuppressedFacets class."""
