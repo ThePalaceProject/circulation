@@ -1,6 +1,8 @@
 import urllib
 from collections.abc import Sequence
 
+import pytest
+
 from palace.manager.core.classifier import Classifier
 from palace.manager.feed.acquisition import OPDSAcquisitionFeed
 from palace.manager.feed.admin.suppressed import (
@@ -10,7 +12,7 @@ from palace.manager.feed.admin.suppressed import (
     VisibilityFilter,
 )
 from palace.manager.feed.annotator.admin.suppressed import AdminSuppressedAnnotator
-from palace.manager.feed.types import FeedData, Link
+from palace.manager.feed.types import FeedData, FeedEntryType, Link
 from palace.manager.sqlalchemy.model.classification import Genre
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.lane import Pagination
@@ -33,6 +35,38 @@ class TestAdminSuppressedFeed:
     def links_for_rel(links: Sequence[Link], rel: str) -> list[Link]:
         """Filter a list of links by their rel attribute."""
         return [link for link in links if link.rel == rel]
+
+    @staticmethod
+    def visibility_categories(
+        categories: Sequence[FeedEntryType],
+    ) -> list[FeedEntryType]:
+        """Extract visibility status categories from a list of categories."""
+        return [
+            c
+            for c in categories
+            if c.get("scheme", None)
+            == AdminSuppressedAnnotator.VISIBILITY_STATUS_SCHEME
+        ]
+
+    @staticmethod
+    def suppressed_search(
+        fixture: EndToEndSearchFixture,
+        query: str,
+        pagination: Pagination | None = None,
+    ) -> OPDSAcquisitionFeed | ProblemDetail:
+        """Execute a suppressed search with common parameters."""
+        db = fixture.db
+        library = db.default_library()
+        annotator = AdminSuppressedAnnotator(None, library)
+        return AdminSuppressedFeed.suppressed_search(
+            _db=db.session,
+            title="Search Results",
+            url="http://test/search",
+            annotator=annotator,
+            search_engine=fixture.external_search_index,
+            query=query,
+            pagination=pagination,
+        )
 
     def test_feed_includes_staff_rating(
         self,
@@ -434,12 +468,9 @@ class TestAdminSuppressedFeed:
         # Check manually suppressed work has correct category
         suppressed_entry = entries_by_work[work_suppressed.id]
         assert suppressed_entry.computed is not None
-        suppressed_categories = [
-            c
-            for c in suppressed_entry.computed.categories
-            if getattr(c, "scheme", None)
-            == AdminSuppressedAnnotator.VISIBILITY_STATUS_SCHEME
-        ]
+        suppressed_categories = self.visibility_categories(
+            suppressed_entry.computed.categories
+        )
         assert len(suppressed_categories) == 1
         assert (
             getattr(suppressed_categories[0], "term", None)
@@ -450,12 +481,9 @@ class TestAdminSuppressedFeed:
         # Check policy-filtered work has correct category
         filtered_entry = entries_by_work[work_filtered.id]
         assert filtered_entry.computed is not None
-        filtered_categories = [
-            c
-            for c in filtered_entry.computed.categories
-            if getattr(c, "scheme", None)
-            == AdminSuppressedAnnotator.VISIBILITY_STATUS_SCHEME
-        ]
+        filtered_categories = self.visibility_categories(
+            filtered_entry.computed.categories
+        )
         assert len(filtered_categories) == 1
         assert (
             getattr(filtered_categories[0], "term", None)
@@ -552,15 +580,10 @@ class TestAdminSuppressedFeed:
         assert entry.computed is not None
 
         # Should show as "Manually Suppressed" (manual takes precedence)
-        visibility_categories = [
-            c
-            for c in entry.computed.categories
-            if getattr(c, "scheme", None)
-            == AdminSuppressedAnnotator.VISIBILITY_STATUS_SCHEME
-        ]
-        assert len(visibility_categories) == 1
+        vis_categories = self.visibility_categories(entry.computed.categories)
+        assert len(vis_categories) == 1
         assert (
-            getattr(visibility_categories[0], "term", None)
+            getattr(vis_categories[0], "term", None)
             == AdminSuppressedAnnotator.VISIBILITY_MANUALLY_SUPPRESSED
         )
 
@@ -625,12 +648,38 @@ class TestAdminSuppressedFeed:
         assert "size=10" in url_with_pagination
         assert "after=20" in url_with_pagination
 
-    def test_suppressed_query_filter_all(
+    @pytest.mark.parametrize(
+        "visibility_filter,expected_in,expected_not_in",
+        [
+            pytest.param(
+                VisibilityFilter.ALL,
+                ["suppressed", "filtered", "both"],
+                ["visible"],
+                id="all",
+            ),
+            pytest.param(
+                VisibilityFilter.MANUALLY_SUPPRESSED,
+                ["suppressed", "both"],
+                ["filtered", "visible"],
+                id="manually-suppressed",
+            ),
+            pytest.param(
+                VisibilityFilter.POLICY_FILTERED,
+                ["filtered"],
+                ["suppressed", "visible", "both"],
+                id="policy-filtered",
+            ),
+        ],
+    )
+    def test_suppressed_query_filter(
         self,
         db: DatabaseTransactionFixture,
         library_fixture: LibraryFixture,
+        visibility_filter: VisibilityFilter,
+        expected_in: list[str],
+        expected_not_in: list[str],
     ):
-        """Filter 'all' returns both manually suppressed and policy-filtered works."""
+        """Test that visibility filters return the correct works."""
         library = db.default_library()
         settings = library_fixture.settings(library)
 
@@ -644,93 +693,40 @@ class TestAdminSuppressedFeed:
         work_filtered.audience = Classifier.AUDIENCE_ADULT
         settings.filtered_audiences = [Classifier.AUDIENCE_ADULT]
 
-        # Create visible work
+        # Create visible work (neither suppressed nor filtered)
         work_visible = db.work(with_open_access_download=True)
         work_visible.audience = Classifier.AUDIENCE_CHILDREN
-
-        # Query with 'all' filter
-        query = AdminSuppressedFeed.suppressed_query(
-            db.session, library, VisibilityFilter.ALL
-        )
-        work_ids = {w.id for w in query.all()}
-
-        assert work_suppressed.id in work_ids
-        assert work_filtered.id in work_ids
-        assert work_visible.id not in work_ids
-
-    def test_suppressed_query_filter_manually_suppressed(
-        self,
-        db: DatabaseTransactionFixture,
-        library_fixture: LibraryFixture,
-    ):
-        """Filter 'manually-suppressed' returns only manually suppressed works."""
-        library = db.default_library()
-        settings = library_fixture.settings(library)
-
-        # Create manually suppressed work
-        work_suppressed = db.work(with_open_access_download=True)
-        work_suppressed.audience = Classifier.AUDIENCE_CHILDREN
-        work_suppressed.suppressed_for.append(library)
-
-        # Create policy-filtered work
-        work_filtered = db.work(with_open_access_download=True)
-        work_filtered.audience = Classifier.AUDIENCE_ADULT
-        settings.filtered_audiences = [Classifier.AUDIENCE_ADULT]
-
-        # Query with 'manually-suppressed' filter
-        query = AdminSuppressedFeed.suppressed_query(
-            db.session, library, VisibilityFilter.MANUALLY_SUPPRESSED
-        )
-        work_ids = {w.id for w in query.all()}
-
-        assert work_suppressed.id in work_ids
-        assert work_filtered.id not in work_ids
-
-    def test_suppressed_query_filter_policy_filtered(
-        self,
-        db: DatabaseTransactionFixture,
-        library_fixture: LibraryFixture,
-    ):
-        """Filter 'policy-filtered' returns only policy-filtered works (not manually suppressed)."""
-        library = db.default_library()
-        settings = library_fixture.settings(library)
-
-        # Create manually suppressed work
-        work_suppressed = db.work(with_open_access_download=True)
-        work_suppressed.audience = Classifier.AUDIENCE_CHILDREN
-        work_suppressed.suppressed_for.append(library)
-
-        # Create policy-filtered work
-        work_filtered = db.work(with_open_access_download=True)
-        work_filtered.audience = Classifier.AUDIENCE_ADULT
-        settings.filtered_audiences = [Classifier.AUDIENCE_ADULT]
 
         # Create a work that is both manually suppressed AND filtered
         work_both = db.work(with_open_access_download=True)
         work_both.audience = Classifier.AUDIENCE_ADULT
         work_both.suppressed_for.append(library)
 
-        # Query with 'policy-filtered' filter
+        works = {
+            "suppressed": work_suppressed,
+            "filtered": work_filtered,
+            "visible": work_visible,
+            "both": work_both,
+        }
+
         query = AdminSuppressedFeed.suppressed_query(
-            db.session, library, VisibilityFilter.POLICY_FILTERED
+            db.session, library, visibility_filter
         )
         work_ids = {w.id for w in query.all()}
 
-        # Only pure policy-filtered work should be included
-        assert work_filtered.id in work_ids
-        # Manually suppressed should not be included
-        assert work_suppressed.id not in work_ids
-        # Work that is both should not be included (it's manually suppressed)
-        assert work_both.id not in work_ids
+        for name in expected_in:
+            assert works[name].id in work_ids, f"{name} should be in results"
+        for name in expected_not_in:
+            assert works[name].id not in work_ids, f"{name} should not be in results"
 
-    def test_suppressed_feed_includes_facet_links(
+    def test_suppressed_feed_facet_links(
         self,
         db: DatabaseTransactionFixture,
         patch_url_for: PatchedUrlFor,
         external_search_fake_fixture: ExternalSearchFixtureFake,
         library_fixture: LibraryFixture,
     ):
-        """The suppressed feed includes facet links for visibility filtering."""
+        """The suppressed feed includes facet links that reflect the active filter."""
         library = db.default_library()
 
         # Create a suppressed work
@@ -738,45 +734,26 @@ class TestAdminSuppressedFeed:
         work.suppressed_for.append(library)
 
         annotator = AdminSuppressedAnnotator(None, library)
+
+        # Generate feed with default facets
         feed = AdminSuppressedFeed.suppressed(
             _db=db.session,
             title="Hidden works",
             annotator=annotator,
         )
 
-        # Find facet links (stored in facet_links list)
         facet_links = feed._feed.facet_links
 
         # Should have 3 facet links (All, Manually Hidden, Policy Filtered)
         assert len(facet_links) == 3
-
-        # Check facet group and titles
         titles = {getattr(link, "title", None) for link in facet_links}
-        assert "All" in titles
-        assert "Manually Hidden" in titles
-        assert "Policy Filtered" in titles
+        assert titles == {"All", "Manually Hidden", "Policy Filtered"}
 
-        # Check that 'All' is marked as active (default)
+        # 'All' should be active by default
         all_link = next(
             link for link in facet_links if getattr(link, "title", None) == "All"
         )
         assert getattr(all_link, "activeFacet", None) == "true"
-
-    def test_suppressed_feed_facet_links_reflect_current_filter(
-        self,
-        db: DatabaseTransactionFixture,
-        patch_url_for: PatchedUrlFor,
-        external_search_fake_fixture: ExternalSearchFixtureFake,
-        library_fixture: LibraryFixture,
-    ):
-        """Facet links correctly mark the active filter."""
-        library = db.default_library()
-
-        # Create a suppressed work
-        work = db.work(with_open_access_download=True)
-        work.suppressed_for.append(library)
-
-        annotator = AdminSuppressedAnnotator(None, library)
 
         # Generate feed with 'manually-suppressed' filter
         facets = SuppressedFacets(visibility=VisibilityFilter.MANUALLY_SUPPRESSED)
@@ -787,10 +764,9 @@ class TestAdminSuppressedFeed:
             facets=facets,
         )
 
-        # Find facet links (stored in facet_links list)
         facet_links = feed._feed.facet_links
 
-        # 'Manually Hidden' should be active
+        # 'Manually Hidden' should now be active
         manually_hidden_link = next(
             link
             for link in facet_links
@@ -798,7 +774,7 @@ class TestAdminSuppressedFeed:
         )
         assert getattr(manually_hidden_link, "activeFacet", None) == "true"
 
-        # 'All' should NOT be active
+        # 'All' should no longer be active
         all_link = next(
             link for link in facet_links if getattr(link, "title", None) == "All"
         )
@@ -869,15 +845,7 @@ class TestAdminSuppressedFeed:
         # Index the works
         fixture.populate_search_index()
 
-        annotator = AdminSuppressedAnnotator(None, library)
-        result = AdminSuppressedFeed.suppressed_search(
-            _db=db.session,
-            title="Search Results",
-            url="http://test/search",
-            annotator=annotator,
-            search_engine=fixture.external_search_index,
-            query="Mystery Novel",
-        )
+        result = self.suppressed_search(fixture, "Mystery Novel")
 
         # Should not be a problem detail
         assert not isinstance(result, ProblemDetail)
@@ -919,15 +887,7 @@ class TestAdminSuppressedFeed:
         # Index the works
         fixture.populate_search_index()
 
-        annotator = AdminSuppressedAnnotator(None, library)
-        result = AdminSuppressedFeed.suppressed_search(
-            _db=db.session,
-            title="Search Results",
-            url="http://test/search",
-            annotator=annotator,
-            search_engine=fixture.external_search_index,
-            query="Content Book",
-        )
+        result = self.suppressed_search(fixture, "Content Book")
 
         assert not isinstance(result, ProblemDetail)
 
@@ -970,15 +930,7 @@ class TestAdminSuppressedFeed:
         # Index the works
         fixture.populate_search_index()
 
-        annotator = AdminSuppressedAnnotator(None, library)
-        result = AdminSuppressedFeed.suppressed_search(
-            _db=db.session,
-            title="Search Results",
-            url="http://test/search",
-            annotator=annotator,
-            search_engine=fixture.external_search_index,
-            query="Story Novel",
-        )
+        result = self.suppressed_search(fixture, "Story Novel")
 
         assert not isinstance(result, ProblemDetail)
 
@@ -995,25 +947,16 @@ class TestAdminSuppressedFeed:
         """Search with no matching suppressed works returns empty feed."""
         fixture = end_to_end_search_fixture
         db = fixture.db
-        library = db.default_library()
 
         # Create only visible works
-        visible_work = db.work(
+        db.work(
             title="Visible Book",
             with_open_access_download=True,
         )
 
         fixture.populate_search_index()
 
-        annotator = AdminSuppressedAnnotator(None, library)
-        result = AdminSuppressedFeed.suppressed_search(
-            _db=db.session,
-            title="Search Results",
-            url="http://test/search",
-            annotator=annotator,
-            search_engine=fixture.external_search_index,
-            query="Visible Book",
-        )
+        result = self.suppressed_search(fixture, "Visible Book")
 
         assert not isinstance(result, ProblemDetail)
         assert len(result._feed.entries) == 0
@@ -1051,15 +994,7 @@ class TestAdminSuppressedFeed:
 
         fixture.populate_search_index()
 
-        annotator = AdminSuppressedAnnotator(None, library)
-        result = AdminSuppressedFeed.suppressed_search(
-            _db=db.session,
-            title="Search Results",
-            url="http://test/search",
-            annotator=annotator,
-            search_engine=fixture.external_search_index,
-            query="Suppressed Book",
-        )
+        result = self.suppressed_search(fixture, "Suppressed Book")
 
         assert not isinstance(result, ProblemDetail)
 
@@ -1079,30 +1014,19 @@ class TestAdminSuppressedFeed:
         library = db.default_library()
 
         # Create multiple suppressed works to trigger pagination
-        works = []
         for i in range(5):
             work = db.work(
                 title=f"Pagination Test Book {i}",
                 with_open_access_download=True,
             )
             work.suppressed_for.append(library)
-            works.append(work)
 
         fixture.populate_search_index()
 
         # Use a small page size to trigger pagination
         pagination = Pagination(offset=0, size=3)
 
-        annotator = AdminSuppressedAnnotator(None, library)
-        result = AdminSuppressedFeed.suppressed_search(
-            _db=db.session,
-            title="Search Results",
-            url="http://test/search",
-            annotator=annotator,
-            search_engine=fixture.external_search_index,
-            query="Pagination Test",
-            pagination=pagination,
-        )
+        result = self.suppressed_search(fixture, "Pagination Test", pagination)
 
         assert not isinstance(result, ProblemDetail)
 
@@ -1127,30 +1051,19 @@ class TestAdminSuppressedFeed:
         library = db.default_library()
 
         # Create multiple suppressed works
-        works = []
         for i in range(10):
             work = db.work(
                 title=f"Paging Test Book {i}",
                 with_open_access_download=True,
             )
             work.suppressed_for.append(library)
-            works.append(work)
 
         fixture.populate_search_index()
 
         # Request the second page
         pagination = Pagination(offset=3, size=3)
 
-        annotator = AdminSuppressedAnnotator(None, library)
-        result = AdminSuppressedFeed.suppressed_search(
-            _db=db.session,
-            title="Search Results",
-            url="http://test/search",
-            annotator=annotator,
-            search_engine=fixture.external_search_index,
-            query="Paging Test",
-            pagination=pagination,
-        )
+        result = self.suppressed_search(fixture, "Paging Test", pagination)
 
         assert not isinstance(result, ProblemDetail)
 
@@ -1200,11 +1113,7 @@ class TestSuppressedFacets:
 
     def test_from_request_uses_default(self):
         """from_request uses the default when key is not present."""
-
-        def get_arg(key: str, default: str) -> str:
-            return default
-
-        facets = SuppressedFacets.from_request(get_arg)
+        facets = SuppressedFacets.from_request(lambda k, d: d)
         assert facets.visibility == VisibilityFilter.ALL
 
     def test_items_all(self):
