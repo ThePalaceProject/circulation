@@ -1,4 +1,5 @@
 import urllib
+from collections.abc import Sequence
 
 from palace.manager.core.classifier import Classifier
 from palace.manager.feed.acquisition import OPDSAcquisitionFeed
@@ -22,14 +23,16 @@ from tests.manager.feed.conftest import PatchedUrlFor
 
 
 class TestAdminSuppressedFeed:
-    def links(self, feed: FeedData, rel=None):
+    @classmethod
+    def links(cls, feed: FeedData, rel: str) -> list[Link]:
         all_links = feed.links + feed.facet_links + feed.breadcrumbs
         links = sorted(all_links, key=lambda x: (x.rel, getattr(x, "title", None)))
-        return [
-            lnk
-            for lnk in links
-            if not rel or lnk.rel == rel or (isinstance(rel, list) and lnk.rel in rel)
-        ]
+        return cls.links_for_rel(links, rel)
+
+    @staticmethod
+    def links_for_rel(links: Sequence[Link], rel: str) -> list[Link]:
+        """Filter a list of links by their rel attribute."""
+        return [link for link in links if link.rel == rel]
 
     def test_feed_includes_staff_rating(
         self,
@@ -90,9 +93,6 @@ class TestAdminSuppressedFeed:
         patch_url_for: PatchedUrlFor,
         external_search_fake_fixture: ExternalSearchFixtureFake,
     ):
-        def _links_for_rel(links: list[Link], rel: str) -> list[Link]:
-            return [link for link in links if link.rel == rel]
-
         work = db.work(with_open_access_download=True)
         lp = work.license_pools[0]
         library = db.default_library()
@@ -110,11 +110,11 @@ class TestAdminSuppressedFeed:
         [entry] = feed._feed.entries
         assert entry.computed is not None
 
-        [suppress_link] = _links_for_rel(
+        [suppress_link] = self.links_for_rel(
             entry.computed.other_links,
             AdminSuppressedAnnotator.REL_SUPPRESS_FOR_LIBRARY,
         )
-        unsuppress_links = _links_for_rel(
+        unsuppress_links = self.links_for_rel(
             entry.computed.other_links,
             AdminSuppressedAnnotator.REL_UNSUPPRESS_FOR_LIBRARY,
         )
@@ -131,11 +131,11 @@ class TestAdminSuppressedFeed:
         [entry] = feed._feed.entries
         assert entry.computed is not None
 
-        suppress_links = _links_for_rel(
+        suppress_links = self.links_for_rel(
             entry.computed.other_links,
             AdminSuppressedAnnotator.REL_SUPPRESS_FOR_LIBRARY,
         )
-        [unsuppress_link] = _links_for_rel(
+        [unsuppress_link] = self.links_for_rel(
             entry.computed.other_links,
             AdminSuppressedAnnotator.REL_UNSUPPRESS_FOR_LIBRARY,
         )
@@ -152,11 +152,11 @@ class TestAdminSuppressedFeed:
         )
         [entry] = feed._feed.entries
         assert entry.computed is not None
-        suppress_links = _links_for_rel(
+        suppress_links = self.links_for_rel(
             entry.computed.other_links,
             AdminSuppressedAnnotator.REL_SUPPRESS_FOR_LIBRARY,
         )
-        unsuppress_links = _links_for_rel(
+        unsuppress_links = self.links_for_rel(
             entry.computed.other_links,
             AdminSuppressedAnnotator.REL_UNSUPPRESS_FOR_LIBRARY,
         )
@@ -474,9 +474,6 @@ class TestAdminSuppressedFeed:
         library = db.default_library()
         settings = library_fixture.settings(library)
 
-        def _links_for_rel(links: list[Link], rel: str) -> list[Link]:
-            return [link for link in links if link.rel == rel]
-
         # Create a policy-filtered work (not manually suppressed)
         work_filtered = db.work(with_open_access_download=True)
         work_filtered.audience = Classifier.AUDIENCE_ADULT
@@ -498,11 +495,11 @@ class TestAdminSuppressedFeed:
         # Policy-filtered work should have NO suppress/unsuppress links
         filtered_entry = entries_by_work[work_filtered.id]
         assert filtered_entry.computed is not None
-        suppress_links = _links_for_rel(
+        suppress_links = self.links_for_rel(
             filtered_entry.computed.other_links,
             AdminSuppressedAnnotator.REL_SUPPRESS_FOR_LIBRARY,
         )
-        unsuppress_links = _links_for_rel(
+        unsuppress_links = self.links_for_rel(
             filtered_entry.computed.other_links,
             AdminSuppressedAnnotator.REL_UNSUPPRESS_FOR_LIBRARY,
         )
@@ -518,7 +515,7 @@ class TestAdminSuppressedFeed:
         # Manually suppressed work should have unsuppress link
         suppressed_entry = entries_by_work[work_suppressed.id]
         assert suppressed_entry.computed is not None
-        unsuppress_links = _links_for_rel(
+        unsuppress_links = self.links_for_rel(
             suppressed_entry.computed.other_links,
             AdminSuppressedAnnotator.REL_UNSUPPRESS_FOR_LIBRARY,
         )
@@ -536,9 +533,6 @@ class TestAdminSuppressedFeed:
         """
         library = db.default_library()
         settings = library_fixture.settings(library)
-
-        def _links_for_rel(links: list[Link], rel: str) -> list[Link]:
-            return [link for link in links if link.rel == rel]
 
         # Create a work that is both manually suppressed AND matches filter
         work = db.work(with_open_access_download=True)
@@ -571,7 +565,7 @@ class TestAdminSuppressedFeed:
         )
 
         # Should have unsuppress link (since it's manually suppressed)
-        unsuppress_links = _links_for_rel(
+        unsuppress_links = self.links_for_rel(
             entry.computed.other_links,
             AdminSuppressedAnnotator.REL_UNSUPPRESS_FOR_LIBRARY,
         )
