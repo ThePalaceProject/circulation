@@ -39,7 +39,7 @@ from palace.manager.data_layer.policy.presentation import (
     PresentationCalculationPolicy,
 )
 from palace.manager.feed.acquisition import OPDSAcquisitionFeed
-from palace.manager.feed.annotator.admin import AdminAnnotator
+from palace.manager.feed.annotator.admin.suppressed import AdminSuppressedAnnotator
 from palace.manager.sqlalchemy.model.classification import (
     Classification,
     Genre,
@@ -78,7 +78,7 @@ class WorkController(CirculationManagerController, AdminPermissionsControllerMix
         if isinstance(work, ProblemDetail):
             return work
 
-        annotator = AdminAnnotator(self.circulation, library)
+        annotator = AdminSuppressedAnnotator(self.circulation, library)
 
         # single_entry returns an OPDSEntryResponse that will not be
         # cached, which is perfect. We want the admin interface

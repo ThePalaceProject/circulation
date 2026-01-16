@@ -23,7 +23,7 @@ from palace.manager.api.admin.problem_details import (
 )
 from palace.manager.api.problem_details import LIBRARY_NOT_FOUND, NO_LICENSES
 from palace.manager.core.classifier.simplified import SimplifiedGenreClassifier
-from palace.manager.feed.annotator.admin import AdminAnnotator
+from palace.manager.feed.annotator.admin.suppressed import AdminSuppressedAnnotator
 from palace.manager.sqlalchemy.constants import IdentifierType
 from palace.manager.sqlalchemy.model.admin import AdminRole
 from palace.manager.sqlalchemy.model.classification import (
@@ -98,10 +98,10 @@ class TestWorkController:
             feed = feedparser.parse(response.get_data())
             [entry] = feed["entries"]
             hide_for_library = _links_for_rel(
-                entry, AdminAnnotator.REL_SUPPRESS_FOR_LIBRARY
+                entry, AdminSuppressedAnnotator.REL_SUPPRESS_FOR_LIBRARY
             )
             unhide_for_library = _links_for_rel(
-                entry, AdminAnnotator.REL_UNSUPPRESS_FOR_LIBRARY
+                entry, AdminSuppressedAnnotator.REL_UNSUPPRESS_FOR_LIBRARY
             )
             assert 1 == len(hide_for_library)
             assert 0 == len(unhide_for_library)
@@ -116,10 +116,10 @@ class TestWorkController:
             feed = feedparser.parse(response.get_data())
             [entry] = feed["entries"]
             hide_for_library = _links_for_rel(
-                entry, AdminAnnotator.REL_SUPPRESS_FOR_LIBRARY
+                entry, AdminSuppressedAnnotator.REL_SUPPRESS_FOR_LIBRARY
             )
             unhide_for_library = _links_for_rel(
-                entry, AdminAnnotator.REL_UNSUPPRESS_FOR_LIBRARY
+                entry, AdminSuppressedAnnotator.REL_UNSUPPRESS_FOR_LIBRARY
             )
             assert 0 == len(hide_for_library)
             assert 1 == len(unhide_for_library)
@@ -134,10 +134,10 @@ class TestWorkController:
             feed = feedparser.parse(response.get_data())
             [entry] = feed["entries"]
             hide_for_library = _links_for_rel(
-                entry, AdminAnnotator.REL_SUPPRESS_FOR_LIBRARY
+                entry, AdminSuppressedAnnotator.REL_SUPPRESS_FOR_LIBRARY
             )
             unhide_for_library = _links_for_rel(
-                entry, AdminAnnotator.REL_UNSUPPRESS_FOR_LIBRARY
+                entry, AdminSuppressedAnnotator.REL_UNSUPPRESS_FOR_LIBRARY
             )
             assert 0 == len(hide_for_library)
             assert 0 == len(unhide_for_library)

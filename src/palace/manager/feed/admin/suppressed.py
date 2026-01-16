@@ -4,20 +4,20 @@ from sqlalchemy import and_, false
 from sqlalchemy.orm import Session
 
 from palace.manager.feed.acquisition import OPDSAcquisitionFeed
-from palace.manager.feed.annotator.admin import AdminAnnotator
+from palace.manager.feed.annotator.admin.suppressed import AdminSuppressedAnnotator
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.lane import Pagination
 from palace.manager.sqlalchemy.model.licensing import LicensePool
 from palace.manager.sqlalchemy.model.work import Work
 
 
-class AdminFeed(OPDSAcquisitionFeed):
+class AdminSuppressedFeed(OPDSAcquisitionFeed):
     @classmethod
     def suppressed(
         cls,
         _db: Session,
         title: str,
-        annotator: AdminAnnotator,
+        annotator: AdminSuppressedAnnotator,
         pagination: Pagination | None = None,
     ) -> Self:
         _pagination = pagination or Pagination.default()

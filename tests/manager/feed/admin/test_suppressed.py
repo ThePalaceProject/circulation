@@ -1,8 +1,8 @@
 import urllib
 
 from palace.manager.feed.acquisition import OPDSAcquisitionFeed
-from palace.manager.feed.admin import AdminFeed
-from palace.manager.feed.annotator.admin import AdminAnnotator
+from palace.manager.feed.admin.suppressed import AdminSuppressedFeed
+from palace.manager.feed.annotator.admin.suppressed import AdminSuppressedAnnotator
 from palace.manager.feed.types import FeedData, Link
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.lane import Pagination
@@ -12,7 +12,7 @@ from tests.fixtures.search import ExternalSearchFixtureFake
 from tests.manager.feed.conftest import PatchedUrlFor
 
 
-class TestOPDS:
+class TestAdminSuppressedFeed:
     def links(self, feed: FeedData, rel=None):
         all_links = feed.links + feed.facet_links + feed.breadcrumbs
         links = sorted(all_links, key=lambda x: (x.rel, getattr(x, "title", None)))
@@ -39,7 +39,7 @@ class TestOPDS:
             "test",
             "url",
             [work],
-            AdminAnnotator(None, db.default_library()),
+            AdminSuppressedAnnotator(None, db.default_library()),
         )
         feed.generate_feed()
 
@@ -65,7 +65,7 @@ class TestOPDS:
             "test",
             "url",
             [work],
-            AdminAnnotator(None, db.default_library()),
+            AdminSuppressedAnnotator(None, db.default_library()),
         )
         [entry] = feed._feed.entries
         assert entry.computed is not None
@@ -96,16 +96,18 @@ class TestOPDS:
             "test",
             "url",
             [work],
-            AdminAnnotator(None, library),
+            AdminSuppressedAnnotator(None, library),
         )
         [entry] = feed._feed.entries
         assert entry.computed is not None
 
         [suppress_link] = _links_for_rel(
-            entry.computed.other_links, AdminAnnotator.REL_SUPPRESS_FOR_LIBRARY
+            entry.computed.other_links,
+            AdminSuppressedAnnotator.REL_SUPPRESS_FOR_LIBRARY,
         )
         unsuppress_links = _links_for_rel(
-            entry.computed.other_links, AdminAnnotator.REL_UNSUPPRESS_FOR_LIBRARY
+            entry.computed.other_links,
+            AdminSuppressedAnnotator.REL_UNSUPPRESS_FOR_LIBRARY,
         )
         assert len(unsuppress_links) == 0
         assert suppress_link.href and lp.identifier.identifier in suppress_link.href
@@ -115,16 +117,18 @@ class TestOPDS:
             "test",
             "url",
             [work],
-            AdminAnnotator(None, library),
+            AdminSuppressedAnnotator(None, library),
         )
         [entry] = feed._feed.entries
         assert entry.computed is not None
 
         suppress_links = _links_for_rel(
-            entry.computed.other_links, AdminAnnotator.REL_SUPPRESS_FOR_LIBRARY
+            entry.computed.other_links,
+            AdminSuppressedAnnotator.REL_SUPPRESS_FOR_LIBRARY,
         )
         [unsuppress_link] = _links_for_rel(
-            entry.computed.other_links, AdminAnnotator.REL_UNSUPPRESS_FOR_LIBRARY
+            entry.computed.other_links,
+            AdminSuppressedAnnotator.REL_UNSUPPRESS_FOR_LIBRARY,
         )
         assert len(suppress_links) == 0
         assert unsuppress_link.href and lp.identifier.identifier in suppress_link.href
@@ -135,15 +139,17 @@ class TestOPDS:
             "test",
             "url",
             [work],
-            AdminAnnotator(None, db.default_library()),
+            AdminSuppressedAnnotator(None, db.default_library()),
         )
         [entry] = feed._feed.entries
         assert entry.computed is not None
         suppress_links = _links_for_rel(
-            entry.computed.other_links, AdminAnnotator.REL_SUPPRESS_FOR_LIBRARY
+            entry.computed.other_links,
+            AdminSuppressedAnnotator.REL_SUPPRESS_FOR_LIBRARY,
         )
         unsuppress_links = _links_for_rel(
-            entry.computed.other_links, AdminAnnotator.REL_UNSUPPRESS_FOR_LIBRARY
+            entry.computed.other_links,
+            AdminSuppressedAnnotator.REL_UNSUPPRESS_FOR_LIBRARY,
         )
         assert len(suppress_links) == 0
         assert len(unsuppress_links) == 0
@@ -161,7 +167,7 @@ class TestOPDS:
             "test",
             "url",
             [work],
-            AdminAnnotator(None, db.default_library()),
+            AdminSuppressedAnnotator(None, db.default_library()),
         )
         [entry] = feed._feed.entries
         assert entry.computed is not None
@@ -201,11 +207,11 @@ class TestOPDS:
         pagination_page_2 = pagination_page_1.next_page
         pagination_page_3 = pagination_page_2.next_page
 
-        annotator = AdminAnnotator(None, db.default_library())
+        annotator = AdminSuppressedAnnotator(None, db.default_library())
         titles = [work1.title, work2.title]
 
         def make_page(_pagination: Pagination):
-            return AdminFeed.suppressed(
+            return AdminSuppressedFeed.suppressed(
                 _db=db.session,
                 title="Hidden works",
                 annotator=annotator,
