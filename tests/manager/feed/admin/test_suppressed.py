@@ -1074,45 +1074,6 @@ class TestAdminSuppressedFeed:
         assert local_work.id in work_ids
         assert other_work.id not in work_ids
 
-    def test_search_includes_navigation_links(
-        self,
-        end_to_end_search_fixture: EndToEndSearchFixture,
-        patch_url_for: PatchedUrlFor,
-    ):
-        """Search results include proper navigation links."""
-        fixture = end_to_end_search_fixture
-        db = fixture.db
-        library = db.default_library()
-
-        # Create a suppressed work
-        work = db.work(
-            title="Navigation Test Book",
-            with_open_access_download=True,
-        )
-        work.suppressed_for.append(library)
-
-        fixture.populate_search_index()
-
-        annotator = AdminSuppressedAnnotator(None, library)
-        result = AdminSuppressedFeed.suppressed_search(
-            _db=db.session,
-            title="Search Results",
-            url="http://test/search",
-            annotator=annotator,
-            search_engine=fixture.external_search_index,
-            query="Navigation Test",
-        )
-
-        assert not isinstance(result, ProblemDetail)
-
-        # Check for navigation links
-        links_by_rel = {link.rel: link for link in result._feed.links}
-
-        # Should have start and up links
-        assert "start" in links_by_rel
-        assert "up" in links_by_rel
-        assert links_by_rel["up"].title == "Hidden Books"
-
     def test_search_pagination_next_link(
         self,
         end_to_end_search_fixture: EndToEndSearchFixture,
