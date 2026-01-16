@@ -314,7 +314,7 @@ def suppressed():
 
 @library_route("/admin/suppressed/search")
 @has_library
-@returns_problem_detail
+@returns_json_or_response_or_problem_detail
 @requires_admin
 def suppressed_search():
     """Search within suppressed/hidden works."""

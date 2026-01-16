@@ -80,8 +80,6 @@ class FeedController(CirculationManagerController, AdminPermissionsControllerMix
             query=query,
             pagination=pagination,
         )
-        if isinstance(result, ProblemDetail):
-            return result
         return result.as_response(max_age=0)
 
     def _suppressed_opensearch_document(self, search_url: str) -> str:

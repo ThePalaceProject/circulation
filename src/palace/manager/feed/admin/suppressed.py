@@ -12,7 +12,6 @@ from sqlalchemy.sql import ColumnElement
 from palace.manager.feed.acquisition import OPDSAcquisitionFeed
 from palace.manager.feed.annotator.admin.suppressed import AdminSuppressedAnnotator
 from palace.manager.search.external_search import (
-    QueryParseException,
     SuppressedWorkFilter,
 )
 from palace.manager.sqlalchemy.model.classification import Genre
@@ -21,7 +20,6 @@ from palace.manager.sqlalchemy.model.lane import Pagination
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.licensing import LicensePool
 from palace.manager.sqlalchemy.model.work import Work, WorkGenre
-from palace.manager.util.problem_detail import ProblemDetail
 
 if TYPE_CHECKING:
     from palace.manager.search.external_search import ExternalSearchIndex
@@ -259,7 +257,7 @@ class AdminSuppressedFeed(OPDSAcquisitionFeed):
         search_engine: ExternalSearchIndex,
         query: str,
         pagination: Pagination | None = None,
-    ) -> Self | ProblemDetail:
+    ) -> Self:
         """Search within suppressed/hidden works.
 
         :param _db: Database session.
@@ -269,23 +267,18 @@ class AdminSuppressedFeed(OPDSAcquisitionFeed):
         :param search_engine: Search engine for executing the search.
         :param query: The search query string.
         :param pagination: Optional pagination settings.
-        :return: An SuppressedFeed with search results, or a ProblemDetail on error.
+        :return: An SuppressedFeed with search results.
         """
-        from palace.manager.core.problem_details import INVALID_INPUT
-
-        _pagination = pagination or Pagination.default()
+        pagination = pagination or Pagination.default()
         library = annotator.library
 
         # Create filter that matches only suppressed/filtered works
         search_filter = SuppressedWorkFilter(collections=library, library=library)
 
         # Execute search
-        try:
-            results = search_engine.query_works(
-                query, search_filter, _pagination, debug=False
-            )
-        except QueryParseException as e:
-            return INVALID_INPUT.detailed(str(e))
+        results = search_engine.query_works(
+            query, search_filter, pagination, debug=False
+        )
 
         # Convert search results to Work objects
         work_ids = [result.work_id for result in results]
@@ -298,31 +291,26 @@ class AdminSuppressedFeed(OPDSAcquisitionFeed):
             works = []
 
         # Build feed
-        feed = cls(title, url, works, annotator, pagination=_pagination)
+        feed = cls(title, url, works, annotator, pagination=pagination)
         feed.generate_feed()
 
-        # Add navigation links
-        start_url = annotator.suppressed_url()
-        feed.add_link(start_url, rel="start", title=annotator.top_level_title())
-        feed.add_link(start_url, rel="up", title="Hidden Books")
-
         # Pagination links
-        if len(results) >= _pagination.size:
+        if len(results) >= pagination.size:
             # There might be more results
-            next_page = _pagination.next_page
+            next_page = pagination.next_page
             if next_page:
                 feed.add_link(
                     href=annotator.suppressed_search_url(query, next_page),
                     rel="next",
                 )
 
-        if _pagination.offset > 0:
+        if pagination.offset > 0:
             feed.add_link(
-                annotator.suppressed_search_url(query, _pagination.first_page),
+                annotator.suppressed_search_url(query, pagination.first_page),
                 rel="first",
             )
 
-        if (previous_page := _pagination.previous_page) is not None:
+        if (previous_page := pagination.previous_page) is not None:
             feed.add_link(
                 annotator.suppressed_search_url(query, previous_page),
                 rel="previous",
