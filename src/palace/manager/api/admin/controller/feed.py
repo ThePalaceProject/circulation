@@ -9,8 +9,8 @@ from palace.manager.api.controller.circulation_manager import (
 )
 from palace.manager.core.app_server import load_pagination_from_request
 from palace.manager.core.classifier import genres
-from palace.manager.feed.admin import AdminFeed
-from palace.manager.feed.annotator.admin import AdminAnnotator
+from palace.manager.feed.admin.suppressed import AdminSuppressedFeed
+from palace.manager.feed.annotator.admin.suppressed import AdminSuppressedAnnotator
 from palace.manager.util.problem_detail import ProblemDetail
 
 
@@ -19,11 +19,11 @@ class FeedController(CirculationManagerController, AdminPermissionsControllerMix
         library = required_library_from_request(flask.request)
         self.require_librarian(library)
 
-        annotator = AdminAnnotator(self.circulation, library)
+        annotator = AdminSuppressedAnnotator(self.circulation, library)
         pagination = load_pagination_from_request()
         if isinstance(pagination, ProblemDetail):
             return pagination
-        opds_feed = AdminFeed.suppressed(
+        opds_feed = AdminSuppressedFeed.suppressed(
             _db=self._db,
             title="Hidden Books",
             annotator=annotator,

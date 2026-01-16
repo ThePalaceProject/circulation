@@ -10,7 +10,7 @@ from palace.manager.sqlalchemy.model.lane import Pagination
 from palace.manager.sqlalchemy.model.library import Library
 
 
-class AdminAnnotator(LibraryAnnotator):
+class AdminSuppressedAnnotator(LibraryAnnotator):
     REL_SUPPRESS_FOR_LIBRARY = "http://palaceproject.io/terms/rel/suppress-for-library"
     REL_UNSUPPRESS_FOR_LIBRARY = (
         "http://palaceproject.io/terms/rel/unsuppress-for-library"
