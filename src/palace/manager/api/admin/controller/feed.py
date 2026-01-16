@@ -18,7 +18,7 @@ from palace.manager.util.problem_detail import ProblemDetail
 
 
 class FeedController(CirculationManagerController, AdminPermissionsControllerMixin):
-    def suppressed(self):
+    def suppressed(self) -> Response | ProblemDetail:
         library = required_library_from_request(flask.request)
         self.require_librarian(library)
 
@@ -93,8 +93,11 @@ class FeedController(CirculationManagerController, AdminPermissionsControllerMix
         info = OpenSearchDocument.escape_entities(info)
         return OpenSearchDocument.TEMPLATE % info
 
-    def genres(self):
-        data = dict({"Fiction": dict({}), "Nonfiction": dict({})})
+    def genres(self) -> dict[str, dict[str, dict[str, str | list[str]]]]:
+        data: dict[str, dict[str, dict[str, str | list[str]]]] = {
+            "Fiction": {},
+            "Nonfiction": {},
+        }
         for name in genres:
             top = "Fiction" if genres[name].is_fiction else "Nonfiction"
             data[top][name] = dict(
