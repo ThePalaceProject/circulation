@@ -1,6 +1,6 @@
 import json
 from contextlib import contextmanager
-from typing import Any
+from typing import Any, NotRequired, TypedDict
 from unittest.mock import MagicMock, create_autospec
 
 import feedparser
@@ -23,7 +23,7 @@ from palace.manager.core.problem_details import INVALID_INPUT
 from palace.manager.feed.acquisition import OPDSAcquisitionFeed
 from palace.manager.feed.annotator.circulation import CirculationManagerAnnotator
 from palace.manager.search.external_search import SortKeyPagination
-from palace.manager.sqlalchemy.model.lane import Facets
+from palace.manager.sqlalchemy.model.lane import Facets, WorkList
 from palace.manager.util.flask_util import Response
 from palace.manager.util.problem_detail import ProblemDetail
 from tests.fixtures.api_controller import CirculationControllerFixture
@@ -253,7 +253,14 @@ class TestCrawlableFeed:
 
         mock_lane = MockLane()
         mock_lane.initialize(None)
-        in_kwargs = dict(
+
+        class CrawlableFeedArgs(TypedDict):
+            title: str
+            url: str
+            worklist: WorkList
+            feed_class: NotRequired[type[Any]]
+
+        in_kwargs: CrawlableFeedArgs = dict(
             title="Lane title", url="Lane URL", worklist=mock_lane, feed_class=MockFeed
         )
 
