@@ -14,9 +14,10 @@ from palace.manager.sqlalchemy.model.classification import Genre
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.lane import Pagination
 from palace.manager.sqlalchemy.model.measurement import Measurement
+from palace.manager.util.problem_detail import ProblemDetail
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.library import LibraryFixture
-from tests.fixtures.search import ExternalSearchFixtureFake
+from tests.fixtures.search import EndToEndSearchFixture, ExternalSearchFixtureFake
 from tests.manager.feed.conftest import PatchedUrlFor
 
 
@@ -844,6 +845,273 @@ class TestAdminSuppressedFeed:
         # The next link should include the visibility parameter
         assert next_link.href is not None
         assert "visibility=manually-suppressed" in next_link.href
+
+    # End-to-end search tests using actual search index
+
+    def test_search_returns_suppressed_works(
+        self,
+        end_to_end_search_fixture: EndToEndSearchFixture,
+        patch_url_for: PatchedUrlFor,
+        library_fixture: LibraryFixture,
+    ):
+        """Search within suppressed works returns only suppressed/filtered works."""
+        fixture = end_to_end_search_fixture
+        db = fixture.db
+        library = db.default_library()
+
+        # Create a suppressed work with a distinctive title
+        suppressed_work = db.work(
+            title="Suppressed Mystery Novel",
+            with_open_access_download=True,
+        )
+        suppressed_work.suppressed_for.append(library)
+
+        # Create a visible work with similar title
+        visible_work = db.work(
+            title="Visible Mystery Novel",
+            with_open_access_download=True,
+        )
+
+        # Index the works
+        fixture.populate_search_index()
+
+        annotator = AdminSuppressedAnnotator(None, library)
+        result = AdminSuppressedFeed.suppressed_search(
+            _db=db.session,
+            title="Search Results",
+            url="http://test/search",
+            annotator=annotator,
+            search_engine=fixture.external_search_index,
+            query="Mystery Novel",
+        )
+
+        # Should not be a problem detail
+        assert not isinstance(result, ProblemDetail)
+
+        # Should only find the suppressed work, not the visible one
+        work_ids = {entry.work.id for entry in result._feed.entries}
+        assert suppressed_work.id in work_ids
+        assert visible_work.id not in work_ids
+
+    def test_search_returns_policy_filtered_works(
+        self,
+        end_to_end_search_fixture: EndToEndSearchFixture,
+        patch_url_for: PatchedUrlFor,
+        library_fixture: LibraryFixture,
+    ):
+        """Search returns works filtered by library policy (audience/genre)."""
+        fixture = end_to_end_search_fixture
+        db = fixture.db
+        library = db.default_library()
+        settings = library_fixture.settings(library)
+
+        # Create an adult work (will be filtered)
+        adult_work = db.work(
+            title="Adult Content Book",
+            with_open_access_download=True,
+        )
+        adult_work.audience = Classifier.AUDIENCE_ADULT
+
+        # Create a children's work (will not be filtered)
+        children_work = db.work(
+            title="Children Content Book",
+            with_open_access_download=True,
+        )
+        children_work.audience = Classifier.AUDIENCE_CHILDREN
+
+        # Set up audience filtering
+        settings.filtered_audiences = [Classifier.AUDIENCE_ADULT]
+
+        # Index the works
+        fixture.populate_search_index()
+
+        annotator = AdminSuppressedAnnotator(None, library)
+        result = AdminSuppressedFeed.suppressed_search(
+            _db=db.session,
+            title="Search Results",
+            url="http://test/search",
+            annotator=annotator,
+            search_engine=fixture.external_search_index,
+            query="Content Book",
+        )
+
+        assert not isinstance(result, ProblemDetail)
+
+        # Should only find the adult (filtered) work
+        work_ids = {entry.work.id for entry in result._feed.entries}
+        assert adult_work.id in work_ids
+        assert children_work.id not in work_ids
+
+    def test_search_returns_genre_filtered_works(
+        self,
+        end_to_end_search_fixture: EndToEndSearchFixture,
+        patch_url_for: PatchedUrlFor,
+        library_fixture: LibraryFixture,
+    ):
+        """Search returns works filtered by library genre policy."""
+        fixture = end_to_end_search_fixture
+        db = fixture.db
+        library = db.default_library()
+        settings = library_fixture.settings(library)
+
+        # Create a romance work (will be filtered)
+        romance_work = db.work(
+            title="Love Story Novel",
+            with_open_access_download=True,
+        )
+        romance_genre, _ = Genre.lookup(db.session, "Romance")
+        romance_work.genres = [romance_genre]
+
+        # Create a sci-fi work (will not be filtered)
+        scifi_work = db.work(
+            title="Space Story Novel",
+            with_open_access_download=True,
+        )
+        scifi_genre, _ = Genre.lookup(db.session, "Science Fiction")
+        scifi_work.genres = [scifi_genre]
+
+        # Set up genre filtering
+        settings.filtered_genres = ["Romance"]
+
+        # Index the works
+        fixture.populate_search_index()
+
+        annotator = AdminSuppressedAnnotator(None, library)
+        result = AdminSuppressedFeed.suppressed_search(
+            _db=db.session,
+            title="Search Results",
+            url="http://test/search",
+            annotator=annotator,
+            search_engine=fixture.external_search_index,
+            query="Story Novel",
+        )
+
+        assert not isinstance(result, ProblemDetail)
+
+        # Should only find the romance (filtered) work
+        work_ids = {entry.work.id for entry in result._feed.entries}
+        assert romance_work.id in work_ids
+        assert scifi_work.id not in work_ids
+
+    def test_search_empty_results(
+        self,
+        end_to_end_search_fixture: EndToEndSearchFixture,
+        patch_url_for: PatchedUrlFor,
+    ):
+        """Search with no matching suppressed works returns empty feed."""
+        fixture = end_to_end_search_fixture
+        db = fixture.db
+        library = db.default_library()
+
+        # Create only visible works
+        visible_work = db.work(
+            title="Visible Book",
+            with_open_access_download=True,
+        )
+
+        fixture.populate_search_index()
+
+        annotator = AdminSuppressedAnnotator(None, library)
+        result = AdminSuppressedFeed.suppressed_search(
+            _db=db.session,
+            title="Search Results",
+            url="http://test/search",
+            annotator=annotator,
+            search_engine=fixture.external_search_index,
+            query="Visible Book",
+        )
+
+        assert not isinstance(result, ProblemDetail)
+        assert len(result._feed.entries) == 0
+
+    def test_search_scoped_to_library_collections(
+        self,
+        end_to_end_search_fixture: EndToEndSearchFixture,
+        patch_url_for: PatchedUrlFor,
+        library_fixture: LibraryFixture,
+    ):
+        """Search only returns works from the library's collections."""
+        fixture = end_to_end_search_fixture
+        db = fixture.db
+        library = db.default_library()
+
+        # Create another library with its own collection
+        other_library = library_fixture.library(name="Other Library")
+        other_collection = db.collection("Other Collection", library=other_library)
+
+        # Suppressed work in default library's collection
+        local_work = db.work(
+            title="Local Suppressed Book",
+            with_open_access_download=True,
+            collection=db.default_collection(),
+        )
+        local_work.suppressed_for.append(library)
+
+        # Suppressed work in other library's collection
+        other_work = db.work(
+            title="Other Suppressed Book",
+            with_open_access_download=True,
+            collection=other_collection,
+        )
+        other_work.suppressed_for.append(other_library)
+
+        fixture.populate_search_index()
+
+        annotator = AdminSuppressedAnnotator(None, library)
+        result = AdminSuppressedFeed.suppressed_search(
+            _db=db.session,
+            title="Search Results",
+            url="http://test/search",
+            annotator=annotator,
+            search_engine=fixture.external_search_index,
+            query="Suppressed Book",
+        )
+
+        assert not isinstance(result, ProblemDetail)
+
+        # Should only find the local library's suppressed work
+        work_ids = {entry.work.id for entry in result._feed.entries}
+        assert local_work.id in work_ids
+        assert other_work.id not in work_ids
+
+    def test_search_includes_navigation_links(
+        self,
+        end_to_end_search_fixture: EndToEndSearchFixture,
+        patch_url_for: PatchedUrlFor,
+    ):
+        """Search results include proper navigation links."""
+        fixture = end_to_end_search_fixture
+        db = fixture.db
+        library = db.default_library()
+
+        # Create a suppressed work
+        work = db.work(
+            title="Navigation Test Book",
+            with_open_access_download=True,
+        )
+        work.suppressed_for.append(library)
+
+        fixture.populate_search_index()
+
+        annotator = AdminSuppressedAnnotator(None, library)
+        result = AdminSuppressedFeed.suppressed_search(
+            _db=db.session,
+            title="Search Results",
+            url="http://test/search",
+            annotator=annotator,
+            search_engine=fixture.external_search_index,
+            query="Navigation Test",
+        )
+
+        assert not isinstance(result, ProblemDetail)
+
+        # Check for navigation links
+        links_by_rel = {link.rel: link for link in result._feed.links}
+
+        # Should have start and up links
+        assert "start" in links_by_rel
+        assert "up" in links_by_rel
+        assert links_by_rel["up"].title == "Hidden Books"
 
 
 class TestSuppressedFacets:
