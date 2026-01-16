@@ -7,6 +7,7 @@ import feedparser
 from flask import url_for
 from opensearchpy.helpers.response.hit import Hit
 
+from palace.manager.api.controller.opds_feed import FeedSort
 from palace.manager.api.lanes import (
     CrawlableCollectionBasedLane,
     CrawlableCustomListBasedLane,
@@ -22,6 +23,7 @@ from palace.manager.core.problem_details import INVALID_INPUT
 from palace.manager.feed.acquisition import OPDSAcquisitionFeed
 from palace.manager.feed.annotator.circulation import CirculationManagerAnnotator
 from palace.manager.search.external_search import SortKeyPagination
+from palace.manager.sqlalchemy.model.lane import Facets
 from palace.manager.util.flask_util import Response
 from palace.manager.util.problem_detail import ProblemDetail
 from tests.fixtures.api_controller import CirculationControllerFixture
@@ -36,13 +38,21 @@ class TestCrawlableFeed:
         controller = circulation_fixture.manager.opds_feeds
         original = controller._crawlable_feed
 
-        def mock(title, url, worklist, annotator=None, feed_class=OPDSAcquisitionFeed):
+        def mock(
+            title,
+            url,
+            worklist,
+            annotator=None,
+            feed_class=OPDSAcquisitionFeed,
+            sort=None,
+        ):
             self._crawlable_feed_called_with = dict(
                 title=title,
                 url=url,
                 worklist=worklist,
                 annotator=annotator,
                 feed_class=feed_class,
+                sort=sort,
             )
             return "An OPDS feed."
 
@@ -59,6 +69,13 @@ class TestCrawlableFeed:
         library = circulation_fixture.db.default_library()
         active_collection = circulation_fixture.db.default_collection()
         inactive_collection = circulation_fixture.db.default_inactive_collection()
+
+        # Invalid sort -> ProblemDetail.
+        with circulation_fixture.request_context_with_library("/?sort=not-a-sort"):
+            response = controller.crawlable_library_feed()
+            assert isinstance(response, ProblemDetail)
+            assert INVALID_INPUT.uri == response.uri
+
         with circulation_fixture.request_context_with_library("/"):
             with self.mock_crawlable_feed(circulation_fixture):
                 response = controller.crawlable_library_feed()
@@ -79,6 +96,7 @@ class TestCrawlableFeed:
         assert library.name == kwargs.pop("title")
         assert None == kwargs.pop("annotator")
         assert OPDSAcquisitionFeed == kwargs.pop("feed_class")
+        assert None == kwargs.pop("sort")
 
         # A CrawlableCollectionBasedLane has been set up to show
         # everything in any of the requested library's active collections.
@@ -144,6 +162,7 @@ class TestCrawlableFeed:
         # feed. We'll be using the default for a request with no
         # library context--a CirculationManagerAnnotator.
         assert None == kwargs.pop("annotator")
+        assert None == kwargs.pop("sort")
 
     def test_crawlable_list_feed(
         self, circulation_fixture: CirculationControllerFixture
@@ -187,6 +206,7 @@ class TestCrawlableFeed:
         assert customlist.name == kwargs.pop("title")
         assert None == kwargs.pop("annotator")
         assert OPDSAcquisitionFeed == kwargs.pop("feed_class")
+        assert None == kwargs.pop("sort")
 
         # A CrawlableCustomListBasedLane was created to fetch only
         # the works in the custom list.
@@ -315,6 +335,15 @@ class TestCrawlableFeed:
                 annotator=mock_annotator, **in_kwargs
             )
             assert mock_annotator == self.page_called_with["annotator"]
+
+        # If a sort override is passed in, it's applied to the facets.
+        with circulation_fixture.request_context_with_library("/"):
+            response = circulation_fixture.manager.opds_feeds._crawlable_feed(
+                sort=FeedSort.BY_LAST_UPDATED, **in_kwargs
+            )
+            facets = self.page_called_with["facets"]
+            assert Facets.ORDER_LAST_UPDATE == facets.order
+            assert False is facets.order_ascending
 
         # Finally, remove the mock feed class and verify that a real OPDS
         # feed is generated from the result of MockLane.works()

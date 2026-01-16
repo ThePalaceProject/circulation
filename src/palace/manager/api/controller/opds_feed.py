@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from enum import StrEnum
+
 import flask
 from flask import Response, redirect, url_for
 
@@ -22,6 +24,7 @@ from palace.manager.core.app_server import (
 )
 from palace.manager.core.entrypoint import EverythingEntryPoint
 from palace.manager.core.opensearch import OpenSearchDocument
+from palace.manager.core.problem_details import INVALID_INPUT
 from palace.manager.feed.acquisition import OPDSAcquisitionFeed
 from palace.manager.feed.navigation import NavigationFeed
 from palace.manager.feed.opds import NavigationFacets
@@ -29,6 +32,7 @@ from palace.manager.search.external_search import SortKeyPagination
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.customlist import CustomList
 from palace.manager.sqlalchemy.model.lane import (
+    Facets,
     FeaturedFacets,
     Pagination,
     SearchFacets,
@@ -38,7 +42,22 @@ from palace.manager.util.flask_util import OPDSFeedResponse
 from palace.manager.util.problem_detail import ProblemDetail
 
 
+class FeedSort(StrEnum):
+    BY_LAST_UPDATED = "last_update"
+
+
 class OPDSFeedController(CirculationManagerController):
+    def _crawlable_sort_from_request(self) -> FeedSort | ProblemDetail | None:
+        sort_value = flask.request.args.get("sort")
+        if not sort_value:
+            return None
+        try:
+            return FeedSort(sort_value)
+        except ValueError:
+            return INVALID_INPUT.detailed(
+                f"Invalid crawlable feed sort '{sort_value}'.", 400
+            )
+
     def groups(self, lane_identifier, feed_class=OPDSAcquisitionFeed):
         """Build or retrieve a grouped acquisition feed.
 
@@ -193,6 +212,9 @@ class OPDSFeedController(CirculationManagerController):
         """Build or retrieve a crawlable acquisition feed for the
         request library.
         """
+        sort = self._crawlable_sort_from_request()
+        if isinstance(sort, ProblemDetail):
+            return sort
         library = get_request_library()
         url = url_for(
             "crawlable_library_feed",
@@ -202,12 +224,15 @@ class OPDSFeedController(CirculationManagerController):
         title = library.name
         lane = CrawlableCollectionBasedLane()
         lane.initialize(library)
-        return self._crawlable_feed(title=title, url=url, worklist=lane)
+        return self._crawlable_feed(title=title, url=url, worklist=lane, sort=sort)
 
     def crawlable_collection_feed(self, collection_name):
         """Build or retrieve a crawlable acquisition feed for the
         requested collection.
         """
+        sort = self._crawlable_sort_from_request()
+        if isinstance(sort, ProblemDetail):
+            return sort
         collection = Collection.by_name(self._db, collection_name)
         if not collection:
             return NO_SUCH_COLLECTION
@@ -217,12 +242,15 @@ class OPDSFeedController(CirculationManagerController):
         )
         lane = CrawlableCollectionBasedLane()
         lane.initialize([collection])
-        return self._crawlable_feed(title=title, url=url, worklist=lane)
+        return self._crawlable_feed(title=title, url=url, worklist=lane, sort=sort)
 
     def crawlable_list_feed(self, list_name):
         """Build or retrieve a crawlable, paginated acquisition feed for the
         named CustomList, sorted by update date.
         """
+        sort = self._crawlable_sort_from_request()
+        if isinstance(sort, ProblemDetail):
+            return sort
         # TODO: A library is not strictly required here, since some
         # CustomLists aren't associated with a library, but this isn't
         # a use case we need to support now.
@@ -240,10 +268,16 @@ class OPDSFeedController(CirculationManagerController):
         )
         lane = CrawlableCustomListBasedLane()
         lane.initialize(library, list)
-        return self._crawlable_feed(title=title, url=url, worklist=lane)
+        return self._crawlable_feed(title=title, url=url, worklist=lane, sort=sort)
 
     def _crawlable_feed(
-        self, title, url, worklist, annotator=None, feed_class=OPDSAcquisitionFeed
+        self,
+        title,
+        url,
+        worklist,
+        annotator=None,
+        feed_class=OPDSAcquisitionFeed,
+        sort: FeedSort | None = None,
     ) -> OPDSFeedResponse | ProblemDetail:
         """Helper method to create a crawlable feed.
 
@@ -254,6 +288,7 @@ class OPDSFeedController(CirculationManagerController):
         :param annotator: A custom Annotator to use when generating the feed.
         :param feed_class: A drop-in replacement for OPDSAcquisitionFeed
             for use in tests.
+        :param sort: Optional sort order override for the feed.
         """
         pagination = load_pagination_from_request(
             SortKeyPagination, default_size=Pagination.DEFAULT_CRAWLABLE_SIZE
@@ -273,6 +308,10 @@ class OPDSFeedController(CirculationManagerController):
         )
         if isinstance(facets, ProblemDetail):
             return facets
+        if sort is not None:
+            if sort == FeedSort.BY_LAST_UPDATED:
+                facets.order = Facets.ORDER_LAST_UPDATE
+                facets.order_ascending = False
         annotator = annotator or self.manager.annotator(worklist, facets=facets)
 
         return feed_class.page(
