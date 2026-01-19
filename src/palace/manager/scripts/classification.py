@@ -163,6 +163,10 @@ class BulkUpdateAudienceScript(Script):
                 old_audience = row["old_audience"].strip()
                 new_audience = row["new_audience"].strip()
 
+                # Skip rows with blank new_audience
+                if not new_audience:
+                    continue
+
                 # Validate audiences
                 if old_audience not in self.VALID_AUDIENCES:
                     self.log.warning(
