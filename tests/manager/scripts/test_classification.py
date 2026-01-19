@@ -343,6 +343,123 @@ ISBN,9780674368280,Adult,Children
         assert len(classifications) == 1
         assert classifications[0].subject.identifier == "Young Adult"
 
+    def test_update_audience_already_correct(
+        self, db: DatabaseTransactionFixture
+    ) -> None:
+        """Test that no changes are made when classification already matches."""
+        work = db.work(audience=Classifier.AUDIENCE_ADULT, with_license_pool=True)
+        identifier = work.presentation_edition.primary_identifier
+        staff_data_source = DataSource.lookup(db.session, DataSource.LIBRARY_STAFF)
+
+        # Create an existing staff classification with the target audience
+        identifier.classify(
+            data_source=staff_data_source,
+            subject_type=Subject.FREEFORM_AUDIENCE,
+            subject_identifier="Young Adult",
+            weight=1000,
+        )
+        db.session.commit()
+
+        script = BulkUpdateAudienceScript(db.session)
+
+        # Should return False since classification already matches
+        result = script._update_audience(work, "Young Adult")
+
+        assert result is False
+
+    def test_process_single_row_no_presentation_edition(
+        self, db: DatabaseTransactionFixture, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Test handling of work without a presentation edition."""
+        work = db.work(audience=Classifier.AUDIENCE_ADULT, with_license_pool=True)
+        identifier = work.presentation_edition.primary_identifier
+
+        # Remove the presentation edition from the work
+        work.presentation_edition = None
+
+        row = CSVRow(
+            identifier_type=identifier.type,
+            identifier=identifier.identifier,
+            old_audience="Adult",
+            new_audience="Young Adult",
+            row_number=2,
+        )
+
+        script = BulkUpdateAudienceScript(db.session)
+        with caplog.at_level(logging.ERROR):
+            result = script._process_single_row(row, dry_run=False)
+
+        assert result is False
+        assert "No presentation edition for work" in caplog.text
+
+    def test_process_single_row_already_correct_classification(
+        self, db: DatabaseTransactionFixture, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Test logging when work already has the correct classification."""
+        work = db.work(audience=Classifier.AUDIENCE_ADULT, with_license_pool=True)
+        identifier = work.presentation_edition.primary_identifier
+        staff_data_source = DataSource.lookup(db.session, DataSource.LIBRARY_STAFF)
+
+        # Create an existing staff classification with the target audience
+        identifier.classify(
+            data_source=staff_data_source,
+            subject_type=Subject.FREEFORM_AUDIENCE,
+            subject_identifier="Adult",
+            weight=1000,
+        )
+        db.session.commit()
+
+        row = CSVRow(
+            identifier_type=identifier.type,
+            identifier=identifier.identifier,
+            old_audience="Adult",
+            new_audience="Adult",
+            row_number=2,
+        )
+
+        script = BulkUpdateAudienceScript(db.session)
+        with caplog.at_level(logging.INFO):
+            result = script._process_single_row(row, dry_run=False)
+
+        assert result is True
+        assert "Already correct" in caplog.text
+
+    def test_process_rows_with_skipped_rows(
+        self, db: DatabaseTransactionFixture
+    ) -> None:
+        """Test that skipped rows are counted correctly in processing results."""
+        # Create one valid work and one identifier without a work
+        work = db.work(audience=Classifier.AUDIENCE_ADULT, with_license_pool=True)
+        valid_identifier = work.presentation_edition.primary_identifier
+        orphan_identifier = db.identifier(identifier_type=Identifier.ISBN)
+
+        rows = [
+            CSVRow(
+                identifier_type=orphan_identifier.type,
+                identifier=orphan_identifier.identifier,
+                old_audience="Adult",
+                new_audience="Young Adult",
+                row_number=2,
+            ),
+            CSVRow(
+                identifier_type=valid_identifier.type,
+                identifier=valid_identifier.identifier,
+                old_audience="Adult",
+                new_audience="Young Adult",
+                row_number=3,
+            ),
+        ]
+
+        script = BulkUpdateAudienceScript(db.session)
+
+        with patch.object(work, "calculate_presentation"):
+            result = script._process_rows(rows, batch_size=50, dry_run=False)
+
+        assert result.total == 2
+        assert result.updated == 1
+        assert result.skipped == 1
+        assert result.errors == 0
+
     def test_process_rows_batching(
         self, db: DatabaseTransactionFixture, caplog: pytest.LogCaptureFixture
     ) -> None:
