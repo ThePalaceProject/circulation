@@ -1,0 +1,6 @@
+#!/usr/bin/env python
+"""Bulk update audience classifications from a CSV file."""
+
+from palace.manager.scripts.classification import BulkUpdateAudienceScript
+
+BulkUpdateAudienceScript().run()
