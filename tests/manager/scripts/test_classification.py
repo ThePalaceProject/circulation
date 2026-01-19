@@ -110,13 +110,34 @@ ISBN,9780674368281,Adult,Children
         csv_path.write_text(csv_content)
 
         script = BulkUpdateAudienceScript(db.session)
-        rows = script._parse_csv(csv_path)
+        with caplog.at_level(logging.WARNING):
+            rows = script._parse_csv(csv_path)
 
         # Only the valid row should be included
         assert len(rows) == 1
         assert rows[0].identifier == "9780674368281"
         assert "Invalid old_audience 'InvalidAudience'" in caplog.text
         assert "Invalid new_audience 'InvalidAudience'" in caplog.text
+
+    def test_parse_csv_blank_new_audience_skipped(
+        self, db: DatabaseTransactionFixture, tmp_path: Path
+    ) -> None:
+        """Test that rows with blank new_audience are silently skipped."""
+        csv_content = """identifier_type,identifier,old_audience,new_audience
+ISBN,9780674368279,Adult,
+ISBN,9780674368280,Adult,Young Adult
+ISBN,9780674368281,Children,
+"""
+        csv_path = tmp_path / "test.csv"
+        csv_path.write_text(csv_content)
+
+        script = BulkUpdateAudienceScript(db.session)
+        rows = script._parse_csv(csv_path)
+
+        # Only the row with a non-blank new_audience should be included
+        assert len(rows) == 1
+        assert rows[0].identifier == "9780674368280"
+        assert rows[0].new_audience == "Young Adult"
 
     def test_parse_csv_missing_identifier(
         self,
@@ -134,7 +155,8 @@ ISBN,9780674368280,Adult,Children
         csv_path.write_text(csv_content)
 
         script = BulkUpdateAudienceScript(db.session)
-        rows = script._parse_csv(csv_path)
+        with caplog.at_level(logging.WARNING):
+            rows = script._parse_csv(csv_path)
 
         # Only the valid row should be included
         assert len(rows) == 1
@@ -154,7 +176,8 @@ ISBN,9780674368280,Adult,Children
         )
 
         script = BulkUpdateAudienceScript(db.session)
-        result = script._process_single_row(row, dry_run=False)
+        with caplog.at_level(logging.WARNING):
+            result = script._process_single_row(row, dry_run=False)
 
         assert result is False
         assert "Identifier not found" in caplog.text
@@ -175,7 +198,8 @@ ISBN,9780674368280,Adult,Children
         )
 
         script = BulkUpdateAudienceScript(db.session)
-        result = script._process_single_row(row, dry_run=False)
+        with caplog.at_level(logging.WARNING):
+            result = script._process_single_row(row, dry_run=False)
 
         assert result is False
         assert "No work found for identifier" in caplog.text
@@ -197,7 +221,8 @@ ISBN,9780674368280,Adult,Children
         )
 
         script = BulkUpdateAudienceScript(db.session)
-        result = script._process_single_row(row, dry_run=False)
+        with caplog.at_level(logging.WARNING):
+            result = script._process_single_row(row, dry_run=False)
 
         assert result is False
         assert "Audience mismatch" in caplog.text

@@ -6,7 +6,7 @@ import argparse
 import csv
 from collections.abc import Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, NamedTuple
+from typing import TYPE_CHECKING, Any, NamedTuple, cast
 
 from sqlalchemy.orm import Session
 
@@ -19,6 +19,7 @@ from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.identifier import Identifier
 
 if TYPE_CHECKING:
+    from palace.manager.sqlalchemy.model.edition import Edition
     from palace.manager.sqlalchemy.model.work import Work
 
 
@@ -163,8 +164,18 @@ class BulkUpdateAudienceScript(Script):
                 old_audience = row["old_audience"].strip()
                 new_audience = row["new_audience"].strip()
 
-                # Skip rows with blank new_audience
+                # Validate required fields first
+                if not identifier_type or not identifier:
+                    self.log.warning(
+                        f"Row {row_num}: Missing identifier_type or identifier"
+                    )
+                    continue
+
+                # Skip rows with blank new_audience (no change needed for this row)
                 if not new_audience:
+                    self.log.debug(
+                        f"Row {row_num}: Skipping row with blank new_audience"
+                    )
                     continue
 
                 # Validate audiences
@@ -179,12 +190,6 @@ class BulkUpdateAudienceScript(Script):
                     self.log.warning(
                         f"Row {row_num}: Invalid new_audience '{new_audience}'. "
                         f"Valid values: {', '.join(sorted(self.VALID_AUDIENCES))}"
-                    )
-                    continue
-
-                if not identifier_type or not identifier:
-                    self.log.warning(
-                        f"Row {row_num}: Missing identifier_type or identifier"
                     )
                     continue
 
@@ -324,8 +329,7 @@ class BulkUpdateAudienceScript(Script):
         )
 
         # presentation_edition is validated in _process_single_row before calling this method
-        presentation_edition = work.presentation_edition
-        assert presentation_edition is not None
+        presentation_edition = cast("Edition", work.presentation_edition)
         primary_identifier = presentation_edition.primary_identifier
 
         # Get existing staff FREEFORM_AUDIENCE classifications for this identifier
