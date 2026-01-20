@@ -18,8 +18,8 @@ from opensearchpy.helpers.query import (
 from palace.manager.core.classifier import Classifier
 from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.feed.facets.constants import FacetConstants
+from palace.manager.search.query_helpers import match_range
 from palace.manager.search.revision_directory import SearchRevisionDirectory
-from palace.manager.search.search_base import SearchBase
 from palace.manager.sqlalchemy.constants import IntegrationConfigurationConstants
 from palace.manager.sqlalchemy.model.contributor import Contributor
 from palace.manager.sqlalchemy.model.edition import Edition
@@ -29,7 +29,7 @@ from palace.manager.sqlalchemy.util import numericrange_to_tuple
 from palace.manager.util.datetime_helpers import from_timestamp
 
 
-class Filter(SearchBase):
+class Filter:
     """A filter for search results.
 
     This covers every reason you might want to not exclude a search
@@ -506,7 +506,7 @@ class Filter(SearchBase):
             updated_after = self.updated_after
             if isinstance(updated_after, datetime.datetime):
                 updated_after = (updated_after - from_timestamp(0)).total_seconds()
-            last_update_time_query = self._match_range(
+            last_update_time_query = match_range(
                 "last_update_time", "gte", updated_after
             )
             f = chain(f, Bool(must=last_update_time_query))
@@ -837,20 +837,20 @@ class Filter(SearchBase):
             and both_limits
         ):
             # If children is audience we want only works with defined age range that matches lane's range
-            clauses.append(self._match_range("target_age.lower", "gte", lower))
-            clauses.append(self._match_range("target_age.upper", "lte", upper))
+            clauses.append(match_range("target_age.lower", "gte", lower))
+            clauses.append(match_range("target_age.upper", "lte", upper))
 
             return Bool(must=clauses)
 
         if upper is not None:
             lower_does_not_exist = does_not_exist("target_age.lower")
-            lower_in_range = self._match_range("target_age.lower", "lte", upper)
+            lower_in_range = match_range("target_age.lower", "lte", upper)
             lower_match = or_does_not_exist(lower_in_range, "target_age.lower")
             clauses.append(lower_match)
 
         if lower is not None:
             upper_does_not_exist = does_not_exist("target_age.upper")
-            upper_in_range = self._match_range("target_age.upper", "gte", lower)
+            upper_in_range = match_range("target_age.upper", "gte", lower)
             upper_match = or_does_not_exist(upper_in_range, "target_age.upper")
             clauses.append(upper_match)
 

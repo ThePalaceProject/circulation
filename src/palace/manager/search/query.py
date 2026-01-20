@@ -25,7 +25,13 @@ from palace.manager.core.classifier.age import AgeClassifier, GradeLevelClassifi
 from palace.manager.core.classifier.keyword import KeywordBasedClassifier
 from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.search.filter import Filter
-from palace.manager.search.search_base import SearchBase
+from palace.manager.search.query_helpers import (
+    boost as boost_query,
+    combine_hypotheses,
+    make_target_age_query,
+    match_term,
+    nest,
+)
 from palace.manager.sqlalchemy.model.contributor import Contributor
 from palace.manager.util import Values
 from palace.manager.util.cache import CachedData
@@ -34,7 +40,7 @@ from palace.manager.util.personal_names import display_name_to_sort_name
 from palace.manager.util.stopwords import ENGLISH_STOPWORDS
 
 
-class Query(SearchBase):
+class Query:
     """An attempt to find something in the search index."""
 
     # This dictionary establishes the relative importance of the
@@ -363,7 +369,7 @@ class Query(SearchBase):
 
         # The score of any given book is the maximum score it gets from
         # any of these hypotheses.
-        return self._combine_hypotheses(hypotheses)
+        return combine_hypotheses(hypotheses)
 
     def match_one_field_hypotheses(self, base_field, query_string=None):
         """Yield a number of hypotheses representing different ways in
@@ -529,7 +535,7 @@ class Query(SearchBase):
         """
         match_role = Terms(**{"contributors.role": cls.SEARCH_RELEVANT_ROLES})
         match_both = Bool(must=[base_query, match_role])
-        return cls._nest("contributors", match_both)
+        return nest("contributors", match_both)
 
     @property
     def match_topic_hypotheses(self):
@@ -639,10 +645,10 @@ class Query(SearchBase):
         :param boost: Boost the overall weight of this hypothesis
         relative to other hypotheses being tested.
 
-        :param kwargs: Keyword arguments for the _boost method.
+        :param kwargs: Keyword arguments for the boost_query function.
         """
         if query or filters:
-            query = cls._boost(boost=boost, queries=query, filters=filters, **kwargs)
+            query = boost_query(boost=boost, queries=query, filters=filters, **kwargs)
         if query:
             hypotheses.append(query)
         return hypotheses
@@ -1048,7 +1054,7 @@ class QueryParser:
         if not query:
             # This is not a relevant part of the query string.
             return query_string
-        match_query = self.query_class._match_term(field, query)
+        match_query = match_term(field, query)
         self.filters.append(match_query)
         return self._without_match(query_string, matched_portion)
 
@@ -1070,7 +1076,7 @@ class QueryParser:
             # This is not a relevant part of the query string.
             return query_string
 
-        filter, query = self.query_class.make_target_age_query(query)
+        filter, query = make_target_age_query(query)
         self.filters.append(filter)
         self.match_queries.append(query)
         return self._without_match(query_string, matched_portion)

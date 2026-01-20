@@ -168,7 +168,6 @@ module = [
     "palace.manager.search.pagination",
     "palace.manager.search.query",
     "palace.manager.search.result",
-    "palace.manager.search.search_base",
     "palace.manager.sqlalchemy.bulk_operation",
     "palace.manager.sqlalchemy.flask_sqlalchemy_session",
     "palace.manager.sqlalchemy.listeners",
