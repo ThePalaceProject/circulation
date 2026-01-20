@@ -11,9 +11,7 @@ from sqlalchemy.sql import ColumnElement
 
 from palace.manager.feed.acquisition import OPDSAcquisitionFeed
 from palace.manager.feed.annotator.admin.suppressed import AdminSuppressedAnnotator
-from palace.manager.search.external_search import (
-    SuppressedWorkFilter,
-)
+from palace.manager.search.filter import SuppressedWorkFilter
 from palace.manager.sqlalchemy.model.classification import Genre
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.lane import Pagination

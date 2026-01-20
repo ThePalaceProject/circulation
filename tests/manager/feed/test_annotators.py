@@ -20,7 +20,7 @@ from palace.manager.integration.license.opds.for_distributors.api import (
 from palace.manager.integration.license.opds.odl.api import OPDS2WithODLApi
 from palace.manager.integration.license.opds.opds1.api import OPDSAPI
 from palace.manager.integration.license.opds.opds2.api import OPDS2API
-from palace.manager.search.external_search import WorkSearchResult
+from palace.manager.search.result import WorkSearchResult
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.classification import Subject
 from palace.manager.sqlalchemy.model.contributor import Contributor

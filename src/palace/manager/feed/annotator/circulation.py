@@ -44,7 +44,7 @@ from palace.manager.integration.license.boundless.constants import (
     BAKER_TAYLOR_KDRM_PARAMS,
 )
 from palace.manager.integration.metadata.novelist import NoveListAPI
-from palace.manager.search.external_search import WorkSearchResult
+from palace.manager.search.result import WorkSearchResult
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.service.container import Services
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent

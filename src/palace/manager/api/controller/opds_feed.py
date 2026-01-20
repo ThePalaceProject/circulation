@@ -25,7 +25,7 @@ from palace.manager.core.opensearch import OpenSearchDocument
 from palace.manager.feed.acquisition import OPDSAcquisitionFeed
 from palace.manager.feed.navigation import NavigationFeed
 from palace.manager.feed.opds import NavigationFacets
-from palace.manager.search.external_search import SortKeyPagination
+from palace.manager.search.pagination import SortKeyPagination
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.customlist import CustomList
 from palace.manager.sqlalchemy.model.lane import (

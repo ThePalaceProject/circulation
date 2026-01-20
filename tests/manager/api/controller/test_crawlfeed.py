@@ -21,7 +21,7 @@ from palace.manager.api.problem_details import (
 from palace.manager.core.problem_details import INVALID_INPUT
 from palace.manager.feed.acquisition import OPDSAcquisitionFeed
 from palace.manager.feed.annotator.circulation import CirculationManagerAnnotator
-from palace.manager.search.external_search import SortKeyPagination
+from palace.manager.search.pagination import SortKeyPagination
 from palace.manager.util.flask_util import Response
 from palace.manager.util.problem_detail import ProblemDetail
 from tests.fixtures.api_controller import CirculationControllerFixture
