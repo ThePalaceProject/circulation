@@ -41,9 +41,9 @@ class TestBulkUpdateAudienceScript:
         self, db: DatabaseTransactionFixture, tmp_path: Path
     ) -> None:
         """Test parsing a valid CSV file."""
-        csv_content = """identifier_type,identifier,old_audience,new_audience
-ISBN,9780674368279,Adult,Young Adult
-Overdrive ID,abc-123-def,Children,All Ages
+        csv_content = """identifier_type,identifier,audience
+ISBN,9780674368279,Young Adult
+Overdrive ID,abc-123-def,All Ages
 """
         csv_path = tmp_path / "test.csv"
         csv_path.write_text(csv_content)
@@ -55,15 +55,13 @@ Overdrive ID,abc-123-def,Children,All Ages
         assert rows[0] == CSVRow(
             identifier_type="ISBN",
             identifier="9780674368279",
-            old_audience="Adult",
-            new_audience="Young Adult",
+            audience="Young Adult",
             row_number=2,
         )
         assert rows[1] == CSVRow(
             identifier_type="Overdrive ID",
             identifier="abc-123-def",
-            old_audience="Children",
-            new_audience="All Ages",
+            audience="All Ages",
             row_number=3,
         )
 
@@ -71,15 +69,15 @@ Overdrive ID,abc-123-def,Children,All Ages
         self, db: DatabaseTransactionFixture, tmp_path: Path
     ) -> None:
         """Test that missing required columns raise an error."""
-        csv_content = """identifier_type,identifier,old_audience
-ISBN,9780674368279,Adult
+        csv_content = """identifier_type,identifier
+ISBN,9780674368279
 """
         csv_path = tmp_path / "test.csv"
         csv_path.write_text(csv_content)
 
         script = BulkUpdateAudienceScript(db.session)
         with pytest.raises(
-            PalaceValueError, match="missing required columns: new_audience"
+            PalaceValueError, match="missing required columns: audience"
         ):
             script._parse_csv(csv_path)
 
@@ -101,10 +99,9 @@ ISBN,9780674368279,Adult
         caplog: pytest.LogCaptureFixture,
     ) -> None:
         """Test that invalid audience values are skipped with warnings."""
-        csv_content = """identifier_type,identifier,old_audience,new_audience
-ISBN,9780674368279,InvalidAudience,Young Adult
-ISBN,9780674368280,Adult,InvalidAudience
-ISBN,9780674368281,Adult,Children
+        csv_content = """identifier_type,identifier,audience
+ISBN,9780674368279,InvalidAudience
+ISBN,9780674368280,Children
 """
         csv_path = tmp_path / "test.csv"
         csv_path.write_text(csv_content)
@@ -115,18 +112,17 @@ ISBN,9780674368281,Adult,Children
 
         # Only the valid row should be included
         assert len(rows) == 1
-        assert rows[0].identifier == "9780674368281"
-        assert "Invalid old_audience 'InvalidAudience'" in caplog.text
-        assert "Invalid new_audience 'InvalidAudience'" in caplog.text
+        assert rows[0].identifier == "9780674368280"
+        assert "Invalid audience 'InvalidAudience'" in caplog.text
 
-    def test_parse_csv_blank_new_audience_skipped(
+    def test_parse_csv_blank_audience_skipped(
         self, db: DatabaseTransactionFixture, tmp_path: Path
     ) -> None:
-        """Test that rows with blank new_audience are silently skipped."""
-        csv_content = """identifier_type,identifier,old_audience,new_audience
-ISBN,9780674368279,Adult,
-ISBN,9780674368280,Adult,Young Adult
-ISBN,9780674368281,Children,
+        """Test that rows with blank audience are silently skipped."""
+        csv_content = """identifier_type,identifier,audience
+ISBN,9780674368279,
+ISBN,9780674368280,Young Adult
+ISBN,9780674368281,
 """
         csv_path = tmp_path / "test.csv"
         csv_path.write_text(csv_content)
@@ -134,10 +130,10 @@ ISBN,9780674368281,Children,
         script = BulkUpdateAudienceScript(db.session)
         rows = script._parse_csv(csv_path)
 
-        # Only the row with a non-blank new_audience should be included
+        # Only the row with a non-blank audience should be included
         assert len(rows) == 1
         assert rows[0].identifier == "9780674368280"
-        assert rows[0].new_audience == "Young Adult"
+        assert rows[0].audience == "Young Adult"
 
     def test_parse_csv_missing_identifier(
         self,
@@ -146,10 +142,10 @@ ISBN,9780674368281,Children,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
         """Test that rows with missing identifiers are skipped."""
-        csv_content = """identifier_type,identifier,old_audience,new_audience
-ISBN,,Adult,Young Adult
-,9780674368279,Adult,Young Adult
-ISBN,9780674368280,Adult,Children
+        csv_content = """identifier_type,identifier,audience
+ISBN,,Young Adult
+,9780674368279,Young Adult
+ISBN,9780674368280,Children
 """
         csv_path = tmp_path / "test.csv"
         csv_path.write_text(csv_content)
@@ -170,8 +166,7 @@ ISBN,9780674368280,Adult,Children
         row = CSVRow(
             identifier_type=Identifier.ISBN,
             identifier="9999999999999",
-            old_audience="Adult",
-            new_audience="Young Adult",
+            audience="Young Adult",
             row_number=2,
         )
 
@@ -192,8 +187,7 @@ ISBN,9780674368280,Adult,Children
         row = CSVRow(
             identifier_type=Identifier.ISBN,
             identifier=identifier.identifier,
-            old_audience="Adult",
-            new_audience="Young Adult",
+            audience="Young Adult",
             row_number=2,
         )
 
@@ -203,30 +197,6 @@ ISBN,9780674368280,Adult,Children
 
         assert result is False
         assert "No work found for identifier" in caplog.text
-
-    def test_process_single_row_audience_mismatch(
-        self, db: DatabaseTransactionFixture, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        """Test that audience mismatches are caught and logged."""
-        # Create a work with a specific audience
-        work = db.work(audience=Classifier.AUDIENCE_ADULT, with_license_pool=True)
-        identifier = work.presentation_edition.primary_identifier
-
-        row = CSVRow(
-            identifier_type=identifier.type,
-            identifier=identifier.identifier,
-            old_audience="Children",  # This doesn't match the actual audience
-            new_audience="Young Adult",
-            row_number=2,
-        )
-
-        script = BulkUpdateAudienceScript(db.session)
-        with caplog.at_level(logging.WARNING):
-            result = script._process_single_row(row, dry_run=False)
-
-        assert result is False
-        assert "Audience mismatch" in caplog.text
-        assert "Expected 'Children', found 'Adult'" in caplog.text
 
     def test_process_single_row_dry_run(
         self, db: DatabaseTransactionFixture, caplog: pytest.LogCaptureFixture
@@ -238,8 +208,7 @@ ISBN,9780674368280,Adult,Children
         row = CSVRow(
             identifier_type=identifier.type,
             identifier=identifier.identifier,
-            old_audience="Adult",
-            new_audience="Young Adult",
+            audience="Young Adult",
             row_number=2,
         )
 
@@ -262,8 +231,7 @@ ISBN,9780674368280,Adult,Children
         row = CSVRow(
             identifier_type=identifier.type,
             identifier=identifier.identifier,
-            old_audience="Adult",
-            new_audience="Young Adult",
+            audience="Young Adult",
             row_number=2,
         )
 
@@ -380,8 +348,7 @@ ISBN,9780674368280,Adult,Children
         row = CSVRow(
             identifier_type=identifier.type,
             identifier=identifier.identifier,
-            old_audience="Adult",
-            new_audience="Young Adult",
+            audience="Young Adult",
             row_number=2,
         )
 
@@ -412,8 +379,7 @@ ISBN,9780674368280,Adult,Children
         row = CSVRow(
             identifier_type=identifier.type,
             identifier=identifier.identifier,
-            old_audience="Adult",
-            new_audience="Adult",
+            audience="Adult",
             row_number=2,
         )
 
@@ -437,15 +403,13 @@ ISBN,9780674368280,Adult,Children
             CSVRow(
                 identifier_type=orphan_identifier.type,
                 identifier=orphan_identifier.identifier,
-                old_audience="Adult",
-                new_audience="Young Adult",
+                audience="Young Adult",
                 row_number=2,
             ),
             CSVRow(
                 identifier_type=valid_identifier.type,
                 identifier=valid_identifier.identifier,
-                old_audience="Adult",
-                new_audience="Young Adult",
+                audience="Young Adult",
                 row_number=3,
             ),
         ]
@@ -475,8 +439,7 @@ ISBN,9780674368280,Adult,Children
                 CSVRow(
                     identifier_type=identifier.type,
                     identifier=identifier.identifier,
-                    old_audience="Adult",
-                    new_audience="Young Adult",
+                    audience="Young Adult",
                     row_number=i + 2,
                 )
             )
@@ -518,7 +481,7 @@ ISBN,9780674368280,Adult,Children
         caplog: pytest.LogCaptureFixture,
     ) -> None:
         """Test handling of CSV with only headers (no data rows)."""
-        csv_content = """identifier_type,identifier,old_audience,new_audience
+        csv_content = """identifier_type,identifier,audience
 """
         csv_path = tmp_path / "test.csv"
         csv_path.write_text(csv_content)
@@ -542,9 +505,9 @@ ISBN,9780674368280,Adult,Children
         id1 = work1.presentation_edition.primary_identifier
         id2 = work2.presentation_edition.primary_identifier
 
-        csv_content = f"""identifier_type,identifier,old_audience,new_audience
-{id1.type},{id1.identifier},Adult,Young Adult
-{id2.type},{id2.identifier},Children,All Ages
+        csv_content = f"""identifier_type,identifier,audience
+{id1.type},{id1.identifier},Young Adult
+{id2.type},{id2.identifier},All Ages
 """
         csv_path = tmp_path / "test.csv"
         csv_path.write_text(csv_content)
@@ -572,8 +535,8 @@ ISBN,9780674368280,Adult,Children
         work = db.work(audience=Classifier.AUDIENCE_ADULT, with_license_pool=True)
         identifier = work.presentation_edition.primary_identifier
 
-        csv_content = f"""identifier_type,identifier,old_audience,new_audience
-{identifier.type},{identifier.identifier},Adult,Young Adult
+        csv_content = f"""identifier_type,identifier,audience
+{identifier.type},{identifier.identifier},Young Adult
 """
         csv_path = tmp_path / "test.csv"
         csv_path.write_text(csv_content)
@@ -614,8 +577,7 @@ ISBN,9780674368280,Adult,Children
         row = CSVRow(
             identifier_type=identifier.type,
             identifier=identifier.identifier,
-            old_audience="Adult",
-            new_audience="Young Adult",
+            audience="Young Adult",
             row_number=2,
         )
 

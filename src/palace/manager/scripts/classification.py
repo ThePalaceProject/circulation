@@ -28,8 +28,7 @@ class CSVRow(NamedTuple):
 
     identifier_type: str
     identifier: str
-    old_audience: str
-    new_audience: str
+    audience: str
     row_number: int
 
 
@@ -45,13 +44,12 @@ class ProcessingResult(NamedTuple):
 class BulkUpdateAudienceScript(Script):
     """Update audience classifications for works in bulk from a CSV file.
 
-    The CSV file must have columns: identifier_type, identifier, old_audience, new_audience
+    The CSV file must have columns: identifier_type, identifier, audience
 
     The script will:
     - Load each identifier from the CSV
-    - Verify the work's current audience matches old_audience
     - Delete existing FREEFORM_AUDIENCE staff classifications
-    - Create a new classification with the new audience
+    - Create a new classification with the specified audience
     - Recalculate the work's presentation with classification updates
     """
 
@@ -59,7 +57,7 @@ class BulkUpdateAudienceScript(Script):
     STAFF_WEIGHT = 1000
 
     # Valid audience values from Classifier
-    VALID_AUDIENCES = Classifier.AUDIENCES
+    VALID_AUDIENCES = frozenset(Classifier.AUDIENCES)
 
     def __init__(
         self,
@@ -88,7 +86,7 @@ class BulkUpdateAudienceScript(Script):
         parser.add_argument(
             "csv_file",
             type=Path,
-            help="Path to CSV file with columns: identifier_type, identifier, old_audience, new_audience",
+            help="Path to CSV file with columns: identifier_type, identifier, audience",
         )
         parser.add_argument(
             "--batch-size",
@@ -139,8 +137,7 @@ class BulkUpdateAudienceScript(Script):
         required_columns = {
             "identifier_type",
             "identifier",
-            "old_audience",
-            "new_audience",
+            "audience",
         }
         rows: list[CSVRow] = []
 
@@ -161,8 +158,7 @@ class BulkUpdateAudienceScript(Script):
             ):  # Start at 2 (header is row 1)
                 identifier_type = row["identifier_type"].strip()
                 identifier = row["identifier"].strip()
-                old_audience = row["old_audience"].strip()
-                new_audience = row["new_audience"].strip()
+                audience = row["audience"].strip()
 
                 # Validate required fields first
                 if not identifier_type or not identifier:
@@ -171,24 +167,14 @@ class BulkUpdateAudienceScript(Script):
                     )
                     continue
 
-                # Skip rows with blank new_audience (no change needed for this row)
-                if not new_audience:
-                    self.log.debug(
-                        f"Row {row_num}: Skipping row with blank new_audience"
-                    )
+                # Skip rows with blank audience (no change needed for this row)
+                if not audience:
+                    self.log.debug(f"Row {row_num}: Skipping row with blank audience")
                     continue
 
-                # Validate audiences
-                if old_audience not in self.VALID_AUDIENCES:
+                if audience not in self.VALID_AUDIENCES:
                     self.log.warning(
-                        f"Row {row_num}: Invalid old_audience '{old_audience}'. "
-                        f"Valid values: {', '.join(sorted(self.VALID_AUDIENCES))}"
-                    )
-                    continue
-
-                if new_audience not in self.VALID_AUDIENCES:
-                    self.log.warning(
-                        f"Row {row_num}: Invalid new_audience '{new_audience}'. "
+                        f"Row {row_num}: Invalid audience '{audience}'. "
                         f"Valid values: {', '.join(sorted(self.VALID_AUDIENCES))}"
                     )
                     continue
@@ -197,8 +183,7 @@ class BulkUpdateAudienceScript(Script):
                     CSVRow(
                         identifier_type=identifier_type,
                         identifier=identifier,
-                        old_audience=old_audience,
-                        new_audience=new_audience,
+                        audience=audience,
                         row_number=row_num,
                     )
                 )
@@ -275,15 +260,6 @@ class BulkUpdateAudienceScript(Script):
             )
             return False
 
-        # Validate current audience matches expected old_audience
-        if work.audience != row.old_audience:
-            self.log.warning(
-                f"Row {row.row_number}: Audience mismatch for "
-                f"{row.identifier_type}/{row.identifier}. "
-                f"Expected '{row.old_audience}', found '{work.audience}'"
-            )
-            return False
-
         # Verify work has a presentation edition
         if work.presentation_edition is None:
             self.log.error(
@@ -296,22 +272,22 @@ class BulkUpdateAudienceScript(Script):
             self.log.info(
                 f"Row {row.row_number}: Would update "
                 f"{row.identifier_type}/{row.identifier} "
-                f"from '{row.old_audience}' to '{row.new_audience}'"
+                f"to '{row.audience}'"
             )
             return True
 
         # Update the audience classification
-        changed = self._update_audience(work, row.new_audience)
+        changed = self._update_audience(work, row.audience)
 
         if changed:
             self.log.info(
                 f"Row {row.row_number}: Updated {row.identifier_type}/{row.identifier} "
-                f"from '{row.old_audience}' to '{row.new_audience}'"
+                f"to '{row.audience}'"
             )
         else:
             self.log.info(
                 f"Row {row.row_number}: Already correct {row.identifier_type}/{row.identifier} "
-                f"(audience: '{row.new_audience}')"
+                f"(audience: '{row.audience}')"
             )
         return True
 
