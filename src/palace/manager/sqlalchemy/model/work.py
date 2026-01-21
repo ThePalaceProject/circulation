@@ -1627,6 +1627,7 @@ class Work(Base, LoggerMixin):
                 "open_access",
                 "suppressed",
                 "availability_time",
+                "last_updated",
                 "type",
                 "status",
                 "unlimited_type",
