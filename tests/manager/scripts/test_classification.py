@@ -79,33 +79,6 @@ Overdrive ID,abc-123-def🔥,All Ages
             row_number=3,
         )
 
-    def test_parse_csv_missing_columns(
-        self, db: DatabaseTransactionFixture, tmp_path: Path
-    ) -> None:
-        """Test that missing required columns raise an error."""
-        csv_content = """identifier_type,identifier
-ISBN,9780674368279
-"""
-        csv_path = tmp_path / "test.csv"
-        csv_path.write_text(csv_content)
-
-        script = BulkUpdateAudienceScript(db.session)
-        with pytest.raises(
-            PalaceValueError, match="missing required columns: audience"
-        ):
-            script._parse_csv(csv_path)
-
-    def test_parse_csv_empty_file(
-        self, db: DatabaseTransactionFixture, tmp_path: Path
-    ) -> None:
-        """Test that an empty CSV file raises an error."""
-        csv_path = tmp_path / "test.csv"
-        csv_path.write_text("")
-
-        script = BulkUpdateAudienceScript(db.session)
-        with pytest.raises(PalaceValueError, match="CSV file is empty"):
-            script._parse_csv(csv_path)
-
     def test_parse_csv_invalid_audience(
         self,
         db: DatabaseTransactionFixture,
@@ -195,6 +168,53 @@ ISBN,9780674368280,Children
         assert len(rows) == 1
         assert rows[0].identifier == "9780674368280"
         assert "Missing identifier_type or identifier" in caplog.text
+
+    def test_parse_csv_blank_rows_skipped(
+        self, db: DatabaseTransactionFixture, tmp_path: Path
+    ) -> None:
+        """Test that completely blank rows are silently skipped."""
+        csv_content = """identifier_type,identifier,audience
+ISBN,9780674368279,Young Adult
+,,
+ISBN,9780674368280,Children
+,,
+"""
+        csv_path = tmp_path / "test.csv"
+        csv_path.write_text(csv_content)
+
+        script = BulkUpdateAudienceScript(db.session)
+        rows = script._parse_csv(csv_path)
+
+        assert len(rows) == 2
+        assert rows[0].identifier == "9780674368279"
+        assert rows[1].identifier == "9780674368280"
+
+    def test_parse_csv_missing_columns(
+        self, db: DatabaseTransactionFixture, tmp_path: Path
+    ) -> None:
+        """Test that missing required columns raise an error."""
+        csv_content = """identifier_type,identifier
+ISBN,9780674368279
+"""
+        csv_path = tmp_path / "test.csv"
+        csv_path.write_text(csv_content)
+
+        script = BulkUpdateAudienceScript(db.session)
+        with pytest.raises(
+            PalaceValueError, match="missing required columns: audience"
+        ):
+            script._parse_csv(csv_path)
+
+    def test_parse_csv_empty_file(
+        self, db: DatabaseTransactionFixture, tmp_path: Path
+    ) -> None:
+        """Test that an empty CSV file raises an error."""
+        csv_path = tmp_path / "test.csv"
+        csv_path.write_text("")
+
+        script = BulkUpdateAudienceScript(db.session)
+        with pytest.raises(PalaceValueError, match="CSV file is empty"):
+            script._parse_csv(csv_path)
 
     def test_process_single_row_identifier_not_found(
         self, db: DatabaseTransactionFixture, caplog: pytest.LogCaptureFixture
@@ -399,7 +419,7 @@ ISBN,9780674368280,Children
     def test_process_single_row_already_correct_classification(
         self, db: DatabaseTransactionFixture, caplog: pytest.LogCaptureFixture
     ) -> None:
-        """Test logging when work already has the correct classification."""
+        """Test that already correct classifications are skipped."""
         work = db.work(audience=Classifier.AUDIENCE_ADULT, with_license_pool=True)
         identifier = work.presentation_edition.primary_identifier
         staff_data_source = DataSource.lookup(db.session, DataSource.LIBRARY_STAFF)
@@ -424,7 +444,8 @@ ISBN,9780674368280,Children
         with caplog.at_level(logging.INFO):
             result = script._process_single_row(row, dry_run=False)
 
-        assert result is True
+        # Returns False (skipped) since no change was needed
+        assert result is False
         assert "Already correct" in caplog.text
 
     def test_process_rows_with_skipped_rows(

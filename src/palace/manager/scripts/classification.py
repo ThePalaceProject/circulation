@@ -163,7 +163,12 @@ class BulkUpdateAudienceScript(Script):
                 identifier = row["identifier"].strip()
                 audience = row["audience"].strip()
 
-                # Validate required fields first
+                # Skip completely blank rows
+                if not identifier_type and not identifier and not audience:
+                    self.log.debug(f"Row {row_num}: Skipping blank row")
+                    continue
+
+                # Validate required fields
                 if not identifier_type or not identifier:
                     self.log.warning(
                         f"Row {row_num}: Missing identifier_type or identifier"
@@ -294,7 +299,7 @@ class BulkUpdateAudienceScript(Script):
                 f"Row {row.row_number}: Already correct {row.identifier_type}/{row.identifier} "
                 f"(audience: '{row.audience}')"
             )
-        return True
+        return changed
 
     def _update_audience(self, work: Work, new_audience: str) -> bool:
         """Update the audience classification for a work.
