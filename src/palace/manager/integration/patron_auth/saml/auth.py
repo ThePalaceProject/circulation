@@ -53,8 +53,10 @@ SAML_INCORRECT_RESPONSE = pd(
 SAML_AUTHENTICATION_ERROR = pd(
     "http://librarysimplified.org/terms/problem/saml/authentication-error",
     status_code=401,
-    title=_("SAML authentication error."),
-    detail=_("SAML authentication error."),
+    title=_("SAML identity provider authentication failed."),
+    detail=_(
+        "Authentication with your identity provider failed. Please try again or contact your library for assistance."
+    ),
 )
 
 SAML_NO_ACCESS_ERROR = pd(

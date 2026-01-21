@@ -41,7 +41,8 @@ from palace.manager.integration.patron_auth.saml.metadata.parser import (
     SAMLSubjectParser,
 )
 from palace.manager.integration.patron_auth.saml.provider import (
-    SAML_INVALID_SUBJECT,
+    SAML_CANNOT_DETERMINE_PATRON,
+    SAML_TOKEN_EXPIRED,
     SAMLWebSSOAuthenticationProvider,
 )
 from palace.manager.integration.patron_auth.saml.python_expression_dsl.evaluator import (
@@ -325,7 +326,7 @@ class TestSAMLWebSSOAuthenticationProvider:
         [
             pytest.param(
                 None,
-                SAML_INVALID_SUBJECT.detailed("Subject is empty"),
+                SAML_CANNOT_DETERMINE_PATRON,
                 None,
                 None,
                 None,
@@ -333,7 +334,7 @@ class TestSAMLWebSSOAuthenticationProvider:
             ),
             pytest.param(
                 SAMLSubject("http://idp.example.com", None, None),
-                SAML_INVALID_SUBJECT.detailed("Subject does not have a unique ID"),
+                SAML_CANNOT_DETERMINE_PATRON,
                 None,
                 None,
                 None,
@@ -369,7 +370,7 @@ class TestSAMLWebSSOAuthenticationProvider:
                     SAMLNameID(SAMLNameIDFormat.UNSPECIFIED.value, "", "", "12345"),
                     SAMLAttributeStatement([]),
                 ),
-                SAML_INVALID_SUBJECT.detailed("Subject does not have a unique ID"),
+                SAML_CANNOT_DETERMINE_PATRON,
                 "false",
                 None,
                 None,
@@ -429,7 +430,7 @@ class TestSAMLWebSSOAuthenticationProvider:
                         ]
                     ),
                 ),
-                SAML_INVALID_SUBJECT.detailed("Subject does not have a unique ID"),
+                SAML_CANNOT_DETERMINE_PATRON,
                 False,
                 [SAMLAttributeType.eduPersonPrincipalName.name],
                 saml_strings.PATRON_ID_REGULAR_EXPRESSION_ORG,
@@ -522,7 +523,7 @@ class TestSAMLWebSSOAuthenticationProvider:
         [
             pytest.param(
                 None,
-                SAML_INVALID_SUBJECT.detailed("Subject is empty"),
+                SAML_CANNOT_DETERMINE_PATRON,
                 None,
                 None,
                 None,
@@ -530,7 +531,7 @@ class TestSAMLWebSSOAuthenticationProvider:
             ),
             pytest.param(
                 SAMLSubject("http://idp.example.com", None, None),
-                SAML_INVALID_SUBJECT.detailed("Subject does not have a unique ID"),
+                SAML_CANNOT_DETERMINE_PATRON,
                 None,
                 None,
                 None,
@@ -891,7 +892,7 @@ class TestSAMLWebSSOAuthenticationProvider:
                 datetime.timedelta(days=1),
                 credential_token,
             )
-        expected_result = test_patron if expect_success else None
+        expected_result = test_patron if expect_success else SAML_TOKEN_EXPIRED
 
         # Set up a auth provider for our test library.
         provider = create_saml_provider(settings=configuration)
@@ -899,3 +900,104 @@ class TestSAMLWebSSOAuthenticationProvider:
         result = provider.authenticated_patron(db.session, provider_token)
 
         assert result == expected_result
+
+    def test_authenticated_patron_token_expired_if_no_credential(
+        self,
+        db: DatabaseTransactionFixture,
+        create_saml_configuration: Callable[..., SAMLWebSSOAuthSettings],
+        create_saml_provider: Callable[..., SAMLWebSSOAuthenticationProvider],
+    ):
+        """Test that when credential lookup returns None, SAML_TOKEN_EXPIRED is returned."""
+        configuration = create_saml_configuration()
+        provider = create_saml_provider(settings=configuration)
+
+        library = db.library()
+        provider.library_id = library.id
+
+        token_value = "expired-or-missing-token"
+
+        with patch.object(
+            provider._credential_manager,
+            "lookup_saml_token_by_value",
+            return_value=None,
+        ) as mock_lookup:
+            result = provider.authenticated_patron(db.session, token_value)
+
+            assert result == SAML_TOKEN_EXPIRED
+            assert result.status_code == 401
+            assert result.title == "SAML session expired."
+            mock_lookup.assert_called_once_with(db.session, token_value, library.id)
+
+    def test_authenticated_patron_token_expired_when_credential_expired(
+        self,
+        db: DatabaseTransactionFixture,
+        create_saml_configuration: Callable[..., SAMLWebSSOAuthSettings],
+        create_saml_provider: Callable[..., SAMLWebSSOAuthenticationProvider],
+    ):
+        """Test that expired credentials result in SAML_TOKEN_EXPIRED."""
+        configuration = create_saml_configuration()
+        credential_manager = SAMLCredentialManager()
+        saml_data_source = credential_manager._get_token_data_source(db.session)
+
+        library = db.library()
+        patron = db.patron(library=library)
+
+        with freeze_time("2024-01-01"):
+            expired_credential = Credential.temporary_token_create(
+                db.session,
+                saml_data_source,
+                SAMLCredentialManager.TOKEN_TYPE,
+                patron,
+                datetime.timedelta(hours=1),
+                "expired-token",
+            )
+
+        with freeze_time("2024-01-02"):
+            provider = create_saml_provider(settings=configuration)
+            provider.library_id = library.id
+            result = provider.authenticated_patron(db.session, "expired-token")
+
+            assert result == SAML_TOKEN_EXPIRED
+            assert result.status_code == 401
+
+    def test_patron_id_extraction_error_returns_correct_problem_detail(
+        self,
+        db: DatabaseTransactionFixture,
+        create_saml_configuration: Callable[..., SAMLWebSSOAuthSettings],
+        create_saml_provider: Callable[..., SAMLWebSSOAuthenticationProvider],
+    ):
+        configuration = create_saml_configuration(
+            patron_id_attributes=["eduPersonUniqueId", "uid"],
+            patron_id_use_name_id=False,
+        )
+        provider = create_saml_provider(settings=configuration)
+
+        subject = SAMLSubject(
+            "http://idp.example.com",
+            None,
+            SAMLAttributeStatement(
+                attributes=[
+                    SAMLAttribute(
+                        name=SAMLAttributeType.givenName.name,
+                        values=["John"],
+                    ),
+                ]
+            ),
+        )
+
+        with pytest.raises(Exception) as exc_info:
+            provider.remote_patron_lookup_from_saml_subject(subject)
+
+        error = exc_info.value
+        assert hasattr(error, "problem_detail")
+        problem_detail = error.problem_detail
+
+        # Ensure that we're returning a simple, user-friendly message....
+        assert problem_detail == SAML_CANNOT_DETERMINE_PATRON
+        assert problem_detail.title == "Unable to identify patron."
+        assert "Unable to determine patron" in problem_detail.detail
+        assert "service configuration issue" in problem_detail.detail
+        # ... without confusing specifics (logged elsewhere) about the SAML configuration.
+        assert "NameID" not in problem_detail.detail
+        assert "eduPersonUniqueId" not in problem_detail.detail
+        assert "uid" not in problem_detail.detail

@@ -26,11 +26,23 @@ from palace.manager.util.problem_detail import (
     ProblemDetailException,
 )
 
-SAML_INVALID_SUBJECT = pd(
-    "http://librarysimplified.org/terms/problem/saml/invalid-subject",
+SAML_CANNOT_DETERMINE_PATRON = pd(
+    "http://palaceproject.io/terms/problem/saml/cannot-determine-patron",
     status_code=401,
-    title=_("SAML invalid subject."),
-    detail=_("SAML invalid subject."),
+    title=_("Unable to identify patron."),
+    detail=_(
+        "Unable to determine patron from authentication response. "
+        "This may indicate a service configuration issue."
+    ),
+)
+
+SAML_TOKEN_EXPIRED = pd(
+    "http://palaceproject.io/terms/problem/saml/token-expired",
+    status_code=401,
+    title=_("SAML session expired."),
+    detail=_(
+        "Your SAML session has expired. Please reauthenticate via your institution's identity provider."
+    ),
 )
 
 
@@ -299,7 +311,7 @@ class SAMLWebSSOAuthenticationProvider(
         # This token wasn't in our database, or was expired. The
         # patron will have to log in through the SAML provider again
         # to get a new token.
-        return None
+        return SAML_TOKEN_EXPIRED
 
     def get_authentication_manager(self):
         """Returns SAML authentication manager used by this provider
@@ -316,7 +328,7 @@ class SAMLWebSSOAuthenticationProvider(
     def remote_patron_lookup_from_saml_subject(
         self, subject: SAMLSubject
     ) -> PatronData:
-        """Creates a PatronData object based on Subject object containing SAML Subject and AttributeStatement
+        """Creates a PatronData object based on Subject object containing SAML Subject with AttributeStatement
 
         :param subject: Subject object containing SAML Subject and AttributeStatement
 
@@ -325,15 +337,8 @@ class SAMLWebSSOAuthenticationProvider(
 
         :raises: ProblemDetailException, if there's a problem.
         """
-        if not subject:
-            raise ProblemDetailException(
-                problem_detail=SAML_INVALID_SUBJECT.detailed("Subject is empty")
-            )
-
         if not isinstance(subject, SAMLSubject):
-            raise ProblemDetailException(
-                problem_detail=SAML_INVALID_SUBJECT.detailed("Incorrect subject type")
-            )
+            raise ProblemDetailException(problem_detail=SAML_CANNOT_DETERMINE_PATRON)
 
         extractor = SAMLSubjectPatronIDExtractor(
             self._patron_id_use_name_id,
@@ -343,11 +348,7 @@ class SAMLWebSSOAuthenticationProvider(
         extracted_id = extractor.extract(subject)
 
         if extracted_id is None:
-            raise ProblemDetailException(
-                problem_detail=SAML_INVALID_SUBJECT.detailed(
-                    "Subject does not have a unique ID"
-                )
-            )
+            raise ProblemDetailException(problem_detail=SAML_CANNOT_DETERMINE_PATRON)
 
         return PatronData(
             permanent_id=extracted_id,
