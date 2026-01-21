@@ -8,6 +8,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, NamedTuple, cast
 
+from frozendict import frozendict
 from sqlalchemy.orm import Session
 
 from palace.manager.core.classifier import Classifier
@@ -56,8 +57,10 @@ class BulkUpdateAudienceScript(Script):
     # Weight for staff-created classifications, matching WorkController.STAFF_WEIGHT
     STAFF_WEIGHT = 1000
 
-    # Valid audience values from Classifier
-    VALID_AUDIENCES = frozenset(Classifier.AUDIENCES)
+    # Case-insensitive mapping from lowercase audience to canonical value
+    AUDIENCE_LOOKUP: frozendict[str, str] = frozendict(
+        {a.lower(): a for a in Classifier.AUDIENCES}
+    )
 
     def __init__(
         self,
@@ -172,10 +175,12 @@ class BulkUpdateAudienceScript(Script):
                     self.log.debug(f"Row {row_num}: Skipping row with blank audience")
                     continue
 
-                if audience not in self.VALID_AUDIENCES:
+                # Case-insensitive lookup to get canonical audience value
+                canonical_audience = self.AUDIENCE_LOOKUP.get(audience.lower())
+                if canonical_audience is None:
                     self.log.warning(
                         f"Row {row_num}: Invalid audience '{audience}'. "
-                        f"Valid values: {', '.join(sorted(self.VALID_AUDIENCES))}"
+                        f"Valid values: {', '.join(sorted(self.AUDIENCE_LOOKUP.values()))}"
                     )
                     continue
 
@@ -183,7 +188,7 @@ class BulkUpdateAudienceScript(Script):
                     CSVRow(
                         identifier_type=identifier_type,
                         identifier=identifier,
-                        audience=audience,
+                        audience=canonical_audience,
                         row_number=row_num,
                     )
                 )

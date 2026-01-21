@@ -129,6 +129,29 @@ ISBN,9780674368280,Children
         assert rows[0].identifier == "9780674368280"
         assert "Invalid audience 'InvalidAudience'" in caplog.text
 
+    def test_parse_csv_case_insensitive_audience(
+        self, db: DatabaseTransactionFixture, tmp_path: Path
+    ) -> None:
+        """Test that audience matching is case-insensitive."""
+        csv_content = """identifier_type,identifier,audience
+ISBN,9780674368279,children
+ISBN,9780674368280,YOUNG ADULT
+ISBN,9780674368281,Adult
+ISBN,9780674368282,all ages
+"""
+        csv_path = tmp_path / "test.csv"
+        csv_path.write_text(csv_content)
+
+        script = BulkUpdateAudienceScript(db.session)
+        rows = script._parse_csv(csv_path)
+
+        assert len(rows) == 4
+        # Verify audiences are normalized to canonical form
+        assert rows[0].audience == "Children"
+        assert rows[1].audience == "Young Adult"
+        assert rows[2].audience == "Adult"
+        assert rows[3].audience == "All Ages"
+
     def test_parse_csv_blank_audience_skipped(
         self, db: DatabaseTransactionFixture, tmp_path: Path
     ) -> None:
@@ -566,20 +589,6 @@ ISBN,9780674368280,Children
         # Verify no changes were made
         db.session.refresh(work)
         assert work.audience == Classifier.AUDIENCE_ADULT
-
-    def test_valid_audiences_constant(self) -> None:
-        """Test that VALID_AUDIENCES matches Classifier.AUDIENCES."""
-        assert BulkUpdateAudienceScript.VALID_AUDIENCES == Classifier.AUDIENCES
-        assert "Adult" in BulkUpdateAudienceScript.VALID_AUDIENCES
-        assert "Adults Only" in BulkUpdateAudienceScript.VALID_AUDIENCES
-        assert "Young Adult" in BulkUpdateAudienceScript.VALID_AUDIENCES
-        assert "Children" in BulkUpdateAudienceScript.VALID_AUDIENCES
-        assert "All Ages" in BulkUpdateAudienceScript.VALID_AUDIENCES
-        assert "Research" in BulkUpdateAudienceScript.VALID_AUDIENCES
-
-    def test_staff_weight_constant(self) -> None:
-        """Test that STAFF_WEIGHT matches the expected value."""
-        assert BulkUpdateAudienceScript.STAFF_WEIGHT == 1000
 
     def test_process_rows_error_handling(
         self, db: DatabaseTransactionFixture, caplog: pytest.LogCaptureFixture
