@@ -37,16 +37,30 @@ class TestBulkUpdateAudienceScript:
         assert parsed.batch_size == 100
         assert parsed.dry_run is True
 
+    @pytest.mark.parametrize(
+        "encoding",
+        [
+            pytest.param("utf-8", id="without_bom"),
+            pytest.param("utf-8-sig", id="with_bom"),
+        ],
+    )
     def test_parse_csv_valid(
-        self, db: DatabaseTransactionFixture, tmp_path: Path
+        self, db: DatabaseTransactionFixture, tmp_path: Path, encoding: str
     ) -> None:
-        """Test parsing a valid CSV file."""
+        """Test parsing a valid CSV file.
+
+        The utf-8-sig encoding includes a BOM (byte order mark) at the start of
+        the file, which is common in CSV files exported from Excel on Windows.
+
+        We include an emoji to make sure that character encoding is handled
+        correctly.
+        """
         csv_content = """identifier_type,identifier,audience
 ISBN,9780674368279,Young Adult
-Overdrive ID,abc-123-def,All Ages
+Overdrive ID,abc-123-def🔥,All Ages
 """
         csv_path = tmp_path / "test.csv"
-        csv_path.write_text(csv_content)
+        csv_path.write_text(csv_content, encoding=encoding)
 
         script = BulkUpdateAudienceScript(db.session)
         rows = script._parse_csv(csv_path)
@@ -60,7 +74,7 @@ Overdrive ID,abc-123-def,All Ages
         )
         assert rows[1] == CSVRow(
             identifier_type="Overdrive ID",
-            identifier="abc-123-def",
+            identifier="abc-123-def🔥",
             audience="All Ages",
             row_number=3,
         )

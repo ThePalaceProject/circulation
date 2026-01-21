@@ -141,7 +141,7 @@ class BulkUpdateAudienceScript(Script):
         }
         rows: list[CSVRow] = []
 
-        with csv_path.open(newline="", encoding="utf-8") as csvfile:
+        with csv_path.open(newline="", encoding="utf-8-sig") as csvfile:
             reader = csv.DictReader(csvfile)
 
             if reader.fieldnames is None:
