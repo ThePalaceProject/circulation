@@ -25,7 +25,7 @@ from palace.manager.integration.patron_auth.saml.metadata.model import (
     SAMLUIInfo,
 )
 from palace.manager.integration.patron_auth.saml.provider import (
-    SAML_INVALID_SUBJECT,
+    SAML_CANNOT_DETERMINE_PATRON,
     SAMLWebSSOAuthenticationProvider,
 )
 from palace.manager.sqlalchemy.model.credential import Credential
@@ -351,7 +351,7 @@ class TestSAMLController:
                     )
                 },
                 None,
-                SAML_INVALID_SUBJECT.detailed("Authentication failed"),
+                SAML_CANNOT_DETERMINE_PATRON,
                 None,
                 None,
                 None,
