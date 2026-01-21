@@ -8,7 +8,8 @@ from palace.manager.api.admin.problem_details import (
     CUSTOMLIST_ENTRY_NOT_VALID_FOR_LIBRARY,
     CUSTOMLIST_SOURCE_COLLECTION_MISSING,
 )
-from palace.manager.search.external_search import ExternalSearchIndex, SortKeyPagination
+from palace.manager.search.external_search import ExternalSearchIndex
+from palace.manager.search.pagination import SortKeyPagination
 from palace.manager.sqlalchemy.model.customlist import CustomList, CustomListEntry
 from palace.manager.sqlalchemy.model.lane import SearchFacets, WorkList
 from palace.manager.sqlalchemy.model.library import Library

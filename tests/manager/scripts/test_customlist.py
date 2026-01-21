@@ -12,7 +12,7 @@ from palace.manager.scripts.customlist import (
     CustomListUpdateEntriesScript,
     UpdateCustomListSizeScript,
 )
-from palace.manager.search.external_search import Filter
+from palace.manager.search.filter import Filter
 from palace.manager.sqlalchemy.model.customlist import CustomList
 from palace.manager.sqlalchemy.model.work import Work
 from tests.fixtures.database import DatabaseTransactionFixture

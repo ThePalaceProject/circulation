@@ -18,7 +18,8 @@ from palace.manager.scripts.input import (
     LibraryInputScript,
     SupportsReadlines,
 )
-from palace.manager.search.external_search import ExternalSearchIndex, Filter
+from palace.manager.search.external_search import ExternalSearchIndex
+from palace.manager.search.filter import Filter
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.coverage import CoverageRecord

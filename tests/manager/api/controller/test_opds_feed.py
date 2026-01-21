@@ -13,7 +13,7 @@ from palace.manager.feed.acquisition import OPDSAcquisitionFeed
 from palace.manager.feed.annotator.circulation import LibraryAnnotator
 from palace.manager.feed.navigation import NavigationFeed
 from palace.manager.feed.opds import NavigationFacets
-from palace.manager.search.external_search import SortKeyPagination
+from palace.manager.search.pagination import SortKeyPagination
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.lane import (
     Facets,

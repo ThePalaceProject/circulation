@@ -37,7 +37,7 @@ from palace.manager.integration.metadata.nyt import (
     NYTBestSellerAPI,
     NytBestSellerApiSettings,
 )
-from palace.manager.search.external_search import Filter
+from palace.manager.search.filter import Filter
 from palace.manager.sqlalchemy.model.contributor import Contributor
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition

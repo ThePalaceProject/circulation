@@ -17,7 +17,7 @@ from palace.manager.celery.tasks.search import (
 )
 from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.scripts.initialization import InstanceInitializationScript
-from palace.manager.search.external_search import Filter
+from palace.manager.search.filter import Filter
 from palace.manager.service.redis.models.lock import LockNotAcquired, TaskLock
 from palace.manager.service.redis.models.search import WaitingForIndexing
 from tests.fixtures.celery import CeleryFixture

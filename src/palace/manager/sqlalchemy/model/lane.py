@@ -74,8 +74,8 @@ from palace.manager.util.problem_detail import ProblemDetail
 if TYPE_CHECKING:
     from palace.manager.search.external_search import (
         ExternalSearchIndex,
-        WorkSearchResult,
     )
+    from palace.manager.search.result import WorkSearchResult
 
 
 class BaseFacets(FacetConstants):
@@ -1856,7 +1856,7 @@ class WorkList:
         Using this ensures that modify_search_filter_hook() is always
         called.
         """
-        from palace.manager.search.external_search import Filter
+        from palace.manager.search.filter import Filter
 
         filter = Filter.from_worklist(_db, self, facets)
         modified = self.modify_search_filter_hook(filter)
@@ -1893,7 +1893,8 @@ class WorkList:
         """Convert a list of lists of Hit objects into a list
         of lists of Work objects.
         """
-        from palace.manager.search.external_search import Filter, WorkSearchResult
+        from palace.manager.search.filter import Filter
+        from palace.manager.search.result import WorkSearchResult
 
         has_script_fields = None
         work_ids = set()
@@ -2149,7 +2150,7 @@ class WorkList:
         queries = []
         for lane in lanes:
             overview_facets = lane.overview_facets(_db, facets)
-            from palace.manager.search.external_search import Filter
+            from palace.manager.search.filter import Filter
 
             filter = Filter.from_worklist(_db, lane, overview_facets)
             queries.append((None, filter, pagination))

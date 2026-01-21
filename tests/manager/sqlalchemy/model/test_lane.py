@@ -25,9 +25,9 @@ from palace.manager.integration.license.bibliotheca import BibliothecaAPI
 from palace.manager.integration.license.opds.odl.api import OPDS2WithODLApi
 from palace.manager.search.external_search import (
     ExternalSearchIndex,
-    Filter,
-    WorkSearchResult,
 )
+from palace.manager.search.filter import Filter
+from palace.manager.search.result import WorkSearchResult
 from palace.manager.sqlalchemy.model.classification import Genre
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.customlist import CustomList

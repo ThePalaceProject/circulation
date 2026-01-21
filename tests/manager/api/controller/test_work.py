@@ -34,7 +34,7 @@ from palace.manager.feed.acquisition import OPDSAcquisitionFeed
 from palace.manager.feed.annotator.circulation import LibraryAnnotator
 from palace.manager.feed.types import WorkEntry
 from palace.manager.integration.metadata.novelist import NoveListAPI
-from palace.manager.search.external_search import SortKeyPagination
+from palace.manager.search.pagination import SortKeyPagination
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.lane import Facets, FeaturedFacets
 from palace.manager.sqlalchemy.model.licensing import LicensePool

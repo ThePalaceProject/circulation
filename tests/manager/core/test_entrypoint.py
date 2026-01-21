@@ -7,7 +7,7 @@ from palace.manager.core.entrypoint import (
     EverythingEntryPoint,
     MediumEntryPoint,
 )
-from palace.manager.search.external_search import Filter
+from palace.manager.search.filter import Filter
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.licensing import LicensePool
 from palace.manager.sqlalchemy.model.work import Work

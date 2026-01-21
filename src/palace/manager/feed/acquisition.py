@@ -24,8 +24,8 @@ from palace.manager.feed.types import FeedData, Link, WorkEntry
 from palace.manager.feed.util import strftime
 from palace.manager.search.external_search import (
     ExternalSearchIndex,
-    QueryParseException,
 )
+from palace.manager.search.query import QueryParseException
 from palace.manager.sqlalchemy.constants import LinkRelations
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
