@@ -52,35 +52,35 @@ class DSLParser:
     FULL_STOP = Suppress(".")
 
     # Unary arithmetic operators
-    NEGATION_OPERATOR = Literal("-").setParseAction(lambda _: Operator.NEGATION)
+    NEGATION_OPERATOR = Literal("-").set_parse_action(lambda _: Operator.NEGATION)
 
     # Binary additive arithmetic operators
-    ADDITION_OPERATOR = Literal("+").setParseAction(lambda _: Operator.ADDITION)
-    SUBTRACTION_OPERATOR = Literal("-").setParseAction(lambda _: Operator.SUBTRACTION)
+    ADDITION_OPERATOR = Literal("+").set_parse_action(lambda _: Operator.ADDITION)
+    SUBTRACTION_OPERATOR = Literal("-").set_parse_action(lambda _: Operator.SUBTRACTION)
     ADDITIVE_OPERATOR = ADDITION_OPERATOR | SUBTRACTION_OPERATOR
 
     # Binary multiplicative arithmetic operators
-    MULTIPLICATION_OPERATOR = Literal("*").setParseAction(
+    MULTIPLICATION_OPERATOR = Literal("*").set_parse_action(
         lambda _: Operator.MULTIPLICATION
     )
-    DIVISION_OPERATOR = Literal("/").setParseAction(lambda _: Operator.DIVISION)
+    DIVISION_OPERATOR = Literal("/").set_parse_action(lambda _: Operator.DIVISION)
     MULTIPLICATIVE_OPERATOR = MULTIPLICATION_OPERATOR | DIVISION_OPERATOR
 
     # Power operator
-    POWER_OPERATOR = Literal("**").setParseAction(lambda _: Operator.EXPONENTIATION)
+    POWER_OPERATOR = Literal("**").set_parse_action(lambda _: Operator.EXPONENTIATION)
 
     # Comparison operators
-    EQUAL_OPERATOR = Literal("==").setParseAction(lambda _: Operator.EQUAL)
-    NOT_EQUAL_OPERATOR = Literal("!=").setParseAction(lambda _: Operator.NOT_EQUAL)
-    GREATER_OPERATOR = Literal(">").setParseAction(lambda _: Operator.GREATER)
-    GREATER_OR_EQUAL_OPERATOR = Literal(">=").setParseAction(
+    EQUAL_OPERATOR = Literal("==").set_parse_action(lambda _: Operator.EQUAL)
+    NOT_EQUAL_OPERATOR = Literal("!=").set_parse_action(lambda _: Operator.NOT_EQUAL)
+    GREATER_OPERATOR = Literal(">").set_parse_action(lambda _: Operator.GREATER)
+    GREATER_OR_EQUAL_OPERATOR = Literal(">=").set_parse_action(
         lambda _: Operator.GREATER_OR_EQUAL
     )
-    LESS_OPERATOR = Literal("<").setParseAction(lambda _: Operator.LESS)
-    LESS_OR_EQUAL_OPERATOR = Literal("<=").setParseAction(
+    LESS_OPERATOR = Literal("<").set_parse_action(lambda _: Operator.LESS)
+    LESS_OR_EQUAL_OPERATOR = Literal("<=").set_parse_action(
         lambda _: Operator.LESS_OR_EQUAL
     )
-    IN_OPERATOR = Literal("in").setParseAction(lambda _: Operator.IN)
+    IN_OPERATOR = Literal("in").set_parse_action(lambda _: Operator.IN)
     COMPARISON_OPERATOR = (
         EQUAL_OPERATOR
         | NOT_EQUAL_OPERATOR
@@ -91,53 +91,59 @@ class DSLParser:
         | IN_OPERATOR
     )
 
-    NUMBER = Regex(r"[+-]?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?").setParseAction(_parse_number)
-    IDENTIFIER = Word(alphas, alphanums + "_$").setParseAction(_parse_identifier)
-    STRING = (QuotedString("'") | QuotedString('"')).setParseAction(_parse_string)
+    NUMBER = Regex(r"[+-]?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?").set_parse_action(
+        _parse_number
+    )
+    IDENTIFIER = Word(alphas, alphanums + "_$").set_parse_action(_parse_identifier)
+    STRING = (QuotedString("'") | QuotedString('"')).set_parse_action(_parse_string)
 
     # Unary boolean operator
-    INVERSION_OPERATOR = Literal("not").setParseAction(lambda _: Operator.INVERSION)
+    INVERSION_OPERATOR = Literal("not").set_parse_action(lambda _: Operator.INVERSION)
 
     # Binary boolean operators
-    CONJUNCTION_OPERATOR = Literal("and").setParseAction(lambda _: Operator.CONJUNCTION)
-    DISJUNCTION_OPERATOR = Literal("or").setParseAction(lambda _: Operator.DISJUNCTION)
+    CONJUNCTION_OPERATOR = Literal("and").set_parse_action(
+        lambda _: Operator.CONJUNCTION
+    )
+    DISJUNCTION_OPERATOR = Literal("or").set_parse_action(
+        lambda _: Operator.DISJUNCTION
+    )
 
     arithmetic_expression = Forward()
 
     comparison_expression = (
         arithmetic_expression + ZeroOrMore(COMPARISON_OPERATOR + arithmetic_expression)
-    ).setParseAction(_parse_comparison_expression)
+    ).set_parse_action(_parse_comparison_expression)
 
     inversion_expression = (
         ZeroOrMore(INVERSION_OPERATOR) + comparison_expression
-    ).setParseAction(_parse_unary_boolean_expression)
+    ).set_parse_action(_parse_unary_boolean_expression)
     conjunction_expression = (
         inversion_expression + ZeroOrMore(CONJUNCTION_OPERATOR + inversion_expression)
-    ).setParseAction(_parse_binary_boolean_expression)
+    ).set_parse_action(_parse_binary_boolean_expression)
     disjunction_expression = (
         conjunction_expression
         + ZeroOrMore(DISJUNCTION_OPERATOR + conjunction_expression)
-    ).setParseAction(_parse_binary_boolean_expression)
+    ).set_parse_action(_parse_binary_boolean_expression)
 
     expression = disjunction_expression
 
     dot_expression = Group(
         IDENTIFIER + ZeroOrMore(FULL_STOP + expression)
-    ).setParseAction(_parse_dot_expression)
+    ).set_parse_action(_parse_dot_expression)
 
     parenthesized_expression = Group(
         LEFT_PAREN + expression + RIGHT_PAREN
-    ).setParseAction(_parse_parenthesized_expression)
+    ).set_parse_action(_parse_parenthesized_expression)
 
     slice = expression
     slice_expression = Group(
         IDENTIFIER + LEFT_BRACKET + slice + RIGHT_BRACKET
-    ).setParseAction(_parse_slice_operation)
+    ).set_parse_action(_parse_slice_operation)
 
     function_call_arguments = ZeroOrMore(expression + ZeroOrMore(COMMA + expression))
     function_call_expression = Group(
         IDENTIFIER + LEFT_PAREN + function_call_arguments + RIGHT_PAREN
-    ).setParseAction(_parse_function_call_expression)
+    ).set_parse_action(_parse_function_call_expression)
 
     atom = (
         ZeroOrMore(NEGATION_OPERATOR)
@@ -150,18 +156,18 @@ class DSLParser:
             | dot_expression
             | IDENTIFIER
         )
-    ).setParseAction(_parse_unary_arithmetic_expression)
+    ).set_parse_action(_parse_unary_arithmetic_expression)
 
     factor = Forward()
-    factor << (atom + ZeroOrMore(POWER_OPERATOR + factor)).setParseAction(
+    factor << (atom + ZeroOrMore(POWER_OPERATOR + factor)).set_parse_action(
         _parse_binary_arithmetic_expression
     )
-    term = (factor + ZeroOrMore(MULTIPLICATIVE_OPERATOR + factor)).setParseAction(
+    term = (factor + ZeroOrMore(MULTIPLICATIVE_OPERATOR + factor)).set_parse_action(
         _parse_binary_arithmetic_expression
     )
     arithmetic_expression << (
         term + ZeroOrMore(ADDITIVE_OPERATOR + term)
-    ).setParseAction(_parse_binary_arithmetic_expression)
+    ).set_parse_action(_parse_binary_arithmetic_expression)
 
     def _parse_error_message(self, parse_exception: ParseException) -> str:
         """Transform the standard error description into a readable concise message.
