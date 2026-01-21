@@ -80,7 +80,6 @@ module = [
     "palace.manager.api.admin.controller.announcement_service",
     "palace.manager.api.admin.controller.base",
     "palace.manager.api.admin.controller.custom_lists",
-    "palace.manager.api.admin.controller.feed",
     "palace.manager.api.admin.controller.individual_admin_settings",
     "palace.manager.api.admin.controller.lanes",
     "palace.manager.api.admin.controller.quicksight",

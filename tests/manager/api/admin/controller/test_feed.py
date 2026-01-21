@@ -4,11 +4,12 @@ import pytest
 from palace.manager.api.admin.exceptions import AdminNotAuthorized
 from palace.manager.core.classifier import genres
 from palace.manager.sqlalchemy.model.admin import AdminRole
+from tests.fixtures.api_admin import AdminLibrarianFixture
 from tests.mocks.search import ExternalSearchIndexFake
 
 
 class TestFeedController:
-    def test_suppressed(self, admin_librarian_fixture):
+    def test_suppressed(self, admin_librarian_fixture: AdminLibrarianFixture) -> None:
         library = admin_librarian_fixture.ctrl.library
 
         suppressed_work = admin_librarian_fixture.ctrl.db.work(
@@ -35,7 +36,7 @@ class TestFeedController:
                 admin_librarian_fixture.manager.admin_feed_controller.suppressed,
             )
 
-    def test_genres(self, admin_librarian_fixture):
+    def test_genres(self, admin_librarian_fixture: AdminLibrarianFixture) -> None:
         with admin_librarian_fixture.ctrl.app.test_request_context("/"):
             response = admin_librarian_fixture.manager.admin_feed_controller.genres()
 
@@ -52,8 +53,8 @@ class TestFeedController:
                 )
 
     def test_suppressed_search_without_query_returns_opensearch_document(
-        self, admin_librarian_fixture
-    ):
+        self, admin_librarian_fixture: AdminLibrarianFixture
+    ) -> None:
         """Without a query parameter, returns an OpenSearch description document."""
         with admin_librarian_fixture.request_context_with_library_and_admin("/"):
             response = (
@@ -71,7 +72,9 @@ class TestFeedController:
             assert "OpenSearchDescription" in data
             assert "Search Hidden Books" in data
 
-    def test_suppressed_search_with_query_returns_feed(self, admin_librarian_fixture):
+    def test_suppressed_search_with_query_returns_feed(
+        self, admin_librarian_fixture: AdminLibrarianFixture
+    ) -> None:
         """With a query parameter, returns an OPDS feed of search results."""
         library = admin_librarian_fixture.ctrl.library
 
@@ -102,7 +105,9 @@ class TestFeedController:
             assert len(entries) == 1
             assert entries[0]["title"] == "Searchable Suppressed Book"
 
-    def test_suppressed_search_requires_librarian_role(self, admin_librarian_fixture):
+    def test_suppressed_search_requires_librarian_role(
+        self, admin_librarian_fixture: AdminLibrarianFixture
+    ) -> None:
         """Search requires librarian authorization."""
         # Remove the librarian role
         admin_librarian_fixture.admin.remove_role(
@@ -115,7 +120,9 @@ class TestFeedController:
                 admin_librarian_fixture.manager.admin_feed_controller.suppressed_search,
             )
 
-    def test_suppressed_search_empty_results(self, admin_librarian_fixture):
+    def test_suppressed_search_empty_results(
+        self, admin_librarian_fixture: AdminLibrarianFixture
+    ) -> None:
         """Search with no matching works returns empty feed."""
         # Mock the search engine to return no results
         search_engine = admin_librarian_fixture.ctrl.controller.search_engine
@@ -133,7 +140,9 @@ class TestFeedController:
             feed = feedparser.parse(response.get_data(as_text=True))
             assert len(feed["entries"]) == 0
 
-    def test_suppressed_search_invalid_pagination(self, admin_librarian_fixture):
+    def test_suppressed_search_invalid_pagination(
+        self, admin_librarian_fixture: AdminLibrarianFixture
+    ) -> None:
         """Search returns error for invalid pagination parameters."""
         from palace.manager.util.problem_detail import ProblemDetail
 
@@ -147,9 +156,12 @@ class TestFeedController:
             # Should return a problem detail for invalid input
             assert isinstance(response, ProblemDetail)
             assert response.status_code == 400
+            assert response.detail is not None
             assert "Invalid page size" in response.detail
 
-    def test_suppressed_search_no_search_engine(self, admin_librarian_fixture):
+    def test_suppressed_search_no_search_engine(
+        self, admin_librarian_fixture: AdminLibrarianFixture
+    ) -> None:
         """Search returns error when search engine is not configured."""
         from palace.manager.util.problem_detail import ProblemDetail
 
@@ -164,4 +176,5 @@ class TestFeedController:
             # Should return a problem detail for missing search engine
             assert isinstance(response, ProblemDetail)
             assert response.status_code == 502
+            assert response.detail is not None
             assert "search index" in response.detail.lower()
