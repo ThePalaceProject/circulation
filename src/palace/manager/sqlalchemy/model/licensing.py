@@ -319,6 +319,7 @@ class LicensePool(Base):
     availability_time = Column(DateTime(timezone=True), index=True)
 
     last_checked = Column(DateTime(timezone=True), index=True)
+    last_updated = Column(DateTime(timezone=True), nullable=True)
 
     # A LicensePool that seemingly looks fine may be manually suppressed
     # to be temporarily or permanently removed from the collection.
