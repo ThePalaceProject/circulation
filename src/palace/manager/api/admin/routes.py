@@ -312,6 +312,15 @@ def suppressed():
     return app.manager.admin_feed_controller.suppressed()
 
 
+@library_route("/admin/suppressed/search")
+@has_library
+@returns_json_or_response_or_problem_detail
+@requires_admin
+def suppressed_search():
+    """Search within suppressed/hidden works."""
+    return app.manager.admin_feed_controller.suppressed_search()
+
+
 @app.route("/admin/genres")
 @returns_json_or_response_or_problem_detail
 @requires_admin

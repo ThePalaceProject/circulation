@@ -1,26 +1,72 @@
 import urllib
+from collections.abc import Sequence
 
+import pytest
+
+from palace.manager.core.classifier import Classifier
 from palace.manager.feed.acquisition import OPDSAcquisitionFeed
-from palace.manager.feed.admin.suppressed import AdminSuppressedFeed
+from palace.manager.feed.admin.suppressed import (
+    AdminSuppressedFeed,
+    FacetGroup,
+    SuppressedFacets,
+    VisibilityFilter,
+)
 from palace.manager.feed.annotator.admin.suppressed import AdminSuppressedAnnotator
-from palace.manager.feed.types import FeedData, Link
+from palace.manager.feed.types import FeedData, FeedEntryType, Link
+from palace.manager.sqlalchemy.model.classification import Genre
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.lane import Pagination
 from palace.manager.sqlalchemy.model.measurement import Measurement
+from palace.manager.util.problem_detail import ProblemDetail
 from tests.fixtures.database import DatabaseTransactionFixture
-from tests.fixtures.search import ExternalSearchFixtureFake
+from tests.fixtures.library import LibraryFixture
+from tests.fixtures.search import EndToEndSearchFixture, ExternalSearchFixtureFake
 from tests.manager.feed.conftest import PatchedUrlFor
 
 
 class TestAdminSuppressedFeed:
-    def links(self, feed: FeedData, rel=None):
+    @classmethod
+    def links(cls, feed: FeedData, rel: str) -> list[Link]:
         all_links = feed.links + feed.facet_links + feed.breadcrumbs
         links = sorted(all_links, key=lambda x: (x.rel, getattr(x, "title", None)))
+        return cls.links_for_rel(links, rel)
+
+    @staticmethod
+    def links_for_rel(links: Sequence[Link], rel: str) -> list[Link]:
+        """Filter a list of links by their rel attribute."""
+        return [link for link in links if link.rel == rel]
+
+    @staticmethod
+    def visibility_categories(
+        categories: Sequence[FeedEntryType],
+    ) -> list[FeedEntryType]:
+        """Extract visibility status categories from a list of categories."""
         return [
-            lnk
-            for lnk in links
-            if not rel or lnk.rel == rel or (isinstance(rel, list) and lnk.rel in rel)
+            c
+            for c in categories
+            if c.get("scheme", None)
+            == AdminSuppressedAnnotator.VISIBILITY_STATUS_SCHEME
         ]
+
+    @staticmethod
+    def suppressed_search(
+        fixture: EndToEndSearchFixture,
+        query: str,
+        pagination: Pagination | None = None,
+    ) -> OPDSAcquisitionFeed | ProblemDetail:
+        """Execute a suppressed search with common parameters."""
+        db = fixture.db
+        library = db.default_library()
+        annotator = AdminSuppressedAnnotator(None, library)
+        return AdminSuppressedFeed.suppressed_search(
+            _db=db.session,
+            title="Search Results",
+            url="http://test/search",
+            annotator=annotator,
+            search_engine=fixture.external_search_index,
+            query=query,
+            pagination=pagination,
+        )
 
     def test_feed_includes_staff_rating(
         self,
@@ -81,9 +127,6 @@ class TestAdminSuppressedFeed:
         patch_url_for: PatchedUrlFor,
         external_search_fake_fixture: ExternalSearchFixtureFake,
     ):
-        def _links_for_rel(links: list[Link], rel: str) -> list[Link]:
-            return [link for link in links if link.rel == rel]
-
         work = db.work(with_open_access_download=True)
         lp = work.license_pools[0]
         library = db.default_library()
@@ -101,11 +144,11 @@ class TestAdminSuppressedFeed:
         [entry] = feed._feed.entries
         assert entry.computed is not None
 
-        [suppress_link] = _links_for_rel(
+        [suppress_link] = self.links_for_rel(
             entry.computed.other_links,
             AdminSuppressedAnnotator.REL_SUPPRESS_FOR_LIBRARY,
         )
-        unsuppress_links = _links_for_rel(
+        unsuppress_links = self.links_for_rel(
             entry.computed.other_links,
             AdminSuppressedAnnotator.REL_UNSUPPRESS_FOR_LIBRARY,
         )
@@ -122,11 +165,11 @@ class TestAdminSuppressedFeed:
         [entry] = feed._feed.entries
         assert entry.computed is not None
 
-        suppress_links = _links_for_rel(
+        suppress_links = self.links_for_rel(
             entry.computed.other_links,
             AdminSuppressedAnnotator.REL_SUPPRESS_FOR_LIBRARY,
         )
-        [unsuppress_link] = _links_for_rel(
+        [unsuppress_link] = self.links_for_rel(
             entry.computed.other_links,
             AdminSuppressedAnnotator.REL_UNSUPPRESS_FOR_LIBRARY,
         )
@@ -143,11 +186,11 @@ class TestAdminSuppressedFeed:
         )
         [entry] = feed._feed.entries
         assert entry.computed is not None
-        suppress_links = _links_for_rel(
+        suppress_links = self.links_for_rel(
             entry.computed.other_links,
             AdminSuppressedAnnotator.REL_SUPPRESS_FOR_LIBRARY,
         )
-        unsuppress_links = _links_for_rel(
+        unsuppress_links = self.links_for_rel(
             entry.computed.other_links,
             AdminSuppressedAnnotator.REL_UNSUPPRESS_FOR_LIBRARY,
         )
@@ -275,3 +318,863 @@ class TestAdminSuppressedFeed:
             == previous3.href
         )
         assert 0 == len(third_page.entries)
+
+    def test_suppressed_feed_includes_policy_filtered_works(
+        self,
+        db: DatabaseTransactionFixture,
+        patch_url_for: PatchedUrlFor,
+        external_search_fake_fixture: ExternalSearchFixtureFake,
+        library_fixture: LibraryFixture,
+    ):
+        """Policy-filtered works (by audience or genre) appear in the suppressed feed."""
+        library = db.default_library()
+        settings = library_fixture.settings(library)
+
+        # Create a work with Adult audience
+        work_adult = db.work(with_open_access_download=True)
+        work_adult.audience = Classifier.AUDIENCE_ADULT
+
+        # Create a work with Romance genre (set audience to Young Adult to avoid Adult filter)
+        work_romance = db.work(with_open_access_download=True)
+        work_romance.audience = Classifier.AUDIENCE_YOUNG_ADULT
+        romance_genre, _ = Genre.lookup(db.session, "Romance")
+        work_romance.genres = [romance_genre]
+
+        # Create a work that is manually suppressed (set audience to Children to avoid Adult filter)
+        work_suppressed = db.work(with_open_access_download=True)
+        work_suppressed.audience = Classifier.AUDIENCE_CHILDREN
+        work_suppressed.suppressed_for.append(library)
+
+        # Create a visible work (not filtered or suppressed)
+        work_visible = db.work(with_open_access_download=True)
+        work_visible.audience = Classifier.AUDIENCE_CHILDREN
+
+        annotator = AdminSuppressedAnnotator(None, library)
+
+        # With no filtering, only the manually suppressed work should appear
+        feed = AdminSuppressedFeed.suppressed(
+            _db=db.session,
+            title="Hidden works",
+            annotator=annotator,
+        )
+        assert len(feed._feed.entries) == 1
+        assert feed._feed.entries[0].work == work_suppressed
+
+        # Filter by Adult audience - should now include work_adult
+        settings.filtered_audiences = [Classifier.AUDIENCE_ADULT]
+        feed = AdminSuppressedFeed.suppressed(
+            _db=db.session,
+            title="Hidden works",
+            annotator=annotator,
+        )
+        assert len(feed._feed.entries) == 2
+        work_ids = {e.work.id for e in feed._feed.entries}
+        assert work_adult.id in work_ids
+        assert work_suppressed.id in work_ids
+
+        # Filter by Romance genre - should now include work_romance too
+        settings.filtered_genres = ["Romance"]
+        feed = AdminSuppressedFeed.suppressed(
+            _db=db.session,
+            title="Hidden works",
+            annotator=annotator,
+        )
+        assert len(feed._feed.entries) == 3
+        work_ids = {e.work.id for e in feed._feed.entries}
+        assert work_adult.id in work_ids
+        assert work_romance.id in work_ids
+        assert work_suppressed.id in work_ids
+        # Visible work should not be in the feed
+        assert work_visible.id not in work_ids
+
+        # Unsuppress the suppressed work - should only include filtered works now
+        work_suppressed.suppressed_for = []
+        feed = AdminSuppressedFeed.suppressed(
+            _db=db.session,
+            title="Hidden works",
+            annotator=annotator,
+        )
+        assert len(feed._feed.entries) == 2
+        work_ids = {e.work.id for e in feed._feed.entries}
+        assert work_adult.id in work_ids
+        assert work_romance.id in work_ids
+        # The visible and un-suppressed work should not be in the feed
+        assert work_visible.id not in work_ids
+        assert work_suppressed.id not in work_ids
+
+    def test_suppressed_feed_policy_filtered_scoped_to_library_collections(
+        self,
+        db: DatabaseTransactionFixture,
+        patch_url_for: PatchedUrlFor,
+        external_search_fake_fixture: ExternalSearchFixtureFake,
+        library_fixture: LibraryFixture,
+    ):
+        """Policy-filtered works should only appear for the library's collections."""
+        library = db.default_library()
+        settings = library_fixture.settings(library)
+
+        other_library = library_fixture.library(name="Other Library")
+        other_collection = db.collection("Other Collection", library=other_library)
+
+        local_work = db.work(
+            with_open_access_download=True, collection=db.default_collection()
+        )
+        local_work.audience = Classifier.AUDIENCE_ADULT
+
+        other_work = db.work(
+            with_open_access_download=True, collection=other_collection
+        )
+        other_work.audience = Classifier.AUDIENCE_ADULT
+
+        settings.filtered_audiences = [Classifier.AUDIENCE_ADULT]
+
+        query = AdminSuppressedFeed.suppressed_query(
+            db.session, library, visibility_filter=VisibilityFilter.ALL
+        )
+        work_ids = {work.id for work in query.all()}
+        assert local_work.id in work_ids
+        assert other_work.id not in work_ids
+
+    def test_suppressed_feed_visibility_status_category(
+        self,
+        db: DatabaseTransactionFixture,
+        patch_url_for: PatchedUrlFor,
+        external_search_fake_fixture: ExternalSearchFixtureFake,
+        library_fixture: LibraryFixture,
+    ):
+        """Works in the suppressed feed get the correct visibility status category."""
+        library = db.default_library()
+        settings = library_fixture.settings(library)
+
+        # Create a manually suppressed work
+        work_suppressed = db.work(with_open_access_download=True)
+        work_suppressed.suppressed_for.append(library)
+
+        # Create a policy-filtered work
+        work_filtered = db.work(with_open_access_download=True)
+        work_filtered.audience = Classifier.AUDIENCE_ADULT
+        settings.filtered_audiences = [Classifier.AUDIENCE_ADULT]
+
+        annotator = AdminSuppressedAnnotator(None, library)
+        feed = AdminSuppressedFeed.suppressed(
+            _db=db.session,
+            title="Hidden works",
+            annotator=annotator,
+        )
+
+        # Find entries by work
+        entries_by_work = {e.work.id: e for e in feed._feed.entries}
+
+        # Check manually suppressed work has correct category
+        suppressed_entry = entries_by_work[work_suppressed.id]
+        assert suppressed_entry.computed is not None
+        suppressed_categories = self.visibility_categories(
+            suppressed_entry.computed.categories
+        )
+        assert len(suppressed_categories) == 1
+        assert (
+            getattr(suppressed_categories[0], "term", None)
+            == AdminSuppressedAnnotator.VISIBILITY_MANUALLY_SUPPRESSED
+        )
+        assert getattr(suppressed_categories[0], "label", None) == "Manually Suppressed"
+
+        # Check policy-filtered work has correct category
+        filtered_entry = entries_by_work[work_filtered.id]
+        assert filtered_entry.computed is not None
+        filtered_categories = self.visibility_categories(
+            filtered_entry.computed.categories
+        )
+        assert len(filtered_categories) == 1
+        assert (
+            getattr(filtered_categories[0], "term", None)
+            == AdminSuppressedAnnotator.VISIBILITY_POLICY_FILTERED
+        )
+        assert getattr(filtered_categories[0], "label", None) == "Policy Filtered"
+
+    def test_suppressed_feed_links_for_policy_filtered_works(
+        self,
+        db: DatabaseTransactionFixture,
+        patch_url_for: PatchedUrlFor,
+        external_search_fake_fixture: ExternalSearchFixtureFake,
+        library_fixture: LibraryFixture,
+    ):
+        """Policy-filtered works do NOT get suppress/unsuppress links."""
+        library = db.default_library()
+        settings = library_fixture.settings(library)
+
+        # Create a policy-filtered work (not manually suppressed)
+        work_filtered = db.work(with_open_access_download=True)
+        work_filtered.audience = Classifier.AUDIENCE_ADULT
+        settings.filtered_audiences = [Classifier.AUDIENCE_ADULT]
+
+        # Create a manually suppressed work
+        work_suppressed = db.work(with_open_access_download=True)
+        work_suppressed.suppressed_for.append(library)
+
+        annotator = AdminSuppressedAnnotator(None, library)
+        feed = AdminSuppressedFeed.suppressed(
+            _db=db.session,
+            title="Hidden works",
+            annotator=annotator,
+        )
+
+        entries_by_work = {e.work.id: e for e in feed._feed.entries}
+
+        # Policy-filtered work should have NO suppress/unsuppress links
+        filtered_entry = entries_by_work[work_filtered.id]
+        assert filtered_entry.computed is not None
+        suppress_links = self.links_for_rel(
+            filtered_entry.computed.other_links,
+            AdminSuppressedAnnotator.REL_SUPPRESS_FOR_LIBRARY,
+        )
+        unsuppress_links = self.links_for_rel(
+            filtered_entry.computed.other_links,
+            AdminSuppressedAnnotator.REL_UNSUPPRESS_FOR_LIBRARY,
+        )
+        assert len(suppress_links) == 0
+        assert len(unsuppress_links) == 0
+
+        # But it should still have an edit link
+        edit_links = [
+            link for link in filtered_entry.computed.other_links if link.rel == "edit"
+        ]
+        assert len(edit_links) == 1
+
+        # Manually suppressed work should have unsuppress link
+        suppressed_entry = entries_by_work[work_suppressed.id]
+        assert suppressed_entry.computed is not None
+        unsuppress_links = self.links_for_rel(
+            suppressed_entry.computed.other_links,
+            AdminSuppressedAnnotator.REL_UNSUPPRESS_FOR_LIBRARY,
+        )
+        assert len(unsuppress_links) == 1
+
+    def test_suppressed_feed_both_suppressed_and_filtered(
+        self,
+        db: DatabaseTransactionFixture,
+        patch_url_for: PatchedUrlFor,
+        external_search_fake_fixture: ExternalSearchFixtureFake,
+        library_fixture: LibraryFixture,
+    ):
+        """A work that is both manually suppressed AND policy-filtered shows as
+        manually suppressed (with unsuppress link).
+        """
+        library = db.default_library()
+        settings = library_fixture.settings(library)
+
+        # Create a work that is both manually suppressed AND matches filter
+        work = db.work(with_open_access_download=True)
+        work.audience = Classifier.AUDIENCE_ADULT
+        work.suppressed_for.append(library)
+        settings.filtered_audiences = [Classifier.AUDIENCE_ADULT]
+
+        annotator = AdminSuppressedAnnotator(None, library)
+        feed = AdminSuppressedFeed.suppressed(
+            _db=db.session,
+            title="Hidden works",
+            annotator=annotator,
+        )
+
+        assert len(feed._feed.entries) == 1
+        entry = feed._feed.entries[0]
+        assert entry.computed is not None
+
+        # Should show as "Manually Suppressed" (manual takes precedence)
+        vis_categories = self.visibility_categories(entry.computed.categories)
+        assert len(vis_categories) == 1
+        assert (
+            getattr(vis_categories[0], "term", None)
+            == AdminSuppressedAnnotator.VISIBILITY_MANUALLY_SUPPRESSED
+        )
+
+        # Should have unsuppress link (since it's manually suppressed)
+        unsuppress_links = self.links_for_rel(
+            entry.computed.other_links,
+            AdminSuppressedAnnotator.REL_UNSUPPRESS_FOR_LIBRARY,
+        )
+        assert len(unsuppress_links) == 1
+
+    def test_suppressed_feed_search_link_points_to_suppressed_search(
+        self,
+        db: DatabaseTransactionFixture,
+        patch_url_for: PatchedUrlFor,
+        external_search_fake_fixture: ExternalSearchFixtureFake,
+    ):
+        """The search link in the suppressed feed should point to suppressed_search endpoint."""
+        library = db.default_library()
+
+        # Create a suppressed work so the feed has content
+        work = db.work(with_open_access_download=True)
+        work.suppressed_for.append(library)
+
+        annotator = AdminSuppressedAnnotator(None, library)
+        feed = AdminSuppressedFeed.suppressed(
+            _db=db.session,
+            title="Hidden works",
+            annotator=annotator,
+        )
+
+        # Find the search link in the feed
+        search_links = [link for link in feed._feed.links if link.rel == "search"]
+        assert len(search_links) == 1
+        search_link = search_links[0]
+
+        # Verify the search link points to suppressed_search endpoint
+        assert search_link.href is not None
+        assert "suppressed_search" in search_link.href
+        assert library.short_name in search_link.href
+        assert search_link.type == "application/opensearchdescription+xml"
+
+    def test_suppressed_search_url_helper(
+        self,
+        db: DatabaseTransactionFixture,
+        patch_url_for: PatchedUrlFor,
+    ):
+        """Test the suppressed_search_url helper generates correct URLs."""
+        library = db.default_library()
+        annotator = AdminSuppressedAnnotator(None, library)
+
+        # Basic URL with just query
+        url = annotator.suppressed_search_url("test query")
+        assert "suppressed_search" in url
+        assert "q=test+query" in url or "q=test%20query" in url
+        assert library.short_name in url
+
+        # URL with pagination
+        pagination = Pagination(offset=20, size=10)
+        url_with_pagination = annotator.suppressed_search_url("test", pagination)
+        assert "suppressed_search" in url_with_pagination
+        assert "q=test" in url_with_pagination
+        assert "size=10" in url_with_pagination
+        assert "after=20" in url_with_pagination
+
+    @pytest.mark.parametrize(
+        "visibility_filter,expected_in,expected_not_in",
+        [
+            pytest.param(
+                VisibilityFilter.ALL,
+                ["suppressed", "filtered", "both"],
+                ["visible"],
+                id="all",
+            ),
+            pytest.param(
+                VisibilityFilter.MANUALLY_SUPPRESSED,
+                ["suppressed", "both"],
+                ["filtered", "visible"],
+                id="manually-suppressed",
+            ),
+            pytest.param(
+                VisibilityFilter.POLICY_FILTERED,
+                ["filtered"],
+                ["suppressed", "visible", "both"],
+                id="policy-filtered",
+            ),
+        ],
+    )
+    def test_suppressed_query_filter(
+        self,
+        db: DatabaseTransactionFixture,
+        library_fixture: LibraryFixture,
+        visibility_filter: VisibilityFilter,
+        expected_in: list[str],
+        expected_not_in: list[str],
+    ):
+        """Test that visibility filters return the correct works."""
+        library = db.default_library()
+        settings = library_fixture.settings(library)
+
+        # Create manually suppressed work
+        work_suppressed = db.work(with_open_access_download=True)
+        work_suppressed.audience = Classifier.AUDIENCE_CHILDREN
+        work_suppressed.suppressed_for.append(library)
+
+        # Create policy-filtered work
+        work_filtered = db.work(with_open_access_download=True)
+        work_filtered.audience = Classifier.AUDIENCE_ADULT
+        settings.filtered_audiences = [Classifier.AUDIENCE_ADULT]
+
+        # Create visible work (neither suppressed nor filtered)
+        work_visible = db.work(with_open_access_download=True)
+        work_visible.audience = Classifier.AUDIENCE_CHILDREN
+
+        # Create a work that is both manually suppressed AND filtered
+        work_both = db.work(with_open_access_download=True)
+        work_both.audience = Classifier.AUDIENCE_ADULT
+        work_both.suppressed_for.append(library)
+
+        works = {
+            "suppressed": work_suppressed,
+            "filtered": work_filtered,
+            "visible": work_visible,
+            "both": work_both,
+        }
+
+        query = AdminSuppressedFeed.suppressed_query(
+            db.session, library, visibility_filter
+        )
+        work_ids = {w.id for w in query.all()}
+
+        for name in expected_in:
+            assert works[name].id in work_ids, f"{name} should be in results"
+        for name in expected_not_in:
+            assert works[name].id not in work_ids, f"{name} should not be in results"
+
+    def test_suppressed_feed_facet_links(
+        self,
+        db: DatabaseTransactionFixture,
+        patch_url_for: PatchedUrlFor,
+        external_search_fake_fixture: ExternalSearchFixtureFake,
+        library_fixture: LibraryFixture,
+    ):
+        """The suppressed feed includes facet links that reflect the active filter."""
+        library = db.default_library()
+
+        # Create a suppressed work
+        work = db.work(with_open_access_download=True)
+        work.suppressed_for.append(library)
+
+        annotator = AdminSuppressedAnnotator(None, library)
+
+        # Generate feed with default facets
+        feed = AdminSuppressedFeed.suppressed(
+            _db=db.session,
+            title="Hidden works",
+            annotator=annotator,
+        )
+
+        facet_links = feed._feed.facet_links
+
+        # Should have 3 facet links (All, Manually Hidden, Policy Filtered)
+        assert len(facet_links) == 3
+        titles = {getattr(link, "title", None) for link in facet_links}
+        assert titles == {"All", "Manually Hidden", "Policy Filtered"}
+
+        # 'All' should be active by default
+        all_link = next(
+            link for link in facet_links if getattr(link, "title", None) == "All"
+        )
+        assert getattr(all_link, "activeFacet", None) == "true"
+
+        # Generate feed with 'manually-suppressed' filter
+        facets = SuppressedFacets(visibility=VisibilityFilter.MANUALLY_SUPPRESSED)
+        feed = AdminSuppressedFeed.suppressed(
+            _db=db.session,
+            title="Hidden works",
+            annotator=annotator,
+            facets=facets,
+        )
+
+        facet_links = feed._feed.facet_links
+
+        # 'Manually Hidden' should now be active
+        manually_hidden_link = next(
+            link
+            for link in facet_links
+            if getattr(link, "title", None) == "Manually Hidden"
+        )
+        assert getattr(manually_hidden_link, "activeFacet", None) == "true"
+
+        # 'All' should no longer be active
+        all_link = next(
+            link for link in facet_links if getattr(link, "title", None) == "All"
+        )
+        assert getattr(all_link, "activeFacet", None) is None
+
+    def test_suppressed_feed_pagination_preserves_facets(
+        self,
+        db: DatabaseTransactionFixture,
+        patch_url_for: PatchedUrlFor,
+        external_search_fake_fixture: ExternalSearchFixtureFake,
+        library_fixture: LibraryFixture,
+    ):
+        """Pagination links preserve the visibility facet parameter."""
+        library = db.default_library()
+
+        # Create multiple suppressed works for pagination
+        for _ in range(3):
+            work = db.work(with_open_access_download=True)
+            work.suppressed_for.append(library)
+
+        annotator = AdminSuppressedAnnotator(None, library)
+        facets = SuppressedFacets(visibility=VisibilityFilter.MANUALLY_SUPPRESSED)
+        pagination = Pagination(size=1)
+
+        feed = AdminSuppressedFeed.suppressed(
+            _db=db.session,
+            title="Hidden works",
+            annotator=annotator,
+            pagination=pagination,
+            facets=facets,
+        )
+
+        # Find the 'next' link
+        next_links = [link for link in feed._feed.links if link.rel == "next"]
+        assert len(next_links) == 1
+        next_link = next_links[0]
+
+        # The next link should include the visibility parameter
+        assert next_link.href is not None
+        assert "visibility=manually-suppressed" in next_link.href
+
+    # End-to-end search tests using actual search index
+
+    def test_search_returns_suppressed_works(
+        self,
+        end_to_end_search_fixture: EndToEndSearchFixture,
+        patch_url_for: PatchedUrlFor,
+        library_fixture: LibraryFixture,
+    ):
+        """Search within suppressed works returns only suppressed/filtered works."""
+        fixture = end_to_end_search_fixture
+        db = fixture.db
+        library = db.default_library()
+
+        # Create a suppressed work with a distinctive title
+        suppressed_work = db.work(
+            title="Suppressed Mystery Novel",
+            with_open_access_download=True,
+        )
+        suppressed_work.suppressed_for.append(library)
+
+        # Create a visible work with similar title
+        visible_work = db.work(
+            title="Visible Mystery Novel",
+            with_open_access_download=True,
+        )
+
+        # Index the works
+        fixture.populate_search_index()
+
+        result = self.suppressed_search(fixture, "Mystery Novel")
+
+        # Should not be a problem detail
+        assert not isinstance(result, ProblemDetail)
+
+        # Should only find the suppressed work, not the visible one
+        work_ids = {entry.work.id for entry in result._feed.entries}
+        assert suppressed_work.id in work_ids
+        assert visible_work.id not in work_ids
+
+    def test_search_returns_policy_filtered_works(
+        self,
+        end_to_end_search_fixture: EndToEndSearchFixture,
+        patch_url_for: PatchedUrlFor,
+        library_fixture: LibraryFixture,
+    ):
+        """Search returns works filtered by library policy (audience/genre)."""
+        fixture = end_to_end_search_fixture
+        db = fixture.db
+        library = db.default_library()
+        settings = library_fixture.settings(library)
+
+        # Create an adult work (will be filtered)
+        adult_work = db.work(
+            title="Adult Content Book",
+            with_open_access_download=True,
+        )
+        adult_work.audience = Classifier.AUDIENCE_ADULT
+
+        # Create a children's work (will not be filtered)
+        children_work = db.work(
+            title="Children Content Book",
+            with_open_access_download=True,
+        )
+        children_work.audience = Classifier.AUDIENCE_CHILDREN
+
+        # Set up audience filtering
+        settings.filtered_audiences = [Classifier.AUDIENCE_ADULT]
+
+        # Index the works
+        fixture.populate_search_index()
+
+        result = self.suppressed_search(fixture, "Content Book")
+
+        assert not isinstance(result, ProblemDetail)
+
+        # Should only find the adult (filtered) work
+        work_ids = {entry.work.id for entry in result._feed.entries}
+        assert adult_work.id in work_ids
+        assert children_work.id not in work_ids
+
+    def test_search_returns_genre_filtered_works(
+        self,
+        end_to_end_search_fixture: EndToEndSearchFixture,
+        patch_url_for: PatchedUrlFor,
+        library_fixture: LibraryFixture,
+    ):
+        """Search returns works filtered by library genre policy."""
+        fixture = end_to_end_search_fixture
+        db = fixture.db
+        library = db.default_library()
+        settings = library_fixture.settings(library)
+
+        # Create a romance work (will be filtered)
+        romance_work = db.work(
+            title="Love Story Novel",
+            with_open_access_download=True,
+        )
+        romance_genre, _ = Genre.lookup(db.session, "Romance")
+        romance_work.genres = [romance_genre]
+
+        # Create a sci-fi work (will not be filtered)
+        scifi_work = db.work(
+            title="Space Story Novel",
+            with_open_access_download=True,
+        )
+        scifi_genre, _ = Genre.lookup(db.session, "Science Fiction")
+        scifi_work.genres = [scifi_genre]
+
+        # Set up genre filtering
+        settings.filtered_genres = ["Romance"]
+
+        # Index the works
+        fixture.populate_search_index()
+
+        result = self.suppressed_search(fixture, "Story Novel")
+
+        assert not isinstance(result, ProblemDetail)
+
+        # Should only find the romance (filtered) work
+        work_ids = {entry.work.id for entry in result._feed.entries}
+        assert romance_work.id in work_ids
+        assert scifi_work.id not in work_ids
+
+    def test_search_empty_results(
+        self,
+        end_to_end_search_fixture: EndToEndSearchFixture,
+        patch_url_for: PatchedUrlFor,
+    ):
+        """Search with no matching suppressed works returns empty feed."""
+        fixture = end_to_end_search_fixture
+        db = fixture.db
+
+        # Create only visible works
+        db.work(
+            title="Visible Book",
+            with_open_access_download=True,
+        )
+
+        fixture.populate_search_index()
+
+        result = self.suppressed_search(fixture, "Visible Book")
+
+        assert not isinstance(result, ProblemDetail)
+        assert len(result._feed.entries) == 0
+
+    def test_search_scoped_to_library_collections(
+        self,
+        end_to_end_search_fixture: EndToEndSearchFixture,
+        patch_url_for: PatchedUrlFor,
+        library_fixture: LibraryFixture,
+    ):
+        """Search only returns works from the library's collections."""
+        fixture = end_to_end_search_fixture
+        db = fixture.db
+        library = db.default_library()
+
+        # Create another library with its own collection
+        other_library = library_fixture.library(name="Other Library")
+        other_collection = db.collection("Other Collection", library=other_library)
+
+        # Suppressed work in default library's collection
+        local_work = db.work(
+            title="Local Suppressed Book",
+            with_open_access_download=True,
+            collection=db.default_collection(),
+        )
+        local_work.suppressed_for.append(library)
+
+        # Suppressed work in other library's collection
+        other_work = db.work(
+            title="Other Suppressed Book",
+            with_open_access_download=True,
+            collection=other_collection,
+        )
+        other_work.suppressed_for.append(other_library)
+
+        fixture.populate_search_index()
+
+        result = self.suppressed_search(fixture, "Suppressed Book")
+
+        assert not isinstance(result, ProblemDetail)
+
+        # Should only find the local library's suppressed work
+        work_ids = {entry.work.id for entry in result._feed.entries}
+        assert local_work.id in work_ids
+        assert other_work.id not in work_ids
+
+    def test_search_pagination_next_link(
+        self,
+        end_to_end_search_fixture: EndToEndSearchFixture,
+        patch_url_for: PatchedUrlFor,
+    ):
+        """Search results include 'next' link when there might be more results."""
+        fixture = end_to_end_search_fixture
+        db = fixture.db
+        library = db.default_library()
+
+        # Create multiple suppressed works to trigger pagination
+        for i in range(5):
+            work = db.work(
+                title=f"Pagination Test Book {i}",
+                with_open_access_download=True,
+            )
+            work.suppressed_for.append(library)
+
+        fixture.populate_search_index()
+
+        # Use a small page size to trigger pagination
+        pagination = Pagination(offset=0, size=3)
+
+        result = self.suppressed_search(fixture, "Pagination Test", pagination)
+
+        assert not isinstance(result, ProblemDetail)
+
+        # Should have a "next" link since we have more results
+        links_by_rel = {link.rel: link for link in result._feed.links}
+        assert "next" in links_by_rel
+        assert links_by_rel["next"].href is not None
+        assert "after=3" in links_by_rel["next"].href
+
+        # Should not have "first" or "previous" links on first page
+        assert "first" not in links_by_rel
+        assert "previous" not in links_by_rel
+
+    def test_search_pagination_previous_and_first_links(
+        self,
+        end_to_end_search_fixture: EndToEndSearchFixture,
+        patch_url_for: PatchedUrlFor,
+    ):
+        """Search results include 'first' and 'previous' links on later pages."""
+        fixture = end_to_end_search_fixture
+        db = fixture.db
+        library = db.default_library()
+
+        # Create multiple suppressed works
+        for i in range(10):
+            work = db.work(
+                title=f"Paging Test Book {i}",
+                with_open_access_download=True,
+            )
+            work.suppressed_for.append(library)
+
+        fixture.populate_search_index()
+
+        # Request the second page
+        pagination = Pagination(offset=3, size=3)
+
+        result = self.suppressed_search(fixture, "Paging Test", pagination)
+
+        assert not isinstance(result, ProblemDetail)
+
+        links_by_rel = {link.rel: link for link in result._feed.links}
+
+        # Should have "first" link pointing to offset 0
+        assert "first" in links_by_rel
+        assert links_by_rel["first"].href is not None
+        # First page should not have "after" parameter or have after=0
+        first_href = links_by_rel["first"].href
+        assert "after=0" in first_href or "after=" not in first_href
+
+        # Should have "previous" link
+        assert "previous" in links_by_rel
+        assert links_by_rel["previous"].href is not None
+
+        # Should still have "next" link since there are more results
+        assert "next" in links_by_rel
+
+
+class TestSuppressedFacets:
+    """Tests for the SuppressedFacets class."""
+
+    def test_default_visibility(self):
+        """Default visibility is 'all'."""
+        facets = SuppressedFacets()
+        assert facets.visibility == VisibilityFilter.ALL
+
+    def test_from_request_valid_values(self):
+        """from_request parses valid visibility values."""
+        # Test 'all'
+        facets = SuppressedFacets.from_request(lambda k, d: "all")
+        assert facets.visibility == VisibilityFilter.ALL
+
+        # Test 'manually-suppressed'
+        facets = SuppressedFacets.from_request(lambda k, d: "manually-suppressed")
+        assert facets.visibility == VisibilityFilter.MANUALLY_SUPPRESSED
+
+        # Test 'policy-filtered'
+        facets = SuppressedFacets.from_request(lambda k, d: "policy-filtered")
+        assert facets.visibility == VisibilityFilter.POLICY_FILTERED
+
+    def test_from_request_invalid_value(self):
+        """from_request falls back to 'all' for invalid values."""
+        facets = SuppressedFacets.from_request(lambda k, d: "invalid-value")
+        assert facets.visibility == VisibilityFilter.ALL
+
+    def test_from_request_uses_default(self):
+        """from_request uses the default when key is not present."""
+        facets = SuppressedFacets.from_request(lambda k, d: d)
+        assert facets.visibility == VisibilityFilter.ALL
+
+    def test_items_all(self):
+        """items() returns empty for 'all' visibility."""
+        facets = SuppressedFacets(visibility=VisibilityFilter.ALL)
+        assert list(facets.items()) == []
+
+    def test_items_filtered(self):
+        """items() returns visibility param for non-'all' values."""
+        facets = SuppressedFacets(visibility=VisibilityFilter.MANUALLY_SUPPRESSED)
+        assert list(facets.items()) == [("visibility", "manually-suppressed")]
+
+        facets = SuppressedFacets(visibility=VisibilityFilter.POLICY_FILTERED)
+        assert list(facets.items()) == [("visibility", "policy-filtered")]
+
+    def test_navigate(self):
+        """navigate() creates a new facets object with different visibility."""
+        facets = SuppressedFacets(visibility=VisibilityFilter.ALL)
+        new_facets = facets.navigate(visibility=VisibilityFilter.MANUALLY_SUPPRESSED)
+
+        # Original unchanged
+        assert facets.visibility == VisibilityFilter.ALL
+        # New facets has new visibility
+        assert new_facets.visibility == VisibilityFilter.MANUALLY_SUPPRESSED
+
+    def test_facet_groups(self):
+        """facet_groups yields FacetGroup objects."""
+        facets = SuppressedFacets(visibility=VisibilityFilter.MANUALLY_SUPPRESSED)
+        groups = list(facets.facet_groups)
+
+        assert len(groups) == 3
+        assert all(isinstance(g, FacetGroup) for g in groups)
+
+        # Check 'all' facet
+        all_group = groups[0]
+        assert all_group.group_name == "Visibility"
+        assert all_group.filter_value == VisibilityFilter.ALL
+        assert all_group.facets.visibility == VisibilityFilter.ALL
+        assert all_group.is_selected is False
+        assert all_group.is_default is True
+
+        # Check 'manually-suppressed' facet (should be selected)
+        manually_suppressed_group = groups[1]
+        assert manually_suppressed_group.group_name == "Visibility"
+        assert (
+            manually_suppressed_group.filter_value
+            == VisibilityFilter.MANUALLY_SUPPRESSED
+        )
+        assert (
+            manually_suppressed_group.facets.visibility
+            == VisibilityFilter.MANUALLY_SUPPRESSED
+        )
+        assert manually_suppressed_group.is_selected is True
+        assert manually_suppressed_group.is_default is False
+
+        # Check 'policy-filtered' facet
+        policy_filtered_group = groups[2]
+        assert policy_filtered_group.group_name == "Visibility"
+        assert policy_filtered_group.filter_value == VisibilityFilter.POLICY_FILTERED
+        assert (
+            policy_filtered_group.facets.visibility == VisibilityFilter.POLICY_FILTERED
+        )
+        assert policy_filtered_group.is_selected is False
+        assert policy_filtered_group.is_default is False
