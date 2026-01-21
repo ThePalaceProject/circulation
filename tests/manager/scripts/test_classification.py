@@ -294,10 +294,7 @@ ISBN,9780674368279
 
         script = BulkUpdateAudienceScript(db.session)
 
-        # Mock calculate_presentation to avoid side effects
-        with caplog.at_level(logging.INFO), patch.object(
-            work, "calculate_presentation"
-        ):
+        with caplog.at_level(logging.INFO):
             result = script._process_single_row(row, dry_run=False)
 
         assert result is True
@@ -333,7 +330,6 @@ ISBN,9780674368279
             subject_identifier="Adult",
             weight=1000,
         )
-        db.session.commit()
 
         # Verify it exists
         initial_count = (
@@ -350,9 +346,7 @@ ISBN,9780674368279
 
         script = BulkUpdateAudienceScript(db.session)
 
-        # Mock calculate_presentation to avoid side effects
-        with patch.object(work, "calculate_presentation"):
-            script._update_audience(work, "Young Adult")
+        script._update_audience(work, "Young Adult")
 
         # Verify the old classification was deleted and new one created
         classifications = (
@@ -373,24 +367,14 @@ ISBN,9780674368279
     ) -> None:
         """Test that no changes are made when classification already matches."""
         work = db.work(audience=Classifier.AUDIENCE_ADULT, with_license_pool=True)
-        identifier = work.presentation_edition.primary_identifier
-        staff_data_source = DataSource.lookup(db.session, DataSource.LIBRARY_STAFF)
-
-        # Create an existing staff classification with the target audience
-        identifier.classify(
-            data_source=staff_data_source,
-            subject_type=Subject.FREEFORM_AUDIENCE,
-            subject_identifier="Young Adult",
-            weight=1000,
-        )
-        db.session.commit()
 
         script = BulkUpdateAudienceScript(db.session)
 
-        # Should return False since classification already matches
-        result = script._update_audience(work, "Young Adult")
+        # The first call does update the classification as expected
+        assert script._update_audience(work, "Young Adult") is True
 
-        assert result is False
+        # The second call should return False since the classification already matches
+        assert script._update_audience(work, "Young Adult") is False
 
     def test_process_single_row_no_presentation_edition(
         self, db: DatabaseTransactionFixture, caplog: pytest.LogCaptureFixture
@@ -431,7 +415,6 @@ ISBN,9780674368279
             subject_identifier="Adult",
             weight=1000,
         )
-        db.session.commit()
 
         row = CSVRow(
             identifier_type=identifier.type,
@@ -473,9 +456,7 @@ ISBN,9780674368279
         ]
 
         script = BulkUpdateAudienceScript(db.session)
-
-        with patch.object(work, "calculate_presentation"):
-            result = script._process_rows(rows, batch_size=50, dry_run=False)
+        result = script._process_rows(rows, batch_size=50, dry_run=False)
 
         assert result.total == 2
         assert result.updated == 1
@@ -504,11 +485,7 @@ ISBN,9780674368279
 
         script = BulkUpdateAudienceScript(db.session)
 
-        # Mock calculate_presentation for all works
-        with (
-            caplog.at_level(logging.INFO),
-            patch("palace.manager.sqlalchemy.model.work.Work.calculate_presentation"),
-        ):
+        with caplog.at_level(logging.INFO):
             # Use batch_size=2 to trigger progress logs
             result = script._process_rows(rows, batch_size=2, dry_run=False)
 
@@ -574,11 +551,7 @@ ISBN,9780674368279
             db.session, cmd_args=[str(csv_path), "--batch-size", "1"]
         )
 
-        # Mock calculate_presentation
-        with (
-            caplog.at_level(logging.INFO),
-            patch("palace.manager.sqlalchemy.model.work.Work.calculate_presentation"),
-        ):
+        with caplog.at_level(logging.INFO):
             script.do_run()
 
         assert "Completed: total=2, updated=2, skipped=0, errors=0" in caplog.text

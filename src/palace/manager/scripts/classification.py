@@ -310,6 +310,10 @@ class BulkUpdateAudienceScript(Script):
         :param new_audience: The new audience value.
         :return: True if a change was made, False if already correct.
         """
+        if work.audience == new_audience:
+            # Already has the correct classification, nothing to do
+            return False
+
         staff_data_source = DataSource.lookup(
             self._db, DataSource.LIBRARY_STAFF, autocreate=True
         )
@@ -329,13 +333,6 @@ class BulkUpdateAudienceScript(Script):
             )
             .all()
         )
-
-        # Check if we already have the correct classification
-        if len(existing_audience_classifications) == 1:
-            existing = existing_audience_classifications[0]
-            if existing.subject.identifier == new_audience:
-                # Already has the correct classification, nothing to do
-                return False
 
         # Delete existing FREEFORM_AUDIENCE staff classifications
         for classification in existing_audience_classifications:
