@@ -873,13 +873,13 @@ class TestExternalSearchWithWorks:
         expect(data.sherlock, "sherlock holmes", f)
 
         # Filter on identifier -- one or many.
-        for results in [
+        for expected_results in [
             [data.lincoln],
             [data.sherlock, data.pride_audio],
         ]:
-            identifiers = [w.license_pools[0].identifier for w in results]
+            identifiers = [w.license_pools[0].identifier for w in expected_results]
             f = Filter(identifiers=identifiers)
-            expect(results, None, f, ordered=False)
+            expect(expected_results, None, f, ordered=False)
 
         # Setting .match_nothing on a Filter makes it always return nothing,
         # even if it would otherwise return works.
@@ -996,19 +996,19 @@ class TestExternalSearchWithWorks:
         # that only match because of words in the description.
         by_title.min_score = 10
         by_author.min_score = 10
-        results = [
+        expected_results = [
             data.no_age,
             data.age_4_5,
             data.dodger,
             data.age_9_10,
             data.obama,
         ]
-        expect(results, "president", by_title)
+        expect(expected_results, "president", by_title)
 
         # Reverse the sort order to demonstrate that these works are being
         # sorted by title rather than randomly.
         by_title.order_ascending = False
-        expect(list(reversed(results)), "president", by_title)
+        expect(list(reversed(expected_results)), "president", by_title)
 
         # Finally, verify that we can run multiple queries
         # simultaneously.

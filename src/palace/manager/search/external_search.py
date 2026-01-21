@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import time
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 
+from opensearchpy import Search
 from opensearchpy.helpers.query import (
     FunctionScore,
 )
+from opensearchpy.helpers.response import Hit
 
 from palace.manager.search.filter import Filter
 from palace.manager.search.query import JSONQuery, Query
@@ -34,9 +36,16 @@ class ExternalSearchIndex(LoggerMixin):
     def clear_search_documents(self) -> None:
         self._search_service.index_clear_documents()
 
-    def create_search_doc(self, query_string, filter, pagination, debug):
+    def create_search_doc(
+        self,
+        query_string: str | None,
+        filter: Filter | None,
+        pagination: Pagination | None,
+        debug: bool,
+    ) -> Search:
+        query: Query
         if filter and filter.search_type == "json":
-            query = JSONQuery(query_string, filter)
+            query = JSONQuery(query_string or "", filter)
         else:
             query = Query(query_string, filter)
 
@@ -65,9 +74,15 @@ class ExternalSearchIndex(LoggerMixin):
         if fields:
             search = search.source(fields)
 
-        return search
+        return search  # type: ignore[no-any-return]
 
-    def query_works(self, query_string, filter=None, pagination=None, debug=False):
+    def query_works(
+        self,
+        query_string: str | None,
+        filter: Filter | None = None,
+        pagination: Pagination | None = None,
+        debug: bool = False,
+    ) -> Sequence[Hit]:
         """Run a search query.
 
         This works by calling query_works_multi().
@@ -104,7 +119,11 @@ class ExternalSearchIndex(LoggerMixin):
 
         return result_list[0]
 
-    def query_works_multi(self, queries, debug=False):
+    def query_works_multi(
+        self,
+        queries: Sequence[tuple[str | None, Filter | None, Pagination]],
+        debug: bool = False,
+    ) -> Iterator[Sequence[Hit]]:
         """Run several queries simultaneously and return the results
         as a big list.
 
@@ -158,7 +177,7 @@ class ExternalSearchIndex(LoggerMixin):
             pagination.page_loaded(results)
             yield results
 
-    def count_works(self, filter):
+    def count_works(self, filter: Filter | None) -> int:
         """Instead of retrieving works that match `filter`, count the total."""
         if filter is not None and filter.match_nothing is True:
             # We already know that the filter should match nothing.
@@ -167,7 +186,7 @@ class ExternalSearchIndex(LoggerMixin):
         qu = self.create_search_doc(
             query_string=None, filter=filter, pagination=None, debug=False
         )
-        return qu.count()
+        return qu.count()  # type: ignore[no-any-return]
 
     def remove_work(self, work: Work | int) -> None:
         """Remove the search document for `work` from the search index."""

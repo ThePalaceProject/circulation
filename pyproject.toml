@@ -156,7 +156,6 @@ module = [
     "palace.manager.integration.patron_auth.sip2.client",
     "palace.manager.integration.patron_auth.sip2.provider",
     "palace.manager.integration.patron_auth.sirsidynix_authentication_provider",
-    "palace.manager.search.external_search",
     "palace.manager.search.filter",
     "palace.manager.search.pagination",
     "palace.manager.search.query",
