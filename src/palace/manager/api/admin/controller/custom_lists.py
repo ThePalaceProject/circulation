@@ -32,11 +32,12 @@ from palace.manager.core.app_server import load_pagination_from_request
 from palace.manager.core.problem_details import INVALID_INPUT, METHOD_NOT_ALLOWED
 from palace.manager.core.query.customlist import CustomListQueries
 from palace.manager.feed.acquisition import OPDSAcquisitionFeed
+from palace.manager.feed.worklist.base import WorkList
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.customlist import CustomList
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.identifier import Identifier
-from palace.manager.sqlalchemy.model.lane import Lane, WorkList
+from palace.manager.sqlalchemy.model.lane import Lane
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.licensing import LicensePool
 from palace.manager.sqlalchemy.model.work import Work

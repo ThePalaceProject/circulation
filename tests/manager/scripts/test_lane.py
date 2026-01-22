@@ -3,12 +3,13 @@ from __future__ import annotations
 from unittest.mock import patch
 
 from palace.manager.api.lanes import create_default_lanes
+from palace.manager.feed.worklist.base import WorkList
 from palace.manager.scripts.lane import (
     DeleteInvisibleLanesScript,
     LaneSweeperScript,
     UpdateLaneSizeScript,
 )
-from palace.manager.sqlalchemy.model.lane import Lane, WorkList
+from palace.manager.sqlalchemy.model.lane import Lane
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.search import EndToEndSearchFixture, ExternalSearchFixtureFake
 

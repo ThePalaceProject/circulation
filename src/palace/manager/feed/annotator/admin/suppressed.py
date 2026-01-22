@@ -5,8 +5,8 @@ from palace.manager.api.circulation.dispatcher import CirculationApiDispatcher
 from palace.manager.feed.annotator.circulation import LibraryAnnotator
 from palace.manager.feed.annotator.verbose import VerboseAnnotator
 from palace.manager.feed.types import FeedData, FeedEntryType, Link, WorkEntry
+from palace.manager.search.pagination import Pagination
 from palace.manager.sqlalchemy.model.datasource import DataSource
-from palace.manager.sqlalchemy.model.lane import Pagination
 from palace.manager.sqlalchemy.model.library import Library
 
 

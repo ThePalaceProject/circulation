@@ -3,7 +3,9 @@ import json
 import pytest
 
 from palace.manager.core.problem_details import INVALID_INPUT
-from palace.manager.search.pagination import SortKeyPagination
+from palace.manager.search.pagination import Pagination, SortKeyPagination
+from palace.manager.sqlalchemy.model.work import Work
+from tests.fixtures.database import DatabaseTransactionFixture
 
 
 class TestSortKeyPagination:
@@ -220,3 +222,129 @@ class TestSortKeyPagination:
         # page, but the page size is zero, there is no next page.
         first_page.this_page_size = 0
         assert None == first_page.next_page
+
+
+class TestPagination:
+    def test_from_request(self):
+        # No arguments -> Class defaults.
+        pagination = Pagination.from_request({}.get, None)
+        assert isinstance(pagination, Pagination)
+        assert Pagination.DEFAULT_SIZE == pagination.size
+        assert 0 == pagination.offset
+
+        # Override the default page size.
+        pagination = Pagination.from_request({}.get, 100)
+        assert isinstance(pagination, Pagination)
+        assert 100 == pagination.size
+        assert 0 == pagination.offset
+
+        # The most common usages.
+        pagination = Pagination.from_request(dict(size="4").get)
+        assert isinstance(pagination, Pagination)
+        assert 4 == pagination.size
+        assert 0 == pagination.offset
+
+        pagination = Pagination.from_request(dict(after="6").get)
+        assert isinstance(pagination, Pagination)
+        assert Pagination.DEFAULT_SIZE == pagination.size
+        assert 6 == pagination.offset
+
+        pagination = Pagination.from_request(dict(size=4, after=6).get)
+        assert isinstance(pagination, Pagination)
+        assert 4 == pagination.size
+        assert 6 == pagination.offset
+
+        # Invalid size or offset -> problem detail
+        error = Pagination.from_request(dict(size="string").get)
+        assert INVALID_INPUT.uri == error.uri
+        assert "Invalid page size: string" == str(error.detail)
+
+        error = Pagination.from_request(dict(after="string").get)
+        assert INVALID_INPUT.uri == error.uri
+        assert "Invalid offset: string" == str(error.detail)
+
+        # Size too large -> cut down to MAX_SIZE
+        pagination = Pagination.from_request(dict(size="10000").get)
+        assert isinstance(pagination, Pagination)
+        assert Pagination.MAX_SIZE == pagination.size
+        assert 0 == pagination.offset
+
+    def test_has_next_page_total_size(self, db: DatabaseTransactionFixture):
+        """Test the ability of Pagination.total_size to control whether there is a next page."""
+        query = db.session.query(Work)
+        pagination = Pagination(size=2)
+
+        # When total_size is not set, Pagination assumes there is a
+        # next page.
+        pagination.modify_database_query(db.session, query)
+        assert True == pagination.has_next_page
+
+        # Here, there is one more item on the next page.
+        pagination.total_size = 3
+        assert 0 == pagination.offset
+        assert True == pagination.has_next_page
+
+        # Here, the last item on this page is the last item in the dataset.
+        pagination.offset = 1
+        assert False == pagination.has_next_page
+        assert None == pagination.next_page
+
+        # If we somehow go over the end of the dataset, there is no next page.
+        pagination.offset = 400
+        assert False == pagination.has_next_page
+        assert None == pagination.next_page
+
+        # If both total_size and this_page_size are set, total_size
+        # takes precedence.
+        pagination.offset = 0
+        pagination.total_size = 100
+        pagination.this_page_size = 0
+        assert True == pagination.has_next_page
+
+        pagination.total_size = 0
+        pagination.this_page_size = 10
+        assert False == pagination.has_next_page
+        assert None == pagination.next_page
+
+    def test_has_next_page_this_page_size(self, db: DatabaseTransactionFixture):
+        """Test the ability of Pagination.this_page_size to control whether there is a next page."""
+        query = db.session.query(Work)
+        pagination = Pagination(size=2)
+
+        # When this_page_size is not set, Pagination assumes there is a
+        # next page.
+        pagination.modify_database_query(db.session, query)
+        assert True == pagination.has_next_page
+
+        # Here, there is nothing on the current page. There is no next page.
+        pagination.this_page_size = 0
+        assert False == pagination.has_next_page
+
+        # If the page is full, we can be almost certain there is a next page.
+        pagination.this_page_size = 400
+        assert True == pagination.has_next_page
+
+        # Here, there is one item on the current page. Even though the
+        # current page is not full (page size is 2), we assume for
+        # safety's sake that there is a next page. The cost of getting
+        # this wrong is low, compared to the cost of saying there is no
+        # next page when there actually is.
+        pagination.this_page_size = 1
+        assert True == pagination.has_next_page
+
+    def test_page_loaded(self):
+        # Test page_loaded(), which lets the Pagination object see the
+        # size of the current page.
+        pagination = Pagination()
+        assert None == pagination.this_page_size
+        assert False == pagination.page_has_loaded
+        pagination.page_loaded([1, 2, 3])
+        assert 3 == pagination.this_page_size
+        assert True == pagination.page_has_loaded
+
+    def test_modify_search_query(self):
+        # The default implementation of modify_search_query is to slice
+        # a set of search results like a list.
+        pagination = Pagination(offset=2, size=3)
+        o = [1, 2, 3, 4, 5, 6]
+        assert o[2 : 2 + 3] == pagination.modify_search_query(o)

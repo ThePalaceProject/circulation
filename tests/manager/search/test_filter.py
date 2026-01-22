@@ -10,8 +10,10 @@ from psycopg2._range import NumericRange
 from palace.manager.core.classifier import Classifier
 from palace.manager.data_layer.contributor import ContributorData
 from palace.manager.data_layer.identifier import IdentifierData
+from palace.manager.feed.facets.feed import Facets, FeaturedFacets
+from palace.manager.feed.worklist.base import WorkList
 from palace.manager.search.filter import Filter
-from palace.manager.search.pagination import SortKeyPagination
+from palace.manager.search.pagination import Pagination, SortKeyPagination
 from palace.manager.search.revision_directory import SearchRevisionDirectory
 from palace.manager.sqlalchemy.model.classification import Genre
 from palace.manager.sqlalchemy.model.collection import Collection
@@ -19,12 +21,6 @@ from palace.manager.sqlalchemy.model.contributor import Contribution, Contributo
 from palace.manager.sqlalchemy.model.customlist import CustomList
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
-from palace.manager.sqlalchemy.model.lane import (
-    Facets,
-    FeaturedFacets,
-    Pagination,
-    WorkList,
-)
 from palace.manager.sqlalchemy.model.licensing import LicensePool, LicensePoolStatus
 from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.sqlalchemy.util import get_one_or_create

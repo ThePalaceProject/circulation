@@ -16,8 +16,8 @@ from opensearchpy.helpers.query import (
 )
 
 from palace.manager.core.classifier import Classifier
-from palace.manager.core.facets import FacetConstants
 from palace.manager.data_layer.identifier import IdentifierData
+from palace.manager.feed.facets.constants import FacetConstants
 from palace.manager.search.revision_directory import SearchRevisionDirectory
 from palace.manager.search.search_base import SearchBase
 from palace.manager.sqlalchemy.constants import IntegrationConfigurationConstants

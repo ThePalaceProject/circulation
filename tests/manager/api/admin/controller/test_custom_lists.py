@@ -21,12 +21,13 @@ from palace.manager.api.admin.problem_details import (
 )
 from palace.manager.api.problem_details import CANNOT_DELETE_SHARED_LIST
 from palace.manager.core.query.customlist import CustomListQueries
+from palace.manager.search.pagination import Pagination
 from palace.manager.sqlalchemy.model.admin import Admin, AdminRole
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.customlist import CustomList, CustomListEntry
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
-from palace.manager.sqlalchemy.model.lane import Lane, Pagination
+from palace.manager.sqlalchemy.model.lane import Lane
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.util import create, get_one
 from palace.manager.util.problem_detail import ProblemDetail

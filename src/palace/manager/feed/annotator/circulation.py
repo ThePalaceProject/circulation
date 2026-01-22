@@ -30,6 +30,8 @@ from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.core.lcp.credential import LCPCredentialFactory, LCPHashedPassphrase
 from palace.manager.core.lcp.exceptions import LCPError
 from palace.manager.feed.annotator.base import Annotator
+from palace.manager.feed.facets.base import FacetsWithEntryPoint
+from palace.manager.feed.facets.feed import Facets
 from palace.manager.feed.opds import UnfulfillableWork
 from palace.manager.feed.types import (
     Acquisition,
@@ -40,10 +42,12 @@ from palace.manager.feed.types import (
     WorkEntry,
 )
 from palace.manager.feed.util import strftime
+from palace.manager.feed.worklist.base import WorkList
 from palace.manager.integration.license.boundless.constants import (
     BAKER_TAYLOR_KDRM_PARAMS,
 )
 from palace.manager.integration.metadata.novelist import NoveListAPI
+from palace.manager.search.pagination import Pagination
 from palace.manager.search.result import WorkSearchResult
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.service.container import Services
@@ -51,11 +55,7 @@ from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.lane import (
-    Facets,
-    FacetsWithEntryPoint,
     Lane,
-    Pagination,
-    WorkList,
 )
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.licensing import (

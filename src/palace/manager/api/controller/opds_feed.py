@@ -23,17 +23,14 @@ from palace.manager.core.app_server import (
 from palace.manager.core.entrypoint import EverythingEntryPoint
 from palace.manager.core.opensearch import OpenSearchDocument
 from palace.manager.feed.acquisition import OPDSAcquisitionFeed
+from palace.manager.feed.facets.feed import FeaturedFacets
+from palace.manager.feed.facets.search import SearchFacets
 from palace.manager.feed.navigation import NavigationFeed
 from palace.manager.feed.opds import NavigationFacets
-from palace.manager.search.pagination import SortKeyPagination
+from palace.manager.feed.worklist.base import WorkList
+from palace.manager.search.pagination import Pagination, SortKeyPagination
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.customlist import CustomList
-from palace.manager.sqlalchemy.model.lane import (
-    FeaturedFacets,
-    Pagination,
-    SearchFacets,
-    WorkList,
-)
 from palace.manager.util.flask_util import OPDSFeedResponse
 from palace.manager.util.problem_detail import ProblemDetail
 

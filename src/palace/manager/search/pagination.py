@@ -5,8 +5,149 @@ import json
 from flask_babel import lazy_gettext as _
 
 from palace.manager.core.problem_details import INVALID_INPUT
-from palace.manager.sqlalchemy.model.lane import Pagination
 from palace.manager.util.problem_detail import ProblemDetail
+
+
+class Pagination:
+    DEFAULT_SIZE = 50
+    DEFAULT_SEARCH_SIZE = 10
+    DEFAULT_FEATURED_SIZE = 10
+    DEFAULT_CRAWLABLE_SIZE = 100
+    MAX_SIZE = 100
+
+    @classmethod
+    def default(cls):
+        return Pagination(0, cls.DEFAULT_SIZE)
+
+    def __init__(self, offset=0, size=DEFAULT_SIZE):
+        """Constructor.
+
+        :param offset: Start pulling entries from the query at this index.
+        :param size: Pull no more than this number of entries from the query.
+        """
+        self.offset = offset
+        self.size = size
+        self.total_size = None
+        self.this_page_size = None
+        self.page_has_loaded = False
+        self.max_size = self.MAX_SIZE
+
+    @classmethod
+    def _int_from_request(cls, key, get_arg, make_detail, default):
+        """Helper method to get and parse an integer value from
+        a URL query argument in a Flask request.
+
+        :param key: Name of the argument.
+        :param get_arg: A function which when called with (key, default)
+           returns the value of the query argument.
+        :pass make_detail: A function, called with the value
+           obtained from the request, which returns the detail
+           information that should be included in a problem detail
+           document if the input isn't convertable to an integer.
+        :param default: Use this value if none is specified.
+        """
+        raw = get_arg(key, default)
+        try:
+            as_int = int(raw)
+        except ValueError:
+            return INVALID_INPUT.detailed(make_detail(raw))
+        return as_int
+
+    @classmethod
+    def size_from_request(cls, get_arg, default):
+        make_detail = lambda size: (_("Invalid page size: %(size)s", size=size))
+        size = cls._int_from_request(
+            "size", get_arg, make_detail, default or cls.DEFAULT_SIZE
+        )
+        if isinstance(size, ProblemDetail):
+            return size
+        return min(size, cls.MAX_SIZE)
+
+    @classmethod
+    def from_request(cls, get_arg, default_size=None):
+        """Instantiate a Pagination object from a Flask request."""
+        default_size = default_size or cls.DEFAULT_SIZE
+        size = cls.size_from_request(get_arg, default_size)
+        if isinstance(size, ProblemDetail):
+            return size
+        offset = cls._int_from_request(
+            "after",
+            get_arg,
+            lambda offset: _("Invalid offset: %(offset)s", offset=offset),
+            0,
+        )
+        if isinstance(offset, ProblemDetail):
+            return offset
+        return cls(offset, size)
+
+    def items(self):
+        yield ("after", self.offset)
+        yield ("size", self.size)
+
+    @property
+    def query_string(self):
+        return "&".join("=".join(map(str, x)) for x in list(self.items()))
+
+    @property
+    def first_page(self):
+        return Pagination(0, self.size)
+
+    @property
+    def next_page(self):
+        if not self.has_next_page:
+            return None
+        return Pagination(self.offset + self.size, self.size)
+
+    @property
+    def previous_page(self):
+        if self.offset <= 0:
+            return None
+        previous_offset = self.offset - self.size
+        previous_offset = max(0, previous_offset)
+        return Pagination(previous_offset, self.size)
+
+    @property
+    def has_next_page(self):
+        """Returns boolean reporting whether pagination is done for a query
+
+        Either `total_size` or `this_page_size` must be set for this
+        method to be accurate.
+        """
+        if self.total_size is not None:
+            # We know the total size of the result set, so we know
+            # whether or not there are more results.
+            return self.offset + self.size < self.total_size
+        if self.this_page_size is not None:
+            # We know the number of items on the current page. If this
+            # page was empty, we can assume there is no next page; if
+            # not, we can assume there is a next page. This is a little
+            # more conservative than checking whether we have a 'full'
+            # page.
+            return self.this_page_size > 0
+
+        # We don't know anything about this result set, so assume there is
+        # a next page.
+        return True
+
+    def modify_database_query(self, _db, qu):
+        """Modify the given database query with OFFSET and LIMIT."""
+        return qu.offset(self.offset).limit(self.size)
+
+    def modify_search_query(self, search):
+        """Modify a Search object so that it retrieves only a single 'page'
+        of results.
+
+        :return: A Search object.
+        """
+        return search[self.offset : self.offset + self.size]
+
+    def page_loaded(self, page):
+        """An actual page of results has been fetched. Keep any internal state
+        that would be useful to know when reasoning about earlier or
+        later pages.
+        """
+        self.this_page_size = len(page)
+        self.page_has_loaded = True
 
 
 class SortKeyPagination(Pagination):

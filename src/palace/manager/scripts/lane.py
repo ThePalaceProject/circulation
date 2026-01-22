@@ -9,10 +9,11 @@ from typing import Any, TextIO
 from sqlalchemy.orm import Session
 
 from palace.manager.api.lanes import create_default_lanes
+from palace.manager.feed.worklist.base import WorkList
 from palace.manager.scripts.input import LibraryInputScript
 from palace.manager.search.external_search import ExternalSearchIndex
 from palace.manager.sqlalchemy.listeners import site_configuration_has_changed
-from palace.manager.sqlalchemy.model.lane import Lane, WorkList
+from palace.manager.sqlalchemy.model.lane import Lane
 from palace.manager.sqlalchemy.model.library import Library
 
 

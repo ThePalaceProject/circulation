@@ -26,7 +26,7 @@ from palace.manager.api.admin.problem_details import (
 )
 from palace.manager.api.config import Configuration
 from palace.manager.api.problem_details import LIBRARY_NOT_FOUND
-from palace.manager.core.facets import FacetConstants
+from palace.manager.feed.facets.constants import FacetConstants
 from palace.manager.sqlalchemy.model.admin import AdminRole
 from palace.manager.sqlalchemy.model.announcements import (
     SETTING_NAME as ANNOUNCEMENTS_SETTING_NAME,

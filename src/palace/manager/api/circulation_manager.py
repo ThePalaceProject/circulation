@@ -41,6 +41,7 @@ from palace.manager.feed.annotator.circulation import (
     CirculationManagerAnnotator,
     LibraryAnnotator,
 )
+from palace.manager.feed.worklist.base import WorkList
 from palace.manager.integration.patron_auth.saml.controller import SAMLController
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.service.container import Services
@@ -53,7 +54,7 @@ from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.discovery_service_registration import (
     DiscoveryServiceRegistration,
 )
-from palace.manager.sqlalchemy.model.lane import Lane, WorkList
+from palace.manager.sqlalchemy.model.lane import Lane
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.util.log import LoggerMixin, elapsed_time_logging, log_elapsed_time
 

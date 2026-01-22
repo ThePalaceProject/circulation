@@ -13,9 +13,9 @@ from palace.manager.feed.admin.suppressed import (
 )
 from palace.manager.feed.annotator.admin.suppressed import AdminSuppressedAnnotator
 from palace.manager.feed.types import FeedData, FeedEntryType, Link
+from palace.manager.search.pagination import Pagination
 from palace.manager.sqlalchemy.model.classification import Genre
 from palace.manager.sqlalchemy.model.datasource import DataSource
-from palace.manager.sqlalchemy.model.lane import Pagination
 from palace.manager.sqlalchemy.model.measurement import Measurement
 from palace.manager.util.problem_detail import ProblemDetail
 from tests.fixtures.database import DatabaseTransactionFixture

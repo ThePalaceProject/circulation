@@ -6,10 +6,12 @@ from sqlalchemy.orm import Session
 from werkzeug.datastructures import MIMEAccept
 
 from palace.manager.feed.annotator.circulation import CirculationManagerAnnotator
+from palace.manager.feed.facets.feed import Facets
 from palace.manager.feed.opds import BaseOPDSFeed, NavigationFacets
 from palace.manager.feed.types import DataEntry, DataEntryTypes, Link
 from palace.manager.feed.util import strftime
-from palace.manager.sqlalchemy.model.lane import Facets, Pagination, WorkList
+from palace.manager.feed.worklist.base import WorkList
+from palace.manager.search.pagination import Pagination
 from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.flask_util import OPDSFeedResponse
 from palace.manager.util.opds_writer import OPDSFeed

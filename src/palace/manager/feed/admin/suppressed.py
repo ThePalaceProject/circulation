@@ -12,9 +12,9 @@ from sqlalchemy.sql import ColumnElement
 from palace.manager.feed.acquisition import OPDSAcquisitionFeed
 from palace.manager.feed.annotator.admin.suppressed import AdminSuppressedAnnotator
 from palace.manager.search.filter import SuppressedWorkFilter
+from palace.manager.search.pagination import Pagination
 from palace.manager.sqlalchemy.model.classification import Genre
 from palace.manager.sqlalchemy.model.edition import Edition
-from palace.manager.sqlalchemy.model.lane import Pagination
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.licensing import LicensePool
 from palace.manager.sqlalchemy.model.work import Work, WorkGenre

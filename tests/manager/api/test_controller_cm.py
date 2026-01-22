@@ -9,11 +9,12 @@ from palace.manager.feed.annotator.circulation import (
     CirculationManagerAnnotator,
     LibraryAnnotator,
 )
+from palace.manager.feed.facets.feed import Facets
+from palace.manager.feed.worklist.base import WorkList
 from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.sqlalchemy.model.discovery_service_registration import (
     DiscoveryServiceRegistration,
 )
-from palace.manager.sqlalchemy.model.lane import Facets, WorkList
 from palace.manager.sqlalchemy.util import create
 from palace.manager.util.problem_detail import ProblemDetail
 

@@ -13,6 +13,8 @@ from palace.manager.core.classifier import (
     nonfiction_genres,
 )
 from palace.manager.core.config import CannotLoadConfiguration
+from palace.manager.feed.facets.feed import DefaultSortOrderFacets, Facets
+from palace.manager.feed.worklist.base import WorkList
 from palace.manager.integration.metadata.novelist import NoveListAPI
 from palace.manager.integration.metadata.nyt import NYTBestSellerAPI
 from palace.manager.sqlalchemy.model.collection import Collection
@@ -21,10 +23,7 @@ from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.lane import (
-    DefaultSortOrderFacets,
-    Facets,
     Lane,
-    WorkList,
 )
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.util import create
