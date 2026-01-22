@@ -335,4 +335,4 @@ class TestCrawlableFeed:
             for l in feed["feed"]["links"]
             if l["rel"] == "http://opds-spec.org/facet"
         }
-        assert facet_groups == {"Collection Name", "Distributor"}
+        assert facet_groups == {"Collection Name", "Distributor", "Sort by"}
