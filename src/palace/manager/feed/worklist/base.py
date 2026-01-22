@@ -12,16 +12,12 @@ from opensearchpy import OpenSearchException
 from sqlalchemy.orm import Session
 
 from palace.manager.core.classifier import Classifier
-from palace.manager.search.external_search import ExternalSearchIndex
 from palace.manager.search.pagination import Pagination
-from palace.manager.search.result import WorkSearchResult
-from palace.manager.sqlalchemy.model.customlist import CustomList
-from palace.manager.sqlalchemy.model.edition import Edition
-from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.util.opds_writer import OPDSFeed
 
 if TYPE_CHECKING:
-    pass
+    from palace.manager.search.external_search import ExternalSearchIndex
+    from palace.manager.search.result import WorkSearchResult
 
 
 class WorkList:
@@ -65,6 +61,7 @@ class WorkList:
         """
         # Local imports to avoid circular dependency
         from palace.manager.feed.worklist.top_level import TopLevelWorkList
+        from palace.manager.sqlalchemy.model.edition import Edition
         from palace.manager.sqlalchemy.model.lane import Lane
 
         # Load all of this Library's visible top-level Lane objects
@@ -258,10 +255,16 @@ class WorkList:
 
     def get_library(self, _db):
         """Find the Library object associated with this WorkList."""
+        # Local import to avoid circular dependency
+        from palace.manager.sqlalchemy.model.library import Library
+
         return Library.by_id(_db, self.library_id)
 
     def get_customlists(self, _db):
         """Get customlists associated with the Worklist."""
+        # Local import to avoid circular dependency
+        from palace.manager.sqlalchemy.model.customlist import CustomList
+
         if hasattr(self, "_customlist_ids") and self._customlist_ids is not None:
             return (
                 _db.query(CustomList)

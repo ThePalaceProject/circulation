@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import and_, exists, not_, or_, select
 from sqlalchemy.orm import Session, aliased, contains_eager, joinedload, query
@@ -8,22 +9,11 @@ from sqlalchemy.orm import Session, aliased, contains_eager, joinedload, query
 from palace.manager.core.classifier import Classifier
 from palace.manager.core.config import ConfigurationAttributeValue
 from palace.manager.feed.worklist.base import WorkList
-from palace.manager.sqlalchemy.model.classification import Genre
-from palace.manager.sqlalchemy.model.collection import Collection
-from palace.manager.sqlalchemy.model.customlist import CustomList, CustomListEntry
-from palace.manager.sqlalchemy.model.edition import Edition
-from palace.manager.sqlalchemy.model.integration import (
-    IntegrationConfiguration,
-    IntegrationLibraryConfiguration,
-)
-from palace.manager.sqlalchemy.model.licensing import (
-    LicensePool,
-    LicensePoolDeliveryMechanism,
-)
-from palace.manager.sqlalchemy.model.resource import Resource
-from palace.manager.sqlalchemy.model.work import Work, WorkGenre
 from palace.manager.sqlalchemy.util import tuple_to_numericrange
 from palace.manager.util.datetime_helpers import utc_now
+
+if TYPE_CHECKING:
+    pass
 
 
 class DatabaseBackedWorkList(WorkList):
@@ -53,6 +43,8 @@ class DatabaseBackedWorkList(WorkList):
         :param kwargs: Ignored -- only included for compatibility with works().
         :return: A Query.
         """
+        # Local import to avoid circular dependency
+        from palace.manager.sqlalchemy.model.work import Work
 
         qu = self.base_query(_db)
 
@@ -98,6 +90,13 @@ class DatabaseBackedWorkList(WorkList):
         Holds are not allowed if the collection's `hold_limit` is set to 0
         or if the library's `dont_display_reserves` is set to True.
         """
+        # Local imports to avoid circular dependency
+        from palace.manager.sqlalchemy.model.collection import Collection
+        from palace.manager.sqlalchemy.model.integration import (
+            IntegrationConfiguration,
+            IntegrationLibraryConfiguration,
+        )
+        from palace.manager.sqlalchemy.model.licensing import LicensePool
 
         restricted_collections = _db.execute(
             select(Collection.id)
@@ -138,6 +137,9 @@ class DatabaseBackedWorkList(WorkList):
         """Return a query that contains the joins set up as necessary to
         create OPDS feeds.
         """
+        # Local import to avoid circular dependency
+        from palace.manager.sqlalchemy.model.work import Work
+
         qu = _db.query(Work).join(Work.license_pools).join(Work.presentation_edition)
 
         # Apply optimizations.
@@ -149,6 +151,14 @@ class DatabaseBackedWorkList(WorkList):
         """Optimize a query for use in generating OPDS feeds, by modifying
         which related objects get pulled from the database.
         """
+        # Local imports to avoid circular dependency
+        from palace.manager.sqlalchemy.model.licensing import (
+            LicensePool,
+            LicensePoolDeliveryMechanism,
+        )
+        from palace.manager.sqlalchemy.model.resource import Resource
+        from palace.manager.sqlalchemy.model.work import Work
+
         # Avoid eager loading of objects that are already being loaded.
         qu = qu.options(
             contains_eager(Work.presentation_edition),
@@ -192,6 +202,10 @@ class DatabaseBackedWorkList(WorkList):
         Note that this assumes the query has an active join against
         LicensePool.
         """
+        # Local imports to avoid circular dependency
+        from palace.manager.sqlalchemy.model.collection import Collection
+        from palace.manager.sqlalchemy.model.work import Work
+
         query = Collection.restrict_to_ready_deliverable_works(
             query, show_suppressed=show_suppressed, collection_ids=self.collection_ids
         )
@@ -213,6 +227,12 @@ class DatabaseBackedWorkList(WorkList):
         :return: A 2-tuple (query, clauses).
 
         """
+        # Local imports to avoid circular dependency
+        from palace.manager.sqlalchemy.model.classification import Genre
+        from palace.manager.sqlalchemy.model.edition import Edition
+        from palace.manager.sqlalchemy.model.licensing import LicensePool
+        from palace.manager.sqlalchemy.model.work import Work, WorkGenre
+
         # Audience language, and genre restrictions are allowed on all
         # WorkLists. (So are collection restrictions, but those are
         # applied by only_show_ready_deliverable_works().
@@ -273,6 +293,9 @@ class DatabaseBackedWorkList(WorkList):
         """Create a SQLAlchemy filter that excludes books whose intended
         audience doesn't match what we're looking for.
         """
+        # Local import to avoid circular dependency
+        from palace.manager.sqlalchemy.model.work import Work
+
         if not self.audiences:
             return []
         return [Work.audience.in_(self.audiences)]
@@ -289,6 +312,13 @@ class DatabaseBackedWorkList(WorkList):
         `clauses` is a list of SQLAlchemy statements for use in a
         filter() or case() statement.
         """
+        # Local imports to avoid circular dependency
+        from palace.manager.sqlalchemy.model.customlist import (
+            CustomList,
+            CustomListEntry,
+        )
+        from palace.manager.sqlalchemy.model.work import Work
+
         if not self.uses_customlists:
             # This lane does not require that books be on any particular
             # CustomList.
@@ -325,6 +355,9 @@ class DatabaseBackedWorkList(WorkList):
         return qu, clauses
 
     def genre_filter_clause(self, qu):
+        # Local import to avoid circular dependency
+        from palace.manager.sqlalchemy.model.work import Work, WorkGenre
+
         wg = aliased(WorkGenre)
         qu = qu.join(wg, wg.work_id == Work.id)
         return qu, wg.genre_id.in_(self.genre_ids)
@@ -333,6 +366,9 @@ class DatabaseBackedWorkList(WorkList):
         """Create a clause that filters out all books not classified as
         suitable for this DatabaseBackedWorkList's age range.
         """
+        # Local import to avoid circular dependency
+        from palace.manager.sqlalchemy.model.work import Work
+
         if self.target_age is None:
             return []
 
