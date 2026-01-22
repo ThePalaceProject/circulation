@@ -997,9 +997,10 @@ class TestCrawlableFacets:
             collectionName,
         ] = facets.enabled_facets
 
-        # The default facets are the only ones enabled.
-        for facet in [order, availability]:
-            assert len(facet) == 1
+        # The default availability is the only one enabled.
+        assert len(availability) == 1
+        # Order facet has two enabled facets
+        assert len(order) == 2
 
         # Except for distributor and collectionName, which have the default
         # along with their unique values among each collection in the library.
@@ -1009,19 +1010,25 @@ class TestCrawlableFacets:
     @pytest.mark.parametrize(
         "group_name, expected",
         [
-            (Facets.ORDER_FACET_GROUP_NAME, Facets.ORDER_LAST_UPDATE),
-            (Facets.AVAILABILITY_FACET_GROUP_NAME, Facets.AVAILABLE_ALL),
-            (Facets.DISTRIBUTOR_FACETS_GROUP_NAME, Facets.DISTRIBUTOR_ALL),
-            (Facets.COLLECTION_NAME_FACETS_GROUP_NAME, Facets.COLLECTION_NAME_ALL),
+            (
+                Facets.ORDER_FACET_GROUP_NAME,
+                [Facets.ORDER_LAST_UPDATE, Facets.ORDER_LICENSE_POOL_LAST_UPDATED],
+            ),
+            (Facets.AVAILABILITY_FACET_GROUP_NAME, [Facets.AVAILABLE_ALL]),
+            (Facets.DISTRIBUTOR_FACETS_GROUP_NAME, [Facets.DISTRIBUTOR_ALL]),
+            (Facets.COLLECTION_NAME_FACETS_GROUP_NAME, [Facets.COLLECTION_NAME_ALL]),
         ],
     )
     def test_available_none(self, group_name: str, expected: list[str]) -> None:
-        assert CrawlableFacets.available_facets(None, group_name) == [expected]
+        assert CrawlableFacets.available_facets(None, group_name) == expected
 
     @pytest.mark.parametrize(
         "group_name, expected",
         [
-            (Facets.ORDER_FACET_GROUP_NAME, [Facets.ORDER_LAST_UPDATE]),
+            (
+                Facets.ORDER_FACET_GROUP_NAME,
+                [Facets.ORDER_LAST_UPDATE, Facets.ORDER_LICENSE_POOL_LAST_UPDATED],
+            ),
             (Facets.AVAILABILITY_FACET_GROUP_NAME, [Facets.AVAILABLE_ALL]),
             (Facets.DISTRIBUTOR_FACETS_GROUP_NAME, [Facets.DISTRIBUTOR_ALL, "foo"]),
             (

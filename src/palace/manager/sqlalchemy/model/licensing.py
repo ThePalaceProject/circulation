@@ -767,10 +767,13 @@ class LicensePool(Base):
             # numbers and they may have even changed our view of the
             # LicensePool.
             self.last_checked = as_of
-            if self.work:
-                self.work.last_update_time = as_of
 
         if changes_made:
+            last_updated = as_of if as_of else utc_now()
+            self.last_updated = last_updated
+            if self.work:
+                self.work.last_update_time = last_updated
+
             message, args = self.circulation_changelog(
                 old_licenses_owned,
                 old_licenses_available,
