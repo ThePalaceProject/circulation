@@ -21,7 +21,7 @@ CANNOT_GENERATE_FEED = pd(
 )
 
 INVALID_CREDENTIALS = pd(
-    "http://librarysimplified.org/terms/problem/credentials-invalid",
+    "http://palaceproject.io/terms/problem/auth/unrecoverable/credentials/invalid",
     401,
     _("Invalid credentials"),
     _("A valid library card barcode number and PIN are required."),
@@ -263,7 +263,7 @@ UNKNOWN_SAML_PROVIDER = pd(
 )
 
 INVALID_SAML_BEARER_TOKEN = pd(
-    "http://librarysimplified.org/terms/problem/credentials-invalid",
+    "http://palaceproject.io/terms/problem/auth/recoverable/saml/bearer-token-invalid",
     status_code=401,
     title=_("Invalid SAML bearer token."),
     detail=_("The provided SAML bearer token couldn't be verified."),
@@ -368,14 +368,14 @@ DEVICE_TOKEN_TYPE_INVALID = pd(
 )
 
 PATRON_AUTH_ACCESS_TOKEN_EXPIRED = pd(
-    "http://librarysimplified.org/terms/problem/patron-auth-access-token-expired",
+    "http://palaceproject.io/terms/problem/auth/recoverable/token/expired",
     status_code=401,
     title=_("Access token expired"),
     detail=_("The patron authentication access token has expired."),
 )
 
 PATRON_AUTH_ACCESS_TOKEN_INVALID = pd(
-    "http://librarysimplified.org/terms/problem/patron-auth-access-token-invalid",
+    "http://palaceproject.io/terms/problem/auth/recoverable/token/invalid",
     status_code=401,
     title=_("Access token invalid"),
     detail=_("The patron authentication access token is invalid."),

@@ -27,7 +27,7 @@ from palace.manager.util.problem_detail import (
 )
 
 SAML_CANNOT_DETERMINE_PATRON = pd(
-    "http://palaceproject.io/terms/problem/saml/cannot-determine-patron",
+    "http://palaceproject.io/terms/problem/auth/unrecoverable/saml/cannot-identify-patron",
     status_code=401,
     title=_("Unable to identify patron."),
     detail=_(
@@ -37,7 +37,7 @@ SAML_CANNOT_DETERMINE_PATRON = pd(
 )
 
 SAML_TOKEN_EXPIRED = pd(
-    "http://palaceproject.io/terms/problem/saml/token-expired",
+    "http://palaceproject.io/terms/problem/auth/recoverable/saml/session-expired",
     status_code=401,
     title=_("SAML session expired."),
     detail=_(

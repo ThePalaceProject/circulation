@@ -51,7 +51,7 @@ SAML_INCORRECT_RESPONSE = pd(
 )
 
 SAML_AUTHENTICATION_ERROR = pd(
-    "http://librarysimplified.org/terms/problem/saml/authentication-error",
+    "http://palaceproject.io/terms/problem/auth/recoverable/saml/authentication-failed",
     status_code=401,
     title=_("SAML identity provider authentication failed."),
     detail=_(
@@ -60,7 +60,7 @@ SAML_AUTHENTICATION_ERROR = pd(
 )
 
 SAML_NO_ACCESS_ERROR = pd(
-    "http://librarysimplified.org/terms/problem/saml/no-access-error",
+    "http://palaceproject.io/terms/problem/auth/unrecoverable/saml/no-access",
     status_code=401,
     title=_("No access."),
     detail=_("Patron does not have access based on their attributes."),
