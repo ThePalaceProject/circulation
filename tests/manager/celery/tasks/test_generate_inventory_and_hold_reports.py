@@ -3,7 +3,7 @@ import io
 import os
 import zipfile
 from collections.abc import Callable
-from datetime import timedelta
+from datetime import date, timedelta
 from typing import IO, BinaryIO
 from unittest.mock import MagicMock, create_autospec
 
@@ -25,12 +25,16 @@ from palace.manager.integration.license.opds.opds1.settings import OPDSImporterS
 from palace.manager.integration.license.overdrive.api import OverdriveAPI
 from palace.manager.opds.odl.info import LicenseStatus
 from palace.manager.service.logging.configuration import LogLevel
-from palace.manager.sqlalchemy.model.classification import Genre
+from palace.manager.sqlalchemy.model.classification import Genre, Subject
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.licensing import LicensePoolStatus
 from palace.manager.sqlalchemy.model.patron import Hold
-from palace.manager.sqlalchemy.util import get_one_or_create
+from palace.manager.sqlalchemy.util import (
+    get_one_or_create,
+    numericrange_to_string,
+    tuple_to_numericrange,
+)
 from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.celery import CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
@@ -115,9 +119,12 @@ def test_only_active_collections_are_included(
                 "isbn",
                 "language",
                 "publisher",
+                "published_date",
                 "format",
                 "audience",
                 "genres",
+                "age_ranges",
+                "bisac_subjects",
                 "data_source",
                 "collection_name",
                 "license_expiration",
@@ -235,11 +242,13 @@ def test_generate_report(
     author = "Laura Goering"
     language = "eng"
     publisher = "My Publisher"
+    published_date = date(2019, 5, 17)
     checkouts_left = 10
     terms_concurrency = 5
     edition = db.edition(data_source_name=ds.name)
     edition.language = language
     edition.publisher = publisher
+    edition.published = published_date
     edition.title = title
     edition.medium = edition.BOOK_MEDIUM
     edition.author = author
@@ -266,6 +275,25 @@ def test_generate_report(
     genre, ignore = Genre.lookup(db.session, "genre_a", autocreate=True)
     work.genres.append(genre)
     work.audience = "young adult"
+    work.target_age = tuple_to_numericrange((12, 14))
+
+    bisac_subject_one = db.subject(Subject.BISAC, "BISAC_ONE")
+    bisac_subject_one.name = "BISAC Subject One"
+    bisac_subject_one.target_age = tuple_to_numericrange((7, 9))
+    bisac_subject_two = db.subject(Subject.BISAC, "BISAC_TWO")
+    bisac_subject_two.name = "BISAC Subject Two"
+    bisac_subject_two.target_age = tuple_to_numericrange((10, 12))
+    non_bisac_subject = db.subject(Subject.LCSH, "NON_BISAC")
+    non_bisac_subject.name = "Non-BISAC Subject"
+    non_bisac_subject.target_age = tuple_to_numericrange((13, 15))
+
+    db.classification(identifier, bisac_subject_one, ds)
+    db.classification(identifier, bisac_subject_two, ds)
+    db.classification(identifier, non_bisac_subject, ds)
+
+    expected_age_range_one = numericrange_to_string(bisac_subject_one.target_age)
+    expected_age_range_two = numericrange_to_string(bisac_subject_two.target_age)
+    expected_non_bisac_age_range = numericrange_to_string(non_bisac_subject.target_age)
 
     licensepool = db.licensepool(
         edition=edition,
@@ -279,9 +307,11 @@ def test_generate_report(
     # Add a second book with no copies
     title2 = "Test Book 2"
     author2 = "Tom Pen"
+    published_date2 = date(2020, 10, 5)
     edition2 = db.edition(data_source_name=ds.name)
     edition2.language = language
     edition2.publisher = publisher
+    edition2.published = published_date2
     edition2.title = title2
     edition2.medium = edition.BOOK_MEDIUM
     edition2.author = author2
@@ -303,6 +333,7 @@ def test_generate_report(
         collection=collection,
         genre="genre_z",
     )
+    work2.target_age = tuple_to_numericrange((6, 8))
 
     licensepool_no_licenses_owned = db.licensepool(
         edition=edition2,
@@ -407,6 +438,7 @@ def test_generate_report(
     no_holds_work = db.work(
         data_source_name=ds.name, collection=collection, with_license_pool=True
     )
+    no_holds_work.target_age = None
     no_holds_identifier_value = (
         no_holds_work.presentation_edition.primary_identifier.identifier
     )
@@ -498,8 +530,27 @@ def test_generate_report(
                 assert book1_available_row["isbn"] == isbn
                 assert book1_available_row["language"] == language
                 assert book1_available_row["publisher"] == publisher
+                assert book1_available_row["published_date"] == "2019-05-17"
                 assert book1_available_row["audience"] == "young adult"
                 assert book1_available_row["genres"] == "genre_a,genre_z"
+                assert "BISAC Subject One" in book1_available_row["bisac_subjects"]
+                assert "BISAC Subject Two" in book1_available_row["bisac_subjects"]
+                assert "Non-BISAC Subject" not in book1_available_row["bisac_subjects"]
+                assert "|" in book1_available_row["bisac_subjects"]
+                assert sorted(book1_available_row["bisac_subjects"].split("|")) == [
+                    "BISAC Subject One",
+                    "BISAC Subject Two",
+                ]
+                assert expected_age_range_one in book1_available_row["age_ranges"]
+                assert expected_age_range_two in book1_available_row["age_ranges"]
+                assert "|" in book1_available_row["age_ranges"]
+                assert sorted(book1_available_row["age_ranges"].split("|")) == sorted(
+                    [expected_age_range_one, expected_age_range_two]
+                )
+                assert (
+                    expected_non_bisac_age_range
+                    not in book1_available_row["age_ranges"]
+                )
                 assert book1_available_row["format"] == edition.BOOK_MEDIUM
                 assert book1_available_row["data_source"] == data_source
                 assert book1_available_row["collection_name"] == collection_name
@@ -529,6 +580,7 @@ def test_generate_report(
                 assert book1_unavailable_row["isbn"] == isbn
                 assert book1_unavailable_row["language"] == language
                 assert book1_unavailable_row["publisher"] == publisher
+                assert book1_unavailable_row["published_date"] == "2019-05-17"
                 assert book1_unavailable_row["audience"] == "young adult"
                 assert book1_unavailable_row["genres"] == "genre_a,genre_z"
                 assert book1_unavailable_row["format"] == edition.BOOK_MEDIUM
@@ -550,6 +602,7 @@ def test_generate_report(
                 assert book2_row["isbn"] == isbn2
                 assert book2_row["language"] == language
                 assert book2_row["publisher"] == publisher
+                assert book2_row["published_date"] == "2020-10-05"
                 assert book2_row["audience"] == "Adult"  # Default audience
                 assert book2_row["genres"] == "genre_z"
                 assert book2_row["format"] == edition.BOOK_MEDIUM
@@ -579,6 +632,7 @@ def test_generate_report(
                 assert book3_no_holds_row["license_status"] == ""
                 assert book3_no_holds_row["license_expiration"] == ""
                 assert book3_no_holds_row["days_remaining_on_license"] == ""
+                assert book3_no_holds_row["published_date"] == ""
                 assert book3_no_holds_row["initial_loans"] == ""
                 assert book3_no_holds_row["remaining_loans"] == ""
                 assert book3_no_holds_row["allowed_concurrent_users"] == ""
