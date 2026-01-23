@@ -24,7 +24,7 @@ from sqlalchemy.sql import Select
 from sqlalchemy.sql.functions import func
 
 from palace.manager.core.entrypoint import EntryPoint
-from palace.manager.core.facets import FacetConstants
+from palace.manager.feed.facets.constants import FacetConstants
 from palace.manager.integration.base import (
     integration_settings_load,
     integration_settings_update,

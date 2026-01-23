@@ -13,7 +13,7 @@ from palace.manager.core.classifier import genres
 from palace.manager.core.opensearch import OpenSearchDocument
 from palace.manager.feed.admin.suppressed import AdminSuppressedFeed, SuppressedFacets
 from palace.manager.feed.annotator.admin.suppressed import AdminSuppressedAnnotator
-from palace.manager.sqlalchemy.model.lane import Pagination
+from palace.manager.search.pagination import Pagination
 from palace.manager.util.problem_detail import ProblemDetail
 
 

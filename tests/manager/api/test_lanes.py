@@ -29,6 +29,12 @@ from palace.manager.core.classifier import Classifier
 from palace.manager.core.entrypoint import AudiobooksEntryPoint
 from palace.manager.data_layer.contributor import ContributorData
 from palace.manager.data_layer.identifier import IdentifierData
+from palace.manager.feed.facets.feed import (
+    DefaultSortOrderFacets,
+    Facets,
+    FeaturedFacets,
+)
+from palace.manager.feed.worklist.base import WorkList
 from palace.manager.integration.goals import Goals
 from palace.manager.integration.license.bibliotheca import BibliothecaAPI
 from palace.manager.integration.license.overdrive.api import OverdriveAPI
@@ -43,11 +49,7 @@ from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.lane import (
-    DefaultSortOrderFacets,
-    Facets,
-    FeaturedFacets,
     Lane,
-    WorkList,
 )
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.util import numericrange_to_tuple

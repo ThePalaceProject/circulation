@@ -24,7 +24,7 @@ from palace.manager.api.admin.problem_details import (
 from palace.manager.core.classifier import Classifier, genres
 from palace.manager.core.config import Configuration
 from palace.manager.core.entrypoint import EntryPoint
-from palace.manager.core.facets import FacetConstants
+from palace.manager.feed.facets.constants import FacetConstants
 from palace.manager.integration.settings import (
     BaseSettings,
     FormFieldType,

@@ -17,6 +17,7 @@ from palace.manager.api.problem_details import (
 )
 from palace.manager.api.util.flask import get_request_library
 from palace.manager.core.problem_details import INVALID_INPUT
+from palace.manager.feed.worklist.base import WorkList
 from palace.manager.search.external_search import ExternalSearchIndex
 from palace.manager.service.redis.redis import Redis
 from palace.manager.sqlalchemy.model.collection import Collection
@@ -25,7 +26,7 @@ from palace.manager.sqlalchemy.model.integration import (
     IntegrationConfiguration,
     IntegrationLibraryConfiguration,
 )
-from palace.manager.sqlalchemy.model.lane import Lane, WorkList
+from palace.manager.sqlalchemy.model.lane import Lane
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.licensing import (
     LicensePool,

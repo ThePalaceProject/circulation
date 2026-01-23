@@ -8,13 +8,13 @@ from opensearchpy.helpers.query import (
 )
 
 from palace.manager.search.filter import Filter
+from palace.manager.search.pagination import Pagination
 from palace.manager.search.query import JSONQuery, Query
 from palace.manager.search.service import (
     SearchDocument,
     SearchService,
     SearchServiceFailedDocument,
 )
-from palace.manager.sqlalchemy.model.lane import Pagination
 from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.util.log import LoggerMixin
 

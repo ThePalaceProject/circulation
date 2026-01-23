@@ -11,17 +11,13 @@ from palace.manager.core.app_server import load_facets_from_request
 from palace.manager.core.entrypoint import AudiobooksEntryPoint, EverythingEntryPoint
 from palace.manager.feed.acquisition import OPDSAcquisitionFeed
 from palace.manager.feed.annotator.circulation import LibraryAnnotator
+from palace.manager.feed.facets.feed import Facets, FeaturedFacets
+from palace.manager.feed.facets.search import SearchFacets
 from palace.manager.feed.navigation import NavigationFeed
 from palace.manager.feed.opds import NavigationFacets
-from palace.manager.search.pagination import SortKeyPagination
+from palace.manager.feed.worklist.base import WorkList
+from palace.manager.search.pagination import Pagination, SortKeyPagination
 from palace.manager.sqlalchemy.model.edition import Edition
-from palace.manager.sqlalchemy.model.lane import (
-    Facets,
-    FeaturedFacets,
-    Pagination,
-    SearchFacets,
-    WorkList,
-)
 from palace.manager.util.flask_util import Response
 from palace.manager.util.problem_detail import ProblemDetail
 from tests.fixtures.api_controller import CirculationControllerFixture, WorkSpec

@@ -5,11 +5,11 @@ from palace.manager.api.problem_details import NOT_FOUND_ON_REMOTE
 from palace.manager.feed.acquisition import OPDSAcquisitionFeed
 from palace.manager.feed.annotator.loan_and_hold import LibraryLoanAndHoldAnnotator
 from palace.manager.feed.types import WorkEntry, WorkEntryData
+from palace.manager.feed.worklist.base import WorkList
 from palace.manager.integration.license.opds.for_distributors.api import (
     OPDSForDistributorsAPI,
 )
 from palace.manager.sqlalchemy.constants import EditionConstants, LinkRelations
-from palace.manager.sqlalchemy.model.lane import WorkList
 from palace.manager.sqlalchemy.model.licensing import LicensePool
 from palace.manager.sqlalchemy.util import get_one
 from tests.fixtures.database import DatabaseTransactionFixture

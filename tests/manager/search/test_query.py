@@ -18,6 +18,8 @@ from opensearchpy.helpers.query import (
 )
 
 from palace.manager.core.classifier import Classifier
+from palace.manager.feed.facets.feed import Facets
+from palace.manager.feed.facets.search import SearchFacets
 from palace.manager.search.filter import Filter
 from palace.manager.search.query import (
     JSONQuery,
@@ -26,7 +28,6 @@ from palace.manager.search.query import (
     QueryParser,
 )
 from palace.manager.sqlalchemy.model.datasource import DataSource
-from palace.manager.sqlalchemy.model.lane import Facets, SearchFacets
 from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.util.cache import CachedData
 from tests.fixtures.database import DatabaseTransactionFixture

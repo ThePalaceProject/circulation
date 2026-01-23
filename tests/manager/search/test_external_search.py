@@ -8,23 +8,20 @@ from opensearchpy.helpers.query import (
 from psycopg2.extras import NumericRange
 
 from palace.manager.core.classifier import Classifier
+from palace.manager.feed.facets.feed import Facets
+from palace.manager.feed.facets.search import SearchFacets
+from palace.manager.feed.worklist.base import WorkList
 from palace.manager.search.external_search import (
     ExternalSearchIndex,
 )
 from palace.manager.search.filter import Filter
-from palace.manager.search.pagination import SortKeyPagination
+from palace.manager.search.pagination import Pagination, SortKeyPagination
 from palace.manager.search.v5 import SearchV5
 from palace.manager.sqlalchemy.model.classification import Genre
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.customlist import CustomList
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
-from palace.manager.sqlalchemy.model.lane import (
-    Facets,
-    Pagination,
-    SearchFacets,
-    WorkList,
-)
 from palace.manager.sqlalchemy.model.licensing import LicensePool, LicensePoolStatus
 from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.util.datetime_helpers import datetime_utc

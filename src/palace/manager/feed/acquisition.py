@@ -11,7 +11,6 @@ from sqlalchemy.orm import Query, Session
 from palace.manager.api.problem_details import NOT_FOUND_ON_REMOTE
 from palace.manager.core.entrypoint import EntryPoint
 from palace.manager.core.exceptions import PalaceValueError
-from palace.manager.core.facets import FacetConstants
 from palace.manager.core.problem_details import INVALID_INPUT
 from palace.manager.feed.annotator.base import Annotator
 from palace.manager.feed.annotator.circulation import (
@@ -19,22 +18,23 @@ from palace.manager.feed.annotator.circulation import (
     LibraryAnnotator,
 )
 from palace.manager.feed.annotator.loan_and_hold import LibraryLoanAndHoldAnnotator
+from palace.manager.feed.facets.base import FacetsWithEntryPoint
+from palace.manager.feed.facets.constants import FacetConstants
+from palace.manager.feed.facets.feed import Facets
+from palace.manager.feed.facets.search import SearchFacets
 from palace.manager.feed.opds import BaseOPDSFeed, UnfulfillableWork
 from palace.manager.feed.types import FeedData, Link, WorkEntry
 from palace.manager.feed.util import strftime
 from palace.manager.search.external_search import (
     ExternalSearchIndex,
 )
+from palace.manager.search.pagination import Pagination
 from palace.manager.search.query import QueryParseException
 from palace.manager.sqlalchemy.constants import LinkRelations
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.lane import (
-    Facets,
-    FacetsWithEntryPoint,
     Lane,
-    Pagination,
-    SearchFacets,
 )
 from palace.manager.sqlalchemy.model.licensing import LicensePool
 from palace.manager.sqlalchemy.model.patron import Hold, Loan, Patron
@@ -47,7 +47,7 @@ from palace.manager.util.problem_detail import ProblemDetail
 if TYPE_CHECKING:
     from palace.manager.api.circulation.dispatcher import CirculationApiDispatcher
     from palace.manager.api.circulation.fulfillment import UrlFulfillment
-    from palace.manager.sqlalchemy.model.lane import WorkList
+    from palace.manager.feed.worklist.base import WorkList
 
 
 class OPDSAcquisitionFeed(BaseOPDSFeed):

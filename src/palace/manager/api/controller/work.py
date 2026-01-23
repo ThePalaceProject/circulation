@@ -22,8 +22,8 @@ from palace.manager.core.app_server import load_pagination_from_request
 from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.data_layer.contributor import ContributorData
 from palace.manager.feed.acquisition import OPDSAcquisitionFeed
-from palace.manager.search.pagination import SortKeyPagination
-from palace.manager.sqlalchemy.model.lane import FeaturedFacets, Pagination
+from palace.manager.feed.facets.feed import FeaturedFacets
+from palace.manager.search.pagination import Pagination, SortKeyPagination
 from palace.manager.util.flask_util import OPDSEntryResponse
 from palace.manager.util.opds_writer import OPDSFeed
 from palace.manager.util.problem_detail import ProblemDetail

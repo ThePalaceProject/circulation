@@ -7,6 +7,7 @@ from werkzeug.datastructures import MIMEAccept
 
 from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.feed.base import FeedInterface
+from palace.manager.feed.facets.feed import FeaturedFacets
 from palace.manager.feed.serializer.base import SerializerInterface
 from palace.manager.feed.serializer.opds import (
     OPDS1Version1Serializer,
@@ -14,7 +15,6 @@ from palace.manager.feed.serializer.opds import (
 )
 from palace.manager.feed.serializer.opds2 import OPDS2Serializer
 from palace.manager.feed.types import FeedData, WorkEntry
-from palace.manager.sqlalchemy.model.lane import FeaturedFacets
 from palace.manager.util.flask_util import OPDSEntryResponse, OPDSFeedResponse
 from palace.manager.util.log import LoggerMixin
 from palace.manager.util.opds_writer import OPDSMessage

@@ -7,7 +7,7 @@ from typing import Any, cast
 
 from lxml import etree
 
-from palace.manager.core.facets import FacetConstants
+from palace.manager.feed.facets.constants import FacetConstants
 from palace.manager.feed.serializer.base import SerializerInterface
 from palace.manager.feed.types import (
     Acquisition,

@@ -14,6 +14,7 @@ from palace.manager.feed.annotator.circulation import CirculationManagerAnnotato
 from palace.manager.feed.annotator.verbose import VerboseAnnotator
 from palace.manager.feed.types import FeedEntryType, Link, WorkEntry
 from palace.manager.feed.util import strftime
+from palace.manager.feed.worklist.base import WorkList
 from palace.manager.integration.license.opds.for_distributors.api import (
     OPDSForDistributorsAPI,
 )
@@ -26,7 +27,6 @@ from palace.manager.sqlalchemy.model.classification import Subject
 from palace.manager.sqlalchemy.model.contributor import Contributor
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
-from palace.manager.sqlalchemy.model.lane import WorkList
 from palace.manager.sqlalchemy.model.licensing import (
     DeliveryMechanism,
     LicensePool,
