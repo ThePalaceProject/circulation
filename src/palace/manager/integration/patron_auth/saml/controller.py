@@ -20,14 +20,14 @@ from palace.manager.util.problem_detail import (
 )
 
 SAML_INVALID_REQUEST = pd(
-    "http://librarysimplified.org/terms/problem/saml/invalid-saml-request",
+    "http://palaceproject.io/terms/problem/auth/unrecoverable/saml/invalid-request",
     status_code=401,
     title=_("SAML invalid request."),
     detail=_("SAML invalid request."),
 )
 
 SAML_INVALID_RESPONSE = pd(
-    "http://librarysimplified.org/terms/problem/saml/invalid-saml-response",
+    "http://palaceproject.io/terms/problem/auth/recoverable/saml/invalid-response",
     status_code=401,
     title=_("SAML invalid response."),
     detail=_("SAML invalid response."),
