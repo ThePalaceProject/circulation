@@ -1,3 +1,4 @@
+import json
 import uuid
 from collections.abc import Callable
 from datetime import datetime
@@ -1437,12 +1438,12 @@ class TestExternalSearchJSONQuery:
         partial_query,
         works,
     ):
-        query = dict(query=partial_query)
+        query = json.dumps(dict(query=partial_query))
         resp = fixture.external_search_index.query_works(query, data.filter)
 
-        assert len(resp.hits) == len(works)
+        assert len(resp) == len(works)
 
-        respids = {h.work_id for h in resp.hits}
+        respids = {h.work_id for h in resp}
         expectedids = {w.id for w in works}
         assert respids == expectedids
         return resp

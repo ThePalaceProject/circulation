@@ -175,7 +175,7 @@ class TestInstanceInitializationScript:
         assert service.write_pointer() == write_pointer
 
         # The same client should work without issue once the pointers are setup
-        assert index.query_works("").hits == []
+        assert len(index.query_works("")) == 0
 
     def test_migrate_search(
         self,
@@ -217,12 +217,12 @@ class TestInstanceInitializationScript:
         assert "index_not_found" in str(raised.value)
 
         # The client can work without issue in this state
-        assert index.query_works("").hits == []
+        assert len(index.query_works("")) == 0
 
         # We can add documents to the index
         index.add_document(work1.to_search_document())
         index.search_service().refresh()
-        [indexed_work_1] = index.query_works("").hits
+        [indexed_work_1] = index.query_works("")
         assert indexed_work_1.work_id == work1.id
 
         # Now we migrate to the new revision
@@ -256,7 +256,7 @@ class TestInstanceInitializationScript:
 
         # But the documents are not searchable yet, since they are added to the new index
         # and the read pointer is still pointing to the old index. So we find work1 but not work2.
-        [indexed_work_1] = index.query_works("").hits
+        [indexed_work_1] = index.query_works("")
         assert indexed_work_1.work_id == work1.id
 
         # The migration should have been queued
@@ -276,7 +276,7 @@ class TestInstanceInitializationScript:
         service.read_pointer_set(new_revision)
 
         # Now work2 is searchable, but work1 is not, since the migration was mocked out and did not actually run
-        [indexed_work_2] = index.query_works("").hits
+        [indexed_work_2] = index.query_works("")
         assert indexed_work_2.work_id == work2.id
 
     def test_migrate_downgrade(
