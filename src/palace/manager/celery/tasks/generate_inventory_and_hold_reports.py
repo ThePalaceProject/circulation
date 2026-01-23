@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import IO, Any
 
 from celery import shared_task
-from sqlalchemy import String, bindparam, case, cast, func, lateral, not_, select, true
+from sqlalchemy import bindparam, case, func, lateral, not_, or_, select, true
 from sqlalchemy.dialects.postgresql import aggregate_order_by
 from sqlalchemy.orm import Session, aliased
 from sqlalchemy.sql import Select, Subquery
@@ -244,14 +244,28 @@ def _bisac_subjects_subquery() -> Subquery:
     classification_alias = aliased(Classification)
     subject_alias = aliased(Subject)
     bisac_value = func.coalesce(subject_alias.name, subject_alias.identifier)
-    age_range_value = cast(subject_alias.target_age, String)
+    age_range_lower = func.lower(subject_alias.target_age)
+    age_range_upper = func.upper(subject_alias.target_age)
+    age_range_lower_adjusted = case(
+        (func.lower_inc(subject_alias.target_age), age_range_lower),
+        else_=age_range_lower + 1,
+    )
+    age_range_upper_adjusted = case(
+        (func.upper_inc(subject_alias.target_age), age_range_upper),
+        else_=age_range_upper - 1,
+    )
+    age_range_value = case(
+        (or_(age_range_lower.is_(None), age_range_upper.is_(None)), None),
+        else_=func.concat(age_range_lower_adjusted, "-", age_range_upper_adjusted),
+    )
     return (
         select(
             classification_alias.identifier_id.label("identifier_id"),
-            classification_alias.data_source_id.label("data_source_id"),
             func.array_to_string(
-                func.array_agg(aggregate_order_by(bisac_value, bisac_value.asc())),
-                ",",
+                func.array_agg(
+                    aggregate_order_by(bisac_value.distinct(), bisac_value.asc())
+                ),
+                "|",
             ).label("bisac_subjects"),
             func.array_to_string(
                 func.array_agg(
@@ -259,15 +273,12 @@ def _bisac_subjects_subquery() -> Subquery:
                         age_range_value.distinct(), age_range_value.asc()
                     )
                 ),
-                ",",
+                "|",
             ).label("age_ranges"),
         )
         .join(subject_alias, classification_alias.subject_id == subject_alias.id)
         .where(subject_alias.type == Subject.BISAC)
-        .group_by(
-            classification_alias.identifier_id,
-            classification_alias.data_source_id,
-        )
+        .group_by(classification_alias.identifier_id)
         .subquery()
     )
 
@@ -411,8 +422,7 @@ def inventory_report_query() -> Select:
         .outerjoin(wg_subquery, Work.id == wg_subquery.c.work_id)
         .outerjoin(
             bisac_subquery,
-            (bisac_subquery.c.data_source_id == DataSource.id)
-            & (bisac_subquery.c.identifier_id == Edition.primary_identifier_id),
+            bisac_subquery.c.identifier_id == Edition.primary_identifier_id,
         )
         .join(collection_sharing, true())
         .outerjoin(lic, true())

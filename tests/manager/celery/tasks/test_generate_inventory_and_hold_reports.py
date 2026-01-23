@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, create_autospec
 
 import pytest
 from pytest import LogCaptureFixture
-from sqlalchemy import String, cast, select
+from sqlalchemy import select
 from sqlalchemy.sql import Select
 
 from palace.manager.celery.tasks.generate_inventory_and_hold_reports import (
@@ -30,7 +30,11 @@ from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.licensing import LicensePoolStatus
 from palace.manager.sqlalchemy.model.patron import Hold
-from palace.manager.sqlalchemy.util import get_one_or_create, tuple_to_numericrange
+from palace.manager.sqlalchemy.util import (
+    get_one_or_create,
+    numericrange_to_string,
+    tuple_to_numericrange,
+)
 from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.celery import CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
@@ -271,6 +275,7 @@ def test_generate_report(
     genre, ignore = Genre.lookup(db.session, "genre_a", autocreate=True)
     work.genres.append(genre)
     work.audience = "young adult"
+    work.target_age = tuple_to_numericrange((12, 14))
 
     bisac_subject_one = db.subject(Subject.BISAC, "BISAC_ONE")
     bisac_subject_one.name = "BISAC Subject One"
@@ -286,21 +291,9 @@ def test_generate_report(
     db.classification(identifier, bisac_subject_two, ds)
     db.classification(identifier, non_bisac_subject, ds)
 
-    expected_age_range_one = db.session.scalar(
-        select(cast(Subject.target_age, String)).where(
-            Subject.id == bisac_subject_one.id
-        )
-    )
-    expected_age_range_two = db.session.scalar(
-        select(cast(Subject.target_age, String)).where(
-            Subject.id == bisac_subject_two.id
-        )
-    )
-    expected_non_bisac_age_range = db.session.scalar(
-        select(cast(Subject.target_age, String)).where(
-            Subject.id == non_bisac_subject.id
-        )
-    )
+    expected_age_range_one = numericrange_to_string(bisac_subject_one.target_age)
+    expected_age_range_two = numericrange_to_string(bisac_subject_two.target_age)
+    expected_non_bisac_age_range = numericrange_to_string(non_bisac_subject.target_age)
 
     licensepool = db.licensepool(
         edition=edition,
@@ -340,6 +333,7 @@ def test_generate_report(
         collection=collection,
         genre="genre_z",
     )
+    work2.target_age = tuple_to_numericrange((6, 8))
 
     licensepool_no_licenses_owned = db.licensepool(
         edition=edition2,
@@ -444,6 +438,7 @@ def test_generate_report(
     no_holds_work = db.work(
         data_source_name=ds.name, collection=collection, with_license_pool=True
     )
+    no_holds_work.target_age = None
     no_holds_identifier_value = (
         no_holds_work.presentation_edition.primary_identifier.identifier
     )
@@ -541,8 +536,17 @@ def test_generate_report(
                 assert "BISAC Subject One" in book1_available_row["bisac_subjects"]
                 assert "BISAC Subject Two" in book1_available_row["bisac_subjects"]
                 assert "Non-BISAC Subject" not in book1_available_row["bisac_subjects"]
+                assert "|" in book1_available_row["bisac_subjects"]
+                assert sorted(book1_available_row["bisac_subjects"].split("|")) == [
+                    "BISAC Subject One",
+                    "BISAC Subject Two",
+                ]
                 assert expected_age_range_one in book1_available_row["age_ranges"]
                 assert expected_age_range_two in book1_available_row["age_ranges"]
+                assert "|" in book1_available_row["age_ranges"]
+                assert sorted(book1_available_row["age_ranges"].split("|")) == sorted(
+                    [expected_age_range_one, expected_age_range_two]
+                )
                 assert (
                     expected_non_bisac_age_range
                     not in book1_available_row["age_ranges"]
