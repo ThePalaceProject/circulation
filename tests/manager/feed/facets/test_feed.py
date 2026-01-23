@@ -273,10 +273,10 @@ class TestFacets:
         # But the time-based facets are ordered descending by default
         # (newest->oldest)
         assert {
-                   Facets.ORDER_ADDED_TO_COLLECTION,
-                   Facets.ORDER_LAST_UPDATE,
-                   Facets.ORDER_LICENSE_POOL_LAST_UPDATED,
-               } == set(Facets.ORDER_DESCENDING_BY_DEFAULT)
+            Facets.ORDER_ADDED_TO_COLLECTION,
+            Facets.ORDER_LAST_UPDATE,
+            Facets.ORDER_LICENSE_POOL_LAST_UPDATED,
+        } == set(Facets.ORDER_DESCENDING_BY_DEFAULT)
 
         for order in Facets.ORDER_DESCENDING_BY_DEFAULT:
             f = Facets(
@@ -533,7 +533,7 @@ class TestFacets:
             expect = Facets.SORT_ORDER_TO_OPENSEARCH_FIELD_NAME[order]
             assert expect == order_filter.order
             assert "yep" == order_filter.order_ascending
-            
+
         # Specifying an invalid sort order doesn't cause a crash, but you
         # don't get a sort order.
         facets = Facets(db.default_library(), None, "invalid order", None, None)
