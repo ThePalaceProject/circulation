@@ -336,3 +336,20 @@ class TestCrawlableFeed:
             if l["rel"] == "http://opds-spec.org/facet"
         }
         assert facet_groups == {"Collection Name", "Distributor", "Sort by"}
+
+        sort_facets = [
+            link
+            for link in feed["feed"]["links"]
+            if link["rel"] == "http://opds-spec.org/facet"
+            and link.get("facetgroup") == "Sort by"
+        ]
+        sort_titles = {link["title"]: link for link in sort_facets}
+
+        def active_facet_value(link):
+            return link.get("activefacet") or link.get("opds:activefacet")
+
+        assert active_facet_value(sort_titles["Last Update"]) == "true"
+        assert active_facet_value(sort_titles["License Pool Last Updated"]) in (
+            None,
+            "false",
+        )

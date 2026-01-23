@@ -83,6 +83,7 @@ class FacetConstants:
         ORDER_TITLE: _("Title"),
         ORDER_AUTHOR: _("Author"),
         ORDER_LAST_UPDATE: _("Last Update"),
+        ORDER_LICENSE_POOL_LAST_UPDATED: _("License Pool Last Updated"),
         ORDER_ADDED_TO_COLLECTION: _("Recently Added"),
         ORDER_SERIES_POSITION: _("Series Position"),
         ORDER_WORK_ID: _("Work ID"),
