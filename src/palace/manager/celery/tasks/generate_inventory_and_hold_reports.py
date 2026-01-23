@@ -14,6 +14,7 @@ from sqlalchemy import bindparam, case, func, lateral, not_, or_, select, true
 from sqlalchemy.dialects.postgresql import aggregate_order_by
 from sqlalchemy.orm import Session, aliased
 from sqlalchemy.sql import Select, Subquery
+from sqlalchemy.sql.elements import ColumnElement
 from sqlalchemy.sql.selectable import Lateral
 
 from palace.manager.celery.task import Task
@@ -246,15 +247,15 @@ def _bisac_subjects_subquery() -> Subquery:
     bisac_value = func.coalesce(subject_alias.name, subject_alias.identifier)
     age_range_lower = func.lower(subject_alias.target_age)
     age_range_upper = func.upper(subject_alias.target_age)
-    age_range_lower_adjusted = case(
+    age_range_lower_adjusted: ColumnElement[Any] = case(
         (func.lower_inc(subject_alias.target_age), age_range_lower),
         else_=age_range_lower + 1,
     )
-    age_range_upper_adjusted = case(
+    age_range_upper_adjusted: ColumnElement[Any] = case(
         (func.upper_inc(subject_alias.target_age), age_range_upper),
         else_=age_range_upper - 1,
     )
-    age_range_value = case(
+    age_range_value: ColumnElement[Any] = case(
         (or_(age_range_lower.is_(None), age_range_upper.is_(None)), None),
         else_=func.concat(age_range_lower_adjusted, "-", age_range_upper_adjusted),
     )
