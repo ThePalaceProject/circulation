@@ -513,9 +513,11 @@ class LicensePool(Base):
             license_pool, was_new = get_one_or_create(_db, LicensePool, **kw)
 
             if was_new:
+                now = utc_now()
                 if not license_pool.availability_time:
-                    now = utc_now()
                     license_pool.availability_time = now
+                # set the last updated date on creation.
+                license_pool.last_updated = now
 
                 # Set the LicensePool's initial values to indicate
                 # that we don't actually know how many copies we own.

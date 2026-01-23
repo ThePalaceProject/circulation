@@ -728,6 +728,8 @@ class TestLicensePool:
         assert pool is not None
         assert pool.availability_time is not None
         assert (pool.availability_time - now).total_seconds() < 2
+        assert pool.last_updated is not None
+        assert (pool.last_updated - now).total_seconds() < 2
         assert True == was_new
         assert DataSource.GUTENBERG == pool.data_source.name
         assert Identifier.GUTENBERG_ID == pool.identifier.type
