@@ -9,10 +9,13 @@ is expanded with the token.
 
 from __future__ import annotations
 
+import json
 import time
 from pathlib import Path
+from typing import cast
 
-import jwt
+from jwcrypto.jwk import JWK, InvalidJWKValue
+from jwcrypto.jwt import JWT
 from pydantic_settings import SettingsConfigDict
 
 from palace.manager.api.circulation.exceptions import CannotFulfill
@@ -20,12 +23,13 @@ from palace.manager.opds.lcp.status import Link as LsdLink
 from palace.manager.service.configuration.service_configuration import (
     ServiceConfiguration,
 )
+from palace.manager.util.log import LoggerMixin
 
 # DeMarque WebReader URL pattern used in LSD link relations
 DEMARQUE_WEBREADER_REL = "https://r.cantook.com"
 
 
-class DeMarqueWebReaderConfiguration(ServiceConfiguration):
+class DeMarqueWebReaderConfiguration(ServiceConfiguration, LoggerMixin):
     """
     Configuration for DeMarque WebReader JWT authentication.
 
@@ -41,31 +45,73 @@ class DeMarqueWebReaderConfiguration(ServiceConfiguration):
     issuer_url: str | None = None
     """JWT issuer URL (must be whitelisted on WebReader)."""
 
-    key_id: str | None = None
-    """Key ID matching registered public key on WebReader."""
+    jwk_file: Path | None = None
+    """Path to Ed25519 private key JWK file (JSON format)."""
 
-    private_key_file: Path | None = None
-    """Path to Ed25519 private key PEM file."""
+    jwk: str | None = None
+    """Inline Ed25519 private key JWK (JSON string)."""
 
-    private_key: str | None = None
-    """Inline Ed25519 private key PEM."""
-
-    def get_private_key(self) -> str | None:
+    def get_jwk(self) -> JWK | None:
         """
-        Load and return the private key content.
+        Load, validate, and return the JWK.
 
-        Prefers inline key over file path if both are provided.
+        Prefers inline JWK over file path if both are provided.
+        Validates that the JWK is an Ed25519 private key with a kid.
 
-        :return: The private key PEM content, or None if not configured.
+        :return: The validated JWK object, or None if not configured or invalid.
         """
-        if self.private_key:
-            return self.private_key
+        jwk_content: str | None = None
 
-        if self.private_key_file:
-            if self.private_key_file.exists():
-                return self.private_key_file.read_text()
+        if self.jwk:
+            jwk_content = self.jwk
+        elif self.jwk_file and self.jwk_file.exists():
+            jwk_content = self.jwk_file.read_text()
 
-        return None
+        if jwk_content is None:
+            return None
+
+        try:
+            jwk_dict = json.loads(jwk_content)
+        except json.JSONDecodeError:
+            self.log.exception("Invalid JWK: Content is not valid JSON.")
+            return None
+
+        if not isinstance(jwk_dict, dict):
+            self.log.error(
+                f"Invalid JWK: Expected a JSON object, got {type(jwk_dict).__name__}."
+            )
+            return None
+
+        # Validate key type
+        kty = jwk_dict.get("kty")
+        if kty != "OKP":
+            self.log.error(
+                f"Invalid JWK: Expected OKP key type for Ed25519, got kty='{kty}'."
+            )
+            return None
+
+        # Validate curve
+        crv = jwk_dict.get("crv")
+        if crv != "Ed25519":
+            self.log.error(f"Invalid JWK: Expected Ed25519 curve, got crv='{crv}'.")
+            return None
+
+        # Validate kid is present
+        kid = jwk_dict.get("kid")
+        if not kid:
+            self.log.error("Invalid JWK: Missing required 'kid' (key ID) field.")
+            return None
+
+        # Validate private key component is present
+        if "d" not in jwk_dict:
+            self.log.error("Invalid JWK: Missing required 'd' (private key) field.")
+            return None
+
+        try:
+            return JWK(**jwk_dict)
+        except InvalidJWKValue:
+            self.log.exception("Invalid JWK: Failed to parse key.")
+            return None
 
 
 class DeMarqueWebReader:
@@ -86,8 +132,7 @@ class DeMarqueWebReader:
     def __init__(
         self,
         issuer_url: str,
-        key_id: str,
-        private_key: str,
+        jwk_key: JWK,
     ) -> None:
         """
         Initialize the WebReader client.
@@ -95,12 +140,11 @@ class DeMarqueWebReader:
         Use :meth:`create` instead of calling this directly.
 
         :param issuer_url: JWT issuer URL.
-        :param key_id: Key ID for the JWT header.
-        :param private_key: Ed25519 private key in PEM format.
+        :param jwk_key: Ed25519 private key as a JWK object.
         """
         self._issuer_url = issuer_url
-        self._key_id = key_id
-        self._private_key = private_key
+        self._jwk_key = jwk_key
+        self._key_id: str = cast(str, jwk_key.get("kid"))
 
     @classmethod
     def create(
@@ -114,17 +158,16 @@ class DeMarqueWebReader:
         """
         config = config or DeMarqueWebReaderConfiguration()
 
-        if config.issuer_url is None or config.key_id is None:
+        if config.issuer_url is None:
             return None
 
-        private_key = config.get_private_key()
-        if private_key is None:
+        jwk_key = config.get_jwk()
+        if jwk_key is None:
             return None
 
         return cls(
             issuer_url=config.issuer_url,
-            key_id=config.key_id,
-            private_key=private_key,
+            jwk_key=jwk_key,
         )
 
     def generate_token(self, subject: str) -> str:
@@ -134,24 +177,22 @@ class DeMarqueWebReader:
         :param subject: The subject claim (typically the publication identifier).
         :return: The signed JWT string.
         """
-        headers = {
+        header = {
             "alg": self.ALGORITHM,
             "kid": self._key_id,
         }
 
-        payload = {
+        claims = {
             "iss": self._issuer_url,
             "sub": subject,
             "iat": int(time.time()),
             "aud": self.AUDIENCE,
         }
 
-        return jwt.encode(
-            payload,
-            self._private_key,
-            algorithm=self.ALGORITHM,
-            headers=headers,
-        )
+        token = JWT(header=header, claims=claims)
+        token.make_signed_token(self._jwk_key)
+        # JWT.serialize() returns str but is typed as Any.
+        return token.serialize()
 
     def fulfill_link(self, link: LsdLink) -> LsdLink:
         """
