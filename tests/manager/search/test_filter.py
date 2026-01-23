@@ -854,8 +854,14 @@ class TestFilter:
         added_to_collection = used_orders[Facets.ORDER_ADDED_TO_COLLECTION]
         series_position = used_orders[Facets.ORDER_SERIES_POSITION]
         last_update = used_orders[Facets.ORDER_LAST_UPDATE]
+        license_pool_last_updated = used_orders[Facets.ORDER_LICENSE_POOL_LAST_UPDATED]
         for sort_field in list(used_orders.values()):
-            if sort_field in (added_to_collection, series_position, last_update):
+            if sort_field in (
+                added_to_collection,
+                series_position,
+                last_update,
+                license_pool_last_updated,
+            ):
                 # These are complicated cases, tested below.
                 continue
             f.order = sort_field
@@ -912,6 +918,29 @@ class TestFilter:
         # Apart from the nested filter, this is the same ordering
         # configuration as before.
         assert simple_nested_configuration == first_field
+
+        # Sorting by license pool last updated is also a nested field,
+        # using the most recent update time among relevant collections.
+        f.order = license_pool_last_updated
+        f.collection_ids = []
+        first_field = validate_sort_order(f, license_pool_last_updated)
+        last_updated_simple_nested_configuration = {
+            "licensepools.last_updated": {"mode": "max", "order": "asc"}
+        }
+        assert last_updated_simple_nested_configuration == first_field
+
+        f.collection_ids = [transaction.default_collection().id]
+        first_field = validate_sort_order(f, "licensepools.last_updated")
+        nested_filter = first_field["licensepools.last_updated"].pop("nested")
+        assert {
+            "path": "licensepools",
+            "filter": {
+                "terms": {
+                    "licensepools.collection_id": [transaction.default_collection().id]
+                }
+            },
+        } == nested_filter
+        assert last_updated_simple_nested_configuration == first_field
 
         # An ordering by "last update" may be simple, if there are no
         # collections or lists associated with the filter.

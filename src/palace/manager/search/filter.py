@@ -624,6 +624,8 @@ class Filter(SearchBase):
         nested = None
         if key == "licensepools.availability_time":
             nested, mode = self._availability_time_sort_order
+        elif key == "licensepools.last_updated":
+            nested, mode = self._licensepool_last_updated_sort_order
         else:
             raise ValueError("I don't know how to sort by %s." % key)
         sort_description = dict(order=self.asc, mode=mode)
@@ -647,6 +649,20 @@ class Filter(SearchBase):
         # If a book shows up in multiple collections, we're only
         # interested in the collection that had it the earliest.
         mode = "min"
+        return nested, mode
+
+    @property
+    def _licensepool_last_updated_sort_order(self):
+        # We're sorting works by the most recent update time among
+        # license pools in relevant collections.
+        nested = None
+        collection_ids = self._filter_ids(self.collection_ids)
+        if collection_ids:
+            nested = dict(
+                path="licensepools",
+                filter=dict(terms={"licensepools.collection_id": collection_ids}),
+            )
+        mode = "max"
         return nested, mode
 
     @property

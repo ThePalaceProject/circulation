@@ -728,6 +728,8 @@ class TestLicensePool:
         assert pool is not None
         assert pool.availability_time is not None
         assert (pool.availability_time - now).total_seconds() < 2
+        assert pool.last_updated is not None
+        assert (pool.last_updated - now).total_seconds() < 2
         assert True == was_new
         assert DataSource.GUTENBERG == pool.data_source.name
         assert Identifier.GUTENBERG_ID == pool.identifier.type
@@ -985,6 +987,8 @@ class TestLicensePool:
         work.last_update_time = None
 
         [pool] = work.license_pools
+        pool.last_checked = None
+        pool.last_updated = None
         pool.update_availability(30, 20, 2, 0)
         assert 30 == pool.licenses_owned
         assert 20 == pool.licenses_available
@@ -992,9 +996,13 @@ class TestLicensePool:
         assert 0 == pool.patrons_in_hold_queue
 
         assert work.last_update_time is not None
+        assert pool.last_checked is not None
+        assert pool.last_updated is not None
 
         # Updating availability also modified work.last_update_time.
         assert (utc_now() - work.last_update_time) < datetime.timedelta(seconds=2)
+        assert (utc_now() - pool.last_updated) < datetime.timedelta(seconds=2)
+        assert pool.last_checked == pool.last_updated
 
     def test_update_availability_does_nothing_if_given_no_data(
         self, db: DatabaseTransactionFixture
@@ -1010,6 +1018,7 @@ class TestLicensePool:
         # Set up a LicensePool.
         [pool] = work.license_pools
         pool.last_checked = None
+        pool.last_updated = None
         pool.licenses_owned = 10
         pool.licenses_available = 20
         pool.licenses_reserved = 30
@@ -1027,6 +1036,7 @@ class TestLicensePool:
         # Work.update_time and LicensePool.last_checked are unaffected.
         assert None == work.last_update_time
         assert None == pool.last_checked
+        assert None == pool.last_updated
 
         # If we pass a mix of good and null values...
         pool.update_availability(5, None, None, None)
@@ -1036,6 +1046,44 @@ class TestLicensePool:
         assert 20 == pool.licenses_available
         assert 30 == pool.licenses_reserved
         assert 40 == pool.patrons_in_hold_queue
+
+    def test_update_availability_updates_last_checked_without_changes(
+        self, db: DatabaseTransactionFixture
+    ):
+        work = db.work(with_license_pool=True)
+        work.last_update_time = None
+
+        [pool] = work.license_pools
+        pool.last_checked = None
+        pool.last_updated = None
+        pool.licenses_owned = 10
+        pool.licenses_available = 5
+        pool.licenses_reserved = 1
+        pool.patrons_in_hold_queue = 2
+
+        as_of = utc_now()
+        pool.update_availability(10, 5, 1, 2, as_of=as_of)
+
+        assert pool.last_checked == as_of
+        assert pool.last_updated is None
+        assert work.last_update_time is None
+
+    def test_update_availability_no_date_updates_last_updated(
+        self, db: DatabaseTransactionFixture
+    ):
+        work = db.work(with_license_pool=True)
+        work.last_update_time = None
+
+        [pool] = work.license_pools
+        pool.last_checked = None
+        pool.last_updated = None
+
+        pool.update_availability(5, 4, 1, 0, as_of=CirculationEvent.NO_DATE)
+
+        assert pool.last_checked is None
+        assert pool.last_updated is not None
+        assert work.last_update_time is not None
+        assert (utc_now() - pool.last_updated) < datetime.timedelta(seconds=2)
 
     def test_set_presentation_edition(self, db: DatabaseTransactionFixture):
         """
@@ -1201,6 +1249,7 @@ class TestLicensePool:
 
         edition, pool = db.edition(with_license_pool=True)
         assert None == pool.last_checked
+        assert None == pool.last_updated
         assert 1 == pool.licenses_owned
         assert 1 == pool.licenses_available
 
@@ -1211,6 +1260,7 @@ class TestLicensePool:
         # history, so we process it.
         pool.update_availability_from_delta(add, CirculationEvent.NO_DATE, 1)
         assert None == pool.last_checked
+        assert pool.last_updated is not None
         assert 2 == pool.licenses_owned
         assert 2 == pool.licenses_available
 

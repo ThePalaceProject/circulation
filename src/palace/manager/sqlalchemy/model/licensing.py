@@ -319,6 +319,7 @@ class LicensePool(Base):
     availability_time = Column(DateTime(timezone=True), index=True)
 
     last_checked = Column(DateTime(timezone=True), index=True)
+    last_updated = Column(DateTime(timezone=True), nullable=True)
 
     # A LicensePool that seemingly looks fine may be manually suppressed
     # to be temporarily or permanently removed from the collection.
@@ -512,9 +513,11 @@ class LicensePool(Base):
             license_pool, was_new = get_one_or_create(_db, LicensePool, **kw)
 
             if was_new:
+                now = utc_now()
                 if not license_pool.availability_time:
-                    now = utc_now()
                     license_pool.availability_time = now
+                # set the last updated date on creation.
+                license_pool.last_updated = now
 
                 # Set the LicensePool's initial values to indicate
                 # that we don't actually know how many copies we own.
@@ -766,10 +769,13 @@ class LicensePool(Base):
             # numbers and they may have even changed our view of the
             # LicensePool.
             self.last_checked = as_of
-            if self.work:
-                self.work.last_update_time = as_of
 
         if changes_made:
+            last_updated = as_of if as_of else utc_now()
+            self.last_updated = last_updated
+            if self.work:
+                self.work.last_update_time = last_updated
+
             message, args = self.circulation_changelog(
                 old_licenses_owned,
                 old_licenses_available,
