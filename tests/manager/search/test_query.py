@@ -3,6 +3,7 @@ import uuid
 from collections.abc import Callable
 from datetime import datetime
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 from opensearchpy import Q
@@ -13,6 +14,7 @@ from opensearchpy.helpers.query import (
     MatchNone,
     MatchPhrase,
     MultiMatch,
+    Nested,
     Range,
     Term,
     Terms,
@@ -499,10 +501,6 @@ class TestQuery:
                 hypotheses.append(new_hypothesis)
                 return hypotheses
 
-            def _combine_hypotheses(self, hypotheses):
-                self._combine_hypotheses_called_with = hypotheses
-                return hypotheses
-
         # Before we get started, try an easy case. If there is no query
         # string we get a match_all query that returns everything.
         query = Mock(None)
@@ -512,12 +510,19 @@ class TestQuery:
         # Now try a real query string.
         q = "query string"
         query = Mock(q)
-        result = query.search_query
 
-        # The final result is the result of calling _combine_hypotheses
-        # on a number of hypotheses. Our mock class just returns
+        # Mock combine_hypotheses to return its input as-is for easier testing
+        with patch(
+            "palace.manager.search.query.combine_hypotheses",
+            side_effect=lambda h: h,
+        ) as mock_combine:
+            result = query.search_query
+
+        # The final result is the result of calling combine_hypotheses
+        # on a number of hypotheses. Our mock just returns
         # the hypotheses as-is, for easier testing.
-        assert result == query._combine_hypotheses_called_with
+        (hypotheses,), _ = mock_combine.call_args
+        assert result == hypotheses
 
         # We ended up with a number of hypothesis:
         assert result == [
@@ -766,29 +771,22 @@ class TestQuery:
         assert 6 == weight
 
     def test__role_must_also_match(self):
-        class Mock(Query):
-            @classmethod
-            def _nest(cls, subdocument, base):
-                return ("nested", subdocument, base)
-
         # Verify that _role_must_also_match() puts an appropriate
         # restriction on a match against a field in the 'contributors'
         # sub-document.
         original_query = Term(**{"contributors.sort_name": "ursula le guin"})
-        modified = Mock._role_must_also_match(original_query)
+        modified = Query._role_must_also_match(original_query)
 
-        # The resulting query was run through Mock._nest. In a real
-        # scenario this would turn it into a nested query against the
+        # The resulting query is a nested query against the
         # 'contributors' subdocument.
-        nested, subdocument, modified_base = modified
-        assert "nested" == nested
-        assert "contributors" == subdocument
+        assert isinstance(modified, Nested)
+        assert "contributors" == modified.path
 
         # The original query was combined with an extra clause, which
         # only matches people if their contribution to a book was of
         # the type that library patrons are likely to search for.
         extra = Terms(**{"contributors.role": ["Primary Author", "Author", "Narrator"]})
-        assert Bool(must=[original_query, extra]) == modified_base
+        assert Bool(must=[original_query, extra]) == modified.query
 
     def test_match_topic_hypotheses(self):
         query = Query("whales")
@@ -854,48 +852,53 @@ class TestQuery:
     def test_hypothesize(self):
         # Verify that _hypothesize() adds a query to a list,
         # boosting it if necessary.
-        class Mock(Query):
-            boost_extras = []
-
-            @classmethod
-            def _boost(cls, boost, queries, filters=None, **kwargs):
-                if filters or kwargs:
-                    cls.boost_extras.append((filters, kwargs))
-                return "%s boosted by %d" % (queries, boost)
-
-        hypotheses = []
+        hypotheses: list = []
 
         # _hypothesize() does nothing if it's not passed a real
         # query.
-        Mock._hypothesize(hypotheses, None, 100)
+        Query._hypothesize(hypotheses, None, 100)
         assert [] == hypotheses
-        assert [] == Mock.boost_extras
 
-        # If it is passed a real query, _boost() is called on the
+        # If it is passed a real query, boost_query() is called on the
         # query object.
-        Mock._hypothesize(hypotheses, "query object", 10)
-        assert ["query object boosted by 10"] == hypotheses
-        assert [] == Mock.boost_extras
+        with patch(
+            "palace.manager.search.query.boost_query",
+            side_effect=lambda boost, queries, **kw: f"{queries} boosted by {boost}",
+        ) as mock_boost:
+            Query._hypothesize(hypotheses, "query object", 10)
+            Query._hypothesize(hypotheses, "another query object", 1)
 
-        Mock._hypothesize(hypotheses, "another query object", 1)
-        assert [
+        assert hypotheses == [
             "query object boosted by 10",
             "another query object boosted by 1",
-        ] == hypotheses
-        assert [] == Mock.boost_extras
+        ]
+        # Verify boost_query was called with expected args (no filters/kwargs)
+        assert mock_boost.call_count == 2
+        for call in mock_boost.call_args_list:
+            assert call.kwargs.get("filters") is None
 
         # If a filter or any other arguments are passed in, those arguments
-        # are propagated to _boost().
+        # are propagated to boost_query().
         hypotheses = []
-        Mock._hypothesize(
-            hypotheses,
-            "query with filter",
-            2,
+        with patch(
+            "palace.manager.search.query.boost_query",
+            side_effect=lambda boost, queries, **kw: f"{queries} boosted by {boost}",
+        ) as mock_boost:
+            Query._hypothesize(
+                hypotheses,
+                "query with filter",
+                2,
+                filters="some filters",
+                extra="extra kwarg",
+            )
+        assert hypotheses == ["query with filter boosted by 2"]
+        # Verify filters and extra kwargs were passed through
+        mock_boost.assert_called_once_with(
+            boost=2,
+            queries="query with filter",
             filters="some filters",
             extra="extra kwarg",
         )
-        assert ["query with filter boosted by 2"] == hypotheses
-        assert [("some filters", dict(extra="extra kwarg"))] == Mock.boost_extras
 
 
 class TestQueryParser:
@@ -913,18 +916,6 @@ class TestQueryParser:
             the ones the Query class makes.
             """
 
-            @classmethod
-            def _match_term(cls, field, query):
-                return (field, query)
-
-            @classmethod
-            def make_target_age_query(cls, query, boost="default boost"):
-                return ("target age (filter)", query), (
-                    "target age (query)",
-                    query,
-                    boost,
-                )
-
             @property
             def search_query(self):
                 # Mock the creation of an extremely complicated DisMax
@@ -932,32 +923,15 @@ class TestQueryParser:
                 # was created.
                 return "A huge DisMax for %r" % self.query_string
 
-        parser = QueryParser("science fiction about dogs", MockQuery)
+        def mock_match_term(field, query):
+            return (field, query)
 
-        # The original query string is always stored as .original_query_string.
-        assert "science fiction about dogs" == parser.original_query_string
-
-        # The part of the query that couldn't be parsed is always stored
-        # as final_query_string.
-        assert "about dogs" == parser.final_query_string
-
-        # Leading and trailing whitespace is never regarded as
-        # significant and it is stripped from the query string
-        # immediately.
-        whitespace = QueryParser(" abc ", MockQuery)
-        assert "abc" == whitespace.original_query_string
-
-        # parser.filters contains the filters that we think we were
-        # able to derive from the query string.
-        assert [("genres.name", "Science Fiction")] == parser.filters
-
-        # parser.match_queries contains the result of putting the rest
-        # of the query string into a Query object (or, here, our
-        # MockQuery) and looking at its .search_query. In a
-        # real scenario, this will result in a huge DisMax query
-        # that tries to consider all the things someone might be
-        # searching for, _in addition to_ applying a filter.
-        assert ["A huge DisMax for 'about dogs'"] == parser.match_queries
+        def mock_make_target_age_query(query, boost="default boost"):
+            return ("target age (filter)", query), (
+                "target age (query)",
+                query,
+                boost,
+            )
 
         # Now that you see how it works, let's define a helper
         # function which makes it easy to verify that a certain query
@@ -969,74 +943,108 @@ class TestQueryParser:
             queries = extra_queries or []
             if not isinstance(queries, list):
                 queries = [queries]
-            parser = QueryParser(query_string, MockQuery)
-            assert filters == parser.filters
+            result = QueryParser(query_string, MockQuery)
+            assert filters == result.filters
 
             if remainder:
                 queries.append(MockQuery(remainder).search_query)
-            assert queries == parser.match_queries
+            assert queries == result.match_queries
 
-        # Here's the same test from before, using the new
-        # helper function.
-        assert_parses_as(
-            "science fiction about dogs",
-            ("genres.name", "Science Fiction"),
-            "about dogs",
-        )
+        with (
+            patch("palace.manager.search.query.match_term", mock_match_term),
+            patch(
+                "palace.manager.search.query.make_target_age_query",
+                mock_make_target_age_query,
+            ),
+        ):
+            parser = QueryParser("science fiction about dogs", MockQuery)
 
-        # Test audiences.
+            # The original query string is always stored as .original_query_string.
+            assert "science fiction about dogs" == parser.original_query_string
 
-        assert_parses_as(
-            "children's picture books", ("audience", "children"), "picture books"
-        )
+            # The part of the query that couldn't be parsed is always stored
+            # as final_query_string.
+            assert "about dogs" == parser.final_query_string
 
-        # (It's possible for the entire query string to be eaten up,
-        # such that there is no remainder match at all.)
-        assert_parses_as(
-            "young adult romance",
-            [("genres.name", "Romance"), ("audience", "youngadult")],
-            "",
-        )
+            # Leading and trailing whitespace is never regarded as
+            # significant and it is stripped from the query string
+            # immediately.
+            whitespace = QueryParser(" abc ", MockQuery)
+            assert "abc" == whitespace.original_query_string
 
-        # Test fiction/nonfiction status.
-        assert_parses_as("fiction dinosaurs", ("fiction", "fiction"), "dinosaurs")
+            # parser.filters contains the filters that we think we were
+            # able to derive from the query string.
+            assert [("genres.name", "Science Fiction")] == parser.filters
 
-        # (Genres are parsed before fiction/nonfiction; otherwise
-        # "science fiction" would be chomped by a search for "fiction"
-        # and "nonfiction" would not be picked up.)
-        assert_parses_as(
-            "science fiction or nonfiction dinosaurs",
-            [("genres.name", "Science Fiction"), ("fiction", "nonfiction")],
-            "or  dinosaurs",
-        )
+            # parser.match_queries contains the result of putting the rest
+            # of the query string into a Query object (or, here, our
+            # MockQuery) and looking at its .search_query. In a
+            # real scenario, this will result in a huge DisMax query
+            # that tries to consider all the things someone might be
+            # searching for, _in addition to_ applying a filter.
+            assert ["A huge DisMax for 'about dogs'"] == parser.match_queries
 
-        # Test target age.
-        #
-        # These are a little different because the target age
-        # restriction shows up twice: once as a filter (to eliminate
-        # all books that don't fit the target age restriction) and
-        # once as a query (to boost books that cluster tightly around
-        # the target age, at the expense of books that span a wider
-        # age range).
-        assert_parses_as(
-            "grade 5 science",
-            [("genres.name", "Science"), ("target age (filter)", (10, 10))],
-            "",
-            ("target age (query)", (10, 10), "default boost"),
-        )
+            # Here's the same test from before, using the new
+            # helper function.
+            assert_parses_as(
+                "science fiction about dogs",
+                ("genres.name", "Science Fiction"),
+                "about dogs",
+            )
 
-        assert_parses_as(
-            "divorce ages 10 and up",
-            ("target age (filter)", (10, 14)),
-            "divorce  and up",  # TODO: not ideal
-            ("target age (query)", (10, 14), "default boost"),
-        )
+            # Test audiences.
 
-        # Nothing can be parsed out from this query--it's an author's name
-        # and will be handled by another query.
-        parser = QueryParser("octavia butler")
-        assert [] == parser.match_queries
-        assert "octavia butler" == parser.final_query_string
+            assert_parses_as(
+                "children's picture books", ("audience", "children"), "picture books"
+            )
+
+            # (It's possible for the entire query string to be eaten up,
+            # such that there is no remainder match at all.)
+            assert_parses_as(
+                "young adult romance",
+                [("genres.name", "Romance"), ("audience", "youngadult")],
+                "",
+            )
+
+            # Test fiction/nonfiction status.
+            assert_parses_as("fiction dinosaurs", ("fiction", "fiction"), "dinosaurs")
+
+            # (Genres are parsed before fiction/nonfiction; otherwise
+            # "science fiction" would be chomped by a search for "fiction"
+            # and "nonfiction" would not be picked up.)
+            assert_parses_as(
+                "science fiction or nonfiction dinosaurs",
+                [("genres.name", "Science Fiction"), ("fiction", "nonfiction")],
+                "or  dinosaurs",
+            )
+
+            # Test target age.
+            #
+            # These are a little different because the target age
+            # restriction shows up twice: once as a filter (to eliminate
+            # all books that don't fit the target age restriction) and
+            # once as a query (to boost books that cluster tightly around
+            # the target age, at the expense of books that span a wider
+            # age range).
+            assert_parses_as(
+                "grade 5 science",
+                [("genres.name", "Science"), ("target age (filter)", (10, 10))],
+                "",
+                ("target age (query)", (10, 10), "default boost"),
+            )
+
+            assert_parses_as(
+                "divorce ages 10 and up",
+                ("target age (filter)", (10, 14)),
+                "divorce  and up",  # TODO: not ideal
+                ("target age (query)", (10, 14), "default boost"),
+            )
+
+            # Nothing can be parsed out from this query--it's an author's name
+            # and will be handled by another query.
+            parser = QueryParser("octavia butler")
+            assert [] == parser.match_queries
+            assert "octavia butler" == parser.final_query_string
 
         # Finally, try parsing a query without using MockQuery.
         query = QueryParser("nonfiction asteroids")
