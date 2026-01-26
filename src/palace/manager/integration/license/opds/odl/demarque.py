@@ -10,6 +10,7 @@ is expanded with the token.
 from __future__ import annotations
 
 import time
+import uuid
 from pathlib import Path
 from typing import cast
 
@@ -49,6 +50,16 @@ class DeMarqueWebReaderConfiguration(ServiceConfiguration, LoggerMixin):
 
     jwk: str | None = None
     """Inline Ed25519 private key JWK (JSON string)."""
+
+    # WebReader display options
+    language: str = "en"
+    """Preferred UI language (BCP-47 format, e.g., 'en', 'fr')."""
+
+    showcase_tts: bool = False
+    """Display text-to-speech in primary actions."""
+
+    allow_offline: bool = False
+    """Enable offline reading mode."""
 
     def get_jwk(self) -> JWK | None:
         """
@@ -123,6 +134,9 @@ class DeMarqueWebReader:
         self,
         issuer_url: str,
         jwk_key: JWK,
+        language: str,
+        showcase_tts: bool,
+        allow_offline: bool,
     ) -> None:
         """
         Initialize the WebReader client.
@@ -131,10 +145,16 @@ class DeMarqueWebReader:
 
         :param issuer_url: JWT issuer URL.
         :param jwk_key: Ed25519 private key as a JWK object.
+        :param language: Preferred UI language (BCP-47 format).
+        :param showcase_tts: Display text-to-speech in primary actions.
+        :param allow_offline: Enable offline reading mode.
         """
         self._issuer_url = issuer_url
         self._jwk_key = jwk_key
         self._key_id: str = cast(str, jwk_key.get("kid"))
+        self._language = language
+        self._showcase_tts = showcase_tts
+        self._allow_offline = allow_offline
 
     @classmethod
     def create(
@@ -158,6 +178,9 @@ class DeMarqueWebReader:
         return cls(
             issuer_url=config.issuer_url,
             jwk_key=jwk_key,
+            language=config.language,
+            showcase_tts=config.showcase_tts,
+            allow_offline=config.allow_offline,
         )
 
     def generate_token(self, subject: str) -> str:
@@ -177,6 +200,10 @@ class DeMarqueWebReader:
             "sub": subject,
             "iat": int(time.time()),
             "aud": self.AUDIENCE,
+            "jti": str(uuid.uuid4()),
+            "language": self._language,
+            "showcaseTTS": self._showcase_tts,
+            "allowOffline": self._allow_offline,
         }
 
         token = JWT(header=header, claims=claims)
