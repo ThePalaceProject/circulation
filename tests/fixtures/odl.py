@@ -3,7 +3,7 @@ from __future__ import annotations
 import datetime
 import uuid
 from functools import partial
-from typing import Literal
+from typing import Any, Literal
 from unittest.mock import MagicMock
 
 import pytest
@@ -104,7 +104,7 @@ class OPDS2WithODLApiFixture:
         self_link: str | Literal[False] = "http://status",
         return_link: str | Literal[False] = "http://return",
         license_link: str | Literal[False] = "http://license",
-        links: list[dict[str, str]] | None = None,
+        links: list[dict[str, Any]] | None = None,
     ) -> LoanStatus:
         if links is None:
             links = []
