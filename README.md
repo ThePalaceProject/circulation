@@ -345,6 +345,25 @@ settings in the future.
 - `PALACE_SAML_SP_METADATA_FILE`: Path to SP metadata XML file
 - `PALACE_SAML_SP_METADATA`: Inline SP metadata XML content
 
+#### DeMarque WebReader
+
+For DeMarque WebReader JWT authentication, the following environment variables can be configured. All are
+optional—if not configured, the system falls back to regular streaming fulfillment. Contact DeMarque for
+more information about the WebReader and its usage.
+
+- `PALACE_DEMARQUE_WEBREADER_ISSUER_URL`: JWT issuer URL (must be whitelisted by DeMarque).
+- `PALACE_DEMARQUE_WEBREADER_JWK_FILE`: Path to an Ed25519 private key JWK file (JSON format).
+- `PALACE_DEMARQUE_WEBREADER_JWK`: Inline Ed25519 private key JWK (JSON string).
+  Takes precedence over `JWK_FILE` if both are set.
+
+The JWK must be an Ed25519 key with a `kid` (key ID) field and the private key component (`d`).
+
+Optional display settings for the WebReader:
+
+- `PALACE_DEMARQUE_WEBREADER_LANGUAGE`: Preferred UI language in BCP-47 format (default: `en`).
+- `PALACE_DEMARQUE_WEBREADER_SHOWCASE_TTS`: Display text-to-speech in primary actions (default: `false`).
+- `PALACE_DEMARQUE_WEBREADER_ALLOW_OFFLINE`: Enable offline reading mode (default: `false`).
+
 ## Running the Application
 
 As mentioned in the [pyenv](#pyenv) section, the `poetry` tool should be executed within a virtual environment
