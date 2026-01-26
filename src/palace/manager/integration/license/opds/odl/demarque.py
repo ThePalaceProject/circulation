@@ -9,7 +9,6 @@ is expanded with the token.
 
 from __future__ import annotations
 
-import json
 import time
 from pathlib import Path
 from typing import cast
@@ -61,29 +60,24 @@ class DeMarqueWebReaderConfiguration(ServiceConfiguration, LoggerMixin):
         :return: The validated JWK object, or None if not configured or invalid.
         """
         jwk_content: str | None = None
+        jwk_file_resolved = self.jwk_file.resolve() if self.jwk_file else None
 
         if self.jwk:
             jwk_content = self.jwk
-        elif self.jwk_file and self.jwk_file.exists():
-            jwk_content = self.jwk_file.read_text()
+        elif jwk_file_resolved and jwk_file_resolved.exists():
+            jwk_content = jwk_file_resolved.read_text()
 
         if jwk_content is None:
             return None
 
         try:
-            jwk_dict = json.loads(jwk_content)
-        except json.JSONDecodeError:
-            self.log.exception("Invalid JWK: Content is not valid JSON.")
-            return None
-
-        if not isinstance(jwk_dict, dict):
-            self.log.error(
-                f"Invalid JWK: Expected a JSON object, got {type(jwk_dict).__name__}."
-            )
+            jwk = JWK.from_json(jwk_content)
+        except InvalidJWKValue:
+            self.log.exception("Invalid JWK: Failed to parse key.")
             return None
 
         # Validate key type
-        kty = jwk_dict.get("kty")
+        kty = jwk.get("kty")
         if kty != "OKP":
             self.log.error(
                 f"Invalid JWK: Expected OKP key type for Ed25519, got kty='{kty}'."
@@ -91,27 +85,23 @@ class DeMarqueWebReaderConfiguration(ServiceConfiguration, LoggerMixin):
             return None
 
         # Validate curve
-        crv = jwk_dict.get("crv")
+        crv = jwk.get("crv")
         if crv != "Ed25519":
             self.log.error(f"Invalid JWK: Expected Ed25519 curve, got crv='{crv}'.")
             return None
 
         # Validate kid is present
-        kid = jwk_dict.get("kid")
+        kid = jwk.get("kid")
         if not kid:
             self.log.error("Invalid JWK: Missing required 'kid' (key ID) field.")
             return None
 
         # Validate private key component is present
-        if "d" not in jwk_dict:
+        if "d" not in jwk:
             self.log.error("Invalid JWK: Missing required 'd' (private key) field.")
             return None
 
-        try:
-            return JWK(**jwk_dict)
-        except InvalidJWKValue:
-            self.log.exception("Invalid JWK: Failed to parse key.")
-            return None
+        return jwk
 
 
 class DeMarqueWebReader:
@@ -191,8 +181,7 @@ class DeMarqueWebReader:
 
         token = JWT(header=header, claims=claims)
         token.make_signed_token(self._jwk_key)
-        # JWT.serialize() returns str but is typed as Any.
-        return token.serialize()
+        return token.serialize()  # type: ignore[no-any-return]
 
     def fulfill_link(self, link: LsdLink) -> LsdLink:
         """

@@ -212,7 +212,7 @@ module = [
     "html_sanitizer",
     "isbnlib",
     "jsonschema.*",
-    "jwcrypto",
+    "jwcrypto.*",
     "kombu.*",
     "lxml.*",
     "multipledispatch",
