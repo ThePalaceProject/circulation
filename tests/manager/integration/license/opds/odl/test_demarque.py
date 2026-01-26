@@ -83,7 +83,7 @@ class Ed25519TestKey:
         )
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def ed25519_test_key() -> Ed25519TestKey:
     """Provide an Ed25519 test key for JWT testing."""
     return Ed25519TestKey()
