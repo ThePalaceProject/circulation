@@ -7,9 +7,11 @@ from typing import Any, Literal
 from unittest.mock import MagicMock
 
 import pytest
+from jwcrypto.jwk import JWK
 
 from palace.manager.api.circulation.data import HoldInfo, LoanInfo
 from palace.manager.integration.license.opds.odl.api import OPDS2WithODLApi
+from palace.manager.integration.license.opds.odl.demarque import DeMarqueWebReader
 from palace.manager.opds.lcp.license import LicenseDocument
 from palace.manager.opds.lcp.status import LoanStatus
 from palace.manager.sqlalchemy.model.collection import Collection
@@ -42,7 +44,23 @@ class OPDS2WithODLApiFixture:
         self.work = self.create_work(self.collection)
         self.license = self.setup_license()
         self.mock_http = http_client
-        self.api = MockOPDS2WithODLApi(self.db.session, self.collection)
+        self.demarque_webreader_jwk = JWK(
+            kty="OKP",
+            crv="Ed25519",
+            kid="test-key-id",
+            x="11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo",
+            d="nWGxne_9WmC6hEr0kuwsxERJxWl7MmkZcDusAxyuf2A",
+        )
+        self.demarque_webreader = DeMarqueWebReader(
+            issuer_url="http://test.library",
+            jwk_key=self.demarque_webreader_jwk,
+            language="en",
+            showcase_tts=False,
+            allow_offline=False,
+        )
+        self.api = MockOPDS2WithODLApi(
+            self.db.session, self.collection, self.demarque_webreader
+        )
         self.patron = db.patron()
         self.pool = self.license.license_pool
         self.license_document = partial(

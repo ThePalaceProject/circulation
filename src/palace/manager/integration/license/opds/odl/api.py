@@ -114,6 +114,7 @@ class OPDS2WithODLApi(
         self,
         _db: Session,
         collection: Collection,
+        demarque_webreader: DeMarqueWebReader | None = None,
     ) -> None:
         super().__init__(_db, collection)
 
@@ -143,7 +144,7 @@ class OPDS2WithODLApi(
         )
 
         # Create DeMarque WebReader client (None if not configured)
-        self._demarque_webreader = DeMarqueWebReader.create()
+        self._demarque_webreader = demarque_webreader or DeMarqueWebReader.create()
 
         # Create the data source for this collection if it doesn't exist.
         _ = self.data_source

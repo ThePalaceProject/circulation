@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import json
 import time
+import uuid
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from unittest.mock import patch
 
 import pytest
-from frozendict import frozendict
+from freezegun import freeze_time
 from jwcrypto.jwk import JWK
 from jwcrypto.jwt import JWT
 
@@ -21,72 +22,51 @@ from palace.manager.integration.license.opds.odl.demarque import (
 from palace.manager.opds.lcp.status import Link as LsdLink
 
 
-class Ed25519TestKey:
-    """Test Ed25519 key fixture for JWT testing."""
+class JwtKeysFixture:
+    """Test JWT keys fixture."""
 
     def __init__(self) -> None:
-        # Valid Ed25519 private key JWK with kid
-        self.jwk = frozendict(
-            {
-                "kty": "OKP",
-                "crv": "Ed25519",
-                "kid": "test-key-id",
-                "x": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo",
-                "d": "nWGxne_9WmC6hEr0kuwsxERJxWl7MmkZcDusAxyuf2A",
-            }
+        self.ed25519 = JWK(
+            kty="OKP",
+            crv="Ed25519",
+            kid="test-key-id",
+            x="11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo",
+            d="nWGxne_9WmC6hEr0kuwsxERJxWl7MmkZcDusAxyuf2A",
+        )
+        self.ed448 = JWK(
+            kty="OKP",
+            crv="Ed448",
+            kid="test-ed448-key",
+            x="X9dEm1m0Yf0s54fsYWrUah2hNCSFpw4fig6nXYDpZ3jt8SR2m0bHBhvWeD3x5Q9s0foavq_oJWGA",
+            d="bIKlYsuAjRDWMr6JyFE-v2ySnzTd-oyfY8mWDvbjSKNSjIo_zC8ETjmj_FuUSS-PAy51SaIAmPlb",
+        )
+        self.rsa = JWK(
+            kty="RSA",
+            kid="test-rsa-key",
+            n="0vx7agoebGcQSuuPiLJXZptN9nndrQmbXEps2aiAFbWhM78LhWx4cbbfAAtVT86zwu1RK7aPFFxuhDR1L6tS"
+            "oc_BJECPebWKRXjBZCiFV4n3oknjhMstn64tZ_2W-5JsGY4Hc5n9yBXArwl93lqt7_RN5w6Cf0h4QyQ5v-65"
+            "YGjQR0_FDW2QvzqY368QQMicAtaSqzs8KJZgnYb9c7d0zgdAZHzu6qMQvRL5hajrn1n91CbOpbISD08qNLyr"
+            "dkt-bFTWhAI4vMQFh6WeZu0fM4lFd2NcRwr3XPksINHaQ-G_xBniIqbw0Ls1jF44-csFCur-kEgU8awapJzK"
+            "nqDKgw",
+            e="AQAB",
+            d="X4cTteJY_gn4FYPsXB8rdXix5vwsg1FLN5E3EaG6RJoVH-HLLKD9M7dx5oo7GURknchnrRweUkC7hT5fJLM0"
+            "WbFAKNLWY2vv7B6NqXSzUvxT0_YSfqijwp3RTzlBaCxWp4doFk5N2o8Gy_nHNKroADIkJ46pRUohsXywbReA"
+            "dYaMwFs9tv8d_cPVY3i07a3t8MN6TNwm0dSawm9v47UiCl3Sk5ZiG7xojPLu4sbg1U2jx4IBTNBznbJSzFHK"
+            "66jT8bgkuqsk0GjskDJk19Z4qwjwbsnn4j2WBii3RL-Us2lGVkY8fkFzme1z0HbIkfz0Y6mqnOYtqc0X4jfc"
+            "KoAC8Q",
         )
 
-    @property
-    def kid(self) -> str:
-        """Return the key ID."""
-        return self.jwk["kid"]
-
-    def as_jwk(self) -> JWK:
-        """Return the key as a JWK object."""
-        return JWK(**self.jwk)
-
-    def as_json(self) -> str:
-        """Return the key as a JSON string."""
-        return json.dumps(self.jwk)
-
     def without(self, name: str) -> str:
-        """Return a JWK JSON string without the specified field"""
-        jwk = dict(self.jwk)
+        """Return a JWK JSON string without the specified field."""
+        jwk = self.ed25519.export(as_dict=True)
         del jwk[name]
         return json.dumps(jwk)
 
-    @staticmethod
-    def wrong_curve() -> str:
-        """Return a JWK JSON string with wrong curve (P-256 instead of Ed25519)."""
-        return json.dumps(
-            {
-                "kty": "EC",
-                "crv": "P-256",
-                "kid": "test-key-id",
-                "x": "f83OJ3D2xF1Bg8vub9tLe1gHMzV76e8Tus9uPHvRVEU",
-                "y": "x_FEzRu9m36HLN_tue659LNpXW6pCyStikYjKIWI5a0",
-                "d": "jpsQnnGQmL-YBIffH1136cspYG6-0iY7X1fCE9-E9LI",
-            }
-        )
-
-    @staticmethod
-    def wrong_kty() -> str:
-        """Return a JWK JSON string with wrong key type (RSA instead of OKP)."""
-        return json.dumps(
-            {
-                "kty": "RSA",
-                "kid": "test-key-id",
-                "n": "0vx7agoebGcQSuuPiLJXZptN9nndrQmbXEps2aiAFbWhM78LhWx4cbbfAAtVT86zwu1RK7aPFFxuhDR1L6tSoc_BJECPebWKRXjBZCiFV4n3oknjhMstn64tZ_2W-5JsGY4Hc5n9yBXArwl93lqt7_RN5w6Cf0h4QyQ5v-65YGjQR0_FDW2QvzqY368QQMicAtaSqzs8KJZgnYb9c7d0zgdAZHzu6qMQvRL5hajrn1n91CbOpbISD08qNLyrdkt-bFTWhAI4vMQFh6WeZu0fM4lFd2NcRwr3XPksINHaQ-G_xBniIqbw0Ls1jF44-csFCur-kEgU8awapJzKnqDKgw",
-                "e": "AQAB",
-                "d": "X4cTteJY_gn4FYPsXB8rdXix5vwsg1FLN5E3EaG6RJoVH-HLLKD9M7dx5oo7GURknchnrRweUkC7hT5fJLM0WbFAKNLWY2vv7B6NqXSzUvxT0_YSfqijwp3RTzlBaCxWp4doFk5N2o8Gy_nHNKroADIkJ46pRUohsXywbReAdYaMwFs9tv8d_cPVY3i07a3t8MN6TNwm0dSawm9v47UiCl3Sk5ZiG7xojPLu4sbg1U2jx4IBTNBznbJSzFHK66jT8bgkuqsk0GjskDJk19Z4qwjwbsnn4j2WBii3RL-Us2lGVkY8fkFzme1z0HbIkfz0Y6mqnOYtqc0X4jfcKoAC8Q",
-            }
-        )
-
 
 @pytest.fixture(scope="module")
-def ed25519_test_key() -> Ed25519TestKey:
-    """Provide an Ed25519 test key for JWT testing."""
-    return Ed25519TestKey()
+def jwt_keys_fixture() -> JwtKeysFixture:
+    """Provide test keys for JWT testing."""
+    return JwtKeysFixture()
 
 
 class TestDeMarqueWebReaderConfiguration:
@@ -103,25 +83,24 @@ class TestDeMarqueWebReaderConfiguration:
         assert config.showcase_tts is False
         assert config.allow_offline is False
 
-    def test_get_jwk_from_inline(self, ed25519_test_key: Ed25519TestKey) -> None:
+    def test_get_jwk_from_inline(self, jwt_keys_fixture: JwtKeysFixture) -> None:
         """Test loading JWK from inline string."""
         config = DeMarqueWebReaderConfiguration(
-            issuer_url="https://example.com",
-            jwk=ed25519_test_key.as_json(),
+            issuer_url="https://example.com", jwk=jwt_keys_fixture.ed25519.export()
         )
 
         jwk = config.get_jwk()
         assert jwk is not None
-        assert jwk.get("kid") == ed25519_test_key.kid
+        assert jwk.get("kid") == jwt_keys_fixture.ed25519["kid"]
         assert jwk.get("kty") == "OKP"
         assert jwk.get("crv") == "Ed25519"
 
     def test_get_jwk_from_file(
-        self, ed25519_test_key: Ed25519TestKey, tmp_path: Path
+        self, jwt_keys_fixture: JwtKeysFixture, tmp_path: Path
     ) -> None:
         """Test loading JWK from file."""
         jwk_file = tmp_path / "test.jwk"
-        jwk_file.write_text(ed25519_test_key.as_json())
+        jwk_file.write_text(jwt_keys_fixture.ed25519.export())
 
         config = DeMarqueWebReaderConfiguration(
             issuer_url="https://example.com",
@@ -130,27 +109,27 @@ class TestDeMarqueWebReaderConfiguration:
 
         jwk = config.get_jwk()
         assert jwk is not None
-        assert jwk.get("kid") == ed25519_test_key.kid
+        assert jwk.get("kid") == jwt_keys_fixture.ed25519["kid"]
 
     def test_get_jwk_inline_takes_precedence(
-        self, ed25519_test_key: Ed25519TestKey, tmp_path: Path
+        self, jwt_keys_fixture: JwtKeysFixture, tmp_path: Path
     ) -> None:
         """Test that inline JWK takes precedence over file."""
         # Create a file with a different key ID
         jwk_file = tmp_path / "test.jwk"
-        file_jwk = dict(ed25519_test_key.jwk)
+        file_jwk = jwt_keys_fixture.ed25519.export(as_dict=True)
         file_jwk["kid"] = "file-key-id"
         jwk_file.write_text(json.dumps(file_jwk))
 
         config = DeMarqueWebReaderConfiguration(
             issuer_url="https://example.com",
-            jwk=ed25519_test_key.as_json(),  # Has kid "test-key-id"
+            jwk=jwt_keys_fixture.ed25519.export(),  # Has kid "test-key-id"
             jwk_file=jwk_file,
         )
 
         jwk = config.get_jwk()
         assert jwk is not None
-        assert jwk.get("kid") == ed25519_test_key.kid  # Inline value, not file
+        assert jwk.get("kid") == jwt_keys_fixture.ed25519["kid"]
 
     def test_get_jwk_file_not_found(self, tmp_path: Path) -> None:
         """Test get_jwk returns None when file doesn't exist."""
@@ -166,34 +145,32 @@ class TestDeMarqueWebReaderConfiguration:
         )
         assert config.get_jwk() is None
 
-    def test_get_jwk_missing_kid(self, ed25519_test_key: Ed25519TestKey) -> None:
+    def test_get_jwk_missing_kid(self, jwt_keys_fixture: JwtKeysFixture) -> None:
         """Test get_jwk returns None when kid is missing."""
         config = DeMarqueWebReaderConfiguration(
-            jwk=ed25519_test_key.without("kid"),
+            jwk=jwt_keys_fixture.without("kid"),
         )
         assert config.get_jwk() is None
 
     def test_get_jwk_missing_private_key(
-        self, ed25519_test_key: Ed25519TestKey
+        self, jwt_keys_fixture: JwtKeysFixture
     ) -> None:
         """Test get_jwk returns None when private key is missing."""
         config = DeMarqueWebReaderConfiguration(
-            jwk=ed25519_test_key.without("d"),
+            jwk=jwt_keys_fixture.without("d"),
         )
         assert config.get_jwk() is None
 
-    def test_get_jwk_wrong_curve(self) -> None:
+    def test_get_jwk_wrong_curve(self, jwt_keys_fixture: JwtKeysFixture) -> None:
         """Test get_jwk returns None for wrong curve."""
         config = DeMarqueWebReaderConfiguration(
-            jwk=Ed25519TestKey.wrong_curve(),
+            jwk=jwt_keys_fixture.ed448.export(),
         )
         assert config.get_jwk() is None
 
-    def test_get_jwk_wrong_kty(self) -> None:
+    def test_get_jwk_wrong_kty(self, jwt_keys_fixture: JwtKeysFixture) -> None:
         """Test get_jwk returns None for wrong key type."""
-        config = DeMarqueWebReaderConfiguration(
-            jwk=Ed25519TestKey.wrong_kty(),
-        )
+        config = DeMarqueWebReaderConfiguration(jwk=jwt_keys_fixture.rsa.export())
         assert config.get_jwk() is None
 
 
@@ -202,13 +179,13 @@ class TestDeMarqueWebReader:
 
     @pytest.fixture
     def valid_config(
-        self, ed25519_test_key: Ed25519TestKey
+        self, jwt_keys_fixture: JwtKeysFixture
     ) -> DeMarqueWebReaderConfiguration:
         """Create a valid configuration for testing."""
         return DeMarqueWebReaderConfiguration(
             issuer_url="https://library.example.com",
-            jwk=ed25519_test_key.as_json(),
-            language="fr",
+            jwk=jwt_keys_fixture.ed25519.export(),
+            language="nl",
             showcase_tts=True,
             allow_offline=True,
         )
@@ -227,10 +204,10 @@ class TestDeMarqueWebReader:
         reader = DeMarqueWebReader.create(valid_config)
         assert reader is not None
 
-    def test_create_missing_issuer_url(self, ed25519_test_key: Ed25519TestKey) -> None:
+    def test_create_missing_issuer_url(self, jwt_keys_fixture: JwtKeysFixture) -> None:
         """Test create returns None when issuer_url is missing."""
         config = DeMarqueWebReaderConfiguration(
-            jwk=ed25519_test_key.as_json(),
+            jwk=jwt_keys_fixture.ed25519.export(),
         )
         assert DeMarqueWebReader.create(config) is None
 
@@ -250,90 +227,66 @@ class TestDeMarqueWebReader:
         assert DeMarqueWebReader.create(config) is None
 
     def test_create_default_config(
-        self, ed25519_test_key: Ed25519TestKey, monkeypatch: pytest.MonkeyPatch
+        self, jwt_keys_fixture: JwtKeysFixture, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Test create loads config from environment when not provided."""
         monkeypatch.setenv(
             "PALACE_DEMARQUE_WEBREADER_ISSUER_URL", "https://library.example.com"
         )
-        monkeypatch.setenv("PALACE_DEMARQUE_WEBREADER_JWK", ed25519_test_key.as_json())
+        monkeypatch.setenv(
+            "PALACE_DEMARQUE_WEBREADER_JWK", jwt_keys_fixture.ed25519.export()
+        )
 
         reader = DeMarqueWebReader.create()
-        assert reader is not None
+        assert reader._jwk_key.export() == jwt_keys_fixture.ed25519.export()
+        assert reader._key_id == jwt_keys_fixture.ed25519["kid"]
+        assert reader._issuer_url == "https://library.example.com"
 
-    def test_generate_token_structure(
-        self, ed25519_test_key: Ed25519TestKey, webreader: DeMarqueWebReader
+    @freeze_time()
+    def test_generate_token(
+        self,
+        jwt_keys_fixture: JwtKeysFixture,
+        webreader: DeMarqueWebReader,
+        valid_config: DeMarqueWebReaderConfiguration,
     ) -> None:
-        """Test that generated token has correct structure."""
+        """Test that generated token has correct structure and claims."""
         token = webreader.generate_token("test-publication-id")
 
         # Parse and verify the token
-        jwt = JWT()
-        jwt.deserialize(token)
+        jwt = JWT(key=jwt_keys_fixture.ed25519, jwt=token)
 
         # Verify header
-        header = json.loads(jwt.token.objects["protected"])
+        header = json.loads(jwt.header)
         assert header["alg"] == "EdDSA"
-        assert header["kid"] == ed25519_test_key.kid
+        assert header["kid"] == jwt_keys_fixture.ed25519["kid"]
 
-    def test_generate_token_claims(
-        self, ed25519_test_key: Ed25519TestKey, webreader: DeMarqueWebReader
-    ) -> None:
-        """Test that generated token has correct claims."""
-        before = int(time.time())
-        token = webreader.generate_token("test-publication-id")
-        after = int(time.time())
-
-        # Decode and verify claims
-        jwt = JWT(
-            key=ed25519_test_key.as_jwk(),
-            jwt=token,
-        )
+        # Verify claims
         claims = json.loads(jwt.claims)
-
-        assert claims["iss"] == "https://library.example.com"
-        assert claims["sub"] == "test-publication-id"
+        assert claims["allowOffline"] == valid_config.allow_offline
         assert claims["aud"] == "https://r.cantook.com"
-        assert before <= claims["iat"] <= after
-        assert "jti" in claims  # UUID should be present
-
-        # Verify display options
-        assert claims["language"] == "fr"
-        assert claims["showcaseTTS"] is True
-        assert claims["allowOffline"] is True
-
-    def test_generate_token_default_display_options(
-        self, ed25519_test_key: Ed25519TestKey
-    ) -> None:
-        """Test that default display options are included in token."""
-        config = DeMarqueWebReaderConfiguration(
-            issuer_url="https://example.com",
-            jwk=ed25519_test_key.as_json(),
-            # Using defaults: language="en", showcase_tts=False, allow_offline=False
-        )
-        reader = DeMarqueWebReader.create(config)
-        assert reader is not None
-
-        token = reader.generate_token("test-id")
-        jwt = JWT(key=ed25519_test_key.as_jwk(), jwt=token)
-        claims = json.loads(jwt.claims)
-
-        assert claims["language"] == "en"
-        assert claims["showcaseTTS"] is False
-        assert claims["allowOffline"] is False
+        assert claims["iss"] == valid_config.issuer_url
+        assert claims["language"] == valid_config.language
+        assert claims["showcaseTTS"] == valid_config.showcase_tts
+        assert claims["sub"] == "test-publication-id"
+        assert claims["iat"] == int(time.time())
+        assert "jti" in claims
 
     def test_generate_token_unique_jti(
-        self, ed25519_test_key: Ed25519TestKey, webreader: DeMarqueWebReader
+        self, jwt_keys_fixture: JwtKeysFixture, webreader: DeMarqueWebReader
     ) -> None:
         """Test that each token has a unique jti claim."""
         token1 = webreader.generate_token("test-id")
         token2 = webreader.generate_token("test-id")
 
-        jwt1 = JWT(key=ed25519_test_key.as_jwk(), jwt=token1)
-        jwt2 = JWT(key=ed25519_test_key.as_jwk(), jwt=token2)
+        jwt1 = JWT(key=jwt_keys_fixture.ed25519, jwt=token1)
+        jwt2 = JWT(key=jwt_keys_fixture.ed25519, jwt=token2)
 
         claims1 = json.loads(jwt1.claims)
         claims2 = json.loads(jwt2.claims)
+
+        # JTI is a valid uuid
+        uuid.UUID(claims1["jti"])
+        uuid.UUID(claims2["jti"])
 
         assert claims1["jti"] != claims2["jti"]
 
@@ -341,18 +294,23 @@ class TestDeMarqueWebReader:
         """Test successful link fulfillment."""
         link = LsdLink(
             href="https://r.cantook.com/read/{?token}",
-            type="text/html",
+            type="application/monster",
             templated=True,
             rel=["publication", DEMARQUE_WEBREADER_REL],
             properties={"identifier": "test-publication-id"},
         )
 
-        result = webreader.fulfill_link(link)
+        with patch.object(
+            webreader, "generate_token", return_value="generated_token%?&"
+        ):
+            result = webreader.fulfill_link(link)
 
-        assert result.type == "text/html"
-        assert result.href.startswith("https://r.cantook.com/read/?token=")
-        # Verify the token is present and properly URL-encoded
-        assert "token=" in result.href
+        # The type is preserved
+        assert result.type == "application/monster"
+        # The token has been templated into the link and is properly escaped
+        assert (
+            result.href == "https://r.cantook.com/read/?token=generated_token%25%3F%26"
+        )
 
     def test_fulfill_link_missing_identifier(
         self, webreader: DeMarqueWebReader
@@ -366,37 +324,3 @@ class TestDeMarqueWebReader:
 
         with pytest.raises(CannotFulfill):
             webreader.fulfill_link(link)
-
-    def test_fulfill_link_preserves_type(self, webreader: DeMarqueWebReader) -> None:
-        """Test that fulfill_link preserves the link type."""
-        link = LsdLink(
-            href="https://r.cantook.com/read/{?token}",
-            type="application/xhtml+xml",
-            templated=True,
-            properties={"identifier": "test-id"},
-        )
-
-        result = webreader.fulfill_link(link)
-        assert result.type == "application/xhtml+xml"
-
-    def test_fulfill_link_token_is_valid_jwt(
-        self, ed25519_test_key: Ed25519TestKey, webreader: DeMarqueWebReader
-    ) -> None:
-        """Test that the token in the fulfilled link is a valid JWT."""
-        link = LsdLink(
-            href="https://r.cantook.com/read/{?token}",
-            type="text/html",
-            templated=True,
-            properties={"identifier": "my-publication"},
-        )
-
-        result = webreader.fulfill_link(link)
-
-        # Extract token from URL
-        parsed = urlparse(result.href)
-        token = parse_qs(parsed.query)["token"][0]
-
-        # Verify it's a valid JWT with correct subject
-        jwt = JWT(key=ed25519_test_key.as_jwk(), jwt=token)
-        claims = json.loads(jwt.claims)
-        assert claims["sub"] == "my-publication"

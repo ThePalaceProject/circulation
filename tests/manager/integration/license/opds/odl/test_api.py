@@ -10,6 +10,7 @@ from urllib.parse import parse_qs, urlparse
 import dateutil
 import pytest
 from freezegun import freeze_time
+from jwcrypto.jwt import JWT
 from sqlalchemy import delete
 
 from palace.manager.api.circulation.exceptions import (
@@ -39,7 +40,6 @@ from palace.manager.integration.license.opds.odl.api import OPDS2WithODLApi
 from palace.manager.integration.license.opds.odl.constants import FEEDBOOKS_AUDIO
 from palace.manager.integration.license.opds.odl.demarque import (
     DEMARQUE_WEBREADER_REL,
-    DeMarqueWebReader,
 )
 from palace.manager.integration.license.opds.requests import OAuthOpdsRequest
 from palace.manager.opds.lcp.status import LoanStatus
@@ -1111,27 +1111,10 @@ class TestOPDS2WithODLApi:
     def test_fulfill_streaming_demarque_webreader(
         self,
         opds2_with_odl_api_fixture: OPDS2WithODLApiFixture,
-        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Test streaming fulfillment with DeMarque WebReader JWT authentication."""
         opds2_with_odl_api_fixture.setup_license(concurrency=1, available=1)
         opds2_with_odl_api_fixture.checkout(create_loan=True)
-
-        # Configure DeMarque WebReader via environment variables
-        monkeypatch.setenv(
-            "PALACE_DEMARQUE_WEBREADER_ISSUER_URL", "https://library.example.com"
-        )
-        monkeypatch.setenv(
-            "PALACE_DEMARQUE_WEBREADER_JWK",
-            '{"kty":"OKP","crv":"Ed25519","kid":"test-key-id",'
-            '"x":"11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo",'
-            '"d":"nWGxne_9WmC6hEr0kuwsxERJxWl7MmkZcDusAxyuf2A"}',
-        )
-
-        # Inject the configured DeMarque WebReader into the API
-        webreader = DeMarqueWebReader.create()
-        assert webreader is not None
-        opds2_with_odl_api_fixture.api._demarque_webreader = webreader
 
         lpdm = MagicMock(spec=LicensePoolDeliveryMechanism)
         lpdm.delivery_mechanism = MagicMock(spec=DeliveryMechanism)
@@ -1169,105 +1152,16 @@ class TestOPDS2WithODLApi:
         assert "token=" in fulfillment.content_link
         assert fulfillment.content_link.startswith("https://r.cantook.com/read/?token=")
 
-    def test_fulfill_streaming_demarque_webreader_not_configured(
-        self,
-        opds2_with_odl_api_fixture: OPDS2WithODLApiFixture,
-    ) -> None:
-        """Test streaming falls back to publication link when WebReader not configured."""
-        opds2_with_odl_api_fixture.setup_license(concurrency=1, available=1)
-        opds2_with_odl_api_fixture.checkout(create_loan=True)
+        # Verify that we have a valid JWT token
+        parsed = urlparse(fulfillment.content_link)
+        token = parse_qs(parsed.query)["token"][0]
 
-        # Ensure WebReader is not configured
-        opds2_with_odl_api_fixture.api._demarque_webreader = None
-
-        lpdm = MagicMock(spec=LicensePoolDeliveryMechanism)
-        lpdm.delivery_mechanism = MagicMock(spec=DeliveryMechanism)
-        lpdm.delivery_mechanism.content_type = (
-            DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE
-        )
-        lpdm.delivery_mechanism.drm_scheme = DeliveryMechanism.STREAMING_DRM
-
-        # Create LSD with only a regular publication link (no WebReader link)
-        lsd = opds2_with_odl_api_fixture.loan_status_document(
-            "active",
-            links=[
-                {
-                    "rel": "publication",
-                    "href": "http://regular-streaming-url",
-                    "type": MediaTypes.TEXT_HTML_MEDIA_TYPE,
-                },
-            ],
-        )
-        opds2_with_odl_api_fixture.mock_http.queue_response(
-            200, content=lsd.model_dump_json()
-        )
-
-        fulfillment = opds2_with_odl_api_fixture.api.fulfill(
-            opds2_with_odl_api_fixture.patron,
-            "pin",
-            opds2_with_odl_api_fixture.pool,
-            lpdm,
-        )
-
-        assert isinstance(fulfillment, StreamingFulfillment)
-        # Should use the publication link directly (no JWT token)
-        assert fulfillment.content_link == "http://regular-streaming-url"
-
-    def test_fulfill_streaming_demarque_webreader_link_not_present(
-        self,
-        opds2_with_odl_api_fixture: OPDS2WithODLApiFixture,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        """Test streaming falls back when WebReader is configured but link not in LSD."""
-        opds2_with_odl_api_fixture.setup_license(concurrency=1, available=1)
-        opds2_with_odl_api_fixture.checkout(create_loan=True)
-
-        # Configure DeMarque WebReader
-        monkeypatch.setenv(
-            "PALACE_DEMARQUE_WEBREADER_ISSUER_URL", "https://library.example.com"
-        )
-        monkeypatch.setenv(
-            "PALACE_DEMARQUE_WEBREADER_JWK",
-            '{"kty":"OKP","crv":"Ed25519","kid":"test-key-id",'
-            '"x":"11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo",'
-            '"d":"nWGxne_9WmC6hEr0kuwsxERJxWl7MmkZcDusAxyuf2A"}',
-        )
-        webreader = DeMarqueWebReader.create()
-        assert webreader is not None
-        opds2_with_odl_api_fixture.api._demarque_webreader = webreader
-
-        lpdm = MagicMock(spec=LicensePoolDeliveryMechanism)
-        lpdm.delivery_mechanism = MagicMock(spec=DeliveryMechanism)
-        lpdm.delivery_mechanism.content_type = (
-            DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE
-        )
-        lpdm.delivery_mechanism.drm_scheme = DeliveryMechanism.STREAMING_DRM
-
-        # Create LSD with only regular publication link (no WebReader link)
-        lsd = opds2_with_odl_api_fixture.loan_status_document(
-            "active",
-            links=[
-                {
-                    "rel": "publication",
-                    "href": "http://regular-streaming-url",
-                    "type": MediaTypes.TEXT_HTML_MEDIA_TYPE,
-                },
-            ],
-        )
-        opds2_with_odl_api_fixture.mock_http.queue_response(
-            200, content=lsd.model_dump_json()
-        )
-
-        fulfillment = opds2_with_odl_api_fixture.api.fulfill(
-            opds2_with_odl_api_fixture.patron,
-            "pin",
-            opds2_with_odl_api_fixture.pool,
-            lpdm,
-        )
-
-        assert isinstance(fulfillment, StreamingFulfillment)
-        # Should use the regular publication link
-        assert fulfillment.content_link == "http://regular-streaming-url"
+        jwt = JWT(jwt=token, key=opds2_with_odl_api_fixture.demarque_webreader_jwk)
+        claims = json.loads(jwt.claims)
+        assert claims["sub"] == "test-publication-id"
+        assert claims["aud"] == "https://r.cantook.com"
+        assert "iat" in claims
+        assert "jti" in claims
 
     def test_fulfill_open_access(
         self,
