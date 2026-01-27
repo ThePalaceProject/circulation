@@ -3,6 +3,7 @@ from typing import override
 from sqlalchemy.orm import Session
 
 from palace.manager.integration.license.opds.odl.api import OPDS2WithODLApi
+from palace.manager.integration.license.opds.odl.demarque import DeMarqueWebReader
 from palace.manager.sqlalchemy.model.collection import Collection
 
 
@@ -11,8 +12,9 @@ class MockOPDS2WithODLApi(OPDS2WithODLApi):
         self,
         _db: Session,
         collection: Collection,
+        demarque_webreader: DeMarqueWebReader | None = None,
     ) -> None:
-        super().__init__(_db, collection)
+        super().__init__(_db, collection, demarque_webreader)
 
     @staticmethod
     @override

@@ -45,6 +45,10 @@ from palace.manager.api.lcp.hash import Hasher, HasherFactory
 from palace.manager.core.lcp.credential import LCPCredentialFactory
 from palace.manager.integration.license.opds.exception import OpdsResponseException
 from palace.manager.integration.license.opds.odl.constants import FEEDBOOKS_AUDIO
+from palace.manager.integration.license.opds.odl.demarque import (
+    DEMARQUE_WEBREADER_REL,
+    DeMarqueWebReader,
+)
 from palace.manager.integration.license.opds.odl.settings import (
     OPDS2WithODLLibrarySettings,
     OPDS2WithODLSettings,
@@ -110,6 +114,7 @@ class OPDS2WithODLApi(
         self,
         _db: Session,
         collection: Collection,
+        demarque_webreader: DeMarqueWebReader | None = None,
     ) -> None:
         super().__init__(_db, collection)
 
@@ -137,6 +142,9 @@ class OPDS2WithODLApi(
             self.settings.prioritized_content_types,
             self.settings.deprioritize_lcp_non_epubs,
         )
+
+        # Create DeMarque WebReader client (None if not configured)
+        self._demarque_webreader = demarque_webreader or DeMarqueWebReader.create()
 
         # Create the data source for this collection if it doesn't exist.
         _ = self.data_source
@@ -579,10 +587,23 @@ class OPDS2WithODLApi(
                     f"Supported types: {list(DeliveryMechanism.MEDIA_TYPES_FOR_STREAMING.keys())}."
                 )
                 raise CannotFulfill("The requested streaming format is not available.")
-            fulfill_link = doc.links.get(
-                rel="publication",
-                type=link_content_type,
-            )
+
+            # Check for DeMarque WebReader link first (requires JWT config)
+            if (
+                self._demarque_webreader is not None
+                and (
+                    webreader_link := doc.links.get(
+                        rel=DEMARQUE_WEBREADER_REL, type=link_content_type
+                    )
+                )
+                is not None
+            ):
+                fulfill_link = self._demarque_webreader.fulfill_link(webreader_link)
+            else:
+                fulfill_link = doc.links.get(
+                    rel="publication",
+                    type=link_content_type,
+                )
             fulfill_cls = StreamingFulfillment
         elif drm_scheme == DeliveryMechanism.FEEDBOOKS_AUDIOBOOK_DRM:
             # For DeMarque audiobook content using "FEEDBOOKS_AUDIOBOOK_DRM", the link
