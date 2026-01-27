@@ -75,10 +75,19 @@ class DeMarqueWebReaderConfiguration(ServiceConfiguration, LoggerMixin):
 
         if self.jwk:
             jwk_content = self.jwk
-        elif jwk_file_resolved and jwk_file_resolved.exists():
-            jwk_content = jwk_file_resolved.read_text()
+        elif jwk_file_resolved:
+            if not jwk_file_resolved.exists():
+                self.log.warning(
+                    f"JWK file configured but not found: {jwk_file_resolved}"
+                )
+            else:
+                jwk_content = jwk_file_resolved.read_text()
+                if not jwk_content:
+                    self.log.warning(
+                        f"JWK file configured but empty: {jwk_file_resolved}"
+                    )
 
-        if jwk_content is None:
+        if jwk_content is None or jwk_content == "":
             return None
 
         try:

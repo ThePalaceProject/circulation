@@ -131,12 +131,30 @@ class TestDeMarqueWebReaderConfiguration:
         assert jwk is not None
         assert jwk.get("kid") == jwt_keys_fixture.ed25519["kid"]
 
-    def test_get_jwk_file_not_found(self, tmp_path: Path) -> None:
-        """Test get_jwk returns None when file doesn't exist."""
+    def test_get_jwk_file_not_found(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Test get_jwk returns None and logs warning when file doesn't exist."""
+        jwk_file = tmp_path / "nonexistent.jwk"
         config = DeMarqueWebReaderConfiguration(
-            jwk_file=tmp_path / "nonexistent.jwk",
+            jwk_file=jwk_file,
         )
         assert config.get_jwk() is None
+        assert "JWK file configured but not found" in caplog.text
+        assert str(jwk_file) in caplog.text
+
+    def test_get_jwk_file_empty(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Test get_jwk returns None and logs warning when file is empty."""
+        jwk_file = tmp_path / "empty.jwk"
+        jwk_file.write_text("")
+        config = DeMarqueWebReaderConfiguration(
+            jwk_file=jwk_file,
+        )
+        assert config.get_jwk() is None
+        assert "JWK file configured but empty" in caplog.text
+        assert str(jwk_file) in caplog.text
 
     def test_get_jwk_invalid_json(self) -> None:
         """Test get_jwk returns None for invalid JSON."""
