@@ -20,6 +20,7 @@ from palace.manager.integration.license.opds.odl.demarque import (
     DeMarqueWebReaderConfiguration,
 )
 from palace.manager.opds.lcp.status import Link as LsdLink
+from palace.manager.service.logging.configuration import LogLevel
 
 
 class JwtKeysFixture:
@@ -135,6 +136,7 @@ class TestDeMarqueWebReaderConfiguration:
         self, tmp_path: Path, caplog: pytest.LogCaptureFixture
     ) -> None:
         """Test get_jwk returns None and logs warning when file doesn't exist."""
+        caplog.set_level(LogLevel.warning)
         jwk_file = tmp_path / "nonexistent.jwk"
         config = DeMarqueWebReaderConfiguration(
             jwk_file=jwk_file,
@@ -147,6 +149,7 @@ class TestDeMarqueWebReaderConfiguration:
         self, tmp_path: Path, caplog: pytest.LogCaptureFixture
     ) -> None:
         """Test get_jwk returns None and logs warning when file is empty."""
+        caplog.set_level(LogLevel.warning)
         jwk_file = tmp_path / "empty.jwk"
         jwk_file.write_text("")
         config = DeMarqueWebReaderConfiguration(
