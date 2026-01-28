@@ -165,14 +165,14 @@ class OPDS2WithODLExtractor[PublicationType: opds2.BasePublication](
                 or audience.suggested_max_age is not None
             ):
                 min_age = audience.suggested_min_age
-                max_age = audience.suggested_max_age
+                if min_age is None:
+                    min_age = ""
 
-                if min_age is not None and max_age is not None:
-                    age_range = f"{min_age}-{max_age}"
-                elif min_age is not None:
-                    age_range = str(min_age)
-                else:
-                    age_range = str(max_age)
+                max_age = audience.suggested_max_age
+                if max_age is None:
+                    max_age = ""
+
+                age_range = f"{min_age}-{max_age}"
 
                 subjects.append(
                     SubjectData(

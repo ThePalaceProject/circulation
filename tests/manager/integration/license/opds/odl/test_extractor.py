@@ -479,7 +479,7 @@ class TestOPDS2WithODLExtractor:
         subjects = OPDS2WithODLExtractor._extract_schema_org_subjects(metadata)
 
         assert len(subjects) == 1
-        assert subjects[0].identifier == "8"
+        assert subjects[0].identifier == "8-"
 
         # Only max age
         metadata = opds2.PublicationMetadata(
@@ -495,7 +495,7 @@ class TestOPDS2WithODLExtractor:
         subjects = OPDS2WithODLExtractor._extract_schema_org_subjects(metadata)
 
         assert len(subjects) == 1
-        assert subjects[0].identifier == "12"
+        assert subjects[0].identifier == "-12"
 
     def test__extract_schema_org_subjects_combined(self) -> None:
         """Test extraction when multiple schema.org fields are present."""
