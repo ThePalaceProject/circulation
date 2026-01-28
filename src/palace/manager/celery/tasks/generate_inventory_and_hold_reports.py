@@ -10,7 +10,18 @@ from pathlib import Path
 from typing import IO, Any
 
 from celery import shared_task
-from sqlalchemy import bindparam, case, func, lateral, not_, or_, select, true
+from sqlalchemy import (
+    bindparam,
+    case,
+    exists,
+    false,
+    func,
+    lateral,
+    not_,
+    or_,
+    select,
+    true,
+)
 from sqlalchemy.dialects.postgresql import aggregate_order_by
 from sqlalchemy.orm import Session, aliased
 from sqlalchemy.sql import Select, Subquery
@@ -122,9 +133,14 @@ def generate_report(
     ]
 
     # generate inventory report csv file
+    settings = library.settings
     sql_params: dict[str, Any] = {
         "library_id": library.id,
         "integration_ids": tuple(integration_ids),
+        "filtered_audiences": settings.filtered_audiences,
+        "filtered_audiences_enabled": bool(settings.filtered_audiences),
+        "filtered_genres": settings.filtered_genres,
+        "filtered_genres_enabled": bool(settings.filtered_genres),
     }
 
     with tempfile.NamedTemporaryFile() as report_zip:
@@ -371,6 +387,50 @@ def inventory_report_query() -> Select:
     bisac_subquery = _bisac_subjects_subquery()
     collection_sharing = _is_shared_collection_lateral()
     lic = _licenses_lateral()
+    library_id_param = bindparam("library_id")
+    filtered_audiences_enabled = bindparam(
+        "filtered_audiences_enabled", value=False, required=False
+    )
+    filtered_genres_enabled = bindparam(
+        "filtered_genres_enabled", value=False, required=False
+    )
+    filtered_audiences = bindparam(
+        "filtered_audiences", expanding=True, value=(), required=False
+    )
+    filtered_genres = bindparam(
+        "filtered_genres", expanding=True, value=(), required=False
+    )
+    is_manually_suppressed = Work.suppressed_for.any(Library.id == library_id_param)
+    audience_filtered = case(
+        (
+            filtered_audiences_enabled,
+            Work.audience.in_(filtered_audiences),
+        ),
+        else_=false(),
+    )
+    genre_filtered = case(
+        (
+            filtered_genres_enabled,
+            exists(
+                select(1)
+                .select_from(WorkGenre)
+                .join(Genre, WorkGenre.genre_id == Genre.id)
+                .where(
+                    WorkGenre.work_id == Work.id,
+                    Genre.name.in_(filtered_genres),
+                )
+            ),
+        ),
+        else_=false(),
+    )
+    is_policy_filtered = or_(audience_filtered, genre_filtered)
+    is_visible = or_(is_manually_suppressed, is_policy_filtered)
+    visible = case((is_visible, "true"), else_="false").label("visible")
+    visibility_status = case(
+        (is_manually_suppressed, "manually suppressed"),
+        (is_policy_filtered, "filtered"),
+        else_="",
+    ).label("visibility_status")
 
     return (
         select(
@@ -394,6 +454,8 @@ def inventory_report_query() -> Select:
             func.coalesce(wg_subquery.c.genres, "").label("genres"),
             func.coalesce(bisac_subquery.c.age_ranges, "").label("age_ranges"),
             func.coalesce(bisac_subquery.c.bisac_subjects, "").label("bisac_subjects"),
+            visible,
+            visibility_status,
             DataSource.name.label("data_source"),
             IntegrationConfiguration.name.label("collection_name"),
             lic.c.expires.label("license_expiration"),

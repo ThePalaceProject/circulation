@@ -125,6 +125,8 @@ def test_only_active_collections_are_included(
                 "genres",
                 "age_ranges",
                 "bisac_subjects",
+                "visible",
+                "visibility_status",
                 "data_source",
                 "collection_name",
                 "license_expiration",
