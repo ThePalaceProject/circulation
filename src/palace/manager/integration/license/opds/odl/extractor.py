@@ -120,6 +120,72 @@ class OPDS2WithODLExtractor[PublicationType: opds2.BasePublication](
         return parsed_subjects
 
     @classmethod
+    def _extract_schema_org_subjects(
+        cls, metadata: opds2.PublicationMetadata
+    ) -> list[SubjectData]:
+        """Extract SubjectData from schema.org metadata fields.
+
+        This extracts audience and age range information from schema.org
+        extensions that may be present in the OPDS2 metadata.
+
+        :param metadata: The publication metadata containing schema.org fields.
+        :return: List of SubjectData extracted from schema.org fields.
+        """
+        subjects: list[SubjectData] = []
+
+        # Extract from schema:typicalAgeRange (e.g., "5-12")
+        if metadata.typical_age_range:
+            subjects.append(
+                SubjectData(
+                    type=Subject.AGE_RANGE,
+                    identifier=metadata.typical_age_range,
+                    name=metadata.typical_age_range,
+                    weight=1,
+                )
+            )
+
+        # Extract from schema:audience
+        if metadata.audience:
+            audience = metadata.audience
+
+            # Extract audience type (e.g., "Children", "Young Adult")
+            if audience.audience_type:
+                subjects.append(
+                    SubjectData(
+                        type=Subject.FREEFORM_AUDIENCE,
+                        identifier=audience.audience_type,
+                        name=audience.audience_type,
+                        weight=1,
+                    )
+                )
+
+            # Extract age range from suggested min/max age
+            if (
+                audience.suggested_min_age is not None
+                or audience.suggested_max_age is not None
+            ):
+                min_age = audience.suggested_min_age
+                max_age = audience.suggested_max_age
+
+                if min_age is not None and max_age is not None:
+                    age_range = f"{min_age}-{max_age}"
+                elif min_age is not None:
+                    age_range = str(min_age)
+                else:
+                    age_range = str(max_age)
+
+                subjects.append(
+                    SubjectData(
+                        type=Subject.AGE_RANGE,
+                        identifier=age_range,
+                        name=age_range,
+                        weight=1,
+                    )
+                )
+
+        return subjects
+
+    @classmethod
     def _extract_contributor_roles(
         cls, roles: Sequence[str], default: str
     ) -> list[str]:
@@ -814,6 +880,7 @@ class OPDS2WithODLExtractor[PublicationType: opds2.BasePublication](
         imprint = str(first_imprint.name) if first_imprint else None
         published = self._extract_published_date(publication.metadata.published)
         subjects = self._extract_subjects(publication.metadata.subjects)
+        subjects += self._extract_schema_org_subjects(publication.metadata)
 
         contributors = self._extract_contributors(publication)
 

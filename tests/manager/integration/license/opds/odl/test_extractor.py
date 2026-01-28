@@ -15,6 +15,7 @@ from palace.manager.opds.odl.odl import License, LicenseMetadata, Publication
 from palace.manager.opds.odl.protection import Protection
 from palace.manager.opds.odl.terms import Terms
 from palace.manager.opds.opds2 import PublicationFeedNoValidation, StrictLink
+from palace.manager.opds.schema_org import Audience
 from palace.manager.sqlalchemy.constants import EditionConstants, MediaTypes
 from palace.manager.sqlalchemy.model.contributor import Contributor
 from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism, RightsStatus
@@ -408,3 +409,121 @@ class TestOPDS2WithODLExtractor:
         assert format_data.content_type == MediaTypes.EPUB_MEDIA_TYPE
         assert format_data.drm_scheme is None
         assert format_data.rights_uri == RightsStatus.IN_COPYRIGHT
+
+    def test__extract_schema_org_subjects_typical_age_range(self) -> None:
+        """Test extraction of schema:typicalAgeRange into AGE_RANGE subject."""
+        metadata = opds2.PublicationMetadata(
+            type="http://schema.org/Book",
+            identifier="urn:isbn:9780306406157",
+            title="Test Book",
+            typical_age_range="8-12",
+        )
+
+        subjects = OPDS2WithODLExtractor._extract_schema_org_subjects(metadata)
+
+        assert len(subjects) == 1
+        assert subjects[0].type == "schema:typicalAgeRange"
+        assert subjects[0].identifier == "8-12"
+        assert subjects[0].name == "8-12"
+
+    def test__extract_schema_org_subjects_audience_type(self) -> None:
+        """Test extraction of schema:audience.audienceType into FREEFORM_AUDIENCE subject."""
+        metadata = opds2.PublicationMetadata(
+            type="http://schema.org/Book",
+            identifier="urn:isbn:9780306406157",
+            title="Test Book",
+            audience=Audience(
+                type="schema:PeopleAudience",
+                audience_type="Children",
+            ),
+        )
+
+        subjects = OPDS2WithODLExtractor._extract_schema_org_subjects(metadata)
+
+        assert len(subjects) == 1
+        assert subjects[0].type == "schema:audience"
+        assert subjects[0].identifier == "Children"
+        assert subjects[0].name == "Children"
+
+    def test__extract_schema_org_subjects_audience_age_range(self) -> None:
+        """Test extraction of suggested min/max age from schema:audience."""
+        # Both min and max age
+        metadata = opds2.PublicationMetadata(
+            type="http://schema.org/Book",
+            identifier="urn:isbn:9780306406157",
+            title="Test Book",
+            audience=Audience(
+                type="schema:PeopleAudience",
+                suggested_min_age=5,
+                suggested_max_age=10,
+            ),
+        )
+
+        subjects = OPDS2WithODLExtractor._extract_schema_org_subjects(metadata)
+
+        assert len(subjects) == 1
+        assert subjects[0].type == "schema:typicalAgeRange"
+        assert subjects[0].identifier == "5-10"
+
+        # Only min age
+        metadata = opds2.PublicationMetadata(
+            type="http://schema.org/Book",
+            identifier="urn:isbn:9780306406157",
+            title="Test Book",
+            audience=Audience(
+                type="schema:PeopleAudience",
+                suggested_min_age=8,
+            ),
+        )
+
+        subjects = OPDS2WithODLExtractor._extract_schema_org_subjects(metadata)
+
+        assert len(subjects) == 1
+        assert subjects[0].identifier == "8"
+
+        # Only max age
+        metadata = opds2.PublicationMetadata(
+            type="http://schema.org/Book",
+            identifier="urn:isbn:9780306406157",
+            title="Test Book",
+            audience=Audience(
+                type="schema:PeopleAudience",
+                suggested_max_age=12,
+            ),
+        )
+
+        subjects = OPDS2WithODLExtractor._extract_schema_org_subjects(metadata)
+
+        assert len(subjects) == 1
+        assert subjects[0].identifier == "12"
+
+    def test__extract_schema_org_subjects_combined(self) -> None:
+        """Test extraction when multiple schema.org fields are present."""
+        metadata = opds2.PublicationMetadata(
+            type="http://schema.org/Book",
+            identifier="urn:isbn:9780306406157",
+            title="Test Book",
+            typical_age_range="5-12",
+            audience=Audience(
+                type="schema:PeopleAudience",
+                audience_type="Children",
+                suggested_min_age=6,
+                suggested_max_age=11,
+            ),
+        )
+
+        subjects = OPDS2WithODLExtractor._extract_schema_org_subjects(metadata)
+
+        # Should have 3 subjects: typical_age_range, audience_type, and suggested age range
+        assert len(subjects) == 3
+
+        # Check types are present
+        types = {s.type for s in subjects}
+        assert "schema:typicalAgeRange" in types
+        assert "schema:audience" in types
+
+        # Check identifiers
+        identifiers = {s.identifier for s in subjects}
+        assert "5-12" in identifiers  # from typical_age_range
+        assert "Children" in identifiers  # from audience_type
+        assert "6-11" in identifiers  # from suggested ages
