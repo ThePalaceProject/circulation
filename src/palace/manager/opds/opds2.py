@@ -225,7 +225,7 @@ class PublicationMetadata(
     OPDS2 publication metadata.
 
     This doesn't have an actual specification document, but its a combination
-    of the Palace OPDS2 extensions, schema.org propetries and OPDS2 proposed
+    of the Palace OPDS2 extensions, schema.org properties, and OPDS2 proposed
     extensions, along with the normal RWPM metadata.
     """
 

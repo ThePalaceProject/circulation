@@ -1,3 +1,12 @@
+"""
+Schema.org vocabulary models for OPDS2 feeds.
+
+This module contains Pydantic models and enums representing schema.org
+types used in OPDS2 feeds, particularly those sent by DeMarque.
+
+https://schema.org/
+"""
+
 from enum import StrEnum
 
 from pydantic import Field
@@ -57,7 +66,8 @@ class WorkExample(BaseOpdsModel):
 class PublicationMetadata(BaseOpdsModel):
     """
     Schema.org extensions to OPDS2 metadata.
-    These are sent in some OPDS2 feeds, especially from DeMarque to provide some
+
+    These are sent in some OPDS2 feeds, especially from DeMarque, to provide
     additional information about the publication.
     """
 
