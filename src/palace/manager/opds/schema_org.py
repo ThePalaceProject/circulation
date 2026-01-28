@@ -52,3 +52,23 @@ class WorkExample(BaseOpdsModel):
     type: str | None = Field(None, alias="@type")
     book_format: str | None = Field(None, alias="schema:bookFormat")
     isbn: str | None = Field(None, alias="schema:isbn")
+
+
+class PublicationMetadata(BaseOpdsModel):
+    """
+    Schema.org extensions to OPDS2 metadata.
+    These are sent in some OPDS2 feeds, especially from DeMarque to provide some
+    additional information about the publication.
+    """
+
+    encoding_format: str | None = Field(None, alias="schema:encodingFormat")
+    """
+    https://schema.org/encodingFormat
+    """
+
+    work_example: list[WorkExample] = Field(
+        default_factory=list, alias="schema:workExample"
+    )
+    """
+    https://schema.org/workExample
+    """

@@ -16,7 +16,7 @@ from pydantic import (
 )
 from pydantic_core import PydanticCustomError
 
-from palace.manager.opds import rwpm
+from palace.manager.opds import rwpm, schema_org
 from palace.manager.opds.base import BaseOpdsModel
 from palace.manager.opds.palace import PalacePublicationMetadata
 from palace.manager.opds.types.currency import CurrencyCode
@@ -218,13 +218,15 @@ class FeedMetadata(BaseOpdsModel):
     number_of_items: NonNegativeInt | None = Field(None, alias="numberOfItems")
 
 
-class PublicationMetadata(PalacePublicationMetadata, rwpm.Metadata):
+class PublicationMetadata(
+    PalacePublicationMetadata, schema_org.PublicationMetadata, rwpm.Metadata
+):
     """
     OPDS2 publication metadata.
 
     This doesn't have an actual specification document, but its a combination
-    of the Palace OPDS2 extensions and OPDS2 proposed extensions, along with
-    the normal RWPM metadata.
+    of the Palace OPDS2 extensions, schema.org propetries and OPDS2 proposed
+    extensions, along with the normal RWPM metadata.
     """
 
     # OPDS2 proposed property. See here for more detail:

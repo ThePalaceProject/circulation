@@ -1,7 +1,7 @@
 from pydantic import Field, field_validator
 
 from palace.manager.opds.base import BaseOpdsModel
-from palace.manager.opds.schema_org import PublicationTypes, WorkExample
+from palace.manager.opds.schema_org import PublicationTypes
 from palace.manager.util.log import LoggerMixin
 
 
@@ -25,14 +25,6 @@ class PalacePublicationMetadata(BaseOpdsModel, LoggerMixin):
     # See: https://www.notion.so/lyrasis/palaceproject-io-terms-namespace-572089bd44404cf395f02b6b78361fe4
     time_tracking: bool = Field(
         False, alias="http://palaceproject.io/terms/timeTracking"
-    )
-
-    # Schema.org extensions
-    # These are sent in some OPDS2 feeds, especially from DeMarque to provide some
-    # additional information about the publication.
-    encoding_format: str | None = Field(None, alias="schema:encodingFormat")
-    work_example: list[WorkExample] = Field(
-        default_factory=list, alias="schema:workExample"
     )
 
     @field_validator("type")
