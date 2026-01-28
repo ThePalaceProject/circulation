@@ -8,6 +8,7 @@ https://schema.org/
 """
 
 from enum import StrEnum
+from typing import Literal
 
 from pydantic import Field
 
@@ -63,6 +64,19 @@ class WorkExample(BaseOpdsModel):
     isbn: str | None = Field(None, alias="schema:isbn")
 
 
+class Audience(BaseOpdsModel):
+    """
+    Schema.org Audience
+
+    https://schema.org/Audience
+    """
+
+    type: Literal["schema:PeopleAudience"] = Field(..., alias="@type")
+    suggested_min_age: int | None = Field(None, alias="schema:suggestedMinAge")
+    suggested_max_age: int | None = Field(None, alias="schema:suggestedMaxAge")
+    audience_type: str | None = Field(None, alias="schema:audienceType")
+
+
 class PublicationMetadata(BaseOpdsModel):
     """
     Schema.org extensions to OPDS2 metadata.
@@ -81,4 +95,14 @@ class PublicationMetadata(BaseOpdsModel):
     )
     """
     https://schema.org/workExample
+    """
+
+    audience: Audience | None = Field(None, alias="schema:audience")
+    """
+    https://schema.org/Audience
+    """
+
+    typical_age_range: str | None = Field(None, alias="schema:typicalAgeRange")
+    """
+    https://schema.org/typicalAgeRange
     """
