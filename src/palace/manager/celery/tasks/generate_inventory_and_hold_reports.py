@@ -25,7 +25,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import aggregate_order_by
 from sqlalchemy.orm import Session, aliased
 from sqlalchemy.sql import Select, Subquery
-from sqlalchemy.sql.elements import ColumnElement
+from sqlalchemy.sql.elements import BindParameter, ColumnElement
 from sqlalchemy.sql.selectable import Lateral
 
 from palace.manager.celery.task import Task
@@ -387,28 +387,30 @@ def inventory_report_query() -> Select:
     bisac_subquery = _bisac_subjects_subquery()
     collection_sharing = _is_shared_collection_lateral()
     lic = _licenses_lateral()
-    library_id_param = bindparam("library_id")
-    filtered_audiences_enabled = bindparam(
+    library_id_param: BindParameter[Any] = bindparam("library_id")
+    filtered_audiences_enabled: BindParameter[Any] = bindparam(
         "filtered_audiences_enabled", value=False, required=False
     )
-    filtered_genres_enabled = bindparam(
+    filtered_genres_enabled: BindParameter[Any] = bindparam(
         "filtered_genres_enabled", value=False, required=False
     )
-    filtered_audiences = bindparam(
+    filtered_audiences: BindParameter[Any] = bindparam(
         "filtered_audiences", expanding=True, value=(), required=False
     )
-    filtered_genres = bindparam(
+    filtered_genres: BindParameter[Any] = bindparam(
         "filtered_genres", expanding=True, value=(), required=False
     )
-    is_manually_suppressed = Work.suppressed_for.any(Library.id == library_id_param)
-    audience_filtered = case(
+    is_manually_suppressed: ColumnElement[Any] = Work.suppressed_for.any(
+        Library.id == library_id_param
+    )
+    audience_filtered: ColumnElement[Any] = case(
         (
             filtered_audiences_enabled,
             Work.audience.in_(filtered_audiences),
         ),
         else_=false(),
     )
-    genre_filtered = case(
+    genre_filtered: ColumnElement[Any] = case(
         (
             filtered_genres_enabled,
             exists(
@@ -423,10 +425,12 @@ def inventory_report_query() -> Select:
         ),
         else_=false(),
     )
-    is_policy_filtered = or_(audience_filtered, genre_filtered)
-    is_visible = or_(is_manually_suppressed, is_policy_filtered)
-    visible = case((is_visible, "true"), else_="false").label("visible")
-    visibility_status = case(
+    is_policy_filtered: ColumnElement[Any] = or_(audience_filtered, genre_filtered)
+    is_visible: ColumnElement[Any] = or_(is_manually_suppressed, is_policy_filtered)
+    visible: ColumnElement[Any] = case((is_visible, "true"), else_="false").label(
+        "visible"
+    )
+    visibility_status: ColumnElement[Any] = case(
         (is_manually_suppressed, "manually suppressed"),
         (is_policy_filtered, "filtered"),
         else_="",
