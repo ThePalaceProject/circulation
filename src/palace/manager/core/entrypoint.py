@@ -133,7 +133,7 @@ class EbooksEntryPoint(MediumEntryPoint):
     URI = "http://schema.org/EBook"
 
 
-EntryPoint.register(EbooksEntryPoint, "eBooks", default_enabled=True)
+EntryPoint.register(EbooksEntryPoint, "Ebooks", default_enabled=True)
 
 
 class AudiobooksEntryPoint(MediumEntryPoint):

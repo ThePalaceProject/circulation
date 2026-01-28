@@ -23,7 +23,7 @@ class TestEntryPoint:
         assert AudiobooksEntryPoint == audiobooks
 
         display = EntryPoint.DISPLAY_TITLES
-        assert "eBooks" == display[ebooks]
+        assert "Ebooks" == display[ebooks]
         assert "Audiobooks" == display[audiobooks]
 
         assert Edition.BOOK_MEDIUM == EbooksEntryPoint.INTERNAL_NAME
