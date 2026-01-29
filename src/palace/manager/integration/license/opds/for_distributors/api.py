@@ -4,6 +4,7 @@ import datetime
 import json
 from collections.abc import Generator
 from typing import Unpack
+from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 from celery.canvas import Signature
 from sqlalchemy.orm import Session
@@ -17,6 +18,7 @@ from palace.manager.api.circulation.exceptions import (
 from palace.manager.api.circulation.fulfillment import (
     DirectFulfillment,
     RedirectFulfillment,
+    StreamingFulfillment,
 )
 from palace.manager.api.selftest import HasCollectionSelfTests
 from palace.manager.core.selftest import SelfTestResult
@@ -28,6 +30,7 @@ from palace.manager.integration.license.opds.requests import OAuthOpdsRequest
 from palace.manager.integration.license.opds.settings.format_priority import (
     FormatPriorities,
 )
+from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.licensing import (
@@ -98,13 +101,17 @@ class OPDSForDistributorsAPI(
         allow it.
 
         Just to be safe, though, we require that the
-        DeliveryMechanism's drm_scheme be either 'no DRM' or 'bearer
-        token', since other DRM schemes require identifying a patron.
+        DeliveryMechanism's drm_scheme be either 'no DRM', 'bearer
+        token', or 'streaming', since other DRM schemes require identifying a patron.
         """
         if not lpdm or not lpdm.delivery_mechanism:
             return False
         drm_scheme = lpdm.delivery_mechanism.drm_scheme
-        if drm_scheme in (DeliveryMechanism.NO_DRM, DeliveryMechanism.BEARER_TOKEN):
+        if drm_scheme in (
+            DeliveryMechanism.NO_DRM,
+            DeliveryMechanism.BEARER_TOKEN,
+            DeliveryMechanism.STREAMING_DRM,
+        ):
             return True
         return False
 
@@ -137,6 +144,20 @@ class OPDSForDistributorsAPI(
             end_date=None,
         )
 
+    @staticmethod
+    def _append_token_to_url(url: str, access_token: str) -> str:
+        """Append an access_token query parameter to a URL.
+
+        :param url: The base URL.
+        :param access_token: The OAuth access token to append.
+        :return: The URL with the access_token query parameter.
+        """
+        parsed = urlparse(url)
+        query_params = parse_qs(parsed.query)
+        query_params["token"] = [access_token]
+        new_query = urlencode(query_params, doseq=True)
+        return urlunparse(parsed._replace(query=new_query))
+
     def fulfill(
         self,
         patron: Patron,
@@ -144,21 +165,26 @@ class OPDSForDistributorsAPI(
         licensepool: LicensePool,
         delivery_mechanism: LicensePoolDeliveryMechanism,
         **kwargs: Unpack[BaseCirculationAPI.FulfillKwargs],
-    ) -> DirectFulfillment | RedirectFulfillment:
-        """Retrieve a bearer token that can be used to download the book.
+    ) -> DirectFulfillment | RedirectFulfillment | StreamingFulfillment:
+        """Retrieve a bearer token that can be used to download the book,
+        or for streaming content, return a URL with the token appended.
 
-        :return: a DirectFulfillment object.
+        :return: A fulfillment object appropriate for the delivery mechanism.
         """
-        if delivery_mechanism.delivery_mechanism.drm_scheme not in [
+        drm_scheme = delivery_mechanism.delivery_mechanism.drm_scheme
+        if drm_scheme not in [
             DeliveryMechanism.NO_DRM,
             DeliveryMechanism.BEARER_TOKEN,
+            DeliveryMechanism.STREAMING_DRM,
         ]:
             raise DeliveryMechanismError(
                 "Cannot fulfill a loan through OPDS For Distributors using a delivery mechanism with DRM scheme %s"
-                % delivery_mechanism.delivery_mechanism.drm_scheme
+                % drm_scheme
             )
 
         links = licensepool.identifier.links
+        content_type = delivery_mechanism.delivery_mechanism.content_type
+        is_streaming = drm_scheme == DeliveryMechanism.STREAMING_DRM
 
         # Find the acquisition link with the right media type.
         url = None
@@ -170,10 +196,21 @@ class OPDSForDistributorsAPI(
                 continue
             media_type = link.resource.representation.media_type
             open_access = link.rel == Hyperlink.OPEN_ACCESS_DOWNLOAD
-            if (
+
+            # For streaming content, the delivery mechanism content_type is
+            # "Streaming Text" or "Streaming Audio", but the actual link
+            # media_type is "text/html" with a streaming profile.
+            if is_streaming:
+                if (
+                    link.rel == Hyperlink.GENERIC_OPDS_ACQUISITION
+                    and media_type == DeliveryMechanism.STREAMING_MEDIA_LINK_TYPE
+                ):
+                    url = link.resource.representation.url
+                    break
+            elif (
                 link.rel == Hyperlink.GENERIC_OPDS_ACQUISITION
                 or link.rel == Hyperlink.OPEN_ACCESS_DOWNLOAD
-            ) and media_type == delivery_mechanism.delivery_mechanism.content_type:
+            ) and media_type == content_type:
                 url = link.resource.representation.url
                 break
 
@@ -189,6 +226,15 @@ class OPDSForDistributorsAPI(
         token = self._make_request.session_token
         if token is None or token.expires - datetime.timedelta(minutes=10) < utc_now():
             token = self._make_request.refresh_token()
+
+        if is_streaming:
+            # For streaming content, append the token to the URL and return a
+            # StreamingFulfillment that will generate an OPDS entry with the link.
+            streaming_url = self._append_token_to_url(url, token.access_token)
+            return StreamingFulfillment(
+                content_link=streaming_url,
+                content_type=MediaTypes.TEXT_HTML_MEDIA_TYPE,
+            )
 
         # Build an application/vnd.librarysimplified.bearer-token
         # document using information from the credential.

@@ -1706,8 +1706,13 @@ class DeliveryMechanism(Base, HasSessionCache):
     FEEDBOOKS_AUDIOBOOK_DRM = "http://www.feedbooks.com/audiobooks/access-restriction"
 
     FEEDBOOKS_AUDIOBOOK_PROFILE = ';profile="%s"' % FEEDBOOKS_AUDIOBOOK_DRM
-    STREAMING_PROFILE = (
-        ';profile="http://librarysimplified.org/terms/profiles/streaming-media"'
+    STREAMING_MEDIA_PROFILE_URI = (
+        "http://librarysimplified.org/terms/profiles/streaming-media"
+    )
+    STREAMING_PROFILE = f';profile="{STREAMING_MEDIA_PROFILE_URI}"'
+    # The exact media type used in OPDS feed links for streaming content.
+    STREAMING_MEDIA_LINK_TYPE = (
+        f"{MediaTypes.TEXT_HTML_MEDIA_TYPE};profile={STREAMING_MEDIA_PROFILE_URI}"
     )
     MEDIA_TYPES_FOR_STREAMING = {
         STREAMING_TEXT_CONTENT_TYPE: MediaTypes.TEXT_HTML_MEDIA_TYPE,

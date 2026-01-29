@@ -10,6 +10,7 @@ from palace.manager.api.circulation.exceptions import (
 from palace.manager.api.circulation.fulfillment import (
     DirectFulfillment,
     RedirectFulfillment,
+    StreamingFulfillment,
 )
 from palace.manager.celery.tasks import opds_for_distributors
 from palace.manager.integration.license.opds.for_distributors.api import (
@@ -20,6 +21,7 @@ from palace.manager.integration.license.opds.for_distributors.settings import (
 )
 from palace.manager.integration.license.opds.requests import OAuthOpdsRequest
 from palace.manager.integration.license.overdrive.api import OverdriveAPI
+from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.identifier import Identifier
@@ -128,6 +130,10 @@ class TestOPDSForDistributorsAPI:
         assert True == m(patron, pool, lpdm)
 
         lpdm.delivery_mechanism.drm_scheme = DeliveryMechanism.BEARER_TOKEN
+        assert True == m(patron, pool, lpdm)
+
+        # STREAMING_DRM is also allowed
+        lpdm.delivery_mechanism.drm_scheme = DeliveryMechanism.STREAMING_DRM
         assert True == m(patron, pool, lpdm)
 
     def test_checkin(self, opds_dist_api_fixture: OPDSForDistributorsAPIFixture):
@@ -345,3 +351,111 @@ class TestOPDSForDistributorsAPI:
 
         mock_import.s.assert_called_once_with(collection_id, force=force)
         assert result == mock_import.s.return_value
+
+    @pytest.mark.parametrize(
+        "url,token,expected",
+        [
+            pytest.param(
+                "http://example.com/viewer",
+                "abc123",
+                "http://example.com/viewer?token=abc123",
+                id="simple url",
+            ),
+            pytest.param(
+                "http://example.com/viewer?foo=bar",
+                "abc123",
+                "http://example.com/viewer?foo=bar&token=abc123",
+                id="url with existing query param",
+            ),
+            pytest.param(
+                "https://library.biblioboard.com/viewer/book/12345",
+                "mytoken",
+                "https://library.biblioboard.com/viewer/book/12345?token=mytoken",
+                id="biblioboard style url",
+            ),
+        ],
+    )
+    def test__append_token_to_url(self, url: str, token: str, expected: str) -> None:
+        """Test that _append_token_to_url correctly appends the token."""
+        result = OPDSForDistributorsAPI._append_token_to_url(url, token)
+        assert result == expected
+
+    def test_fulfill_streaming(
+        self,
+        opds_dist_api_fixture: OPDSForDistributorsAPIFixture,
+    ):
+        """Test that fulfilling streaming content returns a StreamingFulfillment."""
+        patron = opds_dist_api_fixture.db.patron()
+
+        data_source = DataSource.lookup(
+            opds_dist_api_fixture.db.session, "Biblioboard", autocreate=True
+        )
+        edition, pool = opds_dist_api_fixture.db.edition(
+            identifier_type=Identifier.URI,
+            data_source_name=data_source.name,
+            with_license_pool=True,
+            collection=opds_dist_api_fixture.collection,
+        )
+
+        # Set up a streaming delivery mechanism
+        pool.set_delivery_mechanism(
+            DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE,
+            DeliveryMechanism.STREAMING_DRM,
+            RightsStatus.IN_COPYRIGHT,
+            None,
+        )
+
+        # Find the streaming delivery mechanism
+        delivery_mechanism = None
+        for mechanism in pool.delivery_mechanisms:
+            if (
+                mechanism.delivery_mechanism.drm_scheme
+                == DeliveryMechanism.STREAMING_DRM
+            ):
+                delivery_mechanism = mechanism
+        assert delivery_mechanism is not None
+
+        # This pool doesn't have an acquisition link yet, so fulfillment should fail
+        pytest.raises(
+            CannotFulfill,
+            opds_dist_api_fixture.api.fulfill,
+            patron,
+            "1234",
+            pool,
+            delivery_mechanism,
+        )
+
+        # Set up a streaming acquisition link
+        viewer_url = "https://library.biblioboard.com/viewer/book/12345"
+        link, ignore = pool.identifier.add_link(
+            Hyperlink.GENERIC_OPDS_ACQUISITION,
+            viewer_url,
+            data_source,
+            DeliveryMechanism.STREAMING_MEDIA_LINK_TYPE,
+        )
+        delivery_mechanism.resource = link.resource
+
+        # Set the API's token URL so it doesn't have to get it
+        opds_dist_api_fixture.api._make_request._token_url = "http://auth"
+
+        token_response = json.dumps(
+            {
+                "access_token": "streaming_token",
+                "expires_in": 60,
+                "token_type": "Bearer",
+            }
+        )
+        opds_dist_api_fixture.http_client.queue_response(200, content=token_response)
+
+        fulfillment = opds_dist_api_fixture.api.fulfill(
+            patron, "1234", pool, delivery_mechanism
+        )
+
+        # Verify we got a StreamingFulfillment
+        assert isinstance(fulfillment, StreamingFulfillment)
+        assert "token=streaming_token" in fulfillment.content_link
+        assert fulfillment.content_link.startswith(viewer_url)
+        # StreamingFulfillment appends the streaming profile to the content type
+        assert fulfillment.content_type == (
+            MediaTypes.TEXT_HTML_MEDIA_TYPE + DeliveryMechanism.STREAMING_PROFILE
+        )
