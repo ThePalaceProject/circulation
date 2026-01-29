@@ -10,10 +10,10 @@ from __future__ import annotations
 
 import time
 from re import Pattern
-from typing import Any
+from typing import Any, cast
 
-from authlib.jose import JsonWebKey, JsonWebToken
-from authlib.jose.errors import JoseError
+from authlib.jose import JsonWebKey, JsonWebToken  # type: ignore[import-untyped]
+from authlib.jose.errors import JoseError  # type: ignore[import-untyped]
 
 from palace.manager.util.log import LoggerMixin
 
@@ -40,7 +40,7 @@ class OIDCTokenValidator(LoggerMixin):
     # Clock skew tolerance (seconds) - allows for time differences between servers
     CLOCK_SKEW_TOLERANCE = 300  # 5 minutes
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize OIDC token validator."""
         self._jwt = JsonWebToken(algorithms=["RS256", "RS384", "RS512", "HS256"])
 
@@ -61,11 +61,14 @@ class OIDCTokenValidator(LoggerMixin):
             # 1. Find the correct key from the set using 'kid' header
             # 2. Verify the signature
             # 3. Return the payload claims
-            claims = self._jwt.decode(
-                id_token,
-                jwk_set,
-                # We'll validate claims separately for better error messages
-                claims_options={"iss": {"essential": False}},
+            claims = cast(
+                dict[str, Any],
+                self._jwt.decode(
+                    id_token,
+                    jwk_set,
+                    # We'll validate claims separately for better error messages
+                    claims_options={"iss": {"essential": False}},
+                ),
             )
 
             self.log.debug("ID token signature validated successfully")
@@ -188,7 +191,7 @@ class OIDCTokenValidator(LoggerMixin):
         self,
         claims: dict[str, Any],
         claim_name: str,
-        regex_pattern: Pattern | None = None,
+        regex_pattern: Pattern[str] | None = None,
     ) -> str:
         """Extract patron ID from ID token claims.
 
@@ -264,7 +267,7 @@ class OIDCTokenValidator(LoggerMixin):
         expected_audience: str,
         patron_id_claim: str,
         nonce: str | None = None,
-        patron_id_regex: Pattern | None = None,
+        patron_id_regex: Pattern[str] | None = None,
     ) -> tuple[dict[str, Any], str]:
         """Validate ID token and extract patron ID in one operation.
 

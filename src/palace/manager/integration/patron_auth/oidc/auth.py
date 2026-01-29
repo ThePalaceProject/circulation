@@ -11,7 +11,7 @@ This module provides the core OIDC authentication flow management including:
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 from urllib.parse import urlencode
 
 import httpx
@@ -206,7 +206,7 @@ class OIDCAuthenticationManager(LoggerMixin):
                 timeout=30.0,
             )
             response.raise_for_status()
-            tokens = response.json()
+            tokens = cast(dict[str, Any], response.json())
 
             # Validate response
             if "access_token" not in tokens:
@@ -307,7 +307,7 @@ class OIDCAuthenticationManager(LoggerMixin):
                 timeout=30.0,
             )
             response.raise_for_status()
-            tokens = response.json()
+            tokens = cast(dict[str, Any], response.json())
 
             # Validate response
             if "access_token" not in tokens:
@@ -360,7 +360,7 @@ class OIDCAuthenticationManager(LoggerMixin):
                 timeout=30.0,
             )
             response.raise_for_status()
-            userinfo = response.json()
+            userinfo = cast(dict[str, Any], response.json())
 
             self.log.debug("Successfully fetched user info")
             return userinfo

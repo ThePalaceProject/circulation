@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import datetime
 import json
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import and_, exists
 from sqlalchemy.orm import Session
@@ -86,7 +86,7 @@ class OIDCCredentialManager(LoggerMixin):
         credential_value = credential.credential if credential.credential else "{}"
 
         try:
-            token_data = json.loads(credential_value)
+            token_data = cast(dict[str, Any], json.loads(credential_value))
         except json.JSONDecodeError as e:
             self.log.exception("Failed to decode OIDC token data")
             raise ValueError(f"Invalid OIDC token format: {str(e)}") from e

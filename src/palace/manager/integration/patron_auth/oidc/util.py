@@ -16,7 +16,7 @@ import hmac
 import json
 import secrets
 import time
-from typing import Any
+from typing import Any, cast
 
 import httpx
 from pydantic import HttpUrl
@@ -149,7 +149,7 @@ class OIDCUtility(LoggerMixin):
 
             # Decode data
             json_data = base64.urlsafe_b64decode(encoded_data).decode("utf-8")
-            state_data = json.loads(json_data)
+            state_data = cast(dict[str, Any], json.loads(json_data))
 
             # Validate timestamp
             timestamp = state_data.get("timestamp")
@@ -200,7 +200,7 @@ class OIDCUtility(LoggerMixin):
             cached = self._redis.get(cache_key)
             if cached:
                 try:
-                    return json.loads(cached)
+                    return cast(dict[str, Any], json.loads(cached))
                 except json.JSONDecodeError:
                     self.log.warning(
                         f"Failed to decode cached discovery document for {issuer_str}"
@@ -213,7 +213,7 @@ class OIDCUtility(LoggerMixin):
         try:
             response = httpx.get(discovery_url, timeout=30.0, follow_redirects=True)
             response.raise_for_status()
-            document = response.json()
+            document = cast(dict[str, Any], response.json())
 
             # Validate required fields
             required_fields = [
@@ -266,7 +266,7 @@ class OIDCUtility(LoggerMixin):
             cached = self._redis.get(cache_key)
             if cached:
                 try:
-                    return json.loads(cached)
+                    return cast(dict[str, Any], json.loads(cached))
                 except json.JSONDecodeError:
                     self.log.warning(f"Failed to decode cached JWKS for {jwks_str}")
 
@@ -276,7 +276,7 @@ class OIDCUtility(LoggerMixin):
         try:
             response = httpx.get(jwks_str, timeout=30.0, follow_redirects=True)
             response.raise_for_status()
-            jwks = response.json()
+            jwks = cast(dict[str, Any], response.json())
 
             # Validate structure
             if "keys" not in jwks or not isinstance(jwks["keys"], list):
@@ -348,7 +348,7 @@ class OIDCUtility(LoggerMixin):
                 self.log.debug(f"Retrieved PKCE for state: {state_token[:16]}...")
 
             try:
-                return json.loads(cached)
+                return cast(dict[str, Any], json.loads(cached))
             except json.JSONDecodeError:
                 self.log.warning(
                     f"Failed to decode cached PKCE data for state: {state_token[:16]}..."
