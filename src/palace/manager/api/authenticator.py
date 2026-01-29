@@ -5,7 +5,7 @@ import json
 import logging
 from abc import ABC
 from collections.abc import Iterable
-from typing import Self
+from typing import Any, Self
 
 import flask
 import jwt
@@ -169,6 +169,9 @@ class Authenticator(LoggerMixin):
     def decode_bearer_token(self, *args, **kwargs):
         return self.invoke_authenticator_method("decode_bearer_token", *args, **kwargs)
 
+    def oidc_provider_lookup(self, *args, **kwargs):
+        return self.invoke_authenticator_method("oidc_provider_lookup", *args, **kwargs)
+
 
 class LibraryAuthenticator(LoggerMixin):
     """Use the registered AuthenticationProviders to turn incoming
@@ -254,8 +257,12 @@ class LibraryAuthenticator(LoggerMixin):
             else integration_registry
         )
 
-        self.saml_providers_by_name = {}
-        self.oidc_providers_by_name = {}
+        self.saml_providers_by_name: dict[
+            str, BaseSAMLAuthenticationProvider[Any, Any]
+        ] = {}
+        self.oidc_providers_by_name: dict[
+            str, BaseOIDCAuthenticationProvider[Any, Any]
+        ] = {}
         self.bearer_token_signing_secret = (
             bearer_token_signing_secret
             or Key.get_key(
@@ -274,12 +281,12 @@ class LibraryAuthenticator(LoggerMixin):
             self.register_basic_auth_provider(basic_auth_provider)
 
         if saml_providers:
-            for provider in saml_providers:
-                self.saml_providers_by_name[provider.label()] = provider
+            for saml_provider in saml_providers:
+                self.saml_providers_by_name[saml_provider.label()] = saml_provider
 
         if oidc_providers:
-            for provider in oidc_providers:
-                self.oidc_providers_by_name[provider.label()] = provider
+            for oidc_provider in oidc_providers:
+                self.oidc_providers_by_name[oidc_provider.label()] = oidc_provider
 
     @property
     def supports_patron_authentication(self) -> bool:
