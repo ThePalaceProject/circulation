@@ -22,7 +22,6 @@ from palace.manager.api.circulation.base import BaseCirculationAPI
 from palace.manager.api.circulation.dispatcher import CirculationApiDispatcher
 from palace.manager.api.circulation.fulfillment import UrlFulfillment
 from palace.manager.api.config import Configuration
-from palace.manager.api.lanes import DynamicLane
 from palace.manager.core.classifier import Classifier
 from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.core.entrypoint import EverythingEntryPoint
@@ -43,6 +42,7 @@ from palace.manager.feed.types import (
 )
 from palace.manager.feed.util import strftime
 from palace.manager.feed.worklist.base import WorkList
+from palace.manager.feed.worklist.dynamic import DynamicLane
 from palace.manager.integration.license.boundless.constants import (
     BAKER_TAYLOR_KDRM_PARAMS,
 )
