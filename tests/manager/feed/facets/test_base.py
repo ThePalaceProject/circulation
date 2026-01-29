@@ -46,7 +46,7 @@ class TestFacetsWithEntryPoint:
             old_entrypoint, entrypoint_is_default=True, **kwargs
         )
         new_entrypoint = object()
-        new_facets = facets.navigate(new_entrypoint)
+        new_facets = facets.navigate(entrypoint=new_entrypoint)
 
         # A new FacetsWithEntryPoint was created.
         assert isinstance(new_facets, FacetsWithEntryPoint)
