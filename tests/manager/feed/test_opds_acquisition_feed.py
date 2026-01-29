@@ -846,7 +846,7 @@ class TestOPDSAcquisitionFeed:
 
         class MockFacets:
             @property
-            def facet_groups(self):
+            def facet_groups(self) -> Generator[FacetGroup]:
                 """Yield a FacetGroup that passes the test we're
                 running (which will be turned into a link), and then a
                 bunch that don't (which will be ignored).
