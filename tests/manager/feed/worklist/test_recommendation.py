@@ -1,4 +1,4 @@
-from unittest.mock import create_autospec
+from unittest.mock import MagicMock, create_autospec
 
 import pytest
 
@@ -20,7 +20,7 @@ from tests.fixtures.database import DatabaseTransactionFixture
 
 
 @pytest.fixture
-def mock_novelist_api() -> NoveListAPI:
+def mock_novelist_api() -> MagicMock:
     """Create a mock NoveListAPI with empty recommendations."""
     mock_api = create_autospec(NoveListAPI)
     mock_api.lookup_recommendations.return_value = []
@@ -29,7 +29,7 @@ def mock_novelist_api() -> NoveListAPI:
 
 class TestRecommendationLane:
     def test_modify_search_filter_hook(
-        self, db: DatabaseTransactionFixture, mock_novelist_api: NoveListAPI
+        self, db: DatabaseTransactionFixture, mock_novelist_api: MagicMock
     ):
         work = db.work(with_license_pool=True)
 
@@ -60,7 +60,7 @@ class TestRecommendationLane:
         assert False == filter.match_nothing
 
     def test_overview_facets(
-        self, db: DatabaseTransactionFixture, mock_novelist_api: NoveListAPI
+        self, db: DatabaseTransactionFixture, mock_novelist_api: MagicMock
     ):
         work = db.work(with_license_pool=True)
 
@@ -82,7 +82,7 @@ class TestRecommendationLane:
         assert AudiobooksEntryPoint == overview.entrypoint
 
     def test_fetch_recommendations(
-        self, db: DatabaseTransactionFixture, mock_novelist_api: NoveListAPI
+        self, db: DatabaseTransactionFixture, mock_novelist_api: MagicMock
     ):
         work = db.work(with_license_pool=True)
 
