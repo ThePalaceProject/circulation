@@ -7,12 +7,6 @@ import feedparser
 from flask import url_for
 from opensearchpy.helpers.response.hit import Hit
 
-from palace.manager.api.lanes import (
-    CrawlableCollectionBasedLane,
-    CrawlableCustomListBasedLane,
-    CrawlableFacets,
-    DynamicLane,
-)
 from palace.manager.api.problem_details import (
     NO_SUCH_COLLECTION,
     NO_SUCH_LANE,
@@ -21,6 +15,12 @@ from palace.manager.api.problem_details import (
 from palace.manager.core.problem_details import INVALID_INPUT
 from palace.manager.feed.acquisition import OPDSAcquisitionFeed
 from palace.manager.feed.annotator.circulation import CirculationManagerAnnotator
+from palace.manager.feed.facets.crawlable import CrawlableFacets
+from palace.manager.feed.worklist.crawlable import (
+    CrawlableCollectionBasedLane,
+    CrawlableCustomListBasedLane,
+)
+from palace.manager.feed.worklist.dynamic import DynamicLane
 from palace.manager.search.pagination import SortKeyPagination
 from palace.manager.util.flask_util import Response
 from palace.manager.util.problem_detail import ProblemDetail

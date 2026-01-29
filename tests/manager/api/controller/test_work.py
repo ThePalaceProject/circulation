@@ -13,14 +13,6 @@ from flask import url_for
 
 from palace.manager.api.circulation.data import LoanInfo
 from palace.manager.api.circulation.fulfillment import Fulfillment
-from palace.manager.api.lanes import (
-    ContributorFacets,
-    ContributorLane,
-    RecommendationLane,
-    RelatedBooksLane,
-    SeriesFacets,
-    SeriesLane,
-)
 from palace.manager.api.problem_details import (
     NO_SUCH_LANE,
     NOT_FOUND_ON_REMOTE,
@@ -32,8 +24,16 @@ from palace.manager.data_layer.contributor import ContributorData
 from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.feed.acquisition import OPDSAcquisitionFeed
 from palace.manager.feed.annotator.circulation import LibraryAnnotator
+from palace.manager.feed.facets.contributor import ContributorFacets
 from palace.manager.feed.facets.feed import Facets, FeaturedFacets
+from palace.manager.feed.facets.series import SeriesFacets
 from palace.manager.feed.types import WorkEntry
+from palace.manager.feed.worklist.contributor import ContributorLane
+from palace.manager.feed.worklist.recommendation import (
+    RecommendationLane,
+    RelatedBooksLane,
+)
+from palace.manager.feed.worklist.series import SeriesLane
 from palace.manager.integration.metadata.novelist import NoveListAPI
 from palace.manager.search.pagination import SortKeyPagination
 from palace.manager.sqlalchemy.model.identifier import Identifier

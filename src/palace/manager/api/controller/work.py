@@ -8,21 +8,21 @@ from flask_babel import lazy_gettext as _
 from palace.manager.api.controller.circulation_manager import (
     CirculationManagerController,
 )
-from palace.manager.api.lanes import (
-    ContributorFacets,
-    ContributorLane,
-    RecommendationLane,
-    RelatedBooksLane,
-    SeriesFacets,
-    SeriesLane,
-)
 from palace.manager.api.problem_details import NO_SUCH_LANE, NOT_FOUND_ON_REMOTE
 from palace.manager.api.util.flask import get_request_library, get_request_patron
 from palace.manager.core.app_server import load_pagination_from_request
 from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.data_layer.contributor import ContributorData
 from palace.manager.feed.acquisition import OPDSAcquisitionFeed
+from palace.manager.feed.facets.contributor import ContributorFacets
 from palace.manager.feed.facets.feed import FeaturedFacets
+from palace.manager.feed.facets.series import SeriesFacets
+from palace.manager.feed.worklist.contributor import ContributorLane
+from palace.manager.feed.worklist.recommendation import (
+    RecommendationLane,
+    RelatedBooksLane,
+)
+from palace.manager.feed.worklist.series import SeriesLane
 from palace.manager.search.pagination import Pagination, SortKeyPagination
 from palace.manager.util.flask_util import OPDSEntryResponse
 from palace.manager.util.opds_writer import OPDSFeed

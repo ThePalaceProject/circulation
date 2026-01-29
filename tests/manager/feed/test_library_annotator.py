@@ -14,7 +14,6 @@ from palace.manager.api.adobe_vendor_id import AuthdataUtility
 from palace.manager.api.circulation.base import BaseCirculationAPI
 from palace.manager.api.circulation.dispatcher import CirculationApiDispatcher
 from palace.manager.api.circulation.fulfillment import RedirectFulfillment
-from palace.manager.api.lanes import ContributorLane
 from palace.manager.core.classifier import Classifier, Fantasy, Urban_Fantasy
 from palace.manager.core.entrypoint import (
     AudiobooksEntryPoint,
@@ -34,6 +33,7 @@ from palace.manager.feed.facets.feed import Facets
 from palace.manager.feed.opds import UnfulfillableWork
 from palace.manager.feed.types import FeedData, WorkEntry
 from palace.manager.feed.util import strftime
+from palace.manager.feed.worklist.contributor import ContributorLane
 from palace.manager.integration.goals import Goals
 from palace.manager.integration.license.boundless.constants import (
     BAKER_TAYLOR_KDRM_PARAMS,

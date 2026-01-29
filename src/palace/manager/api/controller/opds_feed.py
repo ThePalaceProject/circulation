@@ -6,14 +6,6 @@ from flask import Response, redirect, url_for
 from palace.manager.api.controller.circulation_manager import (
     CirculationManagerController,
 )
-from palace.manager.api.lanes import (
-    CrawlableCollectionBasedLane,
-    CrawlableCustomListBasedLane,
-    CrawlableFacets,
-    HasSeriesFacets,
-    JackpotFacets,
-    JackpotWorkList,
-)
 from palace.manager.api.problem_details import NO_SUCH_COLLECTION, NO_SUCH_LIST
 from palace.manager.api.util.flask import get_request_library
 from palace.manager.core.app_server import (
@@ -23,11 +15,19 @@ from palace.manager.core.app_server import (
 from palace.manager.core.entrypoint import EverythingEntryPoint
 from palace.manager.core.opensearch import OpenSearchDocument
 from palace.manager.feed.acquisition import OPDSAcquisitionFeed
+from palace.manager.feed.facets.crawlable import CrawlableFacets
 from palace.manager.feed.facets.feed import FeaturedFacets
+from palace.manager.feed.facets.qa import JackpotFacets
 from palace.manager.feed.facets.search import SearchFacets
+from palace.manager.feed.facets.series import HasSeriesFacets
 from palace.manager.feed.navigation import NavigationFeed
 from palace.manager.feed.opds import NavigationFacets
 from palace.manager.feed.worklist.base import WorkList
+from palace.manager.feed.worklist.crawlable import (
+    CrawlableCollectionBasedLane,
+    CrawlableCustomListBasedLane,
+)
+from palace.manager.feed.worklist.qa import JackpotWorkList
 from palace.manager.search.pagination import Pagination, SortKeyPagination
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.customlist import CustomList
