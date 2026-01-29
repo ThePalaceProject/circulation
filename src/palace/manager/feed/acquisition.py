@@ -232,7 +232,7 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
         cls,
         feed: FeedData,
         url_generator: Callable[[type[EntryPoint]], str],
-        entrypoints: list[type[EntryPoint]],
+        entrypoints: Iterable[type[EntryPoint]],
         selected_entrypoint: type[EntryPoint] | None,
         group_name: str = "Formats",
     ) -> None:
@@ -242,9 +242,11 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
         :param feed: A FeedData object.
         :param url_generator: A callable that returns the entry point
             URL when passed an EntryPoint.
-        :param entrypoints: A list of all EntryPoints in the facet group.
+        :param entrypoints: An iterable of all EntryPoints in the facet group.
         :param selected_entrypoint: The current EntryPoint, if selected.
         """
+        entrypoints = list(entrypoints)
+
         if len(entrypoints) == 1 and selected_entrypoint in (None, entrypoints[0]):
             # There is only one entry point. Unless the currently
             # selected entry point is somehow different, there's no

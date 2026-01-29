@@ -430,7 +430,11 @@ class TestFacets:
                 return cls.mock_enabled[facet_group_name][0]
 
         library = db.default_library()
-        result = Mock.from_request(library, library, {}.get, {}.get, None)
+
+        def get_val(val: str, default: str | None) -> str | None:
+            return default
+
+        result = Mock.from_request(library, library, get_val, get_val, None)
 
         (
             order,

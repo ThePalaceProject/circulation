@@ -1,9 +1,12 @@
+from unittest.mock import create_autospec
+
 from palace.manager.feed.facets.constants import FacetConstants
 from palace.manager.feed.facets.database import DatabaseBackedFacets
 from palace.manager.feed.facets.feed import Facets
 from palace.manager.feed.worklist.database import DatabaseBackedWorkList
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
+from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.work import Work
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.library import LibraryFixture
@@ -45,22 +48,16 @@ class TestDatabaseBackedFacets:
         # In this bizarre library, the default sort order is 'time
         # added to collection' -- an order not supported by
         # DatabaseBackedFacets.
-        class Mock:
-            enabled = [
-                FacetConstants.ORDER_ADDED_TO_COLLECTION,
-                FacetConstants.ORDER_TITLE,
-                FacetConstants.ORDER_AUTHOR,
-            ]
-
-            def enabled_facets(self, group_name):
-                return self.enabled
-
-            def default_facet(self, group_name):
-                return FacetConstants.ORDER_ADDED_TO_COLLECTION
+        config = create_autospec(Library, instance=True)
+        config.enabled_facets.return_value = [
+            FacetConstants.ORDER_ADDED_TO_COLLECTION,
+            FacetConstants.ORDER_TITLE,
+            FacetConstants.ORDER_AUTHOR,
+        ]
+        config.default_facet.return_value = FacetConstants.ORDER_ADDED_TO_COLLECTION
 
         # A Facets object uses the 'time added to collection' order by
         # default.
-        config = Mock()
         assert f1.ORDER_ADDED_TO_COLLECTION == f1.default_facet(
             config, f1.ORDER_FACET_GROUP_NAME
         )
@@ -71,7 +68,7 @@ class TestDatabaseBackedFacets:
 
         # If no enabled sort orders are supported, it just sorts
         # by Work ID, so that there is always _some_ sort order.
-        config.enabled = [FacetConstants.ORDER_ADDED_TO_COLLECTION]
+        config.enabled_facets.return_value = [FacetConstants.ORDER_ADDED_TO_COLLECTION]
         assert f2.ORDER_WORK_ID == f2.default_facet(config, f2.ORDER_FACET_GROUP_NAME)
 
     def test_order_by(self, db: DatabaseTransactionFixture):

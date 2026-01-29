@@ -1,5 +1,4 @@
 from palace.manager.core.entrypoint import AudiobooksEntryPoint, EbooksEntryPoint
-from palace.manager.core.problem_details import INVALID_INPUT
 from palace.manager.feed.facets.base import FacetsWithEntryPoint
 from palace.manager.feed.facets.feed import Facets
 from palace.manager.search.filter import Filter
@@ -148,12 +147,6 @@ class TestFacetsWithEntryPoint:
                 default_entrypoint=default_entrypoint,
                 extra="extra kwarg",
             )
-
-        # First, test failure. If load_entrypoint() returns a
-        # ProblemDetail, that object is returned instead of the
-        # faceting class.
-        MockFacetsWithEntryPoint.expect_load_entrypoint = INVALID_INPUT
-        assert INVALID_INPUT == m()
 
         expect_entrypoint = object()
         expect_is_default = object()

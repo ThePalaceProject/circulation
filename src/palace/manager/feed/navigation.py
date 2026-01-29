@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from werkzeug.datastructures import MIMEAccept
 
 from palace.manager.feed.annotator.circulation import CirculationManagerAnnotator
-from palace.manager.feed.facets.feed import Facets
+from palace.manager.feed.facets.base import BaseFacets
 from palace.manager.feed.opds import BaseOPDSFeed, NavigationFacets
 from palace.manager.feed.types import DataEntry, DataEntryTypes, Link
 from palace.manager.feed.util import strftime
@@ -24,7 +24,7 @@ class NavigationFeed(BaseOPDSFeed):
         url: str,
         lane: WorkList,
         annotator: CirculationManagerAnnotator,
-        facets: Facets | None = None,
+        facets: BaseFacets | None = None,
         pagination: Pagination | None = None,
     ) -> None:
         self.lane = lane
@@ -41,7 +41,7 @@ class NavigationFeed(BaseOPDSFeed):
         url: str,
         worklist: WorkList,
         annotator: CirculationManagerAnnotator,
-        facets: Facets | None = None,
+        facets: BaseFacets | None = None,
     ) -> Self:
         """The navigation feed with links to a given lane's sublanes."""
 

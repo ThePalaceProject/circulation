@@ -1,8 +1,19 @@
 from __future__ import annotations
 
+from collections.abc import Callable, Generator, Iterable, Sequence
+from typing import TYPE_CHECKING, Any, Self
+
 from palace.manager.core.entrypoint import EntryPoint
-from palace.manager.feed.facets.constants import FacetConstants
+from palace.manager.feed.facets.constants import FacetConfig, FacetConstants
 from palace.manager.util.problem_detail import ProblemDetail
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Query, Session
+
+    from palace.manager.feed.worklist.base import WorkList
+    from palace.manager.search.filter import Filter, OpensearchDslType
+    from palace.manager.sqlalchemy.model.library import Library
+    from palace.manager.sqlalchemy.model.work import Work
 
 
 class BaseFacets(FacetConstants):
@@ -11,23 +22,24 @@ class BaseFacets(FacetConstants):
     This is intended solely for use as a base class.
     """
 
-    def items(self):
+    def items(self) -> Generator[tuple[str, str]]:
         """Yields a 2-tuple for every active facet setting.
 
         These tuples are used to generate URLs that can identify
         specific facet settings.
         """
-        return []
+        # Empty generator
+        yield from ()
 
     @property
-    def query_string(self):
+    def query_string(self) -> str:
         """A query string fragment that propagates all active facet
         settings.
         """
         return "&".join("=".join(x) for x in sorted(self.items()))
 
     @property
-    def facet_groups(self):
+    def facet_groups(self) -> Generator[tuple[str, str, Self, bool, bool]]:
         """Yield a list of 5-tuples
         (facet group, facet value, new Facets object, selected, is_default)
         for use in building OPDS facets.
@@ -35,20 +47,22 @@ class BaseFacets(FacetConstants):
         This does not include the 'entry point' facet group,
         which must be handled separately.
         """
-        return []
+        yield from ()
 
     @classmethod
-    def selectable_entrypoints(cls, worklist):
+    def selectable_entrypoints(
+        cls, worklist: WorkList | Library | FacetConfig | None
+    ) -> Iterable[type[EntryPoint]]:
         """Ignore all entry points, even if the WorkList supports them."""
         return []
 
-    def modify_search_filter(self, filter):
+    def modify_search_filter(self, filter: Filter) -> Filter:
         """Modify an external_search.Filter object to filter out works
         excluded by the business logic of this faceting class.
         """
         return filter
 
-    def modify_database_query(cls, _db, qu):
+    def modify_database_query(self, _db: Session, qu: Query[Work]) -> Query[Work]:
         """If necessary, modify a database query so that resulting
         items conform the constraints of this faceting object.
 
@@ -56,8 +70,8 @@ class BaseFacets(FacetConstants):
         """
         return qu
 
-    def scoring_functions(self, filter):
-        """Create a list of ScoringFunction objects that modify how
+    def scoring_functions(self, filter: Filter) -> list[OpensearchDslType]:
+        """Create a list of scoring function objects that modify how
         works in the given WorkList should be ordered.
 
         Most subclasses will not use this because they order
@@ -71,7 +85,12 @@ class FacetsWithEntryPoint(BaseFacets):
     selected EntryPoint.
     """
 
-    def __init__(self, entrypoint=None, entrypoint_is_default=False, **kwargs):
+    def __init__(
+        self,
+        entrypoint: type[EntryPoint] | None = None,
+        entrypoint_is_default: bool = False,
+        **kwargs: Any,
+    ) -> None:
         """Constructor.
 
         :param entrypoint: An EntryPoint (optional).
@@ -86,7 +105,9 @@ class FacetsWithEntryPoint(BaseFacets):
         self.constructor_kwargs = kwargs
 
     @classmethod
-    def selectable_entrypoints(cls, worklist):
+    def selectable_entrypoints(
+        cls, worklist: WorkList | Library | FacetConfig | None
+    ) -> Iterable[type[EntryPoint]]:
         """Which EntryPoints can be selected for these facets on this
         WorkList?
 
@@ -100,9 +121,14 @@ class FacetsWithEntryPoint(BaseFacets):
             return []
         return worklist.entrypoints
 
-    def navigate(self, entrypoint):
+    def navigate(
+        self, *, entrypoint: type[EntryPoint] | None = None, **kwargs: Any
+    ) -> Self:
         """Create a very similar FacetsWithEntryPoint that points to
         a different EntryPoint.
+
+        Subclasses can override this method to accept additional keyword
+        arguments for navigating to different facet settings.
         """
         return self.__class__(
             entrypoint=entrypoint,
@@ -113,14 +139,14 @@ class FacetsWithEntryPoint(BaseFacets):
     @classmethod
     def from_request(
         cls,
-        library,
-        facet_config,
-        get_argument,
-        get_header,
-        worklist,
-        default_entrypoint=None,
-        **extra_kwargs,
-    ):
+        library: Library,
+        facet_config: Library | FacetConfig,
+        get_argument: Callable[[str, str | None], str | None],
+        get_header: Callable[[str, str | None], str | None],
+        worklist: WorkList | None,
+        default_entrypoint: type[EntryPoint] | None = None,
+        **extra_kwargs: Any,
+    ) -> Self | ProblemDetail:
         """Load a faceting object from an HTTP request.
 
         :param facet_config: A Library (or mock of one) that knows
@@ -160,13 +186,13 @@ class FacetsWithEntryPoint(BaseFacets):
     @classmethod
     def _from_request(
         cls,
-        facet_config,
-        get_argument,
-        get_header,
-        worklist,
-        default_entrypoint=None,
-        **extra_kwargs,
-    ):
+        facet_config: Library | FacetConfig,
+        get_argument: Callable[[str, str | None], str | None],
+        get_header: Callable[[str, str | None], str | None],
+        worklist: WorkList | None,
+        default_entrypoint: type[EntryPoint] | None = None,
+        **extra_kwargs: Any,
+    ) -> Self:
         """Load a faceting object from an HTTP request.
 
         Subclasses of FacetsWithEntryPoint can override `from_request`,
@@ -175,12 +201,9 @@ class FacetsWithEntryPoint(BaseFacets):
         """
         entrypoint_name = get_argument(cls.ENTRY_POINT_FACET_GROUP_NAME, None)
         valid_entrypoints = list(cls.selectable_entrypoints(facet_config))
-        entrypoint = cls.load_entrypoint(
+        entrypoint, is_default = cls.load_entrypoint(
             entrypoint_name, valid_entrypoints, default=default_entrypoint
         )
-        if isinstance(entrypoint, ProblemDetail):
-            return entrypoint
-        entrypoint, is_default = entrypoint
 
         return cls(
             entrypoint=entrypoint,
@@ -189,7 +212,12 @@ class FacetsWithEntryPoint(BaseFacets):
         )
 
     @classmethod
-    def load_entrypoint(cls, name, valid_entrypoints, default=None):
+    def load_entrypoint(
+        cls,
+        name: str | None,
+        valid_entrypoints: Sequence[type[EntryPoint]],
+        default: type[EntryPoint] | None = None,
+    ) -> tuple[type[EntryPoint] | None, bool]:
         """Look up an EntryPoint by name, assuming it's valid in the
         given WorkList.
 
@@ -209,12 +237,12 @@ class FacetsWithEntryPoint(BaseFacets):
             return None, True
         if default is None:
             default = valid_entrypoints[0]
-        ep = EntryPoint.BY_INTERNAL_NAME.get(name)
+        ep = EntryPoint.BY_INTERNAL_NAME.get(name) if name else None
         if not ep or ep not in valid_entrypoints:
             return default, True
         return ep, False
 
-    def items(self):
+    def items(self) -> Generator[tuple[str, str]]:
         """Yields a 2-tuple for every active facet setting.
 
         In this class that just means the entrypoint.
@@ -222,7 +250,7 @@ class FacetsWithEntryPoint(BaseFacets):
         if self.entrypoint:
             yield (self.ENTRY_POINT_FACET_GROUP_NAME, self.entrypoint.INTERNAL_NAME)
 
-    def modify_search_filter(self, filter):
+    def modify_search_filter(self, filter: Filter) -> Filter:
         """Modify the given external_search.Filter object
         so that it reflects this set of facets.
         """
@@ -230,7 +258,7 @@ class FacetsWithEntryPoint(BaseFacets):
             self.entrypoint.modify_search_filter(filter)
         return filter
 
-    def modify_database_query(self, _db, qu):
+    def modify_database_query(self, _db: Session, qu: Query[Work]) -> Query[Work]:
         """Modify the given database query so that it reflects this set of
         facets.
         """

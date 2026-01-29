@@ -29,8 +29,7 @@ from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.core.lcp.credential import LCPCredentialFactory, LCPHashedPassphrase
 from palace.manager.core.lcp.exceptions import LCPError
 from palace.manager.feed.annotator.base import Annotator
-from palace.manager.feed.facets.base import FacetsWithEntryPoint
-from palace.manager.feed.facets.feed import Facets
+from palace.manager.feed.facets.base import BaseFacets, FacetsWithEntryPoint
 from palace.manager.feed.opds import UnfulfillableWork
 from palace.manager.feed.types import (
     Acquisition,
@@ -251,13 +250,13 @@ class CirculationManagerAnnotator(Annotator):
     def url_for(self, *args: Any, **kwargs: Any) -> str:
         return url_for(*args, **kwargs)
 
-    def facet_url(self, facets: Facets) -> str:
+    def facet_url(self, facets: BaseFacets) -> str:
         return self.feed_url(self.lane, facets=facets, default_route=self.facet_view)
 
     def feed_url(
         self,
         lane: WorkList | None,
-        facets: FacetsWithEntryPoint | None = None,
+        facets: BaseFacets | None = None,
         pagination: Pagination | None = None,
         default_route: str = "feed",
         extra_kwargs: dict[str, Any] | None = None,

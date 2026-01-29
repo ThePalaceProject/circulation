@@ -11,7 +11,9 @@ class TestFacetConfig:
         # enabled_facets() and default_facet() the same as the Library
         # does.
         config = FacetConfig.from_library(library)
-        assert Facets.ORDER_RANDOM not in config.enabled_facets(order_by)
+        enabled = config.enabled_facets(order_by)
+        assert enabled is not None
+        assert Facets.ORDER_RANDOM not in enabled
         for group in list(Facets.DEFAULT_FACET.keys()):
             assert config.enabled_facets(group) == library.enabled_facets(group)
             assert config.default_facet(group) == library.default_facet(group)
@@ -21,7 +23,9 @@ class TestFacetConfig:
         config.set_default_facet(order_by, Facets.ORDER_RANDOM)
         assert Facets.ORDER_RANDOM == config.default_facet(order_by)
         assert library.default_facet(order_by) != Facets.ORDER_RANDOM
-        assert Facets.ORDER_RANDOM in config.enabled_facets(order_by)
+        enabled = config.enabled_facets(order_by)
+        assert enabled is not None
+        assert Facets.ORDER_RANDOM in enabled
 
     def test_enable_facet(self, db: DatabaseTransactionFixture):
         # You can enable a facet without making it the default for its
@@ -29,5 +33,7 @@ class TestFacetConfig:
         order_by = Facets.ORDER_FACET_GROUP_NAME
         config = FacetConfig.from_library(db.default_library())
         config.enable_facet(order_by, Facets.ORDER_RANDOM)
-        assert Facets.ORDER_RANDOM in config.enabled_facets(order_by)
+        enabled = config.enabled_facets(order_by)
+        assert enabled is not None
+        assert Facets.ORDER_RANDOM in enabled
         assert config.default_facet(order_by) != Facets.ORDER_RANDOM
