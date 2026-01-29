@@ -5,6 +5,9 @@ This module provides the OIDC authentication provider implementation for patron 
 
 from __future__ import annotations
 
+from collections.abc import Generator
+from typing import TYPE_CHECKING
+
 from flask import url_for
 from flask_babel import lazy_gettext as _
 from sqlalchemy.orm import Session
@@ -13,6 +16,7 @@ from werkzeug.datastructures import Authorization
 from palace.manager.api.authentication.base import PatronData, PatronLookupNotSupported
 from palace.manager.api.authenticator import BaseOIDCAuthenticationProvider
 from palace.manager.integration.patron_auth.oidc.auth import (
+    OIDCAuthenticationManager,
     OIDCAuthenticationManagerFactory,
 )
 from palace.manager.integration.patron_auth.oidc.configuration.model import (
@@ -27,6 +31,9 @@ from palace.manager.util.problem_detail import (
     ProblemDetail as pd,
     ProblemDetailException,
 )
+
+if TYPE_CHECKING:
+    from palace.manager.core.selftest import SelfTestResult
 
 OIDC_CANNOT_DETERMINE_PATRON = pd(
     "http://palaceproject.io/terms/problem/auth/unrecoverable/oidc/cannot-identify-patron",
@@ -127,7 +134,9 @@ class OIDCAuthenticationProvider(
             return auth.token
         return None
 
-    def _authentication_flow_document(self, db: Session) -> dict:
+    def _authentication_flow_document(
+        self, db: Session
+    ) -> dict[str, str | list[dict[str, str]]]:
         """Create Authentication Flow object for OPDS document.
 
         Example:
@@ -146,6 +155,8 @@ class OIDCAuthenticationProvider(
         :return: Authentication Flow object for OPDS document
         """
         library = self.library(db)
+        if not library:
+            raise ValueError("Library not found")
 
         authenticate_url = url_for(
             "oidc_authenticate",
@@ -160,11 +171,12 @@ class OIDCAuthenticationProvider(
             "links": [{"rel": "authenticate", "href": authenticate_url}],
         }
 
-    def _run_self_tests(self, db: Session) -> None:
+    def _run_self_tests(self, db: Session) -> Generator[SelfTestResult]:
         """Run self-tests for this authentication provider."""
+        yield from ()
 
     def authenticated_patron(
-        self, db: Session, token: dict | str
+        self, db: Session, token: dict[str, str] | str
     ) -> Patron | pd | None:
         """Authenticate patron using OIDC token.
 
@@ -193,7 +205,7 @@ class OIDCAuthenticationProvider(
             self.log.warning(f"Failed to refresh OIDC token: {e}")
             return OIDC_TOKEN_EXPIRED
 
-    def get_authentication_manager(self):
+    def get_authentication_manager(self) -> OIDCAuthenticationManager:
         """Return OIDC authentication manager for this provider.
 
         :return: OIDC authentication manager
@@ -201,7 +213,7 @@ class OIDCAuthenticationProvider(
         return self._authentication_manager_factory.create(self._settings)
 
     def remote_patron_lookup_from_oidc_claims(
-        self, id_token_claims: dict
+        self, id_token_claims: dict[str, str]
     ) -> PatronData:
         """Create PatronData from ID token claims.
 
@@ -264,7 +276,7 @@ class OIDCAuthenticationProvider(
     def oidc_callback(
         self,
         db: Session,
-        id_token_claims: dict,
+        id_token_claims: dict[str, str],
         access_token: str,
         refresh_token: str | None = None,
         expires_in: int | None = None,

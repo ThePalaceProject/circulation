@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import json
 import logging
+from typing import TYPE_CHECKING
 from urllib.parse import SplitResult, parse_qs, urlencode, urlsplit
 
-from flask import redirect
+from flask import redirect, url_for
 from flask_babel import lazy_gettext as _
+from sqlalchemy.orm import Session
+from werkzeug.wrappers import Response as BaseResponse
 
 from palace.manager.integration.patron_auth.oidc.util import OIDCUtility
 from palace.manager.util.problem_detail import (
@@ -16,6 +19,10 @@ from palace.manager.util.problem_detail import (
     ProblemDetailException,
     json as pd_json,
 )
+
+if TYPE_CHECKING:
+    from palace.manager.api.authenticator import Authenticator
+    from palace.manager.api.circulation_manager import CirculationManager
 
 OIDC_INVALID_REQUEST = pd(
     "http://palaceproject.io/terms/problem/auth/unrecoverable/oidc/invalid-request",
@@ -50,7 +57,9 @@ class OIDCController:
     ACCESS_TOKEN = "access_token"
     PATRON_INFO = "patron_info"
 
-    def __init__(self, circulation_manager, authenticator):
+    def __init__(
+        self, circulation_manager: CirculationManager, authenticator: Authenticator
+    ) -> None:
         """Initialize OIDC controller.
 
         :param circulation_manager: Circulation Manager
@@ -61,7 +70,7 @@ class OIDCController:
         self._logger = logging.getLogger(__name__)
 
     @staticmethod
-    def _add_params_to_url(url: str, params: dict) -> str:
+    def _add_params_to_url(url: str, params: dict[str, str]) -> str:
         """Add parameters to URL query string.
 
         :param url: Base URL
@@ -69,7 +78,8 @@ class OIDCController:
         :return: URL with parameters
         """
         url_parts = urlsplit(url)
-        existing_params = parse_qs(url_parts.query)
+        existing_params_raw = parse_qs(url_parts.query)
+        existing_params = {k: v[0] for k, v in existing_params_raw.items()}
         params.update(existing_params)
         new_query = urlencode(params, True)
         url_parts = SplitResult(
@@ -100,7 +110,7 @@ class OIDCController:
 
     @staticmethod
     def _get_request_parameter(
-        params: dict, name: str, default_value: str | None = None
+        params: dict[str, str], name: str, default_value: str | None = None
     ) -> str | ProblemDetail:
         """Get parameter from request.
 
@@ -120,7 +130,7 @@ class OIDCController:
 
     def _redirect_with_error(
         self, redirect_uri: str, problem_detail: ProblemDetail
-    ) -> redirect:
+    ) -> BaseResponse:
         """Redirect patron to URL with error encoded.
 
         :param redirect_uri: Redirect URL
@@ -130,8 +140,8 @@ class OIDCController:
         return redirect(self._error_uri(redirect_uri, problem_detail))
 
     def oidc_authentication_redirect(
-        self, params: dict, db
-    ) -> redirect | ProblemDetail:
+        self, params: dict[str, str], db: Session
+    ) -> BaseResponse | ProblemDetail:
         """Redirect patron to OIDC provider for authentication.
 
         :param params: Query parameters including provider and redirect_uri
@@ -155,25 +165,25 @@ class OIDCController:
 
         utility = OIDCUtility(redis_client=None)
         nonce = utility.generate_nonce()
-        state_data = {
+        state_data: dict[str, str] = {
             "library_short_name": library.short_name,
             "provider": provider_name,
             "redirect_uri": redirect_uri,
             "nonce": nonce,
         }
 
-        pkce_data = None
+        code_challenge = None
         if provider._settings.use_pkce:
-            pkce_data = utility.generate_pkce()
-            state_data["code_verifier"] = pkce_data["code_verifier"]
+            code_verifier, code_challenge = utility.generate_pkce()
+            state_data["code_verifier"] = code_verifier
 
-        state = utility.generate_state(state_data)
-
-        from flask import url_for
+        library_authenticator = self._authenticator.library_authenticators[
+            library.short_name
+        ]
+        secret = library_authenticator.bearer_token_signing_secret
+        state = utility.generate_state(state_data, secret)
 
         callback_uri = url_for("oidc_callback", _external=True)
-
-        code_challenge = pkce_data["code_challenge"] if pkce_data else None
 
         authorization_url = authentication_manager.build_authorization_url(
             redirect_uri=callback_uri,
@@ -185,8 +195,8 @@ class OIDCController:
         return redirect(authorization_url)
 
     def oidc_authentication_callback(
-        self, params: dict, db
-    ) -> redirect | ProblemDetail:
+        self, params: dict[str, str], db: Session
+    ) -> BaseResponse | ProblemDetail:
         """Handle OIDC callback after authentication.
 
         :param params: Query parameters including code and state
@@ -204,7 +214,11 @@ class OIDCController:
         utility = OIDCUtility(redis_client=None)
 
         try:
-            state_data = utility.validate_state(state)
+            library_authenticator = next(
+                iter(self._authenticator.library_authenticators.values())
+            )
+            secret = library_authenticator.bearer_token_signing_secret
+            state_data = utility.validate_state(state, secret)
         except Exception as e:
             self._logger.error(f"Invalid state parameter: {e}")
             return OIDC_INVALID_STATE
@@ -229,8 +243,6 @@ class OIDCController:
             return self._redirect_with_error(redirect_uri, provider)
 
         authentication_manager = provider.get_authentication_manager()
-
-        from flask import url_for
 
         callback_uri = url_for("oidc_callback", _external=True)
 
