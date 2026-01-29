@@ -262,6 +262,13 @@ UNKNOWN_SAML_PROVIDER = pd(
     detail=_("The specified SAML provider name isn't one of the known providers."),
 )
 
+UNKNOWN_OIDC_PROVIDER = pd(
+    "http://librarysimplified.org/terms/problem/unknown-oidc-provider",
+    status_code=400,
+    title=_("Unknown OIDC provider."),
+    detail=_("The specified OIDC provider name isn't one of the known providers."),
+)
+
 INVALID_SAML_BEARER_TOKEN = pd(
     "http://palaceproject.io/terms/problem/auth/recoverable/saml/bearer-token-invalid",
     status_code=401,
