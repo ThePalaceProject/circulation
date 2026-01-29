@@ -151,7 +151,7 @@ class OIDCAuthSettings(AuthProviderSettings, LoggerMixin):
     ] = "sub"
 
     patron_id_regular_expression: Annotated[
-        Pattern | None,
+        Pattern[str] | None,
         FormMetadata(
             label=_("Patron ID Regular Expression (Optional)"),
             description=_(
@@ -292,7 +292,7 @@ class OIDCAuthSettings(AuthProviderSettings, LoggerMixin):
 
     @field_validator("patron_id_regular_expression")
     @classmethod
-    def validate_patron_id_regex(cls, v: Pattern | None) -> Pattern | None:
+    def validate_patron_id_regex(cls, v: Pattern[str] | None) -> Pattern[str] | None:
         """Validate that the regex contains a 'patron_id' named group."""
         if v is not None:
             if "patron_id" not in v.groupindex:
