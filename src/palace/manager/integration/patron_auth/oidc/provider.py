@@ -1,0 +1,297 @@
+"""OIDC Authentication Provider.
+
+This module provides the OIDC authentication provider implementation for patron authentication.
+"""
+
+from __future__ import annotations
+
+from flask import url_for
+from flask_babel import lazy_gettext as _
+from sqlalchemy.orm import Session
+from werkzeug.datastructures import Authorization
+
+from palace.manager.api.authentication.base import PatronData, PatronLookupNotSupported
+from palace.manager.api.authenticator import BaseOIDCAuthenticationProvider
+from palace.manager.integration.patron_auth.oidc.auth import (
+    OIDCAuthenticationManagerFactory,
+)
+from palace.manager.integration.patron_auth.oidc.configuration.model import (
+    OIDCAuthLibrarySettings,
+    OIDCAuthSettings,
+)
+from palace.manager.integration.patron_auth.oidc.credential import OIDCCredentialManager
+from palace.manager.service.analytics.analytics import Analytics
+from palace.manager.sqlalchemy.model.credential import Credential
+from palace.manager.sqlalchemy.model.patron import Patron
+from palace.manager.util.problem_detail import (
+    ProblemDetail as pd,
+    ProblemDetailException,
+)
+
+OIDC_CANNOT_DETERMINE_PATRON = pd(
+    "http://palaceproject.io/terms/problem/auth/unrecoverable/oidc/cannot-identify-patron",
+    status_code=401,
+    title=_("Unable to identify patron."),
+    detail=_(
+        "Unable to determine patron from ID token claims. "
+        "This may indicate a service configuration issue."
+    ),
+)
+
+OIDC_TOKEN_EXPIRED = pd(
+    "http://palaceproject.io/terms/problem/auth/recoverable/oidc/session-expired",
+    status_code=401,
+    title=_("OIDC session expired."),
+    detail=_(
+        "Your OIDC session has expired. Please reauthenticate via your identity provider."
+    ),
+)
+
+OIDC_PATRON_FILTERED = pd(
+    "http://palaceproject.io/terms/problem/auth/unrecoverable/oidc/patron-filtered",
+    status_code=403,
+    title=_("Access denied."),
+    detail=_(
+        "Your account does not meet the requirements for library access. "
+        "Please contact your library administrator for assistance."
+    ),
+)
+
+
+class OIDCAuthenticationProvider(
+    BaseOIDCAuthenticationProvider[OIDCAuthSettings, OIDCAuthLibrarySettings]
+):
+    """OIDC authentication provider implementing OpenID Connect authentication flow."""
+
+    def __init__(
+        self,
+        library_id: int,
+        integration_id: int,
+        settings: OIDCAuthSettings,
+        library_settings: OIDCAuthLibrarySettings,
+        analytics: Analytics | None = None,
+    ):
+        """Initialize OIDC authentication provider.
+
+        :param library_id: Library identifier
+        :param integration_id: Integration identifier
+        :param settings: OIDC authentication settings
+        :param library_settings: Library-specific settings
+        :param analytics: Analytics service
+        """
+        super().__init__(
+            library_id, integration_id, settings, library_settings, analytics
+        )
+
+        self._authentication_manager_factory = OIDCAuthenticationManagerFactory()
+        self._credential_manager = OIDCCredentialManager()
+        self._settings = settings
+
+    @classmethod
+    def label(cls) -> str:
+        """Return human-readable label for this authentication provider."""
+        return "OpenID Connect"
+
+    @classmethod
+    def description(cls) -> str:
+        """Return human-readable description for this authentication provider."""
+        return (
+            "OpenID Connect authentication provider supporting standard OIDC flows "
+            "with PKCE for enhanced security."
+        )
+
+    @property
+    def identifies_individuals(self) -> bool:
+        """Indicate whether this provider identifies individual patrons."""
+        return True
+
+    @classmethod
+    def settings_class(cls) -> type[OIDCAuthSettings]:
+        """Return the settings class for this provider."""
+        return OIDCAuthSettings
+
+    @classmethod
+    def library_settings_class(cls) -> type[OIDCAuthLibrarySettings]:
+        """Return the library settings class for this provider."""
+        return OIDCAuthLibrarySettings
+
+    def get_credential_from_header(self, auth: Authorization) -> str | None:
+        """Extract credential from Authorization header.
+
+        For OIDC, the credential is the bearer token stored in our database.
+
+        :param auth: Authorization header data
+        :return: Credential token if present, None otherwise
+        """
+        if auth and auth.type and auth.type.lower() == "bearer" and auth.token:
+            return auth.token
+        return None
+
+    def _authentication_flow_document(self, db: Session) -> dict:
+        """Create Authentication Flow object for OPDS document.
+
+        Example:
+        {
+            "type": "http://opds-spec.org/auth/oauth",
+            "description": "OpenID Connect",
+            "links": [
+                {
+                    "rel": "authenticate",
+                    "href": "https://cm.example.com/default/oidc_authenticate?provider=OpenID+Connect"
+                }
+            ]
+        }
+
+        :param db: Database session
+        :return: Authentication Flow object for OPDS document
+        """
+        library = self.library(db)
+
+        authenticate_url = url_for(
+            "oidc_authenticate",
+            _external=True,
+            library_short_name=library.short_name,
+            provider=self.label(),
+        )
+
+        return {
+            "type": self.flow_type,
+            "description": self.label(),
+            "links": [{"rel": "authenticate", "href": authenticate_url}],
+        }
+
+    def _run_self_tests(self, db: Session) -> None:
+        """Run self-tests for this authentication provider."""
+
+    def authenticated_patron(
+        self, db: Session, token: dict | str
+    ) -> Patron | pd | None:
+        """Authenticate patron using OIDC token.
+
+        :param db: Database session
+        :param token: The OIDC bearer token
+        :return: Authenticated Patron, None if not found, or ProblemDetail on error
+        """
+        if not isinstance(token, str):
+            return None
+
+        credential = self._credential_manager.lookup_oidc_token_by_value(
+            db, token, self.library_id
+        )
+
+        if not credential:
+            return OIDC_TOKEN_EXPIRED
+
+        auth_manager = self.get_authentication_manager()
+
+        try:
+            refreshed_credential = self._credential_manager.refresh_token_if_needed(
+                db, credential, auth_manager
+            )
+            return refreshed_credential.patron
+        except Exception as e:
+            self.log.warning(f"Failed to refresh OIDC token: {e}")
+            return OIDC_TOKEN_EXPIRED
+
+    def get_authentication_manager(self):
+        """Return OIDC authentication manager for this provider.
+
+        :return: OIDC authentication manager
+        """
+        return self._authentication_manager_factory.create(self._settings)
+
+    def remote_patron_lookup_from_oidc_claims(
+        self, id_token_claims: dict
+    ) -> PatronData:
+        """Create PatronData from ID token claims.
+
+        :param id_token_claims: Validated ID token claims
+        :return: PatronData object
+        :raises: ProblemDetailException if patron cannot be determined or filtered
+        """
+        patron_id_claim = self._settings.patron_id_claim
+        raw_patron_id = id_token_claims.get(patron_id_claim)
+
+        if not raw_patron_id:
+            raise ProblemDetailException(problem_detail=OIDC_CANNOT_DETERMINE_PATRON)
+
+        if self._settings.patron_id_regular_expression:
+            match = self._settings.patron_id_regular_expression.match(
+                str(raw_patron_id)
+            )
+            if not match or "patron_id" not in match.groupdict():
+                raise ProblemDetailException(
+                    problem_detail=OIDC_CANNOT_DETERMINE_PATRON
+                )
+            patron_id = match.group("patron_id")
+        else:
+            patron_id = str(raw_patron_id)
+
+        if self._settings.filter_expression:
+            try:
+                allowed = eval(
+                    self._settings.filter_expression,
+                    {"__builtins__": {}},
+                    {"claims": id_token_claims},
+                )
+                if not allowed:
+                    raise ProblemDetailException(problem_detail=OIDC_PATRON_FILTERED)
+            except Exception as e:
+                self.log.error(f"Error evaluating filter expression: {e}")
+                raise ProblemDetailException(problem_detail=OIDC_PATRON_FILTERED)
+
+        return PatronData(
+            permanent_id=patron_id,
+            authorization_identifier=patron_id,
+            external_type="A",
+            complete=True,
+        )
+
+    def remote_patron_lookup(
+        self, patron_or_patrondata: PatronData | Patron
+    ) -> PatronData | None:
+        """Look up patron information.
+
+        OIDC authentication requires the full OAuth flow, so we cannot perform
+        a fresh lookup using only an authorization identifier.
+
+        :param patron_or_patrondata: PatronData or Patron object
+        :return: None
+        :raises: PatronLookupNotSupported
+        """
+        raise PatronLookupNotSupported()
+
+    def oidc_callback(
+        self,
+        db: Session,
+        id_token_claims: dict,
+        access_token: str,
+        refresh_token: str | None = None,
+        expires_in: int | None = None,
+    ) -> tuple[Credential, Patron, PatronData]:
+        """Handle OIDC callback after successful authentication.
+
+        :param db: Database session
+        :param id_token_claims: Validated ID token claims
+        :param access_token: Access token from token exchange
+        :param refresh_token: Optional refresh token
+        :param expires_in: Token expiry in seconds
+        :return: 3-tuple (Credential, Patron, PatronData)
+        """
+        patron_data = self.remote_patron_lookup_from_oidc_claims(id_token_claims)
+
+        patron, is_new = patron_data.get_or_create_patron(
+            db, self.library_id, self.analytics
+        )
+
+        credential = self._credential_manager.create_oidc_token(
+            db,
+            patron,
+            id_token_claims,
+            access_token,
+            refresh_token,
+            expires_in,
+            self._settings.session_lifetime,
+        )
+
+        return credential, patron, patron_data

@@ -810,3 +810,13 @@ class BaseSAMLAuthenticationProvider[
     @property
     def flow_type(self) -> str:
         return "http://librarysimplified.org/authtype/SAML-2.0"
+
+
+class BaseOIDCAuthenticationProvider[
+    SettingsType: AuthProviderSettings, LibrarySettingsType: AuthProviderLibrarySettings
+](AuthenticationProvider[SettingsType, LibrarySettingsType], ABC):
+    """Base class for OIDC authentication providers."""
+
+    @property
+    def flow_type(self) -> str:
+        return "http://opds-spec.org/auth/oauth"
