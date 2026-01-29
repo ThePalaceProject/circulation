@@ -1,11 +1,29 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Generator, Iterable, Sequence
-from typing import TYPE_CHECKING, Any, Self
+from typing import TYPE_CHECKING, Any, NamedTuple, Self
 
 from palace.manager.core.entrypoint import EntryPoint
 from palace.manager.feed.facets.constants import FacetConfig, FacetConstants
 from palace.manager.util.problem_detail import ProblemDetail
+
+
+class FacetGroup(NamedTuple):
+    """Represents a single facet option for OPDS facet links.
+
+    :param group: Name of the facet group (e.g., "Order", "Availability").
+    :param value: The facet value this option represents.
+    :param facets: Facets instance with this facet value applied.
+    :param is_selected: Whether this facet is currently selected.
+    :param is_default: Whether this is the default facet value.
+    """
+
+    group: str
+    value: str
+    facets: BaseFacets
+    is_selected: bool
+    is_default: bool
+
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Query, Session
@@ -39,10 +57,8 @@ class BaseFacets(FacetConstants):
         return "&".join("=".join(x) for x in sorted(self.items()))
 
     @property
-    def facet_groups(self) -> Generator[tuple[str, str, Self, bool, bool]]:
-        """Yield a list of 5-tuples
-        (facet group, facet value, new Facets object, selected, is_default)
-        for use in building OPDS facets.
+    def facet_groups(self) -> Generator[FacetGroup]:
+        """Yield FacetGroup objects for use in building OPDS facet links.
 
         This does not include the 'entry point' facet group,
         which must be handled separately.

@@ -12,7 +12,7 @@ from palace.manager.core.config import Configuration
 from palace.manager.core.entrypoint import EntryPoint
 from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.core.problem_details import INVALID_INPUT
-from palace.manager.feed.facets.base import FacetsWithEntryPoint
+from palace.manager.feed.facets.base import FacetGroup, FacetsWithEntryPoint
 from palace.manager.feed.facets.constants import FacetConfig
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.datasource import DataSource
@@ -325,12 +325,8 @@ class Facets(FacetsWithEntryPoint):
                 yield self.available_facets(self.library, group_name)
 
     @property
-    def facet_groups(
-        self,
-    ) -> Generator[tuple[str, str, Self, bool, bool]]:
-        """Yield a list of 5-tuples
-        (facet group, facet value, new Facets object, selected, is_default)
-        for use in building OPDS facets.
+    def facet_groups(self) -> Generator[FacetGroup]:
+        """Yield FacetGroup objects for use in building OPDS facet links.
 
         This does not yield anything for the 'entry point' facet group,
         which must be handled separately.
@@ -345,75 +341,56 @@ class Facets(FacetsWithEntryPoint):
 
         facet_config = FacetConfig.from_library(self.library) if self.library else None
 
-        def is_default_facet(facets: Self, facet: str, facet_group_name: str) -> bool:
+        def is_default_facet(facet: str, facet_group_name: str) -> bool:
             if not facet_config:
                 return False
-            default_facet = facets.default_facet(facet_config, facet_group_name)
+            default_facet = self.default_facet(facet_config, facet_group_name)
             return default_facet == facet
-
-        def order_facet_tuple(
-            new_value: str,
-        ) -> tuple[str, str, Self, bool, bool]:
-            group = self.ORDER_FACET_GROUP_NAME
-            current_value = self.order
-            facets = self.navigate(order=new_value)
-
-            return (
-                group,
-                new_value,
-                facets,
-                current_value == new_value,
-                is_default_facet(facets, new_value, group),
-            )
 
         # First, the order facets.
         if len(order_facets) > 1:
+            group = self.ORDER_FACET_GROUP_NAME
             for facet in order_facets:
-                yield order_facet_tuple(facet)
-
-        def availability_facet_tuple(
-            new_value: str,
-        ) -> tuple[str, str, Self, bool, bool]:
-            group = self.AVAILABILITY_FACET_GROUP_NAME
-            current_value = self.availability
-            facets = self.navigate(availability=new_value)
-            return (
-                group,
-                new_value,
-                facets,
-                new_value == current_value,
-                is_default_facet(facets, new_value, group),
-            )
+                yield FacetGroup(
+                    group=group,
+                    value=facet,
+                    facets=self.navigate(order=facet),
+                    is_selected=self.order == facet,
+                    is_default=is_default_facet(facet, group),
+                )
 
         # Next, the availability facets.
         if len(availability_facets) > 1:
+            group = self.AVAILABILITY_FACET_GROUP_NAME
             for facet in availability_facets:
-                yield availability_facet_tuple(facet)
+                yield FacetGroup(
+                    group=group,
+                    value=facet,
+                    facets=self.navigate(availability=facet),
+                    is_selected=self.availability == facet,
+                    is_default=is_default_facet(facet, group),
+                )
 
         if len(distributor_facets) > 1:
+            group = self.DISTRIBUTOR_FACETS_GROUP_NAME
             for facet in distributor_facets:
-                group = self.DISTRIBUTOR_FACETS_GROUP_NAME
-                current_value = self.distributor
-                facets = self.navigate(distributor=facet)
-                yield (
-                    group,
-                    facet,
-                    facets,
-                    facet == current_value,
-                    is_default_facet(facets, facet, group),
+                yield FacetGroup(
+                    group=group,
+                    value=facet,
+                    facets=self.navigate(distributor=facet),
+                    is_selected=self.distributor == facet,
+                    is_default=is_default_facet(facet, group),
                 )
 
         if len(collection_name_facets) > 1:
+            group = self.COLLECTION_NAME_FACETS_GROUP_NAME
             for facet in collection_name_facets:
-                group = self.COLLECTION_NAME_FACETS_GROUP_NAME
-                current_value = self.collection_name
-                facets = self.navigate(collection_name=facet)
-                yield (
-                    group,
-                    facet,
-                    facets,
-                    facet == current_value,
-                    is_default_facet(facets, facet, group),
+                yield FacetGroup(
+                    group=group,
+                    value=facet,
+                    facets=self.navigate(collection_name=facet),
+                    is_selected=self.collection_name == facet,
+                    is_default=is_default_facet(facet, group),
                 )
 
     def modify_search_filter(self, filter: Filter) -> Filter:
