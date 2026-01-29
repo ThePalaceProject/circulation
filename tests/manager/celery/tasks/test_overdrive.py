@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import time
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
@@ -818,6 +817,7 @@ class TestIntegration:
         overdrive_api_fixture: OverdriveAPIFixture,
         celery_fixture: CeleryFixture,
         redis_fixture: RedisFixture,
+        apply_task_fixture: ApplyTaskFixture,
     ):
         """Test import with parent identifiers provided and Overdrive data."""
         collection = overdrive_api_fixture.collection
@@ -864,10 +864,13 @@ class TestIntegration:
                 collection_id=collection.id, import_all=True
             ).wait()
 
-            # wait a second before proceeding.  For reasons that aren't clear to me,
-            # this delay seems to be necessary to keep the test from flapping.
-            time.sleep(1)
-            # verify that the identifier is now in the database.
+            # Process the queued apply tasks synchronously. The import task fires off
+            # bibliographic_apply and circulation_apply tasks asynchronously, which are
+            # captured by the ApplyTaskFixture. Processing them here ensures the database
+            # records are created before we verify them.
+            apply_task_fixture.process_apply_queue()
+
+            # Verify that the identifier is now in the database.
             assert self._get_identifier(book, overdrive_api_fixture)
 
     def _get_identifier(self, book, overdrive_api_fixture):
