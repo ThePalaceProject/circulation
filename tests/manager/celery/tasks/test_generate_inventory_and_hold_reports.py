@@ -834,19 +834,19 @@ def test_inventory_report_visibility_columns(
         return next(r for r in rows if r["identifier"] == identifier_value)
 
     visible_row = row_for(visible_work)
-    assert visible_row["visible"] == "false"
+    assert visible_row["visible"] == "true"
     assert visible_row["visibility_status"] == ""
 
     audience_filtered_row = row_for(audience_filtered_work)
-    assert audience_filtered_row["visible"] == "true"
+    assert audience_filtered_row["visible"] == "false"
     assert audience_filtered_row["visibility_status"] == "filtered"
 
     genre_filtered_row = row_for(genre_filtered_work)
-    assert genre_filtered_row["visible"] == "true"
+    assert genre_filtered_row["visible"] == "false"
     assert genre_filtered_row["visibility_status"] == "filtered"
 
     suppressed_row = row_for(suppressed_work)
-    assert suppressed_row["visible"] == "true"
+    assert suppressed_row["visible"] == "false"
     assert suppressed_row["visibility_status"] == "manually suppressed"
 
 

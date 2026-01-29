@@ -426,8 +426,8 @@ def inventory_report_query() -> Select:
         else_=false(),
     )
     is_policy_filtered: ColumnElement[Any] = or_(audience_filtered, genre_filtered)
-    is_visible: ColumnElement[Any] = or_(is_manually_suppressed, is_policy_filtered)
-    visible: ColumnElement[Any] = case((is_visible, "true"), else_="false").label(
+    is_hidden: ColumnElement[Any] = or_(is_manually_suppressed, is_policy_filtered)
+    visible: ColumnElement[Any] = case((is_hidden, "false"), else_="true").label(
         "visible"
     )
     visibility_status: ColumnElement[Any] = case(
