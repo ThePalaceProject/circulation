@@ -145,11 +145,11 @@ class OPDSForDistributorsAPI(
 
     @staticmethod
     def _append_token_to_url(url: str, access_token: str) -> str:
-        """Append an access_token query parameter to a URL.
+        """Append a token query parameter to a URL.
 
         :param url: The base URL.
-        :param access_token: The OAuth access token to append.
-        :return: The URL with the access_token query parameter.
+        :param access_token: The OAuth access token to append as the 'token' query parameter.
+        :return: The URL with the token query parameter appended.
         """
         parsed = urlparse(url)
         query_params = parse_qs(parsed.query)
@@ -173,11 +173,11 @@ class OPDSForDistributorsAPI(
         media_type = delivery_mechanism.delivery_mechanism.content_type
         drm_scheme = delivery_mechanism.delivery_mechanism.drm_scheme
 
-        if drm_scheme not in [
+        if drm_scheme not in (
             DeliveryMechanism.NO_DRM,
             DeliveryMechanism.BEARER_TOKEN,
             DeliveryMechanism.STREAMING_DRM,
-        ]:
+        ):
             raise DeliveryMechanismError(
                 "Cannot fulfill a loan through OPDS For Distributors using a delivery mechanism with DRM scheme %s"
                 % drm_scheme

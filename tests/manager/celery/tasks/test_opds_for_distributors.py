@@ -117,9 +117,9 @@ class TestImportCollection:
     @staticmethod
     def get_link_url(pool: LicensePool, rel: str, media_type: str) -> str | None:
         links = [
-            l
-            for l in pool.identifier.links
-            if l.rel == rel and l.resource.representation.media_type == media_type
+            link
+            for link in pool.identifier.links
+            if link.rel == rel and link.resource.representation.media_type == media_type
         ]
 
         if len(links) != 1:

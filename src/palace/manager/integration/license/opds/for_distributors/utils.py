@@ -5,9 +5,9 @@ from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism, RightsStatus
 from palace.manager.sqlalchemy.model.resource import Hyperlink
 
-# This is the exact streaming media URI used in Biblioboard OPDS for Distributors feeds
-# its technically incorrect because the profile contains special characters, so it should
-# be wrapped in quotes. However, this is how its present in the OPDS1 feeds, so we use it
+# This is the exact streaming media URI used in Biblioboard OPDS for Distributors feeds.
+# It's technically incorrect because the profile contains special characters, so it should
+# be wrapped in quotes. However, this is how it's present in the OPDS1 feeds, so we use it
 # as is. This should be corrected when moving to OPDS2.
 STREAMING_MEDIA_LINK_TYPE = f"{MediaTypes.TEXT_HTML_MEDIA_TYPE};profile={DeliveryMechanism.STREAMING_MEDIA_PROFILE_URI}"
 
