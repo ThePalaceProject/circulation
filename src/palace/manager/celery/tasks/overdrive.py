@@ -185,7 +185,7 @@ def import_collection_group(
     import_all: bool = False,
     modified_since: datetime.datetime | None = None,
     start_time: datetime.datetime | None = None,
-) -> None:
+) -> dict[str, Any]:
     """Import an Overdrive collection and all its child (Advantage) collections.
 
     This task orchestrates the import of a parent Overdrive collection and chains
@@ -206,13 +206,10 @@ def import_collection_group(
                           See import_collection docstring for detailed behavior.
     :param start_time: The datetime when this import began. Used to update the
                       collection's timestamp. If None, uses current time.
-
-    .. note::
-       This task does not return a value. Results are tracked through the
-       linked chord and cleanup tasks.
+    :return: Dictionary containing the chain_id for tracking the async import chain.
     """
 
-    chain(
+    result = chain(
         import_collection.s(
             collection_id=collection_id,
             import_all=import_all,
@@ -228,6 +225,7 @@ def import_collection_group(
             modified_since=modified_since,
         ),
     )()
+    return {"chain_id": result.id}
 
 
 def rehydrate_identifier_set(

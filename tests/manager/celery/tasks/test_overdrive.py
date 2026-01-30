@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import time
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
+from celery.result import AsyncResult
 
 from palace.manager.celery.tasks import overdrive
 from palace.manager.celery.tasks.overdrive import import_collection_group
@@ -438,7 +438,12 @@ class TestImportCollectionGroup:
         mock_cleanup_sig = Mock()
         mock_cleanup_chord.s.return_value = mock_cleanup_sig
 
+        # Mock the async result returned when the chain is called
+        mock_async_result = Mock()
+        mock_async_result.id = "test-chain-id"
+
         mock_chain_result = Mock()
+        mock_chain_result.return_value = mock_async_result
         mock_chain.return_value = mock_chain_result
 
         return mock_chain_result
@@ -818,6 +823,7 @@ class TestIntegration:
         overdrive_api_fixture: OverdriveAPIFixture,
         celery_fixture: CeleryFixture,
         redis_fixture: RedisFixture,
+        apply_task_fixture: ApplyTaskFixture,
     ):
         """Test import with parent identifiers provided and Overdrive data."""
         collection = overdrive_api_fixture.collection
@@ -860,14 +866,22 @@ class TestIntegration:
         ) as equivalent:
             equivalent.return_value = True
 
-            import_collection_group.delay(
+            result = import_collection_group.delay(
                 collection_id=collection.id, import_all=True
             ).wait()
 
-            # wait a second before proceeding.  For reasons that aren't clear to me,
-            # this delay seems to be necessary to keep the test from flapping.
-            time.sleep(1)
-            # verify that the identifier is now in the database.
+            # Wait for the import chain to complete. The import_collection_group task
+            # starts an async chain and returns immediately with the chain_id. We need
+            # to wait for that chain to finish before processing apply tasks.
+            AsyncResult(result["chain_id"]).wait()
+
+            # Process the queued apply tasks synchronously. The import task fires off
+            # bibliographic_apply and circulation_apply tasks asynchronously, which are
+            # captured by the ApplyTaskFixture. Processing them here ensures the database
+            # records are created before we verify them.
+            apply_task_fixture.process_apply_queue()
+
+            # Verify that the identifier is now in the database.
             assert self._get_identifier(book, overdrive_api_fixture)
 
     def _get_identifier(self, book, overdrive_api_fixture):
