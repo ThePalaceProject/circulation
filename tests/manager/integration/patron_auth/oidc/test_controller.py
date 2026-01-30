@@ -773,3 +773,181 @@ class TestOIDCControllerLogout:
         assert result == OIDC_INVALID_REQUEST.detailed(
             "Missing 'state' parameter in logout callback"
         )
+
+
+class TestOIDCControllerBackChannelLogout:
+    """Tests for OIDC back-channel logout flow."""
+
+    @pytest.fixture
+    def mock_redis(self, redis_fixture):
+        return redis_fixture.client
+
+    @pytest.fixture
+    def mock_circulation_manager(self, mock_redis):
+        cm = MagicMock()
+        cm.services.redis.client.return_value = mock_redis
+        return cm
+
+    @pytest.fixture
+    def mock_authenticator(self):
+        authenticator = MagicMock()
+        authenticator.library_authenticators = {}
+        return authenticator
+
+    @pytest.fixture
+    def backchannel_controller(self, mock_circulation_manager, mock_authenticator):
+        return OIDCController(mock_circulation_manager, mock_authenticator)
+
+    def test_oidc_backchannel_logout_success(self, backchannel_controller, db):
+        """Test successful back-channel logout."""
+        from unittest.mock import Mock
+
+        patron = db.patron()
+        patron.authorization_identifier = "user123@example.com"
+        db.session.commit()
+
+        library = db.default_library()
+
+        # Create mock provider
+        mock_provider = Mock()
+        mock_provider._authentication_manager_factory = Mock()
+        mock_provider._settings = Mock()
+        mock_provider._settings.patron_id_claim = "sub"
+        mock_provider._credential_manager = Mock()
+
+        # Mock auth manager that validates the logout token
+        mock_auth_manager = Mock()
+        mock_auth_manager.validate_logout_token.return_value = {
+            "sub": "user123@example.com",
+            "iss": "https://oidc.provider.test",
+            "aud": "test-client-id",
+            "iat": 1234567890,
+            "jti": "unique-token-id",
+            "events": {"http://schemas.openid.net/event/backchannel-logout": {}},
+        }
+        mock_provider._authentication_manager_factory.create.return_value = (
+            mock_auth_manager
+        )
+
+        # Mock credential manager
+        mock_patron = Mock()
+        mock_patron.id = patron.id
+        mock_provider._credential_manager.lookup_patron_by_identifier.return_value = (
+            mock_patron
+        )
+        mock_provider._credential_manager.invalidate_patron_credentials.return_value = 1
+        mock_provider.label.return_value = "Test OIDC"
+
+        # Set up library authenticator with the provider
+        mock_library_auth = Mock()
+        mock_library_auth.providers = [mock_provider]
+        backchannel_controller._authenticator.library_authenticators[
+            library.short_name
+        ] = mock_library_auth
+
+        # Send back-channel logout request
+        form_data = {"logout_token": "test.logout.token"}
+
+        body, status = backchannel_controller.oidc_backchannel_logout(
+            form_data, db.session
+        )
+
+        assert status == 200
+        assert body == ""
+        mock_auth_manager.validate_logout_token.assert_called_once_with(
+            "test.logout.token"
+        )
+        mock_provider._credential_manager.invalidate_patron_credentials.assert_called_once()
+
+    def test_oidc_backchannel_logout_missing_token(self, backchannel_controller, db):
+        """Test back-channel logout with missing logout token."""
+        form_data = {}
+
+        body, status = backchannel_controller.oidc_backchannel_logout(
+            form_data, db.session
+        )
+
+        assert status == 400
+        assert body == ""
+
+    def test_oidc_backchannel_logout_invalid_token(self, backchannel_controller, db):
+        """Test back-channel logout with invalid token."""
+        from unittest.mock import Mock
+
+        library = db.default_library()
+
+        # Create mock provider that rejects the token
+        mock_provider = Mock()
+        mock_provider._authentication_manager_factory = Mock()
+
+        mock_auth_manager = Mock()
+        mock_auth_manager.validate_logout_token.side_effect = Exception("Invalid token")
+        mock_provider._authentication_manager_factory.create.return_value = (
+            mock_auth_manager
+        )
+        mock_provider.label.return_value = "Test OIDC"
+
+        # Set up library authenticator
+        mock_library_auth = Mock()
+        mock_library_auth.providers = [mock_provider]
+        backchannel_controller._authenticator.library_authenticators[
+            library.short_name
+        ] = mock_library_auth
+
+        form_data = {"logout_token": "invalid.token"}
+
+        body, status = backchannel_controller.oidc_backchannel_logout(
+            form_data, db.session
+        )
+
+        assert status == 400
+        assert body == ""
+
+    def test_oidc_backchannel_logout_patron_not_found(self, backchannel_controller, db):
+        """Test back-channel logout when patron doesn't exist."""
+        from unittest.mock import Mock
+
+        library = db.default_library()
+
+        # Create mock provider
+        mock_provider = Mock()
+        mock_provider._authentication_manager_factory = Mock()
+        mock_provider._settings = Mock()
+        mock_provider._settings.patron_id_claim = "sub"
+        mock_provider._credential_manager = Mock()
+
+        mock_auth_manager = Mock()
+        mock_auth_manager.validate_logout_token.return_value = {
+            "sub": "nonexistent@example.com",
+            "iss": "https://oidc.provider.test",
+            "aud": "test-client-id",
+            "iat": 1234567890,
+            "jti": "unique-token-id",
+            "events": {"http://schemas.openid.net/event/backchannel-logout": {}},
+        }
+        mock_provider._authentication_manager_factory.create.return_value = (
+            mock_auth_manager
+        )
+
+        # Patron not found
+        mock_provider._credential_manager.lookup_patron_by_identifier.return_value = (
+            None
+        )
+        mock_provider.label.return_value = "Test OIDC"
+
+        # Set up library authenticator
+        mock_library_auth = Mock()
+        mock_library_auth.providers = [mock_provider]
+        backchannel_controller._authenticator.library_authenticators[
+            library.short_name
+        ] = mock_library_auth
+
+        form_data = {"logout_token": "test.logout.token"}
+
+        body, status = backchannel_controller.oidc_backchannel_logout(
+            form_data, db.session
+        )
+
+        # Should still return 200 even if patron not found
+        assert status == 200
+        assert body == ""
