@@ -28,7 +28,11 @@ class DatabaseBackedFacets(Facets):
         FacetConstants.ORDER_TITLE: Edition.sort_title,
         FacetConstants.ORDER_AUTHOR: Edition.sort_author,
         FacetConstants.ORDER_LAST_UPDATE: Work.last_update_time,
+        # Reverse variants map to the same fields (direction is handled separately)
+        FacetConstants.ORDER_TITLE_DESC: Edition.sort_title,
+        FacetConstants.ORDER_AUTHOR_DESC: Edition.sort_author,
     }
+    # Note: ORDER_ADDED_TO_COLLECTION variants are not database-backed
 
     @classmethod
     def available_facets(

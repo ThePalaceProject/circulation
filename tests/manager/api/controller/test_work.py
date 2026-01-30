@@ -132,11 +132,12 @@ class TestWorkController:
         assert work_fixture.english_1.title == entry["title"]
 
         # The feed has facet links.
+        # 3 order facets + 3 reverse variants + 3 availability + 2 distributor + 2 collection = 13
         links = feed["feed"]["links"]
         facet_links = [
             link for link in links if link["rel"] == "http://opds-spec.org/facet"
         ]
-        assert 10 == len(facet_links)
+        assert 13 == len(facet_links)
 
         # At this point we don't want to generate real feeds anymore.
         # We can't do a real end-to-end test without setting up a real
@@ -866,11 +867,12 @@ class TestWorkController:
         assert work.title == entry["title"]
 
         # The feed has facet links.
+        # 4 order facets + 3 reverse variants + 3 availability + 2 distributor + 2 collection = 14
         links = feed["feed"]["links"]
         facet_links = [
             link for link in links if link["rel"] == "http://opds-spec.org/facet"
         ]
-        assert 11 == len(facet_links)
+        assert 14 == len(facet_links)
 
         # The facet link we care most about is the default sort order,
         # put into place by SeriesFacets.

@@ -47,9 +47,9 @@ class TestFacets:
         )
         all_groups = list(facets.facet_groups)
 
-        # By default, there are 10 facet transitions: two groups of three
-        # and 2 datasource groups and 2 for collection names
-        assert 10 == len(all_groups)
+        # By default, there are 13 facet transitions: 3 base order facets + 3 reverse variants,
+        # 3 availability facets, 2 datasource groups and 2 for collection names
+        assert 13 == len(all_groups)
 
         # available=all and order=title are the selected
         # facets.
@@ -76,16 +76,17 @@ class TestFacets:
         facets = Facets(db.default_library(), None, Facets.ORDER_TITLE, None, None)
         all_groups = list(facets.facet_groups)
         # We have disabled almost all the facets, so the list of
-        # facet transitions includes only two items.
+        # facet transitions includes only a few items.
         #
         # 'Sort by title' was selected, and it shows up as the selected
-        # item in this facet group.
+        # item in this facet group. Reverse variants are also included.
         expect = [
             ["collectionName", "All", True],
             ["collectionName", db.default_collection().name, False],
             ["distributor", "All", True],
             ["distributor", "OPDS", False],
             ["order", "title", True],
+            ["order", "title_desc", False],  # Reverse variant of title
             ["order", "work_id", False],
         ]
         assert expect == sorted(list(x[:2]) + [x[-2]] for x in all_groups)
@@ -214,7 +215,13 @@ class TestFacets:
             enabled_facets=enabled_facets,
         )
         all_groups = list(facets.facet_groups)
-        expect = [["order", "author", False], ["order", "title", True]]
+        # Each base order facet also includes its reverse variant
+        expect = [
+            ["order", "author", False],
+            ["order", "author_desc", False],  # Reverse variant
+            ["order", "title", True],
+            ["order", "title_desc", False],  # Reverse variant
+        ]
         assert expect == sorted(list(x[:2]) + [x[-2]] for x in all_groups)
 
     def test_facets_dont_need_a_library(self):
@@ -235,7 +242,13 @@ class TestFacets:
             enabled_facets=enabled_facets,
         )
         all_groups = list(facets.facet_groups)
-        expect = [["order", "author", False], ["order", "title", True]]
+        # Each base order facet also includes its reverse variant
+        expect = [
+            ["order", "author", False],
+            ["order", "author_desc", False],  # Reverse variant
+            ["order", "title", True],
+            ["order", "title_desc", False],  # Reverse variant
+        ]
         assert expect == sorted(list(x[:2]) + [x[-2]] for x in all_groups)
 
     def test_items(self, db: DatabaseTransactionFixture):
@@ -271,11 +284,13 @@ class TestFacets:
             assert True == f.order_ascending
 
         # But the time-based facets are ordered descending by default
-        # (newest->oldest)
+        # (newest->oldest), as are the reverse variants of alphabetical facets (Z->A)
         assert {
             Facets.ORDER_ADDED_TO_COLLECTION,
             Facets.ORDER_LAST_UPDATE,
             Facets.ORDER_LICENSE_POOL_LAST_UPDATED,
+            Facets.ORDER_TITLE_DESC,
+            Facets.ORDER_AUTHOR_DESC,
         } == set(Facets.ORDER_DESCENDING_BY_DEFAULT)
 
         for order in Facets.ORDER_DESCENDING_BY_DEFAULT:
@@ -639,6 +654,153 @@ class TestFacets:
             match="Unknown availability facet: invalid_availability_value",
         ):
             facets.modify_database_query(db.session, qu)
+
+    def test_reverse_order_direction(self, db: DatabaseTransactionFixture):
+        """Test that reverse order facets produce correct sort direction."""
+        # Reverse variants should be descending for alphabetical sorts
+        for order in (Facets.ORDER_TITLE_DESC, Facets.ORDER_AUTHOR_DESC):
+            f = Facets(
+                db.default_library(),
+                availability=Facets.AVAILABLE_ALL,
+                order=order,
+                distributor=None,
+                collection_name=None,
+            )
+            assert f.order_ascending is False
+
+        # Reverse variant for date sort should be ascending (oldest first)
+        f = Facets(
+            db.default_library(),
+            availability=Facets.AVAILABLE_ALL,
+            order=Facets.ORDER_ADDED_TO_COLLECTION_ASC,
+            distributor=None,
+            collection_name=None,
+        )
+        assert f.order_ascending is True
+
+    def test_facet_groups_yields_reverse_variants(self, db: DatabaseTransactionFixture):
+        """When a base facet is enabled, its reverse variant should also be yielded."""
+        facets = Facets(
+            library=db.default_library(),
+            availability=Facets.AVAILABLE_ALL,
+            order=Facets.ORDER_AUTHOR,
+            distributor=None,
+            collection_name=None,
+            enabled_facets={
+                Facets.ORDER_FACET_GROUP_NAME: [
+                    Facets.ORDER_AUTHOR,
+                    Facets.ORDER_TITLE,
+                ],
+                Facets.AVAILABILITY_FACET_GROUP_NAME: [Facets.AVAILABLE_ALL],
+                Facets.DISTRIBUTOR_FACETS_GROUP_NAME: [],
+                Facets.COLLECTION_NAME_FACETS_GROUP_NAME: [],
+            },
+        )
+
+        order_groups = [
+            fg
+            for fg in facets.facet_groups
+            if fg.group == Facets.ORDER_FACET_GROUP_NAME
+        ]
+        order_values = [fg.value for fg in order_groups]
+
+        # Should have both base facets and their reverse variants
+        assert Facets.ORDER_AUTHOR in order_values
+        assert Facets.ORDER_AUTHOR_DESC in order_values
+        assert Facets.ORDER_TITLE in order_values
+        assert Facets.ORDER_TITLE_DESC in order_values
+
+        # Reverse variants should never be marked as default
+        for fg in order_groups:
+            if fg.value in (
+                Facets.ORDER_AUTHOR_DESC,
+                Facets.ORDER_TITLE_DESC,
+                Facets.ORDER_ADDED_TO_COLLECTION_ASC,
+            ):
+                assert fg.is_default is False
+
+    def test_reverse_variant_selected_when_current(
+        self, db: DatabaseTransactionFixture
+    ):
+        """When current order is a reverse variant, it should be marked as selected."""
+        facets = Facets(
+            library=db.default_library(),
+            availability=Facets.AVAILABLE_ALL,
+            order=Facets.ORDER_AUTHOR_DESC,
+            distributor=None,
+            collection_name=None,
+            enabled_facets={
+                Facets.ORDER_FACET_GROUP_NAME: [
+                    Facets.ORDER_AUTHOR,
+                    Facets.ORDER_TITLE,
+                ],
+                Facets.AVAILABILITY_FACET_GROUP_NAME: [Facets.AVAILABLE_ALL],
+                Facets.DISTRIBUTOR_FACETS_GROUP_NAME: [],
+                Facets.COLLECTION_NAME_FACETS_GROUP_NAME: [],
+            },
+        )
+
+        order_groups = [
+            fg
+            for fg in facets.facet_groups
+            if fg.group == Facets.ORDER_FACET_GROUP_NAME
+        ]
+
+        author_desc_group = next(
+            fg for fg in order_groups if fg.value == Facets.ORDER_AUTHOR_DESC
+        )
+        assert author_desc_group.is_selected is True
+
+        author_group = next(
+            fg for fg in order_groups if fg.value == Facets.ORDER_AUTHOR
+        )
+        assert author_group.is_selected is False
+
+    def test_values_from_request_accepts_reverse_variants(
+        self, db: DatabaseTransactionFixture
+    ):
+        """When base facet is enabled, reverse variant should be accepted in requests."""
+        from unittest.mock import create_autospec
+
+        config = create_autospec(Library, instance=True)
+        config.enabled_facets.return_value = [
+            Facets.ORDER_AUTHOR,
+            Facets.ORDER_TITLE,
+        ]
+        config.default_facet.return_value = Facets.ORDER_AUTHOR
+
+        def get_argument(name: str, default: str | None) -> str | None:
+            if name == "order":
+                return Facets.ORDER_AUTHOR_DESC
+            return default
+
+        def get_header(name: str, default: str | None) -> str | None:
+            return default
+
+        result = Facets._values_from_request(config, get_argument, get_header)
+        assert isinstance(result, dict)
+        assert result["order"] == Facets.ORDER_AUTHOR_DESC
+
+    def test_values_from_request_rejects_reverse_variant_when_base_not_enabled(
+        self, db: DatabaseTransactionFixture
+    ):
+        """When base facet is not enabled, reverse variant should be rejected."""
+        from unittest.mock import create_autospec
+
+        config = create_autospec(Library, instance=True)
+        config.enabled_facets.return_value = [Facets.ORDER_TITLE]
+        config.default_facet.return_value = Facets.ORDER_TITLE
+
+        def get_argument(name: str, default: str | None) -> str | None:
+            if name == "order":
+                return Facets.ORDER_AUTHOR_DESC
+            return default
+
+        def get_header(name: str, default: str | None) -> str | None:
+            return default
+
+        result = Facets._values_from_request(config, get_argument, get_header)
+        assert not isinstance(result, dict)
 
 
 class TestDefaultSortOrderFacets:

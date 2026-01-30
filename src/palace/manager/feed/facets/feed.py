@@ -109,7 +109,13 @@ class Facets(FacetsWithEntryPoint):
         g = Facets.ORDER_FACET_GROUP_NAME
         order = get_argument(g, cls.default_facet(config, g))
         order_facets = cls.available_facets(config, g)
-        if order and not order in order_facets:
+        # Also accept reverse variants of enabled base facets
+        valid_order_facets = set(order_facets)
+        for base_facet in order_facets:
+            reverse = cls.ORDER_FACET_TO_REVERSE_VARIANT.get(base_facet)
+            if reverse:
+                valid_order_facets.add(reverse)
+        if order and order not in valid_order_facets:
             return INVALID_INPUT.detailed(
                 _("I don't know how to order a feed by '%(order)s'", order=order), 400
             )
@@ -348,7 +354,13 @@ class Facets(FacetsWithEntryPoint):
             return default_facet == facet
 
         # First, the order facets.
-        if len(order_facets) > 1:
+        # For each enabled base facet, also yield its reverse variant.
+        order_facet_values = list(order_facets)
+        for facet in order_facets:
+            reverse_facet = self.ORDER_FACET_TO_REVERSE_VARIANT.get(facet)
+            if reverse_facet:
+                order_facet_values.append(reverse_facet)
+        if len(set(order_facet_values)) > 1:
             group = self.ORDER_FACET_GROUP_NAME
             for facet in order_facets:
                 yield FacetGroup(
@@ -358,6 +370,16 @@ class Facets(FacetsWithEntryPoint):
                     is_selected=self.order == facet,
                     is_default=is_default_facet(facet, group),
                 )
+                # Yield the reverse variant if one exists
+                reverse_facet = self.ORDER_FACET_TO_REVERSE_VARIANT.get(facet)
+                if reverse_facet:
+                    yield FacetGroup(
+                        group=group,
+                        value=reverse_facet,
+                        facets=self.navigate(order=reverse_facet),
+                        is_selected=self.order == reverse_facet,
+                        is_default=False,  # Reverse variants are never the default
+                    )
 
         # Next, the availability facets.
         if len(availability_facets) > 1:
