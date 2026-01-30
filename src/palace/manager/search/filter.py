@@ -21,7 +21,6 @@ from palace.manager.core.classifier import Classifier
 from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.feed.facets.constants import FacetConstants
 from palace.manager.search.query_helpers import match_range
-from palace.manager.search.revision_directory import SearchRevisionDirectory
 from palace.manager.sqlalchemy.constants import IntegrationConfigurationConstants
 from palace.manager.sqlalchemy.model.contributor import Contributor
 from palace.manager.sqlalchemy.model.edition import Edition
@@ -59,7 +58,7 @@ class Filter:
     # When search results include known script fields, we need to
     # wrap the works we would be returning in WorkSearchResults so
     # the useful information from the search engine isn't lost.
-    KNOWN_SCRIPT_FIELDS = ["last_update"]
+    KNOWN_SCRIPT_FIELDS = []
 
     # In general, someone looking for things "by this person" is
     # probably looking for one of these roles.
@@ -617,23 +616,11 @@ class Filter:
             return "asc"
 
     def _make_order_field(self, key):
-        if key == "last_update_time":
-            # Sorting by last_update_time may be very simple or very
-            # complex, depending on whether or not the filter
-            # involves collection or list membership.
-            if self.collection_ids or self.customlist_restriction_sets:
-                # The complex case -- use a helper method.
-                return self._last_update_time_order_by
-            else:
-                # The simple case, handled below.
-                pass
-
         if "." not in key:
             # A simple case.
             return {key: self.asc}
 
         # At this point we're sorting by a nested field.
-        nested = None
         if key == "licensepools.availability_time":
             nested, mode = self._availability_time_sort_order
         elif key == "licensepools.last_updated":
@@ -676,56 +663,6 @@ class Filter:
             )
         mode = "max"
         return nested, mode
-
-    @property
-    def last_update_time_script_field(self):
-        """Return the configuration for a script field that calculates the
-        'last update' time of a work. An 'update' happens when the
-        work's metadata is changed, when it's added to a collection
-        used by this Filter, or when it's added to one of the lists
-        used by this Filter.
-        """
-        # First, set up the parameters we're going to pass into the
-        # script -- a list of custom list IDs relevant to this filter,
-        # and a list of collection IDs relevant to this filter.
-        collection_ids = self._filter_ids(self.collection_ids)
-
-        # The different restriction sets don't matter here. The filter
-        # part of the query ensures that we only match works present
-        # on one list in every restriction set. Here, we need to find
-        # the latest time a work was added to _any_ relevant list.
-        all_list_ids = set()
-        for restriction in self.customlist_restriction_sets:
-            all_list_ids.update(self._filter_ids(restriction))
-        nested = dict(
-            path="customlists",
-            filter=dict(terms={"customlists.list_id": list(all_list_ids)}),
-        )
-        params = dict(collection_ids=collection_ids, list_ids=list(all_list_ids))
-        # Messy, but this is the only way to get the "current mapping" for the index
-        script_name = (
-            SearchRevisionDirectory.create().highest().script_name("work_last_update")
-        )
-        return dict(script=dict(stored=script_name, params=params))
-
-    @property
-    def _last_update_time_order_by(self):
-        """We're sorting works by the time of their 'last update'.
-
-        Add the 'last update' field to the dictionary of script fields
-        (so we can use the result afterwards), and define it a second
-        time as the script to use for a sort value.
-        """
-        field = self.last_update_time_script_field
-        if not "last_update" in self.script_fields:
-            self.script_fields["last_update"] = field
-        return dict(
-            _script=dict(
-                type="number",
-                script=field["script"],
-                order=self.asc,
-            ),
-        )
 
     # The Painless script to generate a 'featurability' score for
     # a work.
