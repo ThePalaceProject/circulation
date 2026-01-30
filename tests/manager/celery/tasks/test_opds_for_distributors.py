@@ -11,12 +11,17 @@ from palace.manager.integration.license.opds.for_distributors.api import (
 from palace.manager.integration.license.opds.for_distributors.settings import (
     OPDSForDistributorsSettings,
 )
+from palace.manager.integration.license.opds.for_distributors.utils import (
+    STREAMING_MEDIA_LINK_TYPE,
+)
 from palace.manager.integration.license.opds.opds2.api import OPDS2API
 from palace.manager.opds.authentication import Authentication, AuthenticationDocument
 from palace.manager.opds.opds2 import Link
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.licensing import (
     DeliveryMechanism,
+    LicensePool,
+    LicensePoolDeliveryMechanism,
     LicensePoolType,
     RightsStatus,
 )
@@ -109,6 +114,26 @@ def opds_for_distributors_import_fixture(
 
 
 class TestImportCollection:
+    @staticmethod
+    def get_link_url(pool: LicensePool, rel: str, media_type: str) -> str | None:
+        links = [
+            l
+            for l in pool.identifier.links
+            if l.rel == rel and l.resource.representation.media_type == media_type
+        ]
+
+        if len(links) != 1:
+            return None
+
+        return links[0].resource.representation.url
+
+    @staticmethod
+    def sorted_mechanisms(pool: LicensePool) -> list[LicensePoolDeliveryMechanism]:
+        return sorted(
+            pool.delivery_mechanisms,
+            key=lambda x: x.delivery_mechanism.content_type or "",
+        )
+
     @freeze_time()
     def test_import(
         self, opds_for_distributors_import_fixture: OPDSForDistributorsImportFixture
@@ -143,87 +168,213 @@ class TestImportCollection:
         [shogun_pool] = shogun.license_pools
         now = utc_now()
 
-        for pool in [camelot_pool, southern_pool, camelot_audio_pool, shogun_pool]:
-            assert pool.open_access is False
-            assert (
-                pool.delivery_mechanisms[0].rights_status.uri
-                == RightsStatus.IN_COPYRIGHT
-            )
-            assert (
-                pool.delivery_mechanisms[0].delivery_mechanism.drm_scheme
-                == DeliveryMechanism.BEARER_TOKEN
-            )
-            assert pool.type == LicensePoolType.UNLIMITED
-            assert pool.work.last_update_time == now
+        # -- Test the Camelot license pool --
+        assert camelot_pool.open_access is False
+        assert camelot_pool.type == LicensePoolType.UNLIMITED
+        assert camelot_pool.work.last_update_time == now
+        assert camelot_pool.should_track_playtime is False
 
-        # The ebooks have the correct delivery mechanism, and they don't track playtime
-        for pool in [camelot_pool, southern_pool]:
-            assert (
-                pool.delivery_mechanisms[0].delivery_mechanism.content_type
-                == Representation.EPUB_MEDIA_TYPE
-            )
-            assert pool.should_track_playtime is False
+        # Test its delivery mechanisms
+        [streaming_mechanism, epub_mechanism] = self.sorted_mechanisms(camelot_pool)
 
-        # The audiobooks have the correct delivery mechanism
-        for pool in [camelot_audio_pool, shogun_pool]:
-            assert (
-                pool.delivery_mechanisms[0].delivery_mechanism.content_type
-                == Representation.AUDIOBOOK_MANIFEST_MEDIA_TYPE
-            )
-
-        # The camelot audiobook does not track playtime
-        assert camelot_audio_pool.should_track_playtime is False
-
-        # The shogun audiobook does track playtime
-        assert shogun_pool.should_track_playtime is True
-
-        [camelot_audio_acquisition_link] = [
-            l
-            for l in camelot_audio_pool.identifier.links
-            if l.rel == Hyperlink.GENERIC_OPDS_ACQUISITION
-            and l.resource.representation.media_type
-            == Representation.AUDIOBOOK_MANIFEST_MEDIA_TYPE
-        ]
+        # The epub with bearer token DRM
+        assert epub_mechanism.rights_status.uri == RightsStatus.IN_COPYRIGHT
         assert (
-            camelot_audio_acquisition_link.resource.representation.url
-            == "https://library.biblioboard.com/ext/api/media/04377e87-ab69-41c8-a2a4-812d55dc0953/assets/content.json"
+            epub_mechanism.delivery_mechanism.drm_scheme
+            == DeliveryMechanism.BEARER_TOKEN
+        )
+        assert (
+            epub_mechanism.delivery_mechanism.content_type
+            == Representation.EPUB_MEDIA_TYPE
         )
 
-        [shogun_acquisition_link] = [
-            l
-            for l in shogun_pool.identifier.links
-            if l.rel == Hyperlink.GENERIC_OPDS_ACQUISITION
-            and l.resource.representation.media_type
-            == Representation.AUDIOBOOK_MANIFEST_MEDIA_TYPE
-        ]
         assert (
-            shogun_acquisition_link.resource.representation.url
-            == "https://catalog.biblioboard.com/opds/items/12905232-0b38-4c3f-a1f3-1a3a34db0011/manifest.json"
+            epub_mechanism.resource.url
+            == "https://library.biblioboard.com/ext/api/media/04377e87-ab69-41c8-a2a4-812d55dc0952/assets/content.epub"
         )
-
-        [camelot_acquisition_link] = [
-            l
-            for l in camelot_pool.identifier.links
-            if l.rel == Hyperlink.GENERIC_OPDS_ACQUISITION
-            and l.resource.representation.media_type == Representation.EPUB_MEDIA_TYPE
-        ]
-        camelot_acquisition_url = camelot_acquisition_link.resource.representation.url
         assert (
-            camelot_acquisition_url
+            self.get_link_url(
+                camelot_pool,
+                Hyperlink.GENERIC_OPDS_ACQUISITION,
+                Representation.EPUB_MEDIA_TYPE,
+            )
             == "https://library.biblioboard.com/ext/api/media/04377e87-ab69-41c8-a2a4-812d55dc0952/assets/content.epub"
         )
 
-        [southern_acquisition_link] = [
-            l
-            for l in southern_pool.identifier.links
-            if l.rel == Hyperlink.GENERIC_OPDS_ACQUISITION
-            and l.resource.representation.media_type == Representation.EPUB_MEDIA_TYPE
-        ]
-        southern_acquisition_url = southern_acquisition_link.resource.representation.url
+        # The streaming mechanism with streaming DRM
+        assert streaming_mechanism.rights_status.uri == RightsStatus.IN_COPYRIGHT
         assert (
-            southern_acquisition_url
+            streaming_mechanism.delivery_mechanism.drm_scheme
+            == DeliveryMechanism.STREAMING_DRM
+        )
+        assert (
+            streaming_mechanism.delivery_mechanism.content_type
+            == DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE
+        )
+
+        assert (
+            streaming_mechanism.resource.url
+            == "https://library.biblioboard.com/viewer/04377e87-ab69-41c8-a2a4-812d55dc0952"
+        )
+        assert (
+            self.get_link_url(
+                camelot_pool,
+                Hyperlink.GENERIC_OPDS_ACQUISITION,
+                STREAMING_MEDIA_LINK_TYPE,
+            )
+            == "https://library.biblioboard.com/viewer/04377e87-ab69-41c8-a2a4-812d55dc0952"
+        )
+
+        # -- Test the southern license pool --
+        assert southern_pool.open_access is False
+        assert southern_pool.type == LicensePoolType.UNLIMITED
+        assert southern_pool.work.last_update_time == now
+        assert southern_pool.should_track_playtime is False
+
+        # Test its delivery mechanisms
+        [streaming_mechanism, epub_mechanism] = self.sorted_mechanisms(southern_pool)
+
+        # The epub with bearer token DRM
+        assert epub_mechanism.rights_status.uri == RightsStatus.IN_COPYRIGHT
+        assert (
+            epub_mechanism.delivery_mechanism.drm_scheme
+            == DeliveryMechanism.BEARER_TOKEN
+        )
+        assert (
+            epub_mechanism.delivery_mechanism.content_type
+            == Representation.EPUB_MEDIA_TYPE
+        )
+
+        assert (
+            epub_mechanism.resource.url
             == "https://library.biblioboard.com/ext/api/media/04da95cd-6cfc-4e82-810f-121d418b6963/assets/content.epub"
         )
+        assert (
+            self.get_link_url(
+                southern_pool,
+                Hyperlink.GENERIC_OPDS_ACQUISITION,
+                Representation.EPUB_MEDIA_TYPE,
+            )
+            == "https://library.biblioboard.com/ext/api/media/04da95cd-6cfc-4e82-810f-121d418b6963/assets/content.epub"
+        )
+
+        # The streaming mechanism with streaming DRM
+        assert streaming_mechanism.rights_status.uri == RightsStatus.IN_COPYRIGHT
+        assert (
+            streaming_mechanism.delivery_mechanism.drm_scheme
+            == DeliveryMechanism.STREAMING_DRM
+        )
+        assert (
+            streaming_mechanism.delivery_mechanism.content_type
+            == DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE
+        )
+
+        assert (
+            streaming_mechanism.resource.url
+            == "https://library.biblioboard.com/viewer/04da95cd-6cfc-4e82-810f-121d418b6963"
+        )
+        assert (
+            self.get_link_url(
+                southern_pool,
+                Hyperlink.GENERIC_OPDS_ACQUISITION,
+                STREAMING_MEDIA_LINK_TYPE,
+            )
+            == "https://library.biblioboard.com/viewer/04da95cd-6cfc-4e82-810f-121d418b6963"
+        )
+
+        # -- Test the camelot audio license pool --
+        assert camelot_audio_pool.open_access is False
+        assert camelot_audio_pool.type == LicensePoolType.UNLIMITED
+        assert camelot_audio_pool.work.last_update_time == now
+        assert camelot_audio_pool.should_track_playtime is False
+
+        # Test its delivery mechanisms
+        [streaming_mechanism, audio_mechanism] = self.sorted_mechanisms(
+            camelot_audio_pool
+        )
+
+        # The audiobook manifest with bearer token DRM
+        assert audio_mechanism.rights_status.uri == RightsStatus.IN_COPYRIGHT
+        assert (
+            audio_mechanism.delivery_mechanism.drm_scheme
+            == DeliveryMechanism.BEARER_TOKEN
+        )
+        assert (
+            audio_mechanism.delivery_mechanism.content_type
+            == Representation.AUDIOBOOK_MANIFEST_MEDIA_TYPE
+        )
+
+        assert (
+            audio_mechanism.resource.url
+            == "https://library.biblioboard.com/ext/api/media/04377e87-ab69-41c8-a2a4-812d55dc0953/assets/content.json"
+        )
+        assert (
+            self.get_link_url(
+                camelot_audio_pool,
+                Hyperlink.GENERIC_OPDS_ACQUISITION,
+                Representation.AUDIOBOOK_MANIFEST_MEDIA_TYPE,
+            )
+            == "https://library.biblioboard.com/ext/api/media/04377e87-ab69-41c8-a2a4-812d55dc0953/assets/content.json"
+        )
+
+        # The streaming mechanism with streaming DRM
+        assert streaming_mechanism.rights_status.uri == RightsStatus.IN_COPYRIGHT
+        assert (
+            streaming_mechanism.delivery_mechanism.drm_scheme
+            == DeliveryMechanism.STREAMING_DRM
+        )
+        assert (
+            streaming_mechanism.delivery_mechanism.content_type
+            == DeliveryMechanism.STREAMING_AUDIO_CONTENT_TYPE
+        )
+
+        assert (
+            streaming_mechanism.resource.url
+            == "https://library.biblioboard.com/viewer/04377e87-ab69-41c8-a2a4-812d55dc0953"
+        )
+        assert (
+            self.get_link_url(
+                camelot_audio_pool,
+                Hyperlink.GENERIC_OPDS_ACQUISITION,
+                STREAMING_MEDIA_LINK_TYPE,
+            )
+            == "https://library.biblioboard.com/viewer/04377e87-ab69-41c8-a2a4-812d55dc0953"
+        )
+
+        # -- Test the shogun audio license pool --
+        assert shogun_pool.open_access is False
+        assert shogun_pool.type == LicensePoolType.UNLIMITED
+        assert shogun_pool.work.last_update_time == now
+        assert shogun_pool.should_track_playtime is True
+
+        # Test its delivery mechanisms
+        [audio_mechanism] = self.sorted_mechanisms(shogun_pool)
+
+        # The audiobook manifest with bearer token DRM
+        assert audio_mechanism.rights_status.uri == RightsStatus.IN_COPYRIGHT
+        assert (
+            audio_mechanism.delivery_mechanism.drm_scheme
+            == DeliveryMechanism.BEARER_TOKEN
+        )
+        assert (
+            audio_mechanism.delivery_mechanism.content_type
+            == Representation.AUDIOBOOK_MANIFEST_MEDIA_TYPE
+        )
+
+        assert (
+            audio_mechanism.resource.url
+            == "https://catalog.biblioboard.com/opds/items/12905232-0b38-4c3f-a1f3-1a3a34db0011/manifest.json"
+        )
+        assert (
+            self.get_link_url(
+                shogun_pool,
+                Hyperlink.GENERIC_OPDS_ACQUISITION,
+                Representation.AUDIOBOOK_MANIFEST_MEDIA_TYPE,
+            )
+            == "https://catalog.biblioboard.com/opds/items/12905232-0b38-4c3f-a1f3-1a3a34db0011/manifest.json"
+        )
+
+        # This pool has no streaming mechanism
 
 
 class TestImportAll:

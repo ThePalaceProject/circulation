@@ -19,6 +19,9 @@ from palace.manager.integration.license.opds.for_distributors.api import (
 from palace.manager.integration.license.opds.for_distributors.settings import (
     OPDSForDistributorsSettings,
 )
+from palace.manager.integration.license.opds.for_distributors.utils import (
+    STREAMING_MEDIA_LINK_TYPE,
+)
 from palace.manager.integration.license.opds.requests import OAuthOpdsRequest
 from palace.manager.integration.license.overdrive.api import OverdriveAPI
 from palace.manager.sqlalchemy.constants import MediaTypes
@@ -398,32 +401,21 @@ class TestOPDSForDistributorsAPI:
         )
 
         # Set up a streaming delivery mechanism
-        pool.set_delivery_mechanism(
+        delivery_mechanism = pool.set_delivery_mechanism(
             DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE,
             DeliveryMechanism.STREAMING_DRM,
             RightsStatus.IN_COPYRIGHT,
             None,
         )
 
-        # Find the streaming delivery mechanism
-        delivery_mechanism = None
-        for mechanism in pool.delivery_mechanisms:
-            if (
-                mechanism.delivery_mechanism.drm_scheme
-                == DeliveryMechanism.STREAMING_DRM
-            ):
-                delivery_mechanism = mechanism
-        assert delivery_mechanism is not None
-
         # This pool doesn't have an acquisition link yet, so fulfillment should fail
-        pytest.raises(
-            CannotFulfill,
-            opds_dist_api_fixture.api.fulfill,
-            patron,
-            "1234",
-            pool,
-            delivery_mechanism,
-        )
+        with pytest.raises(CannotFulfill):
+            opds_dist_api_fixture.api.fulfill(
+                patron,
+                "1234",
+                pool,
+                delivery_mechanism,
+            )
 
         # Set up a streaming acquisition link
         viewer_url = "https://library.biblioboard.com/viewer/book/12345"
@@ -431,7 +423,7 @@ class TestOPDSForDistributorsAPI:
             Hyperlink.GENERIC_OPDS_ACQUISITION,
             viewer_url,
             data_source,
-            DeliveryMechanism.STREAMING_MEDIA_LINK_TYPE,
+            STREAMING_MEDIA_LINK_TYPE,
         )
         delivery_mechanism.resource = link.resource
 
@@ -453,9 +445,10 @@ class TestOPDSForDistributorsAPI:
 
         # Verify we got a StreamingFulfillment
         assert isinstance(fulfillment, StreamingFulfillment)
-        assert "token=streaming_token" in fulfillment.content_link
-        assert fulfillment.content_link.startswith(viewer_url)
-        # StreamingFulfillment appends the streaming profile to the content type
+        assert (
+            fulfillment.content_link
+            == "https://library.biblioboard.com/viewer/book/12345?token=streaming_token"
+        )
         assert fulfillment.content_type == (
             MediaTypes.TEXT_HTML_MEDIA_TYPE + DeliveryMechanism.STREAMING_PROFILE
         )

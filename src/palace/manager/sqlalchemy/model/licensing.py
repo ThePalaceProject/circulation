@@ -1710,10 +1710,6 @@ class DeliveryMechanism(Base, HasSessionCache):
         "http://librarysimplified.org/terms/profiles/streaming-media"
     )
     STREAMING_PROFILE = f';profile="{STREAMING_MEDIA_PROFILE_URI}"'
-    # The exact media type used in OPDS feed links for streaming content.
-    STREAMING_MEDIA_LINK_TYPE = (
-        f"{MediaTypes.TEXT_HTML_MEDIA_TYPE};profile={STREAMING_MEDIA_PROFILE_URI}"
-    )
     MEDIA_TYPES_FOR_STREAMING = {
         STREAMING_TEXT_CONTENT_TYPE: MediaTypes.TEXT_HTML_MEDIA_TYPE,
         STREAMING_AUDIO_CONTENT_TYPE: MediaTypes.TEXT_HTML_MEDIA_TYPE,

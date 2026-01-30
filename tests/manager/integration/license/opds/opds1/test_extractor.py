@@ -15,7 +15,7 @@ from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.contributor import Contributor
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
-from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism, RightsStatus
+from palace.manager.sqlalchemy.model.licensing import RightsStatus
 from palace.manager.sqlalchemy.model.measurement import Measurement
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
 from palace.manager.util import first_or_default
@@ -409,90 +409,3 @@ class TestOPDS1Extractor:
         i1, i2 = links
         assert i1.thumbnail == t1
         assert i2.thumbnail is None
-
-    def test_publication_bibliographic_streaming_format(
-        self, db: DatabaseTransactionFixture
-    ) -> None:
-        """Test that streaming links are detected and create correct FormatData."""
-        streaming_profile = DeliveryMechanism.STREAMING_MEDIA_PROFILE_URI
-        feed_content = f"""<?xml version="1.0" encoding="UTF-8"?>
-<feed xmlns="http://www.w3.org/2005/Atom"
-      xmlns:dcterms="http://purl.org/dc/terms/">
-  <id>http://example.com/feed</id>
-  <title>Test Feed</title>
-  <entry>
-    <id>http://example.com/books/streaming-book-1</id>
-    <title>Streaming Book</title>
-    <link rel="http://opds-spec.org/acquisition"
-          type="text/html;profile={streaming_profile}"
-          href="https://library.biblioboard.com/viewer/book/12345" />
-  </entry>
-</feed>""".encode()
-
-        extractor = Opds1Extractor(
-            "http://example.com/feed",
-            "Test Data Source",
-            opds_for_distributors=True,
-        )
-
-        feed = extractor.feed_parse(feed_content)
-        publications = list(extractor.feed_publications(feed))
-        assert len(publications) == 1
-
-        identifier = extractor.publication_identifier(publications[0])
-        bibliographic = extractor.publication_bibliographic(identifier, publications[0])
-
-        # The streaming link should create a FormatData with STREAMING_DRM
-        circulation = bibliographic.circulation
-        assert circulation is not None
-        assert len(circulation.formats) == 1
-
-        format_data = circulation.formats[0]
-        assert format_data.drm_scheme == DeliveryMechanism.STREAMING_DRM
-        assert format_data.content_type == DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE
-        assert format_data.rights_uri == RightsStatus.IN_COPYRIGHT
-
-    def test_publication_bibliographic_streaming_audio_format(
-        self, db: DatabaseTransactionFixture
-    ) -> None:
-        """Test that audio streaming links use STREAMING_AUDIO_CONTENT_TYPE."""
-        streaming_profile = DeliveryMechanism.STREAMING_MEDIA_PROFILE_URI
-        feed_content = f"""<?xml version="1.0" encoding="UTF-8"?>
-<feed xmlns="http://www.w3.org/2005/Atom"
-      xmlns:dcterms="http://purl.org/dc/terms/"
-      xmlns:schema="http://schema.org/">
-  <id>http://example.com/feed</id>
-  <title>Test Feed</title>
-  <entry schema:additionalType="http://bib.schema.org/Audiobook">
-    <id>http://example.com/books/streaming-audiobook-1</id>
-    <title>Streaming Audiobook</title>
-    <link rel="http://opds-spec.org/acquisition"
-          type="text/html;profile={streaming_profile}"
-          href="https://library.biblioboard.com/viewer/audiobook/12345" />
-  </entry>
-</feed>""".encode()
-
-        extractor = Opds1Extractor(
-            "http://example.com/feed",
-            "Test Data Source",
-            opds_for_distributors=True,
-        )
-
-        feed = extractor.feed_parse(feed_content)
-        publications = list(extractor.feed_publications(feed))
-        assert len(publications) == 1
-
-        identifier = extractor.publication_identifier(publications[0])
-        bibliographic = extractor.publication_bibliographic(identifier, publications[0])
-
-        # The streaming link should create a FormatData with STREAMING_AUDIO_CONTENT_TYPE
-        circulation = bibliographic.circulation
-        assert circulation is not None
-        assert len(circulation.formats) == 1
-
-        format_data = circulation.formats[0]
-        assert format_data.drm_scheme == DeliveryMechanism.STREAMING_DRM
-        assert (
-            format_data.content_type == DeliveryMechanism.STREAMING_AUDIO_CONTENT_TYPE
-        )
-        assert format_data.rights_uri == RightsStatus.IN_COPYRIGHT
