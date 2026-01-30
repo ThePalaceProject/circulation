@@ -1023,3 +1023,193 @@ class TestOIDCAuthenticationManagerLogout:
 
             assert claims["sub"] == "user123"
             assert claims["email"] == "testuser@example.com"
+
+
+class TestOIDCAuthenticationManagerBackChannelLogout:
+    """Tests for OIDC back-channel logout functionality."""
+
+    def test_validate_logout_token_success(
+        self,
+        oidc_settings_with_discovery,
+        redis_fixture,
+        mock_logout_token,
+        mock_discovery_document,
+        mock_jwks,
+    ):
+        """Test successful validation of back-channel logout token."""
+        manager = OIDCAuthenticationManager(
+            settings=oidc_settings_with_discovery,
+            redis_client=redis_fixture.client,
+        )
+
+        with patch("httpx.get") as mock_get:
+
+            def mock_get_side_effect(url, **kwargs):
+                response = Mock()
+                response.raise_for_status = Mock()
+                if "jwks" in str(url):
+                    response.json.return_value = mock_jwks
+                else:
+                    response.json.return_value = mock_discovery_document
+                return response
+
+            mock_get.side_effect = mock_get_side_effect
+
+            claims = manager.validate_logout_token(mock_logout_token)
+
+            assert claims["sub"] == "user123"
+            assert "events" in claims
+            assert "jti" in claims
+            assert "iat" in claims
+            assert "nonce" not in claims
+
+    def test_validate_logout_token_with_nonce_fails(
+        self,
+        oidc_settings_with_discovery,
+        redis_fixture,
+        oidc_test_keys,
+        mock_logout_token_claims,
+        mock_discovery_document,
+        mock_jwks,
+    ):
+        """Test that logout token with nonce claim is rejected."""
+        manager = OIDCAuthenticationManager(
+            settings=oidc_settings_with_discovery,
+            redis_client=redis_fixture.client,
+        )
+
+        # Create invalid logout token with nonce
+        invalid_claims = mock_logout_token_claims.copy()
+        invalid_claims["nonce"] = "invalid-nonce"
+        invalid_token = oidc_test_keys.sign_jwt(invalid_claims)
+
+        with patch("httpx.get") as mock_get:
+
+            def mock_get_side_effect(url, **kwargs):
+                response = Mock()
+                response.raise_for_status = Mock()
+                if "jwks" in str(url):
+                    response.json.return_value = mock_jwks
+                else:
+                    response.json.return_value = mock_discovery_document
+                return response
+
+            mock_get.side_effect = mock_get_side_effect
+
+            with pytest.raises(
+                OIDCAuthenticationError, match="must not contain 'nonce' claim"
+            ):
+                manager.validate_logout_token(invalid_token)
+
+    def test_validate_logout_token_missing_events_fails(
+        self,
+        oidc_settings_with_discovery,
+        redis_fixture,
+        oidc_test_keys,
+        mock_logout_token_claims,
+        mock_discovery_document,
+        mock_jwks,
+    ):
+        """Test that logout token without events claim is rejected."""
+        manager = OIDCAuthenticationManager(
+            settings=oidc_settings_with_discovery,
+            redis_client=redis_fixture.client,
+        )
+
+        # Create invalid logout token without events
+        invalid_claims = mock_logout_token_claims.copy()
+        del invalid_claims["events"]
+        invalid_token = oidc_test_keys.sign_jwt(invalid_claims)
+
+        with patch("httpx.get") as mock_get:
+
+            def mock_get_side_effect(url, **kwargs):
+                response = Mock()
+                response.raise_for_status = Mock()
+                if "jwks" in str(url):
+                    response.json.return_value = mock_jwks
+                else:
+                    response.json.return_value = mock_discovery_document
+                return response
+
+            mock_get.side_effect = mock_get_side_effect
+
+            with pytest.raises(OIDCAuthenticationError, match="missing 'events' claim"):
+                manager.validate_logout_token(invalid_token)
+
+    def test_validate_logout_token_missing_sub_and_sid_fails(
+        self,
+        oidc_settings_with_discovery,
+        redis_fixture,
+        oidc_test_keys,
+        mock_logout_token_claims,
+        mock_discovery_document,
+        mock_jwks,
+    ):
+        """Test that logout token without sub or sid is rejected."""
+        manager = OIDCAuthenticationManager(
+            settings=oidc_settings_with_discovery,
+            redis_client=redis_fixture.client,
+        )
+
+        # Create invalid logout token without sub or sid
+        invalid_claims = mock_logout_token_claims.copy()
+        del invalid_claims["sub"]
+        if "sid" in invalid_claims:
+            del invalid_claims["sid"]
+        invalid_token = oidc_test_keys.sign_jwt(invalid_claims)
+
+        with patch("httpx.get") as mock_get:
+
+            def mock_get_side_effect(url, **kwargs):
+                response = Mock()
+                response.raise_for_status = Mock()
+                if "jwks" in str(url):
+                    response.json.return_value = mock_jwks
+                else:
+                    response.json.return_value = mock_discovery_document
+                return response
+
+            mock_get.side_effect = mock_get_side_effect
+
+            with pytest.raises(
+                OIDCAuthenticationError,
+                match="must contain either 'sub' or 'sid' claim",
+            ):
+                manager.validate_logout_token(invalid_token)
+
+    def test_validate_logout_token_missing_jti_fails(
+        self,
+        oidc_settings_with_discovery,
+        redis_fixture,
+        oidc_test_keys,
+        mock_logout_token_claims,
+        mock_discovery_document,
+        mock_jwks,
+    ):
+        """Test that logout token without jti is rejected."""
+        manager = OIDCAuthenticationManager(
+            settings=oidc_settings_with_discovery,
+            redis_client=redis_fixture.client,
+        )
+
+        # Create invalid logout token without jti
+        invalid_claims = mock_logout_token_claims.copy()
+        del invalid_claims["jti"]
+        invalid_token = oidc_test_keys.sign_jwt(invalid_claims)
+
+        with patch("httpx.get") as mock_get:
+
+            def mock_get_side_effect(url, **kwargs):
+                response = Mock()
+                response.raise_for_status = Mock()
+                if "jwks" in str(url):
+                    response.json.return_value = mock_jwks
+                else:
+                    response.json.return_value = mock_discovery_document
+                return response
+
+            mock_get.side_effect = mock_get_side_effect
+
+            with pytest.raises(OIDCAuthenticationError, match="missing 'jti' claim"):
+                manager.validate_logout_token(invalid_token)

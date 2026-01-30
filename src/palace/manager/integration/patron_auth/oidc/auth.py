@@ -24,6 +24,7 @@ from palace.manager.integration.patron_auth.oidc.util import (
     OIDCUtility,
 )
 from palace.manager.integration.patron_auth.oidc.validator import (
+    OIDCTokenClaimsError,
     OIDCTokenValidator,
 )
 from palace.manager.service.redis.redis import Redis
@@ -423,6 +424,86 @@ class OIDCAuthenticationManager(LoggerMixin):
         :return: Decoded ID token claims
         """
         return self.validate_id_token(id_token, nonce=None)
+
+    def validate_logout_token(self, logout_token: str) -> dict[str, Any]:
+        """Validate OIDC back-channel logout token.
+
+        Logout tokens are similar to ID tokens but with specific requirements:
+        - Must NOT contain 'nonce' claim
+        - Must contain 'events' claim with back-channel logout event
+        - Must contain either 'sub' or 'sid' claim
+        - Must contain 'iat', 'jti' claims
+
+        :param logout_token: Logout token JWT from provider
+        :raises OIDCAuthenticationError: If validation fails
+        :return: Decoded logout token claims
+        """
+        try:
+            # Try to validate as ID token (requires 'sub')
+            claims = self.validate_id_token(logout_token, nonce=None)
+        except OIDCTokenClaimsError as e:
+            # If validation failed due to missing 'sub', validate signature only and check for 'sid'
+            if "Missing required claim: 'sub'" in str(e):
+                # Get JWKS and validate signature
+                metadata = self.get_provider_metadata()
+                jwks_uri = metadata["jwks_uri"]
+                jwks = self._utility.fetch_jwks(HttpUrl(jwks_uri))
+
+                # Validate signature only (this decodes the token)
+                claims = self._validator.validate_signature(logout_token, jwks)
+
+                # Check if 'sid' is present
+                if "sid" not in claims:
+                    # Neither 'sub' nor 'sid' present
+                    raise OIDCAuthenticationError(
+                        "Logout token must contain either 'sub' or 'sid' claim"
+                    ) from e
+
+                # Manually validate the required claims (without requiring 'sub')
+                expected_issuer = metadata.get(
+                    "issuer", str(self._settings.issuer_url or "manual")
+                )
+                if claims.get("iss") != expected_issuer:
+                    raise OIDCAuthenticationError(
+                        f"Invalid issuer: expected {expected_issuer}, got {claims.get('iss')}"
+                    ) from e
+                if claims.get("aud") != self._settings.client_id:
+                    raise OIDCAuthenticationError(
+                        f"Invalid audience: expected {self._settings.client_id}, got {claims.get('aud')}"
+                    ) from e
+            else:
+                # Other validation error, re-raise
+                raise OIDCAuthenticationError(f"Invalid logout token: {e}") from e
+
+        # Additional validation for logout tokens
+        if "nonce" in claims:
+            raise OIDCAuthenticationError("Logout token must not contain 'nonce' claim")
+
+        events = claims.get("events")
+        if not events:
+            raise OIDCAuthenticationError("Logout token missing 'events' claim")
+
+        # Check for back-channel logout event
+        backchannel_logout_event = "http://schemas.openid.net/event/backchannel-logout"
+        if backchannel_logout_event not in events:
+            raise OIDCAuthenticationError(
+                f"Logout token missing '{backchannel_logout_event}' event"
+            )
+
+        # Must contain either 'sub' or 'sid'
+        if "sub" not in claims and "sid" not in claims:
+            raise OIDCAuthenticationError(
+                "Logout token must contain either 'sub' or 'sid' claim"
+            )
+
+        # Must contain 'iat' and 'jti'
+        if "iat" not in claims:
+            raise OIDCAuthenticationError("Logout token missing 'iat' claim")
+
+        if "jti" not in claims:
+            raise OIDCAuthenticationError("Logout token missing 'jti' claim")
+
+        return claims
 
 
 class OIDCAuthenticationManagerFactory:

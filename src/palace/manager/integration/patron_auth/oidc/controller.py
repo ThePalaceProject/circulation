@@ -59,6 +59,20 @@ OIDC_INVALID_ID_TOKEN_HINT = pd(
     detail=_("The ID token hint is missing or invalid."),
 )
 
+OIDC_INVALID_LOGOUT_TOKEN = pd(
+    "http://palaceproject.io/terms/problem/auth/unrecoverable/oidc/invalid-logout-token",
+    status_code=400,
+    title=_("Invalid logout token."),
+    detail=_("The logout token is missing or invalid."),
+)
+
+OIDC_BACKCHANNEL_LOGOUT_NOT_SUPPORTED = pd(
+    "http://palaceproject.io/terms/problem/auth/unrecoverable/oidc/backchannel-logout-not-supported",
+    status_code=501,
+    title=_("Back-channel logout not supported."),
+    detail=_("The OIDC provider does not support back-channel logout."),
+)
+
 
 class OIDCController:
     """Controller for handling OIDC authentication requests."""
@@ -73,6 +87,7 @@ class OIDCController:
     ID_TOKEN_HINT = "id_token_hint"
     POST_LOGOUT_REDIRECT_URI = "post_logout_redirect_uri"
     LOGOUT_STATUS = "logout_status"
+    LOGOUT_TOKEN = "logout_token"
 
     def __init__(
         self, circulation_manager: CirculationManager, authenticator: Authenticator
@@ -479,3 +494,76 @@ class OIDCController:
         final_redirect_uri = self._add_params_to_url(redirect_uri, result_params)
 
         return redirect(final_redirect_uri)
+
+    def oidc_backchannel_logout(
+        self, request_form: dict[str, str], db: Session
+    ) -> tuple[str, int]:
+        """Handle OIDC back-channel logout request from provider.
+
+        :param request_form: POST form data from OIDC provider
+        :param db: Database session
+        :return: Tuple of (response body, status code)
+        """
+        logout_token = request_form.get(self.LOGOUT_TOKEN)
+
+        if not logout_token:
+            self._logger.warning("Back-channel logout request missing logout_token")
+            return "", 400
+
+        # We need to determine which provider sent this logout token
+        # Try all configured OIDC providers until we find one that can validate the token
+        for (
+            library_authenticator
+        ) in self._authenticator.library_authenticators.values():
+            # Get all OIDC providers for this library
+            for provider in library_authenticator.providers:
+                # Skip non-OIDC providers
+                if not hasattr(provider, "_authentication_manager_factory"):
+                    continue
+
+                try:
+                    auth_manager = provider._authentication_manager_factory.create(
+                        provider._settings  # type: ignore[attr-defined]
+                    )
+
+                    # Try to validate the logout token with this provider
+                    claims = auth_manager.validate_logout_token(logout_token)
+
+                    # Successfully validated - get patron identifier
+                    patron_identifier = claims.get(
+                        provider._settings.patron_id_claim  # type: ignore[attr-defined]
+                    )
+                    if not patron_identifier:
+                        self._logger.warning(
+                            "Logout token missing patron identifier claim"
+                        )
+                        return "", 400
+
+                    # Invalidate patron credentials
+                    credential_manager = provider._credential_manager  # type: ignore[attr-defined]
+                    patron = credential_manager.lookup_patron_by_identifier(
+                        db, patron_identifier
+                    )
+
+                    if patron:
+                        credential_manager.invalidate_patron_credentials(db, patron.id)
+                        self._logger.info(
+                            f"Back-channel logout: invalidated credentials for patron {patron_identifier}"
+                        )
+                    else:
+                        self._logger.warning(
+                            f"Back-channel logout: patron not found for identifier {patron_identifier}"
+                        )
+
+                    return "", 200
+
+                except Exception as e:
+                    # This provider couldn't validate the token, try the next one
+                    self._logger.debug(
+                        f"Provider {provider.label()} could not validate logout token: {e}"
+                    )
+                    continue
+
+        # No provider could validate the logout token
+        self._logger.error("No OIDC provider could validate the logout token")
+        return "", 400

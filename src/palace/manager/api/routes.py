@@ -604,6 +604,15 @@ def oidc_logout_callback():
     )
 
 
+@app.route("/oidc_backchannel_logout", methods=["POST"])
+def oidc_backchannel_logout():
+    """Handle OIDC back-channel logout requests from providers."""
+    body, status = app.manager.oidc_controller.oidc_backchannel_logout(
+        flask.request.form, app.manager._db
+    )
+    return body, status
+
+
 # Redirect URI for SAML providers
 # NOTE: we cannot use @has_library decorator and append a library's name to saml_calback route
 # (e.g. https://cm.org/LIBRARY_NAME/saml_callback).

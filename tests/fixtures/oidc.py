@@ -237,9 +237,7 @@ def mock_logout_token_claims(mock_id_token_claims: dict[str, Any]) -> dict[str, 
             "iat": now,
             "exp": now + LOGOUT_TOKEN_EXPIRY_SECONDS,
             "jti": "logout-token-unique-id-123",
-            "events": {
-                "http://openid.net/specs/openid-connect-core-1_0.html#logout": {}
-            },
+            "events": {"http://schemas.openid.net/event/backchannel-logout": {}},
             "sid": "session-id-abc123",
         }
     )

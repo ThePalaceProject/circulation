@@ -105,3 +105,28 @@ class TestOIDCRoutes:
             call_args = mock_callback.call_args
             assert isinstance(call_args[0][0], ImmutableMultiDict)
             assert call_args[0][0]["state"] == "test-logout-state"
+
+    def test_oidc_backchannel_logout_route(self, controller_fixture: ControllerFixture):
+        """Test that /oidc_backchannel_logout route calls the controller correctly."""
+        with (
+            controller_fixture.app.test_request_context(
+                "/oidc_backchannel_logout",
+                method="POST",
+                data={"logout_token": "test.logout.token"},
+            ),
+            patch.object(
+                controller_fixture.manager.oidc_controller,
+                "oidc_backchannel_logout",
+            ) as mock_backchannel,
+        ):
+            mock_backchannel.return_value = ("", 200)
+
+            from palace.manager.api.routes import oidc_backchannel_logout
+
+            response = oidc_backchannel_logout()
+
+            assert response == ("", 200)
+            mock_backchannel.assert_called_once()
+            call_args = mock_backchannel.call_args
+            assert isinstance(call_args[0][0], ImmutableMultiDict)
+            assert call_args[0][0]["logout_token"] == "test.logout.token"
