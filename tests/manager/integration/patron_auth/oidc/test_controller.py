@@ -598,3 +598,178 @@ class TestOIDCController:
             controller._authenticator.create_bearer_token.assert_called_once_with(
                 "OpenID Connect", "oidc-credential-123"
             )
+
+
+class TestOIDCControllerLogout:
+    """Tests for OIDC logout flow."""
+
+    @pytest.fixture
+    def mock_redis(self, redis_fixture):
+        return redis_fixture.client
+
+    @pytest.fixture
+    def mock_circulation_manager(self, mock_redis):
+        cm = MagicMock()
+        cm.index_controller.library_for_request = MagicMock()
+        cm.services.redis.client.return_value = mock_redis
+        return cm
+
+    @pytest.fixture
+    def mock_authenticator(self):
+        authenticator = MagicMock()
+        authenticator.library_authenticators = {}
+        return authenticator
+
+    @pytest.fixture
+    def logout_controller(self, mock_circulation_manager, mock_authenticator):
+        return OIDCController(mock_circulation_manager, mock_authenticator)
+
+    def test_oidc_logout_initiate_success(self, logout_controller, db):
+        from unittest.mock import Mock, patch
+
+        controller = logout_controller
+        patron = db.patron()
+        patron.authorization_identifier = "user123@example.com"
+        db.session.commit()
+
+        library = db.default_library()
+
+        mock_library_auth = Mock()
+        mock_library_auth.bearer_token_signing_secret = "test-secret"
+        mock_provider = Mock()
+        mock_provider._authentication_manager_factory = Mock()
+        mock_provider._settings = Mock()
+        mock_provider._settings.patron_id_claim = "sub"
+        mock_provider._credential_manager = Mock()
+        mock_provider.integration_id = 1
+
+        mock_auth_manager = Mock()
+        mock_auth_manager.validate_id_token_hint.return_value = {
+            "sub": "user123@example.com"
+        }
+        mock_auth_manager.build_logout_url.return_value = "https://oidc.provider.test/logout?id_token_hint=test.token&post_logout_redirect_uri=https://cm.test/oidc_logout_callback&state=test-state"
+        mock_provider._authentication_manager_factory.create.return_value = (
+            mock_auth_manager
+        )
+
+        mock_patron = Mock()
+        mock_patron.id = patron.id
+        mock_provider._credential_manager.lookup_patron_by_identifier.return_value = (
+            mock_patron
+        )
+        mock_provider._credential_manager.invalidate_patron_credentials.return_value = 1
+
+        mock_library_auth.oidc_provider_lookup.return_value = mock_provider
+
+        # Set up library_authenticators dict
+        controller._authenticator.library_authenticators[library.short_name] = (
+            mock_library_auth
+        )
+
+        with (
+            patch.object(
+                controller._circulation_manager.index_controller,
+                "library_for_request",
+                return_value=library,
+            ),
+            patch(
+                "palace.manager.integration.patron_auth.oidc.controller.url_for"
+            ) as mock_url_for,
+        ):
+            mock_url_for.return_value = "https://cm.test/oidc_logout_callback"
+
+            params = {
+                "provider": "Test OIDC",
+                "id_token_hint": "test.id.token",
+                "post_logout_redirect_uri": "https://app.example.com/logout/callback",
+            }
+
+            result = controller.oidc_logout_initiate(params, db.session)
+
+            assert result.status_code == 302
+            assert "https://oidc.provider.test/logout" in result.location
+
+    def test_oidc_logout_initiate_missing_provider(self, logout_controller, db):
+        from palace.manager.integration.patron_auth.oidc.controller import (
+            OIDC_INVALID_REQUEST,
+        )
+
+        params = {
+            "id_token_hint": "test.id.token",
+            "post_logout_redirect_uri": "https://app.example.com/logout/callback",
+        }
+
+        result = logout_controller.oidc_logout_initiate(params, db.session)
+
+        assert result == OIDC_INVALID_REQUEST.detailed(
+            "Missing 'provider' parameter in logout request"
+        )
+
+    def test_oidc_logout_initiate_missing_id_token_hint(self, logout_controller, db):
+        from palace.manager.integration.patron_auth.oidc.controller import (
+            OIDC_INVALID_ID_TOKEN_HINT,
+        )
+
+        params = {
+            "provider": "Test OIDC",
+            "post_logout_redirect_uri": "https://app.example.com/logout/callback",
+        }
+
+        result = logout_controller.oidc_logout_initiate(params, db.session)
+
+        assert result == OIDC_INVALID_ID_TOKEN_HINT.detailed(
+            "Missing 'id_token_hint' parameter in logout request"
+        )
+
+    def test_oidc_logout_callback_success(self, logout_controller, db):
+        from unittest.mock import Mock
+
+        from palace.manager.integration.patron_auth.oidc.util import OIDCUtility
+
+        library = db.default_library()
+
+        logout_state_data = {
+            "provider_name": "Test OIDC",
+            "library_short_name": library.short_name,
+        }
+
+        mock_library_auth = Mock()
+        mock_library_auth.bearer_token_signing_secret = "test-secret"
+
+        state_token = OIDCUtility.generate_state(logout_state_data, "test-secret")
+
+        # Set up library_authenticators dict
+        logout_controller._authenticator.library_authenticators[library.short_name] = (
+            mock_library_auth
+        )
+
+        # Use the mock redis from the logout_controller fixture
+        mock_redis = logout_controller._circulation_manager.services.redis.client()
+
+        utility = OIDCUtility(mock_redis)
+        utility.store_logout_state(
+            state_token,
+            "https://app.example.com/logout/callback",
+            metadata={"library_short_name": library.short_name},
+        )
+
+        params = {"state": state_token}
+
+        result = logout_controller.oidc_logout_callback(params, db.session)
+
+        assert result.status_code == 302
+        assert "https://app.example.com/logout/callback" in result.location
+        assert "logout_status=success" in result.location
+
+    def test_oidc_logout_callback_missing_state(self, logout_controller, db):
+        from palace.manager.integration.patron_auth.oidc.controller import (
+            OIDC_INVALID_REQUEST,
+        )
+
+        params = {}
+
+        result = logout_controller.oidc_logout_callback(params, db.session)
+
+        assert result == OIDC_INVALID_REQUEST.detailed(
+            "Missing 'state' parameter in logout callback"
+        )

@@ -585,6 +585,25 @@ def oidc_callback():
     )
 
 
+# Route that initiates OIDC logout
+@library_route("/oidc_logout")
+@has_library
+@returns_problem_detail
+def oidc_logout():
+    return app.manager.oidc_controller.oidc_logout_initiate(
+        flask.request.args, app.manager._db
+    )
+
+
+# Redirect URI for OIDC logout callback
+@returns_problem_detail
+@app.route("/oidc_logout_callback", methods=["GET"])
+def oidc_logout_callback():
+    return app.manager.oidc_controller.oidc_logout_callback(
+        flask.request.args, app.manager._db
+    )
+
+
 # Redirect URI for SAML providers
 # NOTE: we cannot use @has_library decorator and append a library's name to saml_calback route
 # (e.g. https://cm.org/LIBRARY_NAME/saml_callback).

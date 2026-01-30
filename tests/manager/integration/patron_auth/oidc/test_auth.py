@@ -867,3 +867,159 @@ class TestOIDCAuthenticationManagerFactory:
         assert isinstance(manager, OIDCAuthenticationManager)
         assert manager._redis is None
         assert manager._secret_key is None
+
+
+class TestOIDCAuthenticationManagerLogout:
+    """Tests for OIDC logout functionality."""
+
+    def test_build_logout_url_with_end_session_endpoint(
+        self, oidc_settings_with_discovery, redis_fixture, mock_discovery_document
+    ):
+        mock_discovery_document["end_session_endpoint"] = (
+            "https://oidc.provider.test/logout"
+        )
+
+        manager = OIDCAuthenticationManager(
+            settings=oidc_settings_with_discovery,
+            redis_client=redis_fixture.client,
+        )
+
+        with patch("httpx.get") as mock_get:
+            mock_response = Mock()
+            mock_response.json.return_value = mock_discovery_document
+            mock_response.raise_for_status = Mock()
+            mock_get.return_value = mock_response
+
+            id_token_hint = "test.id.token"
+            post_logout_redirect_uri = "https://app.example.com/logout/callback"
+            state = "test-state-token"
+
+            logout_url = manager.build_logout_url(
+                id_token_hint, post_logout_redirect_uri, state
+            )
+
+            assert "https://oidc.provider.test/logout" in logout_url
+            assert f"id_token_hint={id_token_hint}" in logout_url
+            assert f"post_logout_redirect_uri={post_logout_redirect_uri}" in logout_url
+            assert f"state={state}" in logout_url
+
+    def test_build_logout_url_without_state(
+        self, oidc_settings_with_discovery, redis_fixture, mock_discovery_document
+    ):
+        mock_discovery_document["end_session_endpoint"] = (
+            "https://oidc.provider.test/logout"
+        )
+
+        manager = OIDCAuthenticationManager(
+            settings=oidc_settings_with_discovery,
+            redis_client=redis_fixture.client,
+        )
+
+        with patch("httpx.get") as mock_get:
+            mock_response = Mock()
+            mock_response.json.return_value = mock_discovery_document
+            mock_response.raise_for_status = Mock()
+            mock_get.return_value = mock_response
+
+            id_token_hint = "test.id.token"
+            post_logout_redirect_uri = "https://app.example.com/logout/callback"
+
+            logout_url = manager.build_logout_url(
+                id_token_hint, post_logout_redirect_uri
+            )
+
+            assert "https://oidc.provider.test/logout" in logout_url
+            assert f"id_token_hint={id_token_hint}" in logout_url
+            assert f"post_logout_redirect_uri={post_logout_redirect_uri}" in logout_url
+            assert "state=" not in logout_url
+
+    def test_build_logout_url_from_settings(self, redis_fixture):
+        # Create settings with custom end_session_endpoint
+        settings = OIDCAuthSettings(
+            issuer_url=TEST_ISSUER_URL,
+            client_id=TEST_CLIENT_ID,
+            client_secret=TEST_CLIENT_SECRET,
+            authorization_endpoint="https://custom.logout.endpoint/authorize",
+            token_endpoint="https://custom.logout.endpoint/token",
+            jwks_uri="https://custom.logout.endpoint/jwks",
+            end_session_endpoint="https://custom.logout.endpoint/logout",
+        )
+
+        manager = OIDCAuthenticationManager(
+            settings=settings,
+            redis_client=redis_fixture.client,
+        )
+
+        # Mock get_provider_metadata to return metadata with our custom endpoint
+        with patch.object(
+            manager,
+            "get_provider_metadata",
+            return_value={
+                "issuer": TEST_ISSUER_URL,
+                "end_session_endpoint": "https://custom.logout.endpoint/logout",
+            },
+        ):
+            id_token_hint = "test.id.token"
+            post_logout_redirect_uri = "https://app.example.com/logout/callback"
+
+            logout_url = manager.build_logout_url(
+                id_token_hint, post_logout_redirect_uri
+            )
+
+            assert "https://custom.logout.endpoint/logout" in logout_url
+
+    def test_build_logout_url_not_supported(
+        self, oidc_settings_with_discovery, redis_fixture, mock_discovery_document
+    ):
+        mock_discovery_document.pop("end_session_endpoint", None)
+
+        manager = OIDCAuthenticationManager(
+            settings=oidc_settings_with_discovery,
+            redis_client=redis_fixture.client,
+        )
+
+        with patch("httpx.get") as mock_get:
+            mock_response = Mock()
+            mock_response.json.return_value = mock_discovery_document
+            mock_response.raise_for_status = Mock()
+            mock_get.return_value = mock_response
+
+            id_token_hint = "test.id.token"
+            post_logout_redirect_uri = "https://app.example.com/logout/callback"
+
+            with pytest.raises(
+                OIDCAuthenticationError,
+                match="does not support RP-Initiated Logout",
+            ):
+                manager.build_logout_url(id_token_hint, post_logout_redirect_uri)
+
+    def test_validate_id_token_hint(
+        self,
+        oidc_settings_with_discovery,
+        redis_fixture,
+        mock_id_token,
+        mock_discovery_document,
+        mock_jwks,
+    ):
+        manager = OIDCAuthenticationManager(
+            settings=oidc_settings_with_discovery,
+            redis_client=redis_fixture.client,
+        )
+
+        with patch("httpx.get") as mock_get:
+            # Mock both discovery and JWKS responses
+            def mock_get_side_effect(url, **kwargs):
+                response = Mock()
+                response.raise_for_status = Mock()
+                if "jwks" in str(url):
+                    response.json.return_value = mock_jwks
+                else:
+                    response.json.return_value = mock_discovery_document
+                return response
+
+            mock_get.side_effect = mock_get_side_effect
+
+            claims = manager.validate_id_token_hint(mock_id_token)
+
+            assert claims["sub"] == "user123"
+            assert claims["email"] == "testuser@example.com"

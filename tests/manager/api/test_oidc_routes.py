@@ -55,3 +55,53 @@ class TestOIDCRoutes:
             assert isinstance(call_args[0][0], ImmutableMultiDict)
             assert call_args[0][0]["code"] == "test-code"
             assert call_args[0][0]["state"] == "test-state"
+
+    def test_oidc_logout_route(self, controller_fixture: ControllerFixture):
+        """Test that /oidc_logout route calls the controller correctly."""
+        with (
+            controller_fixture.app.test_request_context(
+                "/default/oidc_logout?provider=OpenID+Connect&id_token_hint=test-token&post_logout_redirect_uri=https://app.example.com"
+            ),
+            patch.object(
+                controller_fixture.manager.oidc_controller,
+                "oidc_logout_initiate",
+            ) as mock_logout,
+        ):
+            mock_logout.return_value = MagicMock(status_code=302)
+
+            from palace.manager.api.routes import oidc_logout
+
+            response = oidc_logout()
+
+            assert response.status_code == 302
+            mock_logout.assert_called_once()
+            call_args = mock_logout.call_args
+            assert isinstance(call_args[0][0], ImmutableMultiDict)
+            assert call_args[0][0]["provider"] == "OpenID Connect"
+            assert call_args[0][0]["id_token_hint"] == "test-token"
+            assert (
+                call_args[0][0]["post_logout_redirect_uri"] == "https://app.example.com"
+            )
+
+    def test_oidc_logout_callback_route(self, controller_fixture: ControllerFixture):
+        """Test that /oidc_logout_callback route calls the controller correctly."""
+        with (
+            controller_fixture.app.test_request_context(
+                "/oidc_logout_callback?state=test-logout-state"
+            ),
+            patch.object(
+                controller_fixture.manager.oidc_controller,
+                "oidc_logout_callback",
+            ) as mock_callback,
+        ):
+            mock_callback.return_value = MagicMock(status_code=302)
+
+            from palace.manager.api.routes import oidc_logout_callback
+
+            response = oidc_logout_callback()
+
+            assert response.status_code == 302
+            mock_callback.assert_called_once()
+            call_args = mock_callback.call_args
+            assert isinstance(call_args[0][0], ImmutableMultiDict)
+            assert call_args[0][0]["state"] == "test-logout-state"

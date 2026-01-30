@@ -45,6 +45,20 @@ OIDC_INVALID_STATE = pd(
     detail=_("The state parameter is invalid or has expired. Please try again."),
 )
 
+OIDC_LOGOUT_NOT_SUPPORTED = pd(
+    "http://palaceproject.io/terms/problem/auth/unrecoverable/oidc/logout-not-supported",
+    status_code=400,
+    title=_("OIDC logout not supported."),
+    detail=_("The OIDC provider does not support RP-Initiated Logout."),
+)
+
+OIDC_INVALID_ID_TOKEN_HINT = pd(
+    "http://palaceproject.io/terms/problem/auth/unrecoverable/oidc/invalid-id-token-hint",
+    status_code=400,
+    title=_("Invalid ID token hint."),
+    detail=_("The ID token hint is missing or invalid."),
+)
+
 
 class OIDCController:
     """Controller for handling OIDC authentication requests."""
@@ -56,6 +70,9 @@ class OIDCController:
     CODE = "code"
     ACCESS_TOKEN = "access_token"
     PATRON_INFO = "patron_info"
+    ID_TOKEN_HINT = "id_token_hint"
+    POST_LOGOUT_REDIRECT_URI = "post_logout_redirect_uri"
+    LOGOUT_STATUS = "logout_status"
 
     def __init__(
         self, circulation_manager: CirculationManager, authenticator: Authenticator
@@ -294,6 +311,171 @@ class OIDCController:
             self.PATRON_INFO: patron_info,
         }
 
+        final_redirect_uri = self._add_params_to_url(redirect_uri, result_params)
+
+        return redirect(final_redirect_uri)
+
+    def oidc_logout_initiate(
+        self, request_args: dict[str, str], db: Session
+    ) -> BaseResponse | ProblemDetail:
+        """Initiate OIDC RP-Initiated Logout flow.
+
+        :param request_args: Request arguments from Flask
+        :param db: Database session
+        :return: Redirect to provider logout endpoint or error
+        """
+        provider_name = request_args.get(self.PROVIDER_NAME)
+        id_token_hint = request_args.get(self.ID_TOKEN_HINT)
+        post_logout_redirect_uri = request_args.get(self.POST_LOGOUT_REDIRECT_URI)
+
+        if not provider_name:
+            return OIDC_INVALID_REQUEST.detailed(
+                _("Missing 'provider' parameter in logout request")
+            )
+
+        if not id_token_hint:
+            return OIDC_INVALID_ID_TOKEN_HINT.detailed(
+                _("Missing 'id_token_hint' parameter in logout request")
+            )
+
+        if not post_logout_redirect_uri:
+            return OIDC_INVALID_REQUEST.detailed(
+                _("Missing 'post_logout_redirect_uri' parameter in logout request")
+            )
+
+        library = self._circulation_manager.index_controller.library_for_request(None)
+        if isinstance(library, ProblemDetail):
+            return library
+
+        library_authenticator = self._authenticator.library_authenticators.get(
+            library.short_name
+        )
+        if not library_authenticator:
+            return OIDC_INVALID_REQUEST.detailed(
+                _("No authenticator found for library")
+            )
+
+        provider = library_authenticator.oidc_provider_lookup(provider_name)
+        if isinstance(provider, ProblemDetail):
+            return provider
+
+        try:
+            auth_manager = provider._authentication_manager_factory.create(  # type: ignore[attr-defined]
+                provider._settings  # type: ignore[attr-defined]
+            )
+
+            claims = auth_manager.validate_id_token_hint(id_token_hint)
+        except Exception as e:
+            self._logger.exception("ID token hint validation failed")
+            return OIDC_INVALID_ID_TOKEN_HINT.detailed(
+                _(f"ID token hint validation failed: {str(e)}")
+            )
+
+        patron_identifier = claims.get(provider._settings.patron_id_claim)  # type: ignore[attr-defined]
+        if not patron_identifier:
+            return OIDC_INVALID_ID_TOKEN_HINT.detailed(
+                _("ID token hint missing patron identifier claim")
+            )
+
+        try:
+            credential_manager = provider._credential_manager  # type: ignore[attr-defined]
+            patron = credential_manager.lookup_patron_by_identifier(
+                db, patron_identifier
+            )
+
+            if patron:
+                credential_manager.invalidate_patron_credentials(db, patron.id)
+                self._logger.info(
+                    f"Invalidated credentials for patron {patron_identifier}"
+                )
+            else:
+                self._logger.warning(
+                    f"Patron not found for identifier {patron_identifier}"
+                )
+
+        except Exception as e:
+            self._logger.exception("Failed to invalidate credentials")
+
+        callback_url = url_for("oidc_logout_callback", _external=True)
+
+        logout_state_data = {
+            "provider_name": provider_name,
+            "redirect_uri": post_logout_redirect_uri,
+            "library_short_name": library.short_name,
+        }
+        logout_state = OIDCUtility.generate_state(
+            logout_state_data, library_authenticator.bearer_token_signing_secret
+        )
+
+        utility = OIDCUtility(self._circulation_manager.services.redis.client())
+        utility.store_logout_state(logout_state, post_logout_redirect_uri)
+
+        try:
+            logout_url = auth_manager.build_logout_url(
+                id_token_hint, callback_url, logout_state
+            )
+        except Exception as e:
+            self._logger.exception("Failed to build logout URL")
+            return OIDC_LOGOUT_NOT_SUPPORTED.detailed(_(str(e)))
+
+        return redirect(logout_url)
+
+    def oidc_logout_callback(
+        self, request_args: dict[str, str], db: Session
+    ) -> BaseResponse | ProblemDetail:
+        """Handle OIDC logout callback.
+
+        :param request_args: Request arguments from Flask
+        :param db: Database session
+        :return: Redirect to client redirect_uri or error
+        """
+        state = request_args.get(self.STATE)
+
+        if not state:
+            return OIDC_INVALID_REQUEST.detailed(
+                _("Missing 'state' parameter in logout callback")
+            )
+
+        utility = OIDCUtility(self._circulation_manager.services.redis.client())
+        logout_data = utility.retrieve_logout_state(state, delete=False)
+
+        if not logout_data:
+            return OIDC_INVALID_STATE.detailed(
+                _("Logout state not found or expired. Please try again.")
+            )
+
+        redirect_uri = logout_data.get("redirect_uri")
+        if not redirect_uri:
+            return OIDC_INVALID_STATE.detailed(
+                _("Missing redirect_uri in logout state")
+            )
+
+        library_short_name = logout_data.get("library_short_name")
+        if not library_short_name:
+            return OIDC_INVALID_STATE.detailed(_("Missing library in logout state"))
+
+        library_authenticator = self._authenticator.library_authenticators.get(
+            library_short_name
+        )
+        if not library_authenticator:
+            return OIDC_INVALID_REQUEST.detailed(
+                _("No authenticator found for library")
+            )
+
+        try:
+            state_data = OIDCUtility.validate_state(
+                state, library_authenticator.bearer_token_signing_secret
+            )
+        except Exception as e:
+            self._logger.exception("Logout state validation failed")
+            return OIDC_INVALID_STATE.detailed(_(f"State validation failed: {str(e)}"))
+
+        logout_cache_key = self._circulation_manager.services.redis.client().get_key(
+            "oidc:logout_state:" + state
+        )
+        self._circulation_manager.services.redis.client().delete(logout_cache_key)
+
+        result_params = {self.LOGOUT_STATUS: "success"}
         final_redirect_uri = self._add_params_to_url(redirect_uri, result_params)
 
         return redirect(final_redirect_uri)

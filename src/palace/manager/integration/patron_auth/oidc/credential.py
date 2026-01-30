@@ -315,3 +315,72 @@ class OIDCCredentialManager(LoggerMixin):
 
         self.log.info(f"Successfully refreshed credential {credential.id}")
         return credential
+
+    def lookup_patron_by_identifier(
+        self, db: Session, patron_identifier: str
+    ) -> Patron | None:
+        """Look up patron by authorization identifier.
+
+        :param db: Database session
+        :param patron_identifier: Patron identifier from ID token
+        :return: Patron object or None if not found
+        """
+        patron = (
+            db.query(Patron)
+            .filter(Patron.authorization_identifier == patron_identifier)
+            .first()
+        )
+
+        if patron:
+            self.log.debug(
+                f"Found patron {patron.id} for identifier {patron_identifier}"
+            )
+        else:
+            self.log.debug(f"No patron found for identifier {patron_identifier}")
+
+        return patron
+
+    def invalidate_credential(self, db: Session, credential_id: int) -> None:
+        """Invalidate a specific credential by marking it as expired.
+
+        :param db: Database session
+        :param credential_id: Credential ID to invalidate
+        """
+        credential = (
+            db.query(Credential).filter(Credential.id == credential_id).one_or_none()
+        )
+
+        if not credential:
+            self.log.warning(f"Credential {credential_id} not found")
+            return
+
+        credential.expires = utc_now()
+        db.commit()
+
+        self.log.info(f"Invalidated credential {credential_id}")
+
+    def invalidate_patron_credentials(self, db: Session, patron_id: int) -> int:
+        """Invalidate all OIDC credentials for a patron.
+
+        :param db: Database session
+        :param patron_id: Patron ID
+        :return: Number of credentials invalidated
+        """
+        credentials = (
+            db.query(Credential)
+            .filter(
+                Credential.patron_id == patron_id,
+                Credential.type == self.TOKEN_TYPE,
+            )
+            .all()
+        )
+
+        count = 0
+        for credential in credentials:
+            credential.expires = utc_now()
+            count += 1
+
+        db.commit()
+
+        self.log.info(f"Invalidated {count} credential(s) for patron {patron_id}")
+        return count

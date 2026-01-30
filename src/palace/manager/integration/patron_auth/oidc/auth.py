@@ -374,6 +374,56 @@ class OIDCAuthenticationManager(LoggerMixin):
                 f"Unexpected error fetching user info: {str(e)}"
             ) from e
 
+    def build_logout_url(
+        self,
+        id_token_hint: str,
+        post_logout_redirect_uri: str,
+        state: str | None = None,
+    ) -> str:
+        """Build logout URL for RP-Initiated Logout.
+
+        :param id_token_hint: ID token from authentication
+        :param post_logout_redirect_uri: Client callback URI after logout
+        :param state: Optional state parameter for logout callback
+        :raises OIDCAuthenticationError: If end_session_endpoint not available
+        :return: Complete logout URL
+        """
+        metadata = self.get_provider_metadata()
+        end_session_endpoint = metadata.get("end_session_endpoint")
+
+        if not end_session_endpoint:
+            if self._settings.end_session_endpoint:
+                end_session_endpoint = str(self._settings.end_session_endpoint)
+            else:
+                raise OIDCAuthenticationError(
+                    "Provider does not support RP-Initiated Logout (no end_session_endpoint)"
+                )
+
+        params = {
+            "id_token_hint": id_token_hint,
+            "post_logout_redirect_uri": post_logout_redirect_uri,
+        }
+
+        if state:
+            params["state"] = state
+
+        query_string = "&".join(f"{k}={v}" for k, v in params.items())
+        logout_url = f"{end_session_endpoint}?{query_string}"
+
+        self.log.info(f"Built logout URL for provider: {end_session_endpoint}")
+        return logout_url
+
+    def validate_id_token_hint(self, id_token: str) -> dict[str, Any]:
+        """Validate ID token hint for logout.
+
+        Similar to ID token validation but without nonce requirement.
+
+        :param id_token: ID token to validate
+        :raises OIDCAuthenticationError: If validation fails
+        :return: Decoded ID token claims
+        """
+        return self.validate_id_token(id_token, nonce=None)
+
 
 class OIDCAuthenticationManagerFactory:
     """Factory for creating OIDCAuthenticationManager instances."""
