@@ -7,6 +7,14 @@ from palace.manager.core.entrypoint import EntryPoint
 from palace.manager.feed.facets.constants import FacetConfig, FacetConstants
 from palace.manager.util.problem_detail import ProblemDetail
 
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Query, Session
+
+    from palace.manager.feed.worklist.base import WorkList
+    from palace.manager.search.filter import Filter, OpensearchDslType
+    from palace.manager.sqlalchemy.model.library import Library
+    from palace.manager.sqlalchemy.model.work import Work
+
 
 class FacetGroup(NamedTuple):
     """Represents a single facet option for OPDS facet links.
@@ -23,15 +31,6 @@ class FacetGroup(NamedTuple):
     facets: BaseFacets
     is_selected: bool
     is_default: bool
-
-
-if TYPE_CHECKING:
-    from sqlalchemy.orm import Query, Session
-
-    from palace.manager.feed.worklist.base import WorkList
-    from palace.manager.search.filter import Filter, OpensearchDslType
-    from palace.manager.sqlalchemy.model.library import Library
-    from palace.manager.sqlalchemy.model.work import Work
 
 
 class BaseFacets(FacetConstants):
