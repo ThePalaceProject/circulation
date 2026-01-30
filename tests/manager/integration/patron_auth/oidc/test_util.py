@@ -509,3 +509,109 @@ class TestOIDCUtilityPKCEStorage:
         retrieved = utility.retrieve_pkce(state_token)
 
         assert retrieved is None
+
+
+class TestOIDCUtilityLogoutState:
+    """Tests for logout state storage and retrieval."""
+
+    def test_store_logout_state(self, redis_fixture):
+        state_token = "test-logout-state-token"
+        redirect_uri = "https://app.example.com/logout/callback"
+        metadata = {"extra": "data"}
+
+        utility = OIDCUtility(redis_client=redis_fixture.client)
+        utility.store_logout_state(state_token, redirect_uri, metadata)
+
+        cache_key = redis_fixture.client.get_key(
+            f"{OIDCUtility.LOGOUT_STATE_KEY_PREFIX}{state_token}"
+        )
+        cached = redis_fixture.client.get(cache_key)
+
+        assert cached is not None
+        data = json.loads(cached)
+        assert data["redirect_uri"] == redirect_uri
+        assert data["extra"] == "data"
+        assert "timestamp" in data
+
+    def test_store_logout_state_without_metadata(self, redis_fixture):
+        state_token = "test-logout-state-token"
+        redirect_uri = "https://app.example.com/logout/callback"
+
+        utility = OIDCUtility(redis_client=redis_fixture.client)
+        utility.store_logout_state(state_token, redirect_uri)
+
+        cache_key = redis_fixture.client.get_key(
+            f"{OIDCUtility.LOGOUT_STATE_KEY_PREFIX}{state_token}"
+        )
+        cached = redis_fixture.client.get(cache_key)
+
+        assert cached is not None
+        data = json.loads(cached)
+        assert data["redirect_uri"] == redirect_uri
+        assert "timestamp" in data
+
+    def test_store_logout_state_requires_redis(self):
+        utility = OIDCUtility(redis_client=None)
+
+        with pytest.raises(OIDCUtilityError, match="Redis client required"):
+            utility.store_logout_state("state", "https://example.com")
+
+    def test_retrieve_logout_state_with_delete(self, redis_fixture):
+        state_token = "test-logout-state-token"
+        redirect_uri = "https://app.example.com/logout/callback"
+
+        utility = OIDCUtility(redis_client=redis_fixture.client)
+        utility.store_logout_state(state_token, redirect_uri)
+
+        retrieved = utility.retrieve_logout_state(state_token, delete=True)
+
+        assert retrieved is not None
+        assert retrieved["redirect_uri"] == redirect_uri
+        assert "timestamp" in retrieved
+
+        cache_key = redis_fixture.client.get_key(
+            f"{OIDCUtility.LOGOUT_STATE_KEY_PREFIX}{state_token}"
+        )
+        assert redis_fixture.client.get(cache_key) is None
+
+    def test_retrieve_logout_state_without_delete(self, redis_fixture):
+        state_token = "test-logout-state-token"
+        redirect_uri = "https://app.example.com/logout/callback"
+
+        utility = OIDCUtility(redis_client=redis_fixture.client)
+        utility.store_logout_state(state_token, redirect_uri)
+
+        retrieved = utility.retrieve_logout_state(state_token, delete=False)
+
+        assert retrieved is not None
+        assert retrieved["redirect_uri"] == redirect_uri
+
+        cache_key = redis_fixture.client.get_key(
+            f"{OIDCUtility.LOGOUT_STATE_KEY_PREFIX}{state_token}"
+        )
+        assert redis_fixture.client.get(cache_key) is not None
+
+    def test_retrieve_logout_state_not_found(self, redis_fixture):
+        utility = OIDCUtility(redis_client=redis_fixture.client)
+        retrieved = utility.retrieve_logout_state("nonexistent-state")
+
+        assert retrieved is None
+
+    def test_retrieve_logout_state_requires_redis(self):
+        utility = OIDCUtility(redis_client=None)
+
+        with pytest.raises(OIDCUtilityError, match="Redis client required"):
+            utility.retrieve_logout_state("state")
+
+    def test_retrieve_logout_state_corrupted_json(self, redis_fixture):
+        state_token = "test-logout-state-token"
+
+        cache_key = redis_fixture.client.get_key(
+            f"{OIDCUtility.LOGOUT_STATE_KEY_PREFIX}{state_token}"
+        )
+        redis_fixture.client.set(cache_key, "invalid-json{{{", ex=600)
+
+        utility = OIDCUtility(redis_client=redis_fixture.client)
+        retrieved = utility.retrieve_logout_state(state_token)
+
+        assert retrieved is None

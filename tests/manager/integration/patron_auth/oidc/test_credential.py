@@ -674,3 +674,84 @@ class TestOIDCCredentialManager:
 
         assert refreshed_credential == credential
         mock_auth_manager.refresh_access_token.assert_not_called()
+
+
+class TestOIDCCredentialManagerLogout:
+    """Tests for logout-related credential operations."""
+
+    def test_lookup_patron_by_identifier(self, db, manager):
+        patron = db.patron()
+        patron.authorization_identifier = "user123@example.com"
+        db.session.commit()
+
+        found_patron = manager.lookup_patron_by_identifier(
+            db.session, "user123@example.com"
+        )
+
+        assert found_patron is not None
+        assert found_patron.id == patron.id
+
+    def test_lookup_patron_by_identifier_not_found(self, db, manager):
+        found_patron = manager.lookup_patron_by_identifier(
+            db.session, "nonexistent@example.com"
+        )
+
+        assert found_patron is None
+
+    def test_invalidate_credential(self, db, manager):
+        from palace.manager.util.datetime_helpers import utc_now
+
+        patron = db.patron()
+        credential = manager.create_oidc_token(
+            db.session,
+            patron,
+            {"sub": "user123", "email": "user@example.com"},
+            "access-token",
+            "refresh-token",
+            3600,
+        )
+
+        future_time = utc_now() + datetime.timedelta(hours=1)
+        assert credential.expires > utc_now()
+
+        manager.invalidate_credential(db.session, credential.id)
+
+        db.session.refresh(credential)
+        assert credential.expires <= utc_now()
+
+    def test_invalidate_credential_not_found(self, db, manager):
+        manager.invalidate_credential(db.session, 999999)
+
+    def test_invalidate_patron_credentials(self, db, manager):
+        from palace.manager.util.datetime_helpers import utc_now
+
+        patron = db.patron()
+
+        # Create OIDC credential for patron
+        credential = manager.create_oidc_token(
+            db.session,
+            patron,
+            {"sub": "user123"},
+            "access-token-1",
+            "refresh-token-1",
+            3600,
+        )
+
+        # Verify credential is not yet expired
+        assert credential.expires > utc_now()
+
+        # Invalidate all credentials for patron
+        count = manager.invalidate_patron_credentials(db.session, patron.id)
+
+        # Should invalidate exactly one credential (each patron has one OIDC credential)
+        assert count == 1
+
+        db.session.refresh(credential)
+        assert credential.expires <= utc_now()
+
+    def test_invalidate_patron_credentials_no_credentials(self, db, manager):
+        patron = db.patron()
+
+        count = manager.invalidate_patron_credentials(db.session, patron.id)
+
+        assert count == 0

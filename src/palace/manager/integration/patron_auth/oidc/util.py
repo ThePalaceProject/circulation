@@ -45,11 +45,14 @@ class OIDCUtility(LoggerMixin):
     JWKS_CACHE_TTL = 86400  # 24 hours
     PKCE_CACHE_TTL = 600  # 10 minutes
     STATE_MAX_AGE = 600  # 10 minutes
+    LOGOUT_STATE_CACHE_TTL = 600  # 10 minutes
+    LOGOUT_STATE_MAX_AGE = 600  # 10 minutes
 
     # Cache key prefixes
     DISCOVERY_KEY_PREFIX = "oidc:discovery:"
     JWKS_KEY_PREFIX = "oidc:jwks:"
     PKCE_KEY_PREFIX = "oidc:pkce:"
+    LOGOUT_STATE_KEY_PREFIX = "oidc:logout_state:"
 
     def __init__(self, redis_client: Redis | None = None):
         """Initialize OIDC utility.
@@ -356,4 +359,65 @@ class OIDCUtility(LoggerMixin):
                 return None
 
         self.log.warning(f"No PKCE found for state: {state_token[:16]}...")
+        return None
+
+    def store_logout_state(
+        self,
+        state_token: str,
+        redirect_uri: str,
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
+        """Store logout state in Redis cache.
+
+        :param state_token: State token to use as cache key
+        :param redirect_uri: Client redirect URI after logout
+        :param metadata: Optional additional metadata to store
+        """
+        if not self._redis:
+            raise OIDCUtilityError("Redis client required for logout state storage")
+
+        data = {
+            "redirect_uri": redirect_uri,
+            "timestamp": int(time.time()),
+        }
+        if metadata:
+            data.update(metadata)
+
+        cache_key = self._redis.get_key(self.LOGOUT_STATE_KEY_PREFIX + state_token)
+        self._redis.set(cache_key, json.dumps(data), ex=self.LOGOUT_STATE_CACHE_TTL)
+        self.log.debug(f"Stored logout state: {state_token[:16]}...")
+
+    def retrieve_logout_state(
+        self, state_token: str, delete: bool = True
+    ) -> dict[str, Any] | None:
+        """Retrieve logout state from Redis cache.
+
+        :param state_token: State token used as cache key
+        :param delete: Whether to delete the entry after retrieval (one-time use)
+        :return: Dictionary with redirect_uri and metadata, or None if not found
+        """
+        if not self._redis:
+            raise OIDCUtilityError("Redis client required for logout state retrieval")
+
+        cache_key = self._redis.get_key(self.LOGOUT_STATE_KEY_PREFIX + state_token)
+        cached = self._redis.get(cache_key)
+
+        if cached:
+            if delete:
+                self._redis.delete(cache_key)
+                self.log.debug(
+                    f"Retrieved and deleted logout state: {state_token[:16]}..."
+                )
+            else:
+                self.log.debug(f"Retrieved logout state: {state_token[:16]}...")
+
+            try:
+                return cast(dict[str, Any], json.loads(cached))
+            except json.JSONDecodeError:
+                self.log.warning(
+                    f"Failed to decode cached logout state: {state_token[:16]}..."
+                )
+                return None
+
+        self.log.warning(f"No logout state found: {state_token[:16]}...")
         return None

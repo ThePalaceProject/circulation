@@ -98,6 +98,19 @@ class OIDCAuthSettings(AuthProviderSettings, LoggerMixin):
         ),
     ] = None
 
+    end_session_endpoint: Annotated[
+        HttpUrl | None,
+        FormMetadata(
+            label=_("End Session Endpoint (Optional)"),
+            description=_(
+                "OIDC provider's end session endpoint URL for RP-Initiated Logout. "
+                "Optional - enables logout functionality if supported by provider. "
+                "Automatically discovered if Issuer URL is provided. "
+                "Example: https://accounts.google.com/o/oauth2/revoke"
+            ),
+        ),
+    ] = None
+
     # Client Configuration
     client_id: Annotated[
         str,
