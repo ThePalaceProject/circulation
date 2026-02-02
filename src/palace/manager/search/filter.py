@@ -55,11 +55,6 @@ class Filter:
     presenting the search results.
     """
 
-    # When search results include known script fields, we need to
-    # wrap the works we would be returning in WorkSearchResults so
-    # the useful information from the search engine isn't lost.
-    KNOWN_SCRIPT_FIELDS = []
-
     # In general, someone looking for things "by this person" is
     # probably looking for one of these roles.
     AUTHOR_MATCH_ROLES = list(Contributor.AUTHOR_ROLES) + [
