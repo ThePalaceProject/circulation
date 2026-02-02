@@ -1,4 +1,13 @@
+from __future__ import annotations
+
+from collections.abc import Mapping, Sequence
+from typing import TYPE_CHECKING
+
 from flask_babel import lazy_gettext as _
+
+if TYPE_CHECKING:
+    from palace.manager.core.entrypoint import EntryPoint
+    from palace.manager.sqlalchemy.model.library import Library
 
 
 class FacetConstants:
@@ -140,34 +149,39 @@ class FacetConfig(FacetConstants):
     """
 
     @classmethod
-    def from_library(cls, library):
-        enabled_facets = dict()
+    def from_library(cls, library: Library) -> FacetConfig:
+        enabled_facets: dict[str, list[str]] = {}
         for group in list(FacetConstants.DEFAULT_ENABLED_FACETS.keys()):
             enabled_facets[group] = library.enabled_facets(group)
 
-        default_facets = dict()
+        default_facets: dict[str, str] = {}
         for group in list(FacetConstants.DEFAULT_FACET.keys()):
             default_facets[group] = library.default_facet(group)
 
         return FacetConfig(enabled_facets, default_facets)
 
-    def __init__(self, enabled_facets, default_facets, entrypoints=[]):
+    def __init__(
+        self,
+        enabled_facets: Mapping[str, list[str]],
+        default_facets: Mapping[str, str],
+        entrypoints: Sequence[type[EntryPoint]] = (),
+    ) -> None:
         self._enabled_facets = dict(enabled_facets)
         self._default_facets = dict(default_facets)
         self.entrypoints = entrypoints
 
-    def enabled_facets(self, group_name):
+    def enabled_facets(self, group_name: str) -> list[str] | None:
         return self._enabled_facets.get(group_name)
 
-    def default_facet(self, group_name):
+    def default_facet(self, group_name: str) -> str | None:
         return self._default_facets.get(group_name)
 
-    def enable_facet(self, group_name, facet):
+    def enable_facet(self, group_name: str, facet: str) -> None:
         self._enabled_facets.setdefault(group_name, [])
         if facet not in self._enabled_facets[group_name]:
             self._enabled_facets[group_name] += [facet]
 
-    def set_default_facet(self, group_name, facet):
+    def set_default_facet(self, group_name: str, facet: str) -> None:
         """Add `facet` to the list of possible values for `group_name`, even
         if the library does not have that facet configured.
         """

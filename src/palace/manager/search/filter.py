@@ -3,6 +3,8 @@ from __future__ import annotations
 import datetime
 import time
 from collections import defaultdict
+from collections.abc import Mapping
+from typing import Final
 
 from opensearchpy import SF
 from opensearchpy.helpers.query import (
@@ -27,6 +29,16 @@ from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.licensing import LicensePoolStatus
 from palace.manager.sqlalchemy.util import numericrange_to_tuple
 from palace.manager.util.datetime_helpers import from_timestamp
+
+
+class _DeterministicSentinel:
+    """Sentinel value to indicate deterministic mode for testing."""
+
+    __slots__ = ()
+
+
+type OpensearchDslType = Mapping[str, str | OpensearchDslType]
+type RandomSeedType = int | _DeterministicSentinel | None
 
 
 class Filter:
@@ -738,9 +750,11 @@ class Filter:
 
     # Used in tests to deactivate the random component of
     # featurability_scoring_functions.
-    DETERMINISTIC = object()
+    DETERMINISTIC: Final[_DeterministicSentinel] = _DeterministicSentinel()
 
-    def featurability_scoring_functions(self, random_seed):
+    def featurability_scoring_functions(
+        self, random_seed: RandomSeedType
+    ) -> list[OpensearchDslType]:
         """Generate scoring functions that weight works randomly, but
         with 'more featurable' works tending to be at the top.
         """

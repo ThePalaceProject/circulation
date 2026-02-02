@@ -1,22 +1,30 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from collections.abc import Callable, Generator
+from typing import TYPE_CHECKING, Any, Self
 
 from flask_babel import lazy_gettext as _
 from sqlalchemy import and_, or_, true
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Query, Session
 
 from palace.manager.core.config import Configuration
+from palace.manager.core.entrypoint import EntryPoint
 from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.core.problem_details import INVALID_INPUT
-from palace.manager.feed.facets.base import FacetsWithEntryPoint
+from palace.manager.feed.facets.base import FacetGroup, FacetsWithEntryPoint
 from palace.manager.feed.facets.constants import FacetConfig
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.licensing import LicensePool
 from palace.manager.util.problem_detail import ProblemDetail
+
+if TYPE_CHECKING:
+    from palace.manager.feed.worklist.base import WorkList
+    from palace.manager.search.filter import Filter, OpensearchDslType, RandomSeedType
+    from palace.manager.sqlalchemy.model.lane import Lane
+    from palace.manager.sqlalchemy.model.work import Work
 
 
 class Facets(FacetsWithEntryPoint):
@@ -32,14 +40,14 @@ class Facets(FacetsWithEntryPoint):
     @classmethod
     def default(
         cls,
-        library,
-        collection=None,
-        availability=None,
-        order=None,
-        entrypoint=None,
-        distributor=None,
-        collection_name=None,
-    ):
+        library: Library | None,
+        collection: Collection | None = None,
+        availability: str | None = None,
+        order: str | None = None,
+        entrypoint: type[EntryPoint] | None = None,
+        distributor: str | None = None,
+        collection_name: str | None = None,
+    ) -> Self:
         return cls(
             library,
             collection=collection,
@@ -51,7 +59,9 @@ class Facets(FacetsWithEntryPoint):
         )
 
     @classmethod
-    def available_facets(cls, config, facet_group_name):
+    def available_facets(
+        cls, config: Library | FacetConfig | None, facet_group_name: str
+    ) -> list[str]:
         """Which facets are enabled for the given facet group?
 
         You can override this to forcible enable or disable facets
@@ -64,28 +74,37 @@ class Facets(FacetsWithEntryPoint):
         elsewhere in this class. Right now this method implies more
         flexibility than actually exists.
         """
-        available = config.enabled_facets(facet_group_name)
+        available = config.enabled_facets(facet_group_name) if config else None
+        if available is None:
+            available = []
 
         # "The default facet isn't available" makes no sense. If the
         # default facet is not in the available list for any reason,
         # add it to the beginning of the list. This makes other code
         # elsewhere easier to write.
         default = cls.default_facet(config, facet_group_name)
-        if default not in available:
+        if default is not None and default not in available:
             available = [default] + available
         return available
 
     @classmethod
-    def default_facet(cls, config, facet_group_name):
+    def default_facet(
+        cls, config: Library | FacetConfig | None, facet_group_name: str
+    ) -> str | None:
         """The default value for the given facet group.
 
         The default value must be one of the values returned by available_facets() above.
         """
+        if config is None:
+            return None
         return config.default_facet(facet_group_name)
 
     @classmethod
     def _values_from_request(
-        cls, config, get_argument, get_header
+        cls,
+        config: Library | FacetConfig,
+        get_argument: Callable[[str, str | None], str | None],
+        get_header: Callable[[str, str | None], str | None],
     ) -> dict[str, Any] | ProblemDetail:
         g = Facets.ORDER_FACET_GROUP_NAME
         order = get_argument(g, cls.default_facet(config, g))
@@ -157,39 +176,44 @@ class Facets(FacetsWithEntryPoint):
     @classmethod
     def from_request(
         cls,
-        library,
-        config,
-        get_argument,
-        get_header,
-        worklist,
-        default_entrypoint=None,
-        **extra,
-    ):
+        library: Library,
+        facet_config: Library | FacetConfig,
+        get_argument: Callable[[str, str | None], str | None],
+        get_header: Callable[[str, str | None], str | None],
+        worklist: WorkList | None,
+        default_entrypoint: type[EntryPoint] | None = None,
+        **extra_kwargs: Any,
+    ) -> Self | ProblemDetail:
         """Load a faceting object from an HTTP request."""
 
-        values = cls._values_from_request(config, get_argument, get_header)
+        values = cls._values_from_request(facet_config, get_argument, get_header)
         if isinstance(values, ProblemDetail):
             return values
-        extra.update(values)
-        extra["library"] = library
+        extra_kwargs.update(values)
+        extra_kwargs["library"] = library
 
         return cls._from_request(
-            config, get_argument, get_header, worklist, default_entrypoint, **extra
+            facet_config,
+            get_argument,
+            get_header,
+            worklist,
+            default_entrypoint,
+            **extra_kwargs,
         )
 
     def __init__(
         self,
-        library,
-        availability,
-        order,
-        distributor,
-        collection_name,
-        order_ascending=None,
-        enabled_facets=None,
-        entrypoint=None,
-        entrypoint_is_default=False,
-        **constructor_kwargs,
-    ):
+        library: Library | None,
+        availability: str | None,
+        order: str | None,
+        distributor: str | None,
+        collection_name: str | None,
+        order_ascending: str | bool | None = None,
+        enabled_facets: dict[str, list[str]] | None = None,
+        entrypoint: type[EntryPoint] | None = None,
+        entrypoint_is_default: bool = False,
+        **constructor_kwargs: Any,
+    ) -> None:
         """Constructor.
 
         :param entrypoint: An EntryPoint class. The 'entry point'
@@ -238,12 +262,14 @@ class Facets(FacetsWithEntryPoint):
 
     def navigate(
         self,
-        availability=None,
-        order=None,
-        entrypoint=None,
-        distributor=None,
-        collection_name=None,
-    ):
+        *,
+        entrypoint: type[EntryPoint] | None = None,
+        availability: str | None = None,
+        order: str | None = None,
+        distributor: str | None = None,
+        collection_name: str | None = None,
+        **kwargs: Any,
+    ) -> Self:
         """Create a slightly different Facets object from this one."""
         return self.__class__(
             library=self.library,
@@ -256,7 +282,7 @@ class Facets(FacetsWithEntryPoint):
             entrypoint_is_default=False,
         )
 
-    def items(self):
+    def items(self) -> Generator[tuple[str, str]]:
         yield from list(super().items())
         if self.order:
             yield (self.ORDER_FACET_GROUP_NAME, self.order)
@@ -268,9 +294,11 @@ class Facets(FacetsWithEntryPoint):
             yield (self.COLLECTION_NAME_FACETS_GROUP_NAME, self.collection_name)
 
     @property
-    def enabled_facets(self):
-        """Yield a 5-tuple of lists (order, availability, collection, distributor, collectionName)
-        representing facet values enabled via initialization or configuration
+    def enabled_facets(self) -> Generator[list[str]]:
+        """
+        Yield lists of enabled facets for each facet group.
+
+        Yields in order: order, availability, collection, distributor, collectionName
 
         The 'entry point' facet group is handled separately, since it
         is not always used.
@@ -297,10 +325,8 @@ class Facets(FacetsWithEntryPoint):
                 yield self.available_facets(self.library, group_name)
 
     @property
-    def facet_groups(self):
-        """Yield a list of 5-tuples
-        (facet group, facet value, new Facets object, selected, is_default)
-        for use in building OPDS facets.
+    def facet_groups(self) -> Generator[FacetGroup]:
+        """Yield FacetGroup objects for use in building OPDS facet links.
 
         This does not yield anything for the 'entry point' facet group,
         which must be handled separately.
@@ -315,74 +341,59 @@ class Facets(FacetsWithEntryPoint):
 
         facet_config = FacetConfig.from_library(self.library) if self.library else None
 
-        def is_default_facet(facets, facet, facet_group_name) -> bool:
+        def is_default_facet(facet: str, facet_group_name: str) -> bool:
             if not facet_config:
                 return False
-            default_facet = facets.default_facet(facet_config, facet_group_name)
+            default_facet = self.default_facet(facet_config, facet_group_name)
             return default_facet == facet
-
-        def dy(new_value):
-            group = self.ORDER_FACET_GROUP_NAME
-            current_value = self.order
-            facets = self.navigate(order=new_value)
-
-            return (
-                group,
-                new_value,
-                facets,
-                current_value == new_value,
-                is_default_facet(facets, new_value, group),
-            )
 
         # First, the order facets.
         if len(order_facets) > 1:
+            group = self.ORDER_FACET_GROUP_NAME
             for facet in order_facets:
-                yield dy(facet)
+                yield FacetGroup(
+                    group=group,
+                    value=facet,
+                    facets=self.navigate(order=facet),
+                    is_selected=self.order == facet,
+                    is_default=is_default_facet(facet, group),
+                )
 
         # Next, the availability facets.
-        def dy(new_value):
-            group = self.AVAILABILITY_FACET_GROUP_NAME
-            current_value = self.availability
-            facets = self.navigate(availability=new_value)
-            return (
-                group,
-                new_value,
-                facets,
-                new_value == current_value,
-                is_default_facet(facets, new_value, group),
-            )
-
         if len(availability_facets) > 1:
+            group = self.AVAILABILITY_FACET_GROUP_NAME
             for facet in availability_facets:
-                yield dy(facet)
+                yield FacetGroup(
+                    group=group,
+                    value=facet,
+                    facets=self.navigate(availability=facet),
+                    is_selected=self.availability == facet,
+                    is_default=is_default_facet(facet, group),
+                )
 
         if len(distributor_facets) > 1:
+            group = self.DISTRIBUTOR_FACETS_GROUP_NAME
             for facet in distributor_facets:
-                group = self.DISTRIBUTOR_FACETS_GROUP_NAME
-                current_value = self.distributor
-                facets = self.navigate(distributor=facet)
-                yield (
-                    group,
-                    facet,
-                    facets,
-                    facet == current_value,
-                    is_default_facet(facets, facet, group),
+                yield FacetGroup(
+                    group=group,
+                    value=facet,
+                    facets=self.navigate(distributor=facet),
+                    is_selected=self.distributor == facet,
+                    is_default=is_default_facet(facet, group),
                 )
 
         if len(collection_name_facets) > 1:
+            group = self.COLLECTION_NAME_FACETS_GROUP_NAME
             for facet in collection_name_facets:
-                group = self.COLLECTION_NAME_FACETS_GROUP_NAME
-                current_value = self.collection_name
-                facets = self.navigate(collection_name=facet)
-                yield (
-                    group,
-                    facet,
-                    facets,
-                    facet == current_value,
-                    is_default_facet(facets, facet, group),
+                yield FacetGroup(
+                    group=group,
+                    value=facet,
+                    facets=self.navigate(collection_name=facet),
+                    is_selected=self.collection_name == facet,
+                    is_default=is_default_facet(facet, group),
                 )
 
-    def modify_search_filter(self, filter):
+    def modify_search_filter(self, filter: Filter) -> Filter:
         """Modify the given external_search.Filter object
         so that it reflects the settings of this Facets object.
 
@@ -425,8 +436,9 @@ class Facets(FacetsWithEntryPoint):
                 filter.order_ascending = self.order_ascending
             else:
                 logging.error("Unrecognized sort order: %s", self.order)
+        return filter
 
-    def modify_database_query(self, _db, qu):
+    def modify_database_query(self, _db: Session, qu: Query[Work]) -> Query[Work]:
         """Restrict a query against Work+LicensePool+Edition so that it
         matches only works that fit the criteria of this Faceting object.
 
@@ -437,11 +449,12 @@ class Facets(FacetsWithEntryPoint):
         # Apply any superclass criteria
         qu = super().modify_database_query(_db, qu)
 
-        active_metered_filter = and_(
+        # sqlalchemy-stubs has issues with true() in and_/or_ expressions
+        active_metered_filter = and_(  # type: ignore[type-var]
             LicensePool.metered_or_equivalent_type == true(),
             LicensePool.active_status == true(),
         )
-        active_unlimited_filter = and_(
+        active_unlimited_filter = and_(  # type: ignore[type-var]
             LicensePool.unlimited_type == true(),
             LicensePool.active_status == true(),
         )
@@ -480,14 +493,20 @@ class DefaultSortOrderFacets(Facets):
     Subclasses must set DEFAULT_SORT_ORDER
     """
 
+    DEFAULT_SORT_ORDER: str
+
     @classmethod
-    def available_facets(cls, config, facet_group_name):
+    def available_facets(
+        cls, config: Library | FacetConfig | None, facet_group_name: str
+    ) -> list[str]:
         """Make sure the default sort order is the first item
         in the list of available sort orders.
         """
         if facet_group_name != cls.ORDER_FACET_GROUP_NAME:
             return super().available_facets(config, facet_group_name)
-        default = config.enabled_facets(facet_group_name)
+        default = config.enabled_facets(facet_group_name) if config else []
+        if default is None:
+            default = []
 
         # Promote the default sort order to the front of the list,
         # adding it if necessary.
@@ -497,7 +516,9 @@ class DefaultSortOrderFacets(Facets):
         return [order] + default
 
     @classmethod
-    def default_facet(cls, config, facet_group_name):
+    def default_facet(
+        cls, config: Library | FacetConfig | None, facet_group_name: str
+    ) -> str | None:
         if facet_group_name == cls.ORDER_FACET_GROUP_NAME:
             return cls.DEFAULT_SORT_ORDER
         return super().default_facet(config, facet_group_name)
@@ -512,8 +533,12 @@ class FeaturedFacets(FacetsWithEntryPoint):
     """
 
     def __init__(
-        self, minimum_featured_quality, entrypoint=None, random_seed=None, **kwargs
-    ):
+        self,
+        minimum_featured_quality: float,
+        entrypoint: type[EntryPoint] | None = None,
+        random_seed: RandomSeedType = None,
+        **kwargs: Any,
+    ) -> None:
         """Set up an object that finds featured books in a given
         WorkList.
 
@@ -525,13 +550,13 @@ class FeaturedFacets(FacetsWithEntryPoint):
         self.random_seed = random_seed
 
     @classmethod
-    def default(cls, lane, **kwargs):
-        library = None
+    def default(cls, lane: WorkList | Library | Lane | None, **kwargs: Any) -> Self:
+        library: Library | None = None
         if lane:
             if isinstance(lane, Library):
                 library = lane
             else:
-                library = lane.library
+                library = getattr(lane, "library", None)
 
         if library:
             quality = library.settings.minimum_featured_quality
@@ -539,7 +564,12 @@ class FeaturedFacets(FacetsWithEntryPoint):
             quality = Configuration.DEFAULT_MINIMUM_FEATURED_QUALITY
         return cls(quality, **kwargs)
 
-    def navigate(self, minimum_featured_quality=None, entrypoint=None):
+    def navigate(
+        self,
+        entrypoint: type[EntryPoint] | None = None,
+        minimum_featured_quality: float | None = None,
+        **kwargs: Any,
+    ) -> Self:
         """Create a slightly different FeaturedFacets object based on this
         one.
         """
@@ -549,11 +579,12 @@ class FeaturedFacets(FacetsWithEntryPoint):
         entrypoint = entrypoint or self.entrypoint
         return self.__class__(minimum_featured_quality, entrypoint)
 
-    def modify_search_filter(self, filter):
+    def modify_search_filter(self, filter: Filter) -> Filter:
         super().modify_search_filter(filter)
         filter.minimum_featured_quality = self.minimum_featured_quality
+        return filter
 
-    def scoring_functions(self, filter):
+    def scoring_functions(self, filter: Filter) -> list[OpensearchDslType]:
         """Generate scoring functions that weight works randomly, but
         with 'more featurable' works tending to be at the top.
         """

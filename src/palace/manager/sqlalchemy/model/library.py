@@ -337,7 +337,7 @@ class Library(Base, HasSessionCache):
         integration_settings_update(LibrarySettings, self, new_settings, merge=True)
 
     @property
-    def entrypoints(self) -> Generator[type[EntryPoint] | None]:
+    def entrypoints(self) -> Generator[type[EntryPoint]]:
         """The EntryPoints enabled for this library."""
         values = self.settings.enabled_entry_points
         for v in values:

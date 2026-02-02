@@ -26,6 +26,7 @@ from palace.manager.feed.annotator.circulation import (
     LibraryAnnotator,
 )
 from palace.manager.feed.annotator.verbose import VerboseAnnotator
+from palace.manager.feed.facets.base import FacetGroup
 from palace.manager.feed.facets.constants import FacetConstants
 from palace.manager.feed.facets.feed import Facets, FeaturedFacets
 from palace.manager.feed.facets.search import SearchFacets
@@ -845,19 +846,19 @@ class TestOPDSAcquisitionFeed:
 
         class MockFacets:
             @property
-            def facet_groups(self):
-                """Yield a facet group+facet 5-tuple that passes the test we're
+            def facet_groups(self) -> Generator[FacetGroup]:
+                """Yield a FacetGroup that passes the test we're
                 running (which will be turned into a link), and then a
                 bunch that don't (which will be ignored).
                 """
 
                 # Nonexistent facet group, nonexistent facet
-                yield (
-                    "no such group",
-                    "no such facet",
-                    "i just don't know",
-                    True,
-                    False,
+                yield FacetGroup(
+                    group="no such group",
+                    value="no such facet",
+                    facets="i just don't know",  # type: ignore[arg-type]
+                    is_selected=True,
+                    is_default=False,
                 )
 
         class MockFeed(OPDSAcquisitionFeed):

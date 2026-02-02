@@ -151,22 +151,30 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
         circumstances apply. You need to decide whether to call
         add_entrypoint_links in addition to calling this method.
         """
-        for group, value, new_facets, selected, default_facet in facets.facet_groups:
-            url = annotator.facet_url(new_facets)
+        for facet_group in facets.facet_groups:
+            url = annotator.facet_url(facet_group.facets)
             if not url:
                 continue
-            group_title = Facets.GROUP_DISPLAY_TITLES.get(group)
-            facet_title = Facets.FACET_DISPLAY_TITLES.get(value)
+            group_title = Facets.GROUP_DISPLAY_TITLES.get(facet_group.group)
+            facet_title = Facets.FACET_DISPLAY_TITLES.get(facet_group.value)
             if not facet_title:
-                display_lambda = Facets.FACET_DISPLAY_TITLES_DYNAMIC.get(group)
-                facet_title = display_lambda(new_facets) if display_lambda else None
+                display_lambda = Facets.FACET_DISPLAY_TITLES_DYNAMIC.get(
+                    facet_group.group
+                )
+                facet_title = (
+                    display_lambda(facet_group.facets) if display_lambda else None
+                )
             if not (group_title and facet_title):
                 # This facet group or facet, is not recognized by the
                 # system. It may be left over from an earlier version,
                 # or just weird junk data.
                 continue
             yield cls.facet_link(
-                url, str(facet_title), str(group_title), selected, default_facet
+                url,
+                str(facet_title),
+                str(group_title),
+                facet_group.is_selected,
+                facet_group.is_default,
             )
 
     @classmethod
@@ -232,7 +240,7 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
         cls,
         feed: FeedData,
         url_generator: Callable[[type[EntryPoint]], str],
-        entrypoints: list[type[EntryPoint]],
+        entrypoints: Iterable[type[EntryPoint]],
         selected_entrypoint: type[EntryPoint] | None,
         group_name: str = "Formats",
     ) -> None:
@@ -242,9 +250,11 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
         :param feed: A FeedData object.
         :param url_generator: A callable that returns the entry point
             URL when passed an EntryPoint.
-        :param entrypoints: A list of all EntryPoints in the facet group.
+        :param entrypoints: An iterable of all EntryPoints in the facet group.
         :param selected_entrypoint: The current EntryPoint, if selected.
         """
+        entrypoints = list(entrypoints)
+
         if len(entrypoints) == 1 and selected_entrypoint in (None, entrypoints[0]):
             # There is only one entry point. Unless the currently
             # selected entry point is somehow different, there's no

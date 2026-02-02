@@ -1,12 +1,21 @@
 from __future__ import annotations
 
-from palace.manager.core.entrypoint import EverythingEntryPoint
+from collections.abc import Callable, Generator
+from typing import TYPE_CHECKING, Any, Self
+
+from palace.manager.core.entrypoint import EntryPoint, EverythingEntryPoint
+from palace.manager.feed.facets.constants import FacetConfig
 from palace.manager.feed.facets.feed import Facets
 from palace.manager.sqlalchemy.constants import EditionConstants
 from palace.manager.sqlalchemy.model.edition import Edition
+from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.util.accept_language import parse_accept_language
 from palace.manager.util.languages import LanguageCodes
 from palace.manager.util.problem_detail import ProblemDetail
+
+if TYPE_CHECKING:
+    from palace.manager.feed.worklist.base import WorkList
+    from palace.manager.search.filter import Filter
 
 
 class SearchFacets(Facets):
@@ -23,7 +32,7 @@ class SearchFacets(Facets):
     # the default cutoff point, determined empirically.
     DEFAULT_MIN_SCORE = 500
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs: Any) -> None:
         languages = kwargs.pop("languages", None)
         media = kwargs.pop("media", None)
 
@@ -46,24 +55,26 @@ class SearchFacets(Facets):
             default_min_score = None
         else:
             default_min_score = self.DEFAULT_MIN_SCORE
-        self.min_score = kwargs.pop("min_score", default_min_score)
+        self.min_score: int | None = kwargs.pop("min_score", default_min_score)
 
-        self.search_type = kwargs.pop("search_type", "default")
+        self.search_type: str = kwargs.pop("search_type", "default")
         if self.search_type not in ["default", "json"]:
             raise ValueError(f"Invalid search type: {self.search_type}")
 
         super().__init__(**kwargs)
         if media == Edition.ALL_MEDIUM:
-            self.media = media
+            self.media: str | list[str] | None = media
         else:
             self.media = self._ensure_list(media)
         self.media_argument = media
 
         self.languages = self._ensure_list(languages)
-        self._language_from_query = kwargs.pop("language_from_query", False)
+        self._language_from_query: bool = kwargs.pop("language_from_query", False)
 
     @classmethod
-    def default_facet(cls, ignore, group_name):
+    def default_facet(
+        cls, ignore: Library | FacetConfig | None, group_name: str
+    ) -> str | None:
         """The default facet settings for SearchFacets are hard-coded.
 
         By default, we will search all
@@ -77,7 +88,7 @@ class SearchFacets(Facets):
             return cls.ORDER_BY_RELEVANCE
         return None
 
-    def _ensure_list(self, x):
+    def _ensure_list(self, x: str | list[str] | None) -> list[str] | None:
         """Make sure x is a list of values, if there is a value at all."""
         if x is None:
             return None
@@ -88,43 +99,47 @@ class SearchFacets(Facets):
     @classmethod
     def from_request(
         cls,
-        library,
-        config,
-        get_argument,
-        get_header,
-        worklist,
-        default_entrypoint=EverythingEntryPoint,
-        **extra,
-    ):
-        values = cls._values_from_request(config, get_argument, get_header)
+        library: Library,
+        facet_config: Library | FacetConfig,
+        get_argument: Callable[[str, str | None], str | None],
+        get_header: Callable[[str, str | None], str | None],
+        worklist: WorkList | None,
+        default_entrypoint: type[EntryPoint] | None = EverythingEntryPoint,
+        **extra_kwargs: Any,
+    ) -> Self | ProblemDetail:
+        values = cls._values_from_request(facet_config, get_argument, get_header)
         if isinstance(values, ProblemDetail):
             return values
-        extra.update(values)
-        extra["library"] = library
+        extra_kwargs.update(values)
+        extra_kwargs["library"] = library
         # Searches against a WorkList will use the union of the
         # languages allowed by the WorkList and the languages found in
         # the client's Accept-Language header.
-        language_header = get_header("Accept-Language")
-        languages = get_argument("language") or None
-        extra["language_from_query"] = languages is not None
-        if not languages:
+        language_header = get_header("Accept-Language", None)
+        language = get_argument("language", None) or None
+        extra_kwargs["language_from_query"] = language is not None
+        languages: str | list[str] | None
+        if not language:
             if language_header:
-                languages = parse_accept_language(language_header)
-                languages = [l[0] for l in languages]
-                languages = list(map(LanguageCodes.iso_639_2_for_locale, languages))
-                languages = [l for l in languages if l]
-            languages = languages or None
-        extra["languages"] = languages
+                accept_header_languages = (
+                    l.language for l in parse_accept_language(language_header)
+                )
+                mapped_languages = map(
+                    LanguageCodes.iso_639_2_for_locale, accept_header_languages
+                )
+                languages = [l for l in mapped_languages if l] or None
+            else:
+                languages = None
+        else:
+            languages = language
+        extra_kwargs["languages"] = languages
 
         # The client can request a minimum score for search results.
-        min_score = get_argument("min_score", None)
-        if min_score is not None:
+        if (min_score := get_argument("min_score", None)) is not None:
             try:
-                min_score = int(min_score)
-            except ValueError as e:
-                min_score = None
-        if min_score is not None:
-            extra["min_score"] = min_score
+                extra_kwargs["min_score"] = int(min_score)
+            except ValueError:
+                pass
 
         # The client can request an additional restriction on
         # the media types to be returned by searches.
@@ -132,18 +147,25 @@ class SearchFacets(Facets):
         media = get_argument("media", None)
         if media not in EditionConstants.KNOWN_MEDIA:
             media = None
-        extra["media"] = media
+        extra_kwargs["media"] = media
 
-        search_type = get_argument("search_type")
+        search_type = get_argument("search_type", None)
         if search_type:
-            extra["search_type"] = search_type
+            extra_kwargs["search_type"] = search_type
 
         return cls._from_request(
-            config, get_argument, get_header, worklist, default_entrypoint, **extra
+            facet_config,
+            get_argument,
+            get_header,
+            worklist,
+            default_entrypoint,
+            **extra_kwargs,
         )
 
     @classmethod
-    def selectable_entrypoints(cls, worklist):
+    def selectable_entrypoints(
+        cls, worklist: WorkList | Library | FacetConfig | None
+    ) -> list[type[EntryPoint]]:
         """If the WorkList has more than one facet, an 'everything' facet
         is added for search purposes.
         """
@@ -156,7 +178,7 @@ class SearchFacets(Facets):
             entrypoints.insert(0, EverythingEntryPoint)
         return entrypoints
 
-    def modify_search_filter(self, filter):
+    def modify_search_filter(self, filter: Filter) -> Filter:
         """Modify the given external_search.Filter object
         so that it reflects this SearchFacets object.
         """
@@ -195,13 +217,14 @@ class SearchFacets(Facets):
         # We should only modify the langauges when we've not been asked to
         # display "all" the languages
         if self.languages != ["all"]:
-            all_languages = set()
+            all_languages: set[str] = set()
             for language_list in (self.languages, filter.languages):
                 for language in self._ensure_list(language_list) or []:
                     all_languages.add(language)
             filter.languages = sorted(all_languages) or None
+        return filter
 
-    def items(self):
+    def items(self) -> Generator[tuple[str, Any]]:
         """Yields a 2-tuple for every active facet setting.
 
         This means the EntryPoint (handled by the superclass)
@@ -221,8 +244,25 @@ class SearchFacets(Facets):
         if self._language_from_query and self.languages:
             yield ("language", self.languages)
 
-    def navigate(self, **kwargs):
-        min_score = kwargs.pop("min_score", self.min_score)
-        new_facets = super().navigate(**kwargs)
+    def navigate(
+        self,
+        entrypoint: type[EntryPoint] | None = None,
+        availability: str | None = None,
+        order: str | None = None,
+        distributor: str | None = None,
+        collection_name: str | None = None,
+        min_score: int | None = None,
+        **kwargs: Any,
+    ) -> Self:
+        if min_score is None:
+            min_score = self.min_score
+        new_facets = super().navigate(
+            entrypoint=entrypoint,
+            availability=availability,
+            order=order,
+            distributor=distributor,
+            collection_name=collection_name,
+            **kwargs,
+        )
         new_facets.min_score = min_score
         return new_facets
