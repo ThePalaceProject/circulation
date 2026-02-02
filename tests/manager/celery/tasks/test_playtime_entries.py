@@ -918,13 +918,15 @@ class TestGeneratePlaytimeReport:
 
         nested_method = mock_google_drive_service.create_nested_folders_if_not_exist
         assert nested_method.call_count == 4
+        # The year in the folder structure is based on the start of the reporting period.
+        expected_year = str(cutoff.year)
         assert nested_method.call_args_list[0].kwargs == {
             "parent_folder_id": parent_folder_id,
             "folders": [
                 "ds_a",
                 "Usage Reports",
                 "test cm",
-                "2025",
+                expected_year,
             ],
         }
         assert nested_method.call_args_list[1].kwargs == {
@@ -933,7 +935,7 @@ class TestGeneratePlaytimeReport:
                 "ds_b",
                 "Usage Reports",
                 "test cm",
-                "2025",
+                expected_year,
             ],
         }
 
@@ -943,7 +945,7 @@ class TestGeneratePlaytimeReport:
                 "ds_c",
                 "Usage Reports",
                 "test cm",
-                "2025",
+                expected_year,
             ],
         }
 
@@ -953,7 +955,7 @@ class TestGeneratePlaytimeReport:
                 "ds_d",
                 "Usage Reports",
                 "test cm",
-                "2025",
+                expected_year,
             ],
         }
 
