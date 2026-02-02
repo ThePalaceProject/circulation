@@ -125,6 +125,8 @@ def test_only_active_collections_are_included(
                 "genres",
                 "age_ranges",
                 "bisac_subjects",
+                "visible",
+                "visibility_status",
                 "data_source",
                 "collection_name",
                 "license_expiration",
@@ -761,6 +763,91 @@ def test_generate_report(
                 assert int(row["library_active_hold_count"]) == 1
     finally:
         os.remove(reports_zip)
+
+
+def test_inventory_report_visibility_columns(
+    db: DatabaseTransactionFixture,
+    services_fixture: ServicesFixture,
+):
+    library = db.library(short_name="test_library")
+    collection = create_test_opds_collection(
+        "Visibility Collection", "VisibilitySource", db, library
+    )
+    ds = collection.data_source
+    assert ds is not None
+
+    filtered_audiences = ["young adult"]
+    filtered_genres = ["filtered_genre"]
+
+    visible_work = db.work(
+        data_source_name=ds.name, collection=collection, with_license_pool=True
+    )
+    visible_work.audience = "adult"
+    genre_ok, _ = Genre.lookup(db.session, "genre_ok", autocreate=True)
+    visible_work.genres.append(genre_ok)
+
+    audience_filtered_work = db.work(
+        data_source_name=ds.name, collection=collection, with_license_pool=True
+    )
+    audience_filtered_work.audience = "young adult"
+    audience_filtered_work.genres.append(genre_ok)
+
+    genre_filtered_work = db.work(
+        data_source_name=ds.name, collection=collection, with_license_pool=True
+    )
+    genre_filtered_work.audience = "adult"
+    genre_filtered, _ = Genre.lookup(db.session, "filtered_genre", autocreate=True)
+    genre_filtered_work.genres.append(genre_filtered)
+
+    suppressed_work = db.work(
+        data_source_name=ds.name, collection=collection, with_license_pool=True
+    )
+    suppressed_work.audience = "young adult"
+    suppressed_work.genres.append(genre_filtered)
+    suppressed_work.suppressed_for.append(library)
+
+    integration_ids = [collection.integration_configuration.id]
+    sql_params = {
+        "library_id": library.id,
+        "integration_ids": tuple(integration_ids),
+        "filtered_audiences": filtered_audiences,
+        "filtered_audiences_enabled": True,
+        "filtered_genres": filtered_genres,
+        "filtered_genres_enabled": True,
+    }
+
+    csv_file = io.StringIO()
+    csv_file.name = "test_visibility_report.csv"
+
+    generate_csv_report(
+        db=db.session,
+        csv_file=csv_file,
+        sql_params=sql_params,
+        query=inventory_report_query(),
+    )
+
+    csv_file.seek(0)
+    rows = list(csv.DictReader(csv_file))
+
+    def row_for(work):
+        identifier_value = work.presentation_edition.primary_identifier.identifier
+        return next(r for r in rows if r["identifier"] == identifier_value)
+
+    visible_row = row_for(visible_work)
+    assert visible_row["visible"] == "true"
+    assert visible_row["visibility_status"] == ""
+
+    audience_filtered_row = row_for(audience_filtered_work)
+    assert audience_filtered_row["visible"] == "false"
+    assert audience_filtered_row["visibility_status"] == "filtered"
+
+    genre_filtered_row = row_for(genre_filtered_work)
+    assert genre_filtered_row["visible"] == "false"
+    assert genre_filtered_row["visibility_status"] == "filtered"
+
+    suppressed_row = row_for(suppressed_work)
+    assert suppressed_row["visible"] == "false"
+    assert suppressed_row["visibility_status"] == "manually suppressed"
 
 
 @pytest.mark.parametrize(
