@@ -221,3 +221,42 @@ class TestDatabaseBackedFacets:
         assert ["sort_author", "sort_title", "id"] == [
             x.name for x in unsupported_order._distinct_on
         ]
+
+    def test_reverse_order_variants_in_database_field_mapping(self):
+        """Verify reverse variants are in the database field mapping."""
+        mapping = DatabaseBackedFacets.ORDER_FACET_TO_DATABASE_FIELD
+        assert FacetConstants.ORDER_TITLE_DESC in mapping
+        assert FacetConstants.ORDER_AUTHOR_DESC in mapping
+        # Maps to same field as base
+        assert (
+            mapping[FacetConstants.ORDER_TITLE_DESC]
+            == mapping[FacetConstants.ORDER_TITLE]
+        )
+        assert (
+            mapping[FacetConstants.ORDER_AUTHOR_DESC]
+            == mapping[FacetConstants.ORDER_AUTHOR]
+        )
+
+    def test_order_by_reverse_variants(self, db: DatabaseTransactionFixture):
+        """Reverse order variants should sort by same field but descending."""
+        # ORDER_TITLE_DESC should sort by sort_title descending
+        facets = DatabaseBackedFacets(
+            library=db.default_library(),
+            availability=Facets.AVAILABLE_ALL,
+            order=Facets.ORDER_TITLE_DESC,
+            distributor=None,
+            collection_name=None,
+        )
+        order_by_sorted, _ = facets.order_by()
+        assert order_by_sorted[0].compare(Edition.sort_title.desc())
+
+        # ORDER_AUTHOR_DESC should sort by sort_author descending
+        facets = DatabaseBackedFacets(
+            library=db.default_library(),
+            availability=Facets.AVAILABLE_ALL,
+            order=Facets.ORDER_AUTHOR_DESC,
+            distributor=None,
+            collection_name=None,
+        )
+        order_by_sorted, _ = facets.order_by()
+        assert order_by_sorted[0].compare(Edition.sort_author.desc())

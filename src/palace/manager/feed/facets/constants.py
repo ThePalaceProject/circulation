@@ -40,26 +40,45 @@ class FacetConstants:
     ORDER_SERIES_POSITION = "series"
     ORDER_WORK_ID = "work_id"
     ORDER_RANDOM = "random"
+
+    # Reverse variants of order facets (opposite sort direction)
+    ORDER_TITLE_DESC = "title_desc"
+    ORDER_AUTHOR_DESC = "author_desc"
+    ORDER_ADDED_TO_COLLECTION_ASC = "added_asc"
+
     # Some order facets, like series and work id,
     # only make sense in certain contexts.
     # These are the options that can be enabled
     # for all feeds as a library-wide setting.
-    ORDER_FACETS = [
+    ORDER_FACETS = {
         ORDER_TITLE,
         ORDER_AUTHOR,
         ORDER_ADDED_TO_COLLECTION,
-    ]
+    }
+
+    # Maps base order facets to their reverse variant.
+    # When a base facet is enabled, its reverse variant is automatically
+    # available in feeds.
+    ORDER_FACET_TO_REVERSE_VARIANT: dict[str, str] = {
+        ORDER_TITLE: ORDER_TITLE_DESC,
+        ORDER_AUTHOR: ORDER_AUTHOR_DESC,
+        ORDER_ADDED_TO_COLLECTION: ORDER_ADDED_TO_COLLECTION_ASC,
+    }
 
     ORDER_ASCENDING = "asc"
     ORDER_DESCENDING = "desc"
 
-    # Most facets should be ordered in ascending order by default (A>-Z), but
-    # these dates should be ordered descending by default (new->old).
-    ORDER_DESCENDING_BY_DEFAULT = [
+    # Most facets should be ordered in ascending order by default (A->Z), but
+    # these should be ordered descending by default.
+    ORDER_DESCENDING_BY_DEFAULT = (
         ORDER_ADDED_TO_COLLECTION,
         ORDER_LAST_UPDATE,
         ORDER_LICENSE_POOL_LAST_UPDATED,
-    ]
+        # Reverse variants that sort descending (Z->A)
+        ORDER_TITLE_DESC,
+        ORDER_AUTHOR_DESC,
+    )
+    # Note: ORDER_ADDED_TO_COLLECTION_ASC is NOT in this tuple - it sorts ascending (oldest first)
 
     DISTRIBUTOR_FACETS_GROUP_NAME = "distributor"
     DISTRIBUTOR_ALL = "All"
@@ -88,17 +107,34 @@ class FacetConstants:
         ),
     }
 
+    # Display titles shown in OPDS feeds (include sort direction)
     FACET_DISPLAY_TITLES = {
+        ORDER_TITLE: _("Title (A-Z)"),
+        ORDER_AUTHOR: _("Author (A-Z)"),
+        ORDER_LAST_UPDATE: _("Last Update"),
+        ORDER_LICENSE_POOL_LAST_UPDATED: _("License Pool Last Updated"),
+        ORDER_ADDED_TO_COLLECTION: _("Date Added (New-Old)"),
+        ORDER_SERIES_POSITION: _("Series Position"),
+        ORDER_WORK_ID: _("Work ID"),
+        # Reverse variants
+        ORDER_TITLE_DESC: _("Title (Z-A)"),
+        ORDER_AUTHOR_DESC: _("Author (Z-A)"),
+        ORDER_ADDED_TO_COLLECTION_ASC: _("Date Added (Old-New)"),
+        # Availability facets
+        AVAILABLE_NOW: _("Available now"),
+        AVAILABLE_ALL: _("All"),
+        AVAILABLE_OPEN_ACCESS: _("Yours to keep"),
+    }
+
+    # Simple titles for admin interface (no direction - both directions are enabled together)
+    ORDER_FACET_ADMIN_TITLES = {
         ORDER_TITLE: _("Title"),
         ORDER_AUTHOR: _("Author"),
         ORDER_LAST_UPDATE: _("Last Update"),
         ORDER_LICENSE_POOL_LAST_UPDATED: _("License Pool Last Updated"),
-        ORDER_ADDED_TO_COLLECTION: _("Recently Added"),
+        ORDER_ADDED_TO_COLLECTION: _("Date Added"),
         ORDER_SERIES_POSITION: _("Series Position"),
         ORDER_WORK_ID: _("Work ID"),
-        AVAILABLE_NOW: _("Available now"),
-        AVAILABLE_ALL: _("All"),
-        AVAILABLE_OPEN_ACCESS: _("Yours to keep"),
     }
 
     # For titles generated based on some runtime value
@@ -129,7 +165,7 @@ class FacetConstants:
         COLLECTION_NAME_FACETS_GROUP_NAME: COLLECTION_NAME_ALL,
     }
 
-    SORT_ORDER_TO_OPENSEARCH_FIELD_NAME = {
+    SORT_ORDER_TO_OPENSEARCH_FIELD_NAME: dict[str, str | list[str]] = {
         ORDER_TITLE: "sort_title",
         ORDER_AUTHOR: "sort_author",
         ORDER_LAST_UPDATE: "last_update_time",
@@ -137,6 +173,10 @@ class FacetConstants:
         ORDER_LICENSE_POOL_LAST_UPDATED: "licensepools.last_updated",
         ORDER_SERIES_POSITION: ["series_position", "sort_title"],
         ORDER_WORK_ID: "_id",
+        # Reverse variants map to the same fields (direction is handled separately)
+        ORDER_TITLE_DESC: "sort_title",
+        ORDER_AUTHOR_DESC: "sort_author",
+        ORDER_ADDED_TO_COLLECTION_ASC: "licensepools.availability_time",
     }
 
 

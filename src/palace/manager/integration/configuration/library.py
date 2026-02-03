@@ -181,7 +181,7 @@ class LibrarySettings(BaseSettings):
             label="Allow patrons to sort by",
             type=FormFieldType.MENU,
             options={
-                facet: FacetConstants.FACET_DISPLAY_TITLES[facet]
+                facet: FacetConstants.ORDER_FACET_ADMIN_TITLES[facet]
                 for facet in FacetConstants.ORDER_FACETS
             },
             category="Lanes & Filters",
@@ -195,7 +195,7 @@ class LibrarySettings(BaseSettings):
             label="Default Sort by",
             type=FormFieldType.SELECT,
             options={
-                facet: FacetConstants.FACET_DISPLAY_TITLES[facet]
+                facet: FacetConstants.ORDER_FACET_ADMIN_TITLES[facet]
                 for facet in FacetConstants.ORDER_FACETS
             },
             category="Lanes & Filters",
