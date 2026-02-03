@@ -23,10 +23,7 @@ class CrawlableFacets(Facets):
     ) -> list[str]:
         facets_setting = cls.SETTINGS[facet_group_name]
 
-        if isinstance(facets_setting, list):
-            facets = list(facets_setting)
-        else:
-            facets = [facets_setting]
+        facets = [facets_setting]
         if (
             facet_group_name == Facets.DISTRIBUTOR_FACETS_GROUP_NAME
             or facet_group_name == Facets.COLLECTION_NAME_FACETS_GROUP_NAME
