@@ -10,11 +10,8 @@ class CrawlableFacets(Facets):
 
     # These facet settings are definitive of a crawlable feed.
     # Library configuration settings don't matter.
-    SETTINGS: dict[str, str | list[str]] = {
-        Facets.ORDER_FACET_GROUP_NAME: [
-            Facets.ORDER_LAST_UPDATE,
-            Facets.ORDER_LICENSE_POOL_LAST_UPDATED,
-        ],
+    SETTINGS: dict[str, str] = {
+        Facets.ORDER_FACET_GROUP_NAME: Facets.ORDER_LAST_UPDATE,
         Facets.AVAILABILITY_FACET_GROUP_NAME: Facets.AVAILABLE_ALL,
         Facets.DISTRIBUTOR_FACETS_GROUP_NAME: Facets.DISTRIBUTOR_ALL,
         Facets.COLLECTION_NAME_FACETS_GROUP_NAME: Facets.COLLECTION_NAME_ALL,
@@ -42,8 +39,4 @@ class CrawlableFacets(Facets):
     def default_facet(
         cls, config: Library | FacetConfig | None, facet_group_name: str
     ) -> str:
-        facets = cls.SETTINGS[facet_group_name]
-        if isinstance(facets, list):
-            return facets[0]
-        else:
-            return facets
+        return cls.SETTINGS[facet_group_name]

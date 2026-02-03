@@ -35,7 +35,6 @@ class FacetConstants:
     ORDER_TITLE = "title"
     ORDER_AUTHOR = "author"
     ORDER_LAST_UPDATE = "last_update"
-    ORDER_LICENSE_POOL_LAST_UPDATED = "license_pool_last_updated"
     ORDER_ADDED_TO_COLLECTION = "added"
     ORDER_SERIES_POSITION = "series"
     ORDER_WORK_ID = "work_id"
@@ -73,7 +72,6 @@ class FacetConstants:
     ORDER_DESCENDING_BY_DEFAULT = (
         ORDER_ADDED_TO_COLLECTION,
         ORDER_LAST_UPDATE,
-        ORDER_LICENSE_POOL_LAST_UPDATED,
         # Reverse variants that sort descending (Z->A)
         ORDER_TITLE_DESC,
         ORDER_AUTHOR_DESC,
@@ -131,7 +129,6 @@ class FacetConstants:
         ORDER_TITLE: _("Title"),
         ORDER_AUTHOR: _("Author"),
         ORDER_LAST_UPDATE: _("Last Update"),
-        ORDER_LICENSE_POOL_LAST_UPDATED: _("License Pool Last Updated"),
         ORDER_ADDED_TO_COLLECTION: _("Date Added"),
         ORDER_SERIES_POSITION: _("Series Position"),
         ORDER_WORK_ID: _("Work ID"),
@@ -170,7 +167,6 @@ class FacetConstants:
         ORDER_AUTHOR: "sort_author",
         ORDER_LAST_UPDATE: "last_update_time",
         ORDER_ADDED_TO_COLLECTION: "licensepools.availability_time",
-        ORDER_LICENSE_POOL_LAST_UPDATED: "licensepools.last_updated",
         ORDER_SERIES_POSITION: ["series_position", "sort_title"],
         ORDER_WORK_ID: "_id",
         # Reverse variants map to the same fields (direction is handled separately)

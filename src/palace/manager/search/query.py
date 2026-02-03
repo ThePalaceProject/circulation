@@ -711,7 +711,6 @@ class JSONQuery(Query):
         ),  # Made up keyword type, because we don't want text fuzzyness on this
         "licensepools.available": dict(path="licensepools"),
         "licensepools.availability_time": dict(path="licensepools"),
-        "licensepools.last_updated": dict(path="licensepools"),
         "licensepools.collection_id": dict(path="licensepools"),
         "licensepools.data_source_id": dict(
             path="licensepools", ops=[Operators.EQ, Operators.NEQ]

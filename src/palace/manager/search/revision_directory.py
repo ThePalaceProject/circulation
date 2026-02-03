@@ -3,10 +3,8 @@ from collections.abc import Mapping
 from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.search.revision import SearchSchemaRevision
 from palace.manager.search.v5 import SearchV5
-from palace.manager.search.v6 import SearchV6
-from palace.manager.search.v7 import SearchV7
 
-REVISIONS = [SearchV5(), SearchV6(), SearchV7()]
+REVISIONS = [SearchV5()]
 
 
 class SearchRevisionDirectory:
