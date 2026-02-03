@@ -50,11 +50,11 @@ class FacetConstants:
     # only make sense in certain contexts.
     # These are the options that can be enabled
     # for all feeds as a library-wide setting.
-    ORDER_FACETS = (
+    ORDER_FACETS = {
         ORDER_TITLE,
         ORDER_AUTHOR,
         ORDER_ADDED_TO_COLLECTION,
-    )
+    }
 
     # Maps base order facets to their reverse variant.
     # When a base facet is enabled, its reverse variant is automatically
