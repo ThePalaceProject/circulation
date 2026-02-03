@@ -57,7 +57,7 @@ def _authorize_from_request(
 
 class ReportController(LoggerMixin):
 
-    def __init__(self, db: Session, registry: LicenseProvidersRegistry):
+    def __init__(self, db: Session, registry: LicenseProvidersRegistry) -> None:
         self._db = db
         self.registry = registry
 

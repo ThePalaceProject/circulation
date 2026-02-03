@@ -68,7 +68,7 @@ class SignInController(AdminController):
         logo=logo_style,
     )
 
-    def sign_in(self):
+    def sign_in(self) -> Response | ProblemDetail | WerkzeugResponse:
         """Redirects admin if they're signed in, or shows the sign in page."""
         if not self.admin_auth_providers:
             return ADMIN_AUTH_NOT_CONFIGURED
@@ -77,7 +77,7 @@ class SignInController(AdminController):
 
         if isinstance(admin, ProblemDetail):
             redirect_url = flask.request.args.get("redirect")
-            auth_provider_html = [
+            auth_provider_sections: list[str] = [
                 auth.sign_in_template(redirect_url)
                 for auth in self.admin_auth_providers
             ]
@@ -88,7 +88,7 @@ class SignInController(AdminController):
             """.format(
                 section=section_style, hr=hr_style
             ).join(
-                auth_provider_html
+                auth_provider_sections
             )
 
             html = self.SIGN_IN_TEMPLATE % dict(
@@ -98,10 +98,12 @@ class SignInController(AdminController):
             headers = dict()
             headers["Content-Type"] = "text/html"
             return Response(html, 200, headers)
-        elif admin:
-            return SanitizedRedirections.redirect(flask.request.args.get("redirect"))
+        redirect_target = flask.request.args.get("redirect") or url_for(
+            "admin_view", _external=True
+        )
+        return SanitizedRedirections.redirect(redirect_target)
 
-    def password_sign_in(self):
+    def password_sign_in(self) -> Response | ProblemDetail | WerkzeugResponse:
         if not self.admin_auth_providers:
             return ADMIN_AUTH_NOT_CONFIGURED
 
@@ -114,16 +116,17 @@ class SignInController(AdminController):
             return self.error_response(INVALID_ADMIN_CREDENTIALS)
 
         admin = self.authenticated_admin(admin_details)
-        return SanitizedRedirections.redirect(redirect_url)
+        redirect_target = redirect_url or url_for("admin_view", _external=True)
+        return SanitizedRedirections.redirect(redirect_target)
 
-    def change_password(self):
+    def change_password(self) -> Response:
         admin = get_request_admin()
         new_password = flask.request.form.get("password")
         if new_password:
             admin.password = new_password
         return Response(_("Success"), 200)
 
-    def sign_out(self):
+    def sign_out(self) -> WerkzeugResponse:
         # Clear out the admin's flask session.
         flask.session.pop("admin_email", None)
         flask.session.pop("auth_type", None)
@@ -143,7 +146,7 @@ class SignInController(AdminController):
         )
         return response
 
-    def error_response(self, problem_detail):
+    def error_response(self, problem_detail: ProblemDetail) -> Response:
         """Returns a problem detail as an HTML response"""
         html = self.ERROR_RESPONSE_TEMPLATE % dict(
             status_code=problem_detail.status_code, message=problem_detail.detail

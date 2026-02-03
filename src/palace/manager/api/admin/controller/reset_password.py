@@ -41,11 +41,11 @@ class ResetPasswordController(AdminController):
         if not auth:
             return ADMIN_AUTH_MECHANISM_NOT_CONFIGURED
 
-        admin = self.authenticated_admin_from_request()
+        logged_in_admin = self.authenticated_admin_from_request()
 
         admin_view_redirect = redirect(url_for("admin_view"))
 
-        if isinstance(admin, Admin):
+        if isinstance(logged_in_admin, Admin):
             return admin_view_redirect
 
         if flask.request.method == "GET":
@@ -60,9 +60,9 @@ class ResetPasswordController(AdminController):
 
             return Response(html, 200, headers)
 
-        admin = self._extract_admin_from_request(flask.request)
+        target_admin = self._extract_admin_from_request(flask.request)
 
-        if not admin:
+        if not target_admin:
             return self._response_with_message_and_redirect_button(
                 INVALID_ADMIN_CREDENTIALS.detail,
                 url_for("admin_forgot_password"),
@@ -71,9 +71,9 @@ class ResetPasswordController(AdminController):
                 status_code=INVALID_ADMIN_CREDENTIALS.status_code,
             )
 
-        reset_password_url = self._generate_reset_password_url(admin, auth)
+        reset_password_url = self._generate_reset_password_url(target_admin, auth)
 
-        auth.send_reset_password_email(admin, reset_password_url)
+        auth.send_reset_password_email(target_admin, reset_password_url)
 
         return self._response_with_message_and_redirect_button(
             "Email successfully sent! Please check your inbox.",

@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
+from typing import Any
+
 from palace.manager.api.admin.controller.base import AdminPermissionsControllerMixin
 from palace.manager.api.controller.circulation_manager import (
     CirculationManagerController,
@@ -14,50 +17,65 @@ class TimestampsController(
     each value is a nested dict in which timestamps are organized by service name and then by collection ID.
     """
 
-    def diagnostics(self):
+    def diagnostics(
+        self,
+    ) -> dict[str, dict[str, dict[str, list[dict[str, Any]]]]]:
         self.require_system_admin()
         timestamps = self._db.query(Timestamp).order_by(Timestamp.start)
-        sorted = self._sort_by_type(timestamps)
-        for type, services in list(sorted.items()):
-            for service in services:
-                by_collection = self._sort_by_collection(sorted[type][service])
-                sorted[type][service] = by_collection
-        return sorted
+        sorted_by_type = self._sort_by_type(timestamps)
+        sorted_by_collection: dict[str, dict[str, dict[str, list[dict[str, Any]]]]] = {}
+        for service_type, services in sorted_by_type.items():
+            sorted_by_collection[service_type] = {}
+            for service_name, service_timestamps in services.items():
+                sorted_by_collection[service_type][service_name] = (
+                    self._sort_by_collection(service_timestamps)
+                )
+        return sorted_by_collection
 
-    def _sort_by_type(self, timestamps):
+    def _sort_by_type(
+        self, timestamps: Iterable[Timestamp]
+    ) -> dict[str, dict[str, list[dict[str, Any]]]]:
         """Takes a list of Timestamp objects.  Returns a dict: each key is a type of service
         (script, monitor, or coverage provider); each value is a dict in which the keys are the names
         of services and the values are lists of timestamps."""
 
-        result = {}
+        result: dict[str, list[dict[str, Any]]] = {}
         for ts in timestamps:
             info = self._extract_info(ts)
-            result.setdefault((ts.service_type or "other"), []).append(info)
+            service_type = str(ts.service_type or "other")
+            result.setdefault(service_type, []).append(info)
 
-        for type, data in list(result.items()):
-            result[type] = self._sort_by_service(data)
+        sorted_result: dict[str, dict[str, list[dict[str, Any]]]] = {}
+        for service_type, data in list(result.items()):
+            sorted_result[service_type] = self._sort_by_service(data)
 
-        return result
+        return sorted_result
 
-    def _sort_by_service(self, timestamps):
+    def _sort_by_service(
+        self, timestamps: list[dict[str, Any]]
+    ) -> dict[str, list[dict[str, Any]]]:
         """Returns a dict: each key is the name of a service; each value is a list of timestamps."""
 
-        result = {}
+        result: dict[str, list[dict[str, Any]]] = {}
         for timestamp in timestamps:
-            result.setdefault(timestamp.get("service"), []).append(timestamp)
+            service_name = str(timestamp.get("service") or "unknown")
+            result.setdefault(service_name, []).append(timestamp)
         return result
 
-    def _sort_by_collection(self, timestamps):
+    def _sort_by_collection(
+        self, timestamps: list[dict[str, Any]]
+    ) -> dict[str, list[dict[str, Any]]]:
         """Takes a list of timestamps; turns it into a dict in which each key is a
         collection ID and each value is a list of the timestamps associated with that collection.
         """
 
-        result = {}
+        result: dict[str, list[dict[str, Any]]] = {}
         for timestamp in timestamps:
-            result.setdefault(timestamp.get("collection_name"), []).append(timestamp)
+            collection_name = str(timestamp.get("collection_name") or "unknown")
+            result.setdefault(collection_name, []).append(timestamp)
         return result
 
-    def _extract_info(self, timestamp):
+    def _extract_info(self, timestamp: Timestamp) -> dict[str, Any]:
         """Takes a Timestamp object and returns a dict"""
 
         duration = None

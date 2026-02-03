@@ -21,7 +21,7 @@ class AdminSearchController(AdminController):
     Eg. Lists Creation
     """
 
-    def search_field_values(self) -> dict:
+    def search_field_values(self) -> dict[str, dict[str, int]]:
         """Enumerate the possible values for the search fields with counts
         - Audience
         - Distributor
@@ -35,13 +35,15 @@ class AdminSearchController(AdminController):
         return self._search_field_values_cached(collection_ids)
 
     @classmethod
-    def _unzip(cls, values: list[tuple[str, int]]) -> dict:
+    def _unzip(cls, values: list[tuple[str, int]]) -> dict[str, int]:
         """Covert a list of tuples to a {value0: value1} dictionary"""
         return {a[0]: a[1] for a in values if type(a[0]) is str}
 
     # 1 hour in-memory cache
     @memoize(ttls=3600)
-    def _search_field_values_cached(self, collection_ids: list[int]) -> dict:
+    def _search_field_values_cached(
+        self, collection_ids: list[int]
+    ) -> dict[str, dict[str, int]]:
         licenses_filter = or_(
             LicensePool.open_access == True,
             LicensePool.licenses_owned != 0,
