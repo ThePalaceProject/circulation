@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import os
+from typing import TYPE_CHECKING, Any
 
 import flask
 
@@ -22,21 +23,26 @@ from palace.manager.sqlalchemy.util import get_one, get_one_or_create
 from palace.manager.util.log import LoggerMixin
 from palace.manager.util.problem_detail import ProblemDetail
 
+if TYPE_CHECKING:
+    from palace.manager.api.circulation_manager import CirculationManager
+
 
 class AdminController(LoggerMixin):
-    def __init__(self, manager):
+    def __init__(self, manager: CirculationManager) -> None:
         self.manager = manager
         self._db = self.manager._db
         self.send_email = self.manager.services.email.send_email
 
     @property
-    def admin_auth_providers(self):
+    def admin_auth_providers(self) -> list[PasswordAdminAuthenticationProvider]:
         if Admin.with_password(self._db).count() != 0:
             return [PasswordAdminAuthenticationProvider(self.send_email)]
 
         return []
 
-    def admin_auth_provider(self, type):
+    def admin_auth_provider(
+        self, type: str
+    ) -> PasswordAdminAuthenticationProvider | None:
         # Return an auth provider with the given type.
         # If no auth provider has this type, return None.
         for provider in self.admin_auth_providers:
@@ -44,7 +50,7 @@ class AdminController(LoggerMixin):
                 return provider
         return None
 
-    def authenticated_admin_from_request(self):
+    def authenticated_admin_from_request(self) -> Admin | ProblemDetail:
         """Returns an authenticated admin or a problem detail."""
         setattr(flask.request, "admin", None)
         if not self.admin_auth_providers:
@@ -63,13 +69,14 @@ class AdminController(LoggerMixin):
                 return admin
         return INVALID_ADMIN_CREDENTIALS
 
-    def authenticated_admin(self, admin_details) -> Admin:
+    def authenticated_admin(self, admin_details: dict[str, Any]) -> Admin:
         """Creates or updates an admin with the given details"""
 
         admin, is_new = get_one_or_create(self._db, Admin, email=admin_details["email"])
 
-        if is_new and admin_details.get("roles"):
-            for role in admin_details.get("roles"):
+        roles = admin_details.get("roles") or []
+        if is_new and roles:
+            for role in roles:
                 if role.get("role") in AdminRole.ROLES:
                     library = Library.lookup(self._db, role.get("library"))
                     if role.get("library") and not library:

@@ -64,7 +64,9 @@ from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailExcep
 class WorkController(CirculationManagerController, AdminPermissionsControllerMixin):
     STAFF_WEIGHT = 1000
 
-    def details(self, identifier_type, identifier):
+    def details(
+        self, identifier_type: str, identifier: str
+    ) -> Response | ProblemDetail:
         """Return an OPDS entry with detailed information for admins.
 
         This includes relevant links for editing the book.
@@ -87,7 +89,7 @@ class WorkController(CirculationManagerController, AdminPermissionsControllerMix
             OPDSAcquisitionFeed.single_entry(work, annotator)
         )
 
-    def roles(self):
+    def roles(self) -> dict[str, Contributor.Role]:
         """Return a mapping from MARC codes to contributor roles."""
         # TODO: The admin interface only allows a subset of the roles
         # listed in model.py since it uses the OPDS representation of
@@ -124,15 +126,15 @@ class WorkController(CirculationManagerController, AdminPermissionsControllerMix
             marc_to_role[CODES[role]] = role
         return marc_to_role
 
-    def languages(self):
+    def languages(self) -> dict[str, list[str]]:
         """Return the supported language codes and their English names."""
         return LanguageCodes.english_names
 
-    def media(self):
+    def media(self) -> dict[str, str]:
         """Return the supported media types for a work and their schema.org values."""
         return Edition.additional_type_to_medium
 
-    def rights_status(self):
+    def rights_status(self) -> dict[str, dict[str, str | bool]]:
         """Return the supported rights status values with their names and whether
         they are open access."""
         return {
@@ -144,7 +146,7 @@ class WorkController(CirculationManagerController, AdminPermissionsControllerMix
             for uri, name in list(RightsStatus.NAMES.items())
         }
 
-    def edit(self, identifier_type, identifier):
+    def edit(self, identifier_type: str, identifier: str) -> Response | ProblemDetail:
         """Edit a work's metadata."""
         library = get_request_library()
         self.require_librarian(library)
@@ -163,6 +165,10 @@ class WorkController(CirculationManagerController, AdminPermissionsControllerMix
         changed = False
 
         staff_data_source = DataSource.lookup(self._db, DataSource.LIBRARY_STAFF)
+        if staff_data_source is None:
+            self._db.rollback()
+            return INVALID_INPUT
+        assert work.presentation_edition is not None
         primary_identifier = work.presentation_edition.primary_identifier
         staff_edition, is_new = get_one_or_create(
             self._db,
@@ -201,17 +207,13 @@ class WorkController(CirculationManagerController, AdminPermissionsControllerMix
         # that already exist from the list so they won't be added again.
         deleted_contributions = False
         for contribution in staff_edition.contributions:
-            if (
-                contribution.role,
-                contribution.contributor.display_name,
-            ) not in roles_and_names:
+            display_name = contribution.contributor.display_name or ""
+            if (contribution.role, display_name) not in roles_and_names:
                 self._db.delete(contribution)
                 deleted_contributions = True
                 changed = True
             else:
-                roles_and_names.remove(
-                    (contribution.role, contribution.contributor.display_name)
-                )
+                roles_and_names.remove((contribution.role, display_name))
         if deleted_contributions:
             # Ensure the staff edition's contributions are up-to-date when
             # calculating the presentation edition later.
@@ -242,10 +244,11 @@ class WorkController(CirculationManagerController, AdminPermissionsControllerMix
             staff_edition.series = str(new_series)
             changed = True
 
-        new_series_position = flask.request.form.get("series_position")
-        if new_series_position != None and new_series_position != "":
+        series_position_str = flask.request.form.get("series_position")
+        new_series_position: int | None
+        if series_position_str is not None and series_position_str != "":
             try:
-                new_series_position = int(new_series_position)
+                new_series_position = int(series_position_str)
             except ValueError:
                 self._db.rollback()
                 return INVALID_SERIES_POSITION
@@ -270,9 +273,9 @@ class WorkController(CirculationManagerController, AdminPermissionsControllerMix
             staff_edition.medium = new_medium
             changed = True
 
-        new_language = flask.request.form.get("language")
-        if new_language != None and new_language != "":
-            new_language = LanguageCodes.string_to_alpha_3(new_language)
+        language_str = flask.request.form.get("language")
+        if language_str is not None and language_str != "":
+            new_language = LanguageCodes.string_to_alpha_3(language_str)
             if not new_language:
                 self._db.rollback()
                 return UNKNOWN_LANGUAGE
@@ -296,10 +299,10 @@ class WorkController(CirculationManagerController, AdminPermissionsControllerMix
             staff_edition.imprint = str(new_imprint)
             changed = True
 
-        new_issued = flask.request.form.get("issued")
-        if new_issued != None and new_issued != "":
+        issued_str = flask.request.form.get("issued")
+        if issued_str is not None and issued_str != "":
             try:
-                new_issued = strptime_utc(new_issued, "%Y-%m-%d")
+                new_issued = strptime_utc(issued_str, "%Y-%m-%d")
             except ValueError:
                 self._db.rollback()
                 return INVALID_DATE_FORMAT
@@ -316,15 +319,16 @@ class WorkController(CirculationManagerController, AdminPermissionsControllerMix
         # confusing. It might also be useful to make it more clear how this
         # relates to the quality threshold in the library settings.
         changed_rating = False
-        new_rating = flask.request.form.get("rating")
-        if new_rating != None and new_rating != "":
+        rating_str = flask.request.form.get("rating")
+        new_rating_value: float | None = None
+        if rating_str is not None and rating_str != "":
             try:
-                new_rating = float(new_rating)
+                new_rating_value = float(rating_str)
             except ValueError:
                 self._db.rollback()
                 return INVALID_RATING
             scale = Measurement.RATING_SCALES[DataSource.LIBRARY_STAFF]
-            if new_rating < scale[0] or new_rating > scale[1]:
+            if new_rating_value < scale[0] or new_rating_value > scale[1]:
                 self._db.rollback()
                 return INVALID_RATING.detailed(
                     _(
@@ -333,11 +337,12 @@ class WorkController(CirculationManagerController, AdminPermissionsControllerMix
                         high=scale[1],
                     )
                 )
-            if (new_rating - scale[0]) / (scale[1] - scale[0]) != work.quality:
+            assert staff_data_source is not None
+            if (new_rating_value - scale[0]) / (scale[1] - scale[0]) != work.quality:
                 primary_identifier.add_measurement(
                     staff_data_source,
                     Measurement.RATING,
-                    new_rating,
+                    new_rating_value,
                     weight=WorkController.STAFF_WEIGHT,
                 )
                 changed = True
@@ -442,7 +447,9 @@ class WorkController(CirculationManagerController, AdminPermissionsControllerMix
             json.dumps({"message": message}), 200, mimetype="application/json"
         )
 
-    def refresh_metadata(self, identifier_type, identifier, provider=None):
+    def refresh_metadata(
+        self, identifier_type: str, identifier: str, provider: Any | None = None
+    ) -> Response | ProblemDetail:
         """Refresh the metadata for a book from the content server"""
         library = get_request_library()
         self.require_librarian(library)
@@ -451,12 +458,13 @@ class WorkController(CirculationManagerController, AdminPermissionsControllerMix
         if isinstance(work, ProblemDetail):
             return work
 
-        if not provider and work.license_pools:
+        if provider is None:
             return METADATA_REFRESH_FAILURE
 
-        identifier = work.presentation_edition.primary_identifier
+        assert work.presentation_edition is not None
+        primary_identifier = work.presentation_edition.primary_identifier
         try:
-            record = provider.ensure_coverage(identifier, force=True)
+            record = provider.ensure_coverage(primary_identifier, force=True)
         except Exception:
             # The coverage provider may raise an HTTPIntegrationException.
             return REMOTE_INTEGRATION_FAILED
@@ -474,7 +482,9 @@ class WorkController(CirculationManagerController, AdminPermissionsControllerMix
 
         return Response("", 200)
 
-    def classifications(self, identifier_type, identifier):
+    def classifications(
+        self, identifier_type: str, identifier: str
+    ) -> dict[str, Any] | ProblemDetail:
         """Return list of this work's classifications."""
         library = get_request_library()
         self.require_librarian(library)
@@ -483,6 +493,7 @@ class WorkController(CirculationManagerController, AdminPermissionsControllerMix
         if isinstance(work, ProblemDetail):
             return work
 
+        assert work.presentation_edition is not None
         identifier_id = work.presentation_edition.primary_identifier.id
         results = (
             self._db.query(Classification)
@@ -513,7 +524,9 @@ class WorkController(CirculationManagerController, AdminPermissionsControllerMix
             }
         )
 
-    def edit_classifications(self, identifier_type, identifier):
+    def edit_classifications(
+        self, identifier_type: str, identifier: str
+    ) -> Response | ProblemDetail:
         """Edit a work's audience, target age, fiction status, and genres."""
         library = get_request_library()
         self.require_librarian(library)
@@ -523,6 +536,10 @@ class WorkController(CirculationManagerController, AdminPermissionsControllerMix
             return work
 
         staff_data_source = DataSource.lookup(self._db, DataSource.LIBRARY_STAFF)
+        if staff_data_source is None:
+            self._db.rollback()
+            return INVALID_INPUT
+        assert work.presentation_edition is not None
 
         # Previous staff classifications
         primary_identifier = work.presentation_edition.primary_identifier
@@ -561,10 +578,10 @@ class WorkController(CirculationManagerController, AdminPermissionsControllerMix
             )
 
         # Update target age if present
-        new_target_age_min = flask.request.form.get("target_age_min")
-        new_target_age_min = int(new_target_age_min) if new_target_age_min else None
-        new_target_age_max = flask.request.form.get("target_age_max")
-        new_target_age_max = int(new_target_age_max) if new_target_age_max else None
+        target_age_min_str = flask.request.form.get("target_age_min")
+        new_target_age_min = int(target_age_min_str) if target_age_min_str else None
+        target_age_max_str = flask.request.form.get("target_age_max")
+        new_target_age_max = int(target_age_max_str) if target_age_max_str else None
         if (
             new_target_age_max is not None
             and new_target_age_min is not None
@@ -625,8 +642,8 @@ class WorkController(CirculationManagerController, AdminPermissionsControllerMix
         # Update genres
         # make sure all new genres are legit
         for name in new_genres:
-            genre, is_new = Genre.lookup(self._db, name)
-            if not isinstance(genre, Genre):
+            genre_obj, is_new = Genre.lookup(self._db, name)
+            if not isinstance(genre_obj, Genre):
                 return GENRE_NOT_FOUND
             if (
                 genres[name].is_fiction is not None
@@ -709,6 +726,9 @@ class WorkController(CirculationManagerController, AdminPermissionsControllerMix
             )
 
         staff_data_source = DataSource.lookup(self._db, DataSource.LIBRARY_STAFF)
+        if staff_data_source is None:
+            self._db.rollback()
+            raise ProblemDetailException(INVALID_INPUT)
         affected_lanes = set()
 
         # Remove entries for lists that were not in the submitted form.

@@ -5,6 +5,7 @@ from urllib.parse import quote_plus
 import flask
 from flask import Response, redirect, url_for
 from flask_babel import lazy_gettext as _
+from werkzeug import Response as WerkzeugResponse
 
 from palace.manager.api.admin.config import Configuration as AdminClientConfig
 from palace.manager.api.admin.controller.base import AdminController
@@ -14,7 +15,12 @@ from palace.manager.util.problem_detail import ProblemDetail
 
 
 class ViewController(AdminController):
-    def __call__(self, collection, book, path=None):
+    def __call__(
+        self,
+        collection: str | None,
+        book: str | None,
+        path: str | None = None,
+    ) -> Response | WerkzeugResponse:
         setting_up = self.admin_auth_providers == []
         email = None
         roles = []
@@ -67,6 +73,7 @@ class ViewController(AdminController):
         )
 
         if has_valid_token:
+            assert existing_csrf_token is not None
             csrf_token = existing_csrf_token
         else:
             csrf_token = self.generate_csrf_token()

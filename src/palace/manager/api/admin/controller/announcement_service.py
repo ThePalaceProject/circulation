@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any
+from typing import Any, cast
 
 import flask
 from sqlalchemy.orm import Session
@@ -21,9 +21,9 @@ class AnnouncementSettings:
     def __init__(self, db: Session) -> None:
         self._db = db
 
-    def _action(self) -> Callable:
+    def _action(self) -> Callable[[], dict[str, Any]]:
         method = flask.request.method.lower()
-        return getattr(self, method)
+        return cast(Callable[[], dict[str, Any]], getattr(self, method))
 
     def process_many(self) -> dict[str, Any] | ProblemDetail:
         try:
