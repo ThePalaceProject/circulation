@@ -21,7 +21,6 @@ from palace.manager.integration.license.opds.for_distributors.api import (
 from palace.manager.integration.license.opds.odl.api import OPDS2WithODLApi
 from palace.manager.integration.license.opds.opds1.api import OPDSAPI
 from palace.manager.integration.license.opds.opds2.api import OPDS2API
-from palace.manager.search.result import WorkSearchResult
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.classification import Subject
 from palace.manager.sqlalchemy.model.contributor import Contributor
@@ -763,7 +762,7 @@ class TestCirculationManagerAnnotator:
     def test_work_entry_includes_updated(
         self, circulation_fixture: CirculationManagerAnnotatorFixture
     ):
-        # By default, the 'updated' date is the value of
+        # The 'updated' date is the value of
         # Work.last_update_time.
         work = circulation_fixture.db.work(with_open_access_download=True)
         # This date is later, but we don't check it.
@@ -782,31 +781,6 @@ class TestCirculationManagerAnnotator:
 
         entry = entry_for(work)
         assert "2018-02-04" in entry.get("updated")
-
-        # If the work passed in is a WorkSearchResult that indicates
-        # the search index found a later 'update time', then the later
-        # time is used. This value isn't always present -- it's only
-        # calculated when the list is being _ordered_ by 'update time'.
-        # Otherwise it's too slow to bother.
-        class MockHit:
-            def __init__(self, last_update):
-                # Store the time the way we get it from Opensearch --
-                # as a single-element list containing seconds since epoch.
-                self.last_update = [
-                    (last_update - datetime_utc(1970, 1, 1)).total_seconds()
-                ]
-
-        hit = MockHit(datetime_utc(2018, 2, 5))
-        result = WorkSearchResult(work, hit)
-        entry = entry_for(result)
-        assert "2018-02-05" in entry.get("updated")
-
-        # Any 'update time' provided by Opensearch is used even if
-        # it's clearly earlier than Work.last_update_time.
-        hit = MockHit(datetime_utc(2017, 1, 1))
-        result._hit = hit
-        entry = entry_for(result)
-        assert "2017-01-01" in entry.get("updated")
 
     def test_sample_link_sort(self):
         epub_link_a = Link(rel=None, href="a", type=MediaTypes.EPUB_MEDIA_TYPE)

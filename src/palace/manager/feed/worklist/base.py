@@ -13,11 +13,11 @@ from sqlalchemy.orm import Session
 
 from palace.manager.core.classifier import Classifier
 from palace.manager.search.pagination import Pagination
+from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.util.opds_writer import OPDSFeed
 
 if TYPE_CHECKING:
     from palace.manager.search.external_search import ExternalSearchIndex
-    from palace.manager.search.result import WorkSearchResult
 
 
 class WorkList:
@@ -613,8 +613,7 @@ class WorkList:
 
         :param _db: A database connection
         :param hits: A list of Hit objects from Opensearch.
-        :return: A list of Work or (if the search results include
-            script fields), WorkSearchResult objects.
+        :return: A list of Work.
         """
 
         [results] = self.works_for_resultsets(_db, [hits], facets=facets)
@@ -788,9 +787,9 @@ class WorkList:
                 by_lane[lane].extend(list(might_need_to_reuse.values())[:num_missing])
 
         used_works = set()
-        by_lane: dict[Lane, list[WorkSearchResult]] = defaultdict(list)
+        by_lane: dict[Lane, list[Work]] = defaultdict(list)
         working_lane = None
-        might_need_to_reuse: dict[int, WorkSearchResult] = dict()
+        might_need_to_reuse: dict[int, Work] = dict()
         for work, lane in works_and_lanes:
             if lane != working_lane:
                 # Either we're done with the old lane, or we're just

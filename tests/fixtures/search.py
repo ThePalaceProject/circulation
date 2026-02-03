@@ -143,8 +143,7 @@ class EndToEndSearchFixture:
             expect_titles.append(work.title)
             expect_ids.append(work.id)
 
-        # We compare IDs rather than objects because the Works may
-        # actually be WorkSearchResults.
+        # We compare IDs
         expect_compare = expect_ids
         actual_compare = actual_ids
         if not should_be_ordered:

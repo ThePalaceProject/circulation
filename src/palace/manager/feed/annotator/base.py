@@ -382,10 +382,6 @@ class Annotator(ToFeedEntry):
                     computed.published = FeedEntryType(text=strftime(avail_date))
 
         if not updated and entry.work.last_update_time:
-            # NOTE: This is a default that works in most cases. When
-            # ordering Opensearch results by last update time,
-            # `work` is a WorkSearchResult object containing a more
-            # reliable value that you can use if you want.
             updated = entry.work.last_update_time
         if updated:
             computed.updated = FeedEntryType(text=strftime(updated))

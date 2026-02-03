@@ -47,7 +47,6 @@ from palace.manager.integration.license.boundless.constants import (
 )
 from palace.manager.integration.metadata.novelist import NoveListAPI
 from palace.manager.search.pagination import Pagination
-from palace.manager.search.result import WorkSearchResult
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.service.container import Services
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
@@ -64,7 +63,6 @@ from palace.manager.sqlalchemy.model.licensing import (
 )
 from palace.manager.sqlalchemy.model.patron import Hold, Loan, Patron
 from palace.manager.sqlalchemy.model.work import Work
-from palace.manager.util.datetime_helpers import from_timestamp
 from palace.manager.util.opds_writer import OPDSFeed
 
 
@@ -328,21 +326,6 @@ class CirculationManagerAnnotator(Annotator):
         # If OpenSearch included a more accurate last_update_time,
         # use it instead of Work.last_update_time
         updated = entry.work.last_update_time
-        if isinstance(work, WorkSearchResult):
-            # Opensearch puts this field in a list, but we've set it up
-            # so there will be at most one value.
-            last_updates = getattr(work._hit, "last_update", [])
-            if last_updates:
-                # last_update is seconds-since epoch; convert to UTC datetime.
-                updated = from_timestamp(last_updates[0])
-
-                # There's a chance that work.last_updated has been
-                # modified but the change hasn't made it to the search
-                # engine yet. Even then, we stick with the search
-                # engine value, because a sorted list is more
-                # important to the import process than an up-to-date
-                # 'last update' value.
-
         super().annotate_work_entry(entry, updated=updated)
         active_loan = self.active_loans_by_work.get(work)
         active_hold = self.active_holds_by_work.get(work)

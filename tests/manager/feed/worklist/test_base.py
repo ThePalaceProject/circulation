@@ -597,7 +597,7 @@ class TestWorkList:
                 return self.fake_work_ids
 
         class MockWorkList(WorkList):
-            """Mock the process of turning work IDs into WorkSearchResult
+            """Mock the process of turning work IDs into Work
             objects."""
 
             fake_work_list = "a list of works"
@@ -677,8 +677,7 @@ class TestWorkList:
 
     def test_works_for_resultsets(self, db: DatabaseTransactionFixture):
         # Verify that WorkList.works_for_resultsets turns lists of
-        # (mocked) Hit objects into lists of Work or WorkSearchResult
-        # objects.
+        # (mocked) Hit objects into lists of Work objects
 
         # Create the WorkList we'll be testing with.
         wl = WorkList()
