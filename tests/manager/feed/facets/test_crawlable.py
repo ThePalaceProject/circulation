@@ -66,8 +66,8 @@ class TestCrawlableFacets:
 
         # The default availability is the only one enabled.
         assert len(availability) == 1
-        # Order facet has two enabled facets
-        assert len(order) == 2
+        # Order facet has one enabled facet
+        assert len(order) == 1
 
         # Except for distributor and collectionName, which have the default
         # along with their unique values among each collection in the library.
@@ -79,7 +79,7 @@ class TestCrawlableFacets:
         [
             (
                 Facets.ORDER_FACET_GROUP_NAME,
-                [Facets.ORDER_LAST_UPDATE, Facets.ORDER_LICENSE_POOL_LAST_UPDATED],
+                [Facets.ORDER_LAST_UPDATE],
             ),
             (Facets.AVAILABILITY_FACET_GROUP_NAME, [Facets.AVAILABLE_ALL]),
             (Facets.DISTRIBUTOR_FACETS_GROUP_NAME, [Facets.DISTRIBUTOR_ALL]),
@@ -94,7 +94,7 @@ class TestCrawlableFacets:
         [
             (
                 Facets.ORDER_FACET_GROUP_NAME,
-                [Facets.ORDER_LAST_UPDATE, Facets.ORDER_LICENSE_POOL_LAST_UPDATED],
+                [Facets.ORDER_LAST_UPDATE],
             ),
             (Facets.AVAILABILITY_FACET_GROUP_NAME, [Facets.AVAILABLE_ALL]),
             (Facets.DISTRIBUTOR_FACETS_GROUP_NAME, [Facets.DISTRIBUTOR_ALL, "foo"]),

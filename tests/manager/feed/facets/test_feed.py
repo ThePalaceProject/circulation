@@ -288,7 +288,6 @@ class TestFacets:
         assert {
             Facets.ORDER_ADDED_TO_COLLECTION,
             Facets.ORDER_LAST_UPDATE,
-            Facets.ORDER_LICENSE_POOL_LAST_UPDATED,
             Facets.ORDER_TITLE_DESC,
             Facets.ORDER_AUTHOR_DESC,
         } == set(Facets.ORDER_DESCENDING_BY_DEFAULT)
@@ -535,10 +534,7 @@ class TestFacets:
         assert expect == filter.order
         assert "yep" == filter.order_ascending
 
-        for order in (
-            Facets.ORDER_ADDED_TO_COLLECTION,
-            Facets.ORDER_LICENSE_POOL_LAST_UPDATED,
-        ):
+        for order in (Facets.ORDER_ADDED_TO_COLLECTION,):
             order_filter = Filter()
             order_facets = Facets(
                 db.default_library(),

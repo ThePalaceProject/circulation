@@ -14,7 +14,6 @@ from palace.manager.feed.facets.feed import Facets, FeaturedFacets
 from palace.manager.feed.worklist.base import WorkList
 from palace.manager.search.filter import Filter
 from palace.manager.search.pagination import Pagination, SortKeyPagination
-from palace.manager.search.revision_directory import SearchRevisionDirectory
 from palace.manager.sqlalchemy.model.classification import Genre
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.contributor import Contribution, Contributor
@@ -854,13 +853,11 @@ class TestFilter:
         added_to_collection = used_orders[Facets.ORDER_ADDED_TO_COLLECTION]
         series_position = used_orders[Facets.ORDER_SERIES_POSITION]
         last_update = used_orders[Facets.ORDER_LAST_UPDATE]
-        license_pool_last_updated = used_orders[Facets.ORDER_LICENSE_POOL_LAST_UPDATED]
         for sort_field in list(used_orders.values()):
             if sort_field in (
                 added_to_collection,
                 series_position,
                 last_update,
-                license_pool_last_updated,
             ):
                 # These are complicated cases, tested below.
                 continue
@@ -919,72 +916,12 @@ class TestFilter:
         # configuration as before.
         assert simple_nested_configuration == first_field
 
-        # Sorting by license pool last updated is also a nested field,
-        # using the most recent update time among relevant collections.
-        f.order = license_pool_last_updated
-        f.collection_ids = []
-        first_field = validate_sort_order(f, license_pool_last_updated)
-        last_updated_simple_nested_configuration = {
-            "licensepools.last_updated": {"mode": "max", "order": "asc"}
-        }
-        assert last_updated_simple_nested_configuration == first_field
-
-        f.collection_ids = [transaction.default_collection().id]
-        first_field = validate_sort_order(f, "licensepools.last_updated")
-        nested_filter = first_field["licensepools.last_updated"].pop("nested")
-        assert {
-            "path": "licensepools",
-            "filter": {
-                "terms": {
-                    "licensepools.collection_id": [transaction.default_collection().id]
-                }
-            },
-        } == nested_filter
-        assert last_updated_simple_nested_configuration == first_field
-
         # An ordering by "last update" may be simple, if there are no
         # collections or lists associated with the filter.
         f.order = last_update
         f.collection_ids = []
         first_field = validate_sort_order(f, last_update)
         assert dict(last_update_time="asc") == first_field
-
-        # Or it can be *incredibly complicated*, if there _are_
-        # collections or lists associated with the filter. Which,
-        # unfortunately, is almost all the time.
-        f.collection_ids = [transaction.default_collection().id]
-        f.customlist_restriction_sets = [[1], [1, 2]]
-        first_field = validate_sort_order(f, last_update)
-
-        # Here, the ordering is done by a script that runs on the
-        # OpenSearch server.
-        sort = first_field.pop("_script")
-        assert {} == first_field
-
-        # The script returns a numeric value and we want to sort those
-        # values in ascending order.
-        assert "asc" == sort.pop("order")
-        assert "number" == sort.pop("type")
-
-        script = sort.pop("script")
-        assert {} == sort
-
-        # The script is the 'simplified.work_last_update' stored script.
-        script_name = (
-            SearchRevisionDirectory.create().highest().script_name("work_last_update")
-        )
-        assert script_name == script.pop("stored")
-
-        # Two parameters are passed into the script -- the IDs of the
-        # collections and the lists relevant to the query. This is so
-        # the query knows which updates should actually be considered
-        # for purposes of this query.
-        params = script.pop("params")
-        assert {} == script
-
-        assert [transaction.default_collection().id] == params.pop("collection_ids")
-        assert [1, 2] == params.pop("list_ids")
-        assert {} == params
 
     def test_author_filter(self):
         # Test an especially complex subfilter for authorship.
@@ -1926,32 +1863,47 @@ class TestSearchOrder:
 
         assert_order(
             Facets.ORDER_LAST_UPDATE,
-            [data.a, data.c, data.b],
+            [
+                data.a,
+                data.b,
+                data.c,
+            ],
             collections=[data.collection1],
         )
 
         assert_order(
             Facets.ORDER_LAST_UPDATE,
-            [data.b, data.a, data.c],
+            [data.a, data.b, data.c],
             collections=[data.collection1, data.collection2],
         )
 
         assert_order(
             Facets.ORDER_LAST_UPDATE,
-            [data.b, data.c, data.a],
+            [
+                data.a,
+                data.b,
+                data.c,
+            ],
             customlist_restriction_sets=[[data.list1]],
         )
 
         assert_order(
             Facets.ORDER_LAST_UPDATE,
-            [data.c, data.a, data.b],
+            [
+                data.a,
+                data.b,
+                data.c,
+            ],
             collections=[data.collection1],
             customlist_restriction_sets=[[data.list2]],
         )
 
         assert_order(
             Facets.ORDER_LAST_UPDATE,
-            [data.c, data.a],
+            [
+                data.a,
+                data.c,
+            ],
             customlist_restriction_sets=[
                 [data.list1],
                 [data.list3],

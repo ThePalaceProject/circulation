@@ -24,7 +24,6 @@ from palace.manager.integration.license.opds.odl.api import OPDS2WithODLApi
 from palace.manager.search.external_search import ExternalSearchIndex
 from palace.manager.search.filter import Filter
 from palace.manager.search.pagination import Pagination
-from palace.manager.search.result import WorkSearchResult
 from palace.manager.sqlalchemy.model.classification import Genre
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.customlist import CustomList
@@ -598,7 +597,7 @@ class TestWorkList:
                 return self.fake_work_ids
 
         class MockWorkList(WorkList):
-            """Mock the process of turning work IDs into WorkSearchResult
+            """Mock the process of turning work IDs into Work
             objects."""
 
             fake_work_list = "a list of works"
@@ -678,8 +677,7 @@ class TestWorkList:
 
     def test_works_for_resultsets(self, db: DatabaseTransactionFixture):
         # Verify that WorkList.works_for_resultsets turns lists of
-        # (mocked) Hit objects into lists of Work or WorkSearchResult
-        # objects.
+        # (mocked) Hit objects into lists of Work objects
 
         # Create the WorkList we'll be testing with.
         wl = WorkList()
@@ -691,17 +689,11 @@ class TestWorkList:
         w2 = db.work(with_license_pool=True)
 
         class MockHit:
-            def __init__(self, work_id, has_last_update=False):
+            def __init__(self, work_id):
                 if isinstance(work_id, Work):
                     self.work_id = work_id.id
                 else:
                     self.work_id = work_id
-                self.has_last_update = has_last_update
-
-            def __contains__(self, k):
-                # Pretend to have the 'last_update' script field,
-                # if necessary.
-                return k == "last_update" and self.has_last_update
 
         hit1 = MockHit(w1)
         hit2 = MockHit(w2)
@@ -722,23 +714,6 @@ class TestWorkList:
         # If we ask for a work ID that's not in the database,
         # we don't get it.
         assert [[]] == m(db.session, [[MockHit(-100)]])
-
-        # If we pass in Hit objects that have extra information in them,
-        # we get WorkSearchResult objects
-        hit1_extra = MockHit(w1, True)
-        hit2_extra = MockHit(w2, True)
-
-        [results] = m(db.session, [[hit2_extra, hit1_extra]])
-        assert all(isinstance(x, WorkSearchResult) for x in results)
-        r1, r2 = results
-
-        # These WorkSearchResult objects wrap Work objects together
-        # with the corresponding Hit objects.
-        assert w2 == r1._work
-        assert hit2_extra == r1._hit
-
-        assert w1 == r2._work
-        assert hit1_extra == r2._hit
 
         # Finally, test that undeliverable works are filtered out.
         for lpdm in w2.license_pools[0].delivery_mechanisms:
