@@ -15,7 +15,7 @@
 <link rel="alternate" type="text/html" href="https://library.biblioboard.com/content/04377e87-ab69-41c8-a2a4-812d55dc0952" title="View Details on BiblioBoard"/>
 <link rel="self" type="application/atom+xml;type=entry;profile=opds-catalog" href="https://catalog.biblioboard.com/opds/items/04377e87-ab69-41c8-a2a4-812d55dc0952"/>
 <link rel="http://opds-spec.org/image/thumbnail" type="image/jpeg" href="https://api.biblioboard.com/media/04377e87-ab69-41c8-a2a4-812d55dc0952/assets/thumbnail.jpg"/>
-<link rel="http://opds-spec.org/acquisition" type="text/html" href="https://library.biblioboard.com/viewer/04377e87-ab69-41c8-a2a4-812d55dc0952" title="View on BiblioBoard"/>
+<link rel="http://opds-spec.org/acquisition" type="text/html;profile=http://librarysimplified.org/terms/profiles/streaming-media" href="https://library.biblioboard.com/viewer/04377e87-ab69-41c8-a2a4-812d55dc0952" title="View on BiblioBoard"/>
 <link rel="http://opds-spec.org/acquisition" type="application/epub+zip" href="https://library.biblioboard.com/ext/api/media/04377e87-ab69-41c8-a2a4-812d55dc0952/assets/content.epub"/>
 <author>
 <name>Nicole Evelina</name>
@@ -36,6 +36,7 @@ History remembers Guinevere’s sin, but it was Arthur who transgressed first.Fo
 <link rel="alternate" type="text/html" href="https://library.biblioboard.com/content/04377e87-ab69-41c8-a2a4-812d55dc0953" title="View Details on BiblioBoard"/>
 <link rel="self" type="application/atom+xml;type=entry;profile=opds-catalog" href="https://catalog.biblioboard.com/opds/items/04377e87-ab69-41c8-a2a4-812d55dc0953"/>
 <link rel="http://opds-spec.org/image/thumbnail" type="image/jpeg" href="https://api.biblioboard.com/media/04377e87-ab69-41c8-a2a4-812d55dc0953/assets/thumbnail.jpg"/>
+<link rel="http://opds-spec.org/acquisition" type="text/html;profile=http://librarysimplified.org/terms/profiles/streaming-media" href="https://library.biblioboard.com/viewer/04377e87-ab69-41c8-a2a4-812d55dc0953" title="View on BiblioBoard"/>
 <link rel="http://opds-spec.org/acquisition" type="application/audiobook+json" href="https://library.biblioboard.com/ext/api/media/04377e87-ab69-41c8-a2a4-812d55dc0953/assets/content.json"/>
 <author>
 <name>Nicole Evelina</name>
@@ -56,7 +57,7 @@ History remembers Guinevere’s sin, but it was Arthur who transgressed first.Fo
 <link rel="alternate" type="text/html" href="https://library.biblioboard.com/content/04da95cd-6cfc-4e82-810f-121d418b6963" title="View Details on BiblioBoard"/>
 <link rel="self" type="application/atom+xml;type=entry;profile=opds-catalog" href="https://catalog.biblioboard.com/opds/items/04da95cd-6cfc-4e82-810f-121d418b6963"/>
 <link rel="http://opds-spec.org/image/thumbnail" type="image/jpeg" href="https://api.biblioboard.com/media/04da95cd-6cfc-4e82-810f-121d418b6963/assets/thumbnail.jpg"/>
-<link rel="http://opds-spec.org/acquisition" type="text/html" href="https://library.biblioboard.com/viewer/04da95cd-6cfc-4e82-810f-121d418b6963" title="View on BiblioBoard"/>
+<link rel="http://opds-spec.org/acquisition" type="text/html;profile=http://librarysimplified.org/terms/profiles/streaming-media" href="https://library.biblioboard.com/viewer/04da95cd-6cfc-4e82-810f-121d418b6963" title="View on BiblioBoard"/>
 <link rel="http://opds-spec.org/acquisition" type="application/epub+zip" href="https://library.biblioboard.com/ext/api/media/04da95cd-6cfc-4e82-810f-121d418b6963/assets/content.epub"/>
 <author>
 <name>Angie Fox</name>

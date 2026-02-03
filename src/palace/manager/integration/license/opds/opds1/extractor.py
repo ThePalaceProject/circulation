@@ -24,6 +24,9 @@ from palace.manager.integration.license.opds.data import FailedPublication
 from palace.manager.integration.license.opds.extractor import (
     OpdsExtractor,
 )
+from palace.manager.integration.license.opds.for_distributors.utils import (
+    streaming_format_data,
+)
 from palace.manager.integration.license.opds.opds1.settings import (
     IdentifierSource,
 )
@@ -702,12 +705,16 @@ class Opds1Extractor(OpdsExtractor[OPDS1Feed, OPDS1Publication], BearerTokenDrmM
 
         if self._opds_for_distributors:
             # If we are parsing an OPDS for Distributors feed, we need to add some extra
-            # format data to handle its Bearer Token DRM type.
-            formats = [
-                format_data
-                for link in links
-                if (format_data := self._bearer_token_format_data(link))
-            ]
+            # format data to handle its Bearer Token DRM type or streaming media type.
+            formats = []
+            for link in links:
+                # First, try to detect streaming media links
+                format_data = streaming_format_data(link, medium)
+                if format_data is None:
+                    # Fall back to bearer token format detection
+                    format_data = self._bearer_token_format_data(link)
+                if format_data is not None:
+                    formats.append(format_data)
         else:
             formats = []
 
