@@ -23,7 +23,7 @@ from palace.manager.feed.types import (
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.work import Work
-from palace.manager.util.opds_writer import OPDSMessage
+from palace.manager.util.opds_writer import OPDSFeed, OPDSMessage
 
 
 class TestOPDS2Serializer:
@@ -32,6 +32,7 @@ class TestOPDS2Serializer:
             metadata=FeedMetadata(
                 title="Title",
                 items_per_page=20,
+                id="http://feed",
             )
         )
         w = WorkEntry(
@@ -39,11 +40,41 @@ class TestOPDS2Serializer:
             edition=Edition(),
             identifier=Identifier(),
         )
-        w.computed = WorkEntryData(identifier="identifier", pwid="permanent-id")
+        w.computed = WorkEntryData(
+            identifier="identifier",
+            pwid="permanent-id",
+            title="Work Title",
+            additional_type="http://schema.org/Book",
+            image_links=[
+                Link(
+                    href="http://image",
+                    rel=OPDSFeed.FULL_IMAGE_REL,
+                    type="image/png",
+                )
+            ],
+            acquisition_links=[
+                Acquisition(
+                    href="http://acquisition",
+                    rel=OPDSFeed.OPEN_ACCESS_REL,
+                    type="application/epub+zip",
+                )
+            ],
+        )
         feed.entries = [w]
-        feed.links = [Link(href="http://link", rel="link-rel")]
+        feed.links = [Link(href="http://link", rel="self")]
         feed.facet_links = [
-            Link(href="http://facet-link", rel="facet-rel", facet_group="FacetGroup")
+            Link(
+                href="http://facet-link-1",
+                rel="facet-rel",
+                title="Facet One",
+                facet_group="FacetGroup",
+            ),
+            Link(
+                href="http://facet-link-2",
+                rel="facet-rel",
+                title="Facet Two",
+                facet_group="FacetGroup",
+            ),
         ]
 
         serialized = OPDS2Serializer().serialize_feed(feed)
@@ -54,28 +85,61 @@ class TestOPDS2Serializer:
 
         assert len(result["publications"]) == 1
         assert result["publications"][0] == dict(
-            metadata={"identifier": "identifier"}, images=[], links=[]
+            metadata={
+                "identifier": "identifier",
+                "@type": "http://schema.org/Book",
+                "title": "Work Title",
+            },
+            images=[
+                {
+                    "href": "http://image",
+                    "rel": OPDSFeed.FULL_IMAGE_REL,
+                    "type": "image/png",
+                }
+            ],
+            links=[
+                {
+                    "href": "http://acquisition",
+                    "rel": OPDSFeed.OPEN_ACCESS_REL,
+                    "type": "application/epub+zip",
+                }
+            ],
         )
 
         assert len(result["links"]) == 1
-        assert result["links"][0] == dict(href="http://link", rel="link-rel")
+        assert result["links"][0] == dict(
+            href="http://link",
+            rel="self",
+            type=OPDS2Serializer.CONTENT_TYPE,
+        )
 
         assert len(result["facets"]) == 1
         assert result["facets"][0] == dict(
             metadata={"title": "FacetGroup"},
-            links=[{"href": "http://facet-link", "rel": "facet-rel"}],
+            links=[
+                {
+                    "href": "http://facet-link-1",
+                    "rel": "facet-rel",
+                    "title": "Facet One",
+                },
+                {
+                    "href": "http://facet-link-2",
+                    "rel": "facet-rel",
+                    "title": "Facet Two",
+                },
+            ],
         )
 
     def test_serialize_work_entry(self):
         data = WorkEntryData(
-            additional_type="type",
+            additional_type="http://schema.org/Book",
             title="The Title",
             sort_title="Title, The",
             subtitle="Sub Title",
             identifier="urn:id",
             language="de",
-            updated="2022-02-02",
-            published="2020-02-02",
+            updated="2022-02-02T00:00:00Z",
+            published="2020-02-02T00:00:00Z",
             summary=RichText(text="Summary"),
             publisher="Publisher",
             imprint="Imprint",
@@ -83,11 +147,21 @@ class TestOPDS2Serializer:
                 Category(scheme="scheme", term="label", label="label"),
             ],
             series=Series(name="Series", position=3),
-            image_links=[Link(href="http://image", rel="image-rel")],
-            acquisition_links=[
-                Acquisition(href="http://acquisition", rel="acquisition-rel")
+            image_links=[
+                Link(
+                    href="http://image",
+                    rel=OPDSFeed.FULL_IMAGE_REL,
+                    type="image/png",
+                )
             ],
-            other_links=[Link(href="http://link", rel="rel")],
+            acquisition_links=[
+                Acquisition(
+                    href="http://acquisition",
+                    rel=OPDSFeed.OPEN_ACCESS_REL,
+                    type="application/epub+zip",
+                )
+            ],
+            other_links=[Link(href="http://link", rel="rel", type="text/html")],
             duration=10,
         )
 
@@ -109,18 +183,45 @@ class TestOPDS2Serializer:
         assert metadata["publisher"] == dict(name=data.publisher)
         assert metadata["imprint"] == dict(name=data.imprint)
         assert metadata["subject"] == [
-            dict(scheme="scheme", name="label", sortAs="label")
+            dict(scheme="scheme", code="label", name="label", sortAs="label")
         ]
-        assert metadata["belongsTo"] == dict(name="Series", position=3)
+        assert metadata["belongsTo"] == dict(series={"name": "Series", "position": 3})
 
         assert entry["links"] == [
-            dict(href="http://link", rel="rel"),
-            dict(href="http://acquisition", rel="acquisition-rel"),
+            dict(href="http://link", rel="rel", type="text/html"),
+            dict(
+                href="http://acquisition",
+                rel=OPDSFeed.OPEN_ACCESS_REL,
+                type="application/epub+zip",
+            ),
         ]
-        assert entry["images"] == [dict(href="http://image", rel="image-rel")]
+        assert entry["images"] == [
+            dict(
+                href="http://image",
+                rel=OPDSFeed.FULL_IMAGE_REL,
+                type="image/png",
+            )
+        ]
 
         # Test the different author types
         data = WorkEntryData(
+            additional_type="http://schema.org/Book",
+            title="Author Work",
+            identifier="urn:id",
+            image_links=[
+                Link(
+                    href="http://image",
+                    rel=OPDSFeed.FULL_IMAGE_REL,
+                    type="image/png",
+                )
+            ],
+            acquisition_links=[
+                Acquisition(
+                    href="http://acquisition",
+                    rel=OPDSFeed.OPEN_ACCESS_REL,
+                    type="application/epub+zip",
+                )
+            ],
             authors=[Author(name="author1"), Author(name="author2")],
             contributors=[
                 Author(name="translator", role="trl"),
@@ -160,8 +261,8 @@ class TestOPDS2Serializer:
             rel="acquisition",
             type="html",
             availability_status="available",
-            availability_since="2022-02-02",
-            availability_until="2222-02-02",
+            availability_since="2022-02-02T00:00:00Z",
+            availability_until="2222-02-02T00:00:00Z",
             lcp_hashed_passphrase="LCPPassphrase",
             indirect_acquisitions=[
                 IndirectAcquisition(
@@ -175,15 +276,17 @@ class TestOPDS2Serializer:
             drm_licensor=drm_licensor,
         )
 
-        result = serializer._serialize_acquisition_link(acquisition)
+        result = serializer._dump_model(
+            serializer._serialize_acquisition_link(acquisition)
+        )
 
         assert result["href"] == acquisition.href
         assert result["rel"] == acquisition.rel
         assert result["type"] == acquisition.type
         assert result["properties"] == dict(
             availability={
-                "since": "2022-02-02",
-                "until": "2222-02-02",
+                "since": "2022-02-02T00:00:00Z",
+                "until": "2222-02-02T00:00:00Z",
                 "state": "available",
             },
             indirectAcquisition=[
@@ -203,7 +306,9 @@ class TestOPDS2Serializer:
             is_hold=True,
             availability_status="available",
         )
-        result = serializer._serialize_acquisition_link(acquisition)
+        result = serializer._dump_model(
+            serializer._serialize_acquisition_link(acquisition)
+        )
         assert result["properties"]["availability"]["state"] == "reserved"
 
         acquisition = Acquisition(
@@ -212,7 +317,9 @@ class TestOPDS2Serializer:
             is_loan=True,
             availability_status="available",
         )
-        result = serializer._serialize_acquisition_link(acquisition)
+        result = serializer._dump_model(
+            serializer._serialize_acquisition_link(acquisition)
+        )
         assert result["properties"]["availability"]["state"] == "ready"
 
         # Test templated link
@@ -220,7 +327,9 @@ class TestOPDS2Serializer:
             href="http://templated.acquisition/{?foo,bar}",
             templated=True,
         )
-        result = serializer._serialize_acquisition_link(acquisition)
+        result = serializer._dump_model(
+            serializer._serialize_acquisition_link(acquisition)
+        )
         assert result["templated"] is True
         assert result["href"] == acquisition.href
 
@@ -230,7 +339,8 @@ class TestOPDS2Serializer:
             sort_name="Author,",
             link=Link(href="http://author", rel="contributor", title="Delete me!"),
         )
-        result = OPDS2Serializer()._serialize_contributor(author)
+        serializer = OPDS2Serializer()
+        result = serializer._dump_model(serializer._serialize_contributor(author))
         assert result["name"] == "Author"
         assert result["sortAs"] == "Author,"
         assert result["links"] == [{"href": "http://author", "rel": "contributor"}]
@@ -241,7 +351,8 @@ class TestOPDS2Serializer:
         ) == dict(urn="URN", description="Description")
 
     def test_serialize_feed_sort_and_facet_links(self):
-        feed_data = FeedData()
+        feed_data = FeedData(metadata=FeedMetadata(title="Sort Feed", id="http://feed"))
+        feed_data.links.append(Link(href="http://feed", rel="self"))
 
         # specify a sort link
         link = Link(
@@ -262,24 +373,37 @@ class TestOPDS2Serializer:
             active_facet=True,
             default_facet=True,
         )
+        link3 = Link(
+            href="test3",
+            title="text3",
+            rel="test_3_rel",
+            facet_group="test_group",
+        )
 
         feed_data.facet_links.append(link)
         feed_data.facet_links.append(link2)
+        feed_data.facet_links.append(link3)
         links = json.loads(OPDS2Serializer().serialize_feed(feed=feed_data))
 
         assert links == {
             "publications": [],
-            "metadata": {},
+            "metadata": {"title": "Sort Feed"},
             "links": [
+                {
+                    "href": "http://feed",
+                    "rel": "self",
+                    "type": OPDS2Serializer.CONTENT_TYPE,
+                },
                 {
                     "href": "test",
                     "rel": PALACE_REL_SORT,
                     "title": "text1",
+                    "type": OPDS2Serializer.CONTENT_TYPE,
                     "properties": {
                         PALACE_PROPERTIES_ACTIVE_SORT: "true",
                         PALACE_PROPERTIES_DEFAULT: "true",
                     },
-                }
+                },
             ],
             "facets": [
                 {
@@ -292,7 +416,12 @@ class TestOPDS2Serializer:
                             "properties": {
                                 PALACE_PROPERTIES_DEFAULT: "true",
                             },
-                        }
+                        },
+                        {
+                            "href": "test3",
+                            "rel": "test_3_rel",
+                            "title": "text3",
+                        },
                     ],
                 }
             ],

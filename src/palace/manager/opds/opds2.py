@@ -4,7 +4,7 @@ from collections.abc import Sequence
 from datetime import datetime
 from enum import StrEnum, auto
 from functools import cached_property
-from typing import Annotated, Any, Self
+from typing import Annotated, Any, Literal, Self
 
 from pydantic import (
     Field,
@@ -146,6 +146,23 @@ class Availability(BaseOpdsModel):
         return value
 
 
+class PalaceLicensor(BaseOpdsModel):
+    """
+    Palace-specific DRM licensor metadata for OPDS2 links.
+    """
+
+    vendor: str | None = None
+    client_token: str | None = Field(None, alias="clientToken")
+
+
+class LinkActions(BaseOpdsModel):
+    """
+    Palace-specific actions metadata for OPDS2 links.
+    """
+
+    cancellable: bool | None = None
+
+
 class LinkProperties(rwpm.LinkProperties):
     """
     OPDS2 extensions to the link properties.
@@ -161,6 +178,15 @@ class LinkProperties(rwpm.LinkProperties):
     holds: Holds = Field(default_factory=Holds)
     copies: Copies = Field(default_factory=Copies)
     availability: Availability = Field(default_factory=Availability)
+    actions: LinkActions | None = None
+    licensor: PalaceLicensor | None = None
+    lcp_hashed_passphrase: str | None = None
+    palace_default: Literal["true"] | None = Field(
+        None, alias="http://palaceproject.io/terms/properties/default"
+    )
+    palace_active_sort: Literal["true"] | None = Field(
+        None, alias="http://palaceproject.io/terms/properties/active-sort"
+    )
 
 
 class Link(rwpm.Link):
@@ -366,9 +392,9 @@ class Feed(BaseOpdsModel):
 
     @model_validator(mode="after")
     def required_collections(self) -> Self:
-        if not self.publications and not self.groups and not self.navigation:
+        if not {"publications", "groups", "navigation"} & self.model_fields_set:
             raise ValueError(
-                "Feed must have at least one of: publications, groups, navigation"
+                "Feed must include at least one of: publications, groups, navigation"
             )
         return self
 
