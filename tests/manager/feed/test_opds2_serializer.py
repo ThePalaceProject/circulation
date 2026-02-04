@@ -9,11 +9,14 @@ from palace.manager.feed.serializer.opds2 import (
 from palace.manager.feed.types import (
     Acquisition,
     Author,
+    Category,
+    DRMLicensor,
     FeedData,
-    FeedEntryType,
     FeedMetadata,
     IndirectAcquisition,
     Link,
+    Series,
+    TextValue,
     WorkEntry,
     WorkEntryData,
 )
@@ -40,9 +43,7 @@ class TestOPDS2Serializer:
         feed.entries = [w]
         feed.links = [Link(href="http://link", rel="link-rel")]
         feed.facet_links = [
-            Link.create(
-                href="http://facet-link", rel="facet-rel", facetGroup="FacetGroup"
-            )
+            Link(href="http://facet-link", rel="facet-rel", facetGroup="FacetGroup")
         ]
 
         serialized = OPDS2Serializer().serialize_feed(feed)
@@ -68,20 +69,20 @@ class TestOPDS2Serializer:
     def test_serialize_work_entry(self):
         data = WorkEntryData(
             additionalType="type",
-            title=FeedEntryType(text="The Title"),
-            sort_title=FeedEntryType(text="Title, The"),
-            subtitle=FeedEntryType(text="Sub Title"),
+            title=TextValue(text="The Title"),
+            sort_title=TextValue(text="Title, The"),
+            subtitle=TextValue(text="Sub Title"),
             identifier="urn:id",
-            language=FeedEntryType(text="de"),
-            updated=FeedEntryType(text="2022-02-02"),
-            published=FeedEntryType(text="2020-02-02"),
-            summary=FeedEntryType(text="Summary"),
-            publisher=FeedEntryType(text="Publisher"),
-            imprint=FeedEntryType(text="Imprint"),
+            language=TextValue(text="de"),
+            updated=TextValue(text="2022-02-02"),
+            published=TextValue(text="2020-02-02"),
+            summary=TextValue(text="Summary"),
+            publisher=TextValue(text="Publisher"),
+            imprint=TextValue(text="Imprint"),
             categories=[
-                FeedEntryType.create(scheme="scheme", label="label"),
+                Category(scheme="scheme", term="label", label="label"),
             ],
-            series=FeedEntryType.create(name="Series", position="3"),
+            series=Series(name="Series", position="3"),
             image_links=[Link(href="http://image", rel="image-rel")],
             acquisition_links=[
                 Acquisition(href="http://acquisition", rel="acquisition-rel")
@@ -151,9 +152,8 @@ class TestOPDS2Serializer:
         assert metadata["narrator"] == dict(name="narrator2")
 
     def test__serialize_acquisition_link(self):
-        drm_licensor = FeedEntryType()
-        drm_licensor.add_attributes(
-            {"vendor": "vendor_name", "clientToken": FeedEntryType(text="token_value")}
+        drm_licensor = DRMLicensor(
+            vendor="vendor_name", clientToken=TextValue(text="token_value")
         )
 
         serializer = OPDS2Serializer()
@@ -164,7 +164,7 @@ class TestOPDS2Serializer:
             availability_status="available",
             availability_since="2022-02-02",
             availability_until="2222-02-02",
-            lcp_hashed_passphrase=FeedEntryType(text="LCPPassphrase"),
+            lcp_hashed_passphrase=TextValue(text="LCPPassphrase"),
             indirect_acquisitions=[
                 IndirectAcquisition(
                     type="indirect1",
@@ -246,15 +246,23 @@ class TestOPDS2Serializer:
         feed_data = FeedData()
 
         # specify a sort link
-        link = Link(href="test", rel="test_rel", title="text1")
-        link.add_attributes(
-            dict(facetGroup="Sort by", activeFacet="true", defaultFacet="true")
+        link = Link(
+            href="test",
+            rel="test_rel",
+            title="text1",
+            facetGroup="Sort by",
+            activeFacet=True,
+            defaultFacet=True,
         )
 
         # include a non-sort facet
-        link2 = Link(href="test2", title="text2", rel="test_2_rel")
-        link2.add_attributes(
-            dict(facetGroup="test_group", activeFacet="true", defaultFacet="true")
+        link2 = Link(
+            href="test2",
+            title="text2",
+            rel="test_2_rel",
+            facetGroup="test_group",
+            activeFacet=True,
+            defaultFacet=True,
         )
 
         feed_data.facet_links.append(link)

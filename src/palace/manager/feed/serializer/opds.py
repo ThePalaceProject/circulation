@@ -12,12 +12,13 @@ from palace.manager.feed.serializer.base import SerializerInterface
 from palace.manager.feed.types import (
     Acquisition,
     Author,
+    BaseModel,
     DataEntry,
     FeedData,
-    FeedEntryType,
     FeedMetadata,
     IndirectAcquisition,
     Link,
+    Series,
     WorkEntryData,
 )
 from palace.manager.util.datetime_helpers import utc_now
@@ -62,12 +63,11 @@ AUTHOR_MAPPING = {
 
 
 def is_sort_facet(link: Link) -> bool:
-    """A until method that determines if the specified link is part of a sort facet"""
-    return (
-        hasattr(link, "facetGroup")
-        and link.facetGroup
-        == FacetConstants.GROUP_DISPLAY_TITLES[FacetConstants.ORDER_FACET_GROUP_NAME]
+    """A until method that determines if the specified link is part of a sort facet."""
+    group_name = cast(
+        str, FacetConstants.GROUP_DISPLAY_TITLES[FacetConstants.ORDER_FACET_GROUP_NAME]
     )
+    return link.facetGroup == group_name
 
 
 class BaseOPDS1Serializer(SerializerInterface[etree._Element], OPDSFeed, abc.ABC):
@@ -259,7 +259,7 @@ class BaseOPDS1Serializer(SerializerInterface[etree._Element], OPDSFeed, abc.ABC
 
         for category in feed_entry.categories:
             element = OPDSFeed.category(
-                scheme=category.scheme, term=category.term, label=category.label  # type: ignore[attr-defined]
+                scheme=category.scheme, term=category.term, label=category.label
             )
             entry.append(element)
 
@@ -289,20 +289,17 @@ class BaseOPDS1Serializer(SerializerInterface[etree._Element], OPDSFeed, abc.ABC
     def serialize_opds_message(self, entry: OPDSMessage) -> etree._Element:
         return entry.tag
 
-    def _serialize_series_entry(self, series: FeedEntryType) -> etree._Element:
+    def _serialize_series_entry(self, series: Series) -> etree._Element:
         entry = self._tag("series")
-        if name := getattr(series, "name", None):
-            entry.set("name", name)
-        if position := getattr(series, "position", None):
-            entry.append(self._tag("position", position))
-        if link := getattr(series, "link", None):
-            entry.append(self._serialize_feed_entry("link", link))
+        entry.set("name", series.name)
+        if series.position:
+            entry.append(self._tag("position", series.position))
+        if series.link:
+            entry.append(self._serialize_feed_entry("link", series.link))
 
         return entry
 
-    def _serialize_feed_entry(
-        self, tag: str, feed_entry: FeedEntryType
-    ) -> etree._Element:
+    def _serialize_feed_entry(self, tag: str, feed_entry: BaseModel) -> etree._Element:
         """Serialize a feed entry type in a recursive and blind manner"""
         entry: etree._Element = self._tag(tag)
         for attrib, value in feed_entry:
@@ -311,11 +308,15 @@ class BaseOPDS1Serializer(SerializerInterface[etree._Element], OPDSFeed, abc.ABC
             if isinstance(value, list):
                 for item in value:
                     entry.append(self._serialize_feed_entry(attrib, item))
-            elif isinstance(value, FeedEntryType):
+            elif isinstance(value, BaseModel):
                 entry.append(self._serialize_feed_entry(attrib, value))
             else:
                 if attrib == "text":
-                    entry.text = value
+                    entry.text = str(value)
+                elif isinstance(value, bool):
+                    if not value:
+                        continue
+                    entry.set(self._attr_name(attrib), "true")
                 else:
                     attribute_mapping = self._get_attribute_mapping()
                     entry.set(
@@ -491,12 +492,8 @@ class OPDS1Version2Serializer(BaseOPDS1Serializer):
         sort_link = Link(
             href=link.href, title=link.title, rel=AtomFeed.PALACE_REL_NS + "sort"
         )
-        attributes: dict[str, Any] = dict()
-        if link.get("activeFacet", False):
-            attributes.update(dict(activeSort="true"))
-        if link.get("defaultFacet", False):
-            attributes.update(dict(defaultFacet="true"))
-        sort_link.add_attributes(attributes)
+        sort_link.activeSort = link.activeFacet
+        sort_link.defaultFacet = link.defaultFacet
 
         return self._serialize_feed_entry("link", sort_link)
 

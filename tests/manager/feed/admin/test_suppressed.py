@@ -12,7 +12,7 @@ from palace.manager.feed.admin.suppressed import (
     VisibilityFilter,
 )
 from palace.manager.feed.annotator.admin.suppressed import AdminSuppressedAnnotator
-from palace.manager.feed.types import FeedData, FeedEntryType, Link
+from palace.manager.feed.types import Category, FeedData, Link
 from palace.manager.search.pagination import Pagination
 from palace.manager.sqlalchemy.model.classification import Genre
 from palace.manager.sqlalchemy.model.datasource import DataSource
@@ -38,14 +38,13 @@ class TestAdminSuppressedFeed:
 
     @staticmethod
     def visibility_categories(
-        categories: Sequence[FeedEntryType],
-    ) -> list[FeedEntryType]:
+        categories: Sequence[Category],
+    ) -> list[Category]:
         """Extract visibility status categories from a list of categories."""
         return [
             c
             for c in categories
-            if c.get("scheme", None)
-            == AdminSuppressedAnnotator.VISIBILITY_STATUS_SCHEME
+            if c.scheme == AdminSuppressedAnnotator.VISIBILITY_STATUS_SCHEME
         ]
 
     @staticmethod
@@ -92,8 +91,8 @@ class TestAdminSuppressedFeed:
         [entry] = feed._feed.entries
         assert entry.computed is not None
         assert len(entry.computed.ratings) == 2
-        assert 3 == float(entry.computed.ratings[1].ratingValue)  # type: ignore[attr-defined]
-        assert Measurement.RATING == entry.computed.ratings[1].additionalType  # type: ignore[attr-defined]
+        assert 3 == float(entry.computed.ratings[1].ratingValue)
+        assert Measurement.RATING == entry.computed.ratings[1].additionalType
 
     def test_feed_includes_refresh_link(
         self,
@@ -753,7 +752,7 @@ class TestAdminSuppressedFeed:
         all_link = next(
             link for link in facet_links if getattr(link, "title", None) == "All"
         )
-        assert getattr(all_link, "activeFacet", None) == "true"
+        assert getattr(all_link, "activeFacet", None) is True
 
         # Generate feed with 'manually-suppressed' filter
         facets = SuppressedFacets(visibility=VisibilityFilter.MANUALLY_SUPPRESSED)
@@ -772,13 +771,13 @@ class TestAdminSuppressedFeed:
             for link in facet_links
             if getattr(link, "title", None) == "Manually Hidden"
         )
-        assert getattr(manually_hidden_link, "activeFacet", None) == "true"
+        assert getattr(manually_hidden_link, "activeFacet", None) is True
 
         # 'All' should no longer be active
         all_link = next(
             link for link in facet_links if getattr(link, "title", None) == "All"
         )
-        assert getattr(all_link, "activeFacet", None) is None
+        assert getattr(all_link, "activeFacet", None) is False
 
     def test_suppressed_feed_pagination_preserves_facets(
         self,

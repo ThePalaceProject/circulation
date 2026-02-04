@@ -116,9 +116,9 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]]):
             for subject in data.categories:
                 subjects.append(
                     {
-                        "scheme": subject.scheme,  # type: ignore[attr-defined]
-                        "name": subject.label,  # type: ignore[attr-defined]
-                        "sortAs": subject.label,  # type: ignore[attr-defined] # Same as above, don't think we have an alternate
+                        "scheme": subject.scheme,
+                        "name": subject.label,
+                        "sortAs": subject.label,  # Same as above, don't think we have an alternate
                     }
                 )
             metadata["subject"] = subjects
@@ -151,10 +151,10 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]]):
         if link.title:
             serialized["title"] = link.title
 
-        if link.get("activeFacet", False):
+        if link.activeFacet:
             serialized["rel"] = "self"
 
-        if link.get("defaultFacet", False):
+        if link.defaultFacet:
             properties: dict[str, Any] = dict()
             properties.update({PALACE_PROPERTIES_DEFAULT: "true"})
             serialized["properties"] = properties
@@ -243,7 +243,7 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]]):
             # TODO: When we remove the facet-based sort links [PP-1814],
             # this check can be removed.
             if not is_sort_facet(link):
-                group = getattr(link, "facetGroup", None)
+                group = link.facetGroup
                 if group:
                     facet_links[group]["links"].append(self._serialize_link(link))
                     facet_links[group]["metadata"]["title"] = group
@@ -274,9 +274,9 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]]):
 
         sort_link["properties"] = properties
 
-        if link.get("activeFacet", False):
+        if link.activeFacet:
             properties.update({PALACE_PROPERTIES_ACTIVE_SORT: "true"})
 
-        if link.get("defaultFacet", False):
+        if link.defaultFacet:
             properties.update({PALACE_PROPERTIES_DEFAULT: "true"})
         return sort_link

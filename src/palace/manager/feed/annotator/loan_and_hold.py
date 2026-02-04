@@ -1,9 +1,8 @@
 import copy
 from datetime import datetime
-from typing import Any
 
 from palace.manager.feed.annotator.circulation import LibraryAnnotator
-from palace.manager.feed.types import FeedData, Link, WorkEntry
+from palace.manager.feed.types import DRMLicensor, FeedData, Link, WorkEntry
 from palace.manager.sqlalchemy.constants import EditionConstants, LinkRelations
 from palace.manager.sqlalchemy.model.patron import Hold, Patron
 
@@ -44,21 +43,12 @@ class LibraryLoanAndHoldAnnotator(LibraryAnnotator):
 
         return best
 
-    def drm_device_registration_feed_tags(self, patron: Patron) -> dict[str, Any]:
-        """Return tags that provide information on DRM device deregistration
-        independent of any particular loan. These tags will go under
-        the <feed> tag.
-
-        This allows us to deregister an Adobe ID, in preparation for
-        logout, even if there is no active loan that requires one.
-        """
-        tags = copy.deepcopy(self.adobe_id_tags(patron))
-        attr = "scheme"
-        for tag, value in tags.items():
-            value.add_attributes(
-                {attr: "http://librarysimplified.org/terms/drm/scheme/ACS"}
-            )
-        return tags
+    def drm_device_registration_feed_tags(self, patron: Patron) -> DRMLicensor | None:
+        """Return DRM device deregistration info for the feed."""
+        licensor = copy.deepcopy(self.adobe_id_tags(patron))
+        if licensor:
+            licensor.scheme = "http://librarysimplified.org/terms/drm/scheme/ACS"
+        return licensor
 
     @property
     def user_profile_management_protocol_link(self) -> Link:
@@ -81,12 +71,12 @@ class LibraryLoanAndHoldAnnotator(LibraryAnnotator):
         """
         super().annotate_feed(feed)
         if self.patron:
-            tags = self.drm_device_registration_feed_tags(self.patron)
+            licensor = self.drm_device_registration_feed_tags(self.patron)
             link = self.user_profile_management_protocol_link
             if link.href is not None:
                 feed.add_link(link.href, rel=link.rel)
-            if "drm_licensor" in tags:
-                feed.metadata.drm_licensor = tags["drm_licensor"]
+            if licensor:
+                feed.metadata.drm_licensor = licensor
 
     def annotate_work_entry(
         self, entry: WorkEntry, updated: datetime | None = None

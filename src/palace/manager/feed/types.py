@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Generator
 from dataclasses import dataclass, field
 from datetime import date, datetime
-from typing import Any, Self, cast
+from typing import Any, cast
 
 from pydantic import ConfigDict
 
@@ -18,18 +18,18 @@ NO_SUCH_KEY = object()
 @dataclass
 class BaseModel:
     def _vars(self) -> Generator[tuple[str, Any]]:
-        """Yield attributes as a tuple"""
+        """Yield attributes as a tuple."""
         _attrs = vars(self)
         for name, value in _attrs.items():
             if name.startswith("_"):
                 continue
-            elif callable(value):
+            if callable(value):
                 continue
             yield name, value
 
     def asdict(self) -> dict[str, Any]:
-        """Dataclasses do not return undefined attributes via `asdict` so we must implement this ourselves"""
-        attrs = {}
+        """Dataclasses do not return undefined attributes via `asdict` so we must implement this ourselves."""
+        attrs: dict[str, Any] = {}
         for name, value in self:
             if isinstance(value, BaseModel):
                 attrs[name] = value.asdict()
@@ -38,45 +38,18 @@ class BaseModel:
         return attrs
 
     def __iter__(self) -> Generator[tuple[str, Any]]:
-        """Allow attribute iteration"""
+        """Allow attribute iteration."""
         yield from self._vars()
 
-    def get(self, name: str, *default: Any) -> Any:
-        """Convenience function. Mimics getattr"""
-        value = getattr(self, name, NO_SUCH_KEY)
-        if value is NO_SUCH_KEY:
-            if len(default) > 0:
-                return default[0]
-            else:
-                raise AttributeError(f"No attribute '{name}' found in object {self}")
-        return value
-
 
 @dataclass
-class FeedEntryType(BaseModel):
+class TextValue(BaseModel):
     text: str | None = None
-
-    @classmethod
-    def create(cls, **kwargs: Any) -> Self:
-        """Create a new object with arbitrary data"""
-        obj = cls()
-        obj.add_attributes(kwargs)
-        return obj
-
-    def add_attributes(self, attrs: dict[str, Any]) -> None:
-        for name, data in attrs.items():
-            setattr(self, name, data)
-
-    def children(self) -> Generator[tuple[str, FeedEntryType]]:
-        """Yield all FeedEntryType attributes"""
-        for name, value in self:
-            if isinstance(value, self.__class__):
-                yield name, value
-        return
+    type: str | None = None
 
 
 @dataclass
-class Link(FeedEntryType):
+class Link(BaseModel):
     href: str | None = None
     rel: str | None = None
     type: str | None = None
@@ -85,14 +58,20 @@ class Link(FeedEntryType):
     role: str | None = None
     title: str | None = None
 
+    # Facet-related attributes
+    facetGroup: str | None = None
+    facetGroupType: str | None = None
+    activeFacet: bool = False
+    defaultFacet: bool = False
+    activeSort: bool = False
+
     def asdict(self) -> dict[str, Any]:
-        """A dict without None values"""
-        d = super().asdict()
-        santized = {}
-        for k, v in d.items():
-            if v is not None:
-                santized[k] = v
-        return santized
+        """A dict without None values and without facet-only attributes."""
+        sanitized: dict[str, Any] = {}
+        for key in ("href", "rel", "type", "role", "title"):
+            if (value := getattr(self, key, None)) is not None:
+                sanitized[key] = value
+        return sanitized
 
     def link_attribs(self) -> dict[str, Any]:
         d = dict(href=self.href)
@@ -100,6 +79,45 @@ class Link(FeedEntryType):
             if (value := getattr(self, key, None)) is not None:
                 d[key] = value
         return d
+
+
+@dataclass
+class Category(BaseModel):
+    scheme: str
+    term: str
+    label: str
+    ratingValue: str | None = None
+
+
+@dataclass
+class Rating(BaseModel):
+    ratingValue: str
+    additionalType: str | None = None
+
+
+@dataclass
+class Series(BaseModel):
+    name: str
+    position: str | None = None
+    link: Link | None = None
+
+
+@dataclass
+class Distribution(BaseModel):
+    provider_name: str
+
+
+@dataclass
+class PatronData(BaseModel):
+    username: str | None = None
+    authorizationIdentifier: str | None = None
+
+
+@dataclass
+class DRMLicensor(BaseModel):
+    vendor: str | None = None
+    clientToken: TextValue | None = None
+    scheme: str | None = None
 
 
 @dataclass
@@ -122,8 +140,8 @@ class Acquisition(Link):
 
     rights: str | None = None
 
-    lcp_hashed_passphrase: FeedEntryType | None = None
-    drm_licensor: FeedEntryType | None = None
+    lcp_hashed_passphrase: TextValue | None = None
+    drm_licensor: DRMLicensor | None = None
 
     indirect_acquisitions: list[IndirectAcquisition] = field(default_factory=list)
 
@@ -136,7 +154,7 @@ class Acquisition(Link):
 
 
 @dataclass
-class Author(FeedEntryType):
+class Author(BaseModel):
     name: str | None = None
     sort_name: str | None = None
     viaf: str | None = None
@@ -149,7 +167,7 @@ class Author(FeedEntryType):
 
 @dataclass
 class WorkEntryData(BaseModel):
-    """All the metadata possible for a work. This is not a FeedEntryType because we want strict control."""
+    """All the metadata possible for a work. This is not a TextValue because we want strict control."""
 
     additionalType: str | None = None
     identifier: str | None = None
@@ -157,22 +175,22 @@ class WorkEntryData(BaseModel):
     issued: datetime | date | None = None
     duration: float | None = None
 
-    summary: FeedEntryType | None = None
-    language: FeedEntryType | None = None
-    publisher: FeedEntryType | None = None
-    published: FeedEntryType | None = None
-    updated: FeedEntryType | None = None
-    title: FeedEntryType | None = None
-    sort_title: FeedEntryType | None = None
-    subtitle: FeedEntryType | None = None
-    series: FeedEntryType | None = None
-    imprint: FeedEntryType | None = None
+    summary: TextValue | None = None
+    language: TextValue | None = None
+    publisher: TextValue | None = None
+    published: TextValue | None = None
+    updated: TextValue | None = None
+    title: TextValue | None = None
+    sort_title: TextValue | None = None
+    subtitle: TextValue | None = None
+    series: Series | None = None
+    imprint: TextValue | None = None
 
     authors: list[Author] = field(default_factory=list)
     contributors: list[Author] = field(default_factory=list)
-    categories: list[FeedEntryType] = field(default_factory=list)
-    ratings: list[FeedEntryType] = field(default_factory=list)
-    distribution: FeedEntryType | None = None
+    categories: list[Category] = field(default_factory=list)
+    ratings: list[Rating] = field(default_factory=list)
+    distribution: Distribution | None = None
 
     # Links
     acquisition_links: list[Acquisition] = field(default_factory=list)
@@ -213,9 +231,9 @@ class FeedMetadata(BaseModel):
     id: str | None = None
     updated: str | None = None
     items_per_page: int | None = None
-    patron: FeedEntryType | None = None
-    drm_licensor: FeedEntryType | None = None
-    lcp_hashed_passphrase: FeedEntryType | None = None
+    patron: PatronData | None = None
+    drm_licensor: DRMLicensor | None = None
+    lcp_hashed_passphrase: TextValue | None = None
 
 
 class DataEntryTypes:
@@ -223,8 +241,8 @@ class DataEntryTypes:
 
 
 @dataclass
-class DataEntry(FeedEntryType):
-    """Other kinds of information, like entries of a navigation feed"""
+class DataEntry(BaseModel):
+    """Other kinds of information, like entries of a navigation feed."""
 
     type: str | None = None
     title: str | None = None

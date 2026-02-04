@@ -1,4 +1,5 @@
 import datetime
+from dataclasses import dataclass
 from unittest.mock import patch
 
 import pytz
@@ -12,10 +13,15 @@ from palace.manager.feed.serializer.opds2 import PALACE_REL_SORT
 from palace.manager.feed.types import (
     Acquisition,
     Author,
+    BaseModel,
+    Category,
+    DRMLicensor,
     FeedData,
-    FeedEntryType,
     IndirectAcquisition,
     Link,
+    Rating,
+    Series,
+    TextValue,
     WorkEntryData,
 )
 from palace.manager.util.opds_writer import OPDSFeed, OPDSMessage
@@ -23,9 +29,26 @@ from palace.manager.util.opds_writer import OPDSFeed, OPDSMessage
 
 class TestOPDSSerializer:
     def test__serialize_feed_entry(self):
-        grandchild = FeedEntryType.create(text="grandchild", attr="gcattr")
-        child = FeedEntryType.create(text="child", attr="chattr", grandchild=grandchild)
-        parent = FeedEntryType.create(text="parent", attr="pattr", child=child)
+        @dataclass
+        class Grandchild(BaseModel):
+            text: str | None = None
+            attr: str | None = None
+
+        @dataclass
+        class Child(BaseModel):
+            text: str | None = None
+            attr: str | None = None
+            grandchild: Grandchild | None = None
+
+        @dataclass
+        class Parent(BaseModel):
+            text: str | None = None
+            attr: str | None = None
+            child: Child | None = None
+
+        grandchild = Grandchild(text="grandchild", attr="gcattr")
+        child = Child(text="child", attr="chattr", grandchild=grandchild)
+        parent = Parent(text="parent", attr="pattr", child=child)
 
         serialized = OPDS1Version1Serializer()._serialize_feed_entry("parent", parent)
 
@@ -102,9 +125,9 @@ class TestOPDSSerializer:
             copies_total="1",
             availability_status="available",
             indirect_acquisitions=[IndirectAcquisition(type="indirect")],
-            lcp_hashed_passphrase=FeedEntryType(text="passphrase"),
-            drm_licensor=FeedEntryType.create(
-                vendor="vendor", clientToken=FeedEntryType(text="token")
+            lcp_hashed_passphrase=TextValue(text="passphrase"),
+            drm_licensor=DRMLicensor(
+                vendor="vendor", clientToken=TextValue(text="token")
             ),
         )
         element = OPDS1Version1Serializer()._serialize_acquisition_link(link)
@@ -149,25 +172,23 @@ class TestOPDSSerializer:
             additionalType="type",
             identifier="identifier",
             pwid="permanent-work-id",
-            summary=FeedEntryType(text="summary"),
-            language=FeedEntryType(text="language"),
-            publisher=FeedEntryType(text="publisher"),
+            summary=TextValue(text="summary"),
+            language=TextValue(text="language"),
+            publisher=TextValue(text="publisher"),
             issued=datetime.datetime(2020, 2, 2, tzinfo=pytz.UTC),
-            published=FeedEntryType(text="published"),
-            updated=FeedEntryType(text="updated"),
-            title=FeedEntryType(text="title"),
-            subtitle=FeedEntryType(text="subtitle"),
-            series=FeedEntryType.create(
+            published=TextValue(text="published"),
+            updated=TextValue(text="updated"),
+            title=TextValue(text="title"),
+            subtitle=TextValue(text="subtitle"),
+            series=Series(
                 name="series",
                 link=Link(href="http://series", title="series title", rel="series"),
             ),
-            imprint=FeedEntryType(text="imprint"),
+            imprint=TextValue(text="imprint"),
             authors=[Author(name="author")],
             contributors=[Author(name="contributor")],
-            categories=[
-                FeedEntryType.create(scheme="scheme", term="term", label="label")
-            ],
-            ratings=[FeedEntryType(text="rating")],
+            categories=[Category(scheme="scheme", term="term", label="label")],
+            ratings=[Rating(ratingValue="rating")],
             duration=10,
         )
 
@@ -250,7 +271,10 @@ class TestOPDSSerializer:
 
         child = element.findall(f"Rating")
         assert len(child) == 1
-        assert child[0].text == data.ratings[0].text
+        assert (
+            child[0].get(f"{{{OPDSFeed.SCHEMA_NS}}}ratingValue")
+            == data.ratings[0].ratingValue
+        )
 
         child = element.findall(f"{{{OPDSFeed.DCTERMS_NS}}}duration")
         assert len(child) == 1
@@ -270,14 +294,22 @@ class TestOPDSSerializer:
         assert serializer.to_string(result) == serializer.to_string(message.tag)
 
     def test_serialize_sort_link_v2(self):
-        sort_link_input = Link(href="test", rel="test_rel", title="text1")
-        sort_link_input.add_attributes(
-            dict(facetGroup="Sort by", activeFacet="true", defaultFacet="true")
+        sort_link_input = Link(
+            href="test",
+            rel="test_rel",
+            title="text1",
+            facetGroup="Sort by",
+            activeFacet=True,
+            defaultFacet=True,
         )
 
-        facet_link = Link(href="test", rel="test_rel", title="text1")
-        facet_link.add_attributes(
-            dict(facetGroup="non_sort_group", activeFacet="true", defaultFacet="true")
+        facet_link = Link(
+            href="test",
+            rel="test_rel",
+            title="text1",
+            facetGroup="non_sort_group",
+            activeFacet=True,
+            defaultFacet=True,
         )
 
         serializer = OPDS1Version2Serializer()
@@ -306,14 +338,22 @@ class TestOPDSSerializer:
             assert serialize_sort_links.call_count == 1
 
     def test_serialize_non_sort_facetgroup_link_v2(self):
-        facet_link = Link(href="test", rel="test_rel", title="text1")
-        facet_link.add_attributes(
-            dict(facetGroup="non_sort_group", activeFacet="true", defaultFacet="true")
+        facet_link = Link(
+            href="test",
+            rel="test_rel",
+            title="text1",
+            facetGroup="non_sort_group",
+            activeFacet=True,
+            defaultFacet=True,
         )
 
-        sort_link = Link(href="test", rel="test_rel", title="text1")
-        sort_link.add_attributes(
-            dict(facetGroup="Sort by", activeFacet="true", defaultFacet="true")
+        sort_link = Link(
+            href="test",
+            rel="test_rel",
+            title="text1",
+            facetGroup="Sort by",
+            activeFacet=True,
+            defaultFacet=True,
         )
         serializer = OPDS1Version2Serializer()
         feed = FeedData()
@@ -341,14 +381,22 @@ class TestOPDSSerializer:
         )
 
     def test_serialize_facets_and_sort_links_v1(self):
-        sort_link_input = Link(href="test", rel="test_rel", title="text1")
-        sort_link_input.add_attributes(
-            dict(facetGroup="Sort by", activeFacet="true", defaultFacet="true")
+        sort_link_input = Link(
+            href="test",
+            rel="test_rel",
+            title="text1",
+            facetGroup="Sort by",
+            activeFacet=True,
+            defaultFacet=True,
         )
 
-        facet_link = Link(href="test", rel="test_rel", title="text1")
-        facet_link.add_attributes(
-            dict(facetGroup="non_sort_group", activeFacet="true", defaultFacet="true")
+        facet_link = Link(
+            href="test",
+            rel="test_rel",
+            title="text1",
+            facetGroup="non_sort_group",
+            activeFacet=True,
+            defaultFacet=True,
         )
 
         serializer = OPDS1Version1Serializer()
@@ -399,7 +447,7 @@ class TestOPDSSerializer:
 
     def test_serialize_work_entry_with_subtitle_equals_none(self):
         data = WorkEntryData(
-            subtitle=FeedEntryType(text=None),
+            subtitle=TextValue(text=None),
         )
 
         element = OPDS1Version1Serializer().serialize_work_entry(data)
@@ -407,7 +455,7 @@ class TestOPDSSerializer:
         assert len(child) == 0
 
         data = WorkEntryData(
-            subtitle=FeedEntryType(text="test"),
+            subtitle=TextValue(text="test"),
         )
 
         element = OPDS1Version1Serializer().serialize_work_entry(data)

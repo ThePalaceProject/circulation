@@ -198,14 +198,14 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
         :return: A dictionary of attributes, suitable for passing as
             keyword arguments into OPDSFeed.add_link_to_feed.
         """
-        args = dict(href=href, title=title)
-        args["rel"] = LinkRelations.FACET_REL
-        args["facetGroup"] = facet_group_name
-        if is_active:
-            args["activeFacet"] = "true"
-        if is_default:
-            args["defaultFacet"] = "true"
-        return Link.create(**args)
+        return Link(
+            href=href,
+            title=title,
+            rel=LinkRelations.FACET_REL,
+            facetGroup=facet_group_name,
+            activeFacet=is_active,
+            defaultFacet=is_default,
+        )
 
     def as_error_response(self, **kwargs: Any) -> OPDSFeedResponse:
         """Convert this feed into an OPDSFeedResponse that should be treated
@@ -298,7 +298,7 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
         #
         # In OPDS 2 this can become an additional rel value,
         # removing the need for a custom attribute.
-        link.add_attributes({"facetGroupType": FacetConstants.ENTRY_POINT_REL})
+        link.facetGroupType = FacetConstants.ENTRY_POINT_REL
         return link
 
     def add_breadcrumb_links(

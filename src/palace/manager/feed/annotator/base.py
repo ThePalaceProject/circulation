@@ -13,9 +13,13 @@ from sqlalchemy.orm import Session, joinedload
 from palace.manager.core.classifier import Classifier
 from palace.manager.feed.types import (
     Author,
+    Category,
+    Distribution,
     FeedData,
-    FeedEntryType,
     Link,
+    Rating,
+    Series,
+    TextValue,
     WorkEntry,
     WorkEntryData,
 )
@@ -114,24 +118,17 @@ class ToFeedEntry:
     @classmethod
     def series(
         cls, series_name: str | None, series_position: int | None | str | None
-    ) -> FeedEntryType | None:
-        """Generate a FeedEntryType object for the given name and position."""
+    ) -> Series | None:
+        """Generate a Series object for the given name and position."""
         if not series_name:
             return None
-        series_details = dict()
-        series_details["name"] = series_name
-        if series_position != None:
-            series_details["position"] = str(series_position)
-        series = FeedEntryType.create(**series_details)
-        return series
+        position = str(series_position) if series_position is not None else None
+        return Series(name=series_name, position=position)
 
     @classmethod
-    def rating(cls, type_uri: str | None, value: float | Decimal) -> FeedEntryType:
-        """Generate a FeedEntryType object for the given type and value."""
-        entry = FeedEntryType.create(
-            **dict(ratingValue="%.4f" % value, additionalType=type_uri)
-        )
-        return entry
+    def rating(cls, type_uri: str | None, value: float | Decimal) -> Rating:
+        """Generate a Rating object for the given type and value."""
+        return Rating(ratingValue="%.4f" % value, additionalType=type_uri)
 
     @classmethod
     def samples(cls, edition: Edition | None) -> list[Hyperlink]:
@@ -309,12 +306,12 @@ class Annotator(ToFeedEntry):
                 logging.warning("No additionalType for medium %s", edition.medium)
             computed.additionalType = additional_type
 
-        computed.title = FeedEntryType(text=(edition.title or OPDSFeed.NO_TITLE))
+        computed.title = TextValue(text=(edition.title or OPDSFeed.NO_TITLE))
 
         if edition.subtitle:
-            computed.subtitle = FeedEntryType(text=edition.subtitle)
+            computed.subtitle = TextValue(text=edition.subtitle)
         if edition.sort_title:
-            computed.sort_title = FeedEntryType(text=edition.sort_title)
+            computed.sort_title = TextValue(text=edition.sort_title)
 
         author_entries = self.authors(edition)
         computed.contributors = author_entries.get("contributors", [])
@@ -328,8 +325,7 @@ class Annotator(ToFeedEntry):
 
         content = self.content(work)
         if content:
-            computed.summary = FeedEntryType(text=content)
-            computed.summary.add_attributes(dict(type="html"))
+            computed.summary = TextValue(text=content, type="html")
 
         computed.pwid = edition.permanent_work_id
 
@@ -340,18 +336,24 @@ class Annotator(ToFeedEntry):
                 category = dict(
                     list(map(str, (k, v))) for k, v in list(category.items())
                 )
-                category_tag = FeedEntryType.create(scheme=scheme, **category)
+                rating_value = category.get("ratingValue")
+                category_tag = Category(
+                    scheme=scheme,
+                    term=category.get("term", ""),
+                    label=category.get("label", ""),
+                    ratingValue=str(rating_value) if rating_value is not None else None,
+                )
                 category_tags.append(category_tag)
         computed.categories = category_tags
 
         if edition.language_code:
-            computed.language = FeedEntryType(text=edition.language_code)
+            computed.language = TextValue(text=edition.language_code)
 
         if edition.publisher:
-            computed.publisher = FeedEntryType(text=edition.publisher)
+            computed.publisher = TextValue(text=edition.publisher)
 
         if edition.imprint:
-            computed.imprint = FeedEntryType(text=edition.imprint)
+            computed.imprint = TextValue(text=edition.imprint)
 
         if edition.issued or edition.published:
             computed.issued = edition.issued or edition.published
@@ -366,8 +368,7 @@ class Annotator(ToFeedEntry):
                 # created as a stand-in, e.g. by the metadata wrangler.
                 # This component is not actually distributing the book,
                 # so it should not have a bibframe:distribution tag.
-                computed.distribution = FeedEntryType()
-                computed.distribution.add_attributes(dict(provider_name=data_source))
+                computed.distribution = Distribution(provider_name=data_source)
 
             # We use Atom 'published' for the date the book first became
             # available to people using this application.
@@ -379,12 +380,12 @@ class Annotator(ToFeedEntry):
                 else:
                     avail_date = avail  # type: ignore[unreachable]
                 if avail_date <= today:  # Avoid obviously wrong values.
-                    computed.published = FeedEntryType(text=strftime(avail_date))
+                    computed.published = TextValue(text=strftime(avail_date))
 
         if not updated and entry.work.last_update_time:
             updated = entry.work.last_update_time
         if updated:
-            computed.updated = FeedEntryType(text=strftime(updated))
+            computed.updated = TextValue(text=strftime(updated))
 
         computed.image_links = image_links
         computed.other_links = other_links

@@ -12,7 +12,7 @@ from palace.manager.feed.acquisition import OPDSAcquisitionFeed
 from palace.manager.feed.annotator.base import Annotator
 from palace.manager.feed.annotator.circulation import CirculationManagerAnnotator
 from palace.manager.feed.annotator.verbose import VerboseAnnotator
-from palace.manager.feed.types import FeedEntryType, Link, WorkEntry
+from palace.manager.feed.types import Link, TextValue, WorkEntry
 from palace.manager.feed.util import strftime
 from palace.manager.feed.worklist.base import WorkList
 from palace.manager.integration.license.opds.for_distributors.api import (
@@ -340,8 +340,8 @@ class TestAnnotators:
         assert computed is not None
 
         assert computed.series is not None
-        assert computed.series.name == work.presentation_edition.series  # type: ignore[attr-defined]
-        assert computed.series.position == str(  # type: ignore[attr-defined]
+        assert computed.series.name == work.presentation_edition.series
+        assert computed.series.position == str(
             work.presentation_edition.series_position
         )
 
@@ -357,8 +357,8 @@ class TestAnnotators:
         computed = feed.entries[0].computed
         assert computed is not None
         assert computed.series is not None
-        assert computed.series.name == work.presentation_edition.series  # type: ignore[attr-defined]
-        assert computed.series.position == str(  # type: ignore[attr-defined]
+        assert computed.series.name == work.presentation_edition.series
+        assert computed.series.position == str(
             work.presentation_edition.series_position
         )
 
@@ -479,18 +479,18 @@ class TestAnnotator:
         )
 
         # Other values
-        assert data.imprint == FeedEntryType(text="imprint")
+        assert data.imprint == TextValue(text="imprint")
         assert data.summary and data.summary.text == "Summary"
-        assert data.summary and data.summary.get("type") == "html"
-        assert data.publisher == FeedEntryType(text="publisher")
+        assert data.summary and data.summary.type == "html"
+        assert data.publisher == TextValue(text="publisher")
         assert data.issued == edition.issued
         assert data.duration == edition.duration
         assert data.distribution is not None
-        assert data.distribution.get("provider_name") == "Gutenberg"
+        assert data.distribution.provider_name == "Gutenberg"
 
         # Missing values
-        assert data.language == None
-        assert data.updated == FeedEntryType(text=strftime(now))
+        assert data.language is None
+        assert data.updated == TextValue(text=strftime(now))
 
         # other links
         other_links = data.other_links
@@ -514,7 +514,7 @@ class TestAnnotator:
             frozenbidict({DataSource.GUTENBERG: "Project Gutenberg"}),
         ):
             Annotator().annotate_work_entry(entry)
-        assert entry.computed.distribution.get("provider_name") == "Project Gutenberg"
+        assert entry.computed.distribution.provider_name == "Project Gutenberg"
 
 
 class CirculationManagerAnnotatorFixture:
@@ -735,29 +735,27 @@ class TestCirculationManagerAnnotator:
             == mock_circulation_api.return_value.sort_delivery_mechanisms.return_value
         )
 
-    def test_rights_attributes(
+    def test_rights_attribute(
         self, circulation_fixture: CirculationManagerAnnotatorFixture
     ):
-        m = circulation_fixture.annotator.rights_attributes
+        m = circulation_fixture.annotator.rights_attribute
 
         # Given a LicensePoolDeliveryMechanism with a RightsStatus,
-        # rights_attributes creates a dictionary mapping the dcterms:rights
-        # attribute to the URI associated with the RightsStatus.
+        # rights_attribute returns the URI associated with the RightsStatus.
         lp = circulation_fixture.db.licensepool(None)
         [lpdm] = lp.delivery_mechanisms
-        assert {"rights": lpdm.rights_status.uri} == m(lpdm)
+        assert lpdm.rights_status.uri == m(lpdm)
 
-        # If any link in the chain is broken, rights_attributes returns
-        # an empty dictionary.
+        # If any link in the chain is broken, rights_attribute returns None.
         old_uri = lpdm.rights_status.uri
         lpdm.rights_status.uri = None
-        assert {} == m(lpdm)
+        assert m(lpdm) is None
         lpdm.rights_status.uri = old_uri
 
         lpdm.rights_status = None
-        assert {} == m(lpdm)
+        assert m(lpdm) is None
 
-        assert {} == m(None)
+        assert m(None) is None
 
     def test_work_entry_includes_updated(
         self, circulation_fixture: CirculationManagerAnnotatorFixture
