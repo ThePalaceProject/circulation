@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+"""Feed model types used to build OPDS 1/2 payloads."""
+
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import NotRequired, TypedDict, Unpack, cast
@@ -14,12 +16,16 @@ from palace.manager.sqlalchemy.model.work import Work
 
 
 class LinkAttributes(TypedDict):
+    """Typed mapping for attributes used in OPDS1 link serialization."""
+
     href: str
     rel: NotRequired[str]
     type: NotRequired[str]
 
 
 class LinkKwargs(TypedDict):
+    """Typed keyword arguments accepted by FeedData.add_link."""
+
     rel: NotRequired[str]
     type: NotRequired[str]
     title: NotRequired[str]
@@ -33,12 +39,16 @@ class LinkKwargs(TypedDict):
 
 @dataclass
 class TextValue:
+    """Text content with an optional type hint (e.g., HTML vs plain)."""
+
     text: str | None = None
     type: str | None = None
 
 
 @dataclass
 class Link:
+    """A link with optional facets and display metadata."""
+
     href: str | None = None
     rel: str | None = None
     type: str | None = None
@@ -55,6 +65,10 @@ class Link:
     active_sort: bool = False
 
     def link_attribs(self) -> LinkAttributes:
+        """Return the basic link attributes required for OPDS1.
+
+        :raises PalaceValueError: If ``href`` is not set.
+        """
         if self.href is None:
             raise PalaceValueError("Link.href cannot be None for link attributes")
         attrs: LinkAttributes = {"href": self.href}
@@ -67,6 +81,8 @@ class Link:
 
 @dataclass
 class Category:
+    """A subject/category tag with an optional rating weight."""
+
     scheme: str
     term: str
     label: str
@@ -75,12 +91,16 @@ class Category:
 
 @dataclass
 class Rating:
+    """A schema.org rating for a work entry."""
+
     rating_value: str
     additional_type: str | None = None
 
 
 @dataclass
 class Series:
+    """Series metadata for a work entry."""
+
     name: str
     position: str | None = None
     link: Link | None = None
@@ -88,17 +108,23 @@ class Series:
 
 @dataclass
 class Distribution:
+    """Distribution metadata for a work entry."""
+
     provider_name: str
 
 
 @dataclass
 class PatronData:
+    """Patron identifier metadata used in feed-level tags."""
+
     username: str | None = None
     authorization_identifier: str | None = None
 
 
 @dataclass
 class DRMLicensor:
+    """DRM licensor metadata for OPDS DRM extensions."""
+
     vendor: str | None = None
     client_token: TextValue | None = None
     scheme: str | None = None
@@ -106,12 +132,16 @@ class DRMLicensor:
 
 @dataclass
 class IndirectAcquisition:
+    """Tree structure for indirect acquisitions in OPDS1."""
+
     type: str | None = None
     children: list[IndirectAcquisition] = field(default_factory=list)
 
 
 @dataclass
 class Acquisition(Link):
+    """Acquisition link with holds/copies/availability details."""
+
     holds_position: str | None = None
     holds_total: str | None = None
 
@@ -139,6 +169,8 @@ class Acquisition(Link):
 
 @dataclass
 class Author:
+    """Author or contributor metadata for a work entry."""
+
     name: str | None = None
     sort_name: str | None = None
     viaf: str | None = None
@@ -151,7 +183,7 @@ class Author:
 
 @dataclass
 class WorkEntryData:
-    """All the metadata possible for a work. This is not a TextValue because we want strict control."""
+    """Computed metadata used by OPDS serializers for a single work entry."""
 
     additional_type: str | None = None
     identifier: str | None = None
@@ -184,6 +216,8 @@ class WorkEntryData:
 
 @dataclass
 class WorkEntry:
+    """Wrapper for a Work and its computed feed representation."""
+
     work: Work
     edition: Edition
     identifier: Identifier
@@ -199,6 +233,10 @@ class WorkEntry:
         identifier: Identifier | None = None,
         license_pool: LicensePool | None = None,
     ) -> None:
+        """Initialize a WorkEntry with core models.
+
+        :raises ValueError: If required work data is missing.
+        """
         if None in (work, edition, identifier):
             raise ValueError(
                 "Work, Edition or Identifier cannot be None while initializing an entry"
@@ -211,6 +249,8 @@ class WorkEntry:
 
 @dataclass
 class FeedMetadata:
+    """Feed-level metadata used by OPDS serializers."""
+
     title: str | None = None
     id: str | None = None
     updated: str | None = None
@@ -221,12 +261,14 @@ class FeedMetadata:
 
 
 class DataEntryTypes:
+    """Known DataEntry.type values."""
+
     NAVIGATION = "navigation"
 
 
 @dataclass
 class DataEntry:
-    """Other kinds of information, like entries of a navigation feed."""
+    """Non-work feed entries (e.g., navigation entries)."""
 
     type: str | None = None
     title: str | None = None
@@ -236,6 +278,8 @@ class DataEntry:
 
 @dataclass
 class FeedData:
+    """Container for all feed-level data passed to serializers."""
+
     links: list[Link] = field(default_factory=list)
     breadcrumbs: list[Link] = field(default_factory=list)
     facet_links: list[Link] = field(default_factory=list)
@@ -246,4 +290,8 @@ class FeedData:
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     def add_link(self, href: str, **kwargs: Unpack[LinkKwargs]) -> None:
+        """Append a Link to the feed's top-level links list.
+
+        :param href: Link URL.
+        """
         self.links.append(Link(href=href, **kwargs))
