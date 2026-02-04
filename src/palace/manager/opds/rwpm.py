@@ -3,9 +3,10 @@ from __future__ import annotations
 from collections.abc import Sequence
 from enum import StrEnum, auto
 from functools import cached_property
-from typing import Literal
+from typing import Any, Literal, cast
 
-from pydantic import Field, NonNegativeInt, PositiveFloat, PositiveInt
+from pydantic import Field, NonNegativeInt, PositiveFloat, PositiveInt, model_serializer
+from pydantic_core.core_schema import SerializerFunctionWrapHandler
 
 from palace.manager.opds.base import BaseOpdsModel
 from palace.manager.opds.types.date import (
@@ -18,6 +19,7 @@ from palace.manager.opds.util import (
     StrModelOrTuple,
     StrOrModel,
     StrOrTuple,
+    drop_if_falsy,
     obj_or_tuple_to_tuple,
 )
 
@@ -124,6 +126,18 @@ class Link(BaseLink):
 
     properties: LinkProperties = Field(default_factory=LinkProperties)
 
+    @model_serializer(mode="wrap")
+    def _serialize(self, serializer: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        data = cast(dict[str, Any], serializer(self))
+
+        # Only include properties in output if there are properties set
+        drop_if_falsy(self, "properties", data)
+
+        # Only include templated in the output when it is True
+        drop_if_falsy(self, "templated", data)
+
+        return data
+
 
 class AltIdentifier(BaseOpdsModel):
     """
@@ -168,6 +182,12 @@ class Contributor(Named):
 
     position: NonNegativeInt | None = None
     links: CompactCollection[Link] = Field(default_factory=CompactCollection)
+
+    @model_serializer(mode="wrap")
+    def _serialize(self, serializer: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        data = cast(dict[str, Any], serializer(self))
+        drop_if_falsy(self, "links", data)
+        return data
 
 
 class ContributorWithRole(Contributor):
