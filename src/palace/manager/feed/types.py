@@ -7,8 +7,6 @@ from datetime import date, datetime
 from enum import StrEnum
 from typing import NotRequired, TypedDict, Unpack, cast
 
-from pydantic import ConfigDict
-
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import LicensePool
@@ -282,7 +280,6 @@ class FeedData:
     data_entries: list[DataEntry] = field(default_factory=list)
     metadata: FeedMetadata = field(default_factory=lambda: FeedMetadata())
     entrypoint: str | None = None
-    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     def add_link(self, href: str, **kwargs: Unpack[LinkKwargs]) -> None:
         """Append a Link to the feed's top-level links list.
