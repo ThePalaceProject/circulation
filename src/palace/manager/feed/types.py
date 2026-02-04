@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import date, datetime
+from enum import StrEnum
 from typing import NotRequired, TypedDict, Unpack, cast
 
 from pydantic import ConfigDict
@@ -260,7 +261,7 @@ class FeedMetadata:
     lcp_hashed_passphrase: str | None = None
 
 
-class DataEntryTypes:
+class DataEntryTypes(StrEnum):
     """Known DataEntry.type values."""
 
     NAVIGATION = "navigation"
@@ -270,7 +271,7 @@ class DataEntryTypes:
 class DataEntry:
     """Non-work feed entries (e.g., navigation entries)."""
 
-    type: str | None = None
+    type: DataEntryTypes | None = None
     title: str | None = None
     id: str | None = None
     links: list[Link] = field(default_factory=list)
