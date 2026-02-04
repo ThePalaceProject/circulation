@@ -1,4 +1,11 @@
+from __future__ import annotations
+
 import logging
+from collections import Counter
+from collections.abc import Mapping, Sequence
+from typing import Any, cast
+
+from sqlalchemy.orm import Session
 
 import palace.manager.core.classifier as genres
 from palace.manager.api.config import Configuration
@@ -17,13 +24,26 @@ from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.lane import (
     Lane,
 )
+from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.util import create
 from palace.manager.util.languages import LanguageCodes
 
 log = logging.getLogger(__name__)
 
+GenreInput = GenreData | Mapping[str, Any] | str
 
-def load_lanes(_db, library, collection_ids):
+
+def _genre_name(genre: GenreInput) -> str:
+    if isinstance(genre, GenreData):
+        return cast(str, genre.name)
+    if isinstance(genre, Mapping):
+        return cast(str, genre.get("name"))
+    return genre
+
+
+def load_lanes(
+    _db: Session, library: Library, collection_ids: Sequence[int] | None
+) -> WorkList | Lane:
     """Return a WorkList that reflects the current lane structure of the
     Library.
 
@@ -36,8 +56,9 @@ def load_lanes(_db, library, collection_ids):
     Otherwise, a WorkList containing the visible top-level lanes is
     returned.
     """
-    top_level = WorkList.top_level_for_library(
-        _db, library, collection_ids=collection_ids
+    top_level = cast(
+        WorkList | Lane,
+        WorkList.top_level_for_library(_db, library, collection_ids=collection_ids),
     )
 
     # It's likely this WorkList will be used across sessions, so
@@ -55,7 +76,9 @@ def load_lanes(_db, library, collection_ids):
     return top_level
 
 
-def _lane_configuration_from_collection_sizes(estimates):
+def _lane_configuration_from_collection_sizes(
+    estimates: Counter[str],
+) -> tuple[list[str], list[str], list[str]]:
     """Sort a library's collections into 'large', 'small', and 'tiny'
     subcollections based on language.
 
@@ -88,7 +111,7 @@ def _lane_configuration_from_collection_sizes(estimates):
     return large, small, tiny
 
 
-def create_default_lanes(_db, library):
+def create_default_lanes(_db: Session, library: Library) -> None:
     """Reset the lanes for the given library to the default.
 
     This method will create a set of default lanes  for the first
@@ -115,8 +138,6 @@ def create_default_lanes(_db, library):
     for lane in _db.query(Lane).filter(Lane.library_id == library.id):
         _db.delete(lane)
 
-    top_level_lanes = []
-
     # Hopefully this library is configured with explicit guidance as
     # to how the languages should be set up.
     large = Configuration.large_collection_languages(library) or []
@@ -140,18 +161,18 @@ def create_default_lanes(_db, library):
 
 
 def lane_from_genres(
-    _db,
-    library,
-    genres,
-    display_name=None,
-    exclude_genres=None,
-    priority=0,
-    audiences=None,
-    **extra_args
-):
+    _db: Session,
+    library: Library,
+    genres: Sequence[GenreInput],
+    display_name: str | None = None,
+    exclude_genres: Sequence[GenreInput] | None = None,
+    priority: int = 0,
+    audiences: Sequence[str] | None = None,
+    **extra_args: Any,
+) -> Lane:
     """Turn genre info into a Lane object."""
 
-    genre_lane_instructions = {
+    genre_lane_instructions: dict[str, dict[str, Any]] = {
         "Dystopian SF": dict(display_name="Dystopian"),
         "Erotica": dict(audiences=[Classifier.AUDIENCE_ADULTS_ONLY]),
         "Humorous Fiction": dict(display_name="Humor"),
@@ -163,7 +184,7 @@ def lane_from_genres(
     }
 
     # Create sublanes first.
-    sublanes = []
+    sublanes: list[Lane] = []
     for genre in genres:
         if isinstance(genre, dict):
             sublane_priority = 0
@@ -174,50 +195,36 @@ def lane_from_genres(
                         library,
                         [subgenre],
                         priority=sublane_priority,
-                        **extra_args
+                        **extra_args,
                     )
                 )
                 sublane_priority += 1
 
     # Now that we have sublanes we don't care about subgenres anymore.
-    genres = [
-        (
-            genre.get("name")
-            if isinstance(genre, dict)
-            else genre.name if isinstance(genre, GenreData) else genre
-        )
-        for genre in genres
-    ]
+    genre_names = [_genre_name(genre) for genre in genres]
 
-    exclude_genres = [
-        (
-            genre.get("name")
-            if isinstance(genre, dict)
-            else genre.name if isinstance(genre, GenreData) else genre
-        )
-        for genre in exclude_genres or []
-    ]
+    exclude_genre_names = [_genre_name(genre) for genre in exclude_genres or []]
 
     fiction = None
     visible = True
-    if len(genres) == 1:
-        if classifier.genres.get(genres[0]):
-            genredata = classifier.genres[genres[0]]
+    if len(genre_names) == 1:
+        if classifier.genres.get(genre_names[0]):
+            genredata = classifier.genres[genre_names[0]]
         else:
-            genredata = GenreData(genres[0], False)
+            genredata = GenreData(genre_names[0], False)
         fiction = genredata.is_fiction
 
-        if genres[0] in list(genre_lane_instructions.keys()):
-            instructions = genre_lane_instructions[genres[0]]
+        if genre_names[0] in list(genre_lane_instructions.keys()):
+            instructions = genre_lane_instructions[genre_names[0]]
             if not display_name and "display_name" in instructions:
-                display_name = instructions.get("display_name")
+                display_name = cast(str, instructions.get("display_name"))
             if "audiences" in instructions:
-                audiences = instructions.get("audiences")
+                audiences = cast(Sequence[str], instructions.get("audiences"))
             if "visible" in instructions:
-                visible = instructions.get("visible")
+                visible = cast(bool, instructions.get("visible"))
 
     if not display_name:
-        display_name = ", ".join(sorted(genres))
+        display_name = ", ".join(sorted(genre_names))
 
     lane, ignore = create(
         _db,
@@ -228,17 +235,19 @@ def lane_from_genres(
         audiences=audiences,
         sublanes=sublanes,
         priority=priority,
-        **extra_args
+        **extra_args,
     )
     lane.visible = visible
-    for genre in genres:
+    for genre in genre_names:
         lane.add_genre(genre)
-    for genre in exclude_genres:
+    for genre in exclude_genre_names:
         lane.add_genre(genre, inclusive=False)
     return lane
 
 
-def create_lanes_for_large_collection(_db, library, languages, priority=0):
+def create_lanes_for_large_collection(
+    _db: Session, library: Library, languages: Sequence[str] | str, priority: int = 0
+) -> int:
     """Ensure that the lanes appropriate to a large collection are all
     present.
 
@@ -271,8 +280,8 @@ def create_lanes_for_large_collection(_db, library, languages, priority=0):
     YA = [Classifier.AUDIENCE_YOUNG_ADULT]
     CHILDREN = [Classifier.AUDIENCE_CHILDREN]
 
-    common_args = dict(languages=languages, media=None)
-    adult_common_args = dict(common_args)
+    common_args: dict[str, Any] = dict(languages=languages, media=None)
+    adult_common_args: dict[str, Any] = dict(common_args)
     adult_common_args["audiences"] = ADULT
 
     nyt_data_source = DataSource.lookup(_db, DataSource.NYT)
@@ -291,7 +300,7 @@ def create_lanes_for_large_collection(_db, library, languages, priority=0):
             library=library,
             display_name="Best Sellers",
             priority=priority,
-            **common_args
+            **common_args,
         )
         priority += 1
         best_sellers.list_datasource = nyt_data_source
@@ -307,17 +316,17 @@ def create_lanes_for_large_collection(_db, library, languages, priority=0):
             display_name="Best Sellers",
             fiction=True,
             priority=adult_fiction_priority,
-            **adult_common_args
+            **adult_common_args,
         )
         adult_fiction_priority += 1
         adult_fiction_best_sellers.list_datasource = nyt_data_source
         adult_fiction_sublanes.append(adult_fiction_best_sellers)
 
-    for genre in fiction_genres:
-        if isinstance(genre, str):
-            genre_name = genre
-        else:
-            genre_name = genre.get("name")
+    fiction_genres_list = cast(Sequence[GenreInput], fiction_genres)
+    nonfiction_genres_list = cast(Sequence[GenreInput], nonfiction_genres)
+
+    for genre in fiction_genres_list:
+        genre_name = _genre_name(genre)
         genre_lane = lane_from_genres(
             _db, library, [genre], priority=adult_fiction_priority, **adult_common_args
         )
@@ -333,7 +342,7 @@ def create_lanes_for_large_collection(_db, library, languages, priority=0):
         sublanes=adult_fiction_sublanes,
         fiction=True,
         priority=priority,
-        **adult_common_args
+        **adult_common_args,
     )
     priority += 1
     sublanes.append(adult_fiction)
@@ -348,26 +357,23 @@ def create_lanes_for_large_collection(_db, library, languages, priority=0):
             display_name="Best Sellers",
             fiction=False,
             priority=adult_nonfiction_priority,
-            **adult_common_args
+            **adult_common_args,
         )
         adult_nonfiction_priority += 1
         adult_nonfiction_best_sellers.list_datasource = nyt_data_source
         adult_nonfiction_sublanes.append(adult_nonfiction_best_sellers)
 
-    for genre in nonfiction_genres:
+    for genre in nonfiction_genres_list:
         # "Life Strategies" is a YA-specific genre that should not be
         # included in the Adult Nonfiction lane.
         if genre != genres.Life_Strategies:
-            if isinstance(genre, str):
-                genre_name = genre
-            else:
-                genre_name = genre.get("name")
+            genre_name = _genre_name(genre)
             genre_lane = lane_from_genres(
                 _db,
                 library,
                 [genre],
                 priority=adult_nonfiction_priority,
-                **adult_common_args
+                **adult_common_args,
             )
             adult_nonfiction_priority += 1
             adult_nonfiction_sublanes.append(genre_lane)
@@ -381,12 +387,12 @@ def create_lanes_for_large_collection(_db, library, languages, priority=0):
         sublanes=adult_nonfiction_sublanes,
         fiction=False,
         priority=priority,
-        **adult_common_args
+        **adult_common_args,
     )
     priority += 1
     sublanes.append(adult_nonfiction)
 
-    ya_common_args = dict(common_args)
+    ya_common_args: dict[str, Any] = dict(common_args)
     ya_common_args["audiences"] = YA
 
     ya_fiction, ignore = create(
@@ -398,7 +404,7 @@ def create_lanes_for_large_collection(_db, library, languages, priority=0):
         fiction=True,
         sublanes=[],
         priority=priority,
-        **ya_common_args
+        **ya_common_args,
     )
     priority += 1
     sublanes.append(ya_fiction)
@@ -412,7 +418,7 @@ def create_lanes_for_large_collection(_db, library, languages, priority=0):
             display_name="Best Sellers",
             fiction=True,
             priority=ya_fiction_priority,
-            **ya_common_args
+            **ya_common_args,
         )
         ya_fiction_priority += 1
         ya_fiction_best_sellers.list_datasource = nyt_data_source
@@ -424,7 +430,7 @@ def create_lanes_for_large_collection(_db, library, languages, priority=0):
             library,
             [genres.Dystopian_SF],
             priority=ya_fiction_priority,
-            **ya_common_args
+            **ya_common_args,
         )
     )
     ya_fiction_priority += 1
@@ -434,7 +440,7 @@ def create_lanes_for_large_collection(_db, library, languages, priority=0):
             library,
             [genres.Fantasy],
             priority=ya_fiction_priority,
-            **ya_common_args
+            **ya_common_args,
         )
     )
     ya_fiction_priority += 1
@@ -444,7 +450,7 @@ def create_lanes_for_large_collection(_db, library, languages, priority=0):
             library,
             [genres.Comics_Graphic_Novels],
             priority=ya_fiction_priority,
-            **ya_common_args
+            **ya_common_args,
         )
     )
     ya_fiction_priority += 1
@@ -455,7 +461,7 @@ def create_lanes_for_large_collection(_db, library, languages, priority=0):
             [genres.Literary_Fiction],
             display_name="Contemporary Fiction",
             priority=ya_fiction_priority,
-            **ya_common_args
+            **ya_common_args,
         )
     )
     ya_fiction_priority += 1
@@ -465,7 +471,7 @@ def create_lanes_for_large_collection(_db, library, languages, priority=0):
             library,
             [genres.LGBTQ_Fiction],
             priority=ya_fiction_priority,
-            **ya_common_args
+            **ya_common_args,
         )
     )
     ya_fiction_priority += 1
@@ -476,7 +482,7 @@ def create_lanes_for_large_collection(_db, library, languages, priority=0):
             [genres.Suspense_Thriller, genres.Mystery],
             display_name="Mystery & Thriller",
             priority=ya_fiction_priority,
-            **ya_common_args
+            **ya_common_args,
         )
     )
     ya_fiction_priority += 1
@@ -486,7 +492,7 @@ def create_lanes_for_large_collection(_db, library, languages, priority=0):
             library,
             [genres.Romance],
             priority=ya_fiction_priority,
-            **ya_common_args
+            **ya_common_args,
         )
     )
     ya_fiction_priority += 1
@@ -497,7 +503,7 @@ def create_lanes_for_large_collection(_db, library, languages, priority=0):
             [genres.Science_Fiction],
             exclude_genres=[genres.Dystopian_SF, genres.Steampunk],
             priority=ya_fiction_priority,
-            **ya_common_args
+            **ya_common_args,
         )
     )
     ya_fiction_priority += 1
@@ -507,7 +513,7 @@ def create_lanes_for_large_collection(_db, library, languages, priority=0):
             library,
             [genres.Steampunk],
             priority=ya_fiction_priority,
-            **ya_common_args
+            **ya_common_args,
         )
     )
     ya_fiction_priority += 1
@@ -521,7 +527,7 @@ def create_lanes_for_large_collection(_db, library, languages, priority=0):
         fiction=False,
         sublanes=[],
         priority=priority,
-        **ya_common_args
+        **ya_common_args,
     )
     priority += 1
     sublanes.append(ya_nonfiction)
@@ -535,7 +541,7 @@ def create_lanes_for_large_collection(_db, library, languages, priority=0):
             display_name="Best Sellers",
             fiction=False,
             priority=ya_nonfiction_priority,
-            **ya_common_args
+            **ya_common_args,
         )
         ya_nonfiction_priority += 1
         ya_nonfiction_best_sellers.list_datasource = nyt_data_source
@@ -548,7 +554,7 @@ def create_lanes_for_large_collection(_db, library, languages, priority=0):
             [genres.Biography_Memoir],
             display_name="Biography",
             priority=ya_nonfiction_priority,
-            **ya_common_args
+            **ya_common_args,
         )
     )
     ya_nonfiction_priority += 1
@@ -559,7 +565,7 @@ def create_lanes_for_large_collection(_db, library, languages, priority=0):
             [genres.History, genres.Social_Sciences],
             display_name="History & Sociology",
             priority=ya_nonfiction_priority,
-            **ya_common_args
+            **ya_common_args,
         )
     )
     ya_nonfiction_priority += 1
@@ -569,7 +575,7 @@ def create_lanes_for_large_collection(_db, library, languages, priority=0):
             library,
             [genres.Life_Strategies],
             priority=ya_nonfiction_priority,
-            **ya_common_args
+            **ya_common_args,
         )
     )
     ya_nonfiction_priority += 1
@@ -579,12 +585,12 @@ def create_lanes_for_large_collection(_db, library, languages, priority=0):
             library,
             [genres.Religion_Spirituality],
             priority=ya_nonfiction_priority,
-            **ya_common_args
+            **ya_common_args,
         )
     )
     ya_nonfiction_priority += 1
 
-    children_common_args = dict(common_args)
+    children_common_args: dict[str, Any] = dict(common_args)
     children_common_args["target_age"] = Classifier.range_tuple(
         0, Classifier.YOUNG_ADULT_AGE_CUTOFF - 1
     )
@@ -598,7 +604,7 @@ def create_lanes_for_large_collection(_db, library, languages, priority=0):
         fiction=None,
         sublanes=[],
         priority=priority,
-        **children_common_args
+        **children_common_args,
     )
     priority += 1
     sublanes.append(children)
@@ -611,7 +617,7 @@ def create_lanes_for_large_collection(_db, library, languages, priority=0):
             library=library,
             display_name="Best Sellers",
             priority=children_priority,
-            **children_common_args
+            **children_common_args,
         )
         children_priority += 1
         children_best_sellers.list_datasource = nyt_data_source
@@ -665,7 +671,7 @@ def create_lanes_for_large_collection(_db, library, languages, priority=0):
         library=library,
         display_name="Poetry Books",
         priority=children_priority,
-        **children_common_args
+        **children_common_args,
     )
     children_priority += 1
     children_poetry.add_genre(genres.Poetry.name)
@@ -677,7 +683,7 @@ def create_lanes_for_large_collection(_db, library, languages, priority=0):
         library=library,
         display_name="Folklore",
         priority=children_priority,
-        **children_common_args
+        **children_common_args,
     )
     children_priority += 1
     children_folklore.add_genre(genres.Folklore.name)
@@ -690,7 +696,7 @@ def create_lanes_for_large_collection(_db, library, languages, priority=0):
         display_name="Fantasy",
         fiction=True,
         priority=children_priority,
-        **children_common_args
+        **children_common_args,
     )
     children_priority += 1
     children_fantasy.add_genre(genres.Fantasy.name)
@@ -703,7 +709,7 @@ def create_lanes_for_large_collection(_db, library, languages, priority=0):
         display_name="Science Fiction",
         fiction=True,
         priority=children_priority,
-        **children_common_args
+        **children_common_args,
     )
     children_priority += 1
     children_sf.add_genre(genres.Science_Fiction.name)
@@ -716,7 +722,7 @@ def create_lanes_for_large_collection(_db, library, languages, priority=0):
         display_name="Realistic Fiction",
         fiction=True,
         priority=children_priority,
-        **children_common_args
+        **children_common_args,
     )
     children_priority += 1
     realistic_fiction.add_genre(genres.Literary_Fiction.name)
@@ -728,7 +734,7 @@ def create_lanes_for_large_collection(_db, library, languages, priority=0):
         library=library,
         display_name="Comics & Graphic Novels",
         priority=children_priority,
-        **children_common_args
+        **children_common_args,
     )
     children_priority += 1
     children_graphic_novels.add_genre(genres.Comics_Graphic_Novels.name)
@@ -740,7 +746,7 @@ def create_lanes_for_large_collection(_db, library, languages, priority=0):
         library=library,
         display_name="Biography",
         priority=children_priority,
-        **children_common_args
+        **children_common_args,
     )
     children_priority += 1
     children_biography.add_genre(genres.Biography_Memoir.name)
@@ -752,7 +758,7 @@ def create_lanes_for_large_collection(_db, library, languages, priority=0):
         library=library,
         display_name="Historical Fiction",
         priority=children_priority,
-        **children_common_args
+        **children_common_args,
     )
     children_priority += 1
     children_historical_fiction.add_genre(genres.Historical_Fiction.name)
@@ -766,7 +772,7 @@ def create_lanes_for_large_collection(_db, library, languages, priority=0):
         fiction=False,
         genres=[],
         priority=children_priority,
-        **children_common_args
+        **children_common_args,
     )
     children_priority += 1
     informational.add_genre(genres.Biography_Memoir.name, inclusive=False)
@@ -776,12 +782,12 @@ def create_lanes_for_large_collection(_db, library, languages, priority=0):
 
 
 def create_world_languages_lane(
-    _db,
-    library,
-    small_languages,
-    tiny_languages,
-    priority=0,
-):
+    _db: Session,
+    library: Library,
+    small_languages: Sequence[Sequence[str] | str],
+    tiny_languages: Sequence[Sequence[str] | str],
+    priority: int = 0,
+) -> int:
     """Create a lane called 'World Languages' whose sublanes represent
     the non-large language collections available to this library.
     """
@@ -825,7 +831,13 @@ def create_world_languages_lane(
     return priority
 
 
-def create_lane_for_small_collection(_db, library, parent, languages, priority=0):
+def create_lane_for_small_collection(
+    _db: Session,
+    library: Library,
+    parent: Lane | None,
+    languages: Sequence[str] | str,
+    priority: int = 0,
+) -> int:
     """Create a lane (with sublanes) for a small collection based on language,
     if the language exists in the lookup table.
 
@@ -833,11 +845,13 @@ def create_lane_for_small_collection(_db, library, parent, languages, priority=0
     """
     if isinstance(languages, str):
         languages = [languages]
+    else:
+        languages = list(languages)
 
     ADULT = Classifier.AUDIENCES_ADULT
     YA_CHILDREN = [Classifier.AUDIENCE_YOUNG_ADULT, Classifier.AUDIENCE_CHILDREN]
 
-    common_args = dict(
+    common_args: dict[str, Any] = dict(
         languages=languages,
         media=[Edition.BOOK_MEDIUM],
         genres=[],
@@ -861,7 +875,7 @@ def create_lane_for_small_collection(_db, library, parent, languages, priority=0
         fiction=True,
         audiences=ADULT,
         priority=sublane_priority,
-        **common_args
+        **common_args,
     )
     sublane_priority += 1
 
@@ -873,7 +887,7 @@ def create_lane_for_small_collection(_db, library, parent, languages, priority=0
         fiction=False,
         audiences=ADULT,
         priority=sublane_priority,
-        **common_args
+        **common_args,
     )
     sublane_priority += 1
 
@@ -885,7 +899,7 @@ def create_lane_for_small_collection(_db, library, parent, languages, priority=0
         fiction=None,
         audiences=YA_CHILDREN,
         priority=sublane_priority,
-        **common_args
+        **common_args,
     )
     sublane_priority += 1
 
@@ -897,23 +911,31 @@ def create_lane_for_small_collection(_db, library, parent, languages, priority=0
         parent=parent,
         sublanes=[adult_fiction, adult_nonfiction, ya_children],
         priority=priority,
-        **common_args
+        **common_args,
     )
     priority += 1
     return priority
 
 
-def create_lane_for_tiny_collection(_db, library, parent, languages, priority=0):
+def create_lane_for_tiny_collection(
+    _db: Session,
+    library: Library,
+    parent: Lane,
+    languages: Sequence[str] | str,
+    priority: int = 0,
+) -> int:
     """Create a single lane for a tiny collection based on language,
     if the language exists in the lookup table.
 
     :param parent: The parent of the new lane.
     """
     if not languages:
-        return None
+        return priority
 
     if isinstance(languages, str):
         languages = [languages]
+    else:
+        languages = list(languages)
 
     try:
         name = LanguageCodes.name_for_languageset(languages)

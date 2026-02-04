@@ -109,7 +109,6 @@ module = [
     "palace.manager.api.controller.profile",
     "palace.manager.api.controller.urn_lookup",
     "palace.manager.api.controller.work",
-    "palace.manager.api.lanes",
     "palace.manager.api.local_analytics_exporter",
     "palace.manager.api.routes",
     "palace.manager.api.util.profilers",
