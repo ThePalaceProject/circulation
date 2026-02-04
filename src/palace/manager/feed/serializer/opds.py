@@ -236,13 +236,13 @@ class BaseOPDS1Serializer(SerializerInterface[etree._Element], OPDSFeed, abc.ABC
 
         if feed_entry.identifier:
             entry.append(OPDSFeed.E("id", feed_entry.identifier))
-        if feed_entry.distribution and (
-            provider := getattr(feed_entry.distribution, "provider_name", None)
-        ):
+        if feed_entry.distribution:
             entry.append(
                 OPDSFeed.E(
                     f"{{{OPDSFeed.BIBFRAME_NS}}}distribution",
-                    **{f"{{{OPDSFeed.BIBFRAME_NS}}}ProviderName": provider},
+                    **{
+                        f"{{{OPDSFeed.BIBFRAME_NS}}}ProviderName": feed_entry.distribution.provider_name
+                    },
                 )
             )
         if feed_entry.published:

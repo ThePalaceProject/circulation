@@ -35,7 +35,7 @@ class LinkKwargs(TypedDict):
     active_sort: NotRequired[bool]
 
 
-@dataclass
+@dataclass(slots=True)
 class RichText:
     """Text content with an optional content type (e.g., HTML)."""
 
@@ -43,7 +43,7 @@ class RichText:
     content_type: str | None = None
 
 
-@dataclass
+@dataclass(slots=True)
 class Link:
     """A link with optional facets and display metadata."""
 
@@ -72,7 +72,7 @@ class Link:
         return attrs
 
 
-@dataclass
+@dataclass(slots=True)
 class Category:
     """A subject/category tag with an optional rating weight."""
 
@@ -82,7 +82,7 @@ class Category:
     rating_value: str | None = None
 
 
-@dataclass
+@dataclass(slots=True)
 class Rating:
     """A schema.org rating for a work entry."""
 
@@ -90,7 +90,7 @@ class Rating:
     additional_type: str | None = None
 
 
-@dataclass
+@dataclass(slots=True)
 class Series:
     """Series metadata for a work entry."""
 
@@ -99,14 +99,14 @@ class Series:
     link: Link | None = None
 
 
-@dataclass
+@dataclass(slots=True)
 class Distribution:
     """Distribution metadata for a work entry."""
 
     provider_name: str
 
 
-@dataclass
+@dataclass(slots=True)
 class PatronData:
     """Patron identifier metadata used in feed-level tags."""
 
@@ -114,7 +114,7 @@ class PatronData:
     authorization_identifier: str | None = None
 
 
-@dataclass
+@dataclass(slots=True)
 class DRMLicensor:
     """DRM licensor metadata for OPDS DRM extensions."""
 
@@ -123,7 +123,7 @@ class DRMLicensor:
     scheme: str | None = None
 
 
-@dataclass
+@dataclass(slots=True)
 class IndirectAcquisition:
     """Tree structure for indirect acquisitions in OPDS1."""
 
@@ -131,7 +131,7 @@ class IndirectAcquisition:
     children: list[IndirectAcquisition] = field(default_factory=list)
 
 
-@dataclass
+@dataclass(slots=True)
 class Acquisition(Link):
     """Acquisition link with holds/copies/availability details."""
 
@@ -160,7 +160,7 @@ class Acquisition(Link):
     templated: bool = False
 
 
-@dataclass
+@dataclass(slots=True)
 class Author:
     """Author or contributor metadata for a work entry."""
 
@@ -174,7 +174,7 @@ class Author:
     link: Link | None = None
 
 
-@dataclass
+@dataclass(slots=True)
 class WorkEntryData:
     """Computed metadata used by OPDS serializers for a single work entry."""
 
@@ -207,7 +207,7 @@ class WorkEntryData:
     other_links: list[Link] = field(default_factory=list)
 
 
-@dataclass
+@dataclass(slots=True)
 class WorkEntry:
     """Wrapper for a Work and its computed feed representation."""
 
@@ -240,7 +240,7 @@ class WorkEntry:
         self.license_pool = license_pool
 
 
-@dataclass
+@dataclass(slots=True)
 class FeedMetadata:
     """Feed-level metadata used by OPDS serializers."""
 
@@ -259,7 +259,7 @@ class DataEntryTypes(StrEnum):
     NAVIGATION = "navigation"
 
 
-@dataclass
+@dataclass(slots=True)
 class DataEntry:
     """Non-work feed entries (e.g., navigation entries)."""
 
@@ -269,7 +269,7 @@ class DataEntry:
     links: list[Link] = field(default_factory=list)
 
 
-@dataclass
+@dataclass(slots=True)
 class FeedData:
     """Container for all feed-level data passed to serializers."""
 

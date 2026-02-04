@@ -1017,7 +1017,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
 
         languages, audiences = self.language_and_audience_key_from_work(entry.work)
         for author_entry in entry.computed.authors:
-            if not (name := getattr(author_entry, "name", None)):
+            if not (name := author_entry.name):
                 continue
 
             author_entry.link = Link(

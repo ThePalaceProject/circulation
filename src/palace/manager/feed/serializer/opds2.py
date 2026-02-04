@@ -124,10 +124,8 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]]):
             metadata["subject"] = subjects
 
         if data.series:
-            name = getattr(data.series, "name", None)
-            position = int(getattr(data.series, "position", 1))
-            if name:
-                metadata["belongsTo"] = dict(name=name, position=position)
+            position = int(data.series.position) if data.series.position else 1
+            metadata["belongsTo"] = dict(name=data.series.name, position=position)
 
         if len(data.authors):
             metadata["author"] = self._serialize_contributor(data.authors[0])
@@ -200,8 +198,8 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]]):
 
         if link.drm_licensor:
             props["licensor"] = {
-                "clientToken": getattr(link.drm_licensor, "client_token"),
-                "vendor": getattr(link.drm_licensor, "vendor"),
+                "clientToken": link.drm_licensor.client_token,
+                "vendor": link.drm_licensor.vendor,
             }
 
         if props:
