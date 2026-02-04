@@ -117,13 +117,12 @@ class ToFeedEntry:
 
     @classmethod
     def series(
-        cls, series_name: str | None, series_position: int | None | str | None
+        cls, series_name: str | None, series_position: int | None
     ) -> Series | None:
         """Generate a Series object for the given name and position."""
         if not series_name:
             return None
-        position = str(series_position) if series_position is not None else None
-        return Series(name=series_name, position=position)
+        return Series(name=series_name, position=series_position)
 
     @classmethod
     def rating(cls, type_uri: str | None, value: float | Decimal) -> Rating:

@@ -95,7 +95,7 @@ class Series:
     """Series metadata for a work entry."""
 
     name: str
-    position: str | None = None
+    position: int | None = None
     link: Link | None = None
 
 

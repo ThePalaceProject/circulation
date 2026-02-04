@@ -288,7 +288,7 @@ class BaseOPDS1Serializer(SerializerInterface[etree._Element], OPDSFeed, abc.ABC
         entry = self._tag("series")
         entry.set("name", series.name)
         if series.position:
-            entry.append(self._tag("position", series.position))
+            entry.append(self._tag("position", str(series.position)))
         if series.link:
             entry.append(self._serialize_link(series.link))
 

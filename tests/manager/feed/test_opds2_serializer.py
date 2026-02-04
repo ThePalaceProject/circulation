@@ -82,7 +82,7 @@ class TestOPDS2Serializer:
             categories=[
                 Category(scheme="scheme", term="label", label="label"),
             ],
-            series=Series(name="Series", position="3"),
+            series=Series(name="Series", position=3),
             image_links=[Link(href="http://image", rel="image-rel")],
             acquisition_links=[
                 Acquisition(href="http://acquisition", rel="acquisition-rel")

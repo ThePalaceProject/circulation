@@ -124,7 +124,7 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]]):
             metadata["subject"] = subjects
 
         if data.series:
-            position = int(data.series.position) if data.series.position else 1
+            position = data.series.position if data.series.position is not None else 1
             metadata["belongsTo"] = dict(name=data.series.name, position=position)
 
         if len(data.authors):

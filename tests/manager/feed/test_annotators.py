@@ -341,9 +341,7 @@ class TestAnnotators:
 
         assert computed.series is not None
         assert computed.series.name == work.presentation_edition.series
-        assert computed.series.position == str(
-            work.presentation_edition.series_position
-        )
+        assert computed.series.position == work.presentation_edition.series_position
 
         # The series position can be 0, for a prequel for example.
         work.presentation_edition.series_position = 0
@@ -375,7 +373,7 @@ class TestAnnotators:
         assert computed.series == None
 
         # No series name
-        assert Annotator.series(None, "") == None
+        assert Annotator.series(None, None) == None
 
     def test_samples(self, db: DatabaseTransactionFixture):
         session = db.session
