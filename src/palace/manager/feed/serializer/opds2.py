@@ -72,29 +72,24 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]]):
         navigation = self._serialize_navigation(feed)
         facets = self._serialize_facet_links(feed)
 
-        feed_kwargs: dict[str, Any] = {
-            "metadata": metadata,
-            "links": feed_links,
-            "publications": publications,
-        }
-        if navigation:
-            feed_kwargs["navigation"] = navigation
-        if facets:
-            feed_kwargs["facets"] = facets
-
-        feed_model = opds2.Feed(**feed_kwargs)
+        feed_model = opds2.Feed(
+            metadata=metadata,
+            links=feed_links,
+            publications=publications,
+            navigation=navigation,
+            facets=facets,
+        )
 
         return self.to_string(self._dump_model(feed_model))
 
     def _serialize_metadata(self, feed: FeedData) -> opds2.FeedMetadata:
         fmeta = feed.metadata
         title = fmeta.title or ""
-        metadata_kwargs: dict[str, Any] = {"title": LanguageMap(title)}
-        if fmeta.items_per_page is not None:
-            metadata_kwargs["items_per_page"] = fmeta.items_per_page
-        if fmeta.updated:
-            metadata_kwargs["modified"] = fmeta.updated
-        return opds2.FeedMetadata(**metadata_kwargs)
+        return opds2.FeedMetadata(
+            title=LanguageMap(title),
+            items_per_page=fmeta.items_per_page,
+            modified=fmeta.updated,
+        )
 
     def serialize_opds_message(self, entry: OPDSMessage) -> dict[str, Any]:
         return dict(urn=entry.urn, description=entry.message)
@@ -119,38 +114,20 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]]):
         additional_type = data.additional_type or schema_org.PublicationTypes.book
         title = data.title or OPDSFeed.NO_TITLE
 
-        metadata_kwargs: dict[str, Any] = {
-            "identifier": identifier,
-            "type": additional_type,
-            "title": LanguageMap(title),
-        }
+        subtitle = LanguageMap(data.subtitle) if data.subtitle else None
+        description = data.summary.text if data.summary else None
+        publisher = (
+            rwpm.Contributor(name=LanguageMap(data.publisher))
+            if data.publisher
+            else None
+        )
+        imprint = (
+            rwpm.Contributor(name=LanguageMap(data.imprint)) if data.imprint else None
+        )
 
-        if data.sort_title:
-            metadata_kwargs["sort_as"] = data.sort_title
-        if data.subtitle:
-            metadata_kwargs["subtitle"] = LanguageMap(data.subtitle)
-        if data.duration is not None:
-            metadata_kwargs["duration"] = data.duration
-        if data.language:
-            metadata_kwargs["language"] = data.language
-        if data.updated:
-            metadata_kwargs["modified"] = data.updated
-        if data.published:
-            metadata_kwargs["published"] = data.published
-        if data.summary:
-            metadata_kwargs["description"] = data.summary.text
-
-        if data.publisher:
-            metadata_kwargs["publisher"] = rwpm.Contributor(
-                name=LanguageMap(data.publisher)
-            )
-        if data.imprint:
-            metadata_kwargs["imprint"] = rwpm.Contributor(
-                name=LanguageMap(data.imprint)
-            )
-
+        subjects: tuple[rwpm.Subject, ...] | None = None
         if data.categories:
-            subjects = [
+            subjects = tuple(
                 rwpm.Subject(
                     name=LanguageMap(category.label),
                     sort_as=category.label,
@@ -158,25 +135,71 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]]):
                     scheme=category.scheme,
                 )
                 for category in data.categories
-            ]
-            metadata_kwargs["subject"] = tuple(subjects)
+            )
 
+        belongs_to: rwpm.BelongsTo | None = None
         if data.series:
             series_contributor = rwpm.Contributor(
                 name=LanguageMap(data.series.name),
                 position=data.series.position,
             )
-            metadata_kwargs["belongs_to"] = rwpm.BelongsTo(
-                series_data=series_contributor
-            )
+            belongs_to = rwpm.BelongsTo(series_data=series_contributor)
 
-        if data.authors:
-            metadata_kwargs["author"] = self._serialize_contributor(data.authors[0])
+        author = self._serialize_contributor(data.authors[0]) if data.authors else None
+
+        translator = editor = artist = illustrator = None
+        letterer = penciler = colorist = inker = narrator = None
+
         for contributor in data.contributors:
-            if role := MARC_CODE_TO_ROLES.get(contributor.role or "", None):
-                metadata_kwargs[role] = self._serialize_contributor(contributor)
+            role = MARC_CODE_TO_ROLES.get(contributor.role or "")
+            if role == "translator":
+                translator = self._serialize_contributor(contributor)
+            elif role == "editor":
+                editor = self._serialize_contributor(contributor)
+            elif role == "artist":
+                artist = self._serialize_contributor(contributor)
+            elif role == "illustrator":
+                illustrator = self._serialize_contributor(contributor)
+            elif role == "letterer":
+                letterer = self._serialize_contributor(contributor)
+            elif role == "penciler":
+                penciler = self._serialize_contributor(contributor)
+            elif role == "colorist":
+                colorist = self._serialize_contributor(contributor)
+            elif role == "inker":
+                inker = self._serialize_contributor(contributor)
+            elif role == "narrator":
+                narrator = self._serialize_contributor(contributor)
 
-        return opds2.PublicationMetadata(**metadata_kwargs)
+        metadata = opds2.PublicationMetadata(
+            identifier=identifier,
+            type=additional_type,
+            title=LanguageMap(title),
+            sort_as=data.sort_title,
+            subtitle=subtitle,
+            duration=data.duration,
+            language=data.language,
+            modified=data.updated,
+            published=data.published,
+            description=description,
+            publisher=publisher,
+            imprint=imprint,
+            subject=subjects,
+            author=author,
+            translator=translator,
+            editor=editor,
+            artist=artist,
+            illustrator=illustrator,
+            letterer=letterer,
+            penciler=penciler,
+            colorist=colorist,
+            inker=inker,
+            narrator=narrator,
+        )
+
+        if belongs_to is None:
+            return metadata
+        return metadata.model_copy(update={"belongs_to": belongs_to})
 
     def _serialize_image_links(self, links: Iterable[Link]) -> list[opds2.Link]:
         return [self._serialize_link(link) for link in links]
@@ -189,12 +212,11 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]]):
             if link.rel is None:
                 logger.warning("Skipping OPDS2 link without rel: %s", link.href)
                 continue
-            link_type = link.type or DEFAULT_LINK_TYPE
             links.append(
-                opds2.StrictLink(
+                self._strict_link(
                     href=link.href,
                     rel=link.rel,
-                    type=link_type,
+                    type=link.type or DEFAULT_LINK_TYPE,
                     title=link.title,
                 )
             )
@@ -214,66 +236,81 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]]):
     def _serialize_acquisition_link(self, link: Acquisition) -> opds2.StrictLink:
         link_type = self._acquisition_link_type(link)
         properties = self._serialize_acquisition_properties(link)
-        link_kwargs: dict[str, Any] = {
-            "href": link.href,
-            "rel": link.rel or opds2.AcquisitionLinkRelations.acquisition,
-            "type": link_type,
-        }
-        if link.title:
-            link_kwargs["title"] = link.title
-        if link.templated:
-            link_kwargs["templated"] = True
-        if properties:
-            link_kwargs["properties"] = properties
-        return opds2.StrictLink(**link_kwargs)
+        return self._strict_link(
+            href=link.href,
+            rel=link.rel or opds2.AcquisitionLinkRelations.acquisition,
+            type=link_type,
+            title=link.title,
+            properties=properties,
+            templated=link.templated,
+        )
 
     def _serialize_acquisition_properties(
         self, link: Acquisition
     ) -> opds2.LinkProperties | None:
-        props: dict[str, Any] = {}
-
         state = self._availability_state(link)
+        availability: opds2.Availability | None = None
         if state is not None:
-            availability_kwargs: dict[str, Any] = {"state": state}
-            if link.availability_since:
-                availability_kwargs["since"] = link.availability_since
-            if link.availability_until:
-                availability_kwargs["until"] = link.availability_until
-            props["availability"] = opds2.Availability(**availability_kwargs)
+            availability = opds2.Availability(
+                state=state,
+                since=link.availability_since,
+                until=link.availability_until,
+            )
 
         holds_total = self._parse_int(link.holds_total)
         holds_position = self._parse_int(link.holds_position)
-        if holds_total is not None or holds_position is not None:
-            props["holds"] = opds2.Holds(total=holds_total, position=holds_position)
+        holds = (
+            opds2.Holds(total=holds_total, position=holds_position)
+            if holds_total is not None or holds_position is not None
+            else None
+        )
 
         copies_total = self._parse_int(link.copies_total)
         copies_available = self._parse_int(link.copies_available)
-        if copies_total is not None or copies_available is not None:
-            props["copies"] = opds2.Copies(
-                total=copies_total, available=copies_available
-            )
+        copies = (
+            opds2.Copies(total=copies_total, available=copies_available)
+            if copies_total is not None or copies_available is not None
+            else None
+        )
 
-        if link.indirect_acquisitions:
-            props["indirect_acquisition"] = [
+        indirect_acquisition = (
+            [
                 self._serialize_indirect_acquisition(indirect)
                 for indirect in link.indirect_acquisitions
             ]
-
-        if link.is_hold:
-            props["actions"] = opds2.LinkActions(cancellable=True)
-
-        if link.lcp_hashed_passphrase:
-            props["lcp_hashed_passphrase"] = link.lcp_hashed_passphrase
-
-        if link.drm_licensor:
-            props["licensor"] = opds2.PalaceLicensor(
+            if link.indirect_acquisitions
+            else None
+        )
+        actions = opds2.LinkActions(cancellable=True) if link.is_hold else None
+        licensor = (
+            opds2.PalaceLicensor(
                 client_token=link.drm_licensor.client_token,
                 vendor=link.drm_licensor.vendor,
             )
+            if link.drm_licensor
+            else None
+        )
 
-        if not props:
+        if (
+            availability is None
+            and holds is None
+            and copies is None
+            and indirect_acquisition is None
+            and actions is None
+            and licensor is None
+            and link.lcp_hashed_passphrase is None
+        ):
             return None
-        return opds2.LinkProperties(**props)
+
+        return self._link_properties(
+            availability=availability,
+            holds=holds,
+            copies=copies,
+            indirect_acquisition=indirect_acquisition,
+            actions=actions,
+            licensor=licensor,
+            lcp_hashed_passphrase=link.lcp_hashed_passphrase,
+        )
 
     def _serialize_indirect_acquisition(
         self, indirect: IndirectAcquisition
@@ -289,24 +326,25 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]]):
     def _serialize_contributor(self, author: Author) -> rwpm.Contributor:
         if not author.name:
             raise PalaceValueError("Contributor name is required for OPDS2 output")
-        contributor_kwargs: dict[str, Any] = {"name": LanguageMap(author.name)}
-        if author.sort_name:
-            contributor_kwargs["sort_as"] = author.sort_name
         if author.link:
-            contributor_kwargs["links"] = [self._serialize_contributor_link(author)]
-        return rwpm.Contributor(**contributor_kwargs)
+            return rwpm.Contributor(
+                name=LanguageMap(author.name),
+                sort_as=author.sort_name,
+                links=[self._serialize_contributor_link(author)],
+            )
+        return rwpm.Contributor(
+            name=LanguageMap(author.name),
+            sort_as=author.sort_name,
+        )
 
     def _serialize_contributor_link(self, author: Author) -> rwpm.Link:
         if author.link is None:
             raise PalaceValueError("Contributor link is required for OPDS2 output")
-        link_kwargs: dict[str, Any] = {
-            "href": author.link.href,
-        }
-        if author.link.rel:
-            link_kwargs["rel"] = author.link.rel
-        if author.link.type:
-            link_kwargs["type"] = author.link.type
-        return rwpm.Link(**link_kwargs)
+        return rwpm.Link(
+            href=author.link.href,
+            rel=author.link.rel,
+            type=author.link.type,
+        )
 
     def content_type(self) -> str:
         return self.CONTENT_TYPE
@@ -340,11 +378,10 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]]):
         if link.rel is None:
             logger.warning("Skipping OPDS2 feed link without rel: %s", link.href)
             return None
-        link_type = link.type or self.CONTENT_TYPE
-        return opds2.StrictLink(
+        return self._strict_link(
             href=link.href,
             rel=link.rel,
-            type=link_type,
+            type=link.type or self.CONTENT_TYPE,
             title=link.title,
         )
 
@@ -365,17 +402,15 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]]):
                 title = link.title or link.rel or link.href
                 rel = "self" if link.active_facet else link.rel
                 props = self._facet_properties(link)
-                link_kwargs: dict[str, Any] = {
-                    "href": link.href,
-                    "title": title,
-                }
-                if rel:
-                    link_kwargs["rel"] = rel
-                if link.type:
-                    link_kwargs["type"] = link.type
-                if props:
-                    link_kwargs["properties"] = props
-                facet_link_models.append(opds2.TitleLink(**link_kwargs))
+                facet_link_models.append(
+                    self._title_link(
+                        href=link.href,
+                        title=title,
+                        rel=rel,
+                        type=link.type,
+                        properties=props,
+                    )
+                )
 
             results.append(
                 opds2.Facet(
@@ -389,7 +424,7 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]]):
     def _facet_properties(self, link: Link) -> opds2.LinkProperties | None:
         if not link.default_facet:
             return None
-        return opds2.LinkProperties(palace_default="true")
+        return self._link_properties(palace_default="true")
 
     def _serialize_sort_links(self, feed: FeedData) -> list[opds2.StrictLink]:
         sort_links: list[opds2.StrictLink] = []
@@ -399,25 +434,20 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]]):
         return sort_links
 
     def _serialize_sort_link(self, link: Link) -> opds2.StrictLink:
-        properties_kwargs: dict[str, Any] = {}
-        if link.active_facet:
-            properties_kwargs["palace_active_sort"] = "true"
-        if link.default_facet:
-            properties_kwargs["palace_default"] = "true"
+        properties = None
+        if link.active_facet or link.default_facet:
+            properties = self._link_properties(
+                palace_active_sort="true" if link.active_facet else None,
+                palace_default="true" if link.default_facet else None,
+            )
 
-        properties = (
-            opds2.LinkProperties(**properties_kwargs) if properties_kwargs else None
+        return self._strict_link(
+            href=link.href,
+            rel=PALACE_REL_SORT,
+            type=link.type or self.CONTENT_TYPE,
+            title=link.title,
+            properties=properties,
         )
-
-        link_kwargs: dict[str, Any] = {
-            "href": link.href,
-            "rel": PALACE_REL_SORT,
-            "type": link.type or self.CONTENT_TYPE,
-            "title": link.title,
-        }
-        if properties is not None:
-            link_kwargs["properties"] = properties
-        return opds2.StrictLink(**link_kwargs)
 
     def _serialize_navigation(self, feed: FeedData) -> list[opds2.TitleLink]:
         navigation: list[opds2.TitleLink] = []
@@ -426,15 +456,14 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]]):
                 continue
             for link in entry.links:
                 title = entry.title or link.title or link.href
-                link_kwargs: dict[str, Any] = {
-                    "href": link.href,
-                    "title": title,
-                }
-                if link.rel:
-                    link_kwargs["rel"] = link.rel
-                if link.type:
-                    link_kwargs["type"] = link.type
-                navigation.append(opds2.TitleLink(**link_kwargs))
+                navigation.append(
+                    self._title_link(
+                        href=link.href,
+                        title=title,
+                        rel=link.rel,
+                        type=link.type,
+                    )
+                )
         return navigation
 
     def _acquisition_link_type(self, link: Acquisition) -> str:
@@ -481,5 +510,109 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]]):
             mode="json",
             by_alias=True,
             exclude_none=True,
-            exclude_unset=True,
+        )
+
+    @staticmethod
+    def _link_properties(
+        *,
+        availability: opds2.Availability | None = None,
+        holds: opds2.Holds | None = None,
+        copies: opds2.Copies | None = None,
+        indirect_acquisition: list[opds2.AcquisitionObject] | None = None,
+        actions: opds2.LinkActions | None = None,
+        licensor: opds2.PalaceLicensor | None = None,
+        lcp_hashed_passphrase: str | None = None,
+        palace_default: str | None = None,
+        palace_active_sort: str | None = None,
+    ) -> opds2.LinkProperties:
+        values: dict[str, Any] = {}
+        fields_set: set[str] = set()
+
+        if availability is not None:
+            values["availability"] = availability
+            fields_set.add("availability")
+        if holds is not None:
+            values["holds"] = holds
+            fields_set.add("holds")
+        if copies is not None:
+            values["copies"] = copies
+            fields_set.add("copies")
+        if indirect_acquisition is not None:
+            values["indirect_acquisition"] = indirect_acquisition
+            fields_set.add("indirect_acquisition")
+        if actions is not None:
+            values["actions"] = actions
+            fields_set.add("actions")
+        if licensor is not None:
+            values["licensor"] = licensor
+            fields_set.add("licensor")
+        if lcp_hashed_passphrase is not None:
+            values["lcp_hashed_passphrase"] = lcp_hashed_passphrase
+            fields_set.add("lcp_hashed_passphrase")
+        if palace_default is not None:
+            values["palace_default"] = palace_default
+            fields_set.add("palace_default")
+        if palace_active_sort is not None:
+            values["palace_active_sort"] = palace_active_sort
+            fields_set.add("palace_active_sort")
+
+        return opds2.LinkProperties.model_construct(
+            _fields_set=fields_set,
+            **values,
+        )
+
+    def _strict_link(
+        self,
+        *,
+        href: str,
+        rel: str,
+        type: str,
+        title: str | None = None,
+        properties: opds2.LinkProperties | None = None,
+        templated: bool = False,
+    ) -> opds2.StrictLink:
+        if properties is None and not templated:
+            return opds2.StrictLink(href=href, rel=rel, type=type, title=title)
+        if properties is None:
+            return opds2.StrictLink(
+                href=href,
+                rel=rel,
+                type=type,
+                title=title,
+                templated=True,
+            )
+        if templated:
+            return opds2.StrictLink(
+                href=href,
+                rel=rel,
+                type=type,
+                title=title,
+                properties=properties,
+                templated=True,
+            )
+        return opds2.StrictLink(
+            href=href,
+            rel=rel,
+            type=type,
+            title=title,
+            properties=properties,
+        )
+
+    @staticmethod
+    def _title_link(
+        *,
+        href: str,
+        title: str,
+        rel: str | None = None,
+        type: str | None = None,
+        properties: opds2.LinkProperties | None = None,
+    ) -> opds2.TitleLink:
+        if properties is None:
+            return opds2.TitleLink(href=href, title=title, rel=rel, type=type)
+        return opds2.TitleLink(
+            href=href,
+            title=title,
+            rel=rel,
+            type=type,
+            properties=properties,
         )

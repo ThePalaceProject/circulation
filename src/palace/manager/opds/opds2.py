@@ -4,14 +4,16 @@ from collections.abc import Sequence
 from datetime import datetime
 from enum import StrEnum, auto
 from functools import cached_property
-from typing import Annotated, Any, Literal, Self
+from typing import Annotated, Any, Literal, Self, cast
 
 from pydantic import (
     Field,
     NonNegativeFloat,
     NonNegativeInt,
     PositiveInt,
+    SerializerFunctionWrapHandler,
     field_validator,
+    model_serializer,
     model_validator,
 )
 from pydantic_core import PydanticCustomError
@@ -389,6 +391,15 @@ class Feed(BaseOpdsModel):
     groups: list[PublicationsGroup | NavigationGroup] = Field(default_factory=list)
 
     _validate_links = field_validator("links")(validate_self_link)
+
+    @model_serializer(mode="wrap")
+    def _serialize(self, serializer: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        data = cast(dict[str, Any], serializer(self))
+        if not data.get("navigation"):
+            data.pop("navigation", None)
+        if not data.get("facets"):
+            data.pop("facets", None)
+        return data
 
     @model_validator(mode="after")
     def required_collections(self) -> Self:
