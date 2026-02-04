@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, Unpack
 
 from werkzeug.datastructures import MIMEAccept
 
@@ -14,7 +14,7 @@ from palace.manager.feed.serializer.opds import (
     OPDS1Version2Serializer,
 )
 from palace.manager.feed.serializer.opds2 import OPDS2Serializer
-from palace.manager.feed.types import FeedData, WorkEntry
+from palace.manager.feed.types import FeedData, LinkKwargs, WorkEntry
 from palace.manager.util.flask_util import OPDSEntryResponse, OPDSFeedResponse
 from palace.manager.util.log import LoggerMixin
 from palace.manager.util.opds_writer import OPDSMessage
@@ -50,8 +50,8 @@ class BaseOPDSFeed(FeedInterface, LoggerMixin):
         self._precomposed_entries = precomposed_entries or []
         self._feed = FeedData()
 
-    def add_link(self, href: str, rel: str | None = None, **kwargs: Any) -> None:
-        self._feed.add_link(href, rel=rel, **kwargs)
+    def add_link(self, href: str, **kwargs: Unpack[LinkKwargs]) -> None:
+        self._feed.add_link(href, **kwargs)
 
     def as_response(
         self,

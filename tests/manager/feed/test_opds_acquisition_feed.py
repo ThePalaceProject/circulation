@@ -337,11 +337,11 @@ class TestOPDSAcquisitionFeed:
         # The link is identified as belonging to an entry point-type
         # facet group.
         assert l.rel == LinkRelations.FACET_REL
-        assert getattr(l, "facetGroupType") == FacetConstants.ENTRY_POINT_REL
-        assert "Grupe" == getattr(l, "facetGroup")
+        assert getattr(l, "facet_group_type") == FacetConstants.ENTRY_POINT_REL
+        assert "Grupe" == getattr(l, "facet_group")
 
         # This facet is the active one in the group.
-        assert getattr(l, "activeFacet") is True
+        assert getattr(l, "active_facet") is True
 
         # The URL generator was invoked to create the href.
         assert l.href == g(AudiobooksEntryPoint)
@@ -361,8 +361,8 @@ class TestOPDSAcquisitionFeed:
         # not the selected one -- EbooksEntryPoint is.
         l = m(g, AudiobooksEntryPoint, EbooksEntryPoint, True, "Grupe")
 
-        # This means the 'activeFacet' attribute is not present.
-        assert getattr(l, "activeFacet", None) is False
+        # This means the 'active_facet' attribute is not present.
+        assert getattr(l, "active_facet", None) is False
 
     def test_license_tags_no_loan_or_hold(self, db: DatabaseTransactionFixture):
         edition, pool = db.edition(with_license_pool=True)

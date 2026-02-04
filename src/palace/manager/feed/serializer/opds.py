@@ -12,13 +12,16 @@ from palace.manager.feed.serializer.base import SerializerInterface
 from palace.manager.feed.types import (
     Acquisition,
     Author,
-    BaseModel,
     DataEntry,
+    DRMLicensor,
     FeedData,
     FeedMetadata,
     IndirectAcquisition,
     Link,
+    PatronData,
+    Rating,
     Series,
+    TextValue,
     WorkEntryData,
 )
 from palace.manager.util.datetime_helpers import utc_now
@@ -39,19 +42,19 @@ V1_ATTRIBUTE_MAPPING = {
     "vendor": f"{{{OPDSFeed.DRM_NS}}}vendor",
     "scheme": f"{{{OPDSFeed.DRM_NS}}}scheme",
     "username": f"{{{OPDSFeed.SIMPLIFIED_NS}}}username",
-    "authorizationIdentifier": f"{{{OPDSFeed.SIMPLIFIED_NS}}}authorizationIdentifier",
+    "authorization_identifier": f"{{{OPDSFeed.SIMPLIFIED_NS}}}authorizationIdentifier",
     "rights": f"{{{OPDSFeed.DCTERMS_NS}}}rights",
     "ProviderName": f"{{{OPDSFeed.BIBFRAME_NS}}}ProviderName",
-    "facetGroup": f"{{{OPDSFeed.OPDS_NS}}}facetGroup",
-    "facetGroupType": f"{{{OPDSFeed.SIMPLIFIED_NS}}}facetGroupType",
-    "activeFacet": f"{{{OPDSFeed.OPDS_NS}}}activeFacet",
-    "ratingValue": f"{{{OPDSFeed.SCHEMA_NS}}}ratingValue",
+    "facet_group": f"{{{OPDSFeed.OPDS_NS}}}facetGroup",
+    "facet_group_type": f"{{{OPDSFeed.SIMPLIFIED_NS}}}facetGroupType",
+    "active_facet": f"{{{OPDSFeed.OPDS_NS}}}activeFacet",
+    "rating_value": f"{{{OPDSFeed.SCHEMA_NS}}}ratingValue",
 }
 
 V2_ATTRIBUTE_MAPPING = {
     **V1_ATTRIBUTE_MAPPING,
-    "defaultFacet": f"{{{OPDSFeed.PALACE_PROPS_NS}}}default",
-    "activeSort": f"{{{OPDSFeed.PALACE_PROPS_NS}}}active-sort",
+    "default_facet": f"{{{OPDSFeed.PALACE_PROPS_NS}}}default",
+    "active_sort": f"{{{OPDSFeed.PALACE_PROPS_NS}}}active-sort",
 }
 
 AUTHOR_MAPPING = {
@@ -67,7 +70,7 @@ def is_sort_facet(link: Link) -> bool:
     group_name = cast(
         str, FacetConstants.GROUP_DISPLAY_TITLES[FacetConstants.ORDER_FACET_GROUP_NAME]
     )
-    return link.facetGroup == group_name
+    return link.facet_group == group_name
 
 
 class BaseOPDS1Serializer(SerializerInterface[etree._Element], OPDSFeed, abc.ABC):
@@ -112,14 +115,14 @@ class BaseOPDS1Serializer(SerializerInterface[etree._Element], OPDSFeed, abc.ABC
                     serialized.append(self.serialize_opds_message(precomposed))
 
         for link in feed.links:
-            serialized.append(self._serialize_feed_entry("link", link))
+            serialized.append(self._serialize_link(link))
 
         if feed.breadcrumbs:
             breadcrumbs = OPDSFeed.E._makeelement(
                 f"{{{OPDSFeed.SIMPLIFIED_NS}}}breadcrumbs"
             )
             for link in feed.breadcrumbs:
-                breadcrumbs.append(self._serialize_feed_entry("link", link))
+                breadcrumbs.append(self._serialize_link(link))
             serialized.append(breadcrumbs)
 
         for link in self._serialize_facet_links(feed):
@@ -141,14 +144,12 @@ class BaseOPDS1Serializer(SerializerInterface[etree._Element], OPDSFeed, abc.ABC
         if metadata.updated:
             tags.append(self._tag("updated", metadata.updated))
         if metadata.patron:
-            tags.append(self._serialize_feed_entry("patron", metadata.patron))
+            tags.append(self._serialize_patron(metadata.patron))
         if metadata.drm_licensor:
-            tags.append(self._serialize_feed_entry("licensor", metadata.drm_licensor))
+            tags.append(self._serialize_drm_licensor(metadata.drm_licensor))
         if metadata.lcp_hashed_passphrase:
             tags.append(
-                self._serialize_feed_entry(
-                    "hashed_passphrase", metadata.lcp_hashed_passphrase
-                )
+                self._serialize_hashed_passphrase(metadata.lcp_hashed_passphrase)
             )
 
         return tags
@@ -156,9 +157,9 @@ class BaseOPDS1Serializer(SerializerInterface[etree._Element], OPDSFeed, abc.ABC
     def serialize_work_entry(self, feed_entry: WorkEntryData) -> etree._Element:
         entry: etree._Element = OPDSFeed.entry()
 
-        if feed_entry.additionalType:
+        if feed_entry.additional_type:
             entry.set(
-                f"{{{OPDSFeed.SCHEMA_NS}}}additionalType", feed_entry.additionalType
+                f"{{{OPDSFeed.SCHEMA_NS}}}additionalType", feed_entry.additional_type
             )
 
         if feed_entry.title:
@@ -264,8 +265,7 @@ class BaseOPDS1Serializer(SerializerInterface[etree._Element], OPDSFeed, abc.ABC
             entry.append(element)
 
         for rating in feed_entry.ratings:
-            rating_tag = self._serialize_feed_entry("Rating", rating)
-            entry.append(rating_tag)
+            entry.append(self._serialize_rating(rating))
 
         for author in feed_entry.authors:
             # Author must at a minimum have a name
@@ -275,14 +275,14 @@ class BaseOPDS1Serializer(SerializerInterface[etree._Element], OPDSFeed, abc.ABC
             entry.append(self._serialize_author_tag("contributor", contributor))
 
         for link in feed_entry.image_links:
-            entry.append(OPDSFeed.link(**link.asdict()))
+            entry.append(self._serialize_link(link))
 
         for link in feed_entry.acquisition_links:
             element = self._serialize_acquisition_link(link)
             entry.append(element)
 
         for link in feed_entry.other_links:
-            entry.append(OPDSFeed.link(**link.asdict()))
+            entry.append(self._serialize_link(link))
 
         return entry
 
@@ -295,34 +295,8 @@ class BaseOPDS1Serializer(SerializerInterface[etree._Element], OPDSFeed, abc.ABC
         if series.position:
             entry.append(self._tag("position", series.position))
         if series.link:
-            entry.append(self._serialize_feed_entry("link", series.link))
+            entry.append(self._serialize_link(series.link))
 
-        return entry
-
-    def _serialize_feed_entry(self, tag: str, feed_entry: BaseModel) -> etree._Element:
-        """Serialize a feed entry type in a recursive and blind manner"""
-        entry: etree._Element = self._tag(tag)
-        for attrib, value in feed_entry:
-            if value is None:
-                continue
-            if isinstance(value, list):
-                for item in value:
-                    entry.append(self._serialize_feed_entry(attrib, item))
-            elif isinstance(value, BaseModel):
-                entry.append(self._serialize_feed_entry(attrib, value))
-            else:
-                if attrib == "text":
-                    entry.text = str(value)
-                elif isinstance(value, bool):
-                    if not value:
-                        continue
-                    entry.set(self._attr_name(attrib), "true")
-                else:
-                    attribute_mapping = self._get_attribute_mapping()
-                    entry.set(
-                        attribute_mapping.get(attrib, attrib),
-                        value if value is not None else "",
-                    )
         return entry
 
     @abc.abstractmethod
@@ -342,7 +316,7 @@ class BaseOPDS1Serializer(SerializerInterface[etree._Element], OPDSFeed, abc.ABC
         if author.role:
             entry.set(attr("role"), author.role)
         if author.link:
-            entry.append(self._serialize_feed_entry("link", author.link))
+            entry.append(self._serialize_link(author.link))
 
         # Verbose
         if author.sort_name:
@@ -353,6 +327,89 @@ class BaseOPDS1Serializer(SerializerInterface[etree._Element], OPDSFeed, abc.ABC
             entry.append(_tag("sameas", author.viaf))
         if author.lc:
             entry.append(_tag("sameas", author.lc))
+        return entry
+
+    def _serialize_link(self, link: Link) -> etree._Element:
+        attrs: dict[str, str] = {}
+        if link.href is not None:
+            attrs["href"] = link.href
+        if link.rel is not None:
+            attrs["rel"] = link.rel
+        if link.type is not None:
+            attrs["type"] = link.type
+        if link.title is not None:
+            attrs["title"] = link.title
+        if link.role is not None:
+            attrs["role"] = link.role
+
+        element = OPDSFeed.link(**attrs)
+        attr_mapping = self._get_attribute_mapping()
+
+        if link.facet_group:
+            element.set(
+                self._attr_name("facet_group", mapping=attr_mapping),
+                link.facet_group,
+            )
+        if link.facet_group_type:
+            element.set(
+                self._attr_name("facet_group_type", mapping=attr_mapping),
+                link.facet_group_type,
+            )
+        if link.active_facet and "active_facet" in attr_mapping:
+            element.set(
+                self._attr_name("active_facet", mapping=attr_mapping),
+                "true",
+            )
+        if link.default_facet and "default_facet" in attr_mapping:
+            element.set(
+                self._attr_name("default_facet", mapping=attr_mapping),
+                "true",
+            )
+        if link.active_sort and "active_sort" in attr_mapping:
+            element.set(
+                self._attr_name("active_sort", mapping=attr_mapping),
+                "true",
+            )
+
+        return element
+
+    def _serialize_patron(self, patron: PatronData) -> etree._Element:
+        entry = self._tag("patron")
+        attr_mapping = self._get_attribute_mapping()
+        if patron.username:
+            entry.set(
+                self._attr_name("username", mapping=attr_mapping), patron.username
+            )
+        if patron.authorization_identifier:
+            entry.set(
+                self._attr_name("authorization_identifier", mapping=attr_mapping),
+                patron.authorization_identifier,
+            )
+        return entry
+
+    def _serialize_drm_licensor(self, licensor: DRMLicensor) -> etree._Element:
+        entry = self._tag("licensor")
+        attr_mapping = self._get_attribute_mapping()
+        if licensor.vendor:
+            entry.set(self._attr_name("vendor", mapping=attr_mapping), licensor.vendor)
+        if licensor.scheme:
+            entry.set(self._attr_name("scheme", mapping=attr_mapping), licensor.scheme)
+        if licensor.client_token and licensor.client_token.text:
+            entry.append(self._tag("clientToken", licensor.client_token.text))
+        return entry
+
+    def _serialize_hashed_passphrase(self, passphrase: TextValue) -> etree._Element:
+        return self._tag("hashed_passphrase", passphrase.text or "")
+
+    def _serialize_rating(self, rating: Rating) -> etree._Element:
+        entry = self._tag("Rating")
+        attr_mapping = self._get_attribute_mapping()
+        entry.set(
+            self._attr_name("rating_value", mapping=attr_mapping),
+            rating.rating_value,
+        )
+        if rating.additional_type:
+            entry.set(f"{{{OPDSFeed.SCHEMA_NS}}}additionalType", rating.additional_type)
         return entry
 
     def _serialize_acquisition_link(self, link: Acquisition) -> etree._Element:
@@ -399,7 +456,7 @@ class BaseOPDS1Serializer(SerializerInterface[etree._Element], OPDSFeed, abc.ABC
             )
 
         if link.drm_licensor:
-            element.append(self._serialize_feed_entry("licensor", link.drm_licensor))
+            element.append(self._serialize_drm_licensor(link.drm_licensor))
 
         return element
 
@@ -410,8 +467,7 @@ class BaseOPDS1Serializer(SerializerInterface[etree._Element], OPDSFeed, abc.ABC
         if entry.id:
             element.append(self._tag("id", entry.id))
         for link in entry.links:
-            link_ele = self._serialize_feed_entry("link", link)
-            element.append(link_ele)
+            element.append(self._serialize_link(link))
         return element
 
     @classmethod
@@ -423,11 +479,11 @@ class BaseOPDS1Serializer(SerializerInterface[etree._Element], OPDSFeed, abc.ABC
         """return the content type associated with the serialization. This value should include the api-version."""
 
     @abc.abstractmethod
-    def _serialize_facet_links(self, feed: FeedData) -> list[Link]:
+    def _serialize_facet_links(self, feed: FeedData) -> list[etree._Element]:
         """This method implements serialization of the facet_links from the feed data."""
 
     @abc.abstractmethod
-    def _serialize_sort_links(self, feed: FeedData) -> list[Link]:
+    def _serialize_sort_links(self, feed: FeedData) -> list[etree._Element]:
         """This method implements serialization of the sort links from the feed data."""
 
 
@@ -437,14 +493,14 @@ class OPDS1Version1Serializer(BaseOPDS1Serializer):
     the http://palaceproject.io/terms/properties/default property indicating default facets
     """
 
-    def _serialize_facet_links(self, feed: FeedData) -> list[Link]:
-        links = []
+    def _serialize_facet_links(self, feed: FeedData) -> list[etree._Element]:
+        links: list[etree._Element] = []
         if feed.facet_links:
             for link in feed.facet_links:
-                links.append(self._serialize_feed_entry("link", link))
+                links.append(self._serialize_link(link))
         return links
 
-    def _serialize_sort_links(self, feed: FeedData) -> list[Link]:
+    def _serialize_sort_links(self, feed: FeedData) -> list[etree._Element]:
         # Since this version of the serializer implements sort links as facets,
         # we return an empty list of sort links.
         return []
@@ -464,21 +520,21 @@ class OPDS1Version2Serializer(BaseOPDS1Serializer):
     inidcated by the http://palaceproject.io/terms/properties/default property.
     """
 
-    def _serialize_facet_links(self, feed: FeedData) -> list[Link]:
+    def _serialize_facet_links(self, feed: FeedData) -> list[etree._Element]:
         # serializes the non-sort related facets.
-        links: list[Link] = []
+        links: list[etree._Element] = []
         facet_links = feed.facet_links
         if facet_links:
             for link in facet_links:
                 # serialize all but the sort facets.
                 if not is_sort_facet(link):
-                    links.append(self._serialize_feed_entry("link", link))
+                    links.append(self._serialize_link(link))
         return links
 
-    def _serialize_sort_links(self, feed: FeedData) -> list[Link]:
+    def _serialize_sort_links(self, feed: FeedData) -> list[etree._Element]:
         # this version of the feed filters out the sort facets and
         # serializes them in a way that makes use of palace extensions.
-        links: list[Link] = []
+        links: list[etree._Element] = []
         facet_links = feed.facet_links
         if facet_links:
             for link in feed.facet_links:
@@ -492,10 +548,10 @@ class OPDS1Version2Serializer(BaseOPDS1Serializer):
         sort_link = Link(
             href=link.href, title=link.title, rel=AtomFeed.PALACE_REL_NS + "sort"
         )
-        sort_link.activeSort = link.activeFacet
-        sort_link.defaultFacet = link.defaultFacet
+        sort_link.active_sort = link.active_facet
+        sort_link.default_facet = link.default_facet
 
-        return self._serialize_feed_entry("link", sort_link)
+        return self._serialize_link(sort_link)
 
     def _get_attribute_mapping(self) -> dict[str, str]:
         return V2_ATTRIBUTE_MAPPING

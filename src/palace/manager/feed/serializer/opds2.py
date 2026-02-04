@@ -83,8 +83,8 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]]):
 
     def serialize_work_entry(self, data: WorkEntryData) -> dict[str, Any]:
         metadata: dict[str, Any] = {}
-        if data.additionalType:
-            metadata["@type"] = data.additionalType
+        if data.additional_type:
+            metadata["@type"] = data.additional_type
 
         if data.title:
             metadata["title"] = data.title.text
@@ -151,10 +151,10 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]]):
         if link.title:
             serialized["title"] = link.title
 
-        if link.activeFacet:
+        if link.active_facet:
             serialized["rel"] = "self"
 
-        if link.defaultFacet:
+        if link.default_facet:
             properties: dict[str, Any] = dict()
             properties.update({PALACE_PROPERTIES_DEFAULT: "true"})
             serialized["properties"] = properties
@@ -201,7 +201,7 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]]):
         if link.drm_licensor:
             props["licensor"] = {
                 "clientToken": getattr(
-                    getattr(link.drm_licensor, "clientToken"), "text"
+                    getattr(link.drm_licensor, "client_token"), "text"
                 ),
                 "vendor": getattr(link.drm_licensor, "vendor"),
             }
@@ -243,7 +243,7 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]]):
             # TODO: When we remove the facet-based sort links [PP-1814],
             # this check can be removed.
             if not is_sort_facet(link):
-                group = link.facetGroup
+                group = link.facet_group
                 if group:
                     facet_links[group]["links"].append(self._serialize_link(link))
                     facet_links[group]["metadata"]["title"] = group
@@ -274,9 +274,9 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]]):
 
         sort_link["properties"] = properties
 
-        if link.activeFacet:
+        if link.active_facet:
             properties.update({PALACE_PROPERTIES_ACTIVE_SORT: "true"})
 
-        if link.defaultFacet:
+        if link.default_facet:
             properties.update({PALACE_PROPERTIES_DEFAULT: "true"})
         return sort_link

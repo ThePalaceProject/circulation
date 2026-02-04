@@ -1,55 +1,44 @@
 from __future__ import annotations
 
-from collections.abc import Generator
 from dataclasses import dataclass, field
 from datetime import date, datetime
-from typing import Any, cast
+from typing import NotRequired, TypedDict, Unpack, cast
 
 from pydantic import ConfigDict
 
+from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import LicensePool
 from palace.manager.sqlalchemy.model.work import Work
 
-NO_SUCH_KEY = object()
+
+class LinkAttributes(TypedDict):
+    href: str
+    rel: NotRequired[str]
+    type: NotRequired[str]
+
+
+class LinkKwargs(TypedDict):
+    rel: NotRequired[str]
+    type: NotRequired[str]
+    title: NotRequired[str]
+    role: NotRequired[str]
+    facet_group: NotRequired[str]
+    facet_group_type: NotRequired[str]
+    active_facet: NotRequired[bool]
+    default_facet: NotRequired[bool]
+    active_sort: NotRequired[bool]
 
 
 @dataclass
-class BaseModel:
-    def _vars(self) -> Generator[tuple[str, Any]]:
-        """Yield attributes as a tuple."""
-        _attrs = vars(self)
-        for name, value in _attrs.items():
-            if name.startswith("_"):
-                continue
-            if callable(value):
-                continue
-            yield name, value
-
-    def asdict(self) -> dict[str, Any]:
-        """Dataclasses do not return undefined attributes via `asdict` so we must implement this ourselves."""
-        attrs: dict[str, Any] = {}
-        for name, value in self:
-            if isinstance(value, BaseModel):
-                attrs[name] = value.asdict()
-            else:
-                attrs[name] = value
-        return attrs
-
-    def __iter__(self) -> Generator[tuple[str, Any]]:
-        """Allow attribute iteration."""
-        yield from self._vars()
-
-
-@dataclass
-class TextValue(BaseModel):
+class TextValue:
     text: str | None = None
     type: str | None = None
 
 
 @dataclass
-class Link(BaseModel):
+class Link:
     href: str | None = None
     rel: str | None = None
     type: str | None = None
@@ -59,69 +48,64 @@ class Link(BaseModel):
     title: str | None = None
 
     # Facet-related attributes
-    facetGroup: str | None = None
-    facetGroupType: str | None = None
-    activeFacet: bool = False
-    defaultFacet: bool = False
-    activeSort: bool = False
+    facet_group: str | None = None
+    facet_group_type: str | None = None
+    active_facet: bool = False
+    default_facet: bool = False
+    active_sort: bool = False
 
-    def asdict(self) -> dict[str, Any]:
-        """A dict without None values and without facet-only attributes."""
-        sanitized: dict[str, Any] = {}
-        for key in ("href", "rel", "type", "role", "title"):
-            if (value := getattr(self, key, None)) is not None:
-                sanitized[key] = value
-        return sanitized
-
-    def link_attribs(self) -> dict[str, Any]:
-        d = dict(href=self.href)
-        for key in ["rel", "type"]:
-            if (value := getattr(self, key, None)) is not None:
-                d[key] = value
-        return d
+    def link_attribs(self) -> LinkAttributes:
+        if self.href is None:
+            raise PalaceValueError("Link.href cannot be None for link attributes")
+        attrs: LinkAttributes = {"href": self.href}
+        if self.rel is not None:
+            attrs["rel"] = self.rel
+        if self.type is not None:
+            attrs["type"] = self.type
+        return attrs
 
 
 @dataclass
-class Category(BaseModel):
+class Category:
     scheme: str
     term: str
     label: str
-    ratingValue: str | None = None
+    rating_value: str | None = None
 
 
 @dataclass
-class Rating(BaseModel):
-    ratingValue: str
-    additionalType: str | None = None
+class Rating:
+    rating_value: str
+    additional_type: str | None = None
 
 
 @dataclass
-class Series(BaseModel):
+class Series:
     name: str
     position: str | None = None
     link: Link | None = None
 
 
 @dataclass
-class Distribution(BaseModel):
+class Distribution:
     provider_name: str
 
 
 @dataclass
-class PatronData(BaseModel):
+class PatronData:
     username: str | None = None
-    authorizationIdentifier: str | None = None
+    authorization_identifier: str | None = None
 
 
 @dataclass
-class DRMLicensor(BaseModel):
+class DRMLicensor:
     vendor: str | None = None
-    clientToken: TextValue | None = None
+    client_token: TextValue | None = None
     scheme: str | None = None
 
 
 @dataclass
-class IndirectAcquisition(BaseModel):
+class IndirectAcquisition:
     type: str | None = None
     children: list[IndirectAcquisition] = field(default_factory=list)
 
@@ -154,7 +138,7 @@ class Acquisition(Link):
 
 
 @dataclass
-class Author(BaseModel):
+class Author:
     name: str | None = None
     sort_name: str | None = None
     viaf: str | None = None
@@ -166,10 +150,10 @@ class Author(BaseModel):
 
 
 @dataclass
-class WorkEntryData(BaseModel):
+class WorkEntryData:
     """All the metadata possible for a work. This is not a TextValue because we want strict control."""
 
-    additionalType: str | None = None
+    additional_type: str | None = None
     identifier: str | None = None
     pwid: str | None = None
     issued: datetime | date | None = None
@@ -199,7 +183,7 @@ class WorkEntryData(BaseModel):
 
 
 @dataclass
-class WorkEntry(BaseModel):
+class WorkEntry:
     work: Work
     edition: Edition
     identifier: Identifier
@@ -226,7 +210,7 @@ class WorkEntry(BaseModel):
 
 
 @dataclass
-class FeedMetadata(BaseModel):
+class FeedMetadata:
     title: str | None = None
     id: str | None = None
     updated: str | None = None
@@ -241,7 +225,7 @@ class DataEntryTypes:
 
 
 @dataclass
-class DataEntry(BaseModel):
+class DataEntry:
     """Other kinds of information, like entries of a navigation feed."""
 
     type: str | None = None
@@ -251,7 +235,7 @@ class DataEntry(BaseModel):
 
 
 @dataclass
-class FeedData(BaseModel):
+class FeedData:
     links: list[Link] = field(default_factory=list)
     breadcrumbs: list[Link] = field(default_factory=list)
     facet_links: list[Link] = field(default_factory=list)
@@ -261,5 +245,5 @@ class FeedData(BaseModel):
     entrypoint: str | None = None
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    def add_link(self, href: str, **kwargs: Any) -> None:
+    def add_link(self, href: str, **kwargs: Unpack[LinkKwargs]) -> None:
         self.links.append(Link(href=href, **kwargs))

@@ -74,7 +74,10 @@ class LibraryLoanAndHoldAnnotator(LibraryAnnotator):
             licensor = self.drm_device_registration_feed_tags(self.patron)
             link = self.user_profile_management_protocol_link
             if link.href is not None:
-                feed.add_link(link.href, rel=link.rel)
+                if link.rel is not None:
+                    feed.add_link(link.href, rel=link.rel)
+                else:
+                    feed.add_link(link.href)
             if licensor:
                 feed.metadata.drm_licensor = licensor
 

@@ -202,9 +202,9 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
             href=href,
             title=title,
             rel=LinkRelations.FACET_REL,
-            facetGroup=facet_group_name,
-            activeFacet=is_active,
-            defaultFacet=is_default,
+            facet_group=facet_group_name,
+            active_facet=is_active,
+            default_facet=is_default,
         )
 
     def as_error_response(self, **kwargs: Any) -> OPDSFeedResponse:
@@ -298,7 +298,7 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
         #
         # In OPDS 2 this can become an additional rel value,
         # removing the need for a custom attribute.
-        link.facetGroupType = FacetConstants.ENTRY_POINT_REL
+        link.facet_group_type = FacetConstants.ENTRY_POINT_REL
         return link
 
     def add_breadcrumb_links(

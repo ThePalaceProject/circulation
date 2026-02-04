@@ -352,7 +352,7 @@ class TestLibraryAnnotator:
         assert element is not None
         assert vendor_id_fixture.TEST_VENDOR_ID == getattr(element, "vendor", None)
 
-        token = getattr(element, "clientToken", None)
+        token = getattr(element, "client_token", None)
         assert token is not None
         # token.text is a token which we can decode, since we know
         # the secret.
@@ -367,7 +367,7 @@ class TestLibraryAnnotator:
         # object that renders to the same data.
         same_tag = annotator_fixture.annotator.adobe_id_tags(patron_identifier)
         assert same_tag is not element
-        assert same_tag.asdict() == element.asdict()
+        assert same_tag == element
 
         # If the Adobe Vendor ID configuration is present but
         # incomplete, adobe_id_tags does nothing.
@@ -1441,9 +1441,9 @@ class TestLibraryAnnotator:
         # If we remove that attribute, the feed-level tag is the same as the
         # generic tag.
         assert generic_tag is not None
-        assert feed_tag.asdict() != generic_tag.asdict()
+        assert feed_tag != generic_tag
         feed_tag.scheme = None
-        assert feed_tag.asdict() == generic_tag.asdict()
+        assert feed_tag == generic_tag
 
     def test_borrow_link_raises_unfulfillable_work(
         self, annotator_fixture: LibraryAnnotatorFixture

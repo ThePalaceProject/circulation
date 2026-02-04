@@ -128,7 +128,7 @@ class ToFeedEntry:
     @classmethod
     def rating(cls, type_uri: str | None, value: float | Decimal) -> Rating:
         """Generate a Rating object for the given type and value."""
-        return Rating(ratingValue="%.4f" % value, additionalType=type_uri)
+        return Rating(rating_value="%.4f" % value, additional_type=type_uri)
 
     @classmethod
     def samples(cls, edition: Edition | None) -> list[Hyperlink]:
@@ -304,7 +304,7 @@ class Annotator(ToFeedEntry):
             additional_type = Edition.medium_to_additional_type.get(str(edition.medium))
             if not additional_type:
                 logging.warning("No additionalType for medium %s", edition.medium)
-            computed.additionalType = additional_type
+            computed.additional_type = additional_type
 
         computed.title = TextValue(text=(edition.title or OPDSFeed.NO_TITLE))
 
@@ -341,7 +341,9 @@ class Annotator(ToFeedEntry):
                     scheme=scheme,
                     term=category.get("term", ""),
                     label=category.get("label", ""),
-                    ratingValue=str(rating_value) if rating_value is not None else None,
+                    rating_value=(
+                        str(rating_value) if rating_value is not None else None
+                    ),
                 )
                 category_tags.append(category_tag)
         computed.categories = category_tags

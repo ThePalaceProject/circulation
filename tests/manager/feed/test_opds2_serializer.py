@@ -43,7 +43,7 @@ class TestOPDS2Serializer:
         feed.entries = [w]
         feed.links = [Link(href="http://link", rel="link-rel")]
         feed.facet_links = [
-            Link(href="http://facet-link", rel="facet-rel", facetGroup="FacetGroup")
+            Link(href="http://facet-link", rel="facet-rel", facet_group="FacetGroup")
         ]
 
         serialized = OPDS2Serializer().serialize_feed(feed)
@@ -68,7 +68,7 @@ class TestOPDS2Serializer:
 
     def test_serialize_work_entry(self):
         data = WorkEntryData(
-            additionalType="type",
+            additional_type="type",
             title=TextValue(text="The Title"),
             sort_title=TextValue(text="Title, The"),
             subtitle=TextValue(text="Sub Title"),
@@ -96,7 +96,7 @@ class TestOPDS2Serializer:
         entry = serializer.serialize_work_entry(data)
         metadata = entry["metadata"]
 
-        assert metadata["@type"] == data.additionalType
+        assert metadata["@type"] == data.additional_type
         assert metadata["title"] == data.title.text
         assert metadata["sortAs"] == data.sort_title.text
         assert metadata["duration"] == data.duration
@@ -153,7 +153,7 @@ class TestOPDS2Serializer:
 
     def test__serialize_acquisition_link(self):
         drm_licensor = DRMLicensor(
-            vendor="vendor_name", clientToken=TextValue(text="token_value")
+            vendor="vendor_name", client_token=TextValue(text="token_value")
         )
 
         serializer = OPDS2Serializer()
@@ -250,9 +250,9 @@ class TestOPDS2Serializer:
             href="test",
             rel="test_rel",
             title="text1",
-            facetGroup="Sort by",
-            activeFacet=True,
-            defaultFacet=True,
+            facet_group="Sort by",
+            active_facet=True,
+            default_facet=True,
         )
 
         # include a non-sort facet
@@ -260,9 +260,9 @@ class TestOPDS2Serializer:
             href="test2",
             title="text2",
             rel="test_2_rel",
-            facetGroup="test_group",
-            activeFacet=True,
-            defaultFacet=True,
+            facet_group="test_group",
+            active_facet=True,
+            default_facet=True,
         )
 
         feed_data.facet_links.append(link)

@@ -206,7 +206,7 @@ class TestAnnotators:
         work.presentation_edition.add_contributor(c, Contributor.Role.PRIMARY_AUTHOR)
 
         [same_tag] = VerboseAnnotator.authors(work.presentation_edition)["authors"]
-        assert same_tag.asdict() == author.asdict()
+        assert same_tag == author
 
     def test_duplicate_author_names_are_ignored(self, db: DatabaseTransactionFixture):
         session = db.session
@@ -280,8 +280,8 @@ class TestAnnotators:
 
         ratings = [
             (
-                getattr(rating, "ratingValue"),
-                getattr(rating, "additionalType"),
+                getattr(rating, "rating_value"),
+                getattr(rating, "additional_type"),
             )
             for rating in entry.computed.ratings
         ]

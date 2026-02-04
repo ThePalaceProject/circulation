@@ -38,6 +38,7 @@ from palace.manager.feed.types import (
     FeedData,
     IndirectAcquisition,
     Link,
+    LinkKwargs,
     PatronData,
     TextValue,
     WorkEntry,
@@ -1100,37 +1101,34 @@ class LibraryAnnotator(CirculationManagerAnnotator):
                 _external=True,
                 **search_facet_kwargs,
             )
-            search_link = dict(
+            feed.add_link(
+                href=search_url,
                 rel="search",
                 type="application/opensearchdescription+xml",
-                href=search_url,
             )
-            feed.add_link(**search_link)
 
         if self.identifies_patrons:
             # Since this library authenticates patrons it can offer
             # a bookshelf and an annotation service.
-            shelf_link = dict(
-                rel="http://opds-spec.org/shelf",
-                type=OPDSFeed.ACQUISITION_FEED_TYPE,
+            feed.add_link(
                 href=self.url_for(
                     "active_loans",
                     library_short_name=self.library.short_name,
                     _external=True,
                 ),
+                rel="http://opds-spec.org/shelf",
+                type=OPDSFeed.ACQUISITION_FEED_TYPE,
             )
-            feed.add_link(**shelf_link)
 
-            annotations_link = dict(
-                rel="http://www.w3.org/ns/oa#annotationService",
-                type=AnnotationWriter.CONTENT_TYPE,
+            feed.add_link(
                 href=self.url_for(
                     "annotations",
                     library_short_name=self.library.short_name,
                     _external=True,
                 ),
+                rel="http://www.w3.org/ns/oa#annotationService",
+                type=AnnotationWriter.CONTENT_TYPE,
             )
-            feed.add_link(**annotations_link)
 
         if self.lane and self.lane.uses_customlists:
             name = None
@@ -1149,84 +1147,82 @@ class LibraryAnnotator(CirculationManagerAnnotator):
                     library_short_name=self.library.short_name,
                     _external=True,
                 )
-                crawlable_link = dict(
+                feed.add_link(
+                    href=crawlable_url,
                     rel="http://opds-spec.org/crawlable",
                     type=OPDSFeed.ACQUISITION_FEED_TYPE,
-                    href=crawlable_url,
                 )
-                feed.add_link(**crawlable_link)
 
         self.add_configuration_links(feed)
 
     def add_configuration_links(self, feed: FeedData) -> None:
         _db = Session.object_session(self.library)
 
-        def _add_link(l: dict[str, str]) -> None:
-            feed.add_link(**l)
+        def _add_link(
+            href: str,
+            rel: str,
+            link_type: str | None = None,
+            title: str | None = None,
+            role: str | None = None,
+        ) -> None:
+            kwargs: LinkKwargs = {"rel": rel}
+            if link_type is not None:
+                kwargs["type"] = link_type
+            if title is not None:
+                kwargs["title"] = title
+            if role is not None:
+                kwargs["role"] = role
+            feed.add_link(href, **kwargs)
 
         library = self.library
         if library.settings.terms_of_service:
             _add_link(
-                dict(
-                    rel="terms-of-service",
-                    href=library.settings.terms_of_service,
-                    type="text/html",
-                )
+                library.settings.terms_of_service,
+                rel="terms-of-service",
+                link_type="text/html",
             )
 
         if library.settings.privacy_policy:
             _add_link(
-                dict(
-                    rel="privacy-policy",
-                    href=library.settings.privacy_policy,
-                    type="text/html",
-                )
+                library.settings.privacy_policy,
+                rel="privacy-policy",
+                link_type="text/html",
             )
 
         if library.settings.copyright:
             _add_link(
-                dict(
-                    rel="copyright",
-                    href=library.settings.copyright,
-                    type="text/html",
-                )
+                library.settings.copyright,
+                rel="copyright",
+                link_type="text/html",
             )
 
         if library.settings.about:
             _add_link(
-                dict(
-                    rel="about",
-                    href=library.settings.about,
-                    type="text/html",
-                )
+                library.settings.about,
+                rel="about",
+                link_type="text/html",
             )
 
         if library.settings.license:
             _add_link(
-                dict(
-                    rel="license",
-                    href=library.settings.license,
-                    type="text/html",
-                )
+                library.settings.license,
+                rel="license",
+                link_type="text/html",
             )
 
         navigation_urls = self.library.settings.web_header_links
         navigation_labels = self.library.settings.web_header_labels
         for url, label in zip(navigation_urls, navigation_labels):
-            d = dict(
-                href=url,
-                title=label,
-                type="text/html",
+            _add_link(
+                url,
                 rel="related",
+                link_type="text/html",
+                title=label,
                 role="navigation",
             )
-            _add_link(d)
 
         for type, value in Configuration.help_uris(self.library):
-            d = dict(href=value, rel="help")
-            if type:
-                d["type"] = type
-            _add_link(d)
+            _add_link(value, rel="help", link_type=type)
 
     def acquisition_links(  # type: ignore [override]
         self,
@@ -1533,12 +1529,13 @@ class LibraryAnnotator(CirculationManagerAnnotator):
                     exc_info=e,
                 )
                 return None
+
             if authdata:
                 vendor_id, token = authdata.short_client_token_for_patron(
                     patron_identifier
                 )
                 cached = DRMLicensor(
-                    vendor=vendor_id, clientToken=TextValue(text=token)
+                    vendor=vendor_id, client_token=TextValue(text=token)
                 )
 
             self._adobe_id_cache[cache_key] = cached
@@ -1567,7 +1564,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
             return None
         feed.metadata.patron = PatronData(
             username=self.patron.username,
-            authorizationIdentifier=self.patron.authorization_identifier,
+            authorization_identifier=self.patron.authorization_identifier,
         )
 
     def add_authentication_document_link(self, feed_obj: FeedData) -> None:
