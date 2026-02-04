@@ -15,8 +15,8 @@ from palace.manager.feed.types import (
     FeedMetadata,
     IndirectAcquisition,
     Link,
+    RichText,
     Series,
-    TextValue,
     WorkEntry,
     WorkEntryData,
 )
@@ -69,16 +69,16 @@ class TestOPDS2Serializer:
     def test_serialize_work_entry(self):
         data = WorkEntryData(
             additional_type="type",
-            title=TextValue(text="The Title"),
-            sort_title=TextValue(text="Title, The"),
-            subtitle=TextValue(text="Sub Title"),
+            title="The Title",
+            sort_title="Title, The",
+            subtitle="Sub Title",
             identifier="urn:id",
-            language=TextValue(text="de"),
-            updated=TextValue(text="2022-02-02"),
-            published=TextValue(text="2020-02-02"),
-            summary=TextValue(text="Summary"),
-            publisher=TextValue(text="Publisher"),
-            imprint=TextValue(text="Imprint"),
+            language="de",
+            updated="2022-02-02",
+            published="2020-02-02",
+            summary=RichText(text="Summary"),
+            publisher="Publisher",
+            imprint="Imprint",
             categories=[
                 Category(scheme="scheme", term="label", label="label"),
             ],
@@ -97,17 +97,17 @@ class TestOPDS2Serializer:
         metadata = entry["metadata"]
 
         assert metadata["@type"] == data.additional_type
-        assert metadata["title"] == data.title.text
-        assert metadata["sortAs"] == data.sort_title.text
+        assert metadata["title"] == data.title
+        assert metadata["sortAs"] == data.sort_title
         assert metadata["duration"] == data.duration
-        assert metadata["subtitle"] == data.subtitle.text
+        assert metadata["subtitle"] == data.subtitle
         assert metadata["identifier"] == data.identifier
-        assert metadata["language"] == data.language.text
-        assert metadata["modified"] == data.updated.text
-        assert metadata["published"] == data.published.text
+        assert metadata["language"] == data.language
+        assert metadata["modified"] == data.updated
+        assert metadata["published"] == data.published
         assert metadata["description"] == data.summary.text
-        assert metadata["publisher"] == dict(name=data.publisher.text)
-        assert metadata["imprint"] == dict(name=data.imprint.text)
+        assert metadata["publisher"] == dict(name=data.publisher)
+        assert metadata["imprint"] == dict(name=data.imprint)
         assert metadata["subject"] == [
             dict(scheme="scheme", name="label", sortAs="label")
         ]
@@ -152,9 +152,7 @@ class TestOPDS2Serializer:
         assert metadata["narrator"] == dict(name="narrator2")
 
     def test__serialize_acquisition_link(self):
-        drm_licensor = DRMLicensor(
-            vendor="vendor_name", client_token=TextValue(text="token_value")
-        )
+        drm_licensor = DRMLicensor(vendor="vendor_name", client_token="token_value")
 
         serializer = OPDS2Serializer()
         acquisition = Acquisition(
@@ -164,7 +162,7 @@ class TestOPDS2Serializer:
             availability_status="available",
             availability_since="2022-02-02",
             availability_until="2222-02-02",
-            lcp_hashed_passphrase=TextValue(text="LCPPassphrase"),
+            lcp_hashed_passphrase="LCPPassphrase",
             indirect_acquisitions=[
                 IndirectAcquisition(
                     type="indirect1",

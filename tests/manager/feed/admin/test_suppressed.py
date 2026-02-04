@@ -266,8 +266,8 @@ class TestAdminSuppressedFeed:
 
         first_page = make_page(pagination_page_1)._feed
         assert 1 == len(first_page.entries)
-        assert first_page.entries[0].computed.title.text in titles
-        titles.remove(first_page.entries[0].computed.title.text)
+        assert first_page.entries[0].computed.title in titles
+        titles.remove(first_page.entries[0].computed.title)
         [remaining_title] = titles
 
         # Make sure the links are in place.
@@ -301,7 +301,7 @@ class TestAdminSuppressedFeed:
         )
         assert library_in(previous2.href)
         assert 1 == len(second_page.entries)
-        assert remaining_title == second_page.entries[0].computed.title.text
+        assert remaining_title == second_page.entries[0].computed.title
 
         # A normal crawl should not get here; but, for testing purposes,
         # we force a third page, which should be empty.

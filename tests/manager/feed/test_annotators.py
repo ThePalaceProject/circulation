@@ -12,7 +12,7 @@ from palace.manager.feed.acquisition import OPDSAcquisitionFeed
 from palace.manager.feed.annotator.base import Annotator
 from palace.manager.feed.annotator.circulation import CirculationManagerAnnotator
 from palace.manager.feed.annotator.verbose import VerboseAnnotator
-from palace.manager.feed.types import Link, TextValue, WorkEntry
+from palace.manager.feed.types import Link, WorkEntry
 from palace.manager.feed.util import strftime
 from palace.manager.feed.worklist.base import WorkList
 from palace.manager.integration.license.opds.for_distributors.api import (
@@ -308,7 +308,7 @@ class TestAnnotators:
         computed = feed.entries[0].computed
         assert computed is not None
         assert computed.subtitle is not None
-        assert computed.subtitle.text == "Return of the Jedi"
+        assert computed.subtitle == "Return of the Jedi"
 
         # If there's no subtitle, the subtitle tag isn't included.
         work.presentation_edition.subtitle = None
@@ -479,10 +479,10 @@ class TestAnnotator:
         )
 
         # Other values
-        assert data.imprint == TextValue(text="imprint")
+        assert data.imprint == "imprint"
         assert data.summary and data.summary.text == "Summary"
-        assert data.summary and data.summary.type == "html"
-        assert data.publisher == TextValue(text="publisher")
+        assert data.summary and data.summary.content_type == "html"
+        assert data.publisher == "publisher"
         assert data.issued == edition.issued
         assert data.duration == edition.duration
         assert data.distribution is not None
@@ -490,7 +490,7 @@ class TestAnnotator:
 
         # Missing values
         assert data.language is None
-        assert data.updated == TextValue(text=strftime(now))
+        assert data.updated == strftime(now)
 
         # other links
         other_links = data.other_links

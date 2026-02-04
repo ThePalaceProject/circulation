@@ -21,7 +21,6 @@ from palace.manager.feed.types import (
     PatronData,
     Rating,
     Series,
-    TextValue,
     WorkEntryData,
 )
 from palace.manager.util.datetime_helpers import utc_now
@@ -163,13 +162,13 @@ class BaseOPDS1Serializer(SerializerInterface[etree._Element], OPDSFeed, abc.ABC
             )
 
         if feed_entry.title:
-            entry.append(OPDSFeed.E("title", feed_entry.title.text))
+            entry.append(OPDSFeed.E("title", feed_entry.title))
 
-        if feed_entry.subtitle and feed_entry.subtitle.text:
+        if feed_entry.subtitle:
             entry.append(
                 OPDSFeed.E(
                     f"{{{OPDSFeed.SCHEMA_NS}}}alternativeHeadline",
-                    feed_entry.subtitle.text,
+                    feed_entry.subtitle,
                 )
             )
         if feed_entry.duration is not None:
@@ -187,21 +186,17 @@ class BaseOPDS1Serializer(SerializerInterface[etree._Element], OPDSFeed, abc.ABC
 
         if feed_entry.language:
             entry.append(
-                OPDSFeed.E(
-                    f"{{{OPDSFeed.DCTERMS_NS}}}language", feed_entry.language.text
-                )
+                OPDSFeed.E(f"{{{OPDSFeed.DCTERMS_NS}}}language", feed_entry.language)
             )
         if feed_entry.publisher:
             entry.append(
-                OPDSFeed.E(
-                    f"{{{OPDSFeed.DCTERMS_NS}}}publisher", feed_entry.publisher.text
-                )
+                OPDSFeed.E(f"{{{OPDSFeed.DCTERMS_NS}}}publisher", feed_entry.publisher)
             )
         if feed_entry.imprint:
             entry.append(
                 OPDSFeed.E(
                     f"{{{OPDSFeed.BIB_SCHEMA_NS}}}publisherImprint",
-                    feed_entry.imprint.text,
+                    feed_entry.imprint,
                 )
             )
         if feed_entry.issued:
@@ -251,9 +246,9 @@ class BaseOPDS1Serializer(SerializerInterface[etree._Element], OPDSFeed, abc.ABC
                 )
             )
         if feed_entry.published:
-            entry.append(OPDSFeed.E("published", feed_entry.published.text))
+            entry.append(OPDSFeed.E("published", feed_entry.published))
         if feed_entry.updated:
-            entry.append(OPDSFeed.E("updated", feed_entry.updated.text))
+            entry.append(OPDSFeed.E("updated", feed_entry.updated))
 
         if feed_entry.series:
             entry.append(self._serialize_series_entry(feed_entry.series))
@@ -394,12 +389,12 @@ class BaseOPDS1Serializer(SerializerInterface[etree._Element], OPDSFeed, abc.ABC
             entry.set(self._attr_name("vendor", mapping=attr_mapping), licensor.vendor)
         if licensor.scheme:
             entry.set(self._attr_name("scheme", mapping=attr_mapping), licensor.scheme)
-        if licensor.client_token and licensor.client_token.text:
-            entry.append(self._tag("clientToken", licensor.client_token.text))
+        if licensor.client_token:
+            entry.append(self._tag("clientToken", licensor.client_token))
         return entry
 
-    def _serialize_hashed_passphrase(self, passphrase: TextValue) -> etree._Element:
-        return self._tag("hashed_passphrase", passphrase.text or "")
+    def _serialize_hashed_passphrase(self, passphrase: str) -> etree._Element:
+        return self._tag("hashed_passphrase", passphrase)
 
     def _serialize_rating(self, rating: Rating) -> etree._Element:
         entry = self._tag("Rating")
@@ -451,9 +446,7 @@ class BaseOPDS1Serializer(SerializerInterface[etree._Element], OPDSFeed, abc.ABC
             element.append(copies_tag)
 
         if link.lcp_hashed_passphrase:
-            element.append(
-                self._tag("hashed_passphrase", link.lcp_hashed_passphrase.text)
-            )
+            element.append(self._tag("hashed_passphrase", link.lcp_hashed_passphrase))
 
         if link.drm_licensor:
             element.append(self._serialize_drm_licensor(link.drm_licensor))

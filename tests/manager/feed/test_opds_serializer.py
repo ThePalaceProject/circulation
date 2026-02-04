@@ -18,8 +18,8 @@ from palace.manager.feed.types import (
     IndirectAcquisition,
     Link,
     Rating,
+    RichText,
     Series,
-    TextValue,
     WorkEntryData,
 )
 from palace.manager.util.opds_writer import OPDSFeed, OPDSMessage
@@ -112,10 +112,8 @@ class TestOPDSSerializer:
             copies_total="1",
             availability_status="available",
             indirect_acquisitions=[IndirectAcquisition(type="indirect")],
-            lcp_hashed_passphrase=TextValue(text="passphrase"),
-            drm_licensor=DRMLicensor(
-                vendor="vendor", client_token=TextValue(text="token")
-            ),
+            lcp_hashed_passphrase="passphrase",
+            drm_licensor=DRMLicensor(vendor="vendor", client_token="token"),
         )
         element = OPDS1Version1Serializer()._serialize_acquisition_link(link)
         assert element.tag == "link"
@@ -159,19 +157,19 @@ class TestOPDSSerializer:
             additional_type="type",
             identifier="identifier",
             pwid="permanent-work-id",
-            summary=TextValue(text="summary"),
-            language=TextValue(text="language"),
-            publisher=TextValue(text="publisher"),
+            summary=RichText(text="summary"),
+            language="language",
+            publisher="publisher",
             issued=datetime.datetime(2020, 2, 2, tzinfo=pytz.UTC),
-            published=TextValue(text="published"),
-            updated=TextValue(text="updated"),
-            title=TextValue(text="title"),
-            subtitle=TextValue(text="subtitle"),
+            published="published",
+            updated="updated",
+            title="title",
+            subtitle="subtitle",
             series=Series(
                 name="series",
                 link=Link(href="http://series", title="series title", rel="series"),
             ),
-            imprint=TextValue(text="imprint"),
+            imprint="imprint",
             authors=[Author(name="author")],
             contributors=[Author(name="contributor")],
             categories=[Category(scheme="scheme", term="term", label="label")],
@@ -200,11 +198,11 @@ class TestOPDSSerializer:
 
         child = element.findall(f"{{{OPDSFeed.DCTERMS_NS}}}language")
         assert len(child) == 1
-        assert child[0].text == data.language.text
+        assert child[0].text == data.language
 
         child = element.findall(f"{{{OPDSFeed.DCTERMS_NS}}}publisher")
         assert len(child) == 1
-        assert child[0].text == data.publisher.text
+        assert child[0].text == data.publisher
 
         child = element.findall(f"{{{OPDSFeed.DCTERMS_NS}}}issued")
         assert len(child) == 1
@@ -212,19 +210,19 @@ class TestOPDSSerializer:
 
         child = element.findall(f"published")
         assert len(child) == 1
-        assert child[0].text == data.published.text
+        assert child[0].text == data.published
 
         child = element.findall(f"updated")
         assert len(child) == 1
-        assert child[0].text == data.updated.text
+        assert child[0].text == data.updated
 
         child = element.findall(f"title")
         assert len(child) == 1
-        assert child[0].text == data.title.text
+        assert child[0].text == data.title
 
         child = element.findall(f"{{{OPDSFeed.SCHEMA_NS}}}alternativeHeadline")
         assert len(child) == 1
-        assert child[0].text == data.subtitle.text
+        assert child[0].text == data.subtitle
 
         child = element.findall(f"{{{OPDSFeed.SCHEMA_NS}}}series")
         assert len(child) == 1
@@ -236,7 +234,7 @@ class TestOPDSSerializer:
 
         child = element.findall(f"{{{OPDSFeed.BIB_SCHEMA_NS}}}publisherImprint")
         assert len(child) == 1
-        assert child[0].text == data.imprint.text
+        assert child[0].text == data.imprint
 
         child = element.findall(f"author")
         assert len(child) == 1
@@ -434,7 +432,7 @@ class TestOPDSSerializer:
 
     def test_serialize_work_entry_with_subtitle_equals_none(self):
         data = WorkEntryData(
-            subtitle=TextValue(text=None),
+            subtitle=None,
         )
 
         element = OPDS1Version1Serializer().serialize_work_entry(data)
@@ -442,7 +440,7 @@ class TestOPDSSerializer:
         assert len(child) == 0
 
         data = WorkEntryData(
-            subtitle=TextValue(text="test"),
+            subtitle="test",
         )
 
         element = OPDS1Version1Serializer().serialize_work_entry(data)

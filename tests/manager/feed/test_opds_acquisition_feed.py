@@ -485,8 +485,8 @@ class TestOPDSAcquisitionFeed:
         assert entry.computed is not None
         assert entry.computed.title is not None
 
-        assert new_pool.presentation_edition.title != entry.computed.title.text
-        assert original_pool.presentation_edition.title == entry.computed.title.text
+        assert new_pool.presentation_edition.title != entry.computed.title
+        assert original_pool.presentation_edition.title == entry.computed.title
 
         # If the edition was issued before 1980, no datetime formatting error
         # is raised.
@@ -1216,16 +1216,16 @@ class TestLookupAcquisitionFeed:
         # depending on which identifier we look up.
         ignore, e1 = self._entry(db.session, original_pool.identifier, work)
         assert original_pool.identifier.urn == e1.computed.identifier
-        assert original_pool.presentation_edition.title == e1.computed.title.text
+        assert original_pool.presentation_edition.title == e1.computed.title
         assert new_pool.identifier.urn != e1.computed.identifier
-        assert new_pool.presentation_edition.title != e1.computed.title.text
+        assert new_pool.presentation_edition.title != e1.computed.title
 
         # Different identifier and pool = different information
         i = new_pool.identifier
         ignore, e2 = self._entry(db.session, i, work)
         assert new_pool.identifier.urn == e2.computed.identifier
-        assert new_pool.presentation_edition.title == e2.computed.title.text
-        assert original_pool.presentation_edition.title != e2.computed.title.text
+        assert new_pool.presentation_edition.title == e2.computed.title
+        assert original_pool.presentation_edition.title != e2.computed.title
         assert original_pool.identifier.urn != e2.computed.identifier
 
     def test_error_on_mismatched_identifier(self, db: DatabaseTransactionFixture):

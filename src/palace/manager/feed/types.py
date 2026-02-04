@@ -38,11 +38,11 @@ class LinkKwargs(TypedDict):
 
 
 @dataclass
-class TextValue:
-    """Text content with an optional type hint (e.g., HTML vs plain)."""
+class RichText:
+    """Text content with an optional content type (e.g., HTML)."""
 
     text: str | None = None
-    type: str | None = None
+    content_type: str | None = None
 
 
 @dataclass
@@ -126,7 +126,7 @@ class DRMLicensor:
     """DRM licensor metadata for OPDS DRM extensions."""
 
     vendor: str | None = None
-    client_token: TextValue | None = None
+    client_token: str | None = None
     scheme: str | None = None
 
 
@@ -154,7 +154,7 @@ class Acquisition(Link):
 
     rights: str | None = None
 
-    lcp_hashed_passphrase: TextValue | None = None
+    lcp_hashed_passphrase: str | None = None
     drm_licensor: DRMLicensor | None = None
 
     indirect_acquisitions: list[IndirectAcquisition] = field(default_factory=list)
@@ -191,16 +191,16 @@ class WorkEntryData:
     issued: datetime | date | None = None
     duration: float | None = None
 
-    summary: TextValue | None = None
-    language: TextValue | None = None
-    publisher: TextValue | None = None
-    published: TextValue | None = None
-    updated: TextValue | None = None
-    title: TextValue | None = None
-    sort_title: TextValue | None = None
-    subtitle: TextValue | None = None
+    summary: RichText | None = None
+    language: str | None = None
+    publisher: str | None = None
+    published: str | None = None
+    updated: str | None = None
+    title: str | None = None
+    sort_title: str | None = None
+    subtitle: str | None = None
     series: Series | None = None
-    imprint: TextValue | None = None
+    imprint: str | None = None
 
     authors: list[Author] = field(default_factory=list)
     contributors: list[Author] = field(default_factory=list)
@@ -257,7 +257,7 @@ class FeedMetadata:
     items_per_page: int | None = None
     patron: PatronData | None = None
     drm_licensor: DRMLicensor | None = None
-    lcp_hashed_passphrase: TextValue | None = None
+    lcp_hashed_passphrase: str | None = None
 
 
 class DataEntryTypes:

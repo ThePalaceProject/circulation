@@ -87,29 +87,29 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]]):
             metadata["@type"] = data.additional_type
 
         if data.title:
-            metadata["title"] = data.title.text
+            metadata["title"] = data.title
         if data.sort_title:
-            metadata["sortAs"] = data.sort_title.text
+            metadata["sortAs"] = data.sort_title
         if data.duration is not None:
             metadata["duration"] = data.duration
 
         if data.subtitle:
-            metadata["subtitle"] = data.subtitle.text
+            metadata["subtitle"] = data.subtitle
         if data.identifier:
             metadata["identifier"] = data.identifier
         if data.language:
-            metadata["language"] = data.language.text
+            metadata["language"] = data.language
         if data.updated:
-            metadata["modified"] = data.updated.text
+            metadata["modified"] = data.updated
         if data.published:
-            metadata["published"] = data.published.text
+            metadata["published"] = data.published
         if data.summary:
             metadata["description"] = data.summary.text
 
         if data.publisher:
-            metadata["publisher"] = dict(name=data.publisher.text)
+            metadata["publisher"] = dict(name=data.publisher)
         if data.imprint:
-            metadata["imprint"] = dict(name=data.imprint.text)
+            metadata["imprint"] = dict(name=data.imprint)
 
         subjects = []
         if data.categories:
@@ -196,13 +196,11 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]]):
             props["indirectAcquisition"].append(_indirect(indirect))
 
         if link.lcp_hashed_passphrase:
-            props["lcp_hashed_passphrase"] = link.lcp_hashed_passphrase.text
+            props["lcp_hashed_passphrase"] = link.lcp_hashed_passphrase
 
         if link.drm_licensor:
             props["licensor"] = {
-                "clientToken": getattr(
-                    getattr(link.drm_licensor, "client_token"), "text"
-                ),
+                "clientToken": getattr(link.drm_licensor, "client_token"),
                 "vendor": getattr(link.drm_licensor, "vendor"),
             }
 

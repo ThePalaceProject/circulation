@@ -354,9 +354,9 @@ class TestLibraryAnnotator:
 
         token = getattr(element, "client_token", None)
         assert token is not None
-        # token.text is a token which we can decode, since we know
+        # token is a token which we can decode, since we know
         # the secret.
-        token_text = token.text
+        token_text = token
         authdata = AuthdataUtility.from_config(library)
         assert authdata is not None
         decoded = authdata.decode_short_client_token(token_text)
@@ -413,7 +413,7 @@ class TestLibraryAnnotator:
         )
         assert link is not None
         assert link.lcp_hashed_passphrase is not None
-        assert link.lcp_hashed_passphrase.text == hashed_password.hashed
+        assert link.lcp_hashed_passphrase == hashed_password.hashed
 
     def test_default_lane_url(self, annotator_fixture: LibraryAnnotatorFixture):
         default_lane_url = annotator_fixture.annotator.default_lane_url()

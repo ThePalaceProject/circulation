@@ -18,8 +18,8 @@ from palace.manager.feed.types import (
     FeedData,
     Link,
     Rating,
+    RichText,
     Series,
-    TextValue,
     WorkEntry,
     WorkEntryData,
 )
@@ -306,12 +306,12 @@ class Annotator(ToFeedEntry):
                 logging.warning("No additionalType for medium %s", edition.medium)
             computed.additional_type = additional_type
 
-        computed.title = TextValue(text=(edition.title or OPDSFeed.NO_TITLE))
+        computed.title = edition.title or OPDSFeed.NO_TITLE
 
         if edition.subtitle:
-            computed.subtitle = TextValue(text=edition.subtitle)
+            computed.subtitle = edition.subtitle
         if edition.sort_title:
-            computed.sort_title = TextValue(text=edition.sort_title)
+            computed.sort_title = edition.sort_title
 
         author_entries = self.authors(edition)
         computed.contributors = author_entries.get("contributors", [])
@@ -325,7 +325,7 @@ class Annotator(ToFeedEntry):
 
         content = self.content(work)
         if content:
-            computed.summary = TextValue(text=content, type="html")
+            computed.summary = RichText(text=content, content_type="html")
 
         computed.pwid = edition.permanent_work_id
 
@@ -349,13 +349,13 @@ class Annotator(ToFeedEntry):
         computed.categories = category_tags
 
         if edition.language_code:
-            computed.language = TextValue(text=edition.language_code)
+            computed.language = edition.language_code
 
         if edition.publisher:
-            computed.publisher = TextValue(text=edition.publisher)
+            computed.publisher = edition.publisher
 
         if edition.imprint:
-            computed.imprint = TextValue(text=edition.imprint)
+            computed.imprint = edition.imprint
 
         if edition.issued or edition.published:
             computed.issued = edition.issued or edition.published
@@ -382,12 +382,12 @@ class Annotator(ToFeedEntry):
                 else:
                     avail_date = avail  # type: ignore[unreachable]
                 if avail_date <= today:  # Avoid obviously wrong values.
-                    computed.published = TextValue(text=strftime(avail_date))
+                    computed.published = strftime(avail_date)
 
         if not updated and entry.work.last_update_time:
             updated = entry.work.last_update_time
         if updated:
-            computed.updated = TextValue(text=strftime(updated))
+            computed.updated = strftime(updated)
 
         computed.image_links = image_links
         computed.other_links = other_links

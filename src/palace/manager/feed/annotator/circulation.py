@@ -40,7 +40,6 @@ from palace.manager.feed.types import (
     Link,
     LinkKwargs,
     PatronData,
-    TextValue,
     WorkEntry,
 )
 from palace.manager.feed.util import strftime
@@ -84,7 +83,7 @@ class LicenseInfo:
 @dataclass(frozen=True)
 class DrmInfo:
     drm_licensor: DRMLicensor | None = None
-    lcp_hashed_passphrase: TextValue | None = None
+    lcp_hashed_passphrase: str | None = None
 
 
 class AcquisitionHelper:
@@ -1534,14 +1533,12 @@ class LibraryAnnotator(CirculationManagerAnnotator):
                 vendor_id, token = authdata.short_client_token_for_patron(
                     patron_identifier
                 )
-                cached = DRMLicensor(
-                    vendor=vendor_id, client_token=TextValue(text=token)
-                )
+                cached = DRMLicensor(vendor=vendor_id, client_token=token)
 
             self._adobe_id_cache[cache_key] = cached
         return copy.deepcopy(cached)
 
-    def lcp_key_retrieval_tags(self, active_loan: Loan) -> TextValue | None:
+    def lcp_key_retrieval_tags(self, active_loan: Loan) -> str | None:
         # In the case of LCP we have to include a patron's hashed passphrase
         # inside the acquisition link so client applications can use it to open the LCP license
         # without having to ask the user to enter their password
@@ -1554,7 +1551,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
             hashed_passphrase: LCPHashedPassphrase = (
                 lcp_credential_factory.get_hashed_passphrase(db, active_loan.patron)
             )
-            return TextValue(text=hashed_passphrase.hashed)
+            return hashed_passphrase.hashed
         except LCPError:
             # The patron's passphrase wasn't generated yet and not present in the database.
             return None
