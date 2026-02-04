@@ -26,7 +26,7 @@ from palace.manager.api.config import Configuration
 from palace.manager.core.classifier import Classifier
 from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.core.entrypoint import EverythingEntryPoint
-from palace.manager.core.exceptions import BasePalaceException
+from palace.manager.core.exceptions import BasePalaceException, PalaceValueError
 from palace.manager.core.lcp.credential import LCPCredentialFactory, LCPHashedPassphrase
 from palace.manager.core.lcp.exceptions import LCPError
 from palace.manager.feed.annotator.base import Annotator
@@ -605,6 +605,8 @@ class CirculationManagerAnnotator(Annotator):
             if rep.media_type:
                 kw["type"] = rep.media_type
             href = rep.public_url
+        if href is None:
+            raise PalaceValueError("Open access links require a non-null href")
         kw["href"] = href
         link = Acquisition(**kw)
         link.rights = self.rights_attribute(lpdm)

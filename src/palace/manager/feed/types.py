@@ -9,7 +9,6 @@ from typing import NotRequired, TypedDict, Unpack, cast
 
 from pydantic import ConfigDict
 
-from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import LicensePool
@@ -50,7 +49,7 @@ class RichText:
 class Link:
     """A link with optional facets and display metadata."""
 
-    href: str | None = None
+    href: str
     rel: str | None = None
     type: str | None = None
 
@@ -66,12 +65,7 @@ class Link:
     active_sort: bool = False
 
     def link_attribs(self) -> LinkAttributes:
-        """Return the basic link attributes required for OPDS1.
-
-        :raises PalaceValueError: If ``href`` is not set.
-        """
-        if self.href is None:
-            raise PalaceValueError("Link.href cannot be None for link attributes")
+        """Return the basic link attributes required for OPDS1."""
         attrs: LinkAttributes = {"href": self.href}
         if self.rel is not None:
             attrs["rel"] = self.rel

@@ -290,6 +290,8 @@ class Annotator(ToFeedEntry):
         for sample in samples:
             representation = sample.resource.representation
             media_type = representation.media_type if representation else None
+            if not sample.resource.url:
+                continue
             other_links.append(
                 Link(
                     rel=Hyperlink.CLIENT_SAMPLE,
