@@ -150,16 +150,6 @@ class TestOPDSFeed:
             url, fixture.controller.search, "<lane_identifier>"
         )
 
-    def test_qa_feed(self, fixture: RouteTestFixture):
-        url = "/feed/qa"
-        fixture.assert_authenticated_request_calls(url, fixture.controller.qa_feed)
-
-    def test_qa_series_feed(self, fixture: RouteTestFixture):
-        url = "/feed/qa/series"
-        fixture.assert_authenticated_request_calls(
-            url, fixture.controller.qa_series_feed
-        )
-
 
 class TestMARCRecord:
     CONTROLLER_NAME = "marc_records"
