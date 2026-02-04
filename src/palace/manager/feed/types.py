@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from enum import StrEnum
-from typing import NotRequired, TypedDict, Unpack, cast
+from typing import Literal, NotRequired, TypedDict, Unpack
 
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
@@ -40,7 +40,7 @@ class RichText:
     """Text content with an optional content type (e.g., HTML)."""
 
     text: str | None = None
-    content_type: str | None = None
+    content_type: Literal["html"] | None = None
 
 
 @dataclass(slots=True)
@@ -218,26 +218,6 @@ class WorkEntry:
 
     # Actual, computed feed data
     computed: WorkEntryData | None = None
-
-    def __init__(
-        self,
-        work: Work | None = None,
-        edition: Edition | None = None,
-        identifier: Identifier | None = None,
-        license_pool: LicensePool | None = None,
-    ) -> None:
-        """Initialize a WorkEntry with core models.
-
-        :raises ValueError: If required work data is missing.
-        """
-        if None in (work, edition, identifier):
-            raise ValueError(
-                "Work, Edition or Identifier cannot be None while initializing an entry"
-            )
-        self.work = cast(Work, work)
-        self.edition = cast(Edition, edition)
-        self.identifier = cast(Identifier, identifier)
-        self.license_pool = license_pool
 
 
 @dataclass(slots=True)

@@ -221,7 +221,7 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
         cls,
         work: Work,
         active_licensepool: LicensePool | None,
-        edition: Edition | None,
+        edition: Edition,
         identifier: Identifier,
         annotator: Annotator,
     ) -> WorkEntry:
@@ -953,16 +953,18 @@ class LookupAcquisitionFeed(OPDSAcquisitionFeed):
             if active_licensepool
             else _work.presentation_edition
         )
-        try:
-            return cls._create_entry(
-                _work, active_licensepool, edition, identifier, annotator
-            )
-        except UnfulfillableWork:
-            cls.logger().info(
-                "Work %r is not fulfillable, refusing to create an <entry>.", _work
-            )
-            return cls.error_message(
-                identifier,
-                403,
-                "I know about this work but can offer no way of fulfilling it.",
-            )
+        if edition is not None:
+            try:
+                return cls._create_entry(
+                    _work, active_licensepool, edition, identifier, annotator
+                )
+            except UnfulfillableWork:
+                pass
+        cls.logger().info(
+            "Work %r is not fulfillable, refusing to create an <entry>.", _work
+        )
+        return cls.error_message(
+            identifier,
+            403,
+            "I know about this work but can offer no way of fulfilling it.",
+        )

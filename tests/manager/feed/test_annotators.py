@@ -356,9 +356,7 @@ class TestAnnotators:
         assert computed is not None
         assert computed.series is not None
         assert computed.series.name == work.presentation_edition.series
-        assert computed.series.position == str(
-            work.presentation_edition.series_position
-        )
+        assert computed.series.position == work.presentation_edition.series_position
 
         # If there's no series title, the series tag isn't included.
         work.presentation_edition.series = None
