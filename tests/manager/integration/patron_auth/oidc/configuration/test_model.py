@@ -59,58 +59,62 @@ class TestOIDCAuthSettings:
 
         assert str(settings.userinfo_endpoint) == "https://example.com/userinfo"
 
-    def test_missing_client_id_raises_error(self):
-        """Test that missing client_id raises validation error."""
+    @pytest.mark.parametrize(
+        "settings_kwargs,expected_error_substring",
+        [
+            pytest.param(
+                {
+                    "issuer_url": "https://example.com",
+                    "client_secret": "test-client-secret",
+                },
+                "Client ID",
+                id="missing-client-id",
+            ),
+            pytest.param(
+                {
+                    "issuer_url": "https://example.com",
+                    "client_id": "test-client-id",
+                },
+                "Client Secret",
+                id="missing-client-secret",
+            ),
+            pytest.param(
+                {
+                    "client_id": "test-client-id",
+                    "client_secret": "test-client-secret",
+                },
+                "Authorization Endpoint",
+                id="missing-auth-endpoint",
+            ),
+            pytest.param(
+                {
+                    "authorization_endpoint": "https://example.com/authorize",
+                    "client_id": "test-client-id",
+                    "client_secret": "test-client-secret",
+                },
+                "Token Endpoint",
+                id="missing-token-endpoint",
+            ),
+            pytest.param(
+                {
+                    "authorization_endpoint": "https://example.com/authorize",
+                    "token_endpoint": "https://example.com/token",
+                    "client_id": "test-client-id",
+                    "client_secret": "test-client-secret",
+                },
+                "JWKS URI",
+                id="missing-jwks-uri",
+            ),
+        ],
+    )
+    def test_missing_required_configuration_raises_error(
+        self, settings_kwargs, expected_error_substring
+    ):
+        """Test that missing required configuration raises validation error."""
         with pytest.raises(ProblemDetailException) as exc_info:
-            OIDCAuthSettings(
-                issuer_url="https://example.com",
-                client_secret="test-client-secret",
-            )
+            OIDCAuthSettings(**settings_kwargs)
         assert exc_info.value.problem_detail.detail is not None
-        assert "Client ID" in exc_info.value.problem_detail.detail
-
-    def test_missing_client_secret_raises_error(self):
-        """Test that missing client_secret raises validation error."""
-        with pytest.raises(ProblemDetailException) as exc_info:
-            OIDCAuthSettings(
-                issuer_url="https://example.com",
-                client_id="test-client-id",
-            )
-        assert exc_info.value.problem_detail.detail is not None
-        assert "Client Secret" in exc_info.value.problem_detail.detail
-
-    def test_missing_issuer_and_authorization_endpoint_raises_error(self):
-        """Test that missing both issuer_url and authorization_endpoint raises error."""
-        with pytest.raises(ProblemDetailException) as exc_info:
-            OIDCAuthSettings(
-                client_id="test-client-id",
-                client_secret="test-client-secret",
-            )
-        assert exc_info.value.problem_detail.detail is not None
-        assert "Authorization Endpoint" in exc_info.value.problem_detail.detail
-
-    def test_missing_issuer_and_token_endpoint_raises_error(self):
-        """Test that missing both issuer_url and token_endpoint raises error."""
-        with pytest.raises(ProblemDetailException) as exc_info:
-            OIDCAuthSettings(
-                authorization_endpoint="https://example.com/authorize",
-                client_id="test-client-id",
-                client_secret="test-client-secret",
-            )
-        assert exc_info.value.problem_detail.detail is not None
-        assert "Token Endpoint" in exc_info.value.problem_detail.detail
-
-    def test_missing_issuer_and_jwks_uri_raises_error(self):
-        """Test that missing both issuer_url and jwks_uri raises error."""
-        with pytest.raises(ProblemDetailException) as exc_info:
-            OIDCAuthSettings(
-                authorization_endpoint="https://example.com/authorize",
-                token_endpoint="https://example.com/token",
-                client_id="test-client-id",
-                client_secret="test-client-secret",
-            )
-        assert exc_info.value.problem_detail.detail is not None
-        assert "JWKS URI" in exc_info.value.problem_detail.detail
+        assert expected_error_substring in exc_info.value.problem_detail.detail
 
     def test_scopes_validation_requires_openid(self):
         """Test that scopes must include 'openid'."""
