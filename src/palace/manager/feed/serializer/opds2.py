@@ -83,51 +83,49 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]]):
 
     def serialize_work_entry(self, data: WorkEntryData) -> dict[str, Any]:
         metadata: dict[str, Any] = {}
-        if data.additionalType:
-            metadata["@type"] = data.additionalType
+        if data.additional_type:
+            metadata["@type"] = data.additional_type
 
         if data.title:
-            metadata["title"] = data.title.text
+            metadata["title"] = data.title
         if data.sort_title:
-            metadata["sortAs"] = data.sort_title.text
+            metadata["sortAs"] = data.sort_title
         if data.duration is not None:
             metadata["duration"] = data.duration
 
         if data.subtitle:
-            metadata["subtitle"] = data.subtitle.text
+            metadata["subtitle"] = data.subtitle
         if data.identifier:
             metadata["identifier"] = data.identifier
         if data.language:
-            metadata["language"] = data.language.text
+            metadata["language"] = data.language
         if data.updated:
-            metadata["modified"] = data.updated.text
+            metadata["modified"] = data.updated
         if data.published:
-            metadata["published"] = data.published.text
+            metadata["published"] = data.published
         if data.summary:
             metadata["description"] = data.summary.text
 
         if data.publisher:
-            metadata["publisher"] = dict(name=data.publisher.text)
+            metadata["publisher"] = dict(name=data.publisher)
         if data.imprint:
-            metadata["imprint"] = dict(name=data.imprint.text)
+            metadata["imprint"] = dict(name=data.imprint)
 
         subjects = []
         if data.categories:
             for subject in data.categories:
                 subjects.append(
                     {
-                        "scheme": subject.scheme,  # type: ignore[attr-defined]
-                        "name": subject.label,  # type: ignore[attr-defined]
-                        "sortAs": subject.label,  # type: ignore[attr-defined] # Same as above, don't think we have an alternate
+                        "scheme": subject.scheme,
+                        "name": subject.label,
+                        "sortAs": subject.label,  # Same as above, don't think we have an alternate
                     }
                 )
             metadata["subject"] = subjects
 
         if data.series:
-            name = getattr(data.series, "name", None)
-            position = int(getattr(data.series, "position", 1))
-            if name:
-                metadata["belongsTo"] = dict(name=name, position=position)
+            position = data.series.position if data.series.position is not None else 1
+            metadata["belongsTo"] = dict(name=data.series.name, position=position)
 
         if len(data.authors):
             metadata["author"] = self._serialize_contributor(data.authors[0])
@@ -151,10 +149,10 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]]):
         if link.title:
             serialized["title"] = link.title
 
-        if link.get("activeFacet", False):
+        if link.active_facet:
             serialized["rel"] = "self"
 
-        if link.get("defaultFacet", False):
+        if link.default_facet:
             properties: dict[str, Any] = dict()
             properties.update({PALACE_PROPERTIES_DEFAULT: "true"})
             serialized["properties"] = properties
@@ -196,14 +194,12 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]]):
             props["indirectAcquisition"].append(_indirect(indirect))
 
         if link.lcp_hashed_passphrase:
-            props["lcp_hashed_passphrase"] = link.lcp_hashed_passphrase.text
+            props["lcp_hashed_passphrase"] = link.lcp_hashed_passphrase
 
         if link.drm_licensor:
             props["licensor"] = {
-                "clientToken": getattr(
-                    getattr(link.drm_licensor, "clientToken"), "text"
-                ),
-                "vendor": getattr(link.drm_licensor, "vendor"),
+                "clientToken": link.drm_licensor.client_token,
+                "vendor": link.drm_licensor.vendor,
             }
 
         if props:
@@ -243,7 +239,7 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]]):
             # TODO: When we remove the facet-based sort links [PP-1814],
             # this check can be removed.
             if not is_sort_facet(link):
-                group = getattr(link, "facetGroup", None)
+                group = link.facet_group
                 if group:
                     facet_links[group]["links"].append(self._serialize_link(link))
                     facet_links[group]["metadata"]["title"] = group
@@ -274,9 +270,9 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]]):
 
         sort_link["properties"] = properties
 
-        if link.get("activeFacet", False):
+        if link.active_facet:
             properties.update({PALACE_PROPERTIES_ACTIVE_SORT: "true"})
 
-        if link.get("defaultFacet", False):
+        if link.default_facet:
             properties.update({PALACE_PROPERTIES_DEFAULT: "true"})
         return sort_link

@@ -4,7 +4,7 @@ from typing import Any
 from palace.manager.api.circulation.dispatcher import CirculationApiDispatcher
 from palace.manager.feed.annotator.circulation import LibraryAnnotator
 from palace.manager.feed.annotator.verbose import VerboseAnnotator
-from palace.manager.feed.types import FeedData, FeedEntryType, Link, WorkEntry
+from palace.manager.feed.types import Category, FeedData, Link, WorkEntry
 from palace.manager.search.pagination import Pagination
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.library import Library
@@ -74,7 +74,7 @@ class AdminSuppressedAnnotator(LibraryAnnotator):
         # Manual suppression takes precedence over policy filtering
         if is_manually_suppressed:
             entry.computed.categories.append(
-                FeedEntryType.create(
+                Category(
                     scheme=self.VISIBILITY_STATUS_SCHEME,
                     term=self.VISIBILITY_MANUALLY_SUPPRESSED,
                     label="Manually Suppressed",
@@ -82,7 +82,7 @@ class AdminSuppressedAnnotator(LibraryAnnotator):
             )
         elif is_policy_filtered:
             entry.computed.categories.append(
-                FeedEntryType.create(
+                Category(
                     scheme=self.VISIBILITY_STATUS_SCHEME,
                     term=self.VISIBILITY_POLICY_FILTERED,
                     label="Policy Filtered",

@@ -198,14 +198,14 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
         :return: A dictionary of attributes, suitable for passing as
             keyword arguments into OPDSFeed.add_link_to_feed.
         """
-        args = dict(href=href, title=title)
-        args["rel"] = LinkRelations.FACET_REL
-        args["facetGroup"] = facet_group_name
-        if is_active:
-            args["activeFacet"] = "true"
-        if is_default:
-            args["defaultFacet"] = "true"
-        return Link.create(**args)
+        return Link(
+            href=href,
+            title=title,
+            rel=LinkRelations.FACET_REL,
+            facet_group=facet_group_name,
+            active_facet=is_active,
+            default_facet=is_default,
+        )
 
     def as_error_response(self, **kwargs: Any) -> OPDSFeedResponse:
         """Convert this feed into an OPDSFeedResponse that should be treated
@@ -221,7 +221,7 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
         cls,
         work: Work,
         active_licensepool: LicensePool | None,
-        edition: Edition | None,
+        edition: Edition,
         identifier: Identifier,
         annotator: Annotator,
     ) -> WorkEntry:
@@ -298,7 +298,7 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
         #
         # In OPDS 2 this can become an additional rel value,
         # removing the need for a custom attribute.
-        link.add_attributes({"facetGroupType": FacetConstants.ENTRY_POINT_REL})
+        link.facet_group_type = FacetConstants.ENTRY_POINT_REL
         return link
 
     def add_breadcrumb_links(
@@ -953,16 +953,18 @@ class LookupAcquisitionFeed(OPDSAcquisitionFeed):
             if active_licensepool
             else _work.presentation_edition
         )
-        try:
-            return cls._create_entry(
-                _work, active_licensepool, edition, identifier, annotator
-            )
-        except UnfulfillableWork:
-            cls.logger().info(
-                "Work %r is not fulfillable, refusing to create an <entry>.", _work
-            )
-            return cls.error_message(
-                identifier,
-                403,
-                "I know about this work but can offer no way of fulfilling it.",
-            )
+        if edition is not None:
+            try:
+                return cls._create_entry(
+                    _work, active_licensepool, edition, identifier, annotator
+                )
+            except UnfulfillableWork:
+                pass
+        cls.logger().info(
+            "Work %r is not fulfillable, refusing to create an <entry>.", _work
+        )
+        return cls.error_message(
+            identifier,
+            403,
+            "I know about this work but can offer no way of fulfilling it.",
+        )

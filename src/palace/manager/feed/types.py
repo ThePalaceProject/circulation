@@ -1,83 +1,53 @@
 from __future__ import annotations
 
-from collections.abc import Generator
+"""Feed model types used to build OPDS 1/2 payloads."""
+
 from dataclasses import dataclass, field
 from datetime import date, datetime
-from typing import Any, Self, cast
-
-from pydantic import ConfigDict
+from enum import StrEnum
+from typing import Literal, NotRequired, TypedDict, Unpack
 
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import LicensePool
 from palace.manager.sqlalchemy.model.work import Work
 
-NO_SUCH_KEY = object()
+
+class LinkAttributes(TypedDict):
+    """Typed mapping for attributes used in OPDS1 link serialization."""
+
+    href: str
+    rel: NotRequired[str]
+    type: NotRequired[str]
 
 
-@dataclass
-class BaseModel:
-    def _vars(self) -> Generator[tuple[str, Any]]:
-        """Yield attributes as a tuple"""
-        _attrs = vars(self)
-        for name, value in _attrs.items():
-            if name.startswith("_"):
-                continue
-            elif callable(value):
-                continue
-            yield name, value
+class LinkKwargs(TypedDict):
+    """Typed keyword arguments accepted by FeedData.add_link."""
 
-    def asdict(self) -> dict[str, Any]:
-        """Dataclasses do not return undefined attributes via `asdict` so we must implement this ourselves"""
-        attrs = {}
-        for name, value in self:
-            if isinstance(value, BaseModel):
-                attrs[name] = value.asdict()
-            else:
-                attrs[name] = value
-        return attrs
-
-    def __iter__(self) -> Generator[tuple[str, Any]]:
-        """Allow attribute iteration"""
-        yield from self._vars()
-
-    def get(self, name: str, *default: Any) -> Any:
-        """Convenience function. Mimics getattr"""
-        value = getattr(self, name, NO_SUCH_KEY)
-        if value is NO_SUCH_KEY:
-            if len(default) > 0:
-                return default[0]
-            else:
-                raise AttributeError(f"No attribute '{name}' found in object {self}")
-        return value
+    rel: NotRequired[str]
+    type: NotRequired[str]
+    title: NotRequired[str]
+    role: NotRequired[str]
+    facet_group: NotRequired[str]
+    facet_group_type: NotRequired[str]
+    active_facet: NotRequired[bool]
+    default_facet: NotRequired[bool]
+    active_sort: NotRequired[bool]
 
 
-@dataclass
-class FeedEntryType(BaseModel):
+@dataclass(slots=True)
+class RichText:
+    """Text content with an optional content type (e.g., HTML)."""
+
     text: str | None = None
-
-    @classmethod
-    def create(cls, **kwargs: Any) -> Self:
-        """Create a new object with arbitrary data"""
-        obj = cls()
-        obj.add_attributes(kwargs)
-        return obj
-
-    def add_attributes(self, attrs: dict[str, Any]) -> None:
-        for name, data in attrs.items():
-            setattr(self, name, data)
-
-    def children(self) -> Generator[tuple[str, FeedEntryType]]:
-        """Yield all FeedEntryType attributes"""
-        for name, value in self:
-            if isinstance(value, self.__class__):
-                yield name, value
-        return
+    content_type: Literal["html"] | None = None
 
 
-@dataclass
-class Link(FeedEntryType):
-    href: str | None = None
+@dataclass(slots=True)
+class Link:
+    """A link with optional facets and display metadata."""
+
+    href: str
     rel: str | None = None
     type: str | None = None
 
@@ -85,31 +55,86 @@ class Link(FeedEntryType):
     role: str | None = None
     title: str | None = None
 
-    def asdict(self) -> dict[str, Any]:
-        """A dict without None values"""
-        d = super().asdict()
-        santized = {}
-        for k, v in d.items():
-            if v is not None:
-                santized[k] = v
-        return santized
+    # Facet-related attributes
+    facet_group: str | None = None
+    facet_group_type: str | None = None
+    active_facet: bool = False
+    default_facet: bool = False
+    active_sort: bool = False
 
-    def link_attribs(self) -> dict[str, Any]:
-        d = dict(href=self.href)
-        for key in ["rel", "type"]:
-            if (value := getattr(self, key, None)) is not None:
-                d[key] = value
-        return d
+    def link_attribs(self) -> LinkAttributes:
+        """Return the basic link attributes required for OPDS1."""
+        attrs: LinkAttributes = {"href": self.href}
+        if self.rel is not None:
+            attrs["rel"] = self.rel
+        if self.type is not None:
+            attrs["type"] = self.type
+        return attrs
 
 
-@dataclass
-class IndirectAcquisition(BaseModel):
+@dataclass(slots=True)
+class Category:
+    """A subject/category tag with an optional rating weight."""
+
+    scheme: str
+    term: str
+    label: str
+    rating_value: str | None = None
+
+
+@dataclass(slots=True)
+class Rating:
+    """A schema.org rating for a work entry."""
+
+    rating_value: str
+    additional_type: str | None = None
+
+
+@dataclass(slots=True)
+class Series:
+    """Series metadata for a work entry."""
+
+    name: str
+    position: int | None = None
+    link: Link | None = None
+
+
+@dataclass(slots=True)
+class Distribution:
+    """Distribution metadata for a work entry."""
+
+    provider_name: str
+
+
+@dataclass(slots=True)
+class PatronData:
+    """Patron identifier metadata used in feed-level tags."""
+
+    username: str | None = None
+    authorization_identifier: str | None = None
+
+
+@dataclass(slots=True)
+class DRMLicensor:
+    """DRM licensor metadata for OPDS DRM extensions."""
+
+    vendor: str | None = None
+    client_token: str | None = None
+    scheme: str | None = None
+
+
+@dataclass(slots=True)
+class IndirectAcquisition:
+    """Tree structure for indirect acquisitions in OPDS1."""
+
     type: str | None = None
     children: list[IndirectAcquisition] = field(default_factory=list)
 
 
-@dataclass
+@dataclass(slots=True)
 class Acquisition(Link):
+    """Acquisition link with holds/copies/availability details."""
+
     holds_position: str | None = None
     holds_total: str | None = None
 
@@ -122,8 +147,8 @@ class Acquisition(Link):
 
     rights: str | None = None
 
-    lcp_hashed_passphrase: FeedEntryType | None = None
-    drm_licensor: FeedEntryType | None = None
+    lcp_hashed_passphrase: str | None = None
+    drm_licensor: DRMLicensor | None = None
 
     indirect_acquisitions: list[IndirectAcquisition] = field(default_factory=list)
 
@@ -135,8 +160,10 @@ class Acquisition(Link):
     templated: bool = False
 
 
-@dataclass
-class Author(FeedEntryType):
+@dataclass(slots=True)
+class Author:
+    """Author or contributor metadata for a work entry."""
+
     name: str | None = None
     sort_name: str | None = None
     viaf: str | None = None
@@ -147,32 +174,32 @@ class Author(FeedEntryType):
     link: Link | None = None
 
 
-@dataclass
-class WorkEntryData(BaseModel):
-    """All the metadata possible for a work. This is not a FeedEntryType because we want strict control."""
+@dataclass(slots=True)
+class WorkEntryData:
+    """Computed metadata used by OPDS serializers for a single work entry."""
 
-    additionalType: str | None = None
+    additional_type: str | None = None
     identifier: str | None = None
     pwid: str | None = None
     issued: datetime | date | None = None
     duration: float | None = None
 
-    summary: FeedEntryType | None = None
-    language: FeedEntryType | None = None
-    publisher: FeedEntryType | None = None
-    published: FeedEntryType | None = None
-    updated: FeedEntryType | None = None
-    title: FeedEntryType | None = None
-    sort_title: FeedEntryType | None = None
-    subtitle: FeedEntryType | None = None
-    series: FeedEntryType | None = None
-    imprint: FeedEntryType | None = None
+    summary: RichText | None = None
+    language: str | None = None
+    publisher: str | None = None
+    published: str | None = None
+    updated: str | None = None
+    title: str | None = None
+    sort_title: str | None = None
+    subtitle: str | None = None
+    series: Series | None = None
+    imprint: str | None = None
 
     authors: list[Author] = field(default_factory=list)
     contributors: list[Author] = field(default_factory=list)
-    categories: list[FeedEntryType] = field(default_factory=list)
-    ratings: list[FeedEntryType] = field(default_factory=list)
-    distribution: FeedEntryType | None = None
+    categories: list[Category] = field(default_factory=list)
+    ratings: list[Rating] = field(default_factory=list)
+    distribution: Distribution | None = None
 
     # Links
     acquisition_links: list[Acquisition] = field(default_factory=list)
@@ -180,8 +207,10 @@ class WorkEntryData(BaseModel):
     other_links: list[Link] = field(default_factory=list)
 
 
-@dataclass
-class WorkEntry(BaseModel):
+@dataclass(slots=True)
+class WorkEntry:
+    """Wrapper for a Work and its computed feed representation."""
+
     work: Work
     edition: Edition
     identifier: Identifier
@@ -190,50 +219,40 @@ class WorkEntry(BaseModel):
     # Actual, computed feed data
     computed: WorkEntryData | None = None
 
-    def __init__(
-        self,
-        work: Work | None = None,
-        edition: Edition | None = None,
-        identifier: Identifier | None = None,
-        license_pool: LicensePool | None = None,
-    ) -> None:
-        if None in (work, edition, identifier):
-            raise ValueError(
-                "Work, Edition or Identifier cannot be None while initializing an entry"
-            )
-        self.work = cast(Work, work)
-        self.edition = cast(Edition, edition)
-        self.identifier = cast(Identifier, identifier)
-        self.license_pool = license_pool
 
+@dataclass(slots=True)
+class FeedMetadata:
+    """Feed-level metadata used by OPDS serializers."""
 
-@dataclass
-class FeedMetadata(BaseModel):
     title: str | None = None
     id: str | None = None
     updated: str | None = None
     items_per_page: int | None = None
-    patron: FeedEntryType | None = None
-    drm_licensor: FeedEntryType | None = None
-    lcp_hashed_passphrase: FeedEntryType | None = None
+    patron: PatronData | None = None
+    drm_licensor: DRMLicensor | None = None
+    lcp_hashed_passphrase: str | None = None
 
 
-class DataEntryTypes:
+class DataEntryTypes(StrEnum):
+    """Known DataEntry.type values."""
+
     NAVIGATION = "navigation"
 
 
-@dataclass
-class DataEntry(FeedEntryType):
-    """Other kinds of information, like entries of a navigation feed"""
+@dataclass(slots=True)
+class DataEntry:
+    """Non-work feed entries (e.g., navigation entries)."""
 
-    type: str | None = None
+    type: DataEntryTypes | None = None
     title: str | None = None
     id: str | None = None
     links: list[Link] = field(default_factory=list)
 
 
-@dataclass
-class FeedData(BaseModel):
+@dataclass(slots=True)
+class FeedData:
+    """Container for all feed-level data passed to serializers."""
+
     links: list[Link] = field(default_factory=list)
     breadcrumbs: list[Link] = field(default_factory=list)
     facet_links: list[Link] = field(default_factory=list)
@@ -241,7 +260,10 @@ class FeedData(BaseModel):
     data_entries: list[DataEntry] = field(default_factory=list)
     metadata: FeedMetadata = field(default_factory=lambda: FeedMetadata())
     entrypoint: str | None = None
-    model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    def add_link(self, href: str, **kwargs: Any) -> None:
+    def add_link(self, href: str, **kwargs: Unpack[LinkKwargs]) -> None:
+        """Append a Link to the feed's top-level links list.
+
+        :param href: Link URL.
+        """
         self.links.append(Link(href=href, **kwargs))

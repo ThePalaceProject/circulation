@@ -324,7 +324,7 @@ class TestLibraryAnnotator:
             adobe_id_identifier.credential
         )
         assert link is not None
-        assert expect.get("drm_licensor") == link.drm_licensor
+        assert expect == link.drm_licensor
 
     def test_no_adobe_id_tags_when_vendor_id_not_configured(
         self, annotator_fixture: LibraryAnnotatorFixture
@@ -332,7 +332,7 @@ class TestLibraryAnnotator:
         """When vendor ID delegation is not configured, adobe_id_tags()
         returns an empty list.
         """
-        assert {} == annotator_fixture.annotator.adobe_id_tags("patron identifier")
+        assert annotator_fixture.annotator.adobe_id_tags("patron identifier") is None
 
     def test_adobe_id_tags_when_vendor_id_configured(
         self,
@@ -349,16 +349,14 @@ class TestLibraryAnnotator:
         patron_identifier = "patron identifier"
         element = annotator_fixture.annotator.adobe_id_tags(patron_identifier)
 
-        assert "drm_licensor" in element
-        assert vendor_id_fixture.TEST_VENDOR_ID == getattr(
-            element["drm_licensor"], "vendor", None
-        )
+        assert element is not None
+        assert vendor_id_fixture.TEST_VENDOR_ID == getattr(element, "vendor", None)
 
-        token = getattr(element["drm_licensor"], "clientToken", None)
+        token = getattr(element, "client_token", None)
         assert token is not None
-        # token.text is a token which we can decode, since we know
+        # token is a token which we can decode, since we know
         # the secret.
-        token_text = token.text
+        token_text = token
         authdata = AuthdataUtility.from_config(library)
         assert authdata is not None
         decoded = authdata.decode_short_client_token(token_text)
@@ -369,7 +367,7 @@ class TestLibraryAnnotator:
         # object that renders to the same data.
         same_tag = annotator_fixture.annotator.adobe_id_tags(patron_identifier)
         assert same_tag is not element
-        assert same_tag["drm_licensor"].asdict() == element["drm_licensor"].asdict()
+        assert same_tag == element
 
         # If the Adobe Vendor ID configuration is present but
         # incomplete, adobe_id_tags does nothing.
@@ -377,7 +375,7 @@ class TestLibraryAnnotator:
         # Delete one setting from the existing integration to check
         # this.
         vendor_id_fixture.registration.short_name = None
-        assert {} == annotator_fixture.annotator.adobe_id_tags("new identifier")
+        assert annotator_fixture.annotator.adobe_id_tags("new identifier") is None
 
     def test_lcp_acquisition_link_contains_hashed_passphrase(
         self, annotator_fixture: LibraryAnnotatorFixture
@@ -415,7 +413,7 @@ class TestLibraryAnnotator:
         )
         assert link is not None
         assert link.lcp_hashed_passphrase is not None
-        assert link.lcp_hashed_passphrase.text == hashed_password.hashed
+        assert link.lcp_hashed_passphrase == hashed_password.hashed
 
     def test_default_lane_url(self, annotator_fixture: LibraryAnnotatorFixture):
         default_lane_url = annotator_fixture.annotator.default_lane_url()
@@ -1437,16 +1435,15 @@ class TestLibraryAnnotator:
         generic_tag = annotator.adobe_id_tags(patron)
 
         # The feed-level tag has the drm:scheme attribute set.
-        assert (
-            "http://librarysimplified.org/terms/drm/scheme/ACS"
-            == feed_tag["drm_licensor"].scheme
-        )
+        assert feed_tag is not None
+        assert "http://librarysimplified.org/terms/drm/scheme/ACS" == feed_tag.scheme
 
         # If we remove that attribute, the feed-level tag is the same as the
         # generic tag.
-        assert feed_tag["drm_licensor"].asdict() != generic_tag["drm_licensor"].asdict()
-        delattr(feed_tag["drm_licensor"], "scheme")
-        assert feed_tag["drm_licensor"].asdict() == generic_tag["drm_licensor"].asdict()
+        assert generic_tag is not None
+        assert feed_tag != generic_tag
+        feed_tag.scheme = None
+        assert feed_tag == generic_tag
 
     def test_borrow_link_raises_unfulfillable_work(
         self, annotator_fixture: LibraryAnnotatorFixture

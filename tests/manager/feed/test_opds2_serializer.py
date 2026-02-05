@@ -9,11 +9,14 @@ from palace.manager.feed.serializer.opds2 import (
 from palace.manager.feed.types import (
     Acquisition,
     Author,
+    Category,
+    DRMLicensor,
     FeedData,
-    FeedEntryType,
     FeedMetadata,
     IndirectAcquisition,
     Link,
+    RichText,
+    Series,
     WorkEntry,
     WorkEntryData,
 )
@@ -40,9 +43,7 @@ class TestOPDS2Serializer:
         feed.entries = [w]
         feed.links = [Link(href="http://link", rel="link-rel")]
         feed.facet_links = [
-            Link.create(
-                href="http://facet-link", rel="facet-rel", facetGroup="FacetGroup"
-            )
+            Link(href="http://facet-link", rel="facet-rel", facet_group="FacetGroup")
         ]
 
         serialized = OPDS2Serializer().serialize_feed(feed)
@@ -67,21 +68,21 @@ class TestOPDS2Serializer:
 
     def test_serialize_work_entry(self):
         data = WorkEntryData(
-            additionalType="type",
-            title=FeedEntryType(text="The Title"),
-            sort_title=FeedEntryType(text="Title, The"),
-            subtitle=FeedEntryType(text="Sub Title"),
+            additional_type="type",
+            title="The Title",
+            sort_title="Title, The",
+            subtitle="Sub Title",
             identifier="urn:id",
-            language=FeedEntryType(text="de"),
-            updated=FeedEntryType(text="2022-02-02"),
-            published=FeedEntryType(text="2020-02-02"),
-            summary=FeedEntryType(text="Summary"),
-            publisher=FeedEntryType(text="Publisher"),
-            imprint=FeedEntryType(text="Imprint"),
+            language="de",
+            updated="2022-02-02",
+            published="2020-02-02",
+            summary=RichText(text="Summary"),
+            publisher="Publisher",
+            imprint="Imprint",
             categories=[
-                FeedEntryType.create(scheme="scheme", label="label"),
+                Category(scheme="scheme", term="label", label="label"),
             ],
-            series=FeedEntryType.create(name="Series", position="3"),
+            series=Series(name="Series", position=3),
             image_links=[Link(href="http://image", rel="image-rel")],
             acquisition_links=[
                 Acquisition(href="http://acquisition", rel="acquisition-rel")
@@ -95,18 +96,18 @@ class TestOPDS2Serializer:
         entry = serializer.serialize_work_entry(data)
         metadata = entry["metadata"]
 
-        assert metadata["@type"] == data.additionalType
-        assert metadata["title"] == data.title.text
-        assert metadata["sortAs"] == data.sort_title.text
+        assert metadata["@type"] == data.additional_type
+        assert metadata["title"] == data.title
+        assert metadata["sortAs"] == data.sort_title
         assert metadata["duration"] == data.duration
-        assert metadata["subtitle"] == data.subtitle.text
+        assert metadata["subtitle"] == data.subtitle
         assert metadata["identifier"] == data.identifier
-        assert metadata["language"] == data.language.text
-        assert metadata["modified"] == data.updated.text
-        assert metadata["published"] == data.published.text
+        assert metadata["language"] == data.language
+        assert metadata["modified"] == data.updated
+        assert metadata["published"] == data.published
         assert metadata["description"] == data.summary.text
-        assert metadata["publisher"] == dict(name=data.publisher.text)
-        assert metadata["imprint"] == dict(name=data.imprint.text)
+        assert metadata["publisher"] == dict(name=data.publisher)
+        assert metadata["imprint"] == dict(name=data.imprint)
         assert metadata["subject"] == [
             dict(scheme="scheme", name="label", sortAs="label")
         ]
@@ -151,10 +152,7 @@ class TestOPDS2Serializer:
         assert metadata["narrator"] == dict(name="narrator2")
 
     def test__serialize_acquisition_link(self):
-        drm_licensor = FeedEntryType()
-        drm_licensor.add_attributes(
-            {"vendor": "vendor_name", "clientToken": FeedEntryType(text="token_value")}
-        )
+        drm_licensor = DRMLicensor(vendor="vendor_name", client_token="token_value")
 
         serializer = OPDS2Serializer()
         acquisition = Acquisition(
@@ -164,7 +162,7 @@ class TestOPDS2Serializer:
             availability_status="available",
             availability_since="2022-02-02",
             availability_until="2222-02-02",
-            lcp_hashed_passphrase=FeedEntryType(text="LCPPassphrase"),
+            lcp_hashed_passphrase="LCPPassphrase",
             indirect_acquisitions=[
                 IndirectAcquisition(
                     type="indirect1",
@@ -246,15 +244,23 @@ class TestOPDS2Serializer:
         feed_data = FeedData()
 
         # specify a sort link
-        link = Link(href="test", rel="test_rel", title="text1")
-        link.add_attributes(
-            dict(facetGroup="Sort by", activeFacet="true", defaultFacet="true")
+        link = Link(
+            href="test",
+            rel="test_rel",
+            title="text1",
+            facet_group="Sort by",
+            active_facet=True,
+            default_facet=True,
         )
 
         # include a non-sort facet
-        link2 = Link(href="test2", title="text2", rel="test_2_rel")
-        link2.add_attributes(
-            dict(facetGroup="test_group", activeFacet="true", defaultFacet="true")
+        link2 = Link(
+            href="test2",
+            title="text2",
+            rel="test_2_rel",
+            facet_group="test_group",
+            active_facet=True,
+            default_facet=True,
         )
 
         feed_data.facet_links.append(link)

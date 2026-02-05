@@ -337,11 +337,11 @@ class TestOPDSAcquisitionFeed:
         # The link is identified as belonging to an entry point-type
         # facet group.
         assert l.rel == LinkRelations.FACET_REL
-        assert getattr(l, "facetGroupType") == FacetConstants.ENTRY_POINT_REL
-        assert "Grupe" == getattr(l, "facetGroup")
+        assert getattr(l, "facet_group_type") == FacetConstants.ENTRY_POINT_REL
+        assert "Grupe" == getattr(l, "facet_group")
 
         # This facet is the active one in the group.
-        assert "true" == getattr(l, "activeFacet")
+        assert getattr(l, "active_facet") is True
 
         # The URL generator was invoked to create the href.
         assert l.href == g(AudiobooksEntryPoint)
@@ -361,21 +361,17 @@ class TestOPDSAcquisitionFeed:
         # not the selected one -- EbooksEntryPoint is.
         l = m(g, AudiobooksEntryPoint, EbooksEntryPoint, True, "Grupe")
 
-        # This means the 'activeFacet' attribute is not present.
-        assert getattr(l, "activeFacet", None) == None
+        # This means the 'active_facet' attribute is not present.
+        assert getattr(l, "active_facet", None) is False
 
     def test_license_tags_no_loan_or_hold(self, db: DatabaseTransactionFixture):
         edition, pool = db.edition(with_license_pool=True)
         tags = AcquisitionHelper.license_tags(pool, None, None)
-        assert (
-            dict(
-                availability_status="available",
-                holds_total="0",
-                copies_total="1",
-                copies_available="1",
-            )
-            == tags
-        )
+        assert tags is not None
+        assert tags.availability_status == "available"
+        assert tags.holds_total == "0"
+        assert tags.copies_total == "1"
+        assert tags.copies_available == "1"
 
     def test_license_tags_hold_position(self, db: DatabaseTransactionFixture):
         # When a book is placed on hold, it typically takes a while
@@ -393,16 +389,16 @@ class TestOPDSAcquisitionFeed:
 
         tags = AcquisitionHelper.license_tags(pool, None, hold)
         assert tags is not None
-        assert "1" == tags["holds_position"]
-        assert "3" == tags["holds_total"]
+        assert "1" == tags.holds_position
+        assert "3" == tags.holds_total
 
         # If the patron's hold position is missing, we assume they
         # are last in the list.
         hold.position = None
         tags = AcquisitionHelper.license_tags(pool, None, hold)
         assert tags is not None
-        assert "3" == tags["holds_position"]
-        assert "3" == tags["holds_total"]
+        assert "3" == tags.holds_position
+        assert "3" == tags.holds_total
 
         # If the patron's current hold position is greater than the
         # total recorded number of holds+reserves, their position will
@@ -410,8 +406,8 @@ class TestOPDSAcquisitionFeed:
         hold.position = 5
         tags = AcquisitionHelper.license_tags(pool, None, hold)
         assert tags is not None
-        assert "5" == tags["holds_position"]
-        assert "5" == tags["holds_total"]
+        assert "5" == tags.holds_position
+        assert "5" == tags.holds_total
 
         # A patron earlier in the holds queue may see a different
         # total number of holds, but that's fine -- it doesn't matter
@@ -420,8 +416,8 @@ class TestOPDSAcquisitionFeed:
         hold.position = 4
         tags = AcquisitionHelper.license_tags(pool, None, hold)
         assert tags is not None
-        assert "4" == tags["holds_position"]
-        assert "4" == tags["holds_total"]
+        assert "4" == tags.holds_position
+        assert "4" == tags.holds_total
 
         # If the patron's hold position is zero (because the book is
         # reserved to them), we do not represent them as having a hold
@@ -432,8 +428,8 @@ class TestOPDSAcquisitionFeed:
         pool.patrons_in_hold_queue = 0
         tags = AcquisitionHelper.license_tags(pool, None, hold)
         assert tags is not None
-        assert "holds_position" not in tags
-        assert "1" == tags["holds_total"]
+        assert tags.holds_position is None
+        assert "1" == tags.holds_total
 
     def test_license_tags_show_unlimited_access_books(
         self, db: DatabaseTransactionFixture
@@ -448,8 +444,9 @@ class TestOPDSAcquisitionFeed:
 
         # Assert
         assert tags is not None
-        assert 1 == len(tags.keys())
-        assert tags["availability_status"] == "available"
+        assert tags.availability_status == "available"
+        assert tags.holds_total is None
+        assert tags.copies_total is None
 
     def test_unlimited_access_pool_loan(self, db: DatabaseTransactionFixture):
         patron = db.patron()
@@ -459,8 +456,8 @@ class TestOPDSAcquisitionFeed:
         tags = AcquisitionHelper.license_tags(pool, loan, None)
 
         assert tags is not None
-        assert "availability_since" in tags
-        assert "availability_until" not in tags
+        assert tags.availability_since is not None
+        assert tags.availability_until is None
 
     def test_single_entry(self, db: DatabaseTransactionFixture):
         session = db.session
@@ -488,8 +485,8 @@ class TestOPDSAcquisitionFeed:
         assert entry.computed is not None
         assert entry.computed.title is not None
 
-        assert new_pool.presentation_edition.title != entry.computed.title.text
-        assert original_pool.presentation_edition.title == entry.computed.title.text
+        assert new_pool.presentation_edition.title != entry.computed.title
+        assert original_pool.presentation_edition.title == entry.computed.title
 
         # If the edition was issued before 1980, no datetime formatting error
         # is raised.
@@ -1219,16 +1216,16 @@ class TestLookupAcquisitionFeed:
         # depending on which identifier we look up.
         ignore, e1 = self._entry(db.session, original_pool.identifier, work)
         assert original_pool.identifier.urn == e1.computed.identifier
-        assert original_pool.presentation_edition.title == e1.computed.title.text
+        assert original_pool.presentation_edition.title == e1.computed.title
         assert new_pool.identifier.urn != e1.computed.identifier
-        assert new_pool.presentation_edition.title != e1.computed.title.text
+        assert new_pool.presentation_edition.title != e1.computed.title
 
         # Different identifier and pool = different information
         i = new_pool.identifier
         ignore, e2 = self._entry(db.session, i, work)
         assert new_pool.identifier.urn == e2.computed.identifier
-        assert new_pool.presentation_edition.title == e2.computed.title.text
-        assert original_pool.presentation_edition.title != e2.computed.title.text
+        assert new_pool.presentation_edition.title == e2.computed.title
+        assert original_pool.presentation_edition.title != e2.computed.title
         assert original_pool.identifier.urn != e2.computed.identifier
 
     def test_error_on_mismatched_identifier(self, db: DatabaseTransactionFixture):
