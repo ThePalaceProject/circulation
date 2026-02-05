@@ -243,26 +243,6 @@ def acquisition_groups(lane_identifier):
     return app.manager.opds_feeds.groups(lane_identifier)
 
 
-@library_route("/feed/qa/series")
-@has_library
-@allows_patron_web
-@requires_auth
-@returns_problem_detail
-@compressible
-def qa_series_feed():
-    return app.manager.opds_feeds.qa_series_feed()
-
-
-@library_route("/feed/qa")
-@has_library
-@allows_patron_web
-@requires_auth
-@returns_problem_detail
-@compressible
-def qa_feed():
-    return app.manager.opds_feeds.qa_feed()
-
-
 @library_dir_route("/feed", defaults=dict(lane_identifier=None))
 @library_route("/feed/<lane_identifier>")
 @has_library

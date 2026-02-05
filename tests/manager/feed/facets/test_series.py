@@ -1,16 +1,6 @@
 from palace.manager.feed.facets.feed import DefaultSortOrderFacets, Facets
-from palace.manager.feed.facets.series import HasSeriesFacets, SeriesFacets
-from palace.manager.search.filter import Filter
+from palace.manager.feed.facets.series import SeriesFacets
 from tests.fixtures.database import DatabaseTransactionFixture
-
-
-class TestHasSeriesFacets:
-    def test_modify_search_filter(self, db: DatabaseTransactionFixture):
-        facets = HasSeriesFacets.default(db.default_library())
-        filter = Filter()
-        assert None == filter.series
-        facets.modify_search_filter(filter)
-        assert True == filter.series
 
 
 class TestSeriesFacets:
