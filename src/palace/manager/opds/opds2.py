@@ -395,6 +395,8 @@ class Feed(BaseOpdsModel):
     @model_serializer(mode="wrap")
     def _serialize(self, serializer: SerializerFunctionWrapHandler) -> dict[str, Any]:
         data = cast(dict[str, Any], serializer(self))
+        if "publications" not in data:
+            data["publications"] = []
         if not data.get("navigation"):
             data.pop("navigation", None)
         if not data.get("facets"):

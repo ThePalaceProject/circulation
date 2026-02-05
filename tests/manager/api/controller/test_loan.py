@@ -112,6 +112,8 @@ class LoanFixture(CirculationControllerFixture):
         self.identifier_identifier = self.identifier.identifier
         self.identifier_type = self.identifier.type
 
+        set_work_cover(self.pool.work, "http://example.com/fixture-cover.png")
+
         # Make sure our collection has a PatronActivityCirculationAPI setup, so we can test the
         # patron activity sync tasks.
         self.manager.d_circulation.add_remote_api(
@@ -125,6 +127,13 @@ def loan_fixture(
 ) -> Generator[LoanFixture]:
     with LoanFixture.fixture(db, services_fixture) as fixture:
         yield fixture
+
+
+def set_work_cover(work: Work | None, url: str) -> None:
+    if work is None or work.presentation_edition is None:
+        return
+    work.presentation_edition.cover_full_url = url
+    work.presentation_edition.cover_thumbnail_url = url
 
 
 class OPDSSerializationTestHelper:
@@ -272,6 +281,7 @@ class TestLoanController:
         work = loan_fixture.db.work(
             with_license_pool=True, with_open_access_download=False
         )
+        set_work_cover(work, "http://example.com/borrow-cover.png")
         pool = work.license_pools[0]
         loan_fixture.manager.d_circulation.queue_checkout(
             pool,

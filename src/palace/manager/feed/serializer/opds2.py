@@ -509,6 +509,7 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]]):
         return model.model_dump(
             mode="json",
             by_alias=True,
+            exclude_unset=True,
             exclude_none=True,
         )
 
