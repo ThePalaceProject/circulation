@@ -369,12 +369,19 @@ class Feed(BaseOpdsModel):
     @model_serializer(mode="wrap")
     def _serialize(self, serializer: SerializerFunctionWrapHandler) -> dict[str, Any]:
         data = cast(dict[str, Any], serializer(self))
-        if "publications" not in data:
-            data["publications"] = []
-        if not data.get("navigation"):
-            data.pop("navigation", None)
+
+        # Always include at least one collection field, even if empty.
+        # Priority: publications > navigation > groups.
+        collection_fields = ("publications", "navigation", "groups")
+        primary = next(f for f in collection_fields if f in self.model_fields_set)
+        for f in collection_fields:
+            if f != primary and not data.get(f):
+                data.pop(f, None)
+
+        # Facets are purely optional.
         if not data.get("facets"):
             data.pop("facets", None)
+
         return data
 
     @model_validator(mode="after")

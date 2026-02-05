@@ -63,7 +63,7 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]]):
                 continue
             try:
                 publications.append(self._publication(entry.computed))
-            except (PalaceValueError, ValidationError, ValueError) as exc:
+            except ValidationError as exc:
                 logger.exception("Skipping invalid OPDS2 publication: %s", exc)
 
         feed_links = self._serialize_feed_links(feed)
@@ -109,9 +109,6 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]]):
         self, data: WorkEntryData
     ) -> opds2.PublicationMetadata:
         identifier = data.identifier or data.pwid
-        if not identifier:
-            raise PalaceValueError("OPDS2 publications require an identifier")
-
         additional_type = data.additional_type or schema_org.PublicationTypes.book
         title = data.title or OPDSFeed.NO_TITLE
 
@@ -325,8 +322,6 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]]):
         )
 
     def _serialize_contributor(self, author: Author) -> rwpm.Contributor:
-        if not author.name:
-            raise PalaceValueError("Contributor name is required for OPDS2 output")
         if author.link:
             return rwpm.Contributor(
                 name=LanguageMap(author.name),
@@ -339,8 +334,8 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]]):
         )
 
     def _serialize_contributor_link(self, author: Author) -> rwpm.Link:
-        if author.link is None:
-            raise PalaceValueError("Contributor link is required for OPDS2 output")
+        # author.link is guaranteed non-None by _serialize_contributor's guard
+        assert author.link is not None
         return rwpm.Link(
             href=author.link.href,
             rel=author.link.rel,
