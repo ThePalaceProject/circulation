@@ -65,7 +65,7 @@ AUTHOR_MAPPING = {
 
 
 def is_sort_facet(link: Link) -> bool:
-    """A until method that determines if the specified link is part of a sort facet."""
+    """A utility method that determines if the specified link is part of a sort facet."""
     group_name = cast(
         str, FacetConstants.GROUP_DISPLAY_TITLES[FacetConstants.ORDER_FACET_GROUP_NAME]
     )
