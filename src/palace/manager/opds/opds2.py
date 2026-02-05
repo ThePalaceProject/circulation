@@ -4,7 +4,7 @@ from collections.abc import Sequence
 from datetime import datetime
 from enum import StrEnum, auto
 from functools import cached_property
-from typing import Annotated, Any, Literal, Self, cast
+from typing import Annotated, Any, Self, cast
 
 from pydantic import (
     Field,
@@ -18,9 +18,8 @@ from pydantic import (
 )
 from pydantic_core import PydanticCustomError
 
-from palace.manager.opds import rwpm, schema_org
+from palace.manager.opds import palace, rwpm, schema_org
 from palace.manager.opds.base import BaseOpdsModel
-from palace.manager.opds.palace import PalacePublicationMetadata
 from palace.manager.opds.types.currency import CurrencyCode
 from palace.manager.opds.types.date import Iso8601AwareDatetime
 from palace.manager.opds.types.language import LanguageMap
@@ -148,24 +147,7 @@ class Availability(BaseOpdsModel):
         return value
 
 
-class PalaceLicensor(BaseOpdsModel):
-    """
-    Palace-specific DRM licensor metadata for OPDS2 links.
-    """
-
-    vendor: str | None = None
-    client_token: str | None = Field(None, alias="clientToken")
-
-
-class LinkActions(BaseOpdsModel):
-    """
-    Palace-specific actions metadata for OPDS2 links.
-    """
-
-    cancellable: bool | None = None
-
-
-class LinkProperties(rwpm.LinkProperties):
+class LinkProperties(rwpm.LinkProperties, palace.LinkProperties):
     """
     OPDS2 extensions to the link properties.
 
@@ -180,15 +162,7 @@ class LinkProperties(rwpm.LinkProperties):
     holds: Holds = Field(default_factory=Holds)
     copies: Copies = Field(default_factory=Copies)
     availability: Availability = Field(default_factory=Availability)
-    actions: LinkActions | None = None
-    licensor: PalaceLicensor | None = None
     lcp_hashed_passphrase: str | None = None
-    palace_default: Literal["true"] | None = Field(
-        None, alias="http://palaceproject.io/terms/properties/default"
-    )
-    palace_active_sort: Literal["true"] | None = Field(
-        None, alias="http://palaceproject.io/terms/properties/active-sort"
-    )
 
 
 class Link(rwpm.Link):
@@ -247,7 +221,7 @@ class FeedMetadata(BaseOpdsModel):
 
 
 class PublicationMetadata(
-    PalacePublicationMetadata, schema_org.PublicationMetadata, rwpm.Metadata
+    palace.PublicationMetadata, schema_org.PublicationMetadata, rwpm.Metadata
 ):
     """
     OPDS2 publication metadata.

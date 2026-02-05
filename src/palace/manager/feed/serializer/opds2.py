@@ -20,6 +20,7 @@ from palace.manager.feed.types import (
 )
 from palace.manager.opds import opds2, rwpm, schema_org
 from palace.manager.opds.base import BaseOpdsModel
+from palace.manager.opds.palace import DrmMetadata, LinkActions
 from palace.manager.opds.types.language import LanguageMap
 from palace.manager.sqlalchemy.model.contributor import Contributor
 from palace.manager.util.opds_writer import AtomFeed, OPDSFeed, OPDSMessage
@@ -281,9 +282,9 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]]):
             if link.indirect_acquisitions
             else None
         )
-        actions = opds2.LinkActions(cancellable=True) if link.is_hold else None
+        actions = LinkActions(cancellable=True) if link.is_hold else None
         licensor = (
-            opds2.PalaceLicensor(
+            DrmMetadata(
                 client_token=link.drm_licensor.client_token,
                 vendor=link.drm_licensor.vendor,
             )
@@ -520,8 +521,8 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]]):
         holds: opds2.Holds | None = None,
         copies: opds2.Copies | None = None,
         indirect_acquisition: list[opds2.AcquisitionObject] | None = None,
-        actions: opds2.LinkActions | None = None,
-        licensor: opds2.PalaceLicensor | None = None,
+        actions: palace.manager.opds.palace.LinkActions | None = None,
+        licensor: palace.manager.opds.palace.DrmMetadata | None = None,
         lcp_hashed_passphrase: str | None = None,
         palace_default: str | None = None,
         palace_active_sort: str | None = None,
