@@ -9,10 +9,10 @@ from tests.fixtures.api_controller import ControllerFixture
 
 class TestOIDCRoutes:
     def test_oidc_authenticate_route(self, controller_fixture: ControllerFixture):
-        """Test that /oidc/authenticate route calls the controller correctly."""
+        """Test the /oidc/authenticate route controller logic."""
         with (
             controller_fixture.app.test_request_context(
-                "/default/oidc/authenticate?provider=OpenID+Connect&redirect_uri=https://app.example.com"
+                "/?provider=OpenID+Connect&redirect_uri=https://app.example.com"
             ),
             patch.object(
                 controller_fixture.manager.oidc_controller,
@@ -33,10 +33,10 @@ class TestOIDCRoutes:
             assert call_args[0][0]["redirect_uri"] == "https://app.example.com"
 
     def test_oidc_callback_route(self, controller_fixture: ControllerFixture):
-        """Test that /oidc/callback route calls the controller correctly."""
+        """Test the /oidc/callback route controller logic."""
         with (
             controller_fixture.app.test_request_context(
-                "/oidc/callback?code=test-code&state=test-state"
+                "/?code=test-code&state=test-state"
             ),
             patch.object(
                 controller_fixture.manager.oidc_controller,
@@ -57,10 +57,10 @@ class TestOIDCRoutes:
             assert call_args[0][0]["state"] == "test-state"
 
     def test_oidc_logout_route(self, controller_fixture: ControllerFixture):
-        """Test that /oidc/logout route calls the controller correctly."""
+        """Test the /oidc/logout route controller logic."""
         with (
             controller_fixture.app.test_request_context(
-                "/default/oidc/logout?provider=OpenID+Connect&id_token_hint=test-token&post_logout_redirect_uri=https://app.example.com"
+                "/?provider=OpenID+Connect&id_token_hint=test-token&post_logout_redirect_uri=https://app.example.com"
             ),
             patch.object(
                 controller_fixture.manager.oidc_controller,
@@ -84,11 +84,9 @@ class TestOIDCRoutes:
             )
 
     def test_oidc_logout_callback_route(self, controller_fixture: ControllerFixture):
-        """Test that /oidc/logout_callback route calls the controller correctly."""
+        """Test the /oidc/logout_callback route controller logic."""
         with (
-            controller_fixture.app.test_request_context(
-                "/oidc/logout_callback?state=test-logout-state"
-            ),
+            controller_fixture.app.test_request_context("/?state=test-logout-state"),
             patch.object(
                 controller_fixture.manager.oidc_controller,
                 "oidc_logout_callback",
@@ -107,10 +105,10 @@ class TestOIDCRoutes:
             assert call_args[0][0]["state"] == "test-logout-state"
 
     def test_oidc_backchannel_logout_route(self, controller_fixture: ControllerFixture):
-        """Test that /oidc/backchannel_logout route calls the controller correctly."""
+        """Test the /oidc/backchannel_logout route controller logic."""
         with (
             controller_fixture.app.test_request_context(
-                "/oidc/backchannel_logout",
+                "/",
                 method="POST",
                 data={"logout_token": "test.logout.token"},
             ),
