@@ -179,12 +179,80 @@ class TestOIDCAuthenticationManagerMetadata:
 class TestOIDCAuthenticationManagerAuthorizationURL:
     """Tests for authorization URL building."""
 
-    def test_build_authorization_url_with_pkce(
-        self, oidc_settings_with_discovery, redis_fixture, mock_discovery_document
+    @pytest.mark.parametrize(
+        "use_pkce,scopes,access_type,code_challenge,expected_in_url,expected_not_in_url",
+        [
+            pytest.param(
+                True,
+                None,
+                "offline",
+                "test-challenge",
+                [
+                    "code_challenge=test-challenge",
+                    "code_challenge_method=S256",
+                    "access_type=offline",
+                ],
+                [],
+                id="with-pkce",
+            ),
+            pytest.param(
+                False,
+                None,
+                "offline",
+                None,
+                ["access_type=offline"],
+                ["code_challenge", "code_challenge_method"],
+                id="without-pkce",
+            ),
+            pytest.param(
+                True,
+                ["openid", "profile", "custom_scope"],
+                "offline",
+                None,
+                ["scope=openid+profile+custom_scope"],
+                [],
+                id="custom-scopes",
+            ),
+            pytest.param(
+                True,
+                None,
+                "online",
+                None,
+                ["access_type=online"],
+                [],
+                id="online-access",
+            ),
+        ],
+    )
+    def test_build_authorization_url(
+        self,
+        use_pkce,
+        scopes,
+        access_type,
+        code_challenge,
+        expected_in_url,
+        expected_not_in_url,
+        redis_fixture,
+        mock_discovery_document,
     ):
-        """Test authorization URL building with PKCE enabled."""
+        """Test authorization URL building with different configurations."""
+        from urllib.parse import quote
+
+        # Build settings with only non-None optional parameters
+        settings_kwargs = {
+            "issuer_url": TEST_ISSUER_URL,
+            "client_id": TEST_CLIENT_ID,
+            "client_secret": TEST_CLIENT_SECRET,
+            "use_pkce": use_pkce,
+            "access_type": access_type,
+        }
+        if scopes is not None:
+            settings_kwargs["scopes"] = scopes
+
+        settings = OIDCAuthSettings(**settings_kwargs)
+
         manager = OIDCAuthenticationManager(
-            settings=oidc_settings_with_discovery,
+            settings=settings,
             redis_client=redis_fixture.client,
         )
 
@@ -196,135 +264,69 @@ class TestOIDCAuthenticationManagerAuthorizationURL:
 
             state = "test-state"
             nonce = "test-nonce"
-            code_challenge = "test-challenge"
 
-            url = manager.build_authorization_url(
-                redirect_uri=TEST_REDIRECT_URI,
-                state=state,
-                nonce=nonce,
-                code_challenge=code_challenge,
-            )
+            build_kwargs = {
+                "redirect_uri": TEST_REDIRECT_URI,
+                "state": state,
+                "nonce": nonce,
+            }
+            if code_challenge:
+                build_kwargs["code_challenge"] = code_challenge
 
-            from urllib.parse import quote
+            url = manager.build_authorization_url(**build_kwargs)
 
+            # Common assertions
             assert "response_type=code" in url
             assert f"client_id={TEST_CLIENT_ID}" in url
             assert quote(TEST_REDIRECT_URI, safe="") in url
-            assert "scope=openid" in url
             assert f"state={state}" in url
             assert f"nonce={nonce}" in url
-            assert f"code_challenge={code_challenge}" in url
-            assert "code_challenge_method=S256" in url
-            assert "access_type=offline" in url
 
-    def test_build_authorization_url_without_pkce(
-        self, redis_fixture, mock_discovery_document
-    ):
-        """Test authorization URL building with PKCE disabled."""
-        settings = OIDCAuthSettings(
-            issuer_url=TEST_ISSUER_URL,
-            client_id=TEST_CLIENT_ID,
-            client_secret=TEST_CLIENT_SECRET,
-            use_pkce=False,
-        )
+            # Check expected content
+            for expected in expected_in_url:
+                assert expected in url, f"Expected '{expected}' in URL"
 
-        manager = OIDCAuthenticationManager(
-            settings=settings,
-            redis_client=redis_fixture.client,
-        )
-
-        with patch("httpx.get") as mock_get:
-            mock_response = Mock()
-            mock_response.json.return_value = mock_discovery_document
-            mock_response.raise_for_status = Mock()
-            mock_get.return_value = mock_response
-
-            state = "test-state"
-            nonce = "test-nonce"
-
-            url = manager.build_authorization_url(
-                redirect_uri=TEST_REDIRECT_URI,
-                state=state,
-                nonce=nonce,
-            )
-
-            assert "code_challenge" not in url
-            assert "code_challenge_method" not in url
-
-    def test_build_authorization_url_custom_scopes(
-        self, redis_fixture, mock_discovery_document
-    ):
-        """Test authorization URL with custom scopes."""
-        settings = OIDCAuthSettings(
-            issuer_url=TEST_ISSUER_URL,
-            client_id=TEST_CLIENT_ID,
-            client_secret=TEST_CLIENT_SECRET,
-            scopes=["openid", "profile", "custom_scope"],
-        )
-
-        manager = OIDCAuthenticationManager(
-            settings=settings,
-            redis_client=redis_fixture.client,
-        )
-
-        with patch("httpx.get") as mock_get:
-            mock_response = Mock()
-            mock_response.json.return_value = mock_discovery_document
-            mock_response.raise_for_status = Mock()
-            mock_get.return_value = mock_response
-
-            url = manager.build_authorization_url(
-                redirect_uri=TEST_REDIRECT_URI,
-                state="state",
-                nonce="nonce",
-            )
-
-            assert "scope=openid+profile+custom_scope" in url
-
-    def test_build_authorization_url_online_access(
-        self, redis_fixture, mock_discovery_document
-    ):
-        """Test authorization URL with online access type."""
-        settings = OIDCAuthSettings(
-            issuer_url=TEST_ISSUER_URL,
-            client_id=TEST_CLIENT_ID,
-            client_secret=TEST_CLIENT_SECRET,
-            access_type="online",
-        )
-
-        manager = OIDCAuthenticationManager(
-            settings=settings,
-            redis_client=redis_fixture.client,
-        )
-
-        with patch("httpx.get") as mock_get:
-            mock_response = Mock()
-            mock_response.json.return_value = mock_discovery_document
-            mock_response.raise_for_status = Mock()
-            mock_get.return_value = mock_response
-
-            url = manager.build_authorization_url(
-                redirect_uri=TEST_REDIRECT_URI,
-                state="state",
-                nonce="nonce",
-            )
-
-            assert "access_type=online" in url
+            # Check expected not present
+            for not_expected in expected_not_in_url:
+                assert (
+                    not_expected not in url
+                ), f"Did not expect '{not_expected}' in URL"
 
 
 class TestOIDCAuthenticationManagerTokenExchange:
     """Tests for authorization code exchange."""
 
-    def test_exchange_authorization_code_success(
+    @pytest.mark.parametrize(
+        "use_pkce,auth_method,pass_code_verifier,should_have_basic_auth",
+        [
+            pytest.param(True, "client_secret_post", True, False, id="with-pkce"),
+            pytest.param(False, "client_secret_post", False, False, id="without-pkce"),
+            pytest.param(
+                True, "client_secret_basic", False, True, id="with-basic-auth"
+            ),
+        ],
+    )
+    def test_exchange_authorization_code(
         self,
-        oidc_settings_with_discovery,
+        use_pkce,
+        auth_method,
+        pass_code_verifier,
+        should_have_basic_auth,
         redis_fixture,
         mock_discovery_document,
         mock_token_response,
     ):
-        """Test successful token exchange."""
+        """Test token exchange with different authentication and PKCE configurations."""
+        settings = OIDCAuthSettings(
+            issuer_url=TEST_ISSUER_URL,
+            client_id=TEST_CLIENT_ID,
+            client_secret=TEST_CLIENT_SECRET,
+            use_pkce=use_pkce,
+            token_endpoint_auth_method=auth_method,
+        )
+
         manager = OIDCAuthenticationManager(
-            settings=oidc_settings_with_discovery,
+            settings=settings,
             redis_client=redis_fixture.client,
         )
 
@@ -341,12 +343,16 @@ class TestOIDCAuthenticationManagerTokenExchange:
             mock_post_response.raise_for_status = Mock()
             mock_post.return_value = mock_post_response
 
-            tokens = manager.exchange_authorization_code(
-                code="test-auth-code",
-                redirect_uri=TEST_REDIRECT_URI,
-                code_verifier="test-verifier",
-            )
+            exchange_kwargs = {
+                "code": "test-auth-code",
+                "redirect_uri": TEST_REDIRECT_URI,
+            }
+            if pass_code_verifier:
+                exchange_kwargs["code_verifier"] = "test-verifier"
 
+            tokens = manager.exchange_authorization_code(**exchange_kwargs)
+
+            # Verify response
             assert tokens == mock_token_response
             assert tokens["access_token"] == mock_token_response["access_token"]
             assert tokens["id_token"] == mock_token_response["id_token"]
@@ -354,94 +360,50 @@ class TestOIDCAuthenticationManagerTokenExchange:
 
             # Verify POST call parameters
             call_args = mock_post.call_args
-            assert call_args.kwargs["data"]["grant_type"] == "authorization_code"
-            assert call_args.kwargs["data"]["code"] == "test-auth-code"
-            assert call_args.kwargs["data"]["code_verifier"] == "test-verifier"
-            assert call_args.kwargs["data"]["client_id"] == TEST_CLIENT_ID
-            assert call_args.kwargs["data"]["client_secret"] == TEST_CLIENT_SECRET
 
-    def test_exchange_authorization_code_with_basic_auth(
-        self, redis_fixture, mock_discovery_document, mock_token_response
+            if should_have_basic_auth:
+                # Basic auth should be used
+                assert call_args.kwargs["auth"] == (TEST_CLIENT_ID, TEST_CLIENT_SECRET)
+                assert "client_id" not in call_args.kwargs["data"]
+                assert "client_secret" not in call_args.kwargs["data"]
+            else:
+                # Credentials in POST data
+                assert call_args.kwargs["data"]["client_id"] == TEST_CLIENT_ID
+                assert call_args.kwargs["data"]["client_secret"] == TEST_CLIENT_SECRET
+
+            # Verify PKCE
+            if pass_code_verifier:
+                assert call_args.kwargs["data"]["code_verifier"] == "test-verifier"
+            else:
+                assert "code_verifier" not in call_args.kwargs["data"]
+
+    @pytest.mark.parametrize(
+        "response_tokens,missing_field,error_message",
+        [
+            pytest.param(
+                {"id_token": "test-id-token"},
+                "access_token",
+                "missing access_token",
+                id="missing-access-token",
+            ),
+            pytest.param(
+                {"access_token": "test-access-token"},
+                "id_token",
+                "missing id_token",
+                id="missing-id-token",
+            ),
+        ],
+    )
+    def test_exchange_authorization_code_missing_token(
+        self,
+        response_tokens,
+        missing_field,
+        error_message,
+        oidc_settings_with_discovery,
+        redis_fixture,
+        mock_discovery_document,
     ):
-        """Test token exchange with client_secret_basic authentication."""
-        settings = OIDCAuthSettings(
-            issuer_url=TEST_ISSUER_URL,
-            client_id=TEST_CLIENT_ID,
-            client_secret=TEST_CLIENT_SECRET,
-            token_endpoint_auth_method="client_secret_basic",
-        )
-
-        manager = OIDCAuthenticationManager(
-            settings=settings,
-            redis_client=redis_fixture.client,
-        )
-
-        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
-            # Mock discovery
-            mock_get_response = Mock()
-            mock_get_response.json.return_value = mock_discovery_document
-            mock_get_response.raise_for_status = Mock()
-            mock_get.return_value = mock_get_response
-
-            # Mock token exchange
-            mock_post_response = Mock()
-            mock_post_response.json.return_value = mock_token_response
-            mock_post_response.raise_for_status = Mock()
-            mock_post.return_value = mock_post_response
-
-            manager.exchange_authorization_code(
-                code="test-auth-code",
-                redirect_uri=TEST_REDIRECT_URI,
-            )
-
-            # Verify Basic Auth was used
-            call_args = mock_post.call_args
-            assert call_args.kwargs["auth"] == (TEST_CLIENT_ID, TEST_CLIENT_SECRET)
-            assert "client_id" not in call_args.kwargs["data"]
-            assert "client_secret" not in call_args.kwargs["data"]
-
-    def test_exchange_authorization_code_without_pkce(
-        self, redis_fixture, mock_discovery_document, mock_token_response
-    ):
-        """Test token exchange without PKCE."""
-        settings = OIDCAuthSettings(
-            issuer_url=TEST_ISSUER_URL,
-            client_id=TEST_CLIENT_ID,
-            client_secret=TEST_CLIENT_SECRET,
-            use_pkce=False,
-        )
-
-        manager = OIDCAuthenticationManager(
-            settings=settings,
-            redis_client=redis_fixture.client,
-        )
-
-        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
-            # Mock discovery
-            mock_get_response = Mock()
-            mock_get_response.json.return_value = mock_discovery_document
-            mock_get_response.raise_for_status = Mock()
-            mock_get.return_value = mock_get_response
-
-            # Mock token exchange
-            mock_post_response = Mock()
-            mock_post_response.json.return_value = mock_token_response
-            mock_post_response.raise_for_status = Mock()
-            mock_post.return_value = mock_post_response
-
-            manager.exchange_authorization_code(
-                code="test-auth-code",
-                redirect_uri=TEST_REDIRECT_URI,
-            )
-
-            # Verify no code_verifier in request
-            call_args = mock_post.call_args
-            assert "code_verifier" not in call_args.kwargs["data"]
-
-    def test_exchange_authorization_code_missing_access_token(
-        self, oidc_settings_with_discovery, redis_fixture, mock_discovery_document
-    ):
-        """Test token exchange error when access_token is missing."""
+        """Test token exchange error when required token is missing."""
         manager = OIDCAuthenticationManager(
             settings=oidc_settings_with_discovery,
             redis_client=redis_fixture.client,
@@ -454,41 +416,13 @@ class TestOIDCAuthenticationManagerTokenExchange:
             mock_get_response.raise_for_status = Mock()
             mock_get.return_value = mock_get_response
 
-            # Mock token exchange with missing access_token
+            # Mock token exchange with missing token
             mock_post_response = Mock()
-            mock_post_response.json.return_value = {"id_token": "test-id-token"}
+            mock_post_response.json.return_value = response_tokens
             mock_post_response.raise_for_status = Mock()
             mock_post.return_value = mock_post_response
 
-            with pytest.raises(OIDCTokenExchangeError, match="missing access_token"):
-                manager.exchange_authorization_code(
-                    code="test-auth-code",
-                    redirect_uri=TEST_REDIRECT_URI,
-                )
-
-    def test_exchange_authorization_code_missing_id_token(
-        self, oidc_settings_with_discovery, redis_fixture, mock_discovery_document
-    ):
-        """Test token exchange error when id_token is missing."""
-        manager = OIDCAuthenticationManager(
-            settings=oidc_settings_with_discovery,
-            redis_client=redis_fixture.client,
-        )
-
-        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
-            # Mock discovery
-            mock_get_response = Mock()
-            mock_get_response.json.return_value = mock_discovery_document
-            mock_get_response.raise_for_status = Mock()
-            mock_get.return_value = mock_get_response
-
-            # Mock token exchange with missing id_token
-            mock_post_response = Mock()
-            mock_post_response.json.return_value = {"access_token": "test-access-token"}
-            mock_post_response.raise_for_status = Mock()
-            mock_post.return_value = mock_post_response
-
-            with pytest.raises(OIDCTokenExchangeError, match="missing id_token"):
+            with pytest.raises(OIDCTokenExchangeError, match=error_message):
                 manager.exchange_authorization_code(
                     code="test-auth-code",
                     redirect_uri=TEST_REDIRECT_URI,
@@ -612,12 +546,30 @@ class TestOIDCAuthenticationManagerTokenValidation:
 class TestOIDCAuthenticationManagerTokenRefresh:
     """Tests for token refresh."""
 
+    @pytest.mark.parametrize(
+        "auth_method,should_have_basic_auth",
+        [
+            pytest.param("client_secret_post", False, id="post-auth"),
+            pytest.param("client_secret_basic", True, id="basic-auth"),
+        ],
+    )
     def test_refresh_access_token_success(
-        self, oidc_settings_with_discovery, redis_fixture, mock_discovery_document
+        self,
+        auth_method,
+        should_have_basic_auth,
+        redis_fixture,
+        mock_discovery_document,
     ):
-        """Test successful token refresh."""
+        """Test successful token refresh with different authentication methods."""
+        settings = OIDCAuthSettings(
+            issuer_url=TEST_ISSUER_URL,
+            client_id=TEST_CLIENT_ID,
+            client_secret=TEST_CLIENT_SECRET,
+            token_endpoint_auth_method=auth_method,
+        )
+
         manager = OIDCAuthenticationManager(
-            settings=oidc_settings_with_discovery,
+            settings=settings,
             redis_client=redis_fixture.client,
         )
 
@@ -650,46 +602,11 @@ class TestOIDCAuthenticationManagerTokenRefresh:
             assert call_args.kwargs["data"]["grant_type"] == "refresh_token"
             assert call_args.kwargs["data"]["refresh_token"] == "test-refresh-token"
 
-    def test_refresh_access_token_with_basic_auth(
-        self, redis_fixture, mock_discovery_document
-    ):
-        """Test token refresh with client_secret_basic authentication."""
-        settings = OIDCAuthSettings(
-            issuer_url=TEST_ISSUER_URL,
-            client_id=TEST_CLIENT_ID,
-            client_secret=TEST_CLIENT_SECRET,
-            token_endpoint_auth_method="client_secret_basic",
-        )
-
-        manager = OIDCAuthenticationManager(
-            settings=settings,
-            redis_client=redis_fixture.client,
-        )
-
-        refresh_response = {
-            "access_token": "new-access-token",
-            "token_type": "Bearer",
-            "expires_in": 3600,
-        }
-
-        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
-            # Mock discovery
-            mock_get_response = Mock()
-            mock_get_response.json.return_value = mock_discovery_document
-            mock_get_response.raise_for_status = Mock()
-            mock_get.return_value = mock_get_response
-
-            # Mock token refresh
-            mock_post_response = Mock()
-            mock_post_response.json.return_value = refresh_response
-            mock_post_response.raise_for_status = Mock()
-            mock_post.return_value = mock_post_response
-
-            manager.refresh_access_token(refresh_token="test-refresh-token")
-
-            # Verify Basic Auth was used
-            call_args = mock_post.call_args
-            assert call_args.kwargs["auth"] == (TEST_CLIENT_ID, TEST_CLIENT_SECRET)
+            if should_have_basic_auth:
+                assert call_args.kwargs["auth"] == (TEST_CLIENT_ID, TEST_CLIENT_SECRET)
+            else:
+                # When not using basic auth, auth should be None or not present
+                assert call_args.kwargs.get("auth") is None
 
     def test_refresh_access_token_missing_access_token(
         self, oidc_settings_with_discovery, redis_fixture, mock_discovery_document
@@ -872,101 +789,96 @@ class TestOIDCAuthenticationManagerFactory:
 class TestOIDCAuthenticationManagerLogout:
     """Tests for OIDC logout functionality."""
 
-    def test_build_logout_url_with_end_session_endpoint(
-        self, oidc_settings_with_discovery, redis_fixture, mock_discovery_document
+    @pytest.mark.parametrize(
+        "state,use_custom_endpoint,expected_endpoint",
+        [
+            pytest.param(
+                "test-state-token",
+                False,
+                "https://oidc.provider.test/logout",
+                id="with-state",
+            ),
+            pytest.param(
+                None,
+                False,
+                "https://oidc.provider.test/logout",
+                id="without-state",
+            ),
+            pytest.param(
+                None,
+                True,
+                "https://custom.logout.endpoint/logout",
+                id="custom-endpoint",
+            ),
+        ],
+    )
+    def test_build_logout_url(
+        self,
+        state,
+        use_custom_endpoint,
+        expected_endpoint,
+        redis_fixture,
+        oidc_settings_with_discovery,
+        mock_discovery_document,
     ):
-        mock_discovery_document["end_session_endpoint"] = (
-            "https://oidc.provider.test/logout"
-        )
-
-        manager = OIDCAuthenticationManager(
-            settings=oidc_settings_with_discovery,
-            redis_client=redis_fixture.client,
-        )
-
-        with patch("httpx.get") as mock_get:
-            mock_response = Mock()
-            mock_response.json.return_value = mock_discovery_document
-            mock_response.raise_for_status = Mock()
-            mock_get.return_value = mock_response
-
-            id_token_hint = "test.id.token"
-            post_logout_redirect_uri = "https://app.example.com/logout/callback"
-            state = "test-state-token"
-
-            logout_url = manager.build_logout_url(
-                id_token_hint, post_logout_redirect_uri, state
+        """Test logout URL building with different configurations."""
+        if use_custom_endpoint:
+            # Create settings with custom end_session_endpoint
+            settings = OIDCAuthSettings(
+                issuer_url=TEST_ISSUER_URL,
+                client_id=TEST_CLIENT_ID,
+                client_secret=TEST_CLIENT_SECRET,
+                authorization_endpoint="https://custom.logout.endpoint/authorize",
+                token_endpoint="https://custom.logout.endpoint/token",
+                jwks_uri="https://custom.logout.endpoint/jwks",
+                end_session_endpoint="https://custom.logout.endpoint/logout",
             )
-
-            assert "https://oidc.provider.test/logout" in logout_url
-            assert f"id_token_hint={id_token_hint}" in logout_url
-            assert f"post_logout_redirect_uri={post_logout_redirect_uri}" in logout_url
-            assert f"state={state}" in logout_url
-
-    def test_build_logout_url_without_state(
-        self, oidc_settings_with_discovery, redis_fixture, mock_discovery_document
-    ):
-        mock_discovery_document["end_session_endpoint"] = (
-            "https://oidc.provider.test/logout"
-        )
-
-        manager = OIDCAuthenticationManager(
-            settings=oidc_settings_with_discovery,
-            redis_client=redis_fixture.client,
-        )
-
-        with patch("httpx.get") as mock_get:
-            mock_response = Mock()
-            mock_response.json.return_value = mock_discovery_document
-            mock_response.raise_for_status = Mock()
-            mock_get.return_value = mock_response
-
-            id_token_hint = "test.id.token"
-            post_logout_redirect_uri = "https://app.example.com/logout/callback"
-
-            logout_url = manager.build_logout_url(
-                id_token_hint, post_logout_redirect_uri
-            )
-
-            assert "https://oidc.provider.test/logout" in logout_url
-            assert f"id_token_hint={id_token_hint}" in logout_url
-            assert f"post_logout_redirect_uri={post_logout_redirect_uri}" in logout_url
-            assert "state=" not in logout_url
-
-    def test_build_logout_url_from_settings(self, redis_fixture):
-        # Create settings with custom end_session_endpoint
-        settings = OIDCAuthSettings(
-            issuer_url=TEST_ISSUER_URL,
-            client_id=TEST_CLIENT_ID,
-            client_secret=TEST_CLIENT_SECRET,
-            authorization_endpoint="https://custom.logout.endpoint/authorize",
-            token_endpoint="https://custom.logout.endpoint/token",
-            jwks_uri="https://custom.logout.endpoint/jwks",
-            end_session_endpoint="https://custom.logout.endpoint/logout",
-        )
+        else:
+            mock_discovery_document["end_session_endpoint"] = expected_endpoint
+            settings = oidc_settings_with_discovery
 
         manager = OIDCAuthenticationManager(
             settings=settings,
             redis_client=redis_fixture.client,
         )
 
-        # Mock get_provider_metadata to return metadata with our custom endpoint
-        with patch.object(
-            manager,
-            "get_provider_metadata",
-            return_value={
-                "issuer": TEST_ISSUER_URL,
-                "end_session_endpoint": "https://custom.logout.endpoint/logout",
-            },
-        ):
-            id_token_hint = "test.id.token"
-            post_logout_redirect_uri = "https://app.example.com/logout/callback"
+        id_token_hint = "test.id.token"
+        post_logout_redirect_uri = "https://app.example.com/logout/callback"
 
-            logout_url = manager.build_logout_url(
-                id_token_hint, post_logout_redirect_uri
-            )
+        if use_custom_endpoint:
+            # Mock get_provider_metadata for custom endpoint
+            with patch.object(
+                manager,
+                "get_provider_metadata",
+                return_value={
+                    "issuer": TEST_ISSUER_URL,
+                    "end_session_endpoint": expected_endpoint,
+                },
+            ):
+                logout_url = manager.build_logout_url(
+                    id_token_hint, post_logout_redirect_uri, state
+                )
+        else:
+            with patch("httpx.get") as mock_get:
+                mock_response = Mock()
+                mock_response.json.return_value = mock_discovery_document
+                mock_response.raise_for_status = Mock()
+                mock_get.return_value = mock_response
 
-            assert "https://custom.logout.endpoint/logout" in logout_url
+                logout_url = manager.build_logout_url(
+                    id_token_hint, post_logout_redirect_uri, state
+                )
+
+        # Common assertions
+        assert expected_endpoint in logout_url
+        assert f"id_token_hint={id_token_hint}" in logout_url
+        assert f"post_logout_redirect_uri={post_logout_redirect_uri}" in logout_url
+
+        # State assertions
+        if state:
+            assert f"state={state}" in logout_url
+        else:
+            assert "state=" not in logout_url
 
     def test_build_logout_url_not_supported(
         self, oidc_settings_with_discovery, redis_fixture, mock_discovery_document
@@ -1063,8 +975,39 @@ class TestOIDCAuthenticationManagerBackChannelLogout:
             assert "iat" in claims
             assert "nonce" not in claims
 
-    def test_validate_logout_token_with_nonce_fails(
+    @pytest.mark.parametrize(
+        "claim_modification,error_match",
+        [
+            pytest.param(
+                lambda claims: (claims.update({"nonce": "invalid-nonce"}), claims)[1],
+                "must not contain 'nonce' claim",
+                id="with-nonce",
+            ),
+            pytest.param(
+                lambda claims: (claims.pop("events"), claims)[1],
+                "missing 'events' claim",
+                id="missing-events",
+            ),
+            pytest.param(
+                lambda claims: (
+                    claims.pop("sub"),
+                    claims.pop("sid", None),
+                    claims,
+                )[2],
+                "must contain either 'sub' or 'sid' claim",
+                id="missing-sub-and-sid",
+            ),
+            pytest.param(
+                lambda claims: (claims.pop("jti"), claims)[1],
+                "missing 'jti' claim",
+                id="missing-jti",
+            ),
+        ],
+    )
+    def test_validate_logout_token_validation_fails(
         self,
+        claim_modification,
+        error_match,
         oidc_settings_with_discovery,
         redis_fixture,
         oidc_test_keys,
@@ -1072,15 +1015,15 @@ class TestOIDCAuthenticationManagerBackChannelLogout:
         mock_discovery_document,
         mock_jwks,
     ):
-        """Test that logout token with nonce claim is rejected."""
+        """Test that invalid logout tokens are rejected."""
         manager = OIDCAuthenticationManager(
             settings=oidc_settings_with_discovery,
             redis_client=redis_fixture.client,
         )
 
-        # Create invalid logout token with nonce
+        # Create invalid logout token with modified claims
         invalid_claims = mock_logout_token_claims.copy()
-        invalid_claims["nonce"] = "invalid-nonce"
+        claim_modification(invalid_claims)
         invalid_token = oidc_test_keys.sign_jwt(invalid_claims)
 
         with patch("httpx.get") as mock_get:
@@ -1096,120 +1039,5 @@ class TestOIDCAuthenticationManagerBackChannelLogout:
 
             mock_get.side_effect = mock_get_side_effect
 
-            with pytest.raises(
-                OIDCAuthenticationError, match="must not contain 'nonce' claim"
-            ):
-                manager.validate_logout_token(invalid_token)
-
-    def test_validate_logout_token_missing_events_fails(
-        self,
-        oidc_settings_with_discovery,
-        redis_fixture,
-        oidc_test_keys,
-        mock_logout_token_claims,
-        mock_discovery_document,
-        mock_jwks,
-    ):
-        """Test that logout token without events claim is rejected."""
-        manager = OIDCAuthenticationManager(
-            settings=oidc_settings_with_discovery,
-            redis_client=redis_fixture.client,
-        )
-
-        # Create invalid logout token without events
-        invalid_claims = mock_logout_token_claims.copy()
-        del invalid_claims["events"]
-        invalid_token = oidc_test_keys.sign_jwt(invalid_claims)
-
-        with patch("httpx.get") as mock_get:
-
-            def mock_get_side_effect(url, **kwargs):
-                response = Mock()
-                response.raise_for_status = Mock()
-                if "jwks" in str(url):
-                    response.json.return_value = mock_jwks
-                else:
-                    response.json.return_value = mock_discovery_document
-                return response
-
-            mock_get.side_effect = mock_get_side_effect
-
-            with pytest.raises(OIDCAuthenticationError, match="missing 'events' claim"):
-                manager.validate_logout_token(invalid_token)
-
-    def test_validate_logout_token_missing_sub_and_sid_fails(
-        self,
-        oidc_settings_with_discovery,
-        redis_fixture,
-        oidc_test_keys,
-        mock_logout_token_claims,
-        mock_discovery_document,
-        mock_jwks,
-    ):
-        """Test that logout token without sub or sid is rejected."""
-        manager = OIDCAuthenticationManager(
-            settings=oidc_settings_with_discovery,
-            redis_client=redis_fixture.client,
-        )
-
-        # Create invalid logout token without sub or sid
-        invalid_claims = mock_logout_token_claims.copy()
-        del invalid_claims["sub"]
-        if "sid" in invalid_claims:
-            del invalid_claims["sid"]
-        invalid_token = oidc_test_keys.sign_jwt(invalid_claims)
-
-        with patch("httpx.get") as mock_get:
-
-            def mock_get_side_effect(url, **kwargs):
-                response = Mock()
-                response.raise_for_status = Mock()
-                if "jwks" in str(url):
-                    response.json.return_value = mock_jwks
-                else:
-                    response.json.return_value = mock_discovery_document
-                return response
-
-            mock_get.side_effect = mock_get_side_effect
-
-            with pytest.raises(
-                OIDCAuthenticationError,
-                match="must contain either 'sub' or 'sid' claim",
-            ):
-                manager.validate_logout_token(invalid_token)
-
-    def test_validate_logout_token_missing_jti_fails(
-        self,
-        oidc_settings_with_discovery,
-        redis_fixture,
-        oidc_test_keys,
-        mock_logout_token_claims,
-        mock_discovery_document,
-        mock_jwks,
-    ):
-        """Test that logout token without jti is rejected."""
-        manager = OIDCAuthenticationManager(
-            settings=oidc_settings_with_discovery,
-            redis_client=redis_fixture.client,
-        )
-
-        # Create invalid logout token without jti
-        invalid_claims = mock_logout_token_claims.copy()
-        del invalid_claims["jti"]
-        invalid_token = oidc_test_keys.sign_jwt(invalid_claims)
-
-        with patch("httpx.get") as mock_get:
-
-            def mock_get_side_effect(url, **kwargs):
-                response = Mock()
-                response.raise_for_status = Mock()
-                if "jwks" in str(url):
-                    response.json.return_value = mock_jwks
-                else:
-                    response.json.return_value = mock_discovery_document
-                return response
-
-            mock_get.side_effect = mock_get_side_effect
-
-            with pytest.raises(OIDCAuthenticationError, match="missing 'jti' claim"):
+            with pytest.raises(OIDCAuthenticationError, match=error_match):
                 manager.validate_logout_token(invalid_token)

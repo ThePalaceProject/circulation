@@ -135,47 +135,21 @@ class TestOIDCUtilityState:
         ):
             OIDCUtility.validate_state(state, wrong_secret)
 
-    def test_validate_state_expired(self):
-        data = {"library_short_name": "TESTLIB", "timestamp": int(time.time()) - 700}
-
-        json_data = json.dumps(data, separators=(",", ":"))
-        encoded_data = urlsafe_b64encode(json_data.encode("utf-8")).decode("utf-8")
-
-        signature = hmac.new(
-            TEST_SECRET_KEY.encode("utf-8"),
-            encoded_data.encode("utf-8"),
-            hashlib.sha256,
-        ).digest()
-        encoded_signature = urlsafe_b64encode(signature).decode("utf-8")
-
-        state = f"{encoded_signature}.{encoded_data}"
-
-        with pytest.raises(OIDCStateValidationError, match="State expired"):
-            OIDCUtility.validate_state(state, TEST_SECRET_KEY)
-
-    def test_validate_state_future_timestamp(self):
-        data = {"library_short_name": "TESTLIB", "timestamp": int(time.time()) + 100}
-
-        json_data = json.dumps(data, separators=(",", ":"))
-        encoded_data = urlsafe_b64encode(json_data.encode("utf-8")).decode("utf-8")
-
-        signature = hmac.new(
-            TEST_SECRET_KEY.encode("utf-8"),
-            encoded_data.encode("utf-8"),
-            hashlib.sha256,
-        ).digest()
-        encoded_signature = urlsafe_b64encode(signature).decode("utf-8")
-
-        state = f"{encoded_signature}.{encoded_data}"
-
-        with pytest.raises(
-            OIDCStateValidationError, match="timestamp is in the future"
-        ):
-            OIDCUtility.validate_state(state, TEST_SECRET_KEY)
-
-    def test_validate_state_missing_timestamp(self):
+    @pytest.mark.parametrize(
+        "timestamp_offset,error_match",
+        [
+            pytest.param(-700, "State expired", id="expired"),
+            pytest.param(100, "timestamp is in the future", id="future-timestamp"),
+            pytest.param(None, "missing timestamp", id="missing-timestamp"),
+        ],
+    )
+    def test_validate_state_timestamp_validation(self, timestamp_offset, error_match):
+        """Test state validation with different timestamp scenarios."""
         data = {"library_short_name": "TESTLIB"}
 
+        if timestamp_offset is not None:
+            data["timestamp"] = int(time.time()) + timestamp_offset
+
         json_data = json.dumps(data, separators=(",", ":"))
         encoded_data = urlsafe_b64encode(json_data.encode("utf-8")).decode("utf-8")
 
@@ -188,20 +162,22 @@ class TestOIDCUtilityState:
 
         state = f"{encoded_signature}.{encoded_data}"
 
-        with pytest.raises(OIDCStateValidationError, match="missing timestamp"):
+        with pytest.raises(OIDCStateValidationError, match=error_match):
             OIDCUtility.validate_state(state, TEST_SECRET_KEY)
 
-    def test_validate_state_invalid_format(self):
-        invalid_states = [
-            "no-dot-separator",
-            "",
-            "only.one.part",
-            "invalid-base64!@#$.data",
-        ]
-
-        for invalid_state in invalid_states:
-            with pytest.raises(OIDCStateValidationError):
-                OIDCUtility.validate_state(invalid_state, TEST_SECRET_KEY)
+    @pytest.mark.parametrize(
+        "invalid_state",
+        [
+            pytest.param("no-dot-separator", id="no-dot"),
+            pytest.param("", id="empty"),
+            pytest.param("only.one.part", id="one-part"),
+            pytest.param("invalid-base64!@#$.data", id="invalid-base64"),
+        ],
+    )
+    def test_validate_state_invalid_format(self, invalid_state):
+        """Test state validation with invalid format."""
+        with pytest.raises(OIDCStateValidationError):
+            OIDCUtility.validate_state(invalid_state, TEST_SECRET_KEY)
 
     def test_validate_state_custom_max_age(self):
         custom_max_age = 120

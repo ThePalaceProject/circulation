@@ -98,21 +98,29 @@ class TestOIDCController:
         assert result.status_code == 302
         assert "error=" in result.location
 
-    def test_oidc_authentication_redirect_missing_provider(self, controller):
-        params = {"redirect_uri": "https://app.example.com"}
-
+    @pytest.mark.parametrize(
+        "params,expected_error_field",
+        [
+            pytest.param(
+                {"redirect_uri": "https://app.example.com"},
+                "provider",
+                id="missing-provider",
+            ),
+            pytest.param(
+                {"provider": "OpenID Connect"},
+                "redirect_uri",
+                id="missing-redirect-uri",
+            ),
+        ],
+    )
+    def test_oidc_authentication_redirect_missing_parameter(
+        self, controller, params, expected_error_field
+    ):
+        """Test OIDC authentication redirect with missing required parameters."""
         result = controller.oidc_authentication_redirect(params, MagicMock())
 
         assert result.uri == OIDC_INVALID_REQUEST.uri
-        assert "provider" in result.detail
-
-    def test_oidc_authentication_redirect_missing_redirect_uri(self, controller):
-        params = {"provider": "OpenID Connect"}
-
-        result = controller.oidc_authentication_redirect(params, MagicMock())
-
-        assert result.uri == OIDC_INVALID_REQUEST.uri
-        assert "redirect_uri" in result.detail
+        assert expected_error_field in result.detail
 
     def test_oidc_authentication_redirect_unknown_provider(
         self, controller, mock_authenticator
@@ -218,21 +226,29 @@ class TestOIDCController:
             assert "code_challenge=" in result.location
             assert "code_challenge_method=S256" in result.location
 
-    def test_oidc_authentication_callback_missing_code(self, controller):
-        params = {"state": "test-state"}
-
+    @pytest.mark.parametrize(
+        "params,expected_error_substring",
+        [
+            pytest.param(
+                {"state": "test-state"},
+                "authorization code",
+                id="missing-code",
+            ),
+            pytest.param(
+                {"code": "test-code"},
+                "state",
+                id="missing-state",
+            ),
+        ],
+    )
+    def test_oidc_authentication_callback_missing_parameter(
+        self, controller, params, expected_error_substring
+    ):
+        """Test OIDC authentication callback with missing required parameters."""
         result = controller.oidc_authentication_callback(params, MagicMock())
 
         assert result.uri == OIDC_INVALID_RESPONSE.uri
-        assert "authorization code" in result.detail
-
-    def test_oidc_authentication_callback_missing_state(self, controller):
-        params = {"code": "test-code"}
-
-        result = controller.oidc_authentication_callback(params, MagicMock())
-
-        assert result.uri == OIDC_INVALID_RESPONSE.uri
-        assert "state" in result.detail
+        assert expected_error_substring in result.detail
 
     def test_oidc_authentication_callback_invalid_state(
         self, controller, mock_authenticator
@@ -689,37 +705,47 @@ class TestOIDCControllerLogout:
             assert result.status_code == 302
             assert "https://oidc.provider.test/logout" in result.location
 
-    def test_oidc_logout_initiate_missing_provider(self, logout_controller, db):
+    @pytest.mark.parametrize(
+        "params,error_constant_name,expected_message",
+        [
+            pytest.param(
+                {
+                    "id_token_hint": "test.id.token",
+                    "post_logout_redirect_uri": "https://app.example.com/logout/callback",
+                },
+                "OIDC_INVALID_REQUEST",
+                "Missing 'provider' parameter in logout request",
+                id="missing-provider",
+            ),
+            pytest.param(
+                {
+                    "provider": "Test OIDC",
+                    "post_logout_redirect_uri": "https://app.example.com/logout/callback",
+                },
+                "OIDC_INVALID_ID_TOKEN_HINT",
+                "Missing 'id_token_hint' parameter in logout request",
+                id="missing-id-token-hint",
+            ),
+        ],
+    )
+    def test_oidc_logout_initiate_missing_parameter(
+        self, logout_controller, db, params, error_constant_name, expected_message
+    ):
+        """Test OIDC logout initiate with missing required parameters."""
         from palace.manager.integration.patron_auth.oidc.controller import (
+            OIDC_INVALID_ID_TOKEN_HINT,
             OIDC_INVALID_REQUEST,
         )
 
-        params = {
-            "id_token_hint": "test.id.token",
-            "post_logout_redirect_uri": "https://app.example.com/logout/callback",
-        }
+        error_constant = (
+            OIDC_INVALID_REQUEST
+            if error_constant_name == "OIDC_INVALID_REQUEST"
+            else OIDC_INVALID_ID_TOKEN_HINT
+        )
 
         result = logout_controller.oidc_logout_initiate(params, db.session)
 
-        assert result == OIDC_INVALID_REQUEST.detailed(
-            "Missing 'provider' parameter in logout request"
-        )
-
-    def test_oidc_logout_initiate_missing_id_token_hint(self, logout_controller, db):
-        from palace.manager.integration.patron_auth.oidc.controller import (
-            OIDC_INVALID_ID_TOKEN_HINT,
-        )
-
-        params = {
-            "provider": "Test OIDC",
-            "post_logout_redirect_uri": "https://app.example.com/logout/callback",
-        }
-
-        result = logout_controller.oidc_logout_initiate(params, db.session)
-
-        assert result == OIDC_INVALID_ID_TOKEN_HINT.detailed(
-            "Missing 'id_token_hint' parameter in logout request"
-        )
+        assert result == error_constant.detailed(expected_message)
 
     def test_oidc_logout_callback_success(self, logout_controller, db):
         from unittest.mock import Mock
