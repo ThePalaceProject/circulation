@@ -844,24 +844,24 @@ def create_lane_for_small_collection(
     :param parent: The parent of the new lane.
     """
     if isinstance(languages, str):
-        languages = [languages]
+        languages_list = [languages]
     else:
-        languages = list(languages)
+        languages_list = list(languages)
 
     ADULT = Classifier.AUDIENCES_ADULT
     YA_CHILDREN = [Classifier.AUDIENCE_YOUNG_ADULT, Classifier.AUDIENCE_CHILDREN]
 
     common_args: dict[str, Any] = dict(
-        languages=languages,
+        languages=languages_list,
         media=[Edition.BOOK_MEDIUM],
         genres=[],
     )
 
     try:
-        language_identifier = LanguageCodes.name_for_languageset(languages)
+        language_identifier = LanguageCodes.name_for_languageset(languages_list)
     except ValueError as e:
         log.warning(
-            "Could not create a lane for small collection with languages %s", languages
+            f"Could not create a lane for small collection with languages {languages_list}"
         )
         return 0
 
@@ -933,15 +933,15 @@ def create_lane_for_tiny_collection(
         return priority
 
     if isinstance(languages, str):
-        languages = [languages]
+        languages_list = [languages]
     else:
-        languages = list(languages)
+        languages_list = list(languages)
 
     try:
-        name = LanguageCodes.name_for_languageset(languages)
+        name = LanguageCodes.name_for_languageset(languages_list)
     except ValueError as e:
         log.warning(
-            "Could not create a lane for tiny collection with languages %s", languages
+            f"Could not create a lane for tiny collection with languages {languages_list}"
         )
         return 0
 
@@ -955,6 +955,6 @@ def create_lane_for_tiny_collection(
         media=[Edition.BOOK_MEDIUM],
         fiction=None,
         priority=priority,
-        languages=languages,
+        languages=languages_list,
     )
     return priority + 1
