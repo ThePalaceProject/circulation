@@ -1,6 +1,7 @@
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
+from werkzeug.datastructures import ImmutableMultiDict
 
 from palace.manager.api import routes
 from palace.manager.api.problem_details import LIBRARY_NOT_FOUND
@@ -458,3 +459,95 @@ class TestHealthCheck:
         # not a mock method -- the Response returned by the mock
         # system would have an explanatory message in its .data.
         assert "" == response.get_data(as_text=True)
+
+
+class TestOIDCRoutes:
+    @pytest.mark.parametrize(
+        "route_func,patch_method,query_string,expected_params",
+        [
+            pytest.param(
+                routes.oidc_authenticate,
+                "oidc_authentication_redirect",
+                "/?provider=OpenID+Connect&redirect_uri=https://app.example.com",
+                {
+                    "provider": "OpenID Connect",
+                    "redirect_uri": "https://app.example.com",
+                },
+                id="authenticate",
+            ),
+            pytest.param(
+                routes.oidc_callback,
+                "oidc_authentication_callback",
+                "/?code=test-code&state=test-state",
+                {"code": "test-code", "state": "test-state"},
+                id="callback",
+            ),
+            pytest.param(
+                routes.oidc_logout,
+                "oidc_logout_initiate",
+                "/?provider=OpenID+Connect&id_token_hint=test-token&post_logout_redirect_uri=https://app.example.com",
+                {
+                    "provider": "OpenID Connect",
+                    "id_token_hint": "test-token",
+                    "post_logout_redirect_uri": "https://app.example.com",
+                },
+                id="logout",
+            ),
+            pytest.param(
+                routes.oidc_logout_callback,
+                "oidc_logout_callback",
+                "/?state=test-logout-state",
+                {"state": "test-logout-state"},
+                id="logout-callback",
+            ),
+        ],
+    )
+    def test_oidc_route(
+        self,
+        route_func,
+        patch_method,
+        query_string,
+        expected_params,
+        controller_fixture: ControllerFixture,
+    ):
+        """Test OIDC route controller logic."""
+        with (
+            controller_fixture.app.test_request_context(query_string),
+            patch.object(
+                controller_fixture.manager.oidc_controller,
+                patch_method,
+            ) as mock_method,
+        ):
+            mock_method.return_value = MagicMock(status_code=302)
+
+            response = route_func()
+
+            assert response.status_code == 302
+            mock_method.assert_called_once()
+            call_args = mock_method.call_args
+            assert isinstance(call_args[0][0], ImmutableMultiDict)
+            for key, value in expected_params.items():
+                assert call_args[0][0][key] == value
+
+    def test_oidc_backchannel_logout_route(self, controller_fixture: ControllerFixture):
+        """Test the /oidc/backchannel_logout route controller logic."""
+        with (
+            controller_fixture.app.test_request_context(
+                "/",
+                method="POST",
+                data={"logout_token": "test.logout.token"},
+            ),
+            patch.object(
+                controller_fixture.manager.oidc_controller,
+                "oidc_backchannel_logout",
+            ) as mock_backchannel,
+        ):
+            mock_backchannel.return_value = ("", 200)
+
+            response = routes.oidc_backchannel_logout()
+
+            assert response == ("", 200)
+            mock_backchannel.assert_called_once()
+            call_args = mock_backchannel.call_args
+            assert isinstance(call_args[0][0], ImmutableMultiDict)
+            assert call_args[0][0]["logout_token"] == "test.logout.token"
