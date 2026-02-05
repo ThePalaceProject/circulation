@@ -162,7 +162,6 @@ class LinkProperties(rwpm.LinkProperties, palace.LinkProperties):
     holds: Holds = Field(default_factory=Holds)
     copies: Copies = Field(default_factory=Copies)
     availability: Availability = Field(default_factory=Availability)
-    lcp_hashed_passphrase: str | None = None
 
 
 class Link(rwpm.Link):

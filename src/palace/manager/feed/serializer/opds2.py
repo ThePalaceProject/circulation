@@ -5,7 +5,6 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.feed.serializer.base import SerializerInterface
 from palace.manager.feed.serializer.opds import is_sort_facet
 from palace.manager.feed.types import (
@@ -20,10 +19,9 @@ from palace.manager.feed.types import (
 from palace.manager.opds import opds2, rwpm, schema_org
 from palace.manager.opds.base import BaseOpdsModel
 from palace.manager.opds.palace import DrmMetadata, LinkActions
-from palace.manager.opds.types.language import LanguageMap
 from palace.manager.sqlalchemy.model.contributor import Contributor
 from palace.manager.util.log import LoggerMixin
-from palace.manager.util.opds_writer import AtomFeed, OPDSFeed, OPDSMessage
+from palace.manager.util.opds_writer import AtomFeed, OPDSMessage
 
 ALLOWED_ROLES = [
     "translator",
@@ -46,23 +44,24 @@ PALACE_REL_SORT = AtomFeed.PALACE_REL_SORT
 PALACE_PROPERTIES_ACTIVE_SORT = AtomFeed.PALACE_PROPS_NS + "active-sort"
 PALACE_PROPERTIES_DEFAULT = AtomFeed.PALACE_PROPERTIES_DEFAULT
 
-DEFAULT_LINK_TYPE = "application/octet-stream"
-
 
 class OPDS2Serializer(SerializerInterface[dict[str, Any]], LoggerMixin):
-    CONTENT_TYPE = opds2.Feed.content_type()
-
     def serialize_feed(
         self, feed: FeedData, precomposed_entries: list[Any] | None = None
     ) -> str:
         publications: list[opds2.Publication] = []
         for entry in feed.entries:
             if entry.computed is None:
+                self.log.warning(
+                    f"Skipping entry for work '{entry.work.title}' (identifier={entry.identifier!r}): no computed data available"
+                )
                 continue
             try:
                 publications.append(self._publication(entry.computed))
             except ValidationError as exc:
-                self.log.exception("Skipping invalid OPDS2 publication: %s", exc)
+                self.log.exception(
+                    f"Skipping invalid OPDS2 publication (identifier={entry.identifier!r}): {exc}"
+                )
 
         feed_links = self._serialize_feed_links(feed)
         feed_links.extend(self._serialize_sort_links(feed))
@@ -82,12 +81,15 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]], LoggerMixin):
         return self.to_string(self._dump_model(feed_model))
 
     def _serialize_metadata(self, feed: FeedData) -> opds2.FeedMetadata:
-        fmeta = feed.metadata
-        title = fmeta.title or ""
+        feed_metadata = feed.metadata
+        title = feed_metadata.title
+        if not title:
+            self.log.warning("Feed metadata has no title, defaulting to 'Feed'")
+            title = "Feed"
         return opds2.FeedMetadata(
-            title=LanguageMap(title),
-            items_per_page=fmeta.items_per_page,
-            modified=fmeta.updated,
+            title=title,
+            items_per_page=feed_metadata.items_per_page,
+            modified=feed_metadata.updated,
         )
 
     def serialize_opds_message(self, entry: OPDSMessage) -> dict[str, Any]:
@@ -106,71 +108,62 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]], LoggerMixin):
     def _serialize_publication_metadata(
         self, data: WorkEntryData
     ) -> opds2.PublicationMetadata:
-        identifier = data.identifier or data.pwid
+        identifier = data.identifier
         additional_type = data.additional_type or schema_org.PublicationTypes.book
-        title = data.title or OPDSFeed.NO_TITLE
-
-        subtitle = LanguageMap(data.subtitle) if data.subtitle else None
+        title = data.title
+        subtitle = data.subtitle
         description = data.summary.text if data.summary else None
-        publisher = (
-            rwpm.Contributor(name=LanguageMap(data.publisher))
-            if data.publisher
-            else None
-        )
-        imprint = (
-            rwpm.Contributor(name=LanguageMap(data.imprint)) if data.imprint else None
-        )
+        publisher = rwpm.Contributor(name=data.publisher) if data.publisher else None
+        imprint = rwpm.Contributor(name=data.imprint) if data.imprint else None
 
-        subjects: tuple[rwpm.Subject, ...] | None = None
-        if data.categories:
-            subjects = tuple(
-                rwpm.Subject(
-                    name=LanguageMap(category.label),
-                    sort_as=category.label,
-                    code=category.term,
-                    scheme=category.scheme,
+        subjects = [
+            rwpm.Subject(
+                name=category.label,
+                sort_as=category.label,
+                code=category.term,
+                scheme=category.scheme,
+            )
+            for category in data.categories
+        ]
+
+        belongs_to = (
+            rwpm.BelongsTo(
+                series_data=rwpm.Contributor(
+                    name=data.series.name,
+                    position=data.series.position,
                 )
-                for category in data.categories
             )
+            if data.series
+            else rwpm.BelongsTo()
+        )
 
-        belongs_to: rwpm.BelongsTo | None = None
-        if data.series:
-            series_contributor = rwpm.Contributor(
-                name=LanguageMap(data.series.name),
-                position=data.series.position,
-            )
-            belongs_to = rwpm.BelongsTo(series_data=series_contributor)
+        if len(data.authors) > 1:
+            author = [self._serialize_contributor(a) for a in data.authors]
+        elif data.authors:
+            author = self._serialize_contributor(data.authors[0])
+        else:
+            author = None
 
-        author = self._serialize_contributor(data.authors[0]) if data.authors else None
+        role_map: dict[str, rwpm.Contributor] = {}
+        generic_contributors: list[rwpm.ContributorWithRole] = []
 
-        translator = editor = artist = illustrator = None
-        letterer = penciler = colorist = inker = narrator = None
+        for contrib in data.contributors:
+            role = MARC_CODE_TO_ROLES.get(contrib.role or "")
+            if role:
+                role_map[role] = self._serialize_contributor(contrib)
+            else:
+                generic_contributors.append(
+                    rwpm.ContributorWithRole(
+                        name=contrib.name,
+                        sort_as=contrib.sort_name,
+                        role=contrib.role,
+                    )
+                )
 
-        for contributor in data.contributors:
-            role = MARC_CODE_TO_ROLES.get(contributor.role or "")
-            if role == "translator":
-                translator = self._serialize_contributor(contributor)
-            elif role == "editor":
-                editor = self._serialize_contributor(contributor)
-            elif role == "artist":
-                artist = self._serialize_contributor(contributor)
-            elif role == "illustrator":
-                illustrator = self._serialize_contributor(contributor)
-            elif role == "letterer":
-                letterer = self._serialize_contributor(contributor)
-            elif role == "penciler":
-                penciler = self._serialize_contributor(contributor)
-            elif role == "colorist":
-                colorist = self._serialize_contributor(contributor)
-            elif role == "inker":
-                inker = self._serialize_contributor(contributor)
-            elif role == "narrator":
-                narrator = self._serialize_contributor(contributor)
-
-        metadata = opds2.PublicationMetadata(
+        return opds2.PublicationMetadata(
             identifier=identifier,
             type=additional_type,
-            title=LanguageMap(title),
+            title=title,
             sort_as=data.sort_title,
             subtitle=subtitle,
             duration=data.duration,
@@ -182,20 +175,18 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]], LoggerMixin):
             imprint=imprint,
             subject=subjects,
             author=author,
-            translator=translator,
-            editor=editor,
-            artist=artist,
-            illustrator=illustrator,
-            letterer=letterer,
-            penciler=penciler,
-            colorist=colorist,
-            inker=inker,
-            narrator=narrator,
+            translator=role_map.get("translator"),
+            editor=role_map.get("editor"),
+            artist=role_map.get("artist"),
+            illustrator=role_map.get("illustrator"),
+            letterer=role_map.get("letterer"),
+            penciler=role_map.get("penciler"),
+            colorist=role_map.get("colorist"),
+            inker=role_map.get("inker"),
+            narrator=role_map.get("narrator"),
+            contributor=generic_contributors,
+            belongs_to=belongs_to,
         )
-
-        if belongs_to is None:
-            return metadata
-        return metadata.model_copy(update={"belongs_to": belongs_to})
 
     def _serialize_image_links(self, links: Iterable[Link]) -> list[opds2.Link]:
         return [self._serialize_link(link) for link in links]
@@ -206,19 +197,24 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]], LoggerMixin):
         links: list[opds2.StrictLink] = []
         for link in data.other_links:
             if link.rel is None:
-                self.log.warning("Skipping OPDS2 link without rel: %s", link.href)
+                self.log.warning(f"Skipping OPDS2 link without rel: {link.href}")
+                continue
+            if link.type is None:
+                self.log.error(f"Skipping OPDS2 link without type: {link.href}")
                 continue
             links.append(
                 self._strict_link(
                     href=link.href,
                     rel=link.rel,
-                    type=link.type or DEFAULT_LINK_TYPE,
+                    type=link.type,
                     title=link.title,
                 )
             )
 
         for acquisition in data.acquisition_links:
-            links.append(self._serialize_acquisition_link(acquisition))
+            acq_link = self._serialize_acquisition_link(acquisition)
+            if acq_link is not None:
+                links.append(acq_link)
         return links
 
     def _serialize_link(self, link: Link) -> opds2.Link:
@@ -229,8 +225,10 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]], LoggerMixin):
             title=link.title,
         )
 
-    def _serialize_acquisition_link(self, link: Acquisition) -> opds2.StrictLink:
+    def _serialize_acquisition_link(self, link: Acquisition) -> opds2.StrictLink | None:
         link_type = self._acquisition_link_type(link)
+        if link_type is None:
+            return None
         properties = self._serialize_acquisition_properties(link)
         return self._strict_link(
             href=link.href,
@@ -271,8 +269,9 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]], LoggerMixin):
 
         indirect_acquisition = (
             [
-                self._serialize_indirect_acquisition(indirect)
+                acq
                 for indirect in link.indirect_acquisitions
+                if (acq := self._serialize_indirect_acquisition(indirect)) is not None
             ]
             if link.indirect_acquisitions
             else None
@@ -310,38 +309,38 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]], LoggerMixin):
 
     def _serialize_indirect_acquisition(
         self, indirect: IndirectAcquisition
-    ) -> opds2.AcquisitionObject:
+    ) -> opds2.AcquisitionObject | None:
+        if indirect.type is None:
+            self.log.error(f"Skipping indirect acquisition without type")
+            return None
         children = [
             self._serialize_indirect_acquisition(child) for child in indirect.children
         ]
         return opds2.AcquisitionObject(
-            type=indirect.type or DEFAULT_LINK_TYPE,
-            child=children or None,
+            type=indirect.type,
+            child=[c for c in children if c is not None] or None,
         )
 
     def _serialize_contributor(self, author: Author) -> rwpm.Contributor:
-        if author.link:
-            return rwpm.Contributor(
-                name=LanguageMap(author.name),
-                sort_as=author.sort_name,
-                links=[self._serialize_contributor_link(author)],
-            )
-        return rwpm.Contributor(
-            name=LanguageMap(author.name),
-            sort_as=author.sort_name,
+        links = (
+            [
+                rwpm.Link(
+                    href=link.href,
+                    rel=link.rel,
+                    type=link.type,
+                )
+            ]
+            if (link := author.link) and link.href
+            else []
         )
-
-    def _serialize_contributor_link(self, author: Author) -> rwpm.Link:
-        # author.link is guaranteed non-None by _serialize_contributor's guard
-        assert author.link is not None
-        return rwpm.Link(
-            href=author.link.href,
-            rel=author.link.rel,
-            type=author.link.type,
+        return rwpm.Contributor(
+            name=author.name,
+            sort_as=author.sort_name,
+            links=links,
         )
 
     def content_type(self) -> str:
-        return self.CONTENT_TYPE
+        return opds2.Feed.content_type()
 
     @classmethod
     def to_string(cls, data: dict[str, Any]) -> str:
@@ -354,28 +353,16 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]], LoggerMixin):
             if strict is not None:
                 links.append(strict)
 
-        if not any(self._is_self_link(link) for link in links):
-            if feed.metadata.id:
-                links.append(
-                    opds2.StrictLink(
-                        href=feed.metadata.id,
-                        rel=rwpm.LinkRelations.self,
-                        type=self.CONTENT_TYPE,
-                    )
-                )
-            else:
-                raise PalaceValueError("OPDS2 feeds require a self link")
-
         return links
 
     def _serialize_feed_link(self, link: Link) -> opds2.StrictLink | None:
         if link.rel is None:
-            self.log.warning("Skipping OPDS2 feed link without rel: %s", link.href)
+            self.log.warning(f"Skipping OPDS2 feed link without rel: {link.href}")
             return None
         return self._strict_link(
             href=link.href,
             rel=link.rel,
-            type=link.type or self.CONTENT_TYPE,
+            type=link.type or self.content_type(),
             title=link.title,
         )
 
@@ -389,7 +376,7 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]], LoggerMixin):
 
         for group, links in facet_links.items():
             if len(links) < 2:
-                self.log.warning("Skipping facet group '%s' with < 2 links", group)
+                self.log.warning(f"Skipping facet group '{group}' with < 2 links")
                 continue
             facet_link_models: list[opds2.TitleLink] = []
             for link in links:
@@ -408,7 +395,7 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]], LoggerMixin):
 
             results.append(
                 opds2.Facet(
-                    metadata=opds2.FeedMetadata(title=LanguageMap(group)),
+                    metadata=opds2.FeedMetadata(title=group),
                     links=facet_link_models,
                 )
             )
@@ -438,7 +425,7 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]], LoggerMixin):
         return self._strict_link(
             href=link.href,
             rel=PALACE_REL_SORT,
-            type=link.type or self.CONTENT_TYPE,
+            type=link.type or self.content_type(),
             title=link.title,
             properties=properties,
         )
@@ -460,14 +447,14 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]], LoggerMixin):
                 )
         return navigation
 
-    def _acquisition_link_type(self, link: Acquisition) -> str:
+    def _acquisition_link_type(self, link: Acquisition) -> str | None:
         if link.type:
             return link.type
         for indirect in link.indirect_acquisitions:
             if indirect.type:
                 return indirect.type
-        self.log.warning("Defaulting OPDS2 acquisition link type: %s", link.href)
-        return DEFAULT_LINK_TYPE
+        self.log.error(f"Skipping acquisition link without type: {link.href}")
+        return None
 
     def _availability_state(self, link: Acquisition) -> opds2.AvailabilityState | None:
         if link.is_loan:
@@ -485,16 +472,13 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]], LoggerMixin):
                 )
         return None
 
-    def _is_self_link(self, link: opds2.StrictLink) -> bool:
-        return rwpm.LinkRelations.self in link.rels
-
     def _parse_int(self, value: str | None) -> int | None:
         if value is None:
             return None
         try:
             return int(value)
         except ValueError:
-            self.log.warning("Expected numeric value, got '%s'", value)
+            self.log.warning(f"Expected numeric value, got '{value}'")
             return None
 
     @staticmethod

@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Literal
-
 from pydantic import Field, field_validator
 
 from palace.manager.opds.base import BaseOpdsModel
@@ -63,10 +61,11 @@ class LinkProperties(BaseOpdsModel):
 
     actions: LinkActions | None = None
     licensor: DrmMetadata | None = None
+    lcp_hashed_passphrase: str | None = None
 
-    palace_default: Literal["true"] | None = Field(
+    palace_default: bool | None = Field(
         None, alias="http://palaceproject.io/terms/properties/default"
     )
-    palace_active_sort: Literal["true"] | None = Field(
+    palace_active_sort: bool | None = Field(
         None, alias="http://palaceproject.io/terms/properties/active-sort"
     )
