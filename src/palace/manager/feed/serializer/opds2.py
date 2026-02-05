@@ -1,5 +1,4 @@
 import json
-import logging
 from collections import defaultdict
 from collections.abc import Iterable
 from typing import Any
@@ -23,9 +22,8 @@ from palace.manager.opds.base import BaseOpdsModel
 from palace.manager.opds.palace import DrmMetadata, LinkActions
 from palace.manager.opds.types.language import LanguageMap
 from palace.manager.sqlalchemy.model.contributor import Contributor
+from palace.manager.util.log import LoggerMixin
 from palace.manager.util.opds_writer import AtomFeed, OPDSFeed, OPDSMessage
-
-logger = logging.getLogger(__name__)
 
 ALLOWED_ROLES = [
     "translator",
@@ -51,7 +49,7 @@ PALACE_PROPERTIES_DEFAULT = AtomFeed.PALACE_PROPERTIES_DEFAULT
 DEFAULT_LINK_TYPE = "application/octet-stream"
 
 
-class OPDS2Serializer(SerializerInterface[dict[str, Any]]):
+class OPDS2Serializer(SerializerInterface[dict[str, Any]], LoggerMixin):
     CONTENT_TYPE = opds2.Feed.content_type()
 
     def serialize_feed(
@@ -64,7 +62,7 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]]):
             try:
                 publications.append(self._publication(entry.computed))
             except ValidationError as exc:
-                logger.exception("Skipping invalid OPDS2 publication: %s", exc)
+                self.log.exception("Skipping invalid OPDS2 publication: %s", exc)
 
         feed_links = self._serialize_feed_links(feed)
         feed_links.extend(self._serialize_sort_links(feed))
@@ -208,7 +206,7 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]]):
         links: list[opds2.StrictLink] = []
         for link in data.other_links:
             if link.rel is None:
-                logger.warning("Skipping OPDS2 link without rel: %s", link.href)
+                self.log.warning("Skipping OPDS2 link without rel: %s", link.href)
                 continue
             links.append(
                 self._strict_link(
@@ -372,7 +370,7 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]]):
 
     def _serialize_feed_link(self, link: Link) -> opds2.StrictLink | None:
         if link.rel is None:
-            logger.warning("Skipping OPDS2 feed link without rel: %s", link.href)
+            self.log.warning("Skipping OPDS2 feed link without rel: %s", link.href)
             return None
         return self._strict_link(
             href=link.href,
@@ -391,7 +389,7 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]]):
 
         for group, links in facet_links.items():
             if len(links) < 2:
-                logger.warning("Skipping facet group '%s' with < 2 links", group)
+                self.log.warning("Skipping facet group '%s' with < 2 links", group)
                 continue
             facet_link_models: list[opds2.TitleLink] = []
             for link in links:
@@ -468,7 +466,7 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]]):
         for indirect in link.indirect_acquisitions:
             if indirect.type:
                 return indirect.type
-        logger.warning("Defaulting OPDS2 acquisition link type: %s", link.href)
+        self.log.warning("Defaulting OPDS2 acquisition link type: %s", link.href)
         return DEFAULT_LINK_TYPE
 
     def _availability_state(self, link: Acquisition) -> opds2.AvailabilityState | None:
@@ -480,7 +478,7 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]]):
             try:
                 return opds2.AvailabilityState(link.availability_status)
             except ValueError:
-                logger.warning(
+                self.log.warning(
                     "Unknown availability status '%s' for %s",
                     link.availability_status,
                     link.href,
@@ -490,14 +488,13 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]]):
     def _is_self_link(self, link: opds2.StrictLink) -> bool:
         return rwpm.LinkRelations.self in link.rels
 
-    @staticmethod
-    def _parse_int(value: str | None) -> int | None:
+    def _parse_int(self, value: str | None) -> int | None:
         if value is None:
             return None
         try:
             return int(value)
         except ValueError:
-            logger.warning("Expected numeric value, got '%s'", value)
+            self.log.warning("Expected numeric value, got '%s'", value)
             return None
 
     @staticmethod
