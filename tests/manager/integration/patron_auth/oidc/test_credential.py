@@ -48,34 +48,35 @@ def sample_id_token_claims():
 class TestOIDCCredentialManager:
     """Tests for OIDCCredentialManager."""
 
-    def test_create_token_value_with_refresh_token(
-        self, manager, sample_id_token_claims
+    @pytest.mark.parametrize(
+        "refresh_token,should_include_refresh_token",
+        [
+            pytest.param("test-refresh-token", True, id="with-refresh-token"),
+            pytest.param(None, False, id="without-refresh-token"),
+        ],
+    )
+    def test_create_token_value(
+        self,
+        manager,
+        sample_id_token_claims,
+        refresh_token,
+        should_include_refresh_token,
     ):
-        """Test creating token value with all fields."""
+        """Test creating token value with different refresh token configurations."""
         token_value = manager._create_token_value(
             sample_id_token_claims,
             "test-access-token",
-            "test-refresh-token",
+            refresh_token,
         )
 
         token_data = json.loads(token_value)
         assert token_data["id_token_claims"] == sample_id_token_claims
         assert token_data["access_token"] == "test-access-token"
-        assert token_data["refresh_token"] == "test-refresh-token"
 
-    def test_create_token_value_without_refresh_token(
-        self, manager, sample_id_token_claims
-    ):
-        """Test creating token value without refresh token."""
-        token_value = manager._create_token_value(
-            sample_id_token_claims,
-            "test-access-token",
-        )
-
-        token_data = json.loads(token_value)
-        assert token_data["id_token_claims"] == sample_id_token_claims
-        assert token_data["access_token"] == "test-access-token"
-        assert "refresh_token" not in token_data
+        if should_include_refresh_token:
+            assert token_data["refresh_token"] == refresh_token
+        else:
+            assert "refresh_token" not in token_data
 
     def test_extract_token_data_success(
         self,
@@ -169,99 +170,74 @@ class TestOIDCCredentialManager:
             manager.extract_token_data(credential)
         assert "missing access_token" in str(exc_info.value)
 
-    def test_create_oidc_token_with_session_lifetime_override(
+    @pytest.mark.parametrize(
+        "expires_in,session_lifetime_days,refresh_token,expected_delta",
+        [
+            pytest.param(
+                3600,
+                30,
+                "test-refresh-token",
+                datetime.timedelta(days=30),
+                id="session-lifetime-override",
+            ),
+            pytest.param(
+                3600,
+                None,
+                None,
+                datetime.timedelta(seconds=3600),
+                id="provider-expiry",
+            ),
+            pytest.param(
+                None,
+                None,
+                None,
+                datetime.timedelta(hours=24),
+                id="default-expiry",
+            ),
+        ],
+    )
+    def test_create_oidc_token_with_expiry_strategy(
         self,
         manager,
         db: DatabaseTransactionFixture,
         mock_patron,
         sample_id_token_claims,
+        expires_in,
+        session_lifetime_days,
+        refresh_token,
+        expected_delta,
     ):
-        """Test creating OIDC token with session lifetime override."""
-        session_lifetime_days = 30
+        """Test creating OIDC token with different expiry strategies."""
+        create_kwargs = {
+            "db": db.session,
+            "patron": mock_patron,
+            "id_token_claims": sample_id_token_claims,
+            "access_token": "test-access-token",
+        }
+        if expires_in is not None:
+            create_kwargs["expires_in"] = expires_in
+        if session_lifetime_days is not None:
+            create_kwargs["session_lifetime_days"] = session_lifetime_days
+        if refresh_token is not None:
+            create_kwargs["refresh_token"] = refresh_token
 
-        credential = manager.create_oidc_token(
-            db.session,
-            mock_patron,
-            sample_id_token_claims,
-            "test-access-token",
-            "test-refresh-token",
-            expires_in=3600,
-            session_lifetime_days=session_lifetime_days,
-        )
+        credential = manager.create_oidc_token(**create_kwargs)
 
         assert credential.patron == mock_patron
         assert credential.type == manager.TOKEN_TYPE
         assert credential.data_source.name == manager.TOKEN_DATA_SOURCE_NAME
 
-        expected_expiry = utc_now() + datetime.timedelta(days=session_lifetime_days)
+        expected_expiry = utc_now() + expected_delta
         assert credential.expires is not None
         assert abs((credential.expires - expected_expiry).total_seconds()) < 5
 
         token_data = manager.extract_token_data(credential)
         assert token_data["id_token_claims"] == sample_id_token_claims
         assert token_data["access_token"] == "test-access-token"
-        assert token_data["refresh_token"] == "test-refresh-token"
-
-    def test_create_oidc_token_with_provider_expiry(
-        self,
-        manager,
-        db: DatabaseTransactionFixture,
-        mock_patron,
-        sample_id_token_claims,
-    ):
-        """Test creating OIDC token with provider expiry."""
-        expires_in_seconds = 3600
-
-        credential = manager.create_oidc_token(
-            db.session,
-            mock_patron,
-            sample_id_token_claims,
-            "test-access-token",
-            expires_in=expires_in_seconds,
-        )
-
-        expected_expiry = utc_now() + datetime.timedelta(seconds=expires_in_seconds)
-        assert credential.expires is not None
-        assert abs((credential.expires - expected_expiry).total_seconds()) < 5
-
-    def test_create_oidc_token_with_default_expiry(
-        self,
-        manager,
-        db: DatabaseTransactionFixture,
-        mock_patron,
-        sample_id_token_claims,
-    ):
-        """Test creating OIDC token with default 24-hour expiry."""
-        credential = manager.create_oidc_token(
-            db.session,
-            mock_patron,
-            sample_id_token_claims,
-            "test-access-token",
-        )
-
-        expected_expiry = utc_now() + datetime.timedelta(hours=24)
-        assert credential.expires is not None
-        assert abs((credential.expires - expected_expiry).total_seconds()) < 5
-
-    def test_create_oidc_token_without_refresh_token(
-        self,
-        manager,
-        db: DatabaseTransactionFixture,
-        mock_patron,
-        sample_id_token_claims,
-    ):
-        """Test creating OIDC token without refresh token."""
-        credential = manager.create_oidc_token(
-            db.session,
-            mock_patron,
-            sample_id_token_claims,
-            "test-access-token",
-            refresh_token=None,
-            expires_in=3600,
-        )
-
-        token_data = manager.extract_token_data(credential)
-        assert "refresh_token" not in token_data
+        if refresh_token is not None:
+            assert token_data["refresh_token"] == refresh_token
+        else:
+            assert "refresh_token" not in token_data
 
     def test_lookup_oidc_token_by_patron_found(
         self,
