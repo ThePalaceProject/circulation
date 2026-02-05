@@ -3,9 +3,10 @@ from __future__ import annotations
 from collections.abc import Sequence
 from enum import StrEnum, auto
 from functools import cached_property
-from typing import Literal
+from typing import Any, Literal, cast
 
-from pydantic import Field, NonNegativeInt, PositiveFloat, PositiveInt
+from pydantic import Field, NonNegativeInt, PositiveFloat, PositiveInt, model_serializer
+from pydantic_core.core_schema import SerializerFunctionWrapHandler
 
 from palace.manager.opds.base import BaseOpdsModel
 from palace.manager.opds.types.date import (
@@ -123,6 +124,20 @@ class Link(BaseLink):
     children: CompactCollection[Link] = Field(default_factory=CompactCollection)
 
     properties: LinkProperties = Field(default_factory=LinkProperties)
+
+    @model_serializer(mode="wrap")
+    def _serialize(self, serializer: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        data = cast(dict[str, Any], serializer(self))
+
+        # Only include properties in output if there are properties set
+        if not data.get("properties"):
+            data.pop("properties", None)
+
+        # Only include templated in the output when it is True
+        if not self.templated:
+            data.pop("templated", None)
+
+        return data
 
 
 class AltIdentifier(BaseOpdsModel):

@@ -568,31 +568,15 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]]):
         properties: opds2.LinkProperties | None = None,
         templated: bool = False,
     ) -> opds2.StrictLink:
-        if properties is None and not templated:
-            return opds2.StrictLink(href=href, rel=rel, type=type, title=title)
         if properties is None:
-            return opds2.StrictLink(
-                href=href,
-                rel=rel,
-                type=type,
-                title=title,
-                templated=True,
-            )
-        if templated:
-            return opds2.StrictLink(
-                href=href,
-                rel=rel,
-                type=type,
-                title=title,
-                properties=properties,
-                templated=True,
-            )
+            properties = opds2.LinkProperties()
         return opds2.StrictLink(
             href=href,
             rel=rel,
             type=type,
             title=title,
             properties=properties,
+            templated=templated,
         )
 
     @staticmethod
@@ -605,7 +589,7 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]]):
         properties: opds2.LinkProperties | None = None,
     ) -> opds2.TitleLink:
         if properties is None:
-            return opds2.TitleLink(href=href, title=title, rel=rel, type=type)
+            properties = opds2.LinkProperties()
         return opds2.TitleLink(
             href=href,
             title=title,
