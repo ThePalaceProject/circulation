@@ -33,7 +33,7 @@ class DiscoveryServiceLibraryRegistrationsController(AdminPermissionsControllerM
     a OpdsRegistrationService.
     """
 
-    def __init__(self, db: Session, registry: DiscoveryRegistry):
+    def __init__(self, db: Session, registry: DiscoveryRegistry) -> None:
         self._db: Session = db
         self.goal = Goals.DISCOVERY_GOAL
         self.registry = registry

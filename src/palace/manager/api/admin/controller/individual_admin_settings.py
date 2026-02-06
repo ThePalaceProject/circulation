@@ -1,4 +1,5 @@
 import json
+from typing import Any
 
 import flask
 from flask import Response
@@ -26,10 +27,12 @@ from palace.manager.util.problem_detail import ProblemDetail
 
 
 class IndividualAdminSettingsController(AdminPermissionsControllerMixin):
-    def __init__(self, db: Session):
+    def __init__(self, db: Session) -> None:
         self._db = db
 
-    def process_individual_admins(self):
+    def process_individual_admins(
+        self,
+    ) -> dict[str, list[dict[str, Any]]] | Response | ProblemDetail:
         if flask.request.method == "GET":
             return self.process_get()
         else:
@@ -61,25 +64,25 @@ class IndividualAdminSettingsController(AdminPermissionsControllerMixin):
                 highest_role = role
         return highest_role if has_auth else None
 
-    def process_get(self):
+    def process_get(self) -> dict[str, list[dict[str, Any]]] | ProblemDetail:
         logged_in_admin = get_request_admin(default=None)
         if not logged_in_admin:
             return ADMIN_AUTH_NOT_CONFIGURED
 
-        highest_role: AdminRole = self._highest_authorized_role()
+        highest_role = self._highest_authorized_role()
 
         if not highest_role:
             raise AdminNotAuthorized()
 
-        def append_role(roles, role):
+        def append_role(roles: list[dict[str, Any]], role: AdminRole) -> None:
             role_dict = dict(role=role.role)
             if role.library:
                 role_dict["library"] = role.library.short_name
             roles.append(role_dict)
 
-        admins = []
+        admins: list[dict[str, Any]] = []
         for admin in self._db.query(Admin).order_by(Admin.email):
-            roles = []
+            roles: list[dict[str, Any]] = []
             show_admin = True
             for role in admin.roles:
                 # System admin sees all
@@ -114,7 +117,7 @@ class IndividualAdminSettingsController(AdminPermissionsControllerMixin):
             individualAdmins=admins,
         )
 
-    def process_post_create_first_admin(self, email: str):
+    def process_post_create_first_admin(self, email: str) -> Response | ProblemDetail:
         """Create the first admin in the system."""
 
         # Passwords are always required, so check presence and validity up front.
@@ -147,7 +150,7 @@ class IndividualAdminSettingsController(AdminPermissionsControllerMixin):
             if not success:
                 self._db.rollback()
 
-    def process_post_create_new_admin(self, email: str):
+    def process_post_create_new_admin(self, email: str) -> Response | ProblemDetail:
         """Create a new admin (not the first admin in the system)."""
 
         # Passwords are always required, so check presence and validity up front.
@@ -179,7 +182,9 @@ class IndividualAdminSettingsController(AdminPermissionsControllerMixin):
             if not success:
                 self._db.rollback()
 
-    def process_post_update_existing_admin(self, admin: Admin):
+    def process_post_update_existing_admin(
+        self, admin: Admin
+    ) -> Response | ProblemDetail:
         """Update an existing admin."""
         password: str | None = flask.request.form.get("password")
 
@@ -212,7 +217,7 @@ class IndividualAdminSettingsController(AdminPermissionsControllerMixin):
             if not success:
                 self._db.rollback()
 
-    def process_post(self):
+    def process_post(self) -> Response | ProblemDetail:
         # There are three possible paths through this method:
         #
         # 1. The admin being edited is the first admin to be created. In this case,
@@ -227,6 +232,7 @@ class IndividualAdminSettingsController(AdminPermissionsControllerMixin):
         error = self.validate_form_fields(email)
         if error:
             return error
+        assert email is not None
 
         # If there are no admins yet, anyone can create the first system admin.
         creating_first_admin = self._db.query(Admin).count() == 0
@@ -246,7 +252,7 @@ class IndividualAdminSettingsController(AdminPermissionsControllerMixin):
         return self.process_post_update_existing_admin(existing_admin)
 
     @staticmethod
-    def unacceptable_password():
+    def unacceptable_password() -> ProblemDetail:
         return INCOMPLETE_CONFIGURATION.detailed(
             _("The password field cannot be blank.")
         )
@@ -263,7 +269,7 @@ class IndividualAdminSettingsController(AdminPermissionsControllerMixin):
 
         return True
 
-    def check_permissions(self, admin, settingUp):
+    def check_permissions(self, admin: Admin, settingUp: bool) -> None:
         """Before going any further, check that the user actually has permission
         to create/edit this type of admin"""
 
@@ -291,7 +297,7 @@ class IndividualAdminSettingsController(AdminPermissionsControllerMixin):
             if admin.is_sitewide_library_manager():
                 raise AdminNotAuthorized()
 
-    def validate_form_fields(self, email):
+    def validate_form_fields(self, email: str | None) -> ProblemDetail | None:
         """Check that 1) the user has entered something into the required fields,
         and 2) if so, the input is formatted as a valid email address."""
         if not email:
@@ -305,12 +311,16 @@ class IndividualAdminSettingsController(AdminPermissionsControllerMixin):
             return INVALID_EMAIL.detailed(
                 _('"%(email)s" is not a valid email address.', email=email)
             )
+        return None
 
-    def validate_role_exists(self, role):
+    def validate_role_exists(self, role: dict[str, Any]) -> ProblemDetail | None:
         if role.get("role") not in AdminRole.ROLES:
             return UNKNOWN_ROLE
+        return None
 
-    def look_up_library_for_role(self, role):
+    def look_up_library_for_role(
+        self, role: dict[str, Any]
+    ) -> Library | ProblemDetail | None:
         """If the role is affiliated with a particular library, as opposed to being
         sitewide, find the library (and check that it actually exists)."""
         library = None
@@ -326,7 +336,9 @@ class IndividualAdminSettingsController(AdminPermissionsControllerMixin):
                 )
         return library
 
-    def handle_roles(self, admin, roles, settingUp):
+    def handle_roles(
+        self, admin: Admin, roles: list[dict[str, Any]], settingUp: bool
+    ) -> ProblemDetail | None:
         """Compare the admin's existing set of roles against the roles submitted in the form, and,
         unless there's a problem with the roles or the permissions, modify the admin's roles accordingly
         """
@@ -350,39 +362,48 @@ class IndividualAdminSettingsController(AdminPermissionsControllerMixin):
             library = self.look_up_library_for_role(role)
             if isinstance(library, ProblemDetail):
                 return library
+            role_name = role.get("role")
+            if role_name is None:
+                return UNKNOWN_ROLE
 
-            if (role.get("role"), library) in old_roles_set:
+            if (role_name, library) in old_roles_set:
                 # The admin already has this role.
                 continue
 
             if library:
                 self.require_library_manager(library)
-            elif role.get("role") == AdminRole.SYSTEM_ADMIN and not settingUp:
+            elif role_name == AdminRole.SYSTEM_ADMIN and not settingUp:
                 self.require_system_admin()
             elif not settingUp:
                 self.require_sitewide_library_manager()
-            admin.add_role(role.get("role"), library)
+            admin.add_role(role_name, library)
 
         new_roles = {(role.get("role"), role.get("library")) for role in roles}
-        for role in old_roles:
-            library = None
-            if role.library:
-                library = role.library.short_name
-            if not (role.role, library) in new_roles:
-                if not library:
+        for existing_role in old_roles:
+            existing_library = existing_role.library
+            library_short_name = (
+                existing_library.short_name if existing_library else None
+            )
+            if not (existing_role.role, library_short_name) in new_roles:
+                if existing_library is None:
                     self.require_sitewide_library_manager()
-                if user and user.is_librarian(role.library):
+                    admin.remove_role(existing_role.role, existing_library)
+                    continue
+                if user and user.is_librarian(existing_library):
                     # A librarian can see roles for the library, but only a library manager
                     # can delete them.
-                    self.require_library_manager(role.library)
-                    admin.remove_role(role.role, role.library)
+                    self.require_library_manager(existing_library)
+                    admin.remove_role(existing_role.role, existing_library)
                 else:
                     # An admin who isn't a librarian for the library won't be able to see
                     # its roles, so might make requests that change other roles without
                     # including this library's roles. Leave the non-visible roles alone.
                     continue
+        return None
 
-    def handle_password(self, password, admin: Admin, is_new, settingUp):
+    def handle_password(
+        self, password: str | None, admin: Admin, is_new: bool, settingUp: bool
+    ) -> ProblemDetail | None:
         """Check that the user has permission to change this type of admin's password"""
 
         # User = person submitting the form; admin = person who the form is about
@@ -433,19 +454,20 @@ class IndividualAdminSettingsController(AdminPermissionsControllerMixin):
         except ProgrammingError as e:
             self._db.rollback()
             return MISSING_PGCRYPTO_EXTENSION
+        return None
 
-    def response(self, admin, is_new):
+    def response(self, admin: Admin, is_new: bool) -> Response:
         if is_new:
             return Response(str(admin.email), 201)
         else:
             return Response(str(admin.email), 200)
 
-    def process_delete(self, email):
+    def process_delete(self, email: str) -> Response | ProblemDetail:
         self.require_sitewide_library_manager()
         admin = get_one(self._db, Admin, email=email)
-        if admin.is_system_admin():
-            self.require_system_admin()
         if not admin:
             return MISSING_ADMIN
+        if admin.is_system_admin():
+            self.require_system_admin()
         self._db.delete(admin)
         return Response(str(_("Deleted")), 200)

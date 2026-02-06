@@ -192,6 +192,7 @@ class TestIndividualAdmins:
                     ],
                 },
             ]
+            assert isinstance(admins, list)
             assert sorted(
                 expected_admins,
                 key=lambda x: x["email"],
@@ -239,6 +240,7 @@ class TestIndividualAdmins:
                     ],
                 },
             ]
+            assert isinstance(admins, list)
             assert sorted(
                 expected_admins,
                 key=lambda x: x["email"],
@@ -300,6 +302,7 @@ class TestIndividualAdmins:
                     ],
                 },
             ]
+            assert isinstance(admins, list)
             assert sorted(
                 expected_admins,
                 key=lambda x: x["email"],
@@ -371,6 +374,7 @@ class TestIndividualAdmins:
             )
             response = controller_fixture.controller.process_post()
             assert response.uri == INVALID_EMAIL.uri
+            assert response.detail is not None
             assert '"not-a-email" is not a valid email address' in response.detail
 
     def test_individual_admins_post_error_unknown_role(
