@@ -1,4 +1,5 @@
 import json
+from unittest.mock import patch
 
 from palace.manager.feed.serializer.opds2 import (
     PALACE_PROPERTIES_ACTIVE_SORT,
@@ -10,6 +11,8 @@ from palace.manager.feed.types import (
     Acquisition,
     Author,
     Category,
+    DataEntry,
+    DataEntryTypes,
     DRMLicensor,
     FeedData,
     FeedMetadata,
@@ -430,3 +433,481 @@ class TestOPDS2Serializer:
                 }
             ],
         }
+
+    def test_serialize_feed_skips_entry_without_computed(self):
+        """Entries with computed=None are skipped with a warning."""
+        feed = FeedData(
+            metadata=FeedMetadata(title="Feed", id="http://feed"),
+        )
+        entry_no_computed = WorkEntry(
+            work=Work(),
+            edition=Edition(),
+            identifier=Identifier(),
+        )
+        # computed is None by default
+        feed.entries = [entry_no_computed]
+        feed.links = [Link(href="http://feed", rel="self")]
+
+        serialized = OPDS2Serializer().serialize_feed(feed)
+        result = json.loads(serialized)
+        assert result["publications"] == []
+
+    def test_serialize_feed_skips_invalid_publication(self):
+        """A ValidationError during publication serialization is caught and the entry is skipped."""
+        feed = FeedData(
+            metadata=FeedMetadata(title="Feed", id="http://feed"),
+        )
+        entry = WorkEntry(
+            work=Work(),
+            edition=Edition(),
+            identifier=Identifier(),
+        )
+        entry.computed = WorkEntryData(
+            identifier="urn:bad",
+            title="Bad Work",
+            image_links=[Link(href="http://image", rel="image", type="image/png")],
+            acquisition_links=[
+                Acquisition(
+                    href="http://acq",
+                    rel=OPDSFeed.OPEN_ACCESS_REL,
+                    type="application/epub+zip",
+                )
+            ],
+        )
+        feed.entries = [entry]
+        feed.links = [Link(href="http://feed", rel="self")]
+
+        serializer = OPDS2Serializer()
+
+        # Force a ValidationError when _publication is called
+        with patch.object(
+            serializer,
+            "_publication",
+            side_effect=__import__("pydantic").ValidationError.from_exception_data(
+                title="Publication",
+                line_errors=[],
+            ),
+        ):
+            serialized = serializer.serialize_feed(feed)
+        result = json.loads(serialized)
+        assert result["publications"] == []
+
+    def test_serialize_metadata_no_title(self):
+        """When the feed has no title, it defaults to 'Feed'."""
+        feed = FeedData(
+            metadata=FeedMetadata(title="", id="http://feed"),
+        )
+        feed.links = [Link(href="http://feed", rel="self")]
+
+        serialized = OPDS2Serializer().serialize_feed(feed)
+        result = json.loads(serialized)
+        assert result["metadata"]["title"] == "Feed"
+
+    def test_publication_links_skip_without_rel(self):
+        """Other links without a rel attribute are skipped."""
+        serializer = OPDS2Serializer()
+        data = WorkEntryData(
+            title="Test",
+            identifier="urn:id",
+            image_links=[Link(href="http://image", rel="image", type="image/png")],
+            acquisition_links=[
+                Acquisition(
+                    href="http://acq",
+                    rel=OPDSFeed.OPEN_ACCESS_REL,
+                    type="application/epub+zip",
+                )
+            ],
+            other_links=[
+                Link(href="http://no-rel", rel=None, type="text/html"),
+            ],
+        )
+        entry = serializer.serialize_work_entry(data)
+        # The other_link without rel should be skipped; only the acquisition link remains
+        link_hrefs = [link["href"] for link in entry["links"]]
+        assert "http://no-rel" not in link_hrefs
+        assert "http://acq" in link_hrefs
+
+    def test_publication_links_skip_without_type(self):
+        """Other links without a type attribute are skipped."""
+        serializer = OPDS2Serializer()
+        data = WorkEntryData(
+            title="Test",
+            identifier="urn:id",
+            image_links=[Link(href="http://image", rel="image", type="image/png")],
+            acquisition_links=[
+                Acquisition(
+                    href="http://acq",
+                    rel=OPDSFeed.OPEN_ACCESS_REL,
+                    type="application/epub+zip",
+                )
+            ],
+            other_links=[
+                Link(href="http://no-type", rel="related", type=None),
+            ],
+        )
+        entry = serializer.serialize_work_entry(data)
+        link_hrefs = [link["href"] for link in entry["links"]]
+        assert "http://no-type" not in link_hrefs
+
+    def test_acquisition_link_type_returns_none(self):
+        """An acquisition link with no type and no indirect types returns None."""
+        serializer = OPDS2Serializer()
+        acquisition = Acquisition(
+            href="http://no-type",
+            rel="acquisition",
+            type=None,
+            indirect_acquisitions=[],
+        )
+        result = serializer._serialize_acquisition_link(acquisition)
+        assert result is None
+
+    def test_acquisition_link_type_fallback_to_indirect(self):
+        """When an acquisition link has no direct type, falls back to the first indirect type."""
+        serializer = OPDS2Serializer()
+        acquisition = Acquisition(
+            href="http://indirect-type",
+            rel="acquisition",
+            type=None,
+            indirect_acquisitions=[
+                IndirectAcquisition(type="application/epub+zip"),
+            ],
+        )
+        result = serializer._serialize_acquisition_link(acquisition)
+        assert result is not None
+        dumped = serializer._dump_model(result)
+        assert dumped["type"] == "application/epub+zip"
+
+    def test_indirect_acquisition_without_type(self):
+        """An indirect acquisition with type=None is skipped."""
+        serializer = OPDS2Serializer()
+        acquisition = Acquisition(
+            href="http://acq",
+            rel="acquisition",
+            type="application/epub+zip",
+            indirect_acquisitions=[
+                IndirectAcquisition(type=None),
+            ],
+        )
+        result = serializer._dump_model(
+            serializer._serialize_acquisition_link(acquisition)
+        )
+        # The indirect acquisition without type should be filtered out,
+        # and the empty list is dropped from serialization
+        assert "indirectAcquisition" not in result.get("properties", {})
+
+    def test_feed_link_without_rel(self):
+        """Feed links without a rel attribute are skipped."""
+        feed = FeedData(
+            metadata=FeedMetadata(title="Feed", id="http://feed"),
+        )
+        feed.links = [
+            Link(href="http://feed", rel="self"),
+            Link(href="http://no-rel", rel=None),
+        ]
+
+        serialized = OPDS2Serializer().serialize_feed(feed)
+        result = json.loads(serialized)
+        link_hrefs = [link["href"] for link in result["links"]]
+        assert "http://feed" in link_hrefs
+        assert "http://no-rel" not in link_hrefs
+
+    def test_facet_group_with_single_link_skipped(self):
+        """A facet group with fewer than 2 links is skipped."""
+        feed = FeedData(
+            metadata=FeedMetadata(title="Feed", id="http://feed"),
+        )
+        feed.links = [Link(href="http://feed", rel="self")]
+        feed.facet_links = [
+            Link(
+                href="http://lone-facet",
+                rel="facet-rel",
+                title="Only One",
+                facet_group="LoneGroup",
+            ),
+        ]
+
+        serialized = OPDS2Serializer().serialize_feed(feed)
+        result = json.loads(serialized)
+        assert "facets" not in result or result.get("facets") == []
+
+    def test_serialize_navigation(self):
+        """Navigation entries are serialized from data_entries with NAVIGATION type."""
+        feed = FeedData(
+            metadata=FeedMetadata(title="Nav Feed", id="http://feed"),
+        )
+        feed.links = [Link(href="http://feed", rel="self")]
+        feed.data_entries = [
+            DataEntry(
+                type=DataEntryTypes.NAVIGATION,
+                title="Nav Entry",
+                links=[
+                    Link(href="http://nav-link", rel="subsection", type="text/html"),
+                ],
+            ),
+            DataEntry(
+                type=DataEntryTypes.NAVIGATION,
+                title=None,
+                links=[
+                    Link(
+                        href="http://nav-fallback",
+                        rel="subsection",
+                        type="text/html",
+                        title="Link Title",
+                    ),
+                ],
+            ),
+            DataEntry(
+                type=DataEntryTypes.NAVIGATION,
+                title=None,
+                links=[
+                    Link(
+                        href="http://nav-href-fallback",
+                        rel="subsection",
+                        type="text/html",
+                        title=None,
+                    ),
+                ],
+            ),
+        ]
+
+        serialized = OPDS2Serializer().serialize_feed(feed)
+        result = json.loads(serialized)
+
+        assert "navigation" in result
+        nav = result["navigation"]
+        assert len(nav) == 3
+        assert nav[0]["title"] == "Nav Entry"
+        assert nav[0]["href"] == "http://nav-link"
+        # Falls back to link.title when entry.title is None
+        assert nav[1]["title"] == "Link Title"
+        # Falls back to link.href when both titles are None
+        assert nav[2]["title"] == "http://nav-href-fallback"
+
+    def test_availability_unknown_status(self):
+        """An unknown availability status logs a warning and returns None."""
+        serializer = OPDS2Serializer()
+        acquisition = Acquisition(
+            href="http://unknown",
+            rel="acquisition",
+            type="application/epub+zip",
+            availability_status="bogus_status",
+        )
+        result = serializer._dump_model(
+            serializer._serialize_acquisition_link(acquisition)
+        )
+        # Unknown status should be treated as if no status was provided
+        assert "availability" not in result.get("properties", {})
+
+    def test_parse_int_non_numeric(self):
+        """Non-numeric strings return None from _parse_int."""
+        serializer = OPDS2Serializer()
+        assert serializer._parse_int("not-a-number") is None
+        assert serializer._parse_int("3.14") is None
+        assert serializer._parse_int(None) is None
+        assert serializer._parse_int("42") == 42
+
+    def test_serialize_work_entry_no_authors(self):
+        """When no authors are provided, author field is omitted from metadata."""
+        serializer = OPDS2Serializer()
+        data = WorkEntryData(
+            title="No Authors",
+            identifier="urn:id",
+            image_links=[Link(href="http://image", rel="image", type="image/png")],
+            acquisition_links=[
+                Acquisition(
+                    href="http://acq",
+                    rel=OPDSFeed.OPEN_ACCESS_REL,
+                    type="application/epub+zip",
+                )
+            ],
+            authors=[],
+        )
+        entry = serializer.serialize_work_entry(data)
+        assert "author" not in entry["metadata"]
+
+    def test_serialize_work_entry_single_author(self):
+        """A single author is serialized as an object (not a list)."""
+        serializer = OPDS2Serializer()
+        data = WorkEntryData(
+            title="One Author",
+            identifier="urn:id",
+            image_links=[Link(href="http://image", rel="image", type="image/png")],
+            acquisition_links=[
+                Acquisition(
+                    href="http://acq",
+                    rel=OPDSFeed.OPEN_ACCESS_REL,
+                    type="application/epub+zip",
+                )
+            ],
+            authors=[Author(name="Solo Author")],
+        )
+        entry = serializer.serialize_work_entry(data)
+        assert entry["metadata"]["author"] == {"name": "Solo Author"}
+
+    def test_serialize_work_entry_no_summary_no_publisher_no_imprint(self):
+        """Metadata fields are omitted when summary, publisher, and imprint are absent."""
+        serializer = OPDS2Serializer()
+        data = WorkEntryData(
+            title="Minimal",
+            identifier="urn:id",
+            image_links=[Link(href="http://image", rel="image", type="image/png")],
+            acquisition_links=[
+                Acquisition(
+                    href="http://acq",
+                    rel=OPDSFeed.OPEN_ACCESS_REL,
+                    type="application/epub+zip",
+                )
+            ],
+            summary=None,
+            publisher=None,
+            imprint=None,
+        )
+        entry = serializer.serialize_work_entry(data)
+        metadata = entry["metadata"]
+        assert "description" not in metadata
+        assert "publisher" not in metadata
+        assert "imprint" not in metadata
+
+    def test_serialize_work_entry_default_additional_type(self):
+        """When additional_type is None, defaults to schema_org Book type."""
+        serializer = OPDS2Serializer()
+        data = WorkEntryData(
+            title="Default Type",
+            identifier="urn:id",
+            additional_type=None,
+            image_links=[Link(href="http://image", rel="image", type="image/png")],
+            acquisition_links=[
+                Acquisition(
+                    href="http://acq",
+                    rel=OPDSFeed.OPEN_ACCESS_REL,
+                    type="application/epub+zip",
+                )
+            ],
+        )
+        entry = serializer.serialize_work_entry(data)
+        assert entry["metadata"]["@type"] == "http://schema.org/Book"
+
+    def test_acquisition_link_skipped_returns_none_in_publication_links(self):
+        """When _serialize_acquisition_link returns None, no link is appended."""
+        serializer = OPDS2Serializer()
+        data = WorkEntryData(
+            title="Test",
+            identifier="urn:id",
+            image_links=[Link(href="http://image", rel="image", type="image/png")],
+            acquisition_links=[
+                # This acquisition has no type and no indirect type, so it returns None
+                Acquisition(
+                    href="http://bad-acq",
+                    rel="acquisition",
+                    type=None,
+                    indirect_acquisitions=[],
+                ),
+                Acquisition(
+                    href="http://good-acq",
+                    rel=OPDSFeed.OPEN_ACCESS_REL,
+                    type="application/epub+zip",
+                ),
+            ],
+        )
+        entry = serializer.serialize_work_entry(data)
+        link_hrefs = [link["href"] for link in entry["links"]]
+        assert "http://bad-acq" not in link_hrefs
+        assert "http://good-acq" in link_hrefs
+
+    def test_facet_link_title_fallback(self):
+        """Facet links fall back to rel or href for title when title is None."""
+        feed = FeedData(
+            metadata=FeedMetadata(title="Feed", id="http://feed"),
+        )
+        feed.links = [Link(href="http://feed", rel="self")]
+        feed.facet_links = [
+            Link(
+                href="http://facet1",
+                rel="facet-rel",
+                title=None,
+                facet_group="Group",
+            ),
+            Link(
+                href="http://facet2",
+                rel=None,
+                title=None,
+                facet_group="Group",
+            ),
+        ]
+
+        serialized = OPDS2Serializer().serialize_feed(feed)
+        result = json.loads(serialized)
+        facet_links = result["facets"][0]["links"]
+        # First facet falls back to rel
+        assert facet_links[0]["title"] == "facet-rel"
+        # Second facet falls back to href
+        assert facet_links[1]["title"] == "http://facet2"
+
+    def test_holds_and_copies_with_values(self):
+        """Holds and copies numeric values are serialized correctly."""
+        serializer = OPDS2Serializer()
+        acquisition = Acquisition(
+            href="http://acq",
+            rel="acquisition",
+            type="application/epub+zip",
+            holds_total="10",
+            holds_position="3",
+            copies_total="5",
+            copies_available="2",
+        )
+        result = serializer._dump_model(
+            serializer._serialize_acquisition_link(acquisition)
+        )
+        props = result["properties"]
+        assert props["holds"] == {"total": 10, "position": 3}
+        assert props["copies"] == {"total": 5, "available": 2}
+
+    def test_generic_contributor(self):
+        """Contributors with unrecognized MARC roles become generic contributors."""
+        serializer = OPDS2Serializer()
+        data = WorkEntryData(
+            title="Generic Contributor Test",
+            identifier="urn:id",
+            image_links=[Link(href="http://image", rel="image", type="image/png")],
+            acquisition_links=[
+                Acquisition(
+                    href="http://acq",
+                    rel=OPDSFeed.OPEN_ACCESS_REL,
+                    type="application/epub+zip",
+                )
+            ],
+            contributors=[
+                Author(name="Some Person", sort_name="Person, Some", role="zzz"),
+            ],
+        )
+        entry = serializer.serialize_work_entry(data)
+        metadata = entry["metadata"]
+        assert metadata["contributor"] == [
+            {"name": "Some Person", "sortAs": "Person, Some", "role": "zzz"}
+        ]
+
+    def test_navigation_skips_non_navigation_data_entries(self):
+        """Data entries without NAVIGATION type are ignored."""
+        feed = FeedData(
+            metadata=FeedMetadata(title="Nav Feed", id="http://feed"),
+        )
+        feed.links = [Link(href="http://feed", rel="self")]
+        feed.data_entries = [
+            DataEntry(
+                type=None,
+                title="Not Navigation",
+                links=[Link(href="http://ignore", rel="something")],
+            ),
+            DataEntry(
+                type=DataEntryTypes.NAVIGATION,
+                title="Real Nav",
+                links=[Link(href="http://nav", rel="subsection")],
+            ),
+        ]
+
+        serialized = OPDS2Serializer().serialize_feed(feed)
+        result = json.loads(serialized)
+        nav = result["navigation"]
+        assert len(nav) == 1
+        assert nav[0]["title"] == "Real Nav"
+        assert nav[0]["href"] == "http://nav"
