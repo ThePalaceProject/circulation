@@ -4,21 +4,22 @@ from collections.abc import Sequence
 from datetime import datetime
 from enum import StrEnum, auto
 from functools import cached_property
-from typing import Annotated, Any, Self
+from typing import Annotated, Any, Self, cast
 
 from pydantic import (
     Field,
     NonNegativeFloat,
     NonNegativeInt,
     PositiveInt,
+    SerializerFunctionWrapHandler,
     field_validator,
+    model_serializer,
     model_validator,
 )
 from pydantic_core import PydanticCustomError
 
-from palace.manager.opds import rwpm, schema_org
+from palace.manager.opds import palace, rwpm, schema_org
 from palace.manager.opds.base import BaseOpdsModel
-from palace.manager.opds.palace import PalacePublicationMetadata
 from palace.manager.opds.types.currency import CurrencyCode
 from palace.manager.opds.types.date import Iso8601AwareDatetime
 from palace.manager.opds.types.language import LanguageMap
@@ -80,6 +81,13 @@ class AcquisitionObject(BaseOpdsModel):
     @cached_property
     def children(self) -> Sequence[AcquisitionObject]:
         return obj_or_tuple_to_tuple(self.child)
+
+    @model_serializer(mode="wrap")
+    def _serialize(self, serializer: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        data = cast(dict[str, Any], serializer(self))
+        if not data.get("child"):
+            data.pop("child", None)
+        return data
 
 
 class Holds(BaseOpdsModel):
@@ -146,7 +154,7 @@ class Availability(BaseOpdsModel):
         return value
 
 
-class LinkProperties(rwpm.LinkProperties):
+class LinkProperties(rwpm.LinkProperties, palace.LinkProperties):
     """
     OPDS2 extensions to the link properties.
 
@@ -161,6 +169,42 @@ class LinkProperties(rwpm.LinkProperties):
     holds: Holds = Field(default_factory=Holds)
     copies: Copies = Field(default_factory=Copies)
     availability: Availability = Field(default_factory=Availability)
+
+    @model_serializer(mode="wrap")
+    def _serialize(self, serializer: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        data = cast(dict[str, Any], serializer(self))
+
+        def alias_for(field_name: str) -> str:
+            field = self.model_fields.get(field_name)
+            if field is None:
+                return field_name
+            return field.serialization_alias or field.alias or field_name
+
+        def drop_if_empty(field_name: str) -> None:
+            for key in {field_name, alias_for(field_name)}:
+                if key in data and not data[key]:
+                    data.pop(key, None)
+
+        drop_if_empty("holds")
+        drop_if_empty("copies")
+        drop_if_empty("availability")
+        drop_if_empty("indirect_acquisition")
+        drop_if_empty("actions")
+        drop_if_empty("licensor")
+
+        def normalize_palace_flag(field_name: str) -> None:
+            for key in {field_name, alias_for(field_name)}:
+                if key in data:
+                    value = data.get(key)
+                    if value is True:
+                        data[key] = True
+                    else:
+                        data.pop(key, None)
+
+        normalize_palace_flag("palace_default")
+        normalize_palace_flag("palace_active_sort")
+
+        return data
 
 
 class Link(rwpm.Link):
@@ -219,7 +263,7 @@ class FeedMetadata(BaseOpdsModel):
 
 
 class PublicationMetadata(
-    PalacePublicationMetadata, schema_org.PublicationMetadata, rwpm.Metadata
+    palace.PublicationMetadata, schema_org.PublicationMetadata, rwpm.Metadata
 ):
     """
     OPDS2 publication metadata.
@@ -232,6 +276,27 @@ class PublicationMetadata(
     # OPDS2 proposed property. See here for more detail:
     # https://github.com/opds-community/drafts/discussions/63
     availability: Availability = Field(default_factory=Availability)
+
+    @model_serializer(mode="wrap")
+    def _serialize(self, serializer: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        data = cast(dict[str, Any], serializer(self))
+
+        def alias_for(field_name: str) -> str:
+            field = self.model_fields.get(field_name)
+            if field is None:
+                return field_name
+            return field.serialization_alias or field.alias or field_name
+
+        def drop_if_empty(field_name: str) -> None:
+            for key in {field_name, alias_for(field_name)}:
+                if key in data and not data[key]:
+                    data.pop(key, None)
+
+        drop_if_empty("contributor")
+        drop_if_empty("subject")
+        drop_if_empty("belongs_to")
+
+        return data
 
 
 class AcquisitionLinkRelations(StrEnum):
@@ -364,11 +429,29 @@ class Feed(BaseOpdsModel):
 
     _validate_links = field_validator("links")(validate_self_link)
 
+    @model_serializer(mode="wrap")
+    def _serialize(self, serializer: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        data = cast(dict[str, Any], serializer(self))
+
+        # Always include at least one collection field, even if empty.
+        # Priority: publications > navigation > groups.
+        collection_fields = ("publications", "navigation", "groups")
+        primary = next(f for f in collection_fields if f in self.model_fields_set)
+        for f in collection_fields:
+            if f != primary and not data.get(f):
+                data.pop(f, None)
+
+        # Facets are purely optional.
+        if not data.get("facets"):
+            data.pop("facets", None)
+
+        return data
+
     @model_validator(mode="after")
     def required_collections(self) -> Self:
-        if not self.publications and not self.groups and not self.navigation:
+        if not {"publications", "groups", "navigation"} & self.model_fields_set:
             raise ValueError(
-                "Feed must have at least one of: publications, groups, navigation"
+                "Feed must include at least one of: publications, groups, navigation"
             )
         return self
 

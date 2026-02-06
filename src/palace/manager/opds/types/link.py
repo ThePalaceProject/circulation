@@ -5,8 +5,9 @@ from collections.abc import Iterable, Sequence
 from functools import cached_property
 from typing import Any, Literal, Self, TypeVar, cast, get_args, overload
 
-from pydantic import GetCoreSchemaHandler
+from pydantic import GetCoreSchemaHandler, model_serializer
 from pydantic_core import core_schema
+from pydantic_core.core_schema import SerializerFunctionWrapHandler
 from uritemplate import URITemplate, variable
 
 from palace.manager.core.exceptions import PalaceValueError
@@ -38,6 +39,16 @@ class BaseLink(BaseOpdsModel):
             return self.href
         template = URITemplate(self.href)
         return template.expand(var_dict)
+
+    @model_serializer(mode="wrap")
+    def _serialize(self, serializer: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        data = cast(dict[str, Any], serializer(self))
+
+        # Only include templated in the output when it is True
+        if not self.templated:
+            data.pop("templated", None)
+
+        return data
 
 
 LinkT = TypeVar("LinkT", bound="BaseLink", covariant=True)
