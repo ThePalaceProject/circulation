@@ -79,6 +79,7 @@ class TestOPDSFeedProtocol:
 
         entry.computed = WorkEntryData(
             identifier="urn:identifier",
+            title="Test Title",
             image_links=[
                 Link(
                     href="http://example.com/cover.png",

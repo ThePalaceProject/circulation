@@ -19,6 +19,7 @@ from palace.manager.feed.types import (
 from palace.manager.opds import opds2, rwpm, schema_org
 from palace.manager.opds.base import BaseOpdsModel
 from palace.manager.opds.palace import DrmMetadata, LinkActions
+from palace.manager.opds.util import StrModelOrTuple
 from palace.manager.sqlalchemy.model.contributor import Contributor
 from palace.manager.util.log import LoggerMixin
 from palace.manager.util.opds_writer import AtomFeed, OPDSMessage
@@ -137,8 +138,9 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]], LoggerMixin):
             else rwpm.BelongsTo()
         )
 
+        author: StrModelOrTuple[rwpm.Contributor] | None
         if len(data.authors) > 1:
-            author = [self._serialize_contributor(a) for a in data.authors]
+            author = tuple(self._serialize_contributor(a) for a in data.authors)
         elif data.authors:
             author = self._serialize_contributor(data.authors[0])
         else:
@@ -208,6 +210,7 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]], LoggerMixin):
                     rel=link.rel,
                     type=link.type,
                     title=link.title,
+                    properties=self._link_properties(),
                 )
             )
 
@@ -229,73 +232,50 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]], LoggerMixin):
         link_type = self._acquisition_link_type(link)
         if link_type is None:
             return None
-        properties = self._serialize_acquisition_properties(link)
         return self._strict_link(
             href=link.href,
             rel=link.rel or opds2.AcquisitionLinkRelations.acquisition,
             type=link_type,
             title=link.title,
-            properties=properties,
+            properties=self._serialize_acquisition_properties(link),
             templated=link.templated,
         )
 
     def _serialize_acquisition_properties(
         self, link: Acquisition
-    ) -> opds2.LinkProperties | None:
+    ) -> opds2.LinkProperties:
         state = self._availability_state(link)
-        availability: opds2.Availability | None = None
+        availability_data: dict[str, Any] = {}
         if state is not None:
-            availability = opds2.Availability(
-                state=state,
-                since=link.availability_since,
-                until=link.availability_until,
+            availability_data.update(
+                {
+                    "state": state,
+                    "since": link.availability_since,
+                    "until": link.availability_until,
+                }
             )
+        availability = opds2.Availability(**availability_data)
 
         holds_total = self._parse_int(link.holds_total)
         holds_position = self._parse_int(link.holds_position)
-        holds = (
-            opds2.Holds(total=holds_total, position=holds_position)
-            if holds_total is not None or holds_position is not None
-            else None
-        )
+        holds = opds2.Holds(total=holds_total, position=holds_position)
 
         copies_total = self._parse_int(link.copies_total)
         copies_available = self._parse_int(link.copies_available)
-        copies = (
-            opds2.Copies(total=copies_total, available=copies_available)
-            if copies_total is not None or copies_available is not None
-            else None
-        )
+        copies = opds2.Copies(total=copies_total, available=copies_available)
 
-        indirect_acquisition = (
-            [
-                acq
-                for indirect in link.indirect_acquisitions
-                if (acq := self._serialize_indirect_acquisition(indirect)) is not None
-            ]
-            if link.indirect_acquisitions
-            else None
+        indirect_acquisition = [
+            acq
+            for indirect in link.indirect_acquisitions
+            if (acq := self._serialize_indirect_acquisition(indirect)) is not None
+        ]
+        actions = LinkActions(cancellable=link.is_hold or None)
+        licensor = DrmMetadata(
+            client_token=(
+                link.drm_licensor.client_token if link.drm_licensor else None
+            ),
+            vendor=link.drm_licensor.vendor if link.drm_licensor else None,
         )
-        actions = LinkActions(cancellable=True) if link.is_hold else None
-        licensor = (
-            DrmMetadata(
-                client_token=link.drm_licensor.client_token,
-                vendor=link.drm_licensor.vendor,
-            )
-            if link.drm_licensor
-            else None
-        )
-
-        if (
-            availability is None
-            and holds is None
-            and copies is None
-            and indirect_acquisition is None
-            and actions is None
-            and licensor is None
-            and link.lcp_hashed_passphrase is None
-        ):
-            return None
 
         return self._link_properties(
             availability=availability,
@@ -314,11 +294,13 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]], LoggerMixin):
             self.log.error(f"Skipping indirect acquisition without type")
             return None
         children = [
-            self._serialize_indirect_acquisition(child) for child in indirect.children
+            acq
+            for child in indirect.children
+            if (acq := self._serialize_indirect_acquisition(child)) is not None
         ]
         return opds2.AcquisitionObject(
             type=indirect.type,
-            child=[c for c in children if c is not None] or None,
+            child=children,
         )
 
     def _serialize_contributor(self, author: Author) -> rwpm.Contributor:
@@ -364,6 +346,7 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]], LoggerMixin):
             rel=link.rel,
             type=link.type or self.content_type(),
             title=link.title,
+            properties=self._link_properties(),
         )
 
     def _serialize_facet_links(self, feed: FeedData) -> list[opds2.Facet]:
@@ -402,10 +385,8 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]], LoggerMixin):
 
         return results
 
-    def _facet_properties(self, link: Link) -> opds2.LinkProperties | None:
-        if not link.default_facet:
-            return None
-        return self._link_properties(palace_default="true")
+    def _facet_properties(self, link: Link) -> opds2.LinkProperties:
+        return self._link_properties(palace_default=link.default_facet or None)
 
     def _serialize_sort_links(self, feed: FeedData) -> list[opds2.StrictLink]:
         sort_links: list[opds2.StrictLink] = []
@@ -415,19 +396,15 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]], LoggerMixin):
         return sort_links
 
     def _serialize_sort_link(self, link: Link) -> opds2.StrictLink:
-        properties = None
-        if link.active_facet or link.default_facet:
-            properties = self._link_properties(
-                palace_active_sort="true" if link.active_facet else None,
-                palace_default="true" if link.default_facet else None,
-            )
-
         return self._strict_link(
             href=link.href,
             rel=PALACE_REL_SORT,
             type=link.type or self.content_type(),
             title=link.title,
-            properties=properties,
+            properties=self._link_properties(
+                palace_active_sort=link.active_facet or None,
+                palace_default=link.default_facet or None,
+            ),
         )
 
     def _serialize_navigation(self, feed: FeedData) -> list[opds2.TitleLink]:
@@ -443,6 +420,7 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]], LoggerMixin):
                         title=title,
                         rel=link.rel,
                         type=link.type,
+                        properties=self._link_properties(),
                     )
                 )
         return navigation
@@ -500,43 +478,19 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]], LoggerMixin):
         actions: LinkActions | None = None,
         licensor: DrmMetadata | None = None,
         lcp_hashed_passphrase: str | None = None,
-        palace_default: str | None = None,
-        palace_active_sort: str | None = None,
+        palace_default: bool | None = None,
+        palace_active_sort: bool | None = None,
     ) -> opds2.LinkProperties:
-        values: dict[str, Any] = {}
-        fields_set: set[str] = set()
-
-        if availability is not None:
-            values["availability"] = availability
-            fields_set.add("availability")
-        if holds is not None:
-            values["holds"] = holds
-            fields_set.add("holds")
-        if copies is not None:
-            values["copies"] = copies
-            fields_set.add("copies")
-        if indirect_acquisition is not None:
-            values["indirect_acquisition"] = indirect_acquisition
-            fields_set.add("indirect_acquisition")
-        if actions is not None:
-            values["actions"] = actions
-            fields_set.add("actions")
-        if licensor is not None:
-            values["licensor"] = licensor
-            fields_set.add("licensor")
-        if lcp_hashed_passphrase is not None:
-            values["lcp_hashed_passphrase"] = lcp_hashed_passphrase
-            fields_set.add("lcp_hashed_passphrase")
-        if palace_default is not None:
-            values["palace_default"] = palace_default
-            fields_set.add("palace_default")
-        if palace_active_sort is not None:
-            values["palace_active_sort"] = palace_active_sort
-            fields_set.add("palace_active_sort")
-
-        return opds2.LinkProperties.model_construct(
-            _fields_set=fields_set,
-            **values,
+        return opds2.LinkProperties(
+            availability=availability or opds2.Availability(),
+            holds=holds or opds2.Holds(),
+            copies=copies or opds2.Copies(),
+            indirect_acquisition=indirect_acquisition or [],
+            actions=actions,
+            licensor=licensor,
+            lcp_hashed_passphrase=lcp_hashed_passphrase,
+            palace_default=palace_default,
+            palace_active_sort=palace_active_sort,
         )
 
     def _strict_link(
@@ -546,11 +500,9 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]], LoggerMixin):
         rel: str,
         type: str,
         title: str | None = None,
-        properties: opds2.LinkProperties | None = None,
+        properties: opds2.LinkProperties,
         templated: bool = False,
     ) -> opds2.StrictLink:
-        if properties is None:
-            properties = opds2.LinkProperties()
         return opds2.StrictLink(
             href=href,
             rel=rel,
@@ -567,10 +519,8 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]], LoggerMixin):
         title: str,
         rel: str | None = None,
         type: str | None = None,
-        properties: opds2.LinkProperties | None = None,
+        properties: opds2.LinkProperties,
     ) -> opds2.TitleLink:
-        if properties is None:
-            properties = opds2.LinkProperties()
         return opds2.TitleLink(
             href=href,
             title=title,

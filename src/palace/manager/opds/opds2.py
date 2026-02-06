@@ -82,6 +82,13 @@ class AcquisitionObject(BaseOpdsModel):
     def children(self) -> Sequence[AcquisitionObject]:
         return obj_or_tuple_to_tuple(self.child)
 
+    @model_serializer(mode="wrap")
+    def _serialize(self, serializer: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        data = cast(dict[str, Any], serializer(self))
+        if not data.get("child"):
+            data.pop("child", None)
+        return data
+
 
 class Holds(BaseOpdsModel):
     """
@@ -163,6 +170,42 @@ class LinkProperties(rwpm.LinkProperties, palace.LinkProperties):
     copies: Copies = Field(default_factory=Copies)
     availability: Availability = Field(default_factory=Availability)
 
+    @model_serializer(mode="wrap")
+    def _serialize(self, serializer: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        data = cast(dict[str, Any], serializer(self))
+
+        def alias_for(field_name: str) -> str:
+            field = self.model_fields.get(field_name)
+            if field is None:
+                return field_name
+            return field.serialization_alias or field.alias or field_name
+
+        def drop_if_empty(field_name: str) -> None:
+            for key in {field_name, alias_for(field_name)}:
+                if key in data and not data[key]:
+                    data.pop(key, None)
+
+        drop_if_empty("holds")
+        drop_if_empty("copies")
+        drop_if_empty("availability")
+        drop_if_empty("indirect_acquisition")
+        drop_if_empty("actions")
+        drop_if_empty("licensor")
+
+        def normalize_palace_flag(field_name: str) -> None:
+            for key in {field_name, alias_for(field_name)}:
+                if key in data:
+                    value = data.get(key)
+                    if value is True:
+                        data[key] = True
+                    else:
+                        data.pop(key, None)
+
+        normalize_palace_flag("palace_default")
+        normalize_palace_flag("palace_active_sort")
+
+        return data
+
 
 class Link(rwpm.Link):
     """
@@ -233,6 +276,27 @@ class PublicationMetadata(
     # OPDS2 proposed property. See here for more detail:
     # https://github.com/opds-community/drafts/discussions/63
     availability: Availability = Field(default_factory=Availability)
+
+    @model_serializer(mode="wrap")
+    def _serialize(self, serializer: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        data = cast(dict[str, Any], serializer(self))
+
+        def alias_for(field_name: str) -> str:
+            field = self.model_fields.get(field_name)
+            if field is None:
+                return field_name
+            return field.serialization_alias or field.alias or field_name
+
+        def drop_if_empty(field_name: str) -> None:
+            for key in {field_name, alias_for(field_name)}:
+                if key in data and not data[key]:
+                    data.pop(key, None)
+
+        drop_if_empty("contributor")
+        drop_if_empty("subject")
+        drop_if_empty("belongs_to")
+
+        return data
 
 
 class AcquisitionLinkRelations(StrEnum):

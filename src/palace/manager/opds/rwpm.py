@@ -184,6 +184,13 @@ class Contributor(Named):
     position: NonNegativeInt | None = None
     links: CompactCollection[Link] = Field(default_factory=CompactCollection)
 
+    @model_serializer(mode="wrap")
+    def _serialize(self, serializer: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        data = cast(dict[str, Any], serializer(self))
+        if not data.get("links"):
+            data.pop("links", None)
+        return data
+
 
 class ContributorWithRole(Contributor):
     """

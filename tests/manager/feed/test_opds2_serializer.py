@@ -25,6 +25,8 @@ from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.util.opds_writer import OPDSFeed, OPDSMessage
 
+OPDS2_CONTENT_TYPE = OPDS2Serializer().content_type()
+
 
 class TestOPDS2Serializer:
     def test_serialize_feed(self):
@@ -110,7 +112,7 @@ class TestOPDS2Serializer:
         assert result["links"][0] == dict(
             href="http://link",
             rel="self",
-            type=OPDS2Serializer.CONTENT_TYPE,
+            type=OPDS2_CONTENT_TYPE,
         )
 
         assert len(result["facets"]) == 1
@@ -239,8 +241,7 @@ class TestOPDS2Serializer:
 
         entry = serializer.serialize_work_entry(data)
         metadata = entry["metadata"]
-        # Only the first author is considered
-        assert metadata["author"] == dict(name="author1")
+        assert metadata["author"] == [dict(name="author1"), dict(name="author2")]
         # Of the allowed roles
         assert metadata["translator"] == dict(name="translator")
         assert metadata["editor"] == dict(name="editor")
@@ -305,6 +306,7 @@ class TestOPDS2Serializer:
             rel="hold",
             is_hold=True,
             availability_status="available",
+            type="application/epub+zip",
         )
         result = serializer._dump_model(
             serializer._serialize_acquisition_link(acquisition)
@@ -316,6 +318,7 @@ class TestOPDS2Serializer:
             rel="loan",
             is_loan=True,
             availability_status="available",
+            type="application/epub+zip",
         )
         result = serializer._dump_model(
             serializer._serialize_acquisition_link(acquisition)
@@ -326,6 +329,7 @@ class TestOPDS2Serializer:
         acquisition = Acquisition(
             href="http://templated.acquisition/{?foo,bar}",
             templated=True,
+            type="application/epub+zip",
         )
         result = serializer._dump_model(
             serializer._serialize_acquisition_link(acquisition)
@@ -392,16 +396,16 @@ class TestOPDS2Serializer:
                 {
                     "href": "http://feed",
                     "rel": "self",
-                    "type": OPDS2Serializer.CONTENT_TYPE,
+                    "type": OPDS2_CONTENT_TYPE,
                 },
                 {
                     "href": "test",
                     "rel": PALACE_REL_SORT,
                     "title": "text1",
-                    "type": OPDS2Serializer.CONTENT_TYPE,
+                    "type": OPDS2_CONTENT_TYPE,
                     "properties": {
-                        PALACE_PROPERTIES_ACTIVE_SORT: "true",
-                        PALACE_PROPERTIES_DEFAULT: "true",
+                        PALACE_PROPERTIES_ACTIVE_SORT: True,
+                        PALACE_PROPERTIES_DEFAULT: True,
                     },
                 },
             ],
@@ -414,7 +418,7 @@ class TestOPDS2Serializer:
                             "rel": "self",
                             "title": "text2",
                             "properties": {
-                                PALACE_PROPERTIES_DEFAULT: "true",
+                                PALACE_PROPERTIES_DEFAULT: True,
                             },
                         },
                         {
