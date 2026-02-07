@@ -86,9 +86,21 @@ class TestOIDCAuthenticationProvider:
             assert result["type"] == "http://opds-spec.org/auth/oauth"
             assert result["description"] == "OpenID Connect"
             assert len(result["links"]) == 1
-            assert result["links"][0]["rel"] == "authenticate"
-            assert library.short_name in result["links"][0]["href"]
-            assert "oidc_authenticate" in result["links"][0]["href"]
+
+            link = result["links"][0]
+            assert link["rel"] == "authenticate"
+            assert library.short_name in link["href"]
+            assert "oidc_authenticate" in link["href"]
+
+            assert link["display_names"] == [
+                {"value": "OpenID Connect", "language": "en"}
+            ]
+            assert link["descriptions"] == [
+                {"value": "OpenID Connect", "language": "en"}
+            ]
+            assert link["information_urls"] == []
+            assert link["privacy_statement_urls"] == []
+            assert link["logo_urls"] == []
 
             mock_url_for.assert_called_once_with(
                 "oidc_authenticate",
@@ -96,6 +108,61 @@ class TestOIDCAuthenticationProvider:
                 library_short_name=library.short_name,
                 provider="OpenID Connect",
             )
+
+    def test_authentication_flow_document_with_authorization_link_settings(
+        self, db: DatabaseTransactionFixture
+    ):
+        """Test authentication flow document with custom UI settings."""
+        library = db.default_library()
+
+        settings = OIDCAuthSettings(
+            issuer_url="https://idp.example.com",
+            client_id="test-client-id",
+            client_secret="test-client-secret",
+            auth_link_display_name="University Single Sign-On",
+            auth_link_description="Log in with your university credentials",
+            auth_link_logo_url="https://university.example.com/logo.png",
+            auth_link_information_url="https://help.university.example.com",
+            auth_link_privacy_statement_url="https://university.example.com/privacy",
+        )
+        library_settings = OIDCAuthLibrarySettings()
+        provider = OIDCAuthenticationProvider(
+            library_id=library.id,
+            integration_id=1,
+            settings=settings,
+            library_settings=library_settings,
+        )
+
+        with patch(
+            "palace.manager.integration.patron_auth.oidc.provider.url_for"
+        ) as mock_url_for:
+            mock_url_for.return_value = (
+                f"https://example.com/{library.short_name}/oidc/authenticate"
+            )
+
+            result = provider._authentication_flow_document(db.session)
+
+            assert result["type"] == "http://opds-spec.org/auth/oauth"
+            assert result["description"] == "OpenID Connect"
+            assert len(result["links"]) == 1
+
+            link = result["links"][0]
+            assert link["rel"] == "authenticate"
+            assert link["display_names"] == [
+                {"value": "University Single Sign-On", "language": "en"}
+            ]
+            assert link["descriptions"] == [
+                {"value": "Log in with your university credentials", "language": "en"}
+            ]
+            assert link["information_urls"] == [
+                {"value": "https://help.university.example.com/", "language": "en"}
+            ]
+            assert link["privacy_statement_urls"] == [
+                {"value": "https://university.example.com/privacy", "language": "en"}
+            ]
+            assert link["logo_urls"] == [
+                {"value": "https://university.example.com/logo.png", "language": "en"}
+            ]
 
     def test_authentication_flow_document_no_library(
         self, db: DatabaseTransactionFixture, oidc_provider
