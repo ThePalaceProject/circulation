@@ -147,6 +147,7 @@ class OIDCAuthSettings(AuthProviderSettings, LoggerMixin):
                 "Common scopes: 'profile', 'email'. "
                 "Comma-separated list."
             ),
+            type=FormFieldType.LIST,
         ),
     ] = ["openid", "profile", "email"]
 
