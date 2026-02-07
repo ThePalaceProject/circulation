@@ -263,7 +263,7 @@ class OIDCAuthSettings(AuthProviderSettings, LoggerMixin):
         ),
     ] = None
 
-    # User Interface Settings
+    # Authentication Link Settings
     auth_link_display_name: Annotated[
         str | None,
         FormMetadata(
