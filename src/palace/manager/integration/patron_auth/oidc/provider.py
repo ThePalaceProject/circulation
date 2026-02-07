@@ -6,7 +6,7 @@ This module provides the OIDC authentication provider implementation for patron 
 from __future__ import annotations
 
 from collections.abc import Generator
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from flask import url_for
 from flask_babel import lazy_gettext as _
@@ -134,13 +134,13 @@ class OIDCAuthenticationProvider(
             return auth.token
         return None
 
-    def _create_authentication_link(self, authenticate_url: str) -> dict[str, str]:
+    def _create_authentication_link(self, authenticate_url: str) -> dict[str, Any]:
         """Build an authentication link for an authentication entry."""
         display_name = self._settings.auth_link_display_name or self.label()
         description = self._settings.auth_link_description or display_name
 
         # Build link with metadata
-        link: dict[str, str | list[dict[str, str]]] = {
+        link: dict[str, Any] = {
             "rel": "authenticate",
             "href": authenticate_url,
             "display_names": [{"value": display_name, "language": "en"}],
@@ -150,7 +150,7 @@ class OIDCAuthenticationProvider(
             "logo_urls": [],
         }
 
-        # Add optional fields if provided
+        # Add optional fields where provided
         if self._settings.auth_link_information_url:
             link["information_urls"] = [
                 {
@@ -158,7 +158,6 @@ class OIDCAuthenticationProvider(
                     "language": "en",
                 }
             ]
-
         if self._settings.auth_link_privacy_statement_url:
             link["privacy_statement_urls"] = [
                 {
@@ -166,15 +165,14 @@ class OIDCAuthenticationProvider(
                     "language": "en",
                 }
             ]
-
         if self._settings.auth_link_logo_url:
             link["logo_urls"] = [
                 {"value": str(self._settings.auth_link_logo_url), "language": "en"}
             ]
 
-    def _authentication_flow_document(
-        self, db: Session
-    ) -> dict[str, str | list[dict[str, str]]]:
+        return link
+
+    def _authentication_flow_document(self, db: Session) -> dict[str, Any]:
         """Build an `authentication` entry suitable for an authentication document.
 
         :param db: Database session
