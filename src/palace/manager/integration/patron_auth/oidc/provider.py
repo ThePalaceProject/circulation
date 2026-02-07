@@ -134,25 +134,51 @@ class OIDCAuthenticationProvider(
             return auth.token
         return None
 
+    def _create_authentication_link(self, authenticate_url: str) -> dict[str, str]:
+        """Build an authentication link for an authentication entry."""
+        display_name = self._settings.auth_link_display_name or self.label()
+        description = self._settings.auth_link_description or display_name
+
+        # Build link with metadata
+        link: dict[str, str | list[dict[str, str]]] = {
+            "rel": "authenticate",
+            "href": authenticate_url,
+            "display_names": [{"value": display_name, "language": "en"}],
+            "descriptions": [{"value": description, "language": "en"}],
+            "information_urls": [],
+            "privacy_statement_urls": [],
+            "logo_urls": [],
+        }
+
+        # Add optional fields if provided
+        if self._settings.auth_link_information_url:
+            link["information_urls"] = [
+                {
+                    "value": str(self._settings.auth_link_information_url),
+                    "language": "en",
+                }
+            ]
+
+        if self._settings.auth_link_privacy_statement_url:
+            link["privacy_statement_urls"] = [
+                {
+                    "value": str(self._settings.auth_link_privacy_statement_url),
+                    "language": "en",
+                }
+            ]
+
+        if self._settings.auth_link_logo_url:
+            link["logo_urls"] = [
+                {"value": str(self._settings.auth_link_logo_url), "language": "en"}
+            ]
+
     def _authentication_flow_document(
         self, db: Session
     ) -> dict[str, str | list[dict[str, str]]]:
-        """Create Authentication Flow object for OPDS document.
-
-        Example:
-        {
-            "type": "http://opds-spec.org/auth/oauth",
-            "description": "OpenID Connect",
-            "links": [
-                {
-                    "rel": "authenticate",
-                    "href": "https://cm.example.com/default/oidc_authenticate?provider=OpenID+Connect"
-                }
-            ]
-        }
+        """Build an `authentication` entry suitable for an authentication document.
 
         :param db: Database session
-        :return: Authentication Flow object for OPDS document
+        :return: Authentication entry
         """
         library = self.library(db)
         if not library:
@@ -164,11 +190,12 @@ class OIDCAuthenticationProvider(
             library_short_name=library.short_name,
             provider=self.label(),
         )
+        link = self._create_authentication_link(authenticate_url)
 
         return {
             "type": self.flow_type,
             "description": self.label(),
-            "links": [{"rel": "authenticate", "href": authenticate_url}],
+            "links": [link],
         }
 
     def _run_self_tests(self, db: Session) -> Generator[SelfTestResult]:

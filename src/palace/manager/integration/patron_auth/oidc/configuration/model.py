@@ -263,6 +263,72 @@ class OIDCAuthSettings(AuthProviderSettings, LoggerMixin):
         ),
     ] = None
 
+    # User Interface Settings
+    auth_link_display_name: Annotated[
+        str | None,
+        FormMetadata(
+            label=_("Authorization Link: Display Name (Optional)"),
+            description=_(
+                "Human-readable name for this authentication provider shown to patrons. "
+                "If not provided, the integration name will be used. "
+                "Example: 'University Single Sign-On' or 'Library Login'"
+            ),
+            weight=1000,
+        ),
+    ] = None
+
+    auth_link_description: Annotated[
+        str | None,
+        FormMetadata(
+            label=_("Authorization Link: Description (Optional)"),
+            description=_(
+                "Brief description of this authentication method shown to patrons. "
+                "If not provided, the display name will be used. "
+                "Example: 'Log in with your university credentials'"
+            ),
+            type=FormFieldType.TEXTAREA,
+            weight=1001,
+        ),
+    ] = None
+
+    auth_link_logo_url: Annotated[
+        HttpUrl | None,
+        FormMetadata(
+            label=_("Authorization Link: Logo URL (Optional)"),
+            description=_(
+                "URL to a logo image representing this authentication provider. "
+                "Displayed in authentication selection screens. "
+                "Should be a publicly accessible HTTPS URL. "
+                "Recommended size: 64x64 pixels or larger."
+            ),
+            weight=1002,
+        ),
+    ] = None
+
+    auth_link_information_url: Annotated[
+        HttpUrl | None,
+        FormMetadata(
+            label=_("Authorization Link: Information URL (Optional)"),
+            description=_(
+                "URL to a page with more information about this authentication method. "
+                "Example: Help page, registration instructions, or provider information."
+            ),
+            weight=1003,
+        ),
+    ] = None
+
+    auth_link_privacy_statement_url: Annotated[
+        HttpUrl | None,
+        FormMetadata(
+            label=_("Authorization Link: Privacy Statement URL (Optional)"),
+            description=_(
+                "URL to the authentication provider's privacy policy or statement. "
+                "Helps patrons understand how their data is handled."
+            ),
+            weight=1004,
+        ),
+    ] = None
+
     @model_validator(mode="after")
     def validate_endpoints(self) -> OIDCAuthSettings:
         """Validate that either issuer_url or manual endpoints are provided."""

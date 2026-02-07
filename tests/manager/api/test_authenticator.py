@@ -1251,6 +1251,69 @@ class TestLibraryAuthenticator:
             headers = real_authenticator.create_authentication_headers()
             assert "WWW-Authenticate" not in headers
 
+    def test_register_oidc_provider(
+            self, db: DatabaseTransactionFixture, library_fixture: LibraryFixture
+    ):
+        """Test that OIDC providers are properly registered and appear in authentication documents."""
+        from palace.manager.api.app import app
+        from palace.manager.integration.patron_auth.oidc.configuration.model import (
+            OIDCAuthLibrarySettings,
+            OIDCAuthSettings,
+        )
+        from palace.manager.integration.patron_auth.oidc.provider import (
+            OIDCAuthenticationProvider,
+        )
+
+        library = library_fixture.library()
+
+        # Create an OIDC provider
+        settings = OIDCAuthSettings(
+            issuer_url="https://idp.example.com",
+            client_id="test-client-id",
+            client_secret="test-client-secret",
+        )
+        library_settings = OIDCAuthLibrarySettings()
+        oidc_provider = OIDCAuthenticationProvider(
+            library_id=library.id,
+            integration_id=1,
+            settings=settings,
+            library_settings=library_settings,
+        )
+
+        # Create authenticator with OIDC provider
+        authenticator = LibraryAuthenticator(
+            _db=db.session,
+            library=library,
+            oidc_providers=[oidc_provider],
+        )
+
+        # Verify provider is registered
+        assert oidc_provider.label() in authenticator.oidc_providers_by_name
+        assert (
+                authenticator.oidc_providers_by_name[oidc_provider.label()] == oidc_provider
+        )
+
+        # Verify provider appears in providers list
+        providers = list(authenticator.providers)
+        assert oidc_provider in providers
+
+        # Verify provider appears in authentication document
+        with app.test_request_context("/"):
+            doc = json.loads(authenticator.create_authentication_document())
+            authenticators = doc["authentication"]
+
+            # Should have one OIDC authentication flow
+            assert len(authenticators) == 1
+            [oidc_doc] = authenticators
+
+            # Verify it's the OIDC flow
+            assert oidc_doc["type"] == "http://opds-spec.org/auth/oauth"
+            assert oidc_doc["description"] == oidc_provider.label()
+            assert len(oidc_doc["links"]) == 1
+            assert oidc_doc["links"][0]["rel"] == "authenticate"
+            assert "/oidc/authenticate" in oidc_doc["links"][0]["href"]
+            assert library.short_name in oidc_doc["links"][0]["href"]
+
     def test_create_authentication_document_no_delete_adobe_id_link_when_authdata_utility_is_none(
         self,
         db: DatabaseTransactionFixture,

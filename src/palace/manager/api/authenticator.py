@@ -377,10 +377,13 @@ class LibraryAuthenticator(LoggerMixin):
             # the ability to run one.
         elif isinstance(provider, BaseSAMLAuthenticationProvider):
             self.register_saml_provider(provider)
+        elif isinstance(provider, BaseOIDCAuthenticationProvider):
+            self.register_oidc_provider(provider)
         else:
             raise CannotLoadConfiguration(
-                f"Authentication provider {impl_cls.__name__} is neither a BasicAuthenticationProvider nor a "
-                "BaseSAMLAuthenticationProvider. I can create it, but not sure where to put it."
+                f"Authentication provider {impl_cls.__name__} is neither BasicAuthenticationProvider, "
+                "BaseSAMLAuthenticationProvider, nor BaseOIDCAuthenticationProvider. "
+                "I can create it, but not sure where to put it."
             )
 
     def register_basic_auth_provider(
@@ -410,6 +413,17 @@ class LibraryAuthenticator(LoggerMixin):
                 'Two different SAML providers claim the name "%s"' % (provider.label())
             )
         self.saml_providers_by_name[provider.label()] = provider
+
+    def register_oidc_provider(
+        self,
+        provider: BaseOIDCAuthenticationProvider,
+    ):
+        already_registered = self.oidc_providers_by_name.get(provider.label())
+        if already_registered and already_registered != provider:
+            raise CannotLoadConfiguration(
+                'Two different OIDC providers claim the name "%s"' % (provider.label())
+            )
+        self.oidc_providers_by_name[provider.label()] = provider
 
     @property
     def providers(self) -> Iterable[AuthenticationProvider]:
