@@ -83,7 +83,9 @@ class TestOIDCAuthenticationProvider:
 
             result = oidc_provider._authentication_flow_document(db.session)
 
-            assert result["type"] == "http://opds-spec.org/auth/oauth"
+            assert (
+                result["type"] == "http://thepalaceproject.org/authtype/OpenIDConnect"
+            )
             assert result["description"] == "OpenID Connect"
             assert len(result["links"]) == 1
 
@@ -142,7 +144,9 @@ class TestOIDCAuthenticationProvider:
 
             result = provider._authentication_flow_document(db.session)
 
-            assert result["type"] == "http://opds-spec.org/auth/oauth"
+            assert (
+                result["type"] == "http://thepalaceproject.org/authtype/OpenIDConnect"
+            )
             assert result["description"] == "OpenID Connect"
             assert len(result["links"]) == 1
 
