@@ -180,6 +180,23 @@ class TestProfileController:
         )
 
 
+class TestAdobePatronController:
+    CONTROLLER_NAME = "adobe_patron"
+
+    @pytest.fixture(scope="function")
+    def fixture(self, route_test: RouteTestFixture) -> RouteTestFixture:
+        route_test.set_controller_name(self.CONTROLLER_NAME)
+        return route_test
+
+    def test_patron_reset_adobe_id(self, fixture: RouteTestFixture):
+        url = "/patrons/me/adobe_id_reset"
+        fixture.assert_authenticated_request_calls(
+            url,
+            fixture.controller.reset_adobe_id,
+            http_method="POST",
+        )
+
+
 class TestLoansController:
     CONTROLLER_NAME = "loans"
 

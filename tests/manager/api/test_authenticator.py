@@ -1108,6 +1108,7 @@ class TestLibraryAuthenticator:
                 help_web,
                 help_email,
                 copyright_agent,
+                adobe_id_reset,
                 reset_link,
                 profile,
                 loans,
@@ -1124,6 +1125,11 @@ class TestLibraryAuthenticator:
             assert "http://copyright.com" == copyright["href"]
             assert "http://about.io" == about["href"]
             assert "http://license.ca/" == license["href"]
+            assert "http://librarysimplified.org/terms/rel/adobe-id-reset" == (
+                adobe_id_reset["rel"]
+            )
+            assert "/patrons/me/adobe_id_reset" in adobe_id_reset["href"]
+            assert library.short_name in adobe_id_reset["href"]
             assert "data:image/png;base64,image data" == logo["href"]
             assert "http://style.css" == stylesheet["href"]
 

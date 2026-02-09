@@ -654,6 +654,17 @@ class LibraryAuthenticator(LoggerMixin):
                 type=ProfileController.MEDIA_TYPE,
             )
         )
+        adobe_id_reset_url = url_for(
+            "patron_reset_adobe_id",
+            _external=True,
+            library_short_name=self.library_short_name,
+        )
+        links.append(
+            dict(
+                rel="http://librarysimplified.org/terms/rel/adobe-id-reset",
+                href=adobe_id_reset_url,
+            )
+        )
 
         # If there is a Designated Agent email address, add it as a
         # link.

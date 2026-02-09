@@ -13,6 +13,7 @@ from palace.manager.api.authenticator import Authenticator
 from palace.manager.api.circulation.base import CirculationApiType
 from palace.manager.api.circulation.dispatcher import CirculationApiDispatcher
 from palace.manager.api.config import Configuration
+from palace.manager.api.controller.adobe_patron import AdobePatronController
 from palace.manager.api.controller.analytics import AnalyticsController
 from palace.manager.api.controller.annotation import AnnotationController
 from palace.manager.api.controller.device_tokens import DeviceTokensController
@@ -115,6 +116,7 @@ class CirculationManager(LoggerMixin):
     urn_lookup: URNLookupController
     work_controller: WorkController
     analytics_controller: AnalyticsController
+    adobe_patron: AdobePatronController
     profiles: ProfileController
     patron_activity_history: PatronActivityHistoryController
     patron_devices: DeviceTokensController
@@ -360,6 +362,7 @@ class CirculationManager(LoggerMixin):
         self.urn_lookup = URNLookupController(self)
         self.work_controller = WorkController(self)
         self.analytics_controller = AnalyticsController(self)
+        self.adobe_patron = AdobePatronController(self)
         self.profiles = ProfileController(self)
         self.patron_devices = DeviceTokensController(self)
         self.patron_activity_history = PatronActivityHistoryController()
