@@ -26,7 +26,7 @@ def authdata() -> AuthdataUtility:
         vendor_id="The Vendor ID",
         library_uri="http://my-library.org/",
         library_short_name="MyLibrary",
-        secret="My library secret",
+        secret="My library secret - padded key!!",
     )
 
 
@@ -186,7 +186,7 @@ class TestAuthdataUtility:
         )
         assert (
             base64.encodebytes(
-                b"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwOi8vbXktbGlicmFyeS5vcmcvIiwic3ViIjoiUGF0cm9uIGlkZW50aWZpZXIiLCJpYXQiOjE0NTE2NDk2MDAuMCwiZXhwIjoxNTE0ODA4MDAwLjB9.wKAnFfJVfJP55CIyD7PntFZrtWVTwDcXHjL-quTndzc"
+                b"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwOi8vbXktbGlicmFyeS5vcmcvIiwic3ViIjoiUGF0cm9uIGlkZW50aWZpZXIiLCJpYXQiOjE0NTE2NDk2MDAuMCwiZXhwIjoxNTE0ODA4MDAwLjB9.xXDBHN3WRCZ1dgX0oAX5zjeUtz2kXElIqR3Xr8GCRbs"
             )
             == authdata_encoded
         )
@@ -198,7 +198,7 @@ class TestAuthdataUtility:
             vendor_id="The Vendor ID",
             library_uri="http://some-other-library.org/",
             library_short_name="SomeOther",
-            secret="Some other library secret",
+            secret="Some other library secret padded",
         )
         vendor_id, authdata_bytes = foreign_authdata.encode("A patron")
         # They can encode, but we cna't decode.
@@ -252,7 +252,7 @@ class TestAuthdataUtility:
         # the semicolon which replaced the slash, and the at sign which
         # replaced the equals sign.
         assert (
-            "a library|1234.5|a patron identifier|YoNGn7f38mF531KSWJ;o1H0Z3chbC:uTE:t7pAwqYxM@"
+            "a library|1234.5|a patron identifier|mSFwEMDHqYwcyS3pFNdYJWJNuC0L3OoyTmBLrZ3U5rY@"
             == value
         )
 
@@ -279,7 +279,7 @@ class TestAuthdataUtility:
             vendor_id="The Vendor ID",
             library_uri="http://your-library.org/",
             library_short_name="you",
-            secret="Your library secret",
+            secret="Your library secret - padded!!!!",
         )
         test_date = datetime_utc(2021, 5, 5)
         monkeypatch.setattr(authdata, "_now", lambda: test_date)
@@ -400,7 +400,7 @@ class TestAuthdataUtility:
             vendor_id="The Vendor ID",
             library_uri="http://your-library.org/",
             library_short_name="you",
-            secret="Your library secret",
+            secret="Your library secret - padded!!!!",
         )
         utility.test_code_ran = False
         utility.decode_two_part_short_client_token("username", encoded_signature)

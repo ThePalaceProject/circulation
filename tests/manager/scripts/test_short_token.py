@@ -26,7 +26,7 @@ class TestGenerateShortTokenScript:
             vendor_id="The Vendor ID",
             library_uri="http://your-library.org/",
             library_short_name="you",
-            secret="Your library secret",
+            secret="Your library secret - padded!!!!",
         )
         test_date = datetime_utc(2021, 5, 5)
         monkeypatch.setattr(authdata, "_now", lambda: test_date)
@@ -68,9 +68,9 @@ class TestGenerateShortTokenScript:
         )
         assert output.getvalue().split("\n") == [
             "Vendor ID: The Vendor ID",
-            "Token: YOU|1620345600|1234567|ZP45vhpfs3fHREvFkDDVgDAmhoD699elFD3PGaZu7yo@",
+            "Token: YOU|1620345600|1234567|MTEUZr1ZxyF86A3DV28NzlTTTjYBDK8gbPled9EQrQY@",
             "Username: YOU|1620345600|1234567",
-            "Password: ZP45vhpfs3fHREvFkDDVgDAmhoD699elFD3PGaZu7yo@",
+            "Password: MTEUZr1ZxyF86A3DV28NzlTTTjYBDK8gbPled9EQrQY@",
             "",
         ]
 

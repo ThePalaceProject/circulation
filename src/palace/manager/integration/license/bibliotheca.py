@@ -1281,7 +1281,7 @@ class BibliothecaCirculationSweep(IdentifierSweepMonitor):
             else:
                 continue
             if pool.licenses_owned > 0:
-                self.log.warn("Removing %s from circulation.", identifier.identifier)
+                self.log.warning("Removing %s from circulation.", identifier.identifier)
             pool.update_availability(0, 0, 0, 0, as_of=now)
 
     def _process_bibliographic(
@@ -1407,7 +1407,7 @@ class BibliothecaPurchaseMonitor(BibliothecaTimelineMonitor):
         try:
             dt_date = to_utc(dateutil.parser.isoparse(date))
         except ValueError as e:
-            self.log.warn(
+            self.log.warning(
                 '%r. Date argument "%s" was not in a valid format. Use an ISO 8601 string or a datetime.',
                 e,
                 date,

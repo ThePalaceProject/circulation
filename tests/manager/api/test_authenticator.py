@@ -875,7 +875,7 @@ class TestLibraryAuthenticator:
             _db=db.session,
             library=db.default_library(),
             saml_providers=[saml],
-            bearer_token_signing_secret="xx",
+            bearer_token_signing_secret="xx-testing-bearer-token-secret!!",
         )
 
         # Mock the sign verification
@@ -2645,7 +2645,7 @@ class TestBearerTokenType:
         authenticator = LibraryAuthenticator(
             _db=db.session,
             library=db.default_library(),
-            bearer_token_signing_secret="secret",
+            bearer_token_signing_secret="secret-for-testing-bearer-tokens",
         )
         jwt_token = authenticator.create_bearer_token("test", "test")
 

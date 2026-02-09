@@ -73,14 +73,14 @@ class AdminController(LoggerMixin):
                 if role.get("role") in AdminRole.ROLES:
                     library = Library.lookup(self._db, role.get("library"))
                     if role.get("library") and not library:
-                        self.log.warn(
+                        self.log.warning(
                             "%s authentication provider specified an unknown library for a new admin: %s"
                             % (admin_details.get("type"), role.get("library"))
                         )
                     else:
                         admin.add_role(role.get("role"), library)
                 else:
-                    self.log.warn(
+                    self.log.warning(
                         "%s authentication provider specified an unknown role for a new admin: %s"
                         % (admin_details.get("type"), role.get("role"))
                     )
