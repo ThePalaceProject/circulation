@@ -112,11 +112,6 @@ class OIDCAuthenticationProvider(
         """Indicate whether this provider identifies individual patrons."""
         return True
 
-    @property
-    def flow_type(self) -> str:
-        """Return the authentication flow type for OIDC authentication."""
-        return "http://thepalaceproject.org/authtype/OpenIDConnect"
-
     @classmethod
     def settings_class(cls) -> type[OIDCAuthSettings]:
         """Return the settings class for this provider."""

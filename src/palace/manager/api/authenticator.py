@@ -29,6 +29,7 @@ from palace.manager.api.config import Configuration
 from palace.manager.api.problem_details import (
     INVALID_SAML_BEARER_TOKEN,
     LIBRARY_NOT_FOUND,
+    UNKNOWN_BEARER_TOKEN_PROVIDER,
     UNKNOWN_OIDC_PROVIDER,
     UNKNOWN_SAML_PROVIDER,
     UNSUPPORTED_AUTHENTICATION_MECHANISM,
@@ -508,9 +509,29 @@ class LibraryAuthenticator(LoggerMixin):
                 if not isinstance(oidc_provider, ProblemDetail):
                     return oidc_provider.authenticated_patron(_db, provider_token)
 
-                # Neither SAML nor OIDC provider found - return the SAML error
-                # (which lists available SAML providers)
-                return saml_provider
+                # Neither SAML nor OIDC provider found - return a helpful error
+                # listing all available providers
+                saml_names = (
+                    list(self.saml_providers_by_name.keys())
+                    if self.saml_providers_by_name
+                    else []
+                )
+                oidc_names = (
+                    list(self.oidc_providers_by_name.keys())
+                    if self.oidc_providers_by_name
+                    else []
+                )
+
+                saml_list = ", ".join(saml_names) if saml_names else "(none configured)"
+                oidc_list = ", ".join(oidc_names) if oidc_names else "(none configured)"
+
+                detail = (
+                    f"The specified provider name '{provider_name}' isn't one of the known providers. "
+                    f"SAML providers: {saml_list}. "
+                    f"OIDC providers: {oidc_list}."
+                )
+
+                return UNKNOWN_BEARER_TOKEN_PROVIDER.detailed(detail)
 
         return UNSUPPORTED_AUTHENTICATION_MECHANISM
 
@@ -881,4 +902,4 @@ class BaseOIDCAuthenticationProvider[
 
     @property
     def flow_type(self) -> str:
-        return "http://opds-spec.org/auth/oauth"
+        return "http://thepalaceproject.org/authtype/OpenIDConnect"
