@@ -263,7 +263,7 @@ UNKNOWN_SAML_PROVIDER = pd(
 )
 
 UNKNOWN_OIDC_PROVIDER = pd(
-    "http://librarysimplified.org/terms/problem/unknown-oidc-provider",
+    "http://palaceproject.io/terms/problem/auth/unknown-oidc-provider",
     status_code=400,
     title=_("Unknown OIDC provider."),
     detail=_("The specified OIDC provider name isn't one of the known providers."),

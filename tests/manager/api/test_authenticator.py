@@ -38,6 +38,7 @@ from palace.manager.api.authentication.basic_token import (
 )
 from palace.manager.api.authenticator import (
     Authenticator,
+    BaseOIDCAuthenticationProvider,
     BaseSAMLAuthenticationProvider,
     BearerTokenType,
     CirculationPatronProfileStorage,
@@ -48,6 +49,7 @@ from palace.manager.api.problem_details import (
     LIBRARY_NOT_FOUND,
     PATRON_AUTH_ACCESS_TOKEN_EXPIRED,
     PATRON_OF_ANOTHER_LIBRARY,
+    UNKNOWN_BEARER_TOKEN_PROVIDER,
     UNSUPPORTED_AUTHENTICATION_MECHANISM,
 )
 from palace.manager.api.util.patron import PatronUtility
@@ -58,6 +60,13 @@ from palace.manager.integration.goals import Goals
 from palace.manager.integration.patron_auth.millenium_patron import (
     MilleniumPatronAPI,
     MilleniumPatronSettings,
+)
+from palace.manager.integration.patron_auth.oidc.configuration.model import (
+    OIDCAuthLibrarySettings,
+    OIDCAuthSettings,
+)
+from palace.manager.integration.patron_auth.oidc.provider import (
+    OIDCAuthenticationProvider,
 )
 from palace.manager.integration.patron_auth.simple_authentication import (
     SimpleAuthenticationProvider,
@@ -1256,13 +1265,6 @@ class TestLibraryAuthenticator:
     ):
         """Test that OIDC providers are properly registered and appear in authentication documents."""
         from palace.manager.api.app import app
-        from palace.manager.integration.patron_auth.oidc.configuration.model import (
-            OIDCAuthLibrarySettings,
-            OIDCAuthSettings,
-        )
-        from palace.manager.integration.patron_auth.oidc.provider import (
-            OIDCAuthenticationProvider,
-        )
 
         library = library_fixture.library()
 
@@ -1320,8 +1322,6 @@ class TestLibraryAuthenticator:
         self, db: DatabaseTransactionFixture, library_fixture: LibraryFixture
     ):
         """Test that OIDC bearer tokens are properly routed to OIDC providers."""
-        from palace.manager.api.authenticator import BaseOIDCAuthenticationProvider
-
         library = library_fixture.library()
 
         # Create mock OIDC provider
@@ -1365,8 +1365,6 @@ class TestLibraryAuthenticator:
         self, db: DatabaseTransactionFixture, library_fixture: LibraryFixture
     ):
         """Test that both SAML and OIDC bearer tokens work in the same authenticator."""
-        from palace.manager.api.authenticator import BaseOIDCAuthenticationProvider
-
         library = library_fixture.library()
 
         # Create mock SAML provider
@@ -1425,7 +1423,10 @@ class TestLibraryAuthenticator:
             )
 
     def test_authenticated_patron_bearer_token_unknown_provider(
-        self, db: DatabaseTransactionFixture, library_fixture: LibraryFixture
+        self,
+        db: DatabaseTransactionFixture,
+        library_fixture: LibraryFixture,
+        caplog: pytest.LogCaptureFixture,
     ):
         """Test that unknown provider names in bearer tokens return appropriate errors."""
         library = library_fixture.library()
@@ -1448,19 +1449,30 @@ class TestLibraryAuthenticator:
             )
 
             # Should return a ProblemDetail about unknown bearer token provider
-            from palace.manager.api.problem_details import UNKNOWN_BEARER_TOKEN_PROVIDER
-
             assert result.uri == UNKNOWN_BEARER_TOKEN_PROVIDER.uri
+            # The detail should only contain the basic error message with provider name
             assert "NonExistentProvider" in result.detail
-            assert "SAML providers: (none configured)" in result.detail
-            assert "OIDC providers: (none configured)" in result.detail
+            assert "isn't one of the known providers" in result.detail
+
+            # The full error message with provider lists should be logged
+            error_logs = [
+                r
+                for r in caplog.records
+                if r.levelname == "ERROR" and "authenticator" in r.name
+            ]
+            assert len(error_logs) == 1
+            log_message = error_logs[0].message
+            assert "NonExistentProvider" in log_message
+            assert "SAML providers: (none configured)" in log_message
+            assert "OIDC providers: (none configured)" in log_message
 
     def test_authenticated_patron_bearer_token_unknown_provider_with_configured_providers(
-        self, db: DatabaseTransactionFixture, library_fixture: LibraryFixture
+        self,
+        db: DatabaseTransactionFixture,
+        library_fixture: LibraryFixture,
+        caplog: pytest.LogCaptureFixture,
     ):
         """Test that error message lists all configured providers when token specifies unknown provider."""
-        from palace.manager.api.authenticator import BaseOIDCAuthenticationProvider
-
         library = library_fixture.library()
 
         # Create mock SAML providers
@@ -1495,14 +1507,24 @@ class TestLibraryAuthenticator:
             )
 
             # Should return a ProblemDetail about unknown bearer token provider
-            from palace.manager.api.problem_details import UNKNOWN_BEARER_TOKEN_PROVIDER
-
             assert result.uri == UNKNOWN_BEARER_TOKEN_PROVIDER.uri
+            # The detail should only contain the basic error message with provider name
             assert "UnknownProvider" in result.detail
-            # Should list all SAML providers
-            assert "SAML providers: SAML Provider 1, SAML Provider 2" in result.detail
-            # Should list all OIDC providers
-            assert "OIDC providers: OIDC Provider 1, OIDC Provider 2" in result.detail
+            assert "isn't one of the known providers" in result.detail
+
+            # The full error message with provider lists should be logged
+            error_logs = [
+                r
+                for r in caplog.records
+                if r.levelname == "ERROR" and "authenticator" in r.name
+            ]
+            assert len(error_logs) == 1
+            log_message = error_logs[0].message
+            assert "UnknownProvider" in log_message
+            # Should list all SAML providers in log
+            assert "SAML providers: SAML Provider 1, SAML Provider 2" in log_message
+            # Should list all OIDC providers in log
+            assert "OIDC providers: OIDC Provider 1, OIDC Provider 2" in log_message
 
     def test_create_authentication_document_no_delete_adobe_id_link_when_authdata_utility_is_none(
         self,
