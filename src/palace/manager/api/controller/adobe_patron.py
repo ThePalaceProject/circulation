@@ -21,4 +21,5 @@ class AdobePatronController(CirculationManagerController):
         return Response(
             str(_("Your Adobe ID has been reset.")),
             200,
+            {"Content-Type": "text/plain"},
         )
