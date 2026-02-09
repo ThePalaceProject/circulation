@@ -492,17 +492,25 @@ class LibraryAuthenticator(LoggerMixin):
                     _db, token_str
                 )
             elif token_type == BearerTokenType.JWT:
-                # The patron wants to use an SAMLAuthenticationProvider. Figure out which one.
+                # The patron wants to use an OAuth provider (SAML or OIDC). Figure out which one.
                 try:
                     provider_name, provider_token = self.decode_bearer_token(token_str)
                 except jwt.exceptions.InvalidTokenError as e:
                     return INVALID_SAML_BEARER_TOKEN
+
+                # Try SAML first (for backwards compatibility)
                 saml_provider = self.saml_provider_lookup(provider_name)
-                if isinstance(saml_provider, ProblemDetail):
-                    # There was a problem turning the provider name into
-                    # a registered SAMLAuthenticationProvider.
-                    return saml_provider
-                return saml_provider.authenticated_patron(_db, provider_token)
+                if not isinstance(saml_provider, ProblemDetail):
+                    return saml_provider.authenticated_patron(_db, provider_token)
+
+                # If not SAML, try OIDC
+                oidc_provider = self.oidc_provider_lookup(provider_name)
+                if not isinstance(oidc_provider, ProblemDetail):
+                    return oidc_provider.authenticated_patron(_db, provider_token)
+
+                # Neither SAML nor OIDC provider found - return the SAML error
+                # (which lists available SAML providers)
+                return saml_provider
 
         return UNSUPPORTED_AUTHENTICATION_MECHANISM
 
