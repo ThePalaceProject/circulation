@@ -195,7 +195,7 @@ class DSLParser:
         :return: AST node
         """
         try:
-            results = self.expression.parseString(expression, parseAll=True)
+            results = self.expression.parse_string(expression, parse_all=True)
 
             return results[0]  # type: ignore[no-any-return]
         except ParseException as exception:

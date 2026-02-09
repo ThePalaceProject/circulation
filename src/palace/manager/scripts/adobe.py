@@ -35,7 +35,7 @@ class AdobeAccountIDResetScript(PatronInputScript):
             self.log.info("Run with --delete to change the database.")
 
         if patrons and self.delete:
-            self.log.warn(
+            self.log.warning(
                 """This is not a drill.
 Running this script will permanently disconnect %d patron(s) from their Adobe account IDs.
 They will be unable to fulfill any existing loans that involve Adobe-encrypted files.
@@ -46,7 +46,7 @@ You'll get another chance to back out before the database session is committed."
             time.sleep(5)
         self.process_patrons(patrons)
         if self.delete:
-            self.log.warn("All done. Sleeping for five seconds before committing.")
+            self.log.warning("All done. Sleeping for five seconds before committing.")
             time.sleep(5)
             self._db.commit()
 

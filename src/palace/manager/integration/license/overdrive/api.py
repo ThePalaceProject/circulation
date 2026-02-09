@@ -717,7 +717,7 @@ class OverdriveAPI(
         # We allow a 404 response code for availability or metadata since those links may not exist for a given
         # identifier.
         if response.status_code == 404:
-            self.log.warn(
+            self.log.warning(
                 f"The following URL unexpectedly returned a 404: {url}. "
                 f'Response text: "{response.text}" -> Skipping...'
             )

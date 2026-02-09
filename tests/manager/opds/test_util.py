@@ -89,6 +89,9 @@ class TestStrOrModel:
 
 
 class TestStrModelOrTuple:
+    # Pydantic emits spurious serialization warnings when serializing a discriminated
+    # union, because it tries each union branch before finding the correct one.
+    @pytest.mark.filterwarnings("ignore:Pydantic serializer warnings:UserWarning")
     def test_serialize(self):
         ta = TypeAdapter(StrModelOrTuple[MockModel])  # type: ignore[misc]
 

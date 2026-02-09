@@ -364,6 +364,11 @@ filterwarnings = [
     "error::pytest.PytestWarning",
     "error::sqlalchemy.exc.SADeprecationWarning",
     "error::sqlalchemy.exc.SAWarning",
+    # onelogin has some deprecation warnings that they don't look like they
+    # are going to fix anytime soon, so we ignore them here, so we don't have
+    # to see in our tests.
+    # https://github.com/SAML-Toolkits/python3-saml/issues/434
+    "ignore::DeprecationWarning:onelogin.saml2",
 ]
 markers = [
     "minio: mark test as requiring minio",

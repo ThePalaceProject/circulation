@@ -125,7 +125,7 @@ class LaneResetScript(LibraryInputScript):
             self.log.info("Run with --reset to change the database.")
 
         if libraries and self.reset:
-            self.log.warn(
+            self.log.warning(
                 """This is not a drill.
 Running this script will permanently reset the lanes for %d libraries. Any lanes created from
 custom lists will be deleted (though the lists themselves will be preserved).
@@ -163,7 +163,7 @@ You'll get another chance to back out before the database session is committed."
         output.write(new_lane_output)
 
         if self.reset:
-            self.log.warn("All done. Sleeping for five seconds before committing.")
+            self.log.warning("All done. Sleeping for five seconds before committing.")
             time.sleep(5)
             self._db.commit()
 
