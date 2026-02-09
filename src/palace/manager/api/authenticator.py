@@ -655,7 +655,7 @@ class LibraryAuthenticator(LoggerMixin):
             )
         )
         adobe_id_reset_url = url_for(
-            "patron_reset_adobe_id",
+            "patron_adobe_id_reset",
             _external=True,
             library_short_name=self.library_short_name,
         )

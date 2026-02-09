@@ -356,7 +356,7 @@ def delete_patron_devices():
 @allows_patron_web
 @requires_auth
 @returns_problem_detail
-def patron_reset_adobe_id():
+def patron_adobe_id_reset():
     return app.manager.adobe_patron.reset_adobe_id()
 
 
