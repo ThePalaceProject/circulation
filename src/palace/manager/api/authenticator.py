@@ -655,13 +655,13 @@ class LibraryAuthenticator(LoggerMixin):
             )
         )
         adobe_id_reset_url = url_for(
-            "patron_adobe_id_reset",
+            "patron_reset_adobe_id",
             _external=True,
             library_short_name=self.library_short_name,
         )
         links.append(
             dict(
-                rel="http://librarysimplified.org/terms/rel/adobe-id-reset",
+                rel="http://librarysimplified.org/terms/rel/reset-adobe-id",
                 href=adobe_id_reset_url,
             )
         )

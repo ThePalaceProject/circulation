@@ -351,12 +351,12 @@ def delete_patron_devices():
     return app.manager.patron_devices.delete_patron_device()
 
 
-@library_dir_route("/patrons/me/adobe_id_reset", methods=["POST"])
+@library_dir_route("/patrons/me/reset_adobe_id", methods=["POST"])
 @has_library
 @allows_patron_web
 @requires_auth
 @returns_problem_detail
-def patron_adobe_id_reset():
+def patron_reset_adobe_id():
     return app.manager.adobe_patron.reset_adobe_id()
 
 
