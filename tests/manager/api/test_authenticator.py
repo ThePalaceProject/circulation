@@ -1447,12 +1447,62 @@ class TestLibraryAuthenticator:
                 db.session, Authorization(auth_type="Bearer", token=bearer_token)
             )
 
-            # Should return a ProblemDetail about unknown SAML provider
-            # (since we try SAML first for backwards compatibility)
-            from palace.manager.api.problem_details import UNKNOWN_SAML_PROVIDER
+            # Should return a ProblemDetail about unknown bearer token provider
+            from palace.manager.api.problem_details import UNKNOWN_BEARER_TOKEN_PROVIDER
 
-            assert result.uri == UNKNOWN_SAML_PROVIDER.uri
-            assert "No SAML providers are configured" in result.detail
+            assert result.uri == UNKNOWN_BEARER_TOKEN_PROVIDER.uri
+            assert "NonExistentProvider" in result.detail
+            assert "SAML providers: (none configured)" in result.detail
+            assert "OIDC providers: (none configured)" in result.detail
+
+    def test_authenticated_patron_bearer_token_unknown_provider_with_configured_providers(
+        self, db: DatabaseTransactionFixture, library_fixture: LibraryFixture
+    ):
+        """Test that error message lists all configured providers when token specifies unknown provider."""
+        from palace.manager.api.authenticator import BaseOIDCAuthenticationProvider
+
+        library = library_fixture.library()
+
+        # Create mock SAML providers
+        saml_provider1 = MagicMock(spec=BaseSAMLAuthenticationProvider)
+        saml_provider1.label.return_value = "SAML Provider 1"
+        saml_provider2 = MagicMock(spec=BaseSAMLAuthenticationProvider)
+        saml_provider2.label.return_value = "SAML Provider 2"
+
+        # Create mock OIDC providers
+        oidc_provider1 = MagicMock(spec=BaseOIDCAuthenticationProvider)
+        oidc_provider1.label.return_value = "OIDC Provider 1"
+        oidc_provider2 = MagicMock(spec=BaseOIDCAuthenticationProvider)
+        oidc_provider2.label.return_value = "OIDC Provider 2"
+
+        # Create authenticator with both SAML and OIDC providers
+        authenticator = LibraryAuthenticator(
+            _db=db.session,
+            library=library,
+            saml_providers=[saml_provider1, saml_provider2],
+            oidc_providers=[oidc_provider1, oidc_provider2],
+            bearer_token_signing_secret="test-secret",
+        )
+
+        # Mock the decode to return a non-existent provider
+        with patch.object(authenticator, "decode_bearer_token") as decode:
+            decode.return_value = ("UnknownProvider", "some-credential")
+            bearer_token = authenticator.create_bearer_token(
+                "UnknownProvider", "some-credential"
+            )
+            result = authenticator.authenticated_patron(
+                db.session, Authorization(auth_type="Bearer", token=bearer_token)
+            )
+
+            # Should return a ProblemDetail about unknown bearer token provider
+            from palace.manager.api.problem_details import UNKNOWN_BEARER_TOKEN_PROVIDER
+
+            assert result.uri == UNKNOWN_BEARER_TOKEN_PROVIDER.uri
+            assert "UnknownProvider" in result.detail
+            # Should list all SAML providers
+            assert "SAML providers: SAML Provider 1, SAML Provider 2" in result.detail
+            # Should list all OIDC providers
+            assert "OIDC providers: OIDC Provider 1, OIDC Provider 2" in result.detail
 
     def test_create_authentication_document_no_delete_adobe_id_link_when_authdata_utility_is_none(
         self,
