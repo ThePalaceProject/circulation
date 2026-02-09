@@ -1338,7 +1338,7 @@ class TestLibraryAuthenticator:
             _db=db.session,
             library=library,
             oidc_providers=[oidc_provider],
-            bearer_token_signing_secret="test-secret",
+            bearer_token_signing_secret="test-secret-at-least-32-bytes-long-for-hmac-sha256",
         )
 
         # Mock the decode to return provider name and token
@@ -1389,7 +1389,7 @@ class TestLibraryAuthenticator:
             library=library,
             saml_providers=[saml_provider],
             oidc_providers=[oidc_provider],
-            bearer_token_signing_secret="test-secret",
+            bearer_token_signing_secret="test-secret-at-least-32-bytes-long-for-hmac-sha256",
         )
 
         # Test SAML bearer token
@@ -1434,7 +1434,7 @@ class TestLibraryAuthenticator:
         authenticator = LibraryAuthenticator(
             _db=db.session,
             library=library,
-            bearer_token_signing_secret="test-secret",
+            bearer_token_signing_secret="test-secret-at-least-32-bytes-long-for-hmac-sha256",
         )
 
         # Mock the decode to return a non-existent provider
@@ -1481,7 +1481,7 @@ class TestLibraryAuthenticator:
             library=library,
             saml_providers=[saml_provider1, saml_provider2],
             oidc_providers=[oidc_provider1, oidc_provider2],
-            bearer_token_signing_secret="test-secret",
+            bearer_token_signing_secret="test-secret-at-least-32-bytes-long-for-hmac-sha256",
         )
 
         # Mock the decode to return a non-existent provider
