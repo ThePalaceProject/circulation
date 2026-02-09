@@ -12,7 +12,10 @@ from palace.manager.integration.settings import (
     FormMetadata,
 )
 from palace.manager.sqlalchemy.constants import MediaTypes
-from palace.manager.sqlalchemy.model.licensing import LicensePoolDeliveryMechanism
+from palace.manager.sqlalchemy.model.licensing import (
+    DeliveryMechanism,
+    LicensePoolDeliveryMechanism,
+)
 
 
 class FormatPriorities:
