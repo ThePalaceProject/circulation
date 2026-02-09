@@ -509,8 +509,9 @@ class LibraryAuthenticator(LoggerMixin):
                 if not isinstance(oidc_provider, ProblemDetail):
                     return oidc_provider.authenticated_patron(_db, provider_token)
 
-                # Neither SAML nor OIDC provider found - return a helpful error
-                # listing all available providers
+                # Neither SAML nor OIDC provider found. Log a helpful error
+                # listing the available SAML & OIDC providers and return a
+                # problem detail.
                 saml_names = (
                     list(self.saml_providers_by_name.keys())
                     if self.saml_providers_by_name
@@ -521,16 +522,16 @@ class LibraryAuthenticator(LoggerMixin):
                     if self.oidc_providers_by_name
                     else []
                 )
-
                 saml_list = ", ".join(saml_names) if saml_names else "(none configured)"
                 oidc_list = ", ".join(oidc_names) if oidc_names else "(none configured)"
 
-                detail = (
-                    f"The specified provider name '{provider_name}' isn't one of the known providers. "
-                    f"SAML providers: {saml_list}. "
+                detail = f"The specified provider name '{provider_name}' isn't one of the known providers"
+                message = (
+                    f"{detail}: "
+                    f"SAML providers: {saml_list}; "
                     f"OIDC providers: {oidc_list}."
                 )
-
+                self.log.error(message)
                 return UNKNOWN_BEARER_TOKEN_PROVIDER.detailed(detail)
 
         return UNSUPPORTED_AUTHENTICATION_MECHANISM
