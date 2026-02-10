@@ -8,7 +8,6 @@ import pytest
 
 from palace.manager.integration.license.opds.settings.format_priority import (
     FormatPriorities,
-    FormatPrioritiesSettings,
 )
 from palace.manager.sqlalchemy.model.licensing import (
     DeliveryMechanism,
@@ -119,7 +118,6 @@ class TestFormatPriorities:
         priorities = FormatPriorities(
             prioritized_drm_schemes=[],
             prioritized_content_types=[],
-            deprioritize_lcp_non_epubs=False,
         )
         assert [] == priorities.prioritize_mechanisms([])
 
@@ -127,7 +125,6 @@ class TestFormatPriorities:
         priorities = FormatPriorities(
             prioritized_drm_schemes=[],
             prioritized_content_types=[],
-            deprioritize_lcp_non_epubs=False,
         )
         mechanism_0 = mock_mechanism()
         assert [mechanism_0] == priorities.prioritize_mechanisms([mechanism_0])
@@ -136,7 +133,6 @@ class TestFormatPriorities:
         priorities = FormatPriorities(
             prioritized_drm_schemes=[],
             prioritized_content_types=[],
-            deprioritize_lcp_non_epubs=False,
         )
         expected = sample_data_0.copy()
         assert expected == priorities.prioritize_mechanisms(sample_data_0)
@@ -146,7 +142,6 @@ class TestFormatPriorities:
         priorities = FormatPriorities(
             prioritized_drm_schemes=[],
             prioritized_content_types=["application/x-mobi8-ebook"],
-            deprioritize_lcp_non_epubs=False,
         )
 
         # We expect the mobi8-ebook format to be pushed to the front of the list.
@@ -215,7 +210,6 @@ class TestFormatPriorities:
                 "application/audiobook+lcp",
                 "application/pdf",
             ],
-            deprioritize_lcp_non_epubs=False,
         )
         expected = [
             mock_mechanism(None, "application/epub+zip"),
@@ -265,71 +259,6 @@ class TestFormatPriorities:
         received = priorities.prioritize_mechanisms(sample_data_0)
         assert expected == received
 
-    def test_prioritized_content_lcp_audiobooks(self, mock_mechanism, sample_data_0):
-        """A test of configuration where LCP audiobooks are artificially deprioritized, whilst
-        keeping the priorities of everything else the same."""
-        priorities = FormatPriorities(
-            prioritized_drm_schemes=[
-                "application/vnd.readium.lcp.license.v1.0+json",
-                "application/vnd.librarysimplified.bearer-token+json",
-                "application/vnd.adobe.adept+xml",
-            ],
-            prioritized_content_types=[
-                "application/epub+zip",
-                "application/audiobook+json",
-                "application/pdf",
-                "application/audiobook+lcp",
-            ],
-            deprioritize_lcp_non_epubs=True,
-        )
-        expected = [
-            mock_mechanism(None, "application/epub+zip"),
-            mock_mechanism(None, "application/audiobook+json"),
-            mock_mechanism(None, "application/pdf"),
-            mock_mechanism(None, "application/kepub+zip"),
-            mock_mechanism(None, "application/x-mobipocket-ebook"),
-            mock_mechanism(None, "application/x-mobi8-ebook"),
-            mock_mechanism(None, "text/plain; charset=utf-8"),
-            mock_mechanism(None, "application/octet-stream"),
-            mock_mechanism(None, "text/html; charset=utf-8"),
-            mock_mechanism(
-                "application/vnd.readium.lcp.license.v1.0+json", "application/epub+zip"
-            ),
-            mock_mechanism(
-                "application/vnd.librarysimplified.bearer-token+json",
-                "application/epub+zip",
-            ),
-            mock_mechanism(
-                "application/vnd.librarysimplified.bearer-token+json",
-                "application/audiobook+json",
-            ),
-            mock_mechanism(
-                "application/vnd.librarysimplified.bearer-token+json",
-                "application/pdf",
-            ),
-            mock_mechanism("application/vnd.adobe.adept+xml", "application/epub+zip"),
-            mock_mechanism(
-                "http://www.feedbooks.com/audiobooks/access-restriction",
-                "application/audiobook+json",
-            ),
-            mock_mechanism(
-                "Libby DRM",
-                "application/vnd.overdrive.circulation.api+json;profile=audiobook",
-            ),
-            mock_mechanism(
-                "application/vnd.librarysimplified.findaway.license+json", None
-            ),
-            mock_mechanism(
-                "application/vnd.readium.lcp.license.v1.0+json", "application/pdf"
-            ),
-            mock_mechanism(
-                "application/vnd.readium.lcp.license.v1.0+json",
-                "application/audiobook+lcp",
-            ),
-        ]
-        received = priorities.prioritize_mechanisms(sample_data_0)
-        assert expected == received
-
     @staticmethod
     def _show(mechanisms):
         output = []
@@ -341,16 +270,3 @@ class TestFormatPriorities:
                 item["type"] = mechanism.delivery_mechanism.content_type
             output.append(item)
         print(json.dumps(output, indent=2))
-
-
-class TestFormatPrioritiesSettings:
-    def test_deprioritize_lcp_non_epubs(self) -> None:
-        settings = FormatPrioritiesSettings.model_validate(
-            {"deprioritize_lcp_non_epubs": "true"}
-        )
-        assert settings.deprioritize_lcp_non_epubs is True
-
-        settings = FormatPrioritiesSettings.model_validate(
-            {"deprioritize_lcp_non_epubs": "false"}
-        )
-        assert settings.deprioritize_lcp_non_epubs is False

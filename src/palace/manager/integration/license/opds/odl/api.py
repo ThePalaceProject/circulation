@@ -140,7 +140,6 @@ class OPDS2WithODLApi(
         self._format_priorities = FormatPriorities(
             self.settings.prioritized_drm_schemes,
             self.settings.prioritized_content_types,
-            self.settings.deprioritize_lcp_non_epubs,
         )
 
         # Create DeMarque WebReader client (None if not configured)

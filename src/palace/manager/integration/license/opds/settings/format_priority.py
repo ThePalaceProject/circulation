@@ -25,12 +25,10 @@ class FormatPriorities:
         self,
         prioritized_drm_schemes: list[str],
         prioritized_content_types: list[str],
-        deprioritize_lcp_non_epubs: bool,
     ):
         """
         :param prioritized_drm_schemes: The set of DRM schemes to prioritize; items earlier in the list are higher priority.
         :param prioritized_content_types: The set of content types to prioritize; items earlier in the list are higher priority.
-        :param deprioritize_lcp_non_epubs: Should LCP audiobooks/PDFs be deprioritized in an ad-hoc manner?
         """
 
         # Assign priorities to each content type and DRM scheme based on their position
@@ -42,8 +40,6 @@ class FormatPriorities:
         self._prioritized_drm_schemes: Mapping[str, int] = {}
         for index, drm_scheme in enumerate(reversed(prioritized_drm_schemes)):
             self._prioritized_drm_schemes[drm_scheme] = index + 1
-
-        self._deprioritize_lcp_non_epubs = deprioritize_lcp_non_epubs
 
     def prioritize_mechanisms(
         self, mechanisms: list[LicensePoolDeliveryMechanism]
@@ -73,30 +69,7 @@ class FormatPriorities:
                 reverse=True,
             )
 
-        if self._deprioritize_lcp_non_epubs:
-            mechanisms.sort(
-                key=lambda mechanism: self._artificial_lcp_content_priority(
-                    drm_scheme=mechanism.delivery_mechanism.drm_scheme,
-                    content_type=mechanism.delivery_mechanism.content_type,
-                ),
-                reverse=True,
-            )
-
         return mechanisms
-
-    @staticmethod
-    def _artificial_lcp_content_priority(
-        drm_scheme: str | None, content_type: str | None
-    ) -> int:
-        """A comparison function that arbitrarily deflates the priority of LCP content. The comparison function
-        treats all other DRM mechanisms and content types as equal."""
-        if (
-            drm_scheme == DeliveryMechanism.LCP_DRM
-            and content_type != MediaTypes.EPUB_MEDIA_TYPE
-        ):
-            return -1
-        else:
-            return 0
 
     def _drm_scheme_priority(self, drm_scheme: str | None) -> int:
         """Determine the priority of a DRM scheme. A lack of DRM is always
@@ -157,24 +130,3 @@ class FormatPrioritiesSettings(BaseSettings):
             required=False,
         ),
     ] = []
-
-    deprioritize_lcp_non_epubs: Annotated[
-        bool,
-        FormMetadata(
-            label=_("De-prioritize LCP non-EPUBs"),
-            description=_(
-                "De-prioritize all LCP content except for EPUBs. Setting this configuration option to "
-                "<i>De-prioritize</i> will preserve any priorities specified above, but will artificially "
-                "push (for example) LCP audiobooks and PDFs to the lowest priority."
-                "<br/>"
-                "<br/>"
-                "<b>Note:</b> This option is a temporary solution and will be removed in future releases!"
-            ),
-            type=FormFieldType.SELECT,
-            required=False,
-            options={
-                True: _("De-prioritize"),
-                False: _("Do not de-prioritize"),
-            },
-        ),
-    ] = False
