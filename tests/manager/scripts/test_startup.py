@@ -13,9 +13,10 @@ from sqlalchemy.engine import Engine
 
 from palace.manager.scripts.startup import (
     StartupTaskRunner,
+    _slugify,
+    create_startup_task,
     discover_startup_tasks,
 )
-from palace.manager.scripts.startup._create import _slugify, main
 from palace.manager.sqlalchemy.model.startup_task import StartupTask
 from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
@@ -296,9 +297,7 @@ class TestCreateStartupTask:
 
     def test_main_creates_file(self, tmp_path: Path) -> None:
         """The create command generates a valid task file."""
-        with patch(
-            "palace.manager.scripts.startup._create.STARTUP_TASKS_DIR", tmp_path
-        ):
+        with patch("palace.manager.scripts.startup.STARTUP_TASKS_DIR", tmp_path):
             with patch(
                 "sys.argv",
                 [
@@ -308,7 +307,7 @@ class TestCreateStartupTask:
                     "2026_03_15_1430",
                 ],
             ):
-                main()
+                create_startup_task()
 
         filepath = tmp_path / "2026_03_15_1430_reindex_everything.py"
         assert filepath.exists()
@@ -322,7 +321,7 @@ class TestCreateStartupTask:
         existing.write_text("# existing")
 
         with (
-            patch("palace.manager.scripts.startup._create.STARTUP_TASKS_DIR", tmp_path),
+            patch("palace.manager.scripts.startup.STARTUP_TASKS_DIR", tmp_path),
             patch(
                 "sys.argv",
                 [
@@ -334,7 +333,7 @@ class TestCreateStartupTask:
             ),
             pytest.raises(SystemExit) as exc_info,
         ):
-            main()
+            create_startup_task()
 
         assert exc_info.value.code == 1
 
@@ -347,6 +346,6 @@ class TestCreateStartupTask:
             ),
             pytest.raises(SystemExit) as exc_info,
         ):
-            main()
+            create_startup_task()
 
         assert exc_info.value.code == 1

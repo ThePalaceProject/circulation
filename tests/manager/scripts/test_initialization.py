@@ -347,11 +347,12 @@ class TestInstanceInitializationScript:
         with patch("palace.manager.scripts.initialization.pg_advisory_lock"):
             mock_engine_factory = MagicMock()
             script = InstanceInitializationScript(engine_factory=mock_engine_factory)
-            script.initialize_database = MagicMock(
-                side_effect=lambda *a: (
-                    call_order.append("initialize_database") or False
-                )
-            )
+
+            def _init_db_side_effect(*a: object) -> bool:
+                call_order.append("initialize_database")
+                return False
+
+            script.initialize_database = MagicMock(side_effect=_init_db_side_effect)
             script.initialize_search = MagicMock(
                 side_effect=lambda: call_order.append("initialize_search")
             )
