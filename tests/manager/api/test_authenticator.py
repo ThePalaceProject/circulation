@@ -1257,9 +1257,8 @@ class TestLibraryAuthenticator:
         mock_basic: MockBasicFixture,
         library_fixture: LibraryFixture,
     ):
-        """When the LibraryAuthenticator's _authdata_utility is None (e.g. library
-        has no Adobe Vendor ID config), the authentication document must not
-        include a delete-adobe-id link.
+        """When the library has no Adobe Vendor ID config, the authentication document
+        must not include a delete-adobe-id link.
         """
         from palace.manager.api.app import app
 
@@ -1270,7 +1269,6 @@ class TestLibraryAuthenticator:
             library=library,
             basic_auth_provider=basic,
         )
-        authenticator._authdata_utility = None
 
         with app.test_request_context("/"):
             doc = json.loads(authenticator.create_authentication_document())
