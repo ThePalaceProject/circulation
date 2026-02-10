@@ -1451,6 +1451,7 @@ class TestLibraryAuthenticator:
             # Should return a ProblemDetail about unknown bearer token provider
             assert result.uri == UNKNOWN_BEARER_TOKEN_PROVIDER.uri
             # The detail should only contain the basic error message with provider name
+            assert isinstance(result.detail, str)
             assert "NonExistentProvider" in result.detail
             assert "isn't one of the known providers" in result.detail
 
@@ -1509,6 +1510,7 @@ class TestLibraryAuthenticator:
             # Should return a ProblemDetail about unknown bearer token provider
             assert result.uri == UNKNOWN_BEARER_TOKEN_PROVIDER.uri
             # The detail should only contain the basic error message with provider name
+            assert isinstance(result.detail, str)
             assert "UnknownProvider" in result.detail
             assert "isn't one of the known providers" in result.detail
 
