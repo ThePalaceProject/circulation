@@ -1,5 +1,5 @@
 import datetime
-from unittest.mock import MagicMock, create_autospec
+from unittest.mock import create_autospec
 
 import pytest
 from sqlalchemy import select
@@ -13,7 +13,6 @@ from palace.manager.integration.license.overdrive.api import OverdriveAPI
 from palace.manager.integration.license.overdrive.settings import (
     OverdriveLibrarySettings,
 )
-from palace.manager.search.external_search import ExternalSearchIndex
 from palace.manager.service.integration_registry.base import LookupException
 from palace.manager.service.integration_registry.license_providers import (
     LicenseProvidersRegistry,
@@ -605,7 +604,6 @@ class TestCollection:
     def test_delete(
         self,
         db: DatabaseTransactionFixture,
-        services_fixture: ServicesFixture,
         is_inactive: bool,
         active_collection_count: int,
     ):
@@ -667,10 +665,6 @@ class TestCollection:
             != None
         )
 
-        # Finally, here's a mock ExternalSearchIndex so we can track when
-        # Works are removed from the search index.
-        index = MagicMock(spec=ExternalSearchIndex)
-
         # If we're meant to test an inactive collection, make it inactive.
         if is_inactive:
             db.make_collection_inactive(collection)
@@ -689,7 +683,10 @@ class TestCollection:
 
         # Delete the collection.
         collection.marked_for_deletion = True
-        collection.delete(search_index=index)
+        complete = collection.delete()
+        db.session.commit()
+
+        assert complete is True
 
         # It's gone.
         assert collection not in db.session.query(Collection).all()
@@ -712,26 +709,16 @@ class TestCollection:
         # LicensePool, so they can and should survive the deletion of
         # the Collection in which they were originally created.
 
-        # The first Work has been deleted, since it lost all of its
-        # LicensePools.
-        assert [work2] == db.session.query(Work).all()
-
         # The second Work is still around, and it still has the other
         # LicensePool.
         assert [pool2] == work2.license_pools
 
-        # Our search index was told to remove the first work (which no longer
-        # has any LicensePools), but not the second.
-        index.remove_work.assert_called_once_with(work)
-
-        # If no search_index is passed into delete() (the default behavior),
-        # then it will use the search index injected from the services
-        # container.
+        # Delete the second collection.
         collection2.marked_for_deletion = True
-        collection2.delete()
+        complete = collection2.delete()
+        db.session.commit()
 
-        # The search index was injected and told to remove the second work.
-        services_fixture.search_index.remove_work.assert_called_once_with(work2)
+        assert complete is True
 
         # We've now deleted every LicensePool created for this test.
         assert 0 == db.session.query(LicensePool).count()

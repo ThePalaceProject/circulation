@@ -3,7 +3,7 @@ from datetime import timedelta
 from typing import Any
 
 from celery import shared_task
-from sqlalchemy import and_, delete, func, select, true
+from sqlalchemy import and_, delete, select, true
 from sqlalchemy.orm import Session, defer, lazyload, raiseload, selectinload
 from sqlalchemy.sql import Delete
 from sqlalchemy.sql.elements import or_
@@ -116,34 +116,25 @@ def work_reaper(task: Task, batch_size: int = 1000) -> None:
 @shared_task(queue=QueueNames.default, bind=True)
 def collection_reaper(task: Task) -> None:
     """
-    Remove collections that have been marked for deletion.
+    Queue ``collection_delete`` tasks for collections marked for deletion.
+
+    The actual deletion work is handled by :func:`collection_delete`, which
+    processes license pools in batches to avoid task timeouts.
     """
+    # Import here to avoid circular import between reaper and collection_delete modules.
+    from palace.manager.celery.tasks.collection_delete import collection_delete
+
     collection_query = (
-        select(Collection)
+        select(Collection.id)
         .where(Collection.marked_for_deletion == True)
         .order_by(Collection.id)
-        .limit(1)
     )
-    with task.transaction() as session:
-        collection = session.execute(collection_query).scalars().one_or_none()
-        if collection:
-            task.log.info(f"Deleting {collection!r}.")
-            collection.delete()
-
     with task.session() as session:
-        # Check if there are more collections to delete
-        collections_awaiting_delete = session.execute(
-            select(func.count(Collection.id)).where(
-                Collection.marked_for_deletion == True
-            )
-        ).scalar()
+        collection_ids = session.execute(collection_query).scalars().all()
 
-    if collections_awaiting_delete and collections_awaiting_delete > 0:
-        task.log.info(
-            f"{pluralize(collections_awaiting_delete, 'collection')}"
-            f" waiting for delete. Re-queueing the reaper."
-        )
-        raise task.replace(collection_reaper.s())
+    for cid in collection_ids:
+        task.log.info(f"Queueing deletion of collection {cid}.")
+        collection_delete.delay(cid)
 
 
 @shared_task(queue=QueueNames.default, bind=True)

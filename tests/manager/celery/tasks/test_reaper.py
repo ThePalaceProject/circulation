@@ -1,5 +1,5 @@
 import datetime
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import call, patch
 
 import pytest
 
@@ -199,63 +199,39 @@ class TestWorkReaper:
 
 
 class TestCollectionReaper:
-    def test_reap(
+    def test_reaper_delegates_to_collection_delete(
         self,
         db: DatabaseTransactionFixture,
         celery_fixture: CeleryFixture,
-        services_fixture: ServicesFixture,
         caplog: pytest.LogCaptureFixture,
-    ):
-        # End-to-end test
+    ) -> None:
+        """The collection reaper queues collection_delete tasks for each
+        collection marked for deletion."""
         caplog.set_level(LogLevel.info)
 
-        # Three collections: two marked for deletion (one active, and one inactive), one not.
-        c1 = db.collection()
+        from palace.manager.celery.tasks.collection_delete import collection_delete
+
+        # Three collections: two marked for deletion (one active, one inactive), one not.
+        db.collection()
         c2 = db.collection(inactive=True)
         c2.marked_for_deletion = True
         c3 = db.collection(inactive=False)
         c3.marked_for_deletion = True
 
-        # Run reaper
-        collection_reaper.delay().wait()
+        with patch.object(collection_delete, "delay") as mock_delay:
+            collection_reaper.delay().wait()
 
-        # The Collections marked for deletion have been deleted; the other
-        # one is unaffected.
-        assert [c1] == db.session.query(Collection).all()
-        assert f"Deleting {c2!r}." in caplog.messages
-        assert (
-            f"1 collection waiting for delete. Re-queueing the reaper."
-            in caplog.messages
-        )
-        assert f"Deleting {c3!r}." in caplog.messages
-
-    def test_reaper_delete_calls_collection_delete(
-        self,
-        db: DatabaseTransactionFixture,
-        celery_fixture: CeleryFixture,
-        monkeypatch: pytest.MonkeyPatch,
-    ):
-        # The collection reaper should call the delete method on the collection
-        # rather than deleting the collection directly in the database.
-        collection = db.collection()
-        collection.marked_for_deletion = True
-
-        mock_delete = MagicMock(side_effect=collection.delete)
-        monkeypatch.setattr(Collection, "delete", mock_delete)
-
-        # Run reaper
-        collection_reaper.delay().wait()
-
-        # Make sure we called the delete method on the collection
-        mock_delete.assert_called_once()
+        mock_delay.assert_has_calls([call(c2.id), call(c3.id)], any_order=True)
+        assert f"Queueing deletion of collection {c2.id}." in caplog.messages
+        assert f"Queueing deletion of collection {c3.id}." in caplog.messages
 
     def test_reaper_no_collections(
         self,
         db: DatabaseTransactionFixture,
         celery_fixture: CeleryFixture,
-    ):
-        # Some collections that don't need to be deleted
-        collections = {db.collection() for idx in range(3)}
+    ) -> None:
+        """When no collections are marked for deletion, nothing is queued."""
+        collections = {db.collection() for _ in range(3)}
 
         # Run reaper
         collection_reaper.delay().wait()

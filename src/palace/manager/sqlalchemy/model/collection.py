@@ -50,7 +50,6 @@ from palace.manager.sqlalchemy.util import create
 
 if TYPE_CHECKING:
     from palace.manager.api.circulation.base import CirculationApiType
-    from palace.manager.search.external_search import ExternalSearchIndex
     from palace.manager.sqlalchemy.model.credential import Credential
     from palace.manager.sqlalchemy.model.customlist import CustomList
 
@@ -675,19 +674,23 @@ class Collection(Base, HasSessionCache, RedisKeyMixin):
 
         return query
 
-    @inject
-    def delete(
-        self, *, search_index: ExternalSearchIndex = Provide["search.index"]
-    ) -> None:
-        """Delete a collection.
+    def delete(self, batch_size: int = 1000) -> bool:
+        """Delete a collection's license pools in batches.
 
-        Collections can have hundreds of thousands of
-        LicensePools. This deletes a collection gradually in a way
-        that can be confined to the background and survive interruption.
+        Collections can have hundreds of thousands of LicensePools. This
+        deletes them in manageable batches so that each transaction stays
+        small and avoids long-running lock contention or task timeouts.
+
+        Orphaned works (those left with no license pools) are cleaned up
+        separately by the ``work_reaper`` task.
+
+        :param batch_size: Maximum number of license pools to delete per call.
+        :return: ``True`` if deletion is complete (all pools removed and the
+            collection itself deleted), ``False`` if more batches remain.
         """
         if not self.marked_for_deletion:
-            raise Exception(
-                "Cannot delete %s: it is not marked for deletion." % self.name
+            raise BasePalaceException(
+                f"Cannot delete {self.name}: it is not marked for deletion."
             )
 
         _db = Session.object_session(self)
@@ -695,25 +698,32 @@ class Collection(Base, HasSessionCache, RedisKeyMixin):
         # Disassociate all libraries from this collection.
         self.associated_libraries.clear()
 
-        # Delete all the license pools. This should be the only part
-        # of the application where LicensePools are permanently
-        # deleted.
-        for i, pool in enumerate(self.licensepools):
-            work = pool.work
-            if work:
-                # We need to remove the item from the collection manually, otherwise the deleted
-                # pool will continue to be on the work until we call commit, so we'll never get to
-                # the point where we delete the work.
-                # https://docs.sqlalchemy.org/en/14/orm/cascades.html#notes-on-delete-deleting-objects-referenced-from-collections-and-scalar-relationships
-                work.license_pools.remove(pool)
-                if not work.license_pools:
-                    work.delete(search_index=search_index)
-
+        # Delete license pools in batches. This is the only part of the
+        # application where LicensePools are permanently deleted.
+        # We use an explicit query rather than the relationship attribute so
+        # that each call gets a fresh result from the database.
+        pool_query = (
+            select(LicensePool)
+            .where(LicensePool.collection_id == self.id)
+            .order_by(LicensePool.id)
+            .limit(batch_size)
+        )
+        pools = _db.execute(pool_query).scalars().unique().all()
+        for pool in pools:
+            # Manually remove the pool from the work's relationship so
+            # SQLAlchemy's in-session state stays consistent. Without this,
+            # work.license_pools retains a stale reference to the deleted pool.
+            if pool.work:
+                pool.work.license_pools.remove(pool)
             _db.delete(pool)
 
-        # Now delete the Collection itself.
+        if len(pools) == batch_size:
+            # There may be more pools to delete.
+            return False
+
+        # All pools are gone — delete the collection itself.
         _db.delete(self)
-        _db.commit()
+        return True
 
 
 collections_identifiers: Table = Table(
