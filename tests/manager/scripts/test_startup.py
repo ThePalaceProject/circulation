@@ -24,8 +24,8 @@ from tests.fixtures.database import DatabaseTransactionFixture
 class TestDiscoverStartupTasks:
     def test_discover_startup_tasks(self, tmp_path: Path) -> None:
         """Task modules are discovered and returned as a dict sorted by key."""
-        (tmp_path / "b_second.py").write_text("def create_signature(): pass\n")
-        (tmp_path / "a_first.py").write_text("def create_signature(): pass\n")
+        (tmp_path / "b_second.py").write_text("def startup_task_signature(): pass\n")
+        (tmp_path / "a_first.py").write_text("def startup_task_signature(): pass\n")
 
         result = discover_startup_tasks(tmp_path)
 
@@ -36,14 +36,14 @@ class TestDiscoverStartupTasks:
     def test_discover_skips_invalid_modules(
         self, tmp_path: Path, caplog: pytest.LogCaptureFixture
     ) -> None:
-        """Modules without a 'create_signature' callable are skipped with a warning."""
+        """Modules without a 'startup_task_signature' callable are skipped with a warning."""
         (tmp_path / "no_task.py").write_text("x = 1\n")
 
         caplog.set_level(logging.WARNING)
         result = discover_startup_tasks(tmp_path)
 
         assert len(result) == 0
-        assert "does not define 'create_signature'" in caplog.text
+        assert "does not define 'startup_task_signature'" in caplog.text
 
     def test_discover_skips_import_errors(
         self, tmp_path: Path, caplog: pytest.LogCaptureFixture
@@ -60,8 +60,8 @@ class TestDiscoverStartupTasks:
     def test_discover_skips_underscore_files(self, tmp_path: Path) -> None:
         """Files starting with _ are skipped."""
         (tmp_path / "__init__.py").write_text("")
-        (tmp_path / "_create.py").write_text("def create_signature(): pass\n")
-        (tmp_path / "_helper.py").write_text("def create_signature(): pass\n")
+        (tmp_path / "_create.py").write_text("def startup_task_signature(): pass\n")
+        (tmp_path / "_helper.py").write_text("def startup_task_signature(): pass\n")
 
         result = discover_startup_tasks(tmp_path)
 
@@ -221,12 +221,12 @@ class TestStartupTaskRunner:
         assert call_count == 1
         mock_sig.apply_async.assert_called_once()
 
-    def test_run_create_signature_exception(
+    def test_run_startup_task_signature_exception(
         self,
         db: DatabaseTransactionFixture,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
-        """If create_signature itself raises, the task is skipped."""
+        """If startup_task_signature itself raises, the task is skipped."""
 
         def bad_create() -> Signature:
             raise ValueError("Cannot build signature")
@@ -257,7 +257,7 @@ class TestStartupTaskRunner:
         db: DatabaseTransactionFixture,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
-        """stamp_only=True records tasks without calling create_signature."""
+        """stamp_only=True records tasks without calling startup_task_signature."""
         mock_create = MagicMock()
 
         engine = db.session.get_bind()
@@ -273,7 +273,7 @@ class TestStartupTaskRunner:
             caplog.set_level(logging.INFO)
             StartupTaskRunner().run(engine, stamp_only=True)
 
-        # create_signature should never be called
+        # startup_task_signature should never be called
         mock_create.assert_not_called()
 
         # But the row should still be recorded
@@ -314,7 +314,7 @@ class TestCreateStartupTask:
         assert filepath.exists()
         content = filepath.read_text()
         assert "reindex everything" in content
-        assert "def create_signature" in content
+        assert "def startup_task_signature" in content
 
     def test_main_refuses_duplicate(self, tmp_path: Path) -> None:
         """The create command refuses to overwrite an existing file."""

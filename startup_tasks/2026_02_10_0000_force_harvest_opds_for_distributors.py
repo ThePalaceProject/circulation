@@ -9,7 +9,7 @@ from __future__ import annotations
 from celery.canvas import Signature
 
 
-def create_signature() -> Signature:
+def startup_task_signature() -> Signature:
     """Build the Celery signature to dispatch.
 
     Uses a local import to avoid import-time coupling with the Celery app,

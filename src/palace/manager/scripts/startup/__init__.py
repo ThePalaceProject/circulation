@@ -1,7 +1,7 @@
 """One-time startup task registry with auto-discovery and database tracking.
 
 Developers register tasks by adding a Python file to the ``startup_tasks/``
-directory at the project root.  Each file must define a ``create_signature``
+directory at the project root.  Each file must define a ``startup_task_signature``
 callable returning a Celery :class:`~celery.canvas.Signature`.
 
 On each application start the :class:`StartupTaskRunner` discovers registered
@@ -11,7 +11,7 @@ new ones to Celery.
 **Adding a task:**
 
 1. Run ``bin/create_startup_task <short_description>`` to scaffold a new file.
-2. Implement ``create_signature() -> Signature`` in the generated file.
+2. Implement ``startup_task_signature() -> Signature`` in the generated file.
 3. Deploy — the init script auto-discovers and queues it.
 
 The task key is derived automatically from the filename (e.g.
@@ -64,16 +64,16 @@ def _load_module_from_file(name: str, path: Path) -> ModuleType:
 def discover_startup_tasks(
     tasks_dir: Path = STARTUP_TASKS_DIR,
 ) -> dict[str, Callable[[], Signature]]:
-    """Scan *tasks_dir* for Python files that define a ``create_signature`` callable.
+    """Scan *tasks_dir* for Python files that define a ``startup_task_signature`` callable.
 
     The task key is derived from the filename (without the ``.py``
     extension).  Files whose name starts with ``_`` are skipped.  Files
-    that do not define a ``create_signature`` callable are skipped with a
+    that do not define a ``startup_task_signature`` callable are skipped with a
     warning.
 
     :param tasks_dir: Directory to scan.  Defaults to the project-root
         ``startup_tasks/`` directory.
-    :returns: A dict mapping task key to the ``create_signature`` callable,
+    :returns: A dict mapping task key to the ``startup_task_signature`` callable,
         sorted by key for deterministic ordering.
     """
     logger = StartupTaskRunner.logger()
@@ -96,17 +96,17 @@ def discover_startup_tasks(
             )
             continue
 
-        create_sig = getattr(module, "create_signature", None)
+        create_sig = getattr(module, "startup_task_signature", None)
         if create_sig is None:
             logger.warning(
-                "Startup task module %s does not define 'create_signature'; skipping.",
+                "Startup task module %s does not define 'startup_task_signature'; skipping.",
                 module_path.stem,
             )
             continue
 
         if not callable(create_sig):
             logger.warning(
-                "Startup task module %s has a 'create_signature' attribute "
+                "Startup task module %s has a 'startup_task_signature' attribute "
                 "that is not callable; skipping.",
                 module_path.stem,
             )
@@ -152,14 +152,14 @@ class StartupTaskRunner(LoggerMixin):
                 session.scalars(select(StartupTask.key)).all()
             )
 
-        for key, create_signature in tasks.items():
+        for key, startup_task_signature in tasks.items():
             if key in existing_keys:
                 self.log.info("Startup task %r already queued; skipping.", key)
                 continue
 
             if not stamp_only:
                 try:
-                    sig = create_signature()
+                    sig = startup_task_signature()
                     sig.apply_async()
                 except Exception:
                     self.log.exception("Failed to queue startup task %r.", key)

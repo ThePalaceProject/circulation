@@ -597,11 +597,11 @@ bin/create_startup_task "force harvest opds for distributors"
 ```
 
 This creates a dated file like `startup_tasks/2026_02_10_1430_force_harvest_opds_for_distributors.py`
-with a template. Edit the generated `create_signature()` function to return the Celery signature you want
+with a template. Edit the generated `startup_task_signature()` function to return the Celery signature you want
 to dispatch:
 
 ```python
-def create_signature() -> Signature:
+def startup_task_signature() -> Signature:
     # Local import to avoid coupling with the Celery app at import time.
     from palace.manager.celery.tasks.opds_for_distributors import import_all
 

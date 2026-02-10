@@ -22,7 +22,7 @@ from __future__ import annotations
 from celery.canvas import Signature
 
 
-def create_signature() -> Signature:
+def startup_task_signature() -> Signature:
     """Build the Celery signature to dispatch.
 
     Uses a local import to avoid import-time coupling with the Celery app,
@@ -80,7 +80,7 @@ def main() -> None:
     print(f"Task key will be: {filepath.stem}")
     print()
     print("Next steps:")
-    print("  1. Implement create_signature() in the generated file.")
+    print("  1. Implement startup_task_signature() in the generated file.")
     print("  2. Commit and deploy.")
 
 
