@@ -1109,7 +1109,6 @@ class TestLibraryAuthenticator:
                 help_email,
                 copyright_agent,
                 reset_link,
-                adobe_id_reset,
                 profile,
                 loans,
                 license,
@@ -1125,11 +1124,6 @@ class TestLibraryAuthenticator:
             assert "http://copyright.com" == copyright["href"]
             assert "http://about.io" == about["href"]
             assert "http://license.ca/" == license["href"]
-            assert "http://librarysimplified.org/terms/rel/reset-adobe-id" == (
-                adobe_id_reset["rel"]
-            )
-            assert "/patrons/me/reset_adobe_id" in adobe_id_reset["href"]
-            assert library.short_name in adobe_id_reset["href"]
             assert "data:image/png;base64,image data" == logo["href"]
             assert "http://style.css" == stylesheet["href"]
 
@@ -1256,6 +1250,36 @@ class TestLibraryAuthenticator:
             )
             headers = real_authenticator.create_authentication_headers()
             assert "WWW-Authenticate" not in headers
+
+    def test_create_authentication_document_no_delete_adobe_id_link_when_authdata_utility_is_none(
+        self,
+        db: DatabaseTransactionFixture,
+        mock_basic: MockBasicFixture,
+        library_fixture: LibraryFixture,
+    ):
+        """When the LibraryAuthenticator's _authdata_utility is None (e.g. library
+        has no Adobe Vendor ID config), the authentication document must not
+        include a delete-adobe-id link.
+        """
+        from palace.manager.api.app import app
+
+        library = library_fixture.library()
+        basic = mock_basic()
+        authenticator = LibraryAuthenticator(
+            _db=db.session,
+            library=library,
+            basic_auth_provider=basic,
+        )
+        authenticator._authdata_utility = None
+
+        with app.test_request_context("/"):
+            doc = json.loads(authenticator.create_authentication_document())
+
+        delete_adobe_id_rel = "http://palaceproject.io/terms/rel/delete-adobe-id"
+        delete_adobe_id_links = [
+            link for link in doc["links"] if link.get("rel") == delete_adobe_id_rel
+        ]
+        assert [] == delete_adobe_id_links
 
 
 class TestBasicAuthenticationProvider:

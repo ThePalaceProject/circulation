@@ -188,12 +188,12 @@ class TestAdobePatronController:
         route_test.set_controller_name(self.CONTROLLER_NAME)
         return route_test
 
-    def test_patron_reset_adobe_id(self, fixture: RouteTestFixture):
-        url = "/patrons/me/reset_adobe_id"
+    def test_patron_delete_adobe_id(self, fixture: RouteTestFixture):
+        url = "/patrons/me/adobe_id"
         fixture.assert_authenticated_request_calls(
             url,
-            fixture.controller.reset_adobe_id,
-            http_method="POST",
+            fixture.controller.delete_adobe_id,
+            http_method="DELETE",
         )
 
 
