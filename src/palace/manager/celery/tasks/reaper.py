@@ -9,6 +9,7 @@ from sqlalchemy.sql import Delete
 from sqlalchemy.sql.elements import or_
 
 from palace.manager.celery.task import Task
+from palace.manager.celery.tasks.collection_delete import collection_delete
 from palace.manager.celery.tasks.notifications import (
     NotificationType,
     NotificationTypeT,
@@ -121,8 +122,6 @@ def collection_reaper(task: Task) -> None:
     The actual deletion work is handled by :func:`collection_delete`, which
     processes license pools in batches to avoid task timeouts.
     """
-    # Import here to avoid circular import between reaper and collection_delete modules.
-    from palace.manager.celery.tasks.collection_delete import collection_delete
 
     collection_query = (
         select(Collection.id)
