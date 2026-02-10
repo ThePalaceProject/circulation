@@ -351,6 +351,15 @@ def delete_patron_devices():
     return app.manager.patron_devices.delete_patron_device()
 
 
+@library_dir_route("/patrons/me/adobe_id", methods=["DELETE"])
+@has_library
+@allows_patron_web
+@requires_auth
+@returns_problem_detail
+def patron_delete_adobe_id():
+    return app.manager.adobe_patron.delete_adobe_id()
+
+
 @library_dir_route("/patrons/me/token", methods=["POST"])
 @has_library
 @allows_patron_web

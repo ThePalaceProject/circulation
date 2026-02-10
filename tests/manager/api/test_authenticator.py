@@ -1251,6 +1251,69 @@ class TestLibraryAuthenticator:
             headers = real_authenticator.create_authentication_headers()
             assert "WWW-Authenticate" not in headers
 
+    def test_create_authentication_document_no_delete_adobe_id_link_when_authdata_utility_is_none(
+        self,
+        db: DatabaseTransactionFixture,
+        mock_basic: MockBasicFixture,
+        library_fixture: LibraryFixture,
+    ):
+        """When the library has no Adobe Vendor ID config, the authentication document
+        must not include a delete-adobe-id link.
+        """
+        from palace.manager.api.app import app
+
+        library = library_fixture.library()
+        basic = mock_basic()
+        authenticator = LibraryAuthenticator(
+            _db=db.session,
+            library=library,
+            basic_auth_provider=basic,
+        )
+
+        with app.test_request_context("/"):
+            doc = json.loads(authenticator.create_authentication_document())
+
+        delete_adobe_id_rel = "http://palaceproject.io/terms/rel/delete-adobe-id"
+        delete_adobe_id_links = [
+            link for link in doc["links"] if link.get("rel") == delete_adobe_id_rel
+        ]
+        assert [] == delete_adobe_id_links
+
+    def test_create_authentication_document_includes_delete_adobe_id_link_when_library_has_adobe_config(
+        self,
+        db: DatabaseTransactionFixture,
+        mock_basic: MockBasicFixture,
+        library_fixture: LibraryFixture,
+    ):
+        """When the library has Adobe Vendor ID config, the authentication document
+        includes a delete-adobe-id link.
+        """
+        from palace.manager.api.app import app
+
+        library = library_fixture.library()
+        basic = mock_basic()
+        authenticator = LibraryAuthenticator(
+            _db=db.session,
+            library=library,
+            basic_auth_provider=basic,
+        )
+
+        with patch(
+            "palace.manager.api.authenticator.AuthdataUtility.from_config",
+            return_value=MagicMock(),
+        ):
+            with app.test_request_context("/"):
+                doc = json.loads(authenticator.create_authentication_document())
+
+        delete_adobe_id_rel = "http://palaceproject.io/terms/rel/delete-adobe-id"
+        delete_adobe_id_links = [
+            link for link in doc["links"] if link.get("rel") == delete_adobe_id_rel
+        ]
+        assert len(delete_adobe_id_links) == 1
+        assert delete_adobe_id_links[0]["rel"] == delete_adobe_id_rel
+        assert "/patrons/me/adobe_id" in delete_adobe_id_links[0]["href"]
+        assert library.short_name in delete_adobe_id_links[0]["href"]
+
 
 class TestBasicAuthenticationProvider:
     credentials = dict(username="user", password="")

@@ -39,6 +39,7 @@ from palace.manager.integration.goals import Goals
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.service.integration_registry.base import IntegrationRegistry
 from palace.manager.service.integration_registry.patron_auth import PatronAuthRegistry
+from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.announcements import Announcement
 from palace.manager.sqlalchemy.model.integration import IntegrationLibraryConfiguration
 from palace.manager.sqlalchemy.model.key import Key, KeyType
@@ -654,6 +655,20 @@ class LibraryAuthenticator(LoggerMixin):
                 type=ProfileController.MEDIA_TYPE,
             )
         )
+
+        if AuthdataUtility.from_config(self.library):
+            adobe_id_delete_url = url_for(
+                "patron_delete_adobe_id",
+                _external=True,
+                library_short_name=self.library_short_name,
+            )
+            links.append(
+                dict(
+                    rel="http://palaceproject.io/terms/rel/delete-adobe-id",
+                    href=adobe_id_delete_url,
+                    type=MediaTypes.APPLICATION_JSON_MEDIA_TYPE,
+                )
+            )
 
         # If there is a Designated Agent email address, add it as a
         # link.
