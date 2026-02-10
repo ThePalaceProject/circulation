@@ -10,7 +10,7 @@ new ones to Celery.
 
 **Adding a task:**
 
-1. Run ``bin/create_startup_task <short_description>`` to scaffold a new file.
+1. Run ``create_startup_task <short_description>`` to scaffold a new file.
 2. Implement ``startup_task_signature() -> Signature`` in the generated file.
 3. Deploy — the init script auto-discovers and queues it.
 

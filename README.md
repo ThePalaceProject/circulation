@@ -593,7 +593,7 @@ queued keys, and dispatches any new ones to Celery. The process is idempotent â€
 Use the provided scaffolding command:
 
 ```sh
-bin/create_startup_task "force harvest opds for distributors"
+create_startup_task "force harvest opds for distributors"
 ```
 
 This creates a dated file like `startup_tasks/2026_02_10_1430_force_harvest_opds_for_distributors.py`
