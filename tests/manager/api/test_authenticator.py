@@ -1261,7 +1261,7 @@ class TestLibraryAuthenticator:
             assert "WWW-Authenticate" not in headers
 
     def test_register_oidc_provider(
-            self, db: DatabaseTransactionFixture, library_fixture: LibraryFixture
+        self, db: DatabaseTransactionFixture, library_fixture: LibraryFixture
     ):
         """Test that OIDC providers are properly registered and appear in authentication documents."""
         from palace.manager.api.app import app
@@ -1292,7 +1292,7 @@ class TestLibraryAuthenticator:
         # Verify provider is registered
         assert oidc_provider.label() in authenticator.oidc_providers_by_name
         assert (
-                authenticator.oidc_providers_by_name[oidc_provider.label()] == oidc_provider
+            authenticator.oidc_providers_by_name[oidc_provider.label()] == oidc_provider
         )
 
         # Verify provider appears in providers list
