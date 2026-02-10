@@ -1,11 +1,12 @@
 """Tests for OIDC authentication provider."""
 
+import re
 from unittest.mock import MagicMock, patch
 
 import pytest
 from freezegun import freeze_time
 
-from palace.manager.api.authentication.base import PatronData
+from palace.manager.api.authentication.base import PatronData, PatronLookupNotSupported
 from palace.manager.integration.patron_auth.oidc.configuration.model import (
     OIDCAuthLibrarySettings,
     OIDCAuthSettings,
@@ -290,8 +291,6 @@ class TestOIDCAuthenticationProvider:
         assert exc_info.value.problem_detail == OIDC_CANNOT_DETERMINE_PATRON
 
     def test_remote_patron_lookup_from_oidc_claims_with_regex(self):
-        import re
-
         settings = OIDCAuthSettings(
             issuer_url="https://idp.example.com",
             client_id="test-client-id",
@@ -317,8 +316,6 @@ class TestOIDCAuthenticationProvider:
         assert patron_data.authorization_identifier == "user123"
 
     def test_remote_patron_lookup_from_oidc_claims_regex_no_match(self):
-        import re
-
         settings = OIDCAuthSettings(
             issuer_url="https://idp.example.com",
             client_id="test-client-id",
@@ -388,8 +385,6 @@ class TestOIDCAuthenticationProvider:
             )
 
     def test_remote_patron_lookup_raises_not_supported(self, oidc_provider):
-        from palace.manager.api.authentication.base import PatronLookupNotSupported
-
         with pytest.raises(PatronLookupNotSupported):
             oidc_provider.remote_patron_lookup(PatronData(permanent_id="test"))
 

@@ -675,8 +675,6 @@ class TestOIDCCredentialManagerLogout:
         assert found_patron is None
 
     def test_invalidate_credential(self, db, manager):
-        from palace.manager.util.datetime_helpers import utc_now
-
         patron = db.patron()
         credential = manager.create_oidc_token(
             db.session,
@@ -699,8 +697,6 @@ class TestOIDCCredentialManagerLogout:
         manager.invalidate_credential(db.session, 999999)
 
     def test_invalidate_patron_credentials(self, db, manager):
-        from palace.manager.util.datetime_helpers import utc_now
-
         patron = db.patron()
 
         # Create OIDC credential for patron

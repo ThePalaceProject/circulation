@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 from unittest.mock import Mock, patch
+from urllib.parse import quote
 
 import httpx
 import pytest
@@ -236,8 +237,6 @@ class TestOIDCAuthenticationManagerAuthorizationURL:
         mock_discovery_document,
     ):
         """Test authorization URL building with different configurations."""
-        from urllib.parse import quote
-
         # Build settings with only non-None optional parameters
         settings_kwargs = {
             "issuer_url": TEST_ISSUER_URL,

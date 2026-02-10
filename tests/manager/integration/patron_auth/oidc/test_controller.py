@@ -1,11 +1,17 @@
 """Tests for OIDC controller."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
+from palace.manager.api.authentication.base import PatronData
 from palace.manager.api.problem_details import LIBRARY_NOT_FOUND, UNKNOWN_OIDC_PROVIDER
+from palace.manager.integration.patron_auth.oidc.configuration.model import (
+    OIDCAuthLibrarySettings,
+    OIDCAuthSettings,
+)
 from palace.manager.integration.patron_auth.oidc.controller import (
+    OIDC_INVALID_ID_TOKEN_HINT,
     OIDC_INVALID_REQUEST,
     OIDC_INVALID_RESPONSE,
     OIDC_INVALID_STATE,
@@ -13,7 +19,9 @@ from palace.manager.integration.patron_auth.oidc.controller import (
 )
 from palace.manager.integration.patron_auth.oidc.provider import (
     OIDC_CANNOT_DETERMINE_PATRON,
+    OIDCAuthenticationProvider,
 )
+from palace.manager.integration.patron_auth.oidc.util import OIDCUtility
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.util.problem_detail import ProblemDetailException
 from tests.fixtures.database import DatabaseTransactionFixture
@@ -172,14 +180,6 @@ class TestOIDCController:
     def test_oidc_authentication_redirect_success_with_pkce(
         self, db: DatabaseTransactionFixture, controller
     ):
-        from palace.manager.integration.patron_auth.oidc.configuration.model import (
-            OIDCAuthLibrarySettings,
-            OIDCAuthSettings,
-        )
-        from palace.manager.integration.patron_auth.oidc.provider import (
-            OIDCAuthenticationProvider,
-        )
-
         library = db.default_library()
         settings = OIDCAuthSettings(
             issuer_url="https://idp.example.com",
@@ -265,8 +265,6 @@ class TestOIDCController:
     def test_oidc_authentication_callback_library_not_found(
         self, db: DatabaseTransactionFixture, controller
     ):
-        from palace.manager.integration.patron_auth.oidc.util import OIDCUtility
-
         params = {"code": "test-code", "state": "valid-state"}
         library = db.default_library()
 
@@ -296,8 +294,6 @@ class TestOIDCController:
     def test_oidc_authentication_callback_unknown_provider(
         self, db: DatabaseTransactionFixture, controller
     ):
-        from palace.manager.integration.patron_auth.oidc.util import OIDCUtility
-
         params = {"code": "test-code"}
         library = db.default_library()
 
@@ -330,8 +326,6 @@ class TestOIDCController:
     def test_oidc_authentication_callback_token_exchange_failure(
         self, db: DatabaseTransactionFixture, controller, oidc_provider
     ):
-        from palace.manager.integration.patron_auth.oidc.util import OIDCUtility
-
         params = {"code": "test-code"}
         library = db.default_library()
 
@@ -379,8 +373,6 @@ class TestOIDCController:
     def test_oidc_authentication_callback_missing_id_token(
         self, db: DatabaseTransactionFixture, controller, oidc_provider
     ):
-        from palace.manager.integration.patron_auth.oidc.util import OIDCUtility
-
         params = {"code": "test-code"}
         library = db.default_library()
 
@@ -428,8 +420,6 @@ class TestOIDCController:
     def test_oidc_authentication_callback_invalid_id_token(
         self, db: DatabaseTransactionFixture, controller, oidc_provider
     ):
-        from palace.manager.integration.patron_auth.oidc.util import OIDCUtility
-
         params = {"code": "test-code"}
         library = db.default_library()
 
@@ -479,8 +469,6 @@ class TestOIDCController:
     def test_oidc_authentication_callback_patron_filtered(
         self, db: DatabaseTransactionFixture, controller, oidc_provider
     ):
-        from palace.manager.integration.patron_auth.oidc.util import OIDCUtility
-
         params = {"code": "test-code"}
         library = db.default_library()
 
@@ -537,9 +525,6 @@ class TestOIDCController:
     def test_oidc_authentication_callback_success(
         self, db: DatabaseTransactionFixture, controller, oidc_provider
     ):
-        from palace.manager.api.authentication.base import PatronData
-        from palace.manager.integration.patron_auth.oidc.util import OIDCUtility
-
         params = {"code": "test-code"}
         library = db.default_library()
 
@@ -641,8 +626,6 @@ class TestOIDCControllerLogout:
         return OIDCController(mock_circulation_manager, mock_authenticator)
 
     def test_oidc_logout_initiate_success(self, logout_controller, db):
-        from unittest.mock import Mock, patch
-
         controller = logout_controller
         patron = db.patron()
         patron.authorization_identifier = "user123@example.com"
@@ -663,7 +646,11 @@ class TestOIDCControllerLogout:
         mock_auth_manager.validate_id_token_hint.return_value = {
             "sub": "user123@example.com"
         }
-        mock_auth_manager.build_logout_url.return_value = "https://oidc.provider.test/logout?id_token_hint=test.token&post_logout_redirect_uri=https://cm.test/oidc_logout_callback&state=test-state"
+        mock_auth_manager.build_logout_url.return_value = (
+            "https://oidc.provider.test/logout"
+            "?id_token_hint=test.token"
+            "&post_logout_redirect_uri=https://cm.test/oidc_logout_callback&state=test-state"
+        )
         mock_provider._authentication_manager_factory.create.return_value = (
             mock_auth_manager
         )
@@ -732,11 +719,6 @@ class TestOIDCControllerLogout:
         self, logout_controller, db, params, error_constant_name, expected_message
     ):
         """Test OIDC logout initiate with missing required parameters."""
-        from palace.manager.integration.patron_auth.oidc.controller import (
-            OIDC_INVALID_ID_TOKEN_HINT,
-            OIDC_INVALID_REQUEST,
-        )
-
         error_constant = (
             OIDC_INVALID_REQUEST
             if error_constant_name == "OIDC_INVALID_REQUEST"
@@ -748,10 +730,6 @@ class TestOIDCControllerLogout:
         assert result == error_constant.detailed(expected_message)
 
     def test_oidc_logout_callback_success(self, logout_controller, db):
-        from unittest.mock import Mock
-
-        from palace.manager.integration.patron_auth.oidc.util import OIDCUtility
-
         library = db.default_library()
 
         logout_state_data = {
@@ -788,10 +766,6 @@ class TestOIDCControllerLogout:
         assert "logout_status=success" in result.location
 
     def test_oidc_logout_callback_missing_state(self, logout_controller, db):
-        from palace.manager.integration.patron_auth.oidc.controller import (
-            OIDC_INVALID_REQUEST,
-        )
-
         params = {}
 
         result = logout_controller.oidc_logout_callback(params, db.session)
@@ -826,8 +800,6 @@ class TestOIDCControllerBackChannelLogout:
 
     def test_oidc_backchannel_logout_success(self, backchannel_controller, db):
         """Test successful back-channel logout."""
-        from unittest.mock import Mock
-
         patron = db.patron()
         patron.authorization_identifier = "user123@example.com"
         db.session.commit()
@@ -898,8 +870,6 @@ class TestOIDCControllerBackChannelLogout:
 
     def test_oidc_backchannel_logout_invalid_token(self, backchannel_controller, db):
         """Test back-channel logout with invalid token."""
-        from unittest.mock import Mock
-
         library = db.default_library()
 
         # Create mock provider that rejects the token
@@ -931,8 +901,6 @@ class TestOIDCControllerBackChannelLogout:
 
     def test_oidc_backchannel_logout_patron_not_found(self, backchannel_controller, db):
         """Test back-channel logout when patron doesn't exist."""
-        from unittest.mock import Mock
-
         library = db.default_library()
 
         # Create mock provider
