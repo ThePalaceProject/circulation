@@ -87,3 +87,37 @@ A Pydantic model field TypeAlias for:
   str | BaseOpdsModelT | tuple[str | BaseOpdsModelT, ...]
 Uses a discriminator to determine the union type, so we get better error messages for validation.
 """
+
+
+def alias_for(model: BaseOpdsModel, field_name: str) -> str:
+    """
+    Get the serialization alias for a field on a model instance.
+
+    :param model: The model instance to look up the field on.
+    :param field_name: The Python field name.
+    :return: The serialization alias if one exists, otherwise the field name.
+    """
+    model_cls = model.__class__
+    field = model_cls.model_fields.get(field_name)
+    if field is None:
+        return field_name
+    return field.serialization_alias or field.alias or field_name
+
+
+def drop_if_falsy(model: BaseOpdsModel, field_name: str, data: dict[str, Any]) -> None:
+    """
+    Remove a field from serialized data if its value is falsy.
+
+    Checks both the Python field name and its serialization alias, removing
+    the entry from ``data`` if the value is falsy (e.g. ``None``, ``False``,
+    empty collection).
+
+    NOTE: This function mutates data directly.
+
+    :param model: The model instance that owns the field.
+    :param field_name: The Python field name.
+    :param data: The serialized data dict to mutate.
+    """
+    for key in {field_name, alias_for(model, field_name)}:
+        if key in data and not data[key]:
+            data.pop(key, None)

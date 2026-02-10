@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from pydantic import Field, field_validator
 
 from palace.manager.opds.base import BaseOpdsModel
@@ -5,7 +7,7 @@ from palace.manager.opds.schema_org import PublicationTypes
 from palace.manager.util.log import LoggerMixin
 
 
-class PalacePublicationMetadata(BaseOpdsModel, LoggerMixin):
+class PublicationMetadata(BaseOpdsModel, LoggerMixin):
     """
     Palace extensions / requirements for OPDS 2.0 publication metadata.
     """
@@ -33,3 +35,37 @@ class PalacePublicationMetadata(BaseOpdsModel, LoggerMixin):
         if type_ not in list(PublicationTypes):
             cls.logger().warning(f"@type '{type_}' is not a valid PublicationType.")
         return type_
+
+
+class DrmMetadata(BaseOpdsModel):
+    """
+    Palace-specific DRM licensor metadata for OPDS2 links.
+    """
+
+    vendor: str | None = None
+    client_token: str | None = Field(None, alias="clientToken")
+
+
+class LinkActions(BaseOpdsModel):
+    """
+    Palace-specific actions metadata for OPDS2 links.
+    """
+
+    cancellable: bool | None = None
+
+
+class LinkProperties(BaseOpdsModel):
+    """
+    Palace extensions to the link properties.
+    """
+
+    actions: LinkActions | None = None
+    licensor: DrmMetadata | None = None
+    lcp_hashed_passphrase: str | None = None
+
+    palace_default: bool | None = Field(
+        None, alias="http://palaceproject.io/terms/properties/default"
+    )
+    palace_active_sort: bool | None = Field(
+        None, alias="http://palaceproject.io/terms/properties/active-sort"
+    )

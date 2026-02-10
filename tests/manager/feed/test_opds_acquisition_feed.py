@@ -32,7 +32,13 @@ from palace.manager.feed.facets.feed import Facets, FeaturedFacets
 from palace.manager.feed.facets.search import SearchFacets
 from palace.manager.feed.navigation import NavigationFeed
 from palace.manager.feed.opds import BaseOPDSFeed, UnfulfillableWork
-from palace.manager.feed.types import FeedData, Link, WorkEntry, WorkEntryData
+from palace.manager.feed.types import (
+    Acquisition,
+    FeedData,
+    Link,
+    WorkEntry,
+    WorkEntryData,
+)
 from palace.manager.feed.worklist.base import WorkList
 from palace.manager.search.pagination import Pagination
 from palace.manager.sqlalchemy.constants import LinkRelations
@@ -71,7 +77,24 @@ class TestOPDSFeedProtocol:
             BaseOPDSFeed.entry_as_response(entry)
         assert str(raised.value) == "Entry data has not been generated"
 
-        entry.computed = WorkEntryData()
+        entry.computed = WorkEntryData(
+            identifier="urn:identifier",
+            title="Test Title",
+            image_links=[
+                Link(
+                    href="http://example.com/cover.png",
+                    rel=OPDSFeed.FULL_IMAGE_REL,
+                    type="image/png",
+                )
+            ],
+            acquisition_links=[
+                Acquisition(
+                    href="http://example.com/acquisition",
+                    rel=OPDSFeed.OPEN_ACCESS_REL,
+                    type="application/epub+zip",
+                )
+            ],
+        )
 
         response = BaseOPDSFeed.entry_as_response(entry)
         assert isinstance(response, OPDSEntryResponse)
