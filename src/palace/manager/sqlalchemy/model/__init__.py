@@ -31,5 +31,6 @@ import palace.manager.sqlalchemy.model.measurement
 import palace.manager.sqlalchemy.model.patron
 import palace.manager.sqlalchemy.model.resource
 import palace.manager.sqlalchemy.model.saml
+import palace.manager.sqlalchemy.model.startup_task
 import palace.manager.sqlalchemy.model.time_tracking
 import palace.manager.sqlalchemy.model.work

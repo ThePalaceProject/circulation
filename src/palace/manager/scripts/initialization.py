@@ -11,6 +11,7 @@ from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.orm import Session
 
 from palace.manager.celery.tasks.search import get_migrate_search_chain
+from palace.manager.scripts.startup import StartupTaskRunner
 from palace.manager.search.revision import SearchSchemaRevision
 from palace.manager.search.service import SearchService
 from palace.manager.service.container import container_instance
@@ -75,8 +76,12 @@ class InstanceInitializationScript(LoggerMixin):
         alembic_conf = self._get_alembic_config(connection, self._config_file)
         command.stamp(alembic_conf, "head")
 
-    def initialize_database(self, connection: Connection) -> None:
-        """Initialize the database if necessary."""
+    def initialize_database(self, connection: Connection) -> bool:
+        """Initialize the database if necessary.
+
+        :returns: ``True`` if the database was freshly created (no prior
+            schema), ``False`` if an existing database was migrated.
+        """
         inspector = inspect(connection)
         if inspector.has_table("alembic_version"):
             self.log.info("Database schema already exists. Running migrations.")
@@ -89,10 +94,12 @@ class InstanceInitializationScript(LoggerMixin):
                     f"is possibly because you are running a old version "
                     f"of the application against a new database."
                 )
+            return False
         else:
             self.log.info("Database schema does not exist. Initializing.")
             self.initialize_database_schema(connection)
             self.log.info("Initialization complete.")
+            return True
 
     @classmethod
     def create_search_index(
@@ -159,6 +166,20 @@ class InstanceInitializationScript(LoggerMixin):
             )
         self.log.info("Search initialization complete.")
 
+    def run_startup_tasks(self, engine: Engine, *, fresh_install: bool = False) -> None:
+        """Run any registered one-time startup tasks.
+
+        On a fresh database install, tasks are stamped as already-queued
+        without dispatching them — there is no existing data to migrate.
+
+        Failures are logged but never propagated — startup tasks must not
+        prevent the application from starting.
+        """
+        try:
+            StartupTaskRunner().run(engine, stamp_only=fresh_install)
+        except Exception:
+            self.log.exception("Error running startup tasks.")
+
     def run(self) -> None:
         """
         Initialize the database if necessary. This script is idempotent, so it
@@ -179,7 +200,8 @@ class InstanceInitializationScript(LoggerMixin):
         engine = self._engine_factory()
         with engine.begin() as connection:
             with pg_advisory_lock(connection, LOCK_ID_DB_INIT):
-                self.initialize_database(connection)
+                fresh_install = self.initialize_database(connection)
                 self.initialize_search()
+                self.run_startup_tasks(engine, fresh_install=fresh_install)
 
         engine.dispose()

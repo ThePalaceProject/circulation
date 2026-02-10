@@ -577,6 +577,44 @@ and existing jobs are being migrated to `celery` as they are updated.
 The `cron` jobs are defined in the `docker/services/simplified_crontab` file. The `celery` jobs are defined
 in the `src/palace/manager/celery/tasks/` module.
 
+## Startup Tasks
+
+Startup tasks are one-time Celery jobs that run automatically on the first application start after a
+deployment. They are useful when new code requires a data backfill, re-import, or reindex that is too
+long-running for a database migration.
+
+Tasks are defined as Python files in `startup_tasks/` at the project root. The filename becomes the
+task key (e.g. `2026_02_10_0000_force_harvest.py` → key `2026_02_10_0000_force_harvest`). On each container start the
+initialization script discovers all task files, checks a `startup_tasks` database table for previously
+queued keys, and dispatches any new ones to Celery. The process is idempotent — each task runs only once.
+
+### Creating a Startup Task
+
+Use the provided scaffolding command:
+
+```sh
+bin/create_startup_task "force harvest opds for distributors"
+```
+
+This creates a dated file like `startup_tasks/2026_02_10_1430_force_harvest_opds_for_distributors.py`
+with a template. Edit the generated `create_signature()` function to return the Celery signature you want
+to dispatch:
+
+```python
+def create_signature() -> Signature:
+    # Local import to avoid coupling with the Celery app at import time.
+    from palace.manager.celery.tasks.opds_for_distributors import import_all
+
+    return import_all.si(force=True)
+```
+
+The `--date-prefix` flag can override the default `YYYY_MM` prefix if needed.
+
+### Cleaning Up
+
+Once every environment has run a task, delete the file. The database row is retained as a historical
+record and prevents the task from being re-queued even after the file is removed.
+
 ## Code Style
 
 Code style on this project is linted using [pre-commit](https://pre-commit.com/). This Python application is included

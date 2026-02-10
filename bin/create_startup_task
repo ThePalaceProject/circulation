@@ -1,0 +1,6 @@
+#!/usr/bin/env python
+"""Create a new startup task file from a template."""
+
+from palace.manager.scripts.startup._create import main
+
+main()
