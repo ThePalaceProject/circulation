@@ -692,6 +692,11 @@ class TestOIDCControllerLogout:
             assert result.status_code == 302
             assert "https://oidc.provider.test/logout" in result.location
 
+            # Verify credentials were invalidated
+            mock_provider._credential_manager.invalidate_patron_credentials.assert_called_once_with(
+                db.session, patron.id
+            )
+
     @pytest.mark.parametrize(
         "params,error_constant_name,expected_message",
         [
