@@ -11,7 +11,10 @@ from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.orm import Session
 
 from palace.manager.celery.tasks.search import get_migrate_search_chain
-from palace.manager.scripts.startup import StartupTaskRunner
+from palace.manager.scripts.startup import (
+    run_startup_tasks as _run_startup_tasks,
+    stamp_startup_tasks as _stamp_startup_tasks,
+)
 from palace.manager.search.revision import SearchSchemaRevision
 from palace.manager.search.service import SearchService
 from palace.manager.service.container import container_instance
@@ -166,7 +169,9 @@ class InstanceInitializationScript(LoggerMixin):
             )
         self.log.info("Search initialization complete.")
 
-    def run_startup_tasks(self, engine: Engine, *, fresh_install: bool = False) -> None:
+    def run_startup_tasks(
+        self, connection: Connection, *, fresh_install: bool = False
+    ) -> None:
         """Run any registered one-time startup tasks.
 
         On a fresh database install, tasks are stamped as already-queued
@@ -176,7 +181,10 @@ class InstanceInitializationScript(LoggerMixin):
         prevent the application from starting.
         """
         try:
-            StartupTaskRunner().run(engine, self._container, stamp_only=fresh_install)
+            if fresh_install:
+                _stamp_startup_tasks(connection)
+            else:
+                _run_startup_tasks(connection, self._container)
         except Exception:
             self.log.exception("Error running startup tasks.")
 
@@ -202,6 +210,6 @@ class InstanceInitializationScript(LoggerMixin):
             with pg_advisory_lock(connection, LOCK_ID_DB_INIT):
                 fresh_install = self.initialize_database(connection)
                 self.initialize_search()
-                self.run_startup_tasks(engine, fresh_install=fresh_install)
+                self.run_startup_tasks(connection, fresh_install=fresh_install)
 
         engine.dispose()

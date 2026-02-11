@@ -33,6 +33,7 @@ row is retained as a historical record.
 from __future__ import annotations
 
 import importlib.util
+import logging
 import re
 import sys
 from argparse import ArgumentParser
@@ -42,13 +43,14 @@ from pathlib import Path
 from types import ModuleType
 
 from sqlalchemy import select
-from sqlalchemy.engine import Engine
+from sqlalchemy.engine import Connection
 from sqlalchemy.orm import Session
 
 from palace.manager.service.container import Services
 from palace.manager.sqlalchemy.model.startup_task import StartupTask
 from palace.manager.util.datetime_helpers import utc_now
-from palace.manager.util.log import LoggerMixin
+
+logger = logging.getLogger(__name__)
 
 #: Type alias for a startup task callable.
 StartupTaskCallable = Callable[[Services, Session], None]
@@ -102,8 +104,6 @@ def discover_startup_tasks(
     :returns: A dict mapping task key to the ``run`` callable,
         sorted by key for deterministic ordering.
     """
-    logger = StartupTaskRunner.logger()
-
     if not tasks_dir.is_dir():
         logger.info("Startup tasks directory %s does not exist; skipping.", tasks_dir)
         return {}
@@ -143,76 +143,90 @@ def discover_startup_tasks(
     return dict(sorted(tasks.items()))
 
 
-class StartupTaskRunner(LoggerMixin):
-    """Discover and execute unexecuted startup tasks.
+def _pending_tasks(
+    session: Session,
+    tasks: dict[str, StartupTaskCallable],
+) -> dict[str, StartupTaskCallable]:
+    """Return the subset of *tasks* not yet recorded in the database."""
+    existing_keys: set[str] = set(session.scalars(select(StartupTask.key)).all())
+    return {k: v for k, v in tasks.items() if k not in existing_keys}
 
-    Each task is committed independently so that a failure in one task does
-    not prevent others from being recorded and executed.
+
+def _record_task(session: Session, key: str, *, run: bool) -> None:
+    """Insert a :class:`StartupTask` row and flush (no commit)."""
+    session.add(StartupTask(key=key, queued_at=utc_now(), run=run))
+    session.flush()
+
+
+def run_startup_tasks(
+    connection: Connection,
+    services: Services,
+) -> None:
+    """Discover tasks, check the database, and execute new ones.
+
+    The function shares the caller's ``connection`` (and its transaction)
+    so that it can see schema created in the same transaction — critical
+    on a fresh install where the ``startup_tasks`` table has not yet been
+    committed.
+
+    Each task is executed inside a **savepoint** (``session.begin_nested()``)
+    so that a failure in one task rolls back only its own changes without
+    affecting other tasks or the outer transaction.
+
+    :param connection: SQLAlchemy connection to bind sessions to.
+    :param services: The application services container, passed to each
+        task alongside a database session.
     """
+    tasks = discover_startup_tasks()
+    if not tasks:
+        logger.info("No startup tasks discovered.")
+        return
 
-    def run(
-        self,
-        engine: Engine,
-        services: Services,
-        *,
-        stamp_only: bool = False,
-    ) -> None:
-        """Discover tasks, check database, and execute or stamp new ones.
+    logger.info("Discovered %d startup task(s).", len(tasks))
 
-        :param engine: SQLAlchemy engine used to create sessions.
-        :param services: The application services container, passed to each
-            task alongside a database session.
-        :param stamp_only: If ``True``, record all discovered tasks as
-            already-executed **without** running them.  This is used on
-            fresh database installs where there is no existing data to
-            migrate — analogous to ``alembic stamp head``.
-        """
-        tasks = discover_startup_tasks()
-        if not tasks:
-            self.log.info("No startup tasks discovered.")
-            return
+    session = Session(bind=connection)
+    pending = _pending_tasks(session, tasks)
 
-        if stamp_only:
-            self.log.info(
-                "Fresh database install — stamping %d startup task(s) "
-                "without running.",
-                len(tasks),
-            )
-        else:
-            self.log.info("Discovered %d startup task(s).", len(tasks))
+    for key in tasks:
+        if key not in pending:
+            logger.info("Startup task %r already executed; skipping.", key)
 
-        with Session(engine) as session:
-            existing_keys: set[str] = set(
-                session.scalars(select(StartupTask.key)).all()
-            )
+    for key, run_fn in pending.items():
+        try:
+            with session.begin_nested():
+                run_fn(services, session)
+        except Exception:
+            logger.exception("Failed to execute startup task %r.", key)
+            continue
 
-        for key, run_fn in tasks.items():
-            if key in existing_keys:
-                self.log.info("Startup task %r already executed; skipping.", key)
-                continue
+        _record_task(session, key, run=True)
+        logger.info("Executed startup task %r.", key)
 
-            if not stamp_only:
-                try:
-                    with Session(engine) as session:
-                        run_fn(services, session)
-                        session.commit()
-                except Exception:
-                    self.log.exception("Failed to execute startup task %r.", key)
-                    continue
 
-            with Session(engine) as session:
-                row = StartupTask(
-                    key=key,
-                    queued_at=utc_now(),
-                    run=not stamp_only,
-                )
-                session.add(row)
-                session.commit()
+def stamp_startup_tasks(connection: Connection) -> None:
+    """Record all discovered tasks as already-executed **without** running them.
 
-            if stamp_only:
-                self.log.info("Stamped startup task %r.", key)
-            else:
-                self.log.info("Executed startup task %r.", key)
+    This is used on fresh database installs where there is no existing data
+    to migrate — analogous to ``alembic stamp head``.
+
+    :param connection: SQLAlchemy connection to bind sessions to.
+    """
+    tasks = discover_startup_tasks()
+    if not tasks:
+        logger.info("No startup tasks discovered.")
+        return
+
+    logger.info(
+        "Fresh database install — stamping %d startup task(s) without running.",
+        len(tasks),
+    )
+
+    session = Session(bind=connection)
+    pending = _pending_tasks(session, tasks)
+
+    for key in pending:
+        _record_task(session, key, run=False)
+        logger.info("Stamped startup task %r.", key)
 
 
 # ---------------------------------------------------------------------------
@@ -265,7 +279,11 @@ def create_startup_task() -> None:
 
     content = _TEMPLATE.format(description=description)
     filepath.write_text(content)
-    print(f"Created {filepath.relative_to(Path.cwd())}")
+    try:
+        display_path = filepath.relative_to(Path.cwd())
+    except ValueError:
+        display_path = filepath
+    print(f"Created {display_path}")
     print(f"Task key will be: {filepath.stem}")
     print()
     print("Next steps:")

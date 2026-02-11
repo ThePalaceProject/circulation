@@ -49,7 +49,7 @@ class TestInstanceInitializationScript:
         script.initialize_database.assert_called_once()
         script.initialize_search.assert_called_once()
         script.run_startup_tasks.assert_called_once_with(
-            mock_engine_factory(), fresh_install=False
+            mock_engine_factory().begin().__enter__(), fresh_install=False
         )
 
     def test_initialize_database(self, services_fixture: ServicesFixture):
@@ -380,7 +380,7 @@ class TestInstanceInitializationScript:
             script.run()
 
         script.run_startup_tasks.assert_called_once_with(
-            mock_engine_factory(), fresh_install=True
+            mock_engine_factory().begin().__enter__(), fresh_install=True
         )
 
     def test_run_startup_tasks_exception_does_not_block_startup(
@@ -388,34 +388,67 @@ class TestInstanceInitializationScript:
         services_fixture: ServicesFixture,
         caplog: LogCaptureFixture,
     ):
-        """An exception in StartupTaskRunner.run does not prevent startup."""
+        """An exception in run_startup_tasks does not prevent startup."""
         script = InstanceInitializationScript()
-        mock_engine = MagicMock()
+        mock_connection = MagicMock()
 
         with patch(
-            "palace.manager.scripts.initialization.StartupTaskRunner"
-        ) as mock_runner_cls:
-            mock_runner_cls.return_value.run.side_effect = RuntimeError(
-                "Something broke"
-            )
+            "palace.manager.scripts.initialization._run_startup_tasks"
+        ) as mock_run:
+            mock_run.side_effect = RuntimeError("Something broke")
             caplog.set_level(logging.ERROR)
             # Should not raise
-            script.run_startup_tasks(mock_engine)
+            script.run_startup_tasks(mock_connection)
 
         assert "Error running startup tasks" in caplog.text
 
-    def test_run_startup_tasks_passes_stamp_only(
-        self, services_fixture: ServicesFixture
+    def test_run_startup_tasks_stamp_exception_does_not_block_startup(
+        self,
+        services_fixture: ServicesFixture,
+        caplog: LogCaptureFixture,
     ):
-        """fresh_install=True is forwarded as stamp_only=True to the runner."""
+        """An exception in stamp_startup_tasks does not prevent startup."""
         script = InstanceInitializationScript()
-        mock_engine = MagicMock()
+        mock_connection = MagicMock()
 
         with patch(
-            "palace.manager.scripts.initialization.StartupTaskRunner"
-        ) as mock_runner_cls:
-            script.run_startup_tasks(mock_engine, fresh_install=True)
+            "palace.manager.scripts.initialization._stamp_startup_tasks"
+        ) as mock_stamp:
+            mock_stamp.side_effect = RuntimeError("Something broke")
+            caplog.set_level(logging.ERROR)
+            # Should not raise
+            script.run_startup_tasks(mock_connection, fresh_install=True)
 
-        mock_runner_cls.return_value.run.assert_called_once_with(
-            mock_engine, script._container, stamp_only=True
-        )
+        assert "Error running startup tasks" in caplog.text
+
+    def test_run_startup_tasks_calls_run(self, services_fixture: ServicesFixture):
+        """fresh_install=False calls _run_startup_tasks."""
+        script = InstanceInitializationScript()
+        mock_connection = MagicMock()
+
+        with patch(
+            "palace.manager.scripts.initialization._run_startup_tasks"
+        ) as mock_run:
+            script.run_startup_tasks(mock_connection)
+
+        mock_run.assert_called_once_with(mock_connection, script._container)
+
+    def test_run_startup_tasks_fresh_install_calls_stamp(
+        self, services_fixture: ServicesFixture
+    ):
+        """fresh_install=True calls _stamp_startup_tasks instead of _run_startup_tasks."""
+        script = InstanceInitializationScript()
+        mock_connection = MagicMock()
+
+        with (
+            patch(
+                "palace.manager.scripts.initialization._run_startup_tasks"
+            ) as mock_run,
+            patch(
+                "palace.manager.scripts.initialization._stamp_startup_tasks"
+            ) as mock_stamp,
+        ):
+            script.run_startup_tasks(mock_connection, fresh_install=True)
+
+        mock_run.assert_not_called()
+        mock_stamp.assert_called_once_with(mock_connection)

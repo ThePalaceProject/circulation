@@ -8,14 +8,15 @@ from unittest.mock import MagicMock, create_autospec, patch
 
 import pytest
 from sqlalchemy import select
-from sqlalchemy.engine import Engine
+from sqlalchemy.engine import Connection
 from sqlalchemy.orm import Session
 
 from palace.manager.scripts.startup import (
-    StartupTaskRunner,
     _slugify,
     create_startup_task,
     discover_startup_tasks,
+    run_startup_tasks,
+    stamp_startup_tasks,
 )
 from palace.manager.service.container import Services
 from palace.manager.sqlalchemy.model.startup_task import StartupTask
@@ -81,23 +82,23 @@ class TestDiscoverStartupTasks:
 
 
 class TestStartupTaskRunner:
-    def _mock_session(self, db: DatabaseTransactionFixture) -> MagicMock:
-        """Create a mock Session class that returns the test fixture's session."""
-        mock_session_cls = MagicMock()
-        mock_session_cls.return_value.__enter__ = MagicMock(return_value=db.session)
-        mock_session_cls.return_value.__exit__ = MagicMock(return_value=False)
-        return mock_session_cls
+    @staticmethod
+    def _connection(db: DatabaseTransactionFixture) -> Connection:
+        """Return the underlying connection from the test fixture's session."""
+        connection = db.session.connection()
+        assert isinstance(connection, Connection)
+        return connection
 
     def test_run_no_tasks_discovered(self, caplog: pytest.LogCaptureFixture) -> None:
         """When no tasks are discovered, nothing is executed."""
-        engine = create_autospec(Engine)
+        connection = create_autospec(Connection)
         services = create_autospec(Services)
         with patch(
             "palace.manager.scripts.startup.discover_startup_tasks",
             return_value={},
         ):
             caplog.set_level(logging.INFO)
-            StartupTaskRunner().run(engine, services)
+            run_startup_tasks(connection, services)
 
         assert "No startup tasks discovered" in caplog.text
 
@@ -105,20 +106,19 @@ class TestStartupTaskRunner:
         """A new task is executed and recorded in the database."""
         mock_task = MagicMock()
         services = create_autospec(Services)
+        connection = self._connection(db)
 
-        engine = db.session.get_bind()
-        assert isinstance(engine, Engine)
-
-        with (
-            patch(
-                "palace.manager.scripts.startup.discover_startup_tasks",
-                return_value={"test_task": mock_task},
-            ),
-            patch("palace.manager.scripts.startup.Session", self._mock_session(db)),
+        with patch(
+            "palace.manager.scripts.startup.discover_startup_tasks",
+            return_value={"test_task": mock_task},
         ):
-            StartupTaskRunner().run(engine, services)
+            run_startup_tasks(connection, services)
 
-        mock_task.assert_called_once_with(services, db.session)
+        mock_task.assert_called_once()
+        # Verify the task received the services and a Session
+        call_args = mock_task.call_args
+        assert call_args[0][0] is services
+        assert isinstance(call_args[0][1], Session)
 
         row = db.session.execute(
             select(StartupTask).where(StartupTask.key == "test_task")
@@ -140,18 +140,13 @@ class TestStartupTaskRunner:
 
         mock_task = MagicMock()
         services = create_autospec(Services)
+        connection = self._connection(db)
 
-        engine = db.session.get_bind()
-        assert isinstance(engine, Engine)
-
-        with (
-            patch(
-                "palace.manager.scripts.startup.discover_startup_tasks",
-                return_value={"already_done": mock_task},
-            ),
-            patch("palace.manager.scripts.startup.Session", self._mock_session(db)),
+        with patch(
+            "palace.manager.scripts.startup.discover_startup_tasks",
+            return_value={"already_done": mock_task},
         ):
-            StartupTaskRunner().run(engine, services)
+            run_startup_tasks(connection, services)
 
         mock_task.assert_not_called()
 
@@ -167,22 +162,17 @@ class TestStartupTaskRunner:
             raise RuntimeError("Something broke")
 
         good_task = MagicMock()
+        connection = self._connection(db)
 
-        engine = db.session.get_bind()
-        assert isinstance(engine, Engine)
-
-        with (
-            patch(
-                "palace.manager.scripts.startup.discover_startup_tasks",
-                return_value={
-                    "a_failing": bad_task,
-                    "b_succeeding": good_task,
-                },
-            ),
-            patch("palace.manager.scripts.startup.Session", self._mock_session(db)),
+        with patch(
+            "palace.manager.scripts.startup.discover_startup_tasks",
+            return_value={
+                "a_failing": bad_task,
+                "b_succeeding": good_task,
+            },
         ):
             caplog.set_level(logging.ERROR)
-            StartupTaskRunner().run(engine, services)
+            run_startup_tasks(connection, services)
 
         # The failing task should not be recorded
         assert (
@@ -212,18 +202,14 @@ class TestStartupTaskRunner:
             nonlocal call_count
             call_count += 1
 
-        engine = db.session.get_bind()
-        assert isinstance(engine, Engine)
+        connection = self._connection(db)
 
-        with (
-            patch(
-                "palace.manager.scripts.startup.discover_startup_tasks",
-                return_value={"idempotent_task": counting_task},
-            ),
-            patch("palace.manager.scripts.startup.Session", self._mock_session(db)),
+        with patch(
+            "palace.manager.scripts.startup.discover_startup_tasks",
+            return_value={"idempotent_task": counting_task},
         ):
-            StartupTaskRunner().run(engine, services)
-            StartupTaskRunner().run(engine, services)
+            run_startup_tasks(connection, services)
+            run_startup_tasks(connection, services)
 
         assert call_count == 1
 
@@ -238,18 +224,14 @@ class TestStartupTaskRunner:
         def bad_task(svc: Services, sess: Session) -> None:
             raise ValueError("Cannot run task")
 
-        engine = db.session.get_bind()
-        assert isinstance(engine, Engine)
+        connection = self._connection(db)
 
-        with (
-            patch(
-                "palace.manager.scripts.startup.discover_startup_tasks",
-                return_value={"bad_task": bad_task},
-            ),
-            patch("palace.manager.scripts.startup.Session", self._mock_session(db)),
+        with patch(
+            "palace.manager.scripts.startup.discover_startup_tasks",
+            return_value={"bad_task": bad_task},
         ):
             caplog.set_level(logging.ERROR)
-            StartupTaskRunner().run(engine, services)
+            run_startup_tasks(connection, services)
 
         assert "Failed to execute startup task" in caplog.text
         assert (
@@ -259,27 +241,21 @@ class TestStartupTaskRunner:
             is None
         )
 
-    def test_run_stamp_only_records_without_executing(
+    def test_stamp_records_without_executing(
         self,
         db: DatabaseTransactionFixture,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
-        """stamp_only=True records tasks without calling run."""
+        """stamp_startup_tasks records tasks without calling run."""
         mock_task = MagicMock()
-        services = create_autospec(Services)
+        connection = self._connection(db)
 
-        engine = db.session.get_bind()
-        assert isinstance(engine, Engine)
-
-        with (
-            patch(
-                "palace.manager.scripts.startup.discover_startup_tasks",
-                return_value={"stamp_me": mock_task},
-            ),
-            patch("palace.manager.scripts.startup.Session", self._mock_session(db)),
+        with patch(
+            "palace.manager.scripts.startup.discover_startup_tasks",
+            return_value={"stamp_me": mock_task},
         ):
             caplog.set_level(logging.INFO)
-            StartupTaskRunner().run(engine, services, stamp_only=True)
+            stamp_startup_tasks(connection)
 
         # run should never be called
         mock_task.assert_not_called()
