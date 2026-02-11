@@ -155,6 +155,7 @@ class LanesController(CirculationManagerController, AdminPermissionsControllerMi
                 if list.id not in custom_list_ids:
                     lane.customlists.remove(list)
             if isinstance(self.search_engine, ProblemDetail):
+                self._db.rollback()
                 return self.search_engine
             lane.update_size(self._db, search_engine=self.search_engine)
 
@@ -164,7 +165,7 @@ class LanesController(CirculationManagerController, AdminPermissionsControllerMi
                 return Response(str(lane.id), 200)
         raise RuntimeError("Unsupported method")
 
-    def lane(self, lane_identifier: int) -> Response | ProblemDetail | None:
+    def lane(self, lane_identifier: int) -> Response | ProblemDetail:
         if flask.request.method == "DELETE":
             library = get_request_library()
             self.require_library_manager(library)
