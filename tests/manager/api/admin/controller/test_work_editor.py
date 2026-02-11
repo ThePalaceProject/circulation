@@ -903,6 +903,7 @@ class TestWorkController:
             response = work_fixture.manager.admin_work_controller.classifications(
                 lp.identifier.type, lp.identifier.identifier
             )
+            assert isinstance(response, dict)
             assert response["book"]["identifier_type"] == lp.identifier.type
             assert response["book"]["identifier"] == lp.identifier.identifier
 

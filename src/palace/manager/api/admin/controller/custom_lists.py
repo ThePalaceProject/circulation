@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 from datetime import datetime
+from typing import Any, cast
 
 import flask
 from flask import Response, url_for
@@ -49,7 +50,7 @@ from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailExcep
 class CustomListsController(
     CirculationManagerController, AdminPermissionsControllerMixin
 ):
-    def _list_as_json(self, list: CustomList, is_owner=True) -> dict:
+    def _list_as_json(self, list: CustomList, is_owner: bool = True) -> dict[str, Any]:
         """Transform a CustomList object into a response ready dict"""
         collections = []
         for collection in list.collections:
@@ -73,7 +74,7 @@ class CustomListsController(
             is_shared=len(list.shared_locally_with_libraries) > 0,
         )
 
-    def custom_lists(self) -> dict | ProblemDetail | Response | None:
+    def custom_lists(self) -> dict[str, Any] | ProblemDetail | Response | None:
         library = get_request_library()
         self.require_librarian(library)
 
@@ -117,16 +118,15 @@ class CustomListsController(
             .filter(LicensePool.identifier_id == identifier.id)
             .filter(Collection.id.in_([c.id for c in library.associated_collections]))
         )
-        work = query.one()
-        return work
+        return cast(Work, query.one())
 
     def _create_or_update_list(
         self,
         library: Library,
         name: str,
-        entries: list[dict],
+        entries: list[dict[str, Any]],
         collections: list[int],
-        deleted_entries: list[dict] | None = None,
+        deleted_entries: list[dict[str, Any]] | None = None,
         id: int | None = None,
         auto_update: bool | None = None,
         auto_update_query: dict[str, str] | None = None,
@@ -301,7 +301,7 @@ class CustomListsController(
     def url_for_custom_list(
         self, library: Library, list: CustomList
     ) -> Callable[[int], str]:
-        def url_fn(after):
+        def url_fn(after: int) -> str:
             return url_for(
                 "custom_list_get",
                 after=after,
@@ -312,7 +312,9 @@ class CustomListsController(
 
         return url_fn
 
-    def custom_list(self, list_id: int) -> Response | dict | ProblemDetail | None:
+    def custom_list(
+        self, list_id: int
+    ) -> Response | dict[str, Any] | ProblemDetail | None:
         library = get_request_library()
         self.require_librarian(library)
         data_source = DataSource.lookup(self._db, DataSource.LIBRARY_STAFF)

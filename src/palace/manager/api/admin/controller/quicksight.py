@@ -18,7 +18,9 @@ from palace.manager.util.problem_detail import ProblemDetailException
 
 
 class QuickSightController(LoggerMixin):
-    def __init__(self, db: Session, authorized_arns: dict[str, list[str]] | None):
+    def __init__(
+        self, db: Session, authorized_arns: dict[str, list[str]] | None
+    ) -> None:
         self._db = db
         self._authorized_arns = authorized_arns
 
@@ -43,7 +45,7 @@ class QuickSightController(LoggerMixin):
             )
         return arns
 
-    def generate_quicksight_url(self, dashboard_name) -> dict:
+    def generate_quicksight_url(self, dashboard_name: str) -> dict[str, str]:
         admin: Admin = get_request_admin()
         request_data = QuicksightGenerateUrlRequest(**flask.request.args)
 
@@ -143,7 +145,7 @@ class QuickSightController(LoggerMixin):
             for tag_index, tag_value in enumerate(session_tags)
         ]
 
-    def get_dashboard_names(self):
+    def get_dashboard_names(self) -> dict[str, list[str]]:
         """Get the named dashboard IDs defined in the configuration"""
         return QuicksightDashboardNamesResponse(
             names=list(self.authorized_arns.keys())

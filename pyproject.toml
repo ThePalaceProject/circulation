@@ -76,17 +76,6 @@ disallow_untyped_decorators = false
 disallow_untyped_defs = false
 module = [
     "palace.manager.api.admin.admin_authentication_provider",
-    "palace.manager.api.admin.controller.admin_search",
-    "palace.manager.api.admin.controller.announcement_service",
-    "palace.manager.api.admin.controller.base",
-    "palace.manager.api.admin.controller.custom_lists",
-    "palace.manager.api.admin.controller.individual_admin_settings",
-    "palace.manager.api.admin.controller.lanes",
-    "palace.manager.api.admin.controller.quicksight",
-    "palace.manager.api.admin.controller.sign_in",
-    "palace.manager.api.admin.controller.timestamps",
-    "palace.manager.api.admin.controller.view",
-    "palace.manager.api.admin.controller.work_editor",
     "palace.manager.api.admin.model.custom_lists",
     "palace.manager.api.admin.password_admin_authentication_provider",
     "palace.manager.api.admin.routes",

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from typing import Any
 
 import flask
 from flask import Response
@@ -25,17 +26,17 @@ from palace.manager.sqlalchemy.model.customlist import CustomList
 from palace.manager.sqlalchemy.model.lane import Lane
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.util import create, get_one
-from palace.manager.util.problem_detail import ProblemDetailException
+from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
 
 
 class LanesController(CirculationManagerController, AdminPermissionsControllerMixin):
-    def lanes(self):
+    def lanes(self) -> dict[str, list[dict[str, Any]]] | Response | ProblemDetail:
         library = get_request_library()
         self.require_librarian(library)
 
         if flask.request.method == "GET":
 
-            def lanes_for_parent(parent):
+            def lanes_for_parent(parent: Lane | None) -> list[dict[str, Any]]:
                 lanes = (
                     self._db.query(Lane)
                     .filter(Lane.library == library)
@@ -66,13 +67,10 @@ class LanesController(CirculationManagerController, AdminPermissionsControllerMi
             custom_list_ids = json.loads(
                 flask.request.form.get("custom_list_ids", "[]")
             )
-            inherit_parent_restrictions = flask.request.form.get(
+            inherit_parent_restrictions_value = flask.request.form.get(
                 "inherit_parent_restrictions"
             )
-            if inherit_parent_restrictions == "true":
-                inherit_parent_restrictions = True
-            else:
-                inherit_parent_restrictions = False
+            inherit_parent_restrictions = inherit_parent_restrictions_value == "true"
 
             if not display_name:
                 return NO_DISPLAY_NAME_FOR_LANE
@@ -117,6 +115,8 @@ class LanesController(CirculationManagerController, AdminPermissionsControllerMi
                     parent=parent,
                     library=library,
                 )
+                if lane is None:
+                    return MISSING_LANE
 
                 # Make a new lane the first child of its parent and bump all the siblings down in priority.
                 siblings = (
@@ -154,14 +154,18 @@ class LanesController(CirculationManagerController, AdminPermissionsControllerMi
             for list in lane.customlists:
                 if list.id not in custom_list_ids:
                     lane.customlists.remove(list)
+            if isinstance(self.search_engine, ProblemDetail):
+                self._db.rollback()
+                return self.search_engine
             lane.update_size(self._db, search_engine=self.search_engine)
 
             if is_new:
                 return Response(str(lane.id), 201)
             else:
                 return Response(str(lane.id), 200)
+        raise RuntimeError("Unsupported method")
 
-    def lane(self, lane_identifier):
+    def lane(self, lane_identifier: int) -> Response | ProblemDetail:
         if flask.request.method == "DELETE":
             library = get_request_library()
             self.require_library_manager(library)
@@ -173,13 +177,14 @@ class LanesController(CirculationManagerController, AdminPermissionsControllerMi
                 return CANNOT_EDIT_DEFAULT_LANE
 
             # Recursively delete all the lane's sublanes.
-            def delete_lane_and_sublanes(lane):
+            def delete_lane_and_sublanes(lane: Lane) -> None:
                 for sublane in lane.sublanes:
                     delete_lane_and_sublanes(sublane)
                 self._db.delete(lane)
 
             delete_lane_and_sublanes(lane)
             return Response(str(_("Deleted")), 200)
+        raise RuntimeError("Unsupported method")
 
     def _check_lane_name_unique(
         self, display_name: str, parent: Lane | None, library: Library
@@ -192,7 +197,7 @@ class LanesController(CirculationManagerController, AdminPermissionsControllerMi
                 LANE_WITH_PARENT_AND_DISPLAY_NAME_ALREADY_EXISTS
             )
 
-    def show_lane(self, lane_identifier):
+    def show_lane(self, lane_identifier: int) -> Response | ProblemDetail:
         library = get_request_library()
         self.require_library_manager(library)
 
@@ -204,7 +209,7 @@ class LanesController(CirculationManagerController, AdminPermissionsControllerMi
         lane.visible = True
         return Response(str(_("Success")), 200)
 
-    def hide_lane(self, lane_identifier):
+    def hide_lane(self, lane_identifier: int) -> Response | ProblemDetail:
         library = get_request_library()
         self.require_library_manager(library)
 
@@ -214,19 +219,19 @@ class LanesController(CirculationManagerController, AdminPermissionsControllerMi
         lane.visible = False
         return Response(str(_("Success")), 200)
 
-    def reset(self):
+    def reset(self) -> Response:
         library = get_request_library()
         self.require_library_manager(library)
 
         create_default_lanes(self._db, library)
         return Response(str(_("Success")), 200)
 
-    def change_order(self):
+    def change_order(self) -> Response:
         self.require_library_manager(get_request_library())
 
         submitted_lanes = json.loads(flask.request.data)
 
-        def update_lane_order(lanes):
+        def update_lane_order(lanes: list[dict[str, Any]]) -> None:
             for index, lane_data in enumerate(lanes):
                 lane_id = lane_data.get("id")
                 lane = self._db.query(Lane).filter(Lane.id == lane_id).one()

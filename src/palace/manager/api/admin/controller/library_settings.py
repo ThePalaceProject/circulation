@@ -54,7 +54,7 @@ class LibraryImportInfo(BaseModel):
 
 
 class LibrarySettingsController(AdminPermissionsControllerMixin):
-    def __init__(self, manager: CirculationManager):
+    def __init__(self, manager: CirculationManager) -> None:
         self._db = manager._db
 
     def process_libraries(self) -> Response | ProblemDetail:

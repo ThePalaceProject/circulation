@@ -48,6 +48,7 @@ class TestViewController:
             )
             assert 302 == response.status_code
             location = response.headers.get("Location")
+            assert location is not None
             assert "sign_in" in location
             assert "admin/web" in location
             assert "collection/a%252F(b)" in location
@@ -89,6 +90,7 @@ class TestViewController:
             response = admin_ctrl_fixture.manager.admin_view_controller(None, None)
             assert 302 == response.status_code
             location = response.headers.get("Location")
+            assert location is not None
             assert "admin/web/collection/%s" % l1.short_name in location
 
         # Only the root url redirects - a non-library specific page with another
@@ -112,8 +114,9 @@ class TestViewController:
             html_csrf_re = re.compile('csrfToken: "([^"]*)"')
             match = html_csrf_re.search(html)
             assert match is not None
-            csrf = match.groups(0)[0]
+            csrf = match.group(1)
             set_cookie = response.headers.get("Set-Cookie")
+            assert set_cookie is not None
             assert csrf in set_cookie
             assert "HttpOnly" in set_cookie
             assert "SameSite=Lax" in set_cookie
@@ -137,8 +140,9 @@ class TestViewController:
             # The invalid token should NOT be in the HTML
             assert 'csrfToken: "%s"' % invalid_token not in html
             # A new token should be set in the cookie
-            assert response.headers.get("Set-Cookie") is not None
-            assert "csrf_token" in response.headers.get("Set-Cookie")
+            set_cookie = response.headers.get("Set-Cookie")
+            assert set_cookie is not None
+            assert "csrf_token" in set_cookie
 
         # If there's a valid CSRF token in the request cookie, the response
         # should use that same token in the HTML but NOT set it again

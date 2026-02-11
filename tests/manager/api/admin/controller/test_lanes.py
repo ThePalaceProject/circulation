@@ -75,12 +75,12 @@ class TestLanesController:
             with_license_pool=True, language="eng", fiction=False, collection=collection
         )
 
-        list, ignore = alm_fixture.ctrl.db.customlist(
+        custom_list, ignore = alm_fixture.ctrl.db.customlist(
             data_source_name=DataSource.LIBRARY_STAFF, num_entries=0
         )
-        list.library = library
+        custom_list.library = library
         lane_for_list = alm_fixture.ctrl.db.lane("List Lane", library=library)
-        lane_for_list.customlists += [list]
+        lane_for_list.customlists += [custom_list]
         lane_for_list.priority = 2
         lane_for_list.size = 1
 
@@ -93,8 +93,11 @@ class TestLanesController:
             alm_fixture.admin.add_role(AdminRole.LIBRARIAN, library)
             response = alm_fixture.manager.admin_lanes_controller.lanes()
 
-            assert 3 == len(response.get("lanes"))
-            [english_info, spanish_info, list_info] = response.get("lanes")
+            assert isinstance(response, dict)
+            lanes = response.get("lanes")
+            assert isinstance(lanes, list)
+            assert 3 == len(lanes)
+            [english_info, spanish_info, list_info] = lanes
 
             assert english.id == english_info.get("id")
             assert english.display_name == english_info.get("display_name")
@@ -103,7 +106,9 @@ class TestLanesController:
             assert [] == english_info.get("custom_list_ids")
             assert True == english_info.get("inherit_parent_restrictions")
 
-            [fiction_info] = english_info.get("sublanes")
+            fiction_sublanes = english_info.get("sublanes")
+            assert isinstance(fiction_sublanes, list)
+            [fiction_info] = fiction_sublanes
             assert english_fiction.id == fiction_info.get("id")
             assert english_fiction.display_name == fiction_info.get("display_name")
             assert english_fiction.visible == fiction_info.get("visible")
@@ -111,7 +116,9 @@ class TestLanesController:
             assert [] == fiction_info.get("custom_list_ids")
             assert True == fiction_info.get("inherit_parent_restrictions")
 
-            [sf_info] = fiction_info.get("sublanes")
+            sf_sublanes = fiction_info.get("sublanes")
+            assert isinstance(sf_sublanes, list)
+            [sf_info] = sf_sublanes
             assert english_sf.id == sf_info.get("id")
             assert english_sf.display_name == sf_info.get("display_name")
             assert english_sf.visible == sf_info.get("visible")
@@ -130,7 +137,7 @@ class TestLanesController:
             assert lane_for_list.display_name == list_info.get("display_name")
             assert lane_for_list.visible == list_info.get("visible")
             assert 1 == list_info.get("count")
-            assert [list.id] == list_info.get("custom_list_ids")
+            assert [custom_list.id] == list_info.get("custom_list_ids")
             assert True == list_info.get("inherit_parent_restrictions")
 
     def test_lanes_post_errors(self, alm_fixture: AdminLibraryManagerFixture):
