@@ -11,12 +11,15 @@ from typing import IO, Any
 
 from celery import shared_task
 from sqlalchemy import (
+    and_,
     bindparam,
     case,
+    cast,
     exists,
     false,
     func,
     lateral,
+    literal_column,
     not_,
     or_,
     select,
@@ -27,6 +30,7 @@ from sqlalchemy.orm import Session, aliased
 from sqlalchemy.sql import Select, Subquery
 from sqlalchemy.sql.elements import BindParameter, ColumnElement
 from sqlalchemy.sql.selectable import Lateral
+from sqlalchemy.types import String
 
 from palace.manager.celery.task import Task
 from palace.manager.integration.goals import Goals
@@ -257,24 +261,10 @@ def _comma_separated_sorted_work_genre_list_subquery() -> Subquery:
 
 
 def _bisac_subjects_subquery() -> Subquery:
-    """Comma-separated BISAC subjects and age ranges for an identifier."""
+    """Comma-separated BISAC subjects for an identifier."""
     classification_alias = aliased(Classification)
     subject_alias = aliased(Subject)
     bisac_value = func.coalesce(subject_alias.name, subject_alias.identifier)
-    age_range_lower = func.lower(subject_alias.target_age)
-    age_range_upper = func.upper(subject_alias.target_age)
-    age_range_lower_adjusted: ColumnElement[Any] = case(
-        (func.lower_inc(subject_alias.target_age), age_range_lower),
-        else_=age_range_lower + 1,
-    )
-    age_range_upper_adjusted: ColumnElement[Any] = case(
-        (func.upper_inc(subject_alias.target_age), age_range_upper),
-        else_=age_range_upper - 1,
-    )
-    age_range_value: ColumnElement[Any] = case(
-        (or_(age_range_lower.is_(None), age_range_upper.is_(None)), None),
-        else_=func.concat(age_range_lower_adjusted, "-", age_range_upper_adjusted),
-    )
     return (
         select(
             classification_alias.identifier_id.label("identifier_id"),
@@ -284,14 +274,6 @@ def _bisac_subjects_subquery() -> Subquery:
                 ),
                 "|",
             ).label("bisac_subjects"),
-            func.array_to_string(
-                func.array_agg(
-                    aggregate_order_by(
-                        age_range_value.distinct(), age_range_value.asc()
-                    )
-                ),
-                "|",
-            ).label("age_ranges"),
         )
         .join(subject_alias, classification_alias.subject_id == subject_alias.id)
         .where(subject_alias.type == Subject.BISAC)
@@ -436,6 +418,38 @@ def inventory_report_query() -> Select:
         else_="",
     ).label("visibility_status")
 
+    # Work.target_age formatted as numericrange_to_string (same as Work.target_age_string)
+    target_age_lower_raw = func.lower(Work.target_age)
+    target_age_upper_raw = func.upper(Work.target_age)
+    target_age_lower_adj: ColumnElement[Any] = case(
+        (func.lower_inc(Work.target_age), target_age_lower_raw),
+        else_=target_age_lower_raw + 1,
+    )
+    target_age_upper_adj: ColumnElement[Any] = case(
+        (func.upper_inc(Work.target_age), target_age_upper_raw),
+        else_=target_age_upper_raw - 1,
+    )
+    target_age_formatted: ColumnElement[Any] = case(
+        (
+            and_(
+                target_age_lower_raw.is_(None),
+                target_age_upper_raw.is_(None),
+            ),
+            literal_column("''"),
+        ),
+        (target_age_upper_raw.is_(None), cast(target_age_lower_adj, String)),
+        (target_age_lower_raw.is_(None), cast(target_age_upper_adj, String)),
+        (
+            target_age_lower_adj == target_age_upper_adj,
+            cast(target_age_lower_adj, String),
+        ),
+        else_=func.concat(
+            cast(target_age_lower_adj, String),
+            "-",
+            cast(target_age_upper_adj, String),
+        ),
+    )
+
     return (
         select(
             LicensePool.status.label("item_status"),
@@ -456,7 +470,7 @@ def inventory_report_query() -> Select:
             Edition.medium.label("format"),
             Work.audience,
             func.coalesce(wg_subquery.c.genres, "").label("genres"),
-            func.coalesce(bisac_subquery.c.age_ranges, "").label("age_ranges"),
+            func.coalesce(target_age_formatted, "").label("target_age"),
             func.coalesce(bisac_subquery.c.bisac_subjects, "").label("bisac_subjects"),
             visible,
             visibility_status,
