@@ -1,7 +1,7 @@
 """Add startup_tasks table
 
 Revision ID: a5ee359c2d31
-Revises: 9c3f2b3fba1b
+Revises: 08aba65e21e0
 Create Date: 2026-02-10 00:00:00.000000+00:00
 
 """
@@ -11,7 +11,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "a5ee359c2d31"
-down_revision = "9c3f2b3fba1b"
+down_revision = "08aba65e21e0"
 branch_labels = None
 depends_on = None
 
