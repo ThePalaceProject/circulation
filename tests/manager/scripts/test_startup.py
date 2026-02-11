@@ -7,9 +7,9 @@ from pathlib import Path
 from unittest.mock import MagicMock, create_autospec, patch
 
 import pytest
-from celery.canvas import Signature
 from sqlalchemy import select
 from sqlalchemy.engine import Engine
+from sqlalchemy.orm import Session
 
 from palace.manager.scripts.startup import (
     StartupTaskRunner,
@@ -17,6 +17,7 @@ from palace.manager.scripts.startup import (
     create_startup_task,
     discover_startup_tasks,
 )
+from palace.manager.service.container import Services
 from palace.manager.sqlalchemy.model.startup_task import StartupTask
 from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
@@ -25,8 +26,8 @@ from tests.fixtures.database import DatabaseTransactionFixture
 class TestDiscoverStartupTasks:
     def test_discover_startup_tasks(self, tmp_path: Path) -> None:
         """Task modules are discovered and returned as a dict sorted by key."""
-        (tmp_path / "b_second.py").write_text("def startup_task_signature(): pass\n")
-        (tmp_path / "a_first.py").write_text("def startup_task_signature(): pass\n")
+        (tmp_path / "b_second.py").write_text("def run(services, session): pass\n")
+        (tmp_path / "a_first.py").write_text("def run(services, session): pass\n")
 
         result = discover_startup_tasks(tmp_path)
 
@@ -37,14 +38,14 @@ class TestDiscoverStartupTasks:
     def test_discover_skips_invalid_modules(
         self, tmp_path: Path, caplog: pytest.LogCaptureFixture
     ) -> None:
-        """Modules without a 'startup_task_signature' callable are skipped with a warning."""
+        """Modules without a 'run' callable are skipped with a warning."""
         (tmp_path / "no_task.py").write_text("x = 1\n")
 
         caplog.set_level(logging.WARNING)
         result = discover_startup_tasks(tmp_path)
 
         assert len(result) == 0
-        assert "does not define 'startup_task_signature'" in caplog.text
+        assert "does not define 'run'" in caplog.text
 
     def test_discover_skips_import_errors(
         self, tmp_path: Path, caplog: pytest.LogCaptureFixture
@@ -61,8 +62,8 @@ class TestDiscoverStartupTasks:
     def test_discover_skips_underscore_files(self, tmp_path: Path) -> None:
         """Files starting with _ are skipped."""
         (tmp_path / "__init__.py").write_text("")
-        (tmp_path / "_create.py").write_text("def startup_task_signature(): pass\n")
-        (tmp_path / "_helper.py").write_text("def startup_task_signature(): pass\n")
+        (tmp_path / "_create.py").write_text("def run(services, session): pass\n")
+        (tmp_path / "_helper.py").write_text("def run(services, session): pass\n")
 
         result = discover_startup_tasks(tmp_path)
 
@@ -88,20 +89,22 @@ class TestStartupTaskRunner:
         return mock_session_cls
 
     def test_run_no_tasks_discovered(self, caplog: pytest.LogCaptureFixture) -> None:
-        """When no tasks are discovered, nothing is queued."""
+        """When no tasks are discovered, nothing is executed."""
         engine = create_autospec(Engine)
+        services = create_autospec(Services)
         with patch(
             "palace.manager.scripts.startup.discover_startup_tasks",
             return_value={},
         ):
             caplog.set_level(logging.INFO)
-            StartupTaskRunner().run(engine)
+            StartupTaskRunner().run(engine, services)
 
         assert "No startup tasks discovered" in caplog.text
 
-    def test_run_queues_new_task(self, db: DatabaseTransactionFixture) -> None:
-        """A new task is dispatched and recorded in the database."""
-        mock_sig = create_autospec(Signature)
+    def test_run_executes_new_task(self, db: DatabaseTransactionFixture) -> None:
+        """A new task is executed and recorded in the database."""
+        mock_task = MagicMock()
+        services = create_autospec(Services)
 
         engine = db.session.get_bind()
         assert isinstance(engine, Engine)
@@ -109,13 +112,13 @@ class TestStartupTaskRunner:
         with (
             patch(
                 "palace.manager.scripts.startup.discover_startup_tasks",
-                return_value={"test_task": lambda: mock_sig},
+                return_value={"test_task": mock_task},
             ),
             patch("palace.manager.scripts.startup.Session", self._mock_session(db)),
         ):
-            StartupTaskRunner().run(engine)
+            StartupTaskRunner().run(engine, services)
 
-        mock_sig.apply_async.assert_called_once()
+        mock_task.assert_called_once_with(services, db.session)
 
         row = db.session.execute(
             select(StartupTask).where(StartupTask.key == "test_task")
@@ -123,10 +126,10 @@ class TestStartupTaskRunner:
         assert row.queued_at is not None
         assert row.run is True
 
-    def test_run_skips_already_queued_task(
+    def test_run_skips_already_executed_task(
         self, db: DatabaseTransactionFixture
     ) -> None:
-        """Tasks already recorded in the database are not re-queued."""
+        """Tasks already recorded in the database are not re-executed."""
         existing = StartupTask(
             key="already_done",
             queued_at=utc_now(),
@@ -135,7 +138,8 @@ class TestStartupTaskRunner:
         db.session.add(existing)
         db.session.flush()
 
-        mock_create = MagicMock()
+        mock_task = MagicMock()
+        services = create_autospec(Services)
 
         engine = db.session.get_bind()
         assert isinstance(engine, Engine)
@@ -143,23 +147,26 @@ class TestStartupTaskRunner:
         with (
             patch(
                 "palace.manager.scripts.startup.discover_startup_tasks",
-                return_value={"already_done": mock_create},
+                return_value={"already_done": mock_task},
             ),
             patch("palace.manager.scripts.startup.Session", self._mock_session(db)),
         ):
-            StartupTaskRunner().run(engine)
+            StartupTaskRunner().run(engine, services)
 
-        mock_create.assert_not_called()
+        mock_task.assert_not_called()
 
-    def test_run_handles_queue_failure_gracefully(
+    def test_run_handles_failure_gracefully(
         self,
         db: DatabaseTransactionFixture,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
-        """If one task fails to queue, others still proceed."""
-        good_sig = create_autospec(Signature)
-        bad_sig = create_autospec(Signature)
-        bad_sig.apply_async.side_effect = RuntimeError("Celery is down")
+        """If one task fails, others still proceed."""
+        services = create_autospec(Services)
+
+        def bad_task(svc: Services, sess: Session) -> None:
+            raise RuntimeError("Something broke")
+
+        good_task = MagicMock()
 
         engine = db.session.get_bind()
         assert isinstance(engine, Engine)
@@ -168,14 +175,14 @@ class TestStartupTaskRunner:
             patch(
                 "palace.manager.scripts.startup.discover_startup_tasks",
                 return_value={
-                    "a_failing": lambda: bad_sig,
-                    "b_succeeding": lambda: good_sig,
+                    "a_failing": bad_task,
+                    "b_succeeding": good_task,
                 },
             ),
             patch("palace.manager.scripts.startup.Session", self._mock_session(db)),
         ):
             caplog.set_level(logging.ERROR)
-            StartupTaskRunner().run(engine)
+            StartupTaskRunner().run(engine, services)
 
         # The failing task should not be recorded
         assert (
@@ -190,21 +197,20 @@ class TestStartupTaskRunner:
             select(StartupTask).where(StartupTask.key == "b_succeeding")
         ).scalar_one()
         assert row is not None
-        good_sig.apply_async.assert_called_once()
+        good_task.assert_called_once()
 
-        assert "Failed to queue startup task" in caplog.text
+        assert "Failed to execute startup task" in caplog.text
 
     def test_run_idempotent_on_second_call(
         self, db: DatabaseTransactionFixture
     ) -> None:
-        """Running the same tasks twice only queues them once."""
-        mock_sig = create_autospec(Signature)
+        """Running the same tasks twice only executes them once."""
         call_count = 0
+        services = create_autospec(Services)
 
-        def make_sig() -> Signature:
+        def counting_task(svc: Services, sess: Session) -> None:
             nonlocal call_count
             call_count += 1
-            return mock_sig
 
         engine = db.session.get_bind()
         assert isinstance(engine, Engine)
@@ -212,25 +218,25 @@ class TestStartupTaskRunner:
         with (
             patch(
                 "palace.manager.scripts.startup.discover_startup_tasks",
-                return_value={"idempotent_task": make_sig},
+                return_value={"idempotent_task": counting_task},
             ),
             patch("palace.manager.scripts.startup.Session", self._mock_session(db)),
         ):
-            StartupTaskRunner().run(engine)
-            StartupTaskRunner().run(engine)
+            StartupTaskRunner().run(engine, services)
+            StartupTaskRunner().run(engine, services)
 
         assert call_count == 1
-        mock_sig.apply_async.assert_called_once()
 
-    def test_run_startup_task_signature_exception(
+    def test_run_task_exception(
         self,
         db: DatabaseTransactionFixture,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
-        """If startup_task_signature itself raises, the task is skipped."""
+        """If a task's run function raises, the task is skipped."""
+        services = create_autospec(Services)
 
-        def bad_create() -> Signature:
-            raise ValueError("Cannot build signature")
+        def bad_task(svc: Services, sess: Session) -> None:
+            raise ValueError("Cannot run task")
 
         engine = db.session.get_bind()
         assert isinstance(engine, Engine)
@@ -238,28 +244,29 @@ class TestStartupTaskRunner:
         with (
             patch(
                 "palace.manager.scripts.startup.discover_startup_tasks",
-                return_value={"bad_signature": bad_create},
+                return_value={"bad_task": bad_task},
             ),
             patch("palace.manager.scripts.startup.Session", self._mock_session(db)),
         ):
             caplog.set_level(logging.ERROR)
-            StartupTaskRunner().run(engine)
+            StartupTaskRunner().run(engine, services)
 
-        assert "Failed to queue startup task" in caplog.text
+        assert "Failed to execute startup task" in caplog.text
         assert (
             db.session.execute(
-                select(StartupTask).where(StartupTask.key == "bad_signature")
+                select(StartupTask).where(StartupTask.key == "bad_task")
             ).scalar_one_or_none()
             is None
         )
 
-    def test_run_stamp_only_records_without_queuing(
+    def test_run_stamp_only_records_without_executing(
         self,
         db: DatabaseTransactionFixture,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
-        """stamp_only=True records tasks without calling startup_task_signature."""
-        mock_create = MagicMock()
+        """stamp_only=True records tasks without calling run."""
+        mock_task = MagicMock()
+        services = create_autospec(Services)
 
         engine = db.session.get_bind()
         assert isinstance(engine, Engine)
@@ -267,15 +274,15 @@ class TestStartupTaskRunner:
         with (
             patch(
                 "palace.manager.scripts.startup.discover_startup_tasks",
-                return_value={"stamp_me": mock_create},
+                return_value={"stamp_me": mock_task},
             ),
             patch("palace.manager.scripts.startup.Session", self._mock_session(db)),
         ):
             caplog.set_level(logging.INFO)
-            StartupTaskRunner().run(engine, stamp_only=True)
+            StartupTaskRunner().run(engine, services, stamp_only=True)
 
-        # startup_task_signature should never be called
-        mock_create.assert_not_called()
+        # run should never be called
+        mock_task.assert_not_called()
 
         # But the row should still be recorded
         row = db.session.execute(
@@ -295,7 +302,7 @@ class TestCreateStartupTask:
         assert _slugify("simple") == "simple"
         assert _slugify("!!!") == ""
 
-    def test_main_creates_file(self, tmp_path: Path) -> None:
+    def test_creates_file(self, tmp_path: Path) -> None:
         """The create command generates a valid task file."""
         with patch("palace.manager.scripts.startup.STARTUP_TASKS_DIR", tmp_path):
             with patch(
@@ -313,9 +320,9 @@ class TestCreateStartupTask:
         assert filepath.exists()
         content = filepath.read_text()
         assert "reindex everything" in content
-        assert "def startup_task_signature" in content
+        assert "def run" in content
 
-    def test_main_refuses_duplicate(self, tmp_path: Path) -> None:
+    def test_refuses_duplicate(self, tmp_path: Path) -> None:
         """The create command refuses to overwrite an existing file."""
         existing = tmp_path / "2026_03_15_1430_duplicate.py"
         existing.write_text("# existing")
@@ -337,7 +344,7 @@ class TestCreateStartupTask:
 
         assert exc_info.value.code == 1
 
-    def test_main_refuses_empty_slug(self) -> None:
+    def test_refuses_empty_slug(self) -> None:
         """The create command refuses a description that produces an empty slug."""
         with (
             patch(

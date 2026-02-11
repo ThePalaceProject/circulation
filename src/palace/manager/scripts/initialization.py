@@ -176,7 +176,7 @@ class InstanceInitializationScript(LoggerMixin):
         prevent the application from starting.
         """
         try:
-            StartupTaskRunner().run(engine, stamp_only=fresh_install)
+            StartupTaskRunner().run(engine, self._container, stamp_only=fresh_install)
         except Exception:
             self.log.exception("Error running startup tasks.")
 

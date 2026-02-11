@@ -6,15 +6,15 @@ to ensure existing collections are re-imported with the new parsing logic.
 
 from __future__ import annotations
 
-from celery.canvas import Signature
+from sqlalchemy.orm import Session
+
+from palace.manager.service.container import Services
 
 
-def startup_task_signature() -> Signature:
-    """Build the Celery signature to dispatch.
-
-    Uses a local import to avoid import-time coupling with the Celery app,
-    which may not be configured when the init script first imports this package.
-    """
+def run(services: Services, session: Session) -> None:
+    # Local import to avoid import-time coupling with the Celery app,
+    # which may not be configured when the init script first imports
+    # this module.
     from palace.manager.celery.tasks.opds_for_distributors import import_all
 
-    return import_all.si(force=True)
+    import_all.si(force=True).apply_async()

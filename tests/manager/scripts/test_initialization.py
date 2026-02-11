@@ -417,5 +417,5 @@ class TestInstanceInitializationScript:
             script.run_startup_tasks(mock_engine, fresh_install=True)
 
         mock_runner_cls.return_value.run.assert_called_once_with(
-            mock_engine, stamp_only=True
+            mock_engine, script._container, stamp_only=True
         )

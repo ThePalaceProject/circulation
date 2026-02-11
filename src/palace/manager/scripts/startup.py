@@ -1,18 +1,24 @@
 """One-time startup task registry with auto-discovery and database tracking.
 
 Developers register tasks by adding a Python file to the ``startup_tasks/``
-directory at the project root.  Each file must define a ``startup_task_signature``
-callable returning a Celery :class:`~celery.canvas.Signature`.
+directory at the project root.  Each file must define a ``run`` function
+with the signature::
+
+    def run(services: Services, session: Session) -> None: ...
+
+The function receives the application's services container and a database
+session, giving it access to Redis, search, Celery dispatch, and any other
+service it needs.
 
 On each application start the :class:`StartupTaskRunner` discovers registered
-tasks, checks the database for previously-queued entries, and dispatches any
-new ones to Celery.
+tasks, checks the database for previously-executed entries, and runs any new
+ones.
 
 **Adding a task:**
 
 1. Run ``create_startup_task <short_description>`` to scaffold a new file.
-2. Implement ``startup_task_signature() -> Signature`` in the generated file.
-3. Deploy — the init script auto-discovers and queues it.
+2. Implement ``run()`` in the generated file.
+3. Deploy — the init script auto-discovers and executes it.
 
 The task key is derived automatically from the filename (e.g.
 ``2026_02_10_0000_force_harvest.py`` → key ``2026_02_10_0000_force_harvest``).
@@ -35,14 +41,17 @@ from datetime import datetime, timezone
 from pathlib import Path
 from types import ModuleType
 
-from celery.canvas import Signature
 from sqlalchemy import select
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
+from palace.manager.service.container import Services
 from palace.manager.sqlalchemy.model.startup_task import StartupTask
 from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.log import LoggerMixin
+
+#: Type alias for a startup task callable.
+StartupTaskCallable = Callable[[Services, Session], None]
 
 #: Default location of startup task files — ``startup_tasks/`` at the
 #: project root, resolved relative to this file's position in the source
@@ -54,16 +63,13 @@ _TEMPLATE = '''\
 
 from __future__ import annotations
 
-from celery.canvas import Signature
+from sqlalchemy.orm import Session
+
+from palace.manager.service.container import Services
 
 
-def startup_task_signature() -> Signature:
-    """Build the Celery signature to dispatch.
-
-    Uses a local import to avoid import-time coupling with the Celery app,
-    which may not be configured when the init script first imports this package.
-    """
-    raise NotImplementedError("TODO: return a Celery signature here")
+def run(services: Services, session: Session) -> None:
+    raise NotImplementedError("TODO: implement this startup task")
 '''
 
 
@@ -84,17 +90,16 @@ def _load_module_from_file(name: str, path: Path) -> ModuleType:
 
 def discover_startup_tasks(
     tasks_dir: Path = STARTUP_TASKS_DIR,
-) -> dict[str, Callable[[], Signature]]:
-    """Scan *tasks_dir* for Python files that define a ``startup_task_signature`` callable.
+) -> dict[str, StartupTaskCallable]:
+    """Scan *tasks_dir* for Python files that define a ``run`` callable.
 
     The task key is derived from the filename (without the ``.py``
     extension).  Files whose name starts with ``_`` are skipped.  Files
-    that do not define a ``startup_task_signature`` callable are skipped with a
-    warning.
+    that do not define a ``run`` callable are skipped with a warning.
 
     :param tasks_dir: Directory to scan.  Defaults to the project-root
         ``startup_tasks/`` directory.
-    :returns: A dict mapping task key to the ``startup_task_signature`` callable,
+    :returns: A dict mapping task key to the ``run`` callable,
         sorted by key for deterministic ordering.
     """
     logger = StartupTaskRunner.logger()
@@ -103,7 +108,7 @@ def discover_startup_tasks(
         logger.info("Startup tasks directory %s does not exist; skipping.", tasks_dir)
         return {}
 
-    tasks: dict[str, Callable[[], Signature]] = {}
+    tasks: dict[str, StartupTaskCallable] = {}
 
     for module_path in sorted(tasks_dir.glob("*.py")):
         if module_path.stem.startswith("_"):
@@ -117,42 +122,50 @@ def discover_startup_tasks(
             )
             continue
 
-        create_sig = getattr(module, "startup_task_signature", None)
-        if create_sig is None:
+        run_fn = getattr(module, "run", None)
+        if run_fn is None:
             logger.warning(
-                "Startup task module %s does not define 'startup_task_signature'; skipping.",
+                "Startup task module %s does not define 'run'; skipping.",
                 module_path.stem,
             )
             continue
 
-        if not callable(create_sig):
+        if not callable(run_fn):
             logger.warning(
-                "Startup task module %s has a 'startup_task_signature' attribute "
+                "Startup task module %s has a 'run' attribute "
                 "that is not callable; skipping.",
                 module_path.stem,
             )
             continue
 
-        tasks[module_path.stem] = create_sig
+        tasks[module_path.stem] = run_fn
 
     return dict(sorted(tasks.items()))
 
 
 class StartupTaskRunner(LoggerMixin):
-    """Discover and dispatch unexecuted startup tasks.
+    """Discover and execute unexecuted startup tasks.
 
     Each task is committed independently so that a failure in one task does
-    not prevent others from being recorded and queued.
+    not prevent others from being recorded and executed.
     """
 
-    def run(self, engine: Engine, *, stamp_only: bool = False) -> None:
-        """Discover tasks, check database, and queue or stamp new ones.
+    def run(
+        self,
+        engine: Engine,
+        services: Services,
+        *,
+        stamp_only: bool = False,
+    ) -> None:
+        """Discover tasks, check database, and execute or stamp new ones.
 
-        :param engine: SQLAlchemy engine used to create a session.
+        :param engine: SQLAlchemy engine used to create sessions.
+        :param services: The application services container, passed to each
+            task alongside a database session.
         :param stamp_only: If ``True``, record all discovered tasks as
-            already-queued **without** dispatching them to Celery.  This is
-            used on fresh database installs where there is no existing data
-            to migrate — analogous to ``alembic stamp head``.
+            already-executed **without** running them.  This is used on
+            fresh database installs where there is no existing data to
+            migrate — analogous to ``alembic stamp head``.
         """
         tasks = discover_startup_tasks()
         if not tasks:
@@ -162,7 +175,7 @@ class StartupTaskRunner(LoggerMixin):
         if stamp_only:
             self.log.info(
                 "Fresh database install — stamping %d startup task(s) "
-                "without queuing.",
+                "without running.",
                 len(tasks),
             )
         else:
@@ -173,17 +186,18 @@ class StartupTaskRunner(LoggerMixin):
                 session.scalars(select(StartupTask.key)).all()
             )
 
-        for key, startup_task_signature in tasks.items():
+        for key, run_fn in tasks.items():
             if key in existing_keys:
-                self.log.info("Startup task %r already queued; skipping.", key)
+                self.log.info("Startup task %r already executed; skipping.", key)
                 continue
 
             if not stamp_only:
                 try:
-                    sig = startup_task_signature()
-                    sig.apply_async()
+                    with Session(engine) as session:
+                        run_fn(services, session)
+                        session.commit()
                 except Exception:
-                    self.log.exception("Failed to queue startup task %r.", key)
+                    self.log.exception("Failed to execute startup task %r.", key)
                     continue
 
             with Session(engine) as session:
@@ -198,11 +212,11 @@ class StartupTaskRunner(LoggerMixin):
             if stamp_only:
                 self.log.info("Stamped startup task %r.", key)
             else:
-                self.log.info("Queued startup task %r.", key)
+                self.log.info("Executed startup task %r.", key)
 
 
 # ---------------------------------------------------------------------------
-# Scaffolding command: bin/create_startup_task
+# Scaffolding command: create_startup_task
 # ---------------------------------------------------------------------------
 
 
@@ -255,5 +269,5 @@ def create_startup_task() -> None:
     print(f"Task key will be: {filepath.stem}")
     print()
     print("Next steps:")
-    print("  1. Implement startup_task_signature() in the generated file.")
+    print("  1. Implement run() in the generated file.")
     print("  2. Commit and deploy.")
