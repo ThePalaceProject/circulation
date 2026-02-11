@@ -79,9 +79,14 @@ class DeleteInvisibleLanesScript(LibraryInputScript):
 
     def process_library(self, library: Library) -> None:
         try:
-            for lane in self._db.query(Lane).filter(Lane.library_id == library.id):
-                if not lane.visible:
-                    self._db.delete(lane)
+            # Evaluate lane visibility before mutating relationships in this session.
+            # Otherwise, deleting a hidden parent can make a visible child appear
+            # top-level (and therefore visible) before the child is considered.
+            lanes = self._db.query(Lane).filter(Lane.library_id == library.id).all()
+            invisible_lanes = [lane for lane in lanes if not lane.visible]
+
+            for lane in invisible_lanes:
+                self._db.delete(lane)
             self._db.commit()
             logging.info(f"Completed hidden lane deletion for {library.short_name}")
         except Exception as e:
