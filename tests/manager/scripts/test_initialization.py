@@ -431,7 +431,7 @@ class TestInstanceInitializationScript:
         ) as mock_run:
             script.run_startup_tasks(mock_connection)
 
-        mock_run.assert_called_once_with(mock_connection, script._container)
+        mock_run.assert_called_once_with(mock_connection, script._container, None)
 
     def test_run_startup_tasks_fresh_install_calls_stamp(
         self, services_fixture: ServicesFixture
@@ -451,4 +451,4 @@ class TestInstanceInitializationScript:
             script.run_startup_tasks(mock_connection, fresh_install=True)
 
         mock_run.assert_not_called()
-        mock_stamp.assert_called_once_with(mock_connection)
+        mock_stamp.assert_called_once_with(mock_connection, None)

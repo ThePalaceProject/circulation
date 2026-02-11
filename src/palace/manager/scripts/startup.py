@@ -91,7 +91,7 @@ def _load_module_from_file(name: str, path: Path) -> ModuleType:
 
 
 def discover_startup_tasks(
-    tasks_dir: Path = STARTUP_TASKS_DIR,
+    tasks_dir: Path | None = None,
 ) -> dict[str, StartupTaskCallable]:
     """Scan *tasks_dir* for Python files that define a ``run`` callable.
 
@@ -104,6 +104,8 @@ def discover_startup_tasks(
     :returns: A dict mapping task key to the ``run`` callable,
         sorted by key for deterministic ordering.
     """
+    if tasks_dir is None:
+        tasks_dir = STARTUP_TASKS_DIR
     if not tasks_dir.is_dir():
         logger.info("Startup tasks directory %s does not exist; skipping.", tasks_dir)
         return {}
@@ -161,6 +163,7 @@ def _record_task(session: Session, key: str, *, run: bool) -> None:
 def run_startup_tasks(
     connection: Connection,
     services: Services,
+    tasks_dir: Path | None = None,
 ) -> None:
     """Discover tasks, check the database, and execute new ones.
 
@@ -176,8 +179,10 @@ def run_startup_tasks(
     :param connection: SQLAlchemy connection to bind sessions to.
     :param services: The application services container, passed to each
         task alongside a database session.
+    :param tasks_dir: Directory to scan for task files.  Defaults to the
+        project-root ``startup_tasks/`` directory.
     """
-    tasks = discover_startup_tasks()
+    tasks = discover_startup_tasks(tasks_dir)
     if not tasks:
         logger.info("No startup tasks discovered.")
         return
@@ -203,15 +208,20 @@ def run_startup_tasks(
         logger.info("Executed startup task %r.", key)
 
 
-def stamp_startup_tasks(connection: Connection) -> None:
+def stamp_startup_tasks(
+    connection: Connection,
+    tasks_dir: Path | None = None,
+) -> None:
     """Record all discovered tasks as already-executed **without** running them.
 
     This is used on fresh database installs where there is no existing data
     to migrate — analogous to ``alembic stamp head``.
 
     :param connection: SQLAlchemy connection to bind sessions to.
+    :param tasks_dir: Directory to scan for task files.  Defaults to the
+        project-root ``startup_tasks/`` directory.
     """
-    tasks = discover_startup_tasks()
+    tasks = discover_startup_tasks(tasks_dir)
     if not tasks:
         logger.info("No startup tasks discovered.")
         return

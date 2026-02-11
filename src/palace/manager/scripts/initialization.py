@@ -38,12 +38,14 @@ class InstanceInitializationScript(LoggerMixin):
         self,
         config_file: Path | None = None,
         engine_factory: Callable[[], Engine] = SessionManager.engine,
+        startup_tasks_dir: Path | None = None,
     ) -> None:
         self._container = container_instance()
 
         # Call init_resources() to initialize the logging configuration.
         self._container.init_resources()
         self._config_file = config_file
+        self._startup_tasks_dir = startup_tasks_dir
 
         self._engine_factory = engine_factory
 
@@ -182,9 +184,9 @@ class InstanceInitializationScript(LoggerMixin):
         """
         try:
             if fresh_install:
-                _stamp_startup_tasks(connection)
+                _stamp_startup_tasks(connection, self._startup_tasks_dir)
             else:
-                _run_startup_tasks(connection, self._container)
+                _run_startup_tasks(connection, self._container, self._startup_tasks_dir)
         except Exception:
             self.log.exception("Error running startup tasks.")
 
