@@ -114,7 +114,7 @@ def create_container() -> Services:
     return container
 
 
-_container_instance = None
+_container_instance: Services | None = None
 
 
 def container_instance() -> Services:
