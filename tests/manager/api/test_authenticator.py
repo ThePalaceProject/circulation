@@ -1309,9 +1309,7 @@ class TestLibraryAuthenticator:
             [oidc_doc] = authenticators
 
             # Verify it's the OIDC flow
-            assert (
-                oidc_doc["type"] == "http://thepalaceproject.org/authtype/OpenIDConnect"
-            )
+            assert oidc_doc["type"] == "http://palaceproject.io/authtype/OpenIDConnect"
             assert oidc_doc["description"] == oidc_provider.label()
             assert len(oidc_doc["links"]) == 1
             assert oidc_doc["links"][0]["rel"] == "authenticate"

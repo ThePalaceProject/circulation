@@ -553,7 +553,7 @@ def track_playtime_events(collection_id, identifier_type, identifier):
 
 
 # Route that redirects to the authentication URL for an OIDC provider
-@library_route("/oidc/authenticate")
+@library_route("/oidc/authenticate", methods=["GET"])
 @has_library
 @returns_problem_detail
 def oidc_authenticate():
@@ -576,7 +576,7 @@ def oidc_callback():
 
 
 # Route that initiates OIDC logout
-@library_route("/oidc/logout")
+@library_route("/oidc/logout", methods=["GET"])
 @has_library
 @returns_problem_detail
 def oidc_logout():

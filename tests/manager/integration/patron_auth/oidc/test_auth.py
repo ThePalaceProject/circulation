@@ -868,16 +868,21 @@ class TestOIDCAuthenticationManagerLogout:
                     id_token_hint, post_logout_redirect_uri, state
                 )
 
-        # Common assertions
+        # Common assertions - parse URL to check properly encoded parameters
+        from urllib.parse import parse_qs, urlparse
+
+        parsed_url = urlparse(logout_url)
         assert expected_endpoint in logout_url
-        assert f"id_token_hint={id_token_hint}" in logout_url
-        assert f"post_logout_redirect_uri={post_logout_redirect_uri}" in logout_url
+        query_params = parse_qs(parsed_url.query)
+
+        assert query_params["id_token_hint"][0] == id_token_hint
+        assert query_params["post_logout_redirect_uri"][0] == post_logout_redirect_uri
 
         # State assertions
         if state:
-            assert f"state={state}" in logout_url
+            assert query_params["state"][0] == state
         else:
-            assert "state=" not in logout_url
+            assert "state" not in query_params
 
     def test_build_logout_url_not_supported(
         self, oidc_settings_with_discovery, redis_fixture, mock_discovery_document

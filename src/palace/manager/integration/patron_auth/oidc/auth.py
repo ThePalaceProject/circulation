@@ -17,6 +17,7 @@ from urllib.parse import urlencode
 import httpx
 from pydantic import HttpUrl
 
+from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.integration.patron_auth.oidc.configuration.model import (
     OIDCAuthSettings,
 )
@@ -31,7 +32,7 @@ from palace.manager.service.redis.redis import Redis
 from palace.manager.util.log import LoggerMixin
 
 
-class OIDCAuthenticationError(Exception):
+class OIDCAuthenticationError(BasePalaceException):
     """Base exception for OIDC authentication errors."""
 
 
@@ -408,7 +409,7 @@ class OIDCAuthenticationManager(LoggerMixin):
         if state:
             params["state"] = state
 
-        query_string = "&".join(f"{k}={v}" for k, v in params.items())
+        query_string = urlencode(params)
         logout_url = f"{end_session_endpoint}?{query_string}"
 
         self.log.info(f"Built logout URL for provider: {end_session_endpoint}")

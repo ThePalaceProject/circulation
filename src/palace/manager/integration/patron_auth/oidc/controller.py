@@ -12,6 +12,7 @@ from flask_babel import lazy_gettext as _
 from sqlalchemy.orm import Session
 from werkzeug.wrappers import Response as BaseResponse
 
+from palace.manager.api.authenticator import BaseOIDCAuthenticationProvider
 from palace.manager.integration.patron_auth.oidc.util import OIDCUtility
 from palace.manager.util.problem_detail import (
     ProblemDetail,
@@ -188,6 +189,10 @@ class OIDCController:
         if isinstance(redirect_uri, ProblemDetail):
             return redirect_uri
 
+        # TODO: Validate redirect_uri against configured patron web client URLs
+        #  to prevent open redirect attacks. This should be done consistently
+        #  for both OIDC and SAML.
+
         provider = self._authenticator.oidc_provider_lookup(provider_name)
         if isinstance(provider, ProblemDetail):
             return self._redirect_with_error(redirect_uri, provider)
@@ -246,6 +251,8 @@ class OIDCController:
         utility = OIDCUtility(redis_client=None)
 
         try:
+            # Get the bearer token signing secret from any library authenticator
+            # (they all share the same global secret)
             library_authenticator = next(
                 iter(self._authenticator.library_authenticators.values())
             )
@@ -518,11 +525,11 @@ class OIDCController:
             # Get all OIDC providers for this library
             for provider in library_authenticator.providers:
                 # Skip non-OIDC providers
-                if not hasattr(provider, "_authentication_manager_factory"):
+                if not isinstance(provider, BaseOIDCAuthenticationProvider):
                     continue
 
                 try:
-                    auth_manager = provider._authentication_manager_factory.create(
+                    auth_manager = provider._authentication_manager_factory.create(  # type: ignore[attr-defined]
                         provider._settings  # type: ignore[attr-defined]
                     )
 

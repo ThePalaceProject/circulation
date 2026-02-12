@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, Mock, patch
 import pytest
 
 from palace.manager.api.authentication.base import PatronData
+from palace.manager.api.authenticator import BaseOIDCAuthenticationProvider
 from palace.manager.api.problem_details import LIBRARY_NOT_FOUND, UNKNOWN_OIDC_PROVIDER
 from palace.manager.integration.patron_auth.oidc.configuration.model import (
     OIDCAuthLibrarySettings,
@@ -811,8 +812,8 @@ class TestOIDCControllerBackChannelLogout:
 
         library = db.default_library()
 
-        # Create mock provider
-        mock_provider = Mock()
+        # Create mock provider with spec so isinstance checks work
+        mock_provider = Mock(spec=BaseOIDCAuthenticationProvider)
         mock_provider._authentication_manager_factory = Mock()
         mock_provider._settings = Mock()
         mock_provider._settings.patron_id_claim = "sub"
@@ -908,8 +909,8 @@ class TestOIDCControllerBackChannelLogout:
         """Test back-channel logout when patron doesn't exist."""
         library = db.default_library()
 
-        # Create mock provider
-        mock_provider = Mock()
+        # Create mock provider with spec so isinstance checks work
+        mock_provider = Mock(spec=BaseOIDCAuthenticationProvider)
         mock_provider._authentication_manager_factory = Mock()
         mock_provider._settings = Mock()
         mock_provider._settings.patron_id_claim = "sub"

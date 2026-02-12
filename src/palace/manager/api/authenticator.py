@@ -243,9 +243,11 @@ class LibraryAuthenticator(LoggerMixin):
         :param saml_providers: A list of AuthenticationProviders that handle
         SAML requests.
 
+        :param oidc_providers: A list of AuthenticationProviders that handle
+        OIDC requests.
+
         :param bearer_token_signing_secret: The secret to use when
         signing JWTs for use as bearer tokens.
-
         """
         self._db = _db
         self.library_id = library.id
@@ -903,4 +905,4 @@ class BaseOIDCAuthenticationProvider[
 
     @property
     def flow_type(self) -> str:
-        return "http://thepalaceproject.org/authtype/OpenIDConnect"
+        return "http://palaceproject.io/authtype/OpenIDConnect"

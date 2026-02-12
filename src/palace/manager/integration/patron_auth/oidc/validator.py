@@ -15,10 +15,11 @@ from typing import Any, cast
 from authlib.jose import JsonWebKey, JsonWebToken  # type: ignore[import-untyped]
 from authlib.jose.errors import JoseError  # type: ignore[import-untyped]
 
+from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.util.log import LoggerMixin
 
 
-class OIDCTokenValidationError(Exception):
+class OIDCTokenValidationError(BasePalaceException):
     """Base exception for ID token validation errors."""
 
 
@@ -246,7 +247,7 @@ class OIDCTokenValidator(LoggerMixin):
 
             self.log.debug(
                 f"Extracted patron ID '{patron_id}' from claim '{claim_name}' "
-                f"using regex pattern"
+                "using regex pattern"
             )
             return patron_id
 
