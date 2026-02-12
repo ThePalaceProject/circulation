@@ -330,7 +330,8 @@ def test_generate_report(
         collection=collection,
         genre="genre_z",
     )
-    work2.target_age = tuple_to_numericrange((6, 8))
+    # No upper bound: formats as "18-" per report specification
+    work2.target_age = tuple_to_numericrange((18, None))
 
     licensepool_no_licenses_owned = db.licensepool(
         edition=edition2,
@@ -595,7 +596,8 @@ def test_generate_report(
                 assert book2_row["published_date"] == "2020-10-05"
                 assert book2_row["audience"] == "Adult"  # Default audience
                 assert book2_row["genres"] == "genre_z"
-                assert book2_row["target_age"] == "6-8"
+                # No upper bound formats as "{lower}-"
+                assert book2_row["target_age"] == "18-"
                 assert book2_row["format"] == edition.BOOK_MEDIUM
                 assert book2_row["data_source"] == data_source
                 assert book2_row["collection_name"] == collection_name

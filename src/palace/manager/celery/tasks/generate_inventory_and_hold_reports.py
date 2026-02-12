@@ -437,7 +437,10 @@ def inventory_report_query() -> Select:
             ),
             literal_column("''"),
         ),
-        (target_age_upper_raw.is_(None), cast(target_age_lower_adj, String)),
+        (
+            target_age_upper_raw.is_(None),
+            func.concat(cast(target_age_lower_adj, String), "-"),
+        ),
         (target_age_lower_raw.is_(None), cast(target_age_upper_adj, String)),
         (
             target_age_lower_adj == target_age_upper_adj,
