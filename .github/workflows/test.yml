@@ -46,6 +46,13 @@ jobs:
 
       - name: Run Tests
         run: tox
+        env:
+          # Workaround for tox-docker not supporting Docker 29+, which removed
+          # the top-level NetworkSettings.Gateway key from the container API.
+          # This can be removed once tox-docker merges the fix.
+          # Docker 29 rollout: https://github.com/actions/runner-images/issues/13474
+          # tox-docker fix: https://github.com/tox-dev/tox-docker/pull/196
+          TOX_DOCKER_GATEWAY: "0.0.0.0"
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
