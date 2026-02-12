@@ -36,8 +36,8 @@ profile = "black"
 # All new code should aim to pass mypy with strict settings.
 disallow_untyped_calls = false
 explicit_package_bases = true
-files = ["alembic", "src/palace", "tests"]
-mypy_path = ["alembic", "src"]
+files = ["alembic", "src/palace", "startup_tasks", "tests"]
+mypy_path = ["alembic", "src", "startup_tasks"]
 plugins = ["pydantic.mypy", "sqlalchemy.ext.mypy.plugin"]
 strict = true
 warn_redundant_casts = true
@@ -338,6 +338,9 @@ optional = true
 
 [tool.poetry.group.pg.dependencies]
 psycopg2 = "~2.9.5"
+
+[tool.poetry.scripts]
+create_startup_task = "palace.manager.scripts.startup:create_startup_task"
 
 [tool.pytest.ini_options]
 addopts = [

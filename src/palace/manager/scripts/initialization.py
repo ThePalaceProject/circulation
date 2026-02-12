@@ -11,6 +11,10 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
 from palace.manager.celery.tasks.search import get_migrate_search_chain
+from palace.manager.scripts.startup import (
+    run_startup_tasks as _run_startup_tasks,
+    stamp_startup_tasks as _stamp_startup_tasks,
+)
 from palace.manager.search.revision import SearchSchemaRevision
 from palace.manager.search.service import SearchService
 from palace.manager.service.container import container_instance
@@ -83,7 +87,7 @@ class InstanceInitializationScript(LoggerMixin):
             alembic_conf = self._get_alembic_config(engine, self._config_file)
             command.stamp(alembic_conf, "head")
 
-    def initialize_database(self, engine: Engine) -> None:
+    def initialize_database(self, engine: Engine) -> bool:
         """
         Initialize the database if necessary.
         """
@@ -103,6 +107,8 @@ class InstanceInitializationScript(LoggerMixin):
             self.log.info("Database schema does not exist. Initializing.")
             self.initialize_database_schema(engine)
             self.log.info("Initialization complete.")
+
+        return already_initialized
 
     @classmethod
     def create_search_index(
@@ -169,6 +175,20 @@ class InstanceInitializationScript(LoggerMixin):
             )
         self.log.info("Search initialization complete.")
 
+    def run_startup_tasks(self, engine: Engine, already_initialized: bool) -> None:
+        """Run any registered one-time startup tasks.
+
+        On a fresh database install, tasks are stamped as already-queued
+        without dispatching them — there is no existing data to migrate.
+
+        Failures are logged but never propagated — startup tasks must not
+        prevent the application from starting.
+        """
+        if already_initialized:
+            _run_startup_tasks(engine, self._container)
+        else:
+            _stamp_startup_tasks(engine)
+
     def run(self, args: Sequence[str] | None = None) -> None:
         """
         Initialize the database if necessary. This script is idempotent, so it
@@ -188,6 +208,7 @@ class InstanceInitializationScript(LoggerMixin):
 
         engine = self._engine_factory()
         with pg_advisory_lock(engine, LOCK_ID_DB_INIT):
-            self.initialize_database(engine)
+            db_initialized = self.initialize_database(engine)
             self.initialize_search()
+            self.run_startup_tasks(engine, db_initialized)
         engine.dispose()

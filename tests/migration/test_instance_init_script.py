@@ -31,7 +31,7 @@ class InstanceInitScriptFixture:
         self.services = services_fixture
         self.alembic_config_path = alembic_config_path
         self.script = InstanceInitializationScript(
-            config_file=self.alembic_config_path,
+            repo_root=self.alembic_config_path.parent,
         )
 
         self.initialize_database_schema_mock = Mock(
@@ -68,7 +68,7 @@ def instance_init_script_fixture(
         yield fixture
 
 
-def _run_script(config_path: Path, db_url: str) -> None:
+def _run_script(repo_root: Path, db_url: str) -> None:
     try:
         # Capturing the log output
         stream = StringIO()
@@ -80,7 +80,7 @@ def _run_script(config_path: Path, db_url: str) -> None:
         mock_services = MagicMock()
         with mock_services_container(mock_services):
             script = InstanceInitializationScript(
-                config_file=config_path, engine_factory=engine_factory
+                engine_factory=engine_factory, repo_root=repo_root
             )
             # Mock out the search initialization, this is tested elsewhere
             script.initialize_search = MagicMock()
@@ -110,7 +110,7 @@ def test_locking(
     # has already been done.
     mp_ctx = multiprocessing.get_context("spawn")
     process_kwargs = {
-        "config_path": alembic_config_path,
+        "repo_root": alembic_config_path.parent,
         "db_url": db_url,
     }
     p1 = mp_ctx.Process(target=_run_script, kwargs=process_kwargs)
