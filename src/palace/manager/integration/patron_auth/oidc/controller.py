@@ -514,8 +514,8 @@ class OIDCController(LoggerMixin):
             self.log.warning("Back-channel logout request missing logout_token")
             return "", 400
 
-        # We need to determine which provider sent this logout token
-        # Try all configured OIDC providers until we find one that can validate the token
+        # We need to determine which provider sent this logout token.
+        # Try all configured OIDC providers until we find one that can validate the token.
         for (
             library_authenticator
         ) in self._authenticator.library_authenticators.values():
