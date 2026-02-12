@@ -591,3 +591,32 @@ class TestOIDCUtilityLogoutState:
         retrieved = utility.retrieve_logout_state(state_token)
 
         assert retrieved is None
+
+    def test_delete_logout_state(self, redis_fixture):
+        """Test delete_logout_state removes entry from cache."""
+        state = "test_state_token"
+        redirect_uri = "https://example.com/callback"
+
+        utility = OIDCUtility(redis_client=redis_fixture.client)
+
+        # Store state
+        utility.store_logout_state(state, redirect_uri)
+
+        # Verify it's stored
+        retrieved = utility.retrieve_logout_state(state, delete=False)
+        assert retrieved is not None
+        assert retrieved["redirect_uri"] == redirect_uri
+
+        # Delete it
+        utility.delete_logout_state(state)
+
+        # Verify it's gone
+        retrieved_after = utility.retrieve_logout_state(state, delete=False)
+        assert retrieved_after is None
+
+    def test_delete_logout_state_requires_redis(self):
+        """Test delete_logout_state raises error without Redis."""
+        utility = OIDCUtility(redis_client=None)
+
+        with pytest.raises(OIDCUtilityError, match="Redis client is required"):
+            utility.delete_logout_state("state")

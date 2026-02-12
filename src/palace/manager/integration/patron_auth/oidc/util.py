@@ -422,3 +422,15 @@ class OIDCUtility(LoggerMixin):
 
         self.log.warning(f"No logout state found: {state_token[:16]}...")
         return None
+
+    def delete_logout_state(self, state_token: str) -> None:
+        """Delete logout state from cache.
+
+        :param state_token: State token used as cache key
+        """
+        if not self._redis:
+            raise OIDCUtilityError("Redis client is required for logout state deletion")
+
+        cache_key = self._redis.get_key(self.LOGOUT_STATE_KEY_PREFIX + state_token)
+        self._redis.delete(cache_key)
+        self.log.debug(f"Deleted logout state for token: {state_token[:16]}...")

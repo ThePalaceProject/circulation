@@ -492,10 +492,7 @@ class OIDCController(LoggerMixin):
             self.log.exception("Logout state validation failed")
             return OIDC_INVALID_STATE.detailed(_(f"State validation failed: {str(e)}"))
 
-        logout_cache_key = self._circulation_manager.services.redis.client().get_key(
-            "oidc:logout_state:" + state
-        )
-        self._circulation_manager.services.redis.client().delete(logout_cache_key)
+        utility.delete_logout_state(state)
 
         result_params = {self.LOGOUT_STATUS: "success"}
         final_redirect_uri = self._add_params_to_url(redirect_uri, result_params)
