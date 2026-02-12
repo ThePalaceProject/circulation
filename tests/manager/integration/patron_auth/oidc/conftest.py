@@ -12,21 +12,6 @@ from palace.manager.integration.patron_auth.oidc.provider import (
     OIDCAuthenticationProvider,
 )
 from tests.fixtures.database import DatabaseTransactionFixture
-from tests.fixtures.oidc import (  # noqa: F401
-    mock_authorization_code,
-    mock_discovery_document,
-    mock_id_token,
-    mock_id_token_claims,
-    mock_jwks,
-    mock_logout_token,
-    mock_logout_token_claims,
-    mock_oidc_provider,
-    mock_pkce,
-    mock_state_data,
-    mock_token_response,
-    mock_userinfo_response,
-    oidc_test_keys,
-)
 
 
 @pytest.fixture
