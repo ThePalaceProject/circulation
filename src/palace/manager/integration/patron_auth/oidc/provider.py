@@ -15,10 +15,7 @@ from werkzeug.datastructures import Authorization
 
 from palace.manager.api.authentication.base import PatronData, PatronLookupNotSupported
 from palace.manager.api.authenticator import BaseOIDCAuthenticationProvider
-from palace.manager.integration.patron_auth.oidc.auth import (
-    OIDCAuthenticationManager,
-    OIDCAuthenticationManagerFactory,
-)
+from palace.manager.integration.patron_auth.oidc.auth import OIDCAuthenticationManager
 from palace.manager.integration.patron_auth.oidc.configuration.model import (
     OIDCAuthLibrarySettings,
     OIDCAuthSettings,
@@ -90,7 +87,6 @@ class OIDCAuthenticationProvider(
             library_id, integration_id, settings, library_settings, analytics
         )
 
-        self._authentication_manager_factory = OIDCAuthenticationManagerFactory()
         self._credential_manager = OIDCCredentialManager()
         self._settings = settings
 
@@ -235,7 +231,7 @@ class OIDCAuthenticationProvider(
 
         :return: OIDC authentication manager
         """
-        return self._authentication_manager_factory.create(self._settings)
+        return OIDCAuthenticationManager(self._settings)
 
     def remote_patron_lookup_from_oidc_claims(
         self, id_token_claims: dict[str, str]

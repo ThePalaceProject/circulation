@@ -505,22 +505,3 @@ class OIDCAuthenticationManager(LoggerMixin):
             raise OIDCAuthenticationError("Logout token missing 'jti' claim")
 
         return claims
-
-
-class OIDCAuthenticationManagerFactory:
-    """Factory for creating OIDCAuthenticationManager instances."""
-
-    @staticmethod
-    def create(
-        settings: OIDCAuthSettings,
-        redis_client: Redis | None = None,
-        secret_key: str | None = None,
-    ) -> OIDCAuthenticationManager:
-        """Create OIDC authentication manager.
-
-        :param settings: OIDC authentication settings
-        :param redis_client: Optional Redis client for caching
-        :param secret_key: Secret key for state generation
-        :return: Configured OIDCAuthenticationManager
-        """
-        return OIDCAuthenticationManager(settings, redis_client, secret_key)

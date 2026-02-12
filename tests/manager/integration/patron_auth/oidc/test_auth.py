@@ -12,7 +12,6 @@ import pytest
 from palace.manager.integration.patron_auth.oidc.auth import (
     OIDCAuthenticationError,
     OIDCAuthenticationManager,
-    OIDCAuthenticationManagerFactory,
     OIDCRefreshTokenError,
     OIDCTokenExchangeError,
 )
@@ -756,33 +755,6 @@ class TestOIDCAuthenticationManagerUserInfo:
 
             with pytest.raises(OIDCAuthenticationError):
                 manager.fetch_userinfo(access_token="invalid-token")
-
-
-class TestOIDCAuthenticationManagerFactory:
-    """Tests for OIDCAuthenticationManagerFactory."""
-
-    def test_factory_create(self, oidc_settings_with_discovery, redis_fixture):
-        """Test factory creates manager instance."""
-        manager = OIDCAuthenticationManagerFactory.create(
-            settings=oidc_settings_with_discovery,
-            redis_client=redis_fixture.client,
-            secret_key=TEST_SECRET_KEY,
-        )
-
-        assert isinstance(manager, OIDCAuthenticationManager)
-        assert manager._settings == oidc_settings_with_discovery
-        assert manager._redis == redis_fixture.client
-        assert manager._secret_key == TEST_SECRET_KEY
-
-    def test_factory_create_minimal(self, oidc_settings_with_discovery):
-        """Test factory with minimal parameters."""
-        manager = OIDCAuthenticationManagerFactory.create(
-            settings=oidc_settings_with_discovery
-        )
-
-        assert isinstance(manager, OIDCAuthenticationManager)
-        assert manager._redis is None
-        assert manager._secret_key is None
 
 
 class TestOIDCAuthenticationManagerLogout:
