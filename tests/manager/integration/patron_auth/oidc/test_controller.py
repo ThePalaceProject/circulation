@@ -655,7 +655,6 @@ class TestOIDCControllerLogout:
         mock_library_auth = Mock()
         mock_library_auth.bearer_token_signing_secret = "test-secret"
         mock_provider = Mock()
-        mock_provider._authentication_manager_factory = Mock()
         mock_provider._settings = Mock()
         mock_provider._settings.patron_id_claim = "sub"
         mock_provider._credential_manager = Mock()
@@ -670,9 +669,7 @@ class TestOIDCControllerLogout:
             "?id_token_hint=test.token"
             "&post_logout_redirect_uri=https://cm.test/oidc_logout_callback&state=test-state"
         )
-        mock_provider._authentication_manager_factory.create.return_value = (
-            mock_auth_manager
-        )
+        mock_provider.get_authentication_manager.return_value = mock_auth_manager
 
         mock_patron = Mock()
         mock_patron.id = patron.id
@@ -756,7 +753,6 @@ class TestOIDCControllerLogout:
             mock_library_auth.bearer_token_signing_secret = f"secret{i+1}"
 
             mock_provider = Mock()
-            mock_provider._authentication_manager_factory = Mock()
             mock_provider._settings = Mock()
             mock_provider._settings.patron_id_claim = "sub"
             mock_provider._credential_manager = Mock()
@@ -771,9 +767,7 @@ class TestOIDCControllerLogout:
             )
             mock_auth_managers.append(mock_auth_manager)
 
-            mock_provider._authentication_manager_factory.create.return_value = (
-                mock_auth_manager
-            )
+            mock_provider.get_authentication_manager.return_value = mock_auth_manager
             mock_provider._credential_manager.lookup_patron_by_identifier.return_value = Mock(
                 id=patron.id
             )

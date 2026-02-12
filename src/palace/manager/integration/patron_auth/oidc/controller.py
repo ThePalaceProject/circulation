@@ -384,10 +384,7 @@ class OIDCController(LoggerMixin):
             return provider
 
         try:
-            auth_manager = provider._authentication_manager_factory.create(  # type: ignore[attr-defined]
-                provider._settings  # type: ignore[attr-defined]
-            )
-
+            auth_manager = provider.get_authentication_manager()  # type: ignore[attr-defined]
             claims = auth_manager.validate_id_token_hint(id_token_hint)
         except Exception as e:
             self.log.exception("ID token hint validation failed")
