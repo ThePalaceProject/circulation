@@ -689,9 +689,8 @@ class TestOIDCControllerLogout:
         )
 
         with (
-            patch.object(
-                controller._circulation_manager.index_controller,
-                "library_for_request",
+            patch(
+                "palace.manager.integration.patron_auth.oidc.controller.get_request_library",
                 return_value=library,
             ),
             patch(
@@ -715,6 +714,123 @@ class TestOIDCControllerLogout:
             mock_provider._credential_manager.invalidate_patron_credentials.assert_called_once_with(
                 db.session, patron.id
             )
+
+    @pytest.mark.parametrize(
+        "library_index,patron_email,logout_url",
+        [
+            pytest.param(
+                0,
+                "user1@example.com",
+                "https://provider1.test/logout",
+                id="default-library",
+            ),
+            pytest.param(
+                1,
+                "user2@example.com",
+                "https://provider2.test/logout",
+                id="non-default-library",
+            ),
+        ],
+    )
+    def test_oidc_logout_initiate_uses_correct_library(
+        self, logout_controller, db, library_index, patron_email, logout_url
+    ):
+        """Test that logout uses the library from the request context."""
+        controller = logout_controller
+
+        # Create two libraries with separate providers
+        libraries = [db.default_library(), db.library()]
+        patrons = []
+        mock_library_auths = []
+        mock_auth_managers = []
+
+        for i, library in enumerate(libraries):
+            # Create patron
+            patron = db.patron()
+            patron.library_id = library.id
+            patron.authorization_identifier = f"user{i+1}@example.com"
+            patrons.append(patron)
+
+            # Set up provider and authenticator for this library
+            mock_library_auth = Mock()
+            mock_library_auth.bearer_token_signing_secret = f"secret{i+1}"
+
+            mock_provider = Mock()
+            mock_provider._authentication_manager_factory = Mock()
+            mock_provider._settings = Mock()
+            mock_provider._settings.patron_id_claim = "sub"
+            mock_provider._credential_manager = Mock()
+            mock_provider.integration_id = i + 1
+
+            mock_auth_manager = Mock()
+            mock_auth_manager.validate_id_token_hint.return_value = {
+                "sub": patron.authorization_identifier
+            }
+            mock_auth_manager.build_logout_url.return_value = (
+                f"https://provider{i+1}.test/logout"
+            )
+            mock_auth_managers.append(mock_auth_manager)
+
+            mock_provider._authentication_manager_factory.create.return_value = (
+                mock_auth_manager
+            )
+            mock_provider._credential_manager.lookup_patron_by_identifier.return_value = Mock(
+                id=patron.id
+            )
+            mock_provider._credential_manager.invalidate_patron_credentials.return_value = (
+                1
+            )
+            mock_library_auth.oidc_provider_lookup.return_value = mock_provider
+            mock_library_auths.append(mock_library_auth)
+
+            # Register library authenticator
+            controller._authenticator.library_authenticators[library.short_name] = (
+                mock_library_auth
+            )
+
+        db.session.commit()
+
+        # Test logout from the specified library
+        target_library = libraries[library_index]
+        target_auth = mock_library_auths[library_index]
+        target_auth_manager = mock_auth_managers[library_index]
+
+        with (
+            patch(
+                "palace.manager.integration.patron_auth.oidc.controller.get_request_library",
+                return_value=target_library,
+            ),
+            patch(
+                "palace.manager.integration.patron_auth.oidc.controller.url_for"
+            ) as mock_url_for,
+        ):
+            mock_url_for.return_value = "https://cm.test/oidc_logout_callback"
+
+            params = {
+                "provider": "Test OIDC",
+                "id_token_hint": "test.id.token",
+                "post_logout_redirect_uri": "https://app.example.com/logout/callback",
+            }
+
+            result = controller.oidc_logout_initiate(params, db.session)
+
+            # Verify correct library's authenticator was used
+            target_auth.oidc_provider_lookup.assert_called_once_with("Test OIDC")
+
+            # Verify other library's authenticator was not called
+            for i, auth in enumerate(mock_library_auths):
+                if i != library_index:
+                    auth.oidc_provider_lookup.assert_not_called()
+
+            # Verify correct provider's logout URL
+            assert result.status_code == 302
+            assert logout_url in result.location
+
+            # Verify correct auth manager was called
+            target_auth_manager.validate_id_token_hint.assert_called_once()
+            for i, auth_manager in enumerate(mock_auth_managers):
+                if i != library_index:
+                    auth_manager.validate_id_token_hint.assert_not_called()
 
     @pytest.mark.parametrize(
         "params,error_constant_name,expected_message",

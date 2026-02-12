@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from werkzeug.wrappers import Response as BaseResponse
 
 from palace.manager.api.authenticator import BaseOIDCAuthenticationProvider
+from palace.manager.api.util.flask import get_request_library
 from palace.manager.integration.patron_auth.oidc.util import OIDCUtility
 from palace.manager.util.log import LoggerMixin
 from palace.manager.util.problem_detail import (
@@ -369,10 +370,7 @@ class OIDCController(LoggerMixin):
                 _("Missing 'post_logout_redirect_uri' parameter in logout request")
             )
 
-        library = self._circulation_manager.index_controller.library_for_request(None)
-        if isinstance(library, ProblemDetail):
-            return library
-
+        library = get_request_library()
         library_authenticator = self._authenticator.library_authenticators.get(
             library.short_name
         )
