@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import logging
 from typing import TYPE_CHECKING
 from urllib.parse import SplitResult, parse_qs, urlencode, urlsplit
 
@@ -14,6 +13,7 @@ from werkzeug.wrappers import Response as BaseResponse
 
 from palace.manager.api.authenticator import BaseOIDCAuthenticationProvider
 from palace.manager.integration.patron_auth.oidc.util import OIDCUtility
+from palace.manager.util.log import LoggerMixin
 from palace.manager.util.problem_detail import (
     ProblemDetail,
     ProblemDetail as pd,
@@ -75,7 +75,7 @@ OIDC_BACKCHANNEL_LOGOUT_NOT_SUPPORTED = pd(
 )
 
 
-class OIDCController:
+class OIDCController(LoggerMixin):
     """Controller for handling OIDC authentication requests."""
 
     ERROR = "error"
@@ -100,7 +100,6 @@ class OIDCController:
         """
         self._circulation_manager = circulation_manager
         self._authenticator = authenticator
-        self._logger = logging.getLogger(__name__)
 
     def _add_params_to_url(self, url: str, params: dict[str, str]) -> str:
         """Add parameters to URL query string.
@@ -117,7 +116,7 @@ class OIDCController:
         existing_params = {k: v[0] for k, v in existing_params_raw.items()}
         collisions = set(params.keys()) & set(existing_params.keys())
         if collisions:
-            self._logger.warning(f"Parameter collision in redirect_uri: {collisions}")
+            self.log.warning(f"Parameter collision in redirect_uri: {collisions}")
         existing_params.update(params)
         new_query = urlencode(existing_params, True)
         url_parts = SplitResult(
@@ -264,7 +263,7 @@ class OIDCController:
             secret = library_authenticator.bearer_token_signing_secret
             state_data = utility.validate_state(state, secret)
         except Exception as e:
-            self._logger.error(f"Invalid state parameter: {e}")
+            self.log.error(f"Invalid state parameter: {e}")
             return OIDC_INVALID_STATE
 
         library_short_name = state_data.get("library_short_name")
@@ -297,7 +296,7 @@ class OIDCController:
                 code_verifier=code_verifier,
             )
         except Exception as e:
-            self._logger.exception("Token exchange failed")
+            self.log.exception("Token exchange failed")
             error = OIDC_INVALID_RESPONSE.detailed(
                 _("Failed to exchange authorization code for tokens")
             )
@@ -313,7 +312,7 @@ class OIDCController:
                 id_token, nonce=nonce
             )
         except Exception as e:
-            self._logger.exception("ID token validation failed")
+            self.log.exception("ID token validation failed")
             error = OIDC_INVALID_RESPONSE.detailed(_("ID token validation failed"))
             return self._redirect_with_error(redirect_uri, error)
 
@@ -393,7 +392,7 @@ class OIDCController:
 
             claims = auth_manager.validate_id_token_hint(id_token_hint)
         except Exception as e:
-            self._logger.exception("ID token hint validation failed")
+            self.log.exception("ID token hint validation failed")
             return OIDC_INVALID_ID_TOKEN_HINT.detailed(
                 _(f"ID token hint validation failed: {str(e)}")
             )
@@ -412,16 +411,12 @@ class OIDCController:
 
             if patron:
                 credential_manager.invalidate_patron_credentials(db, patron.id)
-                self._logger.info(
-                    f"Invalidated credentials for patron {patron_identifier}"
-                )
+                self.log.info(f"Invalidated credentials for patron {patron_identifier}")
             else:
-                self._logger.warning(
-                    f"Patron not found for identifier {patron_identifier}"
-                )
+                self.log.warning(f"Patron not found for identifier {patron_identifier}")
 
         except Exception as e:
-            self._logger.exception("Failed to invalidate credentials")
+            self.log.exception("Failed to invalidate credentials")
 
         callback_url = url_for("oidc_logout_callback", _external=True)
 
@@ -442,7 +437,7 @@ class OIDCController:
                 id_token_hint, callback_url, logout_state
             )
         except Exception as e:
-            self._logger.exception("Failed to build logout URL")
+            self.log.exception("Failed to build logout URL")
             return OIDC_LOGOUT_NOT_SUPPORTED.detailed(_(str(e)))
 
         return redirect(logout_url)
@@ -494,7 +489,7 @@ class OIDCController:
                 state, library_authenticator.bearer_token_signing_secret
             )
         except Exception as e:
-            self._logger.exception("Logout state validation failed")
+            self.log.exception("Logout state validation failed")
             return OIDC_INVALID_STATE.detailed(_(f"State validation failed: {str(e)}"))
 
         logout_cache_key = self._circulation_manager.services.redis.client().get_key(
@@ -519,7 +514,7 @@ class OIDCController:
         logout_token = request_form.get(self.LOGOUT_TOKEN)
 
         if not logout_token:
-            self._logger.warning("Back-channel logout request missing logout_token")
+            self.log.warning("Back-channel logout request missing logout_token")
             return "", 400
 
         # We need to determine which provider sent this logout token
@@ -546,9 +541,7 @@ class OIDCController:
                         provider._settings.patron_id_claim  # type: ignore[attr-defined]
                     )
                     if not patron_identifier:
-                        self._logger.warning(
-                            "Logout token missing patron identifier claim"
-                        )
+                        self.log.warning("Logout token missing patron identifier claim")
                         return "", 400
 
                     # Invalidate patron credentials
@@ -559,11 +552,11 @@ class OIDCController:
 
                     if patron:
                         credential_manager.invalidate_patron_credentials(db, patron.id)
-                        self._logger.info(
+                        self.log.info(
                             f"Back-channel logout: invalidated credentials for patron {patron_identifier}"
                         )
                     else:
-                        self._logger.warning(
+                        self.log.warning(
                             f"Back-channel logout: patron not found for identifier {patron_identifier}"
                         )
 
@@ -571,11 +564,11 @@ class OIDCController:
 
                 except Exception as e:
                     # This provider couldn't validate the token, try the next one
-                    self._logger.debug(
+                    self.log.debug(
                         f"Provider {provider.label()} could not validate logout token: {e}"
                     )
                     continue
 
         # No provider could validate the logout token
-        self._logger.error("No OIDC provider could validate the logout token")
+        self.log.error("No OIDC provider could validate the logout token")
         return "", 400
