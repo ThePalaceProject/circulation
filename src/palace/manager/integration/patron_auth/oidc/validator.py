@@ -12,8 +12,8 @@ import time
 from re import Pattern
 from typing import Any, cast
 
-from authlib.jose import JsonWebKey, JsonWebToken  # type: ignore[import-untyped]
-from authlib.jose.errors import JoseError  # type: ignore[import-untyped]
+from authlib.jose import JsonWebKey, JsonWebToken
+from authlib.jose.errors import JoseError
 
 from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.util.log import LoggerMixin

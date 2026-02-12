@@ -189,6 +189,8 @@ module = [
 # list periodically and remove modules that have since added type hints.
 ignore_missing_imports = true
 module = [
+    "authlib.jose",
+    "authlib.jose.errors",
     "aws_xray_sdk.ext.*",
     "celery.*",
     "expiringdict",
