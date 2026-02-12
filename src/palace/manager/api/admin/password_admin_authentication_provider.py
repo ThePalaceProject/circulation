@@ -1,5 +1,7 @@
-from flask import render_template, url_for
+from flask import Response, render_template, url_for
 from sqlalchemy.orm.session import Session
+from werkzeug.datastructures import ImmutableMultiDict
+from werkzeug.wrappers.response import Response as WerkzeugResponse
 
 from palace.manager.api.admin.admin_authentication_provider import (
     AdminAuthenticationProvider,
@@ -28,7 +30,7 @@ class PasswordAdminAuthenticationProvider(AdminAuthenticationProvider, LoggerMix
     def get_secret_key(db: Session) -> str:
         return Key.get_key(db, KeyType.ADMIN_SECRET_KEY, raise_exception=True).value
 
-    def sign_in_template(self, redirect):
+    def sign_in_template(self, redirect: str | None) -> str:
         password_sign_in_url = url_for("password_auth")
         forgot_password_url = url_for("admin_forgot_password")
         return render_template(
@@ -44,7 +46,9 @@ class PasswordAdminAuthenticationProvider(AdminAuthenticationProvider, LoggerMix
         )
 
     @staticmethod
-    def forgot_password_template(redirect):
+    def forgot_password_template(
+        redirect: str | None | Response | WerkzeugResponse,
+    ) -> str:
         forgot_password_url = url_for("admin_forgot_password")
         return render_template(
             "admin/auth/forgot-password.html.jinja2",
@@ -56,7 +60,11 @@ class PasswordAdminAuthenticationProvider(AdminAuthenticationProvider, LoggerMix
         )
 
     @staticmethod
-    def reset_password_template(reset_password_token, admin_id, redirect):
+    def reset_password_template(
+        reset_password_token: str,
+        admin_id: int,
+        redirect: str | None | Response | WerkzeugResponse,
+    ) -> str:
         reset_password_url = url_for(
             "admin_reset_password",
             reset_password_token=reset_password_token,
@@ -71,7 +79,13 @@ class PasswordAdminAuthenticationProvider(AdminAuthenticationProvider, LoggerMix
             button_style=button_style,
         )
 
-    def sign_in(self, _db, request={}):
+    def sign_in(
+        self,
+        _db: Session,
+        request: ImmutableMultiDict[str, str] | dict[str, str | None] | None = None,
+    ) -> tuple[dict[str, str], str | None] | tuple[ProblemDetail, None]:
+        if request is None:
+            request = {}
         email = request.get("email")
         password = request.get("password")
         redirect_url = request.get("redirect")
@@ -91,7 +105,7 @@ class PasswordAdminAuthenticationProvider(AdminAuthenticationProvider, LoggerMix
 
         return INVALID_ADMIN_CREDENTIALS, None
 
-    def active_credentials(self, admin):
+    def active_credentials(self, admin: Admin) -> bool:
         # Admins who have a password are always active.
         return True
 
