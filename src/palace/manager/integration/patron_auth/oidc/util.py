@@ -18,11 +18,13 @@ import secrets
 import time
 from typing import Any, cast
 
-import httpx
 from pydantic import HttpUrl
+from requests import RequestException
 
 from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.service.redis.redis import Redis
+from palace.manager.util.http.exception import RequestNetworkException
+from palace.manager.util.http.http import HTTP
 from palace.manager.util.log import LoggerMixin
 
 
@@ -42,12 +44,12 @@ class OIDCUtility(LoggerMixin):
     """Utility class for OIDC operations."""
 
     # Cache TTLs
-    DISCOVERY_CACHE_TTL = 86400  # 24 hours
-    JWKS_CACHE_TTL = 86400  # 24 hours
-    PKCE_CACHE_TTL = 600  # 10 minutes
-    STATE_MAX_AGE = 600  # 10 minutes
-    LOGOUT_STATE_CACHE_TTL = 600  # 10 minutes
-    LOGOUT_STATE_MAX_AGE = 600  # 10 minutes
+    DISCOVERY_CACHE_TTL = 24 * 60 * 60  # 24 hours
+    JWKS_CACHE_TTL = 24 * 60 * 60  # 24 hours
+    PKCE_CACHE_TTL = 10 * 60  # 10 minutes
+    STATE_MAX_AGE = 10 * 60  # 10 minutes
+    LOGOUT_STATE_CACHE_TTL = 10 * 60  # 10 minutes
+    LOGOUT_STATE_MAX_AGE = 10 * 60  # 10 minutes
 
     # Cache key prefixes
     DISCOVERY_KEY_PREFIX = "oidc:discovery:"
@@ -215,41 +217,44 @@ class OIDCUtility(LoggerMixin):
         self.log.info(f"Fetching OIDC discovery document from {discovery_url}")
 
         try:
-            response = httpx.get(discovery_url, timeout=30.0, follow_redirects=True)
-            response.raise_for_status()
-            document = cast(dict[str, Any], response.json())
-
-            # Validate required fields
-            required_fields = [
-                "issuer",
-                "authorization_endpoint",
-                "token_endpoint",
-                "jwks_uri",
-            ]
-            missing_fields = [f for f in required_fields if f not in document]
-            if missing_fields:
-                raise OIDCDiscoveryError(
-                    f"Discovery document missing required fields: {', '.join(missing_fields)}"
-                )
-
-            # Cache the result
-            if use_cache and self._redis and cache_key:
-                self._redis.set(
-                    cache_key, json.dumps(document), ex=self.DISCOVERY_CACHE_TTL
-                )
-
-            return document
-
-        except httpx.HTTPError as e:
-            self.log.exception(f"HTTP error fetching discovery document: {e}")
+            response = HTTP.get_with_timeout(
+                discovery_url,
+                allow_redirects=True,
+                allowed_response_codes=["2xx"],
+            )
+        except (RequestNetworkException, RequestException) as e:
+            self.log.exception(f"Network error fetching discovery document: {e}")
             raise OIDCDiscoveryError(
                 f"Failed to fetch discovery document from {discovery_url}: {str(e)}"
             ) from e
+
+        try:
+            document = cast(dict[str, Any], response.json())
         except json.JSONDecodeError as e:
             self.log.exception("Failed to decode discovery document JSON")
             raise OIDCDiscoveryError(
                 f"Invalid JSON in discovery document: {str(e)}"
             ) from e
+
+        # Validate required fields
+        required_fields = [
+            "issuer",
+            "authorization_endpoint",
+            "token_endpoint",
+            "jwks_uri",
+        ]
+        if missing_fields := [f for f in required_fields if f not in document]:
+            raise OIDCDiscoveryError(
+                f"Discovery document missing required fields: {', '.join(missing_fields)}"
+            )
+
+        # Cache the result
+        if use_cache and self._redis and cache_key:
+            self._redis.set(
+                cache_key, json.dumps(document), ex=self.DISCOVERY_CACHE_TTL
+            )
+
+        return document
 
     def fetch_jwks(self, jwks_uri: HttpUrl, use_cache: bool = True) -> dict[str, Any]:
         """Fetch JSON Web Key Set from provider.
@@ -278,28 +283,32 @@ class OIDCUtility(LoggerMixin):
         self.log.info(f"Fetching JWKS from {jwks_str}")
 
         try:
-            response = httpx.get(jwks_str, timeout=30.0, follow_redirects=True)
-            response.raise_for_status()
-            jwks = cast(dict[str, Any], response.json())
-
-            # Validate structure
-            if "keys" not in jwks or not isinstance(jwks["keys"], list):
-                raise OIDCUtilityError("JWKS must contain a 'keys' array")
-
-            # Cache the result
-            if use_cache and self._redis and cache_key:
-                self._redis.set(cache_key, json.dumps(jwks), ex=self.JWKS_CACHE_TTL)
-
-            return jwks
-
-        except httpx.HTTPError as e:
-            self.log.exception(f"HTTP error fetching JWKS: {e}")
+            response = HTTP.get_with_timeout(
+                jwks_str,
+                allow_redirects=True,
+                allowed_response_codes=["2xx"],
+            )
+        except (RequestNetworkException, RequestException) as e:
+            self.log.exception(f"Network error fetching JWKS: {e}")
             raise OIDCUtilityError(
                 f"Failed to fetch JWKS from {jwks_uri}: {str(e)}"
             ) from e
+
+        try:
+            jwks = cast(dict[str, Any], response.json())
         except json.JSONDecodeError as e:
             self.log.exception("Failed to decode JWKS JSON")
             raise OIDCUtilityError(f"Invalid JSON in JWKS: {str(e)}") from e
+
+        # Validate structure
+        if "keys" not in jwks or not isinstance(jwks["keys"], list):
+            raise OIDCUtilityError("JWKS must contain a 'keys' array")
+
+        # Cache the result
+        if use_cache and self._redis and cache_key:
+            self._redis.set(cache_key, json.dumps(jwks), ex=self.JWKS_CACHE_TTL)
+
+        return jwks
 
     def store_pkce(
         self,

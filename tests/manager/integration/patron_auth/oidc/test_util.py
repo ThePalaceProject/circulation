@@ -9,7 +9,6 @@ import time
 from base64 import urlsafe_b64decode, urlsafe_b64encode
 from unittest.mock import Mock, patch
 
-import httpx
 import pytest
 
 from palace.manager.integration.patron_auth.oidc.util import (
@@ -18,6 +17,7 @@ from palace.manager.integration.patron_auth.oidc.util import (
     OIDCUtility,
     OIDCUtilityError,
 )
+from palace.manager.util.http.exception import RequestNetworkException
 
 # Test constants
 TEST_SECRET_KEY = "test-secret-key-for-hmac-signing"
@@ -200,10 +200,11 @@ class TestOIDCUtilityDiscovery:
     ):
         discovery_url = f"{TEST_ISSUER_URL}/.well-known/openid-configuration"
 
-        with patch("httpx.get") as mock_get:
+        with patch(
+            "palace.manager.integration.patron_auth.oidc.util.HTTP.get_with_timeout"
+        ) as mock_get:
             mock_response = Mock()
             mock_response.json.return_value = mock_discovery_document
-            mock_response.raise_for_status = Mock()
             mock_get.return_value = mock_response
 
             utility = OIDCUtility(redis_client=redis_fixture.client)
@@ -216,10 +217,11 @@ class TestOIDCUtilityDiscovery:
     def test_discover_oidc_configuration_caching(
         self, mock_discovery_document, redis_fixture
     ):
-        with patch("httpx.get") as mock_get:
+        with patch(
+            "palace.manager.integration.patron_auth.oidc.util.HTTP.get_with_timeout"
+        ) as mock_get:
             mock_response = Mock()
             mock_response.json.return_value = mock_discovery_document
-            mock_response.raise_for_status = Mock()
             mock_get.return_value = mock_response
 
             utility = OIDCUtility(redis_client=redis_fixture.client)
@@ -233,10 +235,11 @@ class TestOIDCUtilityDiscovery:
     def test_discover_oidc_configuration_cache_disabled(
         self, mock_discovery_document, redis_fixture
     ):
-        with patch("httpx.get") as mock_get:
+        with patch(
+            "palace.manager.integration.patron_auth.oidc.util.HTTP.get_with_timeout"
+        ) as mock_get:
             mock_response = Mock()
             mock_response.json.return_value = mock_discovery_document
-            mock_response.raise_for_status = Mock()
             mock_get.return_value = mock_response
 
             utility = OIDCUtility(redis_client=redis_fixture.client)
@@ -257,10 +260,11 @@ class TestOIDCUtilityDiscovery:
             "authorization_endpoint": "https://example.com/auth",
         }
 
-        with patch("httpx.get") as mock_get:
+        with patch(
+            "palace.manager.integration.patron_auth.oidc.util.HTTP.get_with_timeout"
+        ) as mock_get:
             mock_response = Mock()
             mock_response.json.return_value = incomplete_document
-            mock_response.raise_for_status = Mock()
             mock_get.return_value = mock_response
 
             utility = OIDCUtility(redis_client=redis_fixture.client)
@@ -269,11 +273,11 @@ class TestOIDCUtilityDiscovery:
                 utility.discover_oidc_configuration(TEST_ISSUER_URL)
 
     def test_discover_oidc_configuration_http_error(self, redis_fixture):
-        with patch("httpx.get") as mock_get:
-            mock_get.side_effect = httpx.HTTPStatusError(
-                "404 Not Found",
-                request=Mock(),
-                response=Mock(status_code=404),
+        with patch(
+            "palace.manager.integration.patron_auth.oidc.util.HTTP.get_with_timeout"
+        ) as mock_get:
+            mock_get.side_effect = RequestNetworkException(
+                f"{TEST_ISSUER_URL}/.well-known/openid-configuration", "404 Not Found"
             )
 
             utility = OIDCUtility(redis_client=redis_fixture.client)
@@ -282,10 +286,11 @@ class TestOIDCUtilityDiscovery:
                 utility.discover_oidc_configuration(TEST_ISSUER_URL)
 
     def test_discover_oidc_configuration_invalid_json(self, redis_fixture):
-        with patch("httpx.get") as mock_get:
+        with patch(
+            "palace.manager.integration.patron_auth.oidc.util.HTTP.get_with_timeout"
+        ) as mock_get:
             mock_response = Mock()
             mock_response.json.side_effect = json.JSONDecodeError("error", "doc", 0)
-            mock_response.raise_for_status = Mock()
             mock_get.return_value = mock_response
 
             utility = OIDCUtility(redis_client=redis_fixture.client)
@@ -300,10 +305,11 @@ class TestOIDCUtilityJWKS:
     def test_fetch_jwks_success(self, mock_jwks, redis_fixture):
         jwks_uri = f"{TEST_ISSUER_URL}/.well-known/jwks.json"
 
-        with patch("httpx.get") as mock_get:
+        with patch(
+            "palace.manager.integration.patron_auth.oidc.util.HTTP.get_with_timeout"
+        ) as mock_get:
             mock_response = Mock()
             mock_response.json.return_value = mock_jwks
-            mock_response.raise_for_status = Mock()
             mock_get.return_value = mock_response
 
             utility = OIDCUtility(redis_client=redis_fixture.client)
@@ -316,10 +322,11 @@ class TestOIDCUtilityJWKS:
     def test_fetch_jwks_caching(self, mock_jwks, redis_fixture):
         jwks_uri = f"{TEST_ISSUER_URL}/.well-known/jwks.json"
 
-        with patch("httpx.get") as mock_get:
+        with patch(
+            "palace.manager.integration.patron_auth.oidc.util.HTTP.get_with_timeout"
+        ) as mock_get:
             mock_response = Mock()
             mock_response.json.return_value = mock_jwks
-            mock_response.raise_for_status = Mock()
             mock_get.return_value = mock_response
 
             utility = OIDCUtility(redis_client=redis_fixture.client)
@@ -333,10 +340,11 @@ class TestOIDCUtilityJWKS:
     def test_fetch_jwks_cache_disabled(self, mock_jwks, redis_fixture):
         jwks_uri = f"{TEST_ISSUER_URL}/.well-known/jwks.json"
 
-        with patch("httpx.get") as mock_get:
+        with patch(
+            "palace.manager.integration.patron_auth.oidc.util.HTTP.get_with_timeout"
+        ) as mock_get:
             mock_response = Mock()
             mock_response.json.return_value = mock_jwks
-            mock_response.raise_for_status = Mock()
             mock_get.return_value = mock_response
 
             utility = OIDCUtility(redis_client=redis_fixture.client)
@@ -351,10 +359,11 @@ class TestOIDCUtilityJWKS:
         jwks_uri = f"{TEST_ISSUER_URL}/.well-known/jwks.json"
         invalid_jwks = {"invalid": "structure"}
 
-        with patch("httpx.get") as mock_get:
+        with patch(
+            "palace.manager.integration.patron_auth.oidc.util.HTTP.get_with_timeout"
+        ) as mock_get:
             mock_response = Mock()
             mock_response.json.return_value = invalid_jwks
-            mock_response.raise_for_status = Mock()
             mock_get.return_value = mock_response
 
             utility = OIDCUtility(redis_client=redis_fixture.client)
@@ -365,11 +374,11 @@ class TestOIDCUtilityJWKS:
     def test_fetch_jwks_http_error(self, redis_fixture):
         jwks_uri = f"{TEST_ISSUER_URL}/.well-known/jwks.json"
 
-        with patch("httpx.get") as mock_get:
-            mock_get.side_effect = httpx.HTTPStatusError(
-                "500 Internal Server Error",
-                request=Mock(),
-                response=Mock(status_code=500),
+        with patch(
+            "palace.manager.integration.patron_auth.oidc.util.HTTP.get_with_timeout"
+        ) as mock_get:
+            mock_get.side_effect = RequestNetworkException(
+                jwks_uri, "500 Internal Server Error"
             )
 
             utility = OIDCUtility(redis_client=redis_fixture.client)
@@ -380,10 +389,11 @@ class TestOIDCUtilityJWKS:
     def test_fetch_jwks_invalid_json(self, redis_fixture):
         jwks_uri = f"{TEST_ISSUER_URL}/.well-known/jwks.json"
 
-        with patch("httpx.get") as mock_get:
+        with patch(
+            "palace.manager.integration.patron_auth.oidc.util.HTTP.get_with_timeout"
+        ) as mock_get:
             mock_response = Mock()
             mock_response.json.side_effect = json.JSONDecodeError("error", "doc", 0)
-            mock_response.raise_for_status = Mock()
             mock_get.return_value = mock_response
 
             utility = OIDCUtility(redis_client=redis_fixture.client)

@@ -11,11 +11,12 @@ This module provides the core OIDC authentication flow management including:
 
 from __future__ import annotations
 
+import json
 from typing import Any, cast
 from urllib.parse import urlencode
 
-import httpx
 from pydantic import HttpUrl
+from requests import RequestException
 
 from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.integration.patron_auth.oidc.configuration.model import (
@@ -29,6 +30,8 @@ from palace.manager.integration.patron_auth.oidc.validator import (
     OIDCTokenValidator,
 )
 from palace.manager.service.redis.redis import Redis
+from palace.manager.util.http.exception import RequestNetworkException
+from palace.manager.util.http.http import HTTP
 from palace.manager.util.log import LoggerMixin
 
 
@@ -200,14 +203,14 @@ class OIDCAuthenticationManager(LoggerMixin):
         self.log.info(f"Exchanging authorization code for tokens at {token_endpoint}")
 
         try:
-            response = httpx.post(
+            response = HTTP.post_with_timeout(
                 token_endpoint,
                 data=data,
                 auth=auth,
                 headers={"Accept": "application/json"},
                 timeout=30.0,
+                allowed_response_codes=["2xx"],
             )
-            response.raise_for_status()
             tokens = cast(dict[str, Any], response.json())
 
             # Validate response
@@ -219,9 +222,10 @@ class OIDCAuthenticationManager(LoggerMixin):
             self.log.info("Successfully exchanged authorization code for tokens")
             return tokens
 
-        except httpx.HTTPError as e:
-            self.log.exception("HTTP error during token exchange")
+        except RequestNetworkException as e:
+            self.log.exception("Network error during token exchange")
             error_detail = ""
+            # RequestNetworkException may have a response attribute in some cases
             if hasattr(e, "response") and e.response is not None:
                 try:
                     error_data = e.response.json()
@@ -231,6 +235,11 @@ class OIDCAuthenticationManager(LoggerMixin):
 
             raise OIDCTokenExchangeError(
                 f"Failed to exchange authorization code{error_detail}"
+            ) from e
+        except RequestException as e:
+            self.log.exception("Request error during token exchange")
+            raise OIDCTokenExchangeError(
+                f"Request error during token exchange: {str(e)}"
             ) from e
         except Exception as e:
             self.log.exception("Unexpected error during token exchange")
@@ -301,27 +310,17 @@ class OIDCAuthenticationManager(LoggerMixin):
         self.log.info("Refreshing access token")
 
         try:
-            response = httpx.post(
+            response = HTTP.post_with_timeout(
                 token_endpoint,
                 data=data,
                 auth=auth,
                 headers={"Accept": "application/json"},
-                timeout=30.0,
+                allowed_response_codes=["2xx"],
             )
-            response.raise_for_status()
-            tokens = cast(dict[str, Any], response.json())
-
-            # Validate response
-            if "access_token" not in tokens:
-                raise OIDCRefreshTokenError("Token response missing access_token")
-
-            # Refresh response may include a new ID token
-            self.log.info("Successfully refreshed access token")
-            return tokens
-
-        except httpx.HTTPError as e:
-            self.log.exception("HTTP error during token refresh")
+        except RequestNetworkException as e:
+            self.log.exception("Network error during token refresh")
             error_detail = ""
+            # RequestNetworkException may have a response attribute in some cases
             if hasattr(e, "response") and e.response is not None:
                 try:
                     error_data = e.response.json()
@@ -332,11 +331,27 @@ class OIDCAuthenticationManager(LoggerMixin):
             raise OIDCRefreshTokenError(
                 f"Failed to refresh access token{error_detail}"
             ) from e
-        except Exception as e:
-            self.log.exception("Unexpected error during token refresh")
+        except RequestException as e:
+            self.log.exception("Request error during token refresh")
             raise OIDCRefreshTokenError(
-                f"Unexpected error during token refresh: {str(e)}"
+                f"Request error during token refresh: {str(e)}"
             ) from e
+
+        try:
+            tokens = cast(dict[str, Any], response.json())
+        except json.JSONDecodeError as e:
+            self.log.exception("Failed to decode token response JSON")
+            raise OIDCRefreshTokenError(
+                f"Invalid JSON in token response: {str(e)}"
+            ) from e
+
+        # Validate response
+        if "access_token" not in tokens:
+            raise OIDCRefreshTokenError("Token response missing access_token")
+
+        # Refresh response may include a new ID token
+        self.log.info("Successfully refreshed access token")
+        return tokens
 
     def fetch_userinfo(self, access_token: str) -> dict[str, Any]:
         """Fetch user info from UserInfo endpoint.
@@ -356,25 +371,25 @@ class OIDCAuthenticationManager(LoggerMixin):
         self.log.info(f"Fetching user info from {userinfo_endpoint}")
 
         try:
-            response = httpx.get(
+            response = HTTP.get_with_timeout(
                 userinfo_endpoint,
                 headers={"Authorization": f"Bearer {access_token}"},
-                timeout=30.0,
+                allowed_response_codes=["2xx"],
             )
-            response.raise_for_status()
-            userinfo = cast(dict[str, Any], response.json())
-
-            self.log.debug("Successfully fetched user info")
-            return userinfo
-
-        except httpx.HTTPError as e:
-            self.log.exception("HTTP error fetching user info")
+        except (RequestNetworkException, RequestException) as e:
+            self.log.exception("Error fetching user info")
             raise OIDCAuthenticationError(f"Failed to fetch user info: {str(e)}") from e
-        except Exception as e:
-            self.log.exception("Unexpected error fetching user info")
+
+        try:
+            userinfo = cast(dict[str, Any], response.json())
+        except json.JSONDecodeError as e:
+            self.log.exception("Failed to decode userinfo response JSON")
             raise OIDCAuthenticationError(
-                f"Unexpected error fetching user info: {str(e)}"
+                f"Invalid JSON in userinfo response: {str(e)}"
             ) from e
+
+        self.log.debug("Successfully fetched user info")
+        return userinfo
 
     def build_logout_url(
         self,

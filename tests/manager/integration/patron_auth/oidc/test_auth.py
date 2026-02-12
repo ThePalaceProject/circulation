@@ -6,7 +6,6 @@ import time
 from unittest.mock import Mock, patch
 from urllib.parse import quote
 
-import httpx
 import pytest
 
 from palace.manager.integration.patron_auth.oidc.auth import (
@@ -17,6 +16,9 @@ from palace.manager.integration.patron_auth.oidc.auth import (
 )
 from palace.manager.integration.patron_auth.oidc.configuration.model import (
     OIDCAuthSettings,
+)
+from palace.manager.util.http.exception import (
+    RequestNetworkException,
 )
 
 # Test constants
@@ -99,10 +101,11 @@ class TestOIDCAuthenticationManagerMetadata:
             redis_client=redis_fixture.client,
         )
 
-        with patch("httpx.get") as mock_get:
+        with patch(
+            "palace.manager.integration.patron_auth.oidc.util.HTTP.get_with_timeout"
+        ) as mock_get:
             mock_response = Mock()
             mock_response.json.return_value = mock_discovery_document
-            mock_response.raise_for_status = Mock()
             mock_get.return_value = mock_response
 
             metadata = manager.get_provider_metadata()
@@ -137,10 +140,11 @@ class TestOIDCAuthenticationManagerMetadata:
             redis_client=redis_fixture.client,
         )
 
-        with patch("httpx.get") as mock_get:
+        with patch(
+            "palace.manager.integration.patron_auth.oidc.util.HTTP.get_with_timeout"
+        ) as mock_get:
             mock_response = Mock()
             mock_response.json.return_value = mock_discovery_document
-            mock_response.raise_for_status = Mock()
             mock_get.return_value = mock_response
 
             # First call
@@ -149,7 +153,7 @@ class TestOIDCAuthenticationManagerMetadata:
             metadata2 = manager.get_provider_metadata()
 
             assert metadata1 == metadata2
-            # httpx.get should only be called once due to caching
+            # HTTP.get_with_timeout should only be called once due to caching
             mock_get.assert_called_once()
 
     def test_get_provider_metadata_bypass_cache(
@@ -161,10 +165,11 @@ class TestOIDCAuthenticationManagerMetadata:
             redis_client=redis_fixture.client,
         )
 
-        with patch("httpx.get") as mock_get:
+        with patch(
+            "palace.manager.integration.patron_auth.oidc.util.HTTP.get_with_timeout"
+        ) as mock_get:
             mock_response = Mock()
             mock_response.json.return_value = mock_discovery_document
-            mock_response.raise_for_status = Mock()
             mock_get.return_value = mock_response
 
             # First call with cache
@@ -172,7 +177,7 @@ class TestOIDCAuthenticationManagerMetadata:
             # Second call bypassing cache
             manager.get_provider_metadata(use_cache=False)
 
-            # httpx.get should be called twice
+            # HTTP.get_with_timeout should be called twice
             assert mock_get.call_count == 2
 
 
@@ -254,10 +259,11 @@ class TestOIDCAuthenticationManagerAuthorizationURL:
             redis_client=redis_fixture.client,
         )
 
-        with patch("httpx.get") as mock_get:
+        with patch(
+            "palace.manager.integration.patron_auth.oidc.util.HTTP.get_with_timeout"
+        ) as mock_get:
             mock_response = Mock()
             mock_response.json.return_value = mock_discovery_document
-            mock_response.raise_for_status = Mock()
             mock_get.return_value = mock_response
 
             state = "test-state"
@@ -328,17 +334,19 @@ class TestOIDCAuthenticationManagerTokenExchange:
             redis_client=redis_fixture.client,
         )
 
-        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
+        with patch(
+            "palace.manager.integration.patron_auth.oidc.util.HTTP.get_with_timeout"
+        ) as mock_get, patch(
+            "palace.manager.integration.patron_auth.oidc.auth.HTTP.post_with_timeout"
+        ) as mock_post:
             # Mock discovery
             mock_get_response = Mock()
             mock_get_response.json.return_value = mock_discovery_document
-            mock_get_response.raise_for_status = Mock()
             mock_get.return_value = mock_get_response
 
             # Mock token exchange
             mock_post_response = Mock()
             mock_post_response.json.return_value = mock_token_response
-            mock_post_response.raise_for_status = Mock()
             mock_post.return_value = mock_post_response
 
             exchange_kwargs = {
@@ -407,17 +415,19 @@ class TestOIDCAuthenticationManagerTokenExchange:
             redis_client=redis_fixture.client,
         )
 
-        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
+        with patch(
+            "palace.manager.integration.patron_auth.oidc.util.HTTP.get_with_timeout"
+        ) as mock_get, patch(
+            "palace.manager.integration.patron_auth.oidc.auth.HTTP.post_with_timeout"
+        ) as mock_post:
             # Mock discovery
             mock_get_response = Mock()
             mock_get_response.json.return_value = mock_discovery_document
-            mock_get_response.raise_for_status = Mock()
             mock_get.return_value = mock_get_response
 
             # Mock token exchange with missing token
             mock_post_response = Mock()
             mock_post_response.json.return_value = response_tokens
-            mock_post_response.raise_for_status = Mock()
             mock_post.return_value = mock_post_response
 
             with pytest.raises(OIDCTokenExchangeError, match=error_message):
@@ -435,18 +445,19 @@ class TestOIDCAuthenticationManagerTokenExchange:
             redis_client=redis_fixture.client,
         )
 
-        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
+        with patch(
+            "palace.manager.integration.patron_auth.oidc.util.HTTP.get_with_timeout"
+        ) as mock_get, patch(
+            "palace.manager.integration.patron_auth.oidc.auth.HTTP.post_with_timeout"
+        ) as mock_post:
             # Mock discovery
             mock_get_response = Mock()
             mock_get_response.json.return_value = mock_discovery_document
-            mock_get_response.raise_for_status = Mock()
             mock_get.return_value = mock_get_response
 
             # Mock HTTP error
-            mock_post.side_effect = httpx.HTTPStatusError(
-                "400 Bad Request",
-                request=Mock(),
-                response=Mock(status_code=400, text="Invalid grant"),
+            mock_post.side_effect = RequestNetworkException(
+                "https://example.com/token", "400 Bad Request"
             )
 
             with pytest.raises(OIDCTokenExchangeError):
@@ -474,7 +485,9 @@ class TestOIDCAuthenticationManagerTokenValidation:
             redis_client=redis_fixture.client,
         )
 
-        with patch("httpx.get") as mock_get:
+        with patch(
+            "palace.manager.integration.patron_auth.oidc.util.HTTP.get_with_timeout"
+        ) as mock_get:
             # Mock discovery and JWKS
             def mock_get_handler(url, **kwargs):
                 mock_response = Mock()
@@ -482,7 +495,6 @@ class TestOIDCAuthenticationManagerTokenValidation:
                     mock_response.json.return_value = mock_discovery_document
                 elif "jwks" in str(url):
                     mock_response.json.return_value = mock_jwks
-                mock_response.raise_for_status = Mock()
                 return mock_response
 
             mock_get.side_effect = mock_get_handler
@@ -526,11 +538,12 @@ class TestOIDCAuthenticationManagerTokenValidation:
         }
         id_token = oidc_test_keys.sign_jwt(claims)
 
-        with patch("httpx.get") as mock_get:
+        with patch(
+            "palace.manager.integration.patron_auth.oidc.util.HTTP.get_with_timeout"
+        ) as mock_get:
             # Mock JWKS only (no discovery)
             mock_response = Mock()
             mock_response.json.return_value = mock_jwks
-            mock_response.raise_for_status = Mock()
             mock_get.return_value = mock_response
 
             validated_claims = manager.validate_id_token(
@@ -577,17 +590,19 @@ class TestOIDCAuthenticationManagerTokenRefresh:
             "expires_in": 3600,
         }
 
-        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
+        with patch(
+            "palace.manager.integration.patron_auth.oidc.util.HTTP.get_with_timeout"
+        ) as mock_get, patch(
+            "palace.manager.integration.patron_auth.oidc.auth.HTTP.post_with_timeout"
+        ) as mock_post:
             # Mock discovery
             mock_get_response = Mock()
             mock_get_response.json.return_value = mock_discovery_document
-            mock_get_response.raise_for_status = Mock()
             mock_get.return_value = mock_get_response
 
             # Mock token refresh
             mock_post_response = Mock()
             mock_post_response.json.return_value = refresh_response
-            mock_post_response.raise_for_status = Mock()
             mock_post.return_value = mock_post_response
 
             tokens = manager.refresh_access_token(refresh_token="test-refresh-token")
@@ -615,17 +630,19 @@ class TestOIDCAuthenticationManagerTokenRefresh:
             redis_client=redis_fixture.client,
         )
 
-        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
+        with patch(
+            "palace.manager.integration.patron_auth.oidc.util.HTTP.get_with_timeout"
+        ) as mock_get, patch(
+            "palace.manager.integration.patron_auth.oidc.auth.HTTP.post_with_timeout"
+        ) as mock_post:
             # Mock discovery
             mock_get_response = Mock()
             mock_get_response.json.return_value = mock_discovery_document
-            mock_get_response.raise_for_status = Mock()
             mock_get.return_value = mock_get_response
 
             # Mock refresh with missing access_token
             mock_post_response = Mock()
             mock_post_response.json.return_value = {"token_type": "Bearer"}
-            mock_post_response.raise_for_status = Mock()
             mock_post.return_value = mock_post_response
 
             with pytest.raises(OIDCRefreshTokenError, match="missing access_token"):
@@ -640,18 +657,19 @@ class TestOIDCAuthenticationManagerTokenRefresh:
             redis_client=redis_fixture.client,
         )
 
-        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
+        with patch(
+            "palace.manager.integration.patron_auth.oidc.util.HTTP.get_with_timeout"
+        ) as mock_get, patch(
+            "palace.manager.integration.patron_auth.oidc.auth.HTTP.post_with_timeout"
+        ) as mock_post:
             # Mock discovery
             mock_get_response = Mock()
             mock_get_response.json.return_value = mock_discovery_document
-            mock_get_response.raise_for_status = Mock()
             mock_get.return_value = mock_get_response
 
             # Mock HTTP error
-            mock_post.side_effect = httpx.HTTPStatusError(
-                "400 Bad Request",
-                request=Mock(),
-                response=Mock(status_code=400, text="Invalid refresh token"),
+            mock_post.side_effect = RequestNetworkException(
+                "https://example.com/token", "400 Bad Request"
             )
 
             with pytest.raises(OIDCRefreshTokenError):
@@ -664,32 +682,26 @@ class TestOIDCAuthenticationManagerUserInfo:
     def test_fetch_userinfo_success(
         self,
         oidc_settings_with_discovery,
-        redis_fixture,
         mock_discovery_document,
         mock_userinfo_response,
     ):
         """Test successful UserInfo fetch."""
+        # Don't use Redis to avoid caching issues in tests
         manager = OIDCAuthenticationManager(
             settings=oidc_settings_with_discovery,
-            redis_client=redis_fixture.client,
+            redis_client=None,
         )
 
-        with patch("httpx.get") as mock_get:
-            # Track call count
-            call_count = 0
-
+        with patch("palace.manager.util.http.http.HTTP.get_with_timeout") as mock_get:
+            # Handler function to return different responses based on URL
             def mock_get_handler(url, **kwargs):
-                nonlocal call_count
-                call_count += 1
                 mock_response = Mock()
-
                 if ".well-known/openid-configuration" in str(url):
-                    mock_response.json.return_value = mock_discovery_document
+                    # Discovery request
+                    mock_response.json = lambda: mock_discovery_document
                 else:
-                    # UserInfo endpoint
-                    mock_response.json.return_value = mock_userinfo_response
-
-                mock_response.raise_for_status = Mock()
+                    # UserInfo request
+                    mock_response.json = lambda: mock_userinfo_response
                 return mock_response
 
             mock_get.side_effect = mock_get_handler
@@ -722,33 +734,27 @@ class TestOIDCAuthenticationManagerUserInfo:
             manager.fetch_userinfo(access_token="test-access-token")
 
     def test_fetch_userinfo_http_error(
-        self, oidc_settings_with_discovery, redis_fixture, mock_discovery_document
+        self, oidc_settings_with_discovery, mock_discovery_document
     ):
         """Test UserInfo fetch error handling."""
+        # Don't use Redis to avoid caching issues in tests
         manager = OIDCAuthenticationManager(
             settings=oidc_settings_with_discovery,
-            redis_client=redis_fixture.client,
+            redis_client=None,
         )
 
-        with patch("httpx.get") as mock_get:
-            call_count = 0
-
+        with patch("palace.manager.util.http.http.HTTP.get_with_timeout") as mock_get:
+            # Handler function to return discovery but fail on userinfo
             def mock_get_handler(url, **kwargs):
-                nonlocal call_count
-                call_count += 1
-
-                if call_count == 1:
-                    # First call: discovery
+                if ".well-known/openid-configuration" in str(url):
+                    # Discovery request - return mock response
                     mock_response = Mock()
-                    mock_response.json.return_value = mock_discovery_document
-                    mock_response.raise_for_status = Mock()
+                    mock_response.json = lambda: mock_discovery_document
                     return mock_response
                 else:
-                    # Second call: UserInfo with error
-                    raise httpx.HTTPStatusError(
-                        "401 Unauthorized",
-                        request=Mock(),
-                        response=Mock(status_code=401),
+                    # UserInfo request - raise error
+                    raise RequestNetworkException(
+                        "https://example.com/userinfo", "401 Unauthorized"
                     )
 
             mock_get.side_effect = mock_get_handler
@@ -830,10 +836,11 @@ class TestOIDCAuthenticationManagerLogout:
                     id_token_hint, post_logout_redirect_uri, state
                 )
         else:
-            with patch("httpx.get") as mock_get:
+            with patch(
+                "palace.manager.integration.patron_auth.oidc.util.HTTP.get_with_timeout"
+            ) as mock_get:
                 mock_response = Mock()
                 mock_response.json.return_value = mock_discovery_document
-                mock_response.raise_for_status = Mock()
                 mock_get.return_value = mock_response
 
                 logout_url = manager.build_logout_url(
@@ -866,10 +873,11 @@ class TestOIDCAuthenticationManagerLogout:
             redis_client=redis_fixture.client,
         )
 
-        with patch("httpx.get") as mock_get:
+        with patch(
+            "palace.manager.integration.patron_auth.oidc.util.HTTP.get_with_timeout"
+        ) as mock_get:
             mock_response = Mock()
             mock_response.json.return_value = mock_discovery_document
-            mock_response.raise_for_status = Mock()
             mock_get.return_value = mock_response
 
             id_token_hint = "test.id.token"
@@ -894,11 +902,12 @@ class TestOIDCAuthenticationManagerLogout:
             redis_client=redis_fixture.client,
         )
 
-        with patch("httpx.get") as mock_get:
+        with patch(
+            "palace.manager.integration.patron_auth.oidc.util.HTTP.get_with_timeout"
+        ) as mock_get:
             # Mock both discovery and JWKS responses
             def mock_get_side_effect(url, **kwargs):
                 response = Mock()
-                response.raise_for_status = Mock()
                 if "jwks" in str(url):
                     response.json.return_value = mock_jwks
                 else:
@@ -930,11 +939,12 @@ class TestOIDCAuthenticationManagerBackChannelLogout:
             redis_client=redis_fixture.client,
         )
 
-        with patch("httpx.get") as mock_get:
+        with patch(
+            "palace.manager.integration.patron_auth.oidc.util.HTTP.get_with_timeout"
+        ) as mock_get:
 
             def mock_get_side_effect(url, **kwargs):
                 response = Mock()
-                response.raise_for_status = Mock()
                 if "jwks" in str(url):
                     response.json.return_value = mock_jwks
                 else:
@@ -1002,11 +1012,12 @@ class TestOIDCAuthenticationManagerBackChannelLogout:
         claim_modification(invalid_claims)
         invalid_token = oidc_test_keys.sign_jwt(invalid_claims)
 
-        with patch("httpx.get") as mock_get:
+        with patch(
+            "palace.manager.integration.patron_auth.oidc.util.HTTP.get_with_timeout"
+        ) as mock_get:
 
             def mock_get_side_effect(url, **kwargs):
                 response = Mock()
-                response.raise_for_status = Mock()
                 if "jwks" in str(url):
                     response.json.return_value = mock_jwks
                 else:
