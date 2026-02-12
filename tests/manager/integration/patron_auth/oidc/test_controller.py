@@ -64,6 +64,24 @@ class TestOIDCController:
         assert "existing=value" in result
         assert "new=param" in result
 
+    def test_add_params_to_url_param_override(self, controller, caplog):
+        """Test that new params override existing params with the same key."""
+        url = "https://example.com/callback?token=old_value&keep=this"
+        params = {"token": "new_value", "extra": "param"}
+
+        result = controller._add_params_to_url(url, params)
+
+        # New param should override existing param
+        assert "token=new_value" in result
+        assert "token=old_value" not in result
+        # Existing param without collision should be preserved
+        assert "keep=this" in result
+        # New param should be added
+        assert "extra=param" in result
+        # Warning should be logged for collision
+        assert "Parameter collision in redirect_uri" in caplog.text
+        assert "token" in caplog.text
+
     def test_error_uri(self, controller):
         redirect_uri = "https://app.example.com/callback"
         problem_detail = OIDC_INVALID_REQUEST

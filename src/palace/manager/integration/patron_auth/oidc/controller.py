@@ -102,9 +102,11 @@ class OIDCController:
         self._authenticator = authenticator
         self._logger = logging.getLogger(__name__)
 
-    @staticmethod
-    def _add_params_to_url(url: str, params: dict[str, str]) -> str:
+    def _add_params_to_url(self, url: str, params: dict[str, str]) -> str:
         """Add parameters to URL query string.
+
+        New params will override any existing `url` query params with the same key.
+        A warning will be logged if there are collisions.
 
         :param url: Base URL
         :param params: Parameters to add
@@ -113,8 +115,11 @@ class OIDCController:
         url_parts = urlsplit(url)
         existing_params_raw = parse_qs(url_parts.query)
         existing_params = {k: v[0] for k, v in existing_params_raw.items()}
-        params.update(existing_params)
-        new_query = urlencode(params, True)
+        collisions = set(params.keys()) & set(existing_params.keys())
+        if collisions:
+            self._logger.warning(f"Parameter collision in redirect_uri: {collisions}")
+        existing_params.update(params)
+        new_query = urlencode(existing_params, True)
         url_parts = SplitResult(
             url_parts.scheme,
             url_parts.netloc,
