@@ -832,6 +832,7 @@ class TestOIDCControllerBackChannelLogout:
 
         # Create mock provider with spec so isinstance checks work
         mock_provider = Mock(spec=BaseOIDCAuthenticationProvider)
+        mock_provider.library_id = library.id
         mock_provider._authentication_manager_factory = Mock()
         mock_provider._settings = Mock()
         mock_provider._settings.patron_id_claim = "sub"
@@ -929,6 +930,7 @@ class TestOIDCControllerBackChannelLogout:
 
         # Create mock provider with spec so isinstance checks work
         mock_provider = Mock(spec=BaseOIDCAuthenticationProvider)
+        mock_provider.library_id = library.id
         mock_provider._authentication_manager_factory = Mock()
         mock_provider._settings = Mock()
         mock_provider._settings.patron_id_claim = "sub"

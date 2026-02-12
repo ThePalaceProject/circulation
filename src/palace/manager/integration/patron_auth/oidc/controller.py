@@ -406,7 +406,7 @@ class OIDCController(LoggerMixin):
         try:
             credential_manager = provider._credential_manager  # type: ignore[attr-defined]
             patron = credential_manager.lookup_patron_by_identifier(
-                db, patron_identifier
+                db, patron_identifier, library.id
             )
 
             if patron:
@@ -544,7 +544,7 @@ class OIDCController(LoggerMixin):
                     # Invalidate patron credentials
                     credential_manager = provider._credential_manager  # type: ignore[attr-defined]
                     patron = credential_manager.lookup_patron_by_identifier(
-                        db, patron_identifier
+                        db, patron_identifier, provider.library_id
                     )
 
                     if patron:

@@ -317,17 +317,21 @@ class OIDCCredentialManager(LoggerMixin):
         return credential
 
     def lookup_patron_by_identifier(
-        self, db: Session, patron_identifier: str
+        self, db: Session, patron_identifier: str, library_id: int
     ) -> Patron | None:
         """Look up patron by authorization identifier.
 
         :param db: Database session
         :param patron_identifier: Patron identifier from ID token
+        :param library_id: Library ID to constrain the search
         :return: Patron object or None if not found
         """
         patron = (
             db.query(Patron)
-            .filter(Patron.authorization_identifier == patron_identifier)
+            .filter(
+                Patron.authorization_identifier == patron_identifier,
+                Patron.library_id == library_id,
+            )
             .first()
         )
 

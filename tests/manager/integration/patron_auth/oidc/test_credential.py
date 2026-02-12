@@ -656,23 +656,78 @@ class TestOIDCCredentialManagerLogout:
     """Tests for logout-related credential operations."""
 
     def test_lookup_patron_by_identifier(self, db, manager):
+        library = db.default_library()
         patron = db.patron()
+        patron.library_id = library.id
         patron.authorization_identifier = "user123@example.com"
         db.session.commit()
 
         found_patron = manager.lookup_patron_by_identifier(
-            db.session, "user123@example.com"
+            db.session, "user123@example.com", library.id
         )
 
         assert found_patron is not None
         assert found_patron.id == patron.id
 
     def test_lookup_patron_by_identifier_not_found(self, db, manager):
+        library = db.default_library()
         found_patron = manager.lookup_patron_by_identifier(
-            db.session, "nonexistent@example.com"
+            db.session, "nonexistent@example.com", library.id
         )
 
         assert found_patron is None
+
+    @pytest.mark.parametrize(
+        "lookup_library,expected_patron,should_find",
+        [
+            pytest.param("library1", "patron1", True, id="library1-finds-patron1"),
+            pytest.param("library2", "patron2", True, id="library2-finds-patron2"),
+            pytest.param(
+                "nonexistent", None, False, id="nonexistent-library-finds-none"
+            ),
+        ],
+    )
+    def test_lookup_patron_by_identifier_multi_library(
+        self, db, manager, lookup_library, expected_patron, should_find
+    ):
+        """Test that patron lookup finds patron of correct library."""
+        # Create two libraries
+        library1 = db.default_library()
+        library2 = db.library()
+
+        # Create patrons with the same authorization_identifier in different libraries
+        patron1 = db.patron()
+        patron1.library_id = library1.id
+        patron1.authorization_identifier = "user@example.com"
+
+        patron2 = db.patron()
+        patron2.library_id = library2.id
+        patron2.authorization_identifier = "user@example.com"
+
+        db.session.commit()
+
+        # Map test parameters to actual objects
+        library_map = {
+            "library1": library1,
+            "library2": library2,
+            "nonexistent": Mock(id=999999),
+        }
+        patron_map = {"patron1": patron1, "patron2": patron2}
+
+        # Perform lookup
+        lookup_lib = library_map[lookup_library]
+        found_patron = manager.lookup_patron_by_identifier(
+            db.session, "user@example.com", lookup_lib.id
+        )
+
+        # Verify results
+        if should_find:
+            assert found_patron is not None
+            expected = patron_map[expected_patron]
+            assert found_patron.id == expected.id
+            assert found_patron.library_id == expected.library_id
+        else:
+            assert found_patron is None
 
     def test_invalidate_credential(self, db, manager):
         patron = db.patron()
