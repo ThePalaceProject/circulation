@@ -73,14 +73,15 @@ class InstanceInitializationScript(LoggerMixin):
         """
         with engine.begin() as connection:
             SessionManager.initialize_schema(connection)
+            with Session(connection) as session:
+                # Initialize the database with default data
+                SessionManager.initialize_data(session)
 
-        with Session(engine) as session:
-            # Initialize the database with default data
-            SessionManager.initialize_data(session)
-
-        # Stamp the most recent migration as the current state of the DB
-        alembic_conf = self._get_alembic_config(engine, self._config_file)
-        command.stamp(alembic_conf, "head")
+            # Stamp the most recent migration as the current state of the DB.
+            # If this fails, schema/data changes above are rolled back with the
+            # surrounding transaction.
+            alembic_conf = self._get_alembic_config(engine, self._config_file)
+            command.stamp(alembic_conf, "head")
 
     def initialize_database(self, engine: Engine) -> None:
         """
