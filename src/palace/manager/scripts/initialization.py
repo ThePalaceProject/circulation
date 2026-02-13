@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 from argparse import ArgumentParser
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
 from alembic import command, config
 from alembic.util import CommandError
 from sqlalchemy import inspect
-from sqlalchemy.engine import Connection, Engine
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
 from palace.manager.celery.tasks.search import get_migrate_search_chain
@@ -44,44 +44,53 @@ class InstanceInitializationScript(LoggerMixin):
         self._engine_factory = engine_factory
 
     @staticmethod
-    def _get_alembic_config(
-        connection: Connection, config_file: Path | None
-    ) -> config.Config:
+    def _get_alembic_config(engine: Engine, config_file: Path | None) -> config.Config:
         """Get the Alembic config object for the current app."""
         filename = "alembic.ini" if config_file is None else str(config_file.resolve())
         conf = config.Config(filename)
         conf.attributes["configure_logger"] = False
-        conf.attributes["connection"] = connection.engine
+        conf.attributes["connection"] = engine
         conf.attributes["need_lock"] = False
         return conf
 
-    def migrate_database(self, connection: Connection) -> None:
+    @staticmethod
+    def _db_initialized(engine: Engine) -> bool:
+        """
+        Test if the database is already initialized
+        """
+        inspector = inspect(engine)
+        return inspector.has_table("alembic_version")
+
+    def migrate_database(self, engine: Engine) -> None:
         """Run our database migrations to make sure the database is up-to-date."""
-        alembic_conf = self._get_alembic_config(connection, self._config_file)
+        alembic_conf = self._get_alembic_config(engine, self._config_file)
         command.upgrade(alembic_conf, "head")
 
-    def initialize_database_schema(self, connection: Connection) -> None:
+    def initialize_database_schema(self, engine: Engine) -> None:
         """
         Initialize the database, creating tables, loading default data and then
         stamping the most recent migration as the current state of the DB.
         """
-        SessionManager.initialize_schema(connection)
+        with engine.begin() as connection:
+            SessionManager.initialize_schema(connection)
 
-        with Session(connection) as session:
+        with Session(engine) as session:
             # Initialize the database with default data
             SessionManager.initialize_data(session)
 
         # Stamp the most recent migration as the current state of the DB
-        alembic_conf = self._get_alembic_config(connection, self._config_file)
+        alembic_conf = self._get_alembic_config(engine, self._config_file)
         command.stamp(alembic_conf, "head")
 
-    def initialize_database(self, connection: Connection) -> None:
-        """Initialize the database if necessary."""
-        inspector = inspect(connection)
-        if inspector.has_table("alembic_version"):
+    def initialize_database(self, engine: Engine) -> None:
+        """
+        Initialize the database if necessary.
+        """
+        already_initialized = self._db_initialized(engine)
+        if already_initialized:
             self.log.info("Database schema already exists. Running migrations.")
             try:
-                self.migrate_database(connection)
+                self.migrate_database(engine)
                 self.log.info("Migrations complete.")
             except CommandError as e:
                 self.log.error(
@@ -91,7 +100,7 @@ class InstanceInitializationScript(LoggerMixin):
                 )
         else:
             self.log.info("Database schema does not exist. Initializing.")
-            self.initialize_database_schema(connection)
+            self.initialize_database_schema(engine)
             self.log.info("Initialization complete.")
 
     @classmethod
@@ -159,7 +168,7 @@ class InstanceInitializationScript(LoggerMixin):
             )
         self.log.info("Search initialization complete.")
 
-    def run(self) -> None:
+    def run(self, args: Sequence[str] | None = None) -> None:
         """
         Initialize the database if necessary. This script is idempotent, so it
         can be run every time the app starts.
@@ -174,12 +183,10 @@ class InstanceInitializationScript(LoggerMixin):
         # surprise of the script actually running when the user just wanted to see the help.
         ArgumentParser(
             description="Initialize the database and search index for the Palace Manager."
-        ).parse_args()
+        ).parse_args(args)
 
         engine = self._engine_factory()
-        with engine.begin() as connection:
-            with pg_advisory_lock(connection, LOCK_ID_DB_INIT):
-                self.initialize_database(connection)
-                self.initialize_search()
-
+        with pg_advisory_lock(engine, LOCK_ID_DB_INIT):
+            self.initialize_database(engine)
+            self.initialize_search()
         engine.dispose()

@@ -32,7 +32,6 @@ class InstanceInitScriptFixture:
         self.script = InstanceInitializationScript(
             config_file=self.alembic_config_path,
         )
-        self.connection = function_database.engine.connect()
 
         self.initialize_database_schema_mock = Mock(
             wraps=self.script.initialize_database_schema
@@ -43,8 +42,7 @@ class InstanceInitScriptFixture:
         self.script.migrate_database = self.migrate_database_mock
 
     def initialize_database(self) -> None:
-        with self.connection.begin():
-            self.script.initialize_database(self.connection)
+        self.script.initialize_database(self.database.engine)
 
     @classmethod
     @contextmanager
@@ -54,9 +52,7 @@ class InstanceInitScriptFixture:
         services_fixture: ServicesFixture,
         alembic_config_path: Path,
     ) -> Generator[Self, None, None]:
-        fixture = cls(function_database, services_fixture, alembic_config_path)
-        yield fixture
-        fixture.connection.close()
+        yield cls(function_database, services_fixture, alembic_config_path)
 
 
 @pytest.fixture

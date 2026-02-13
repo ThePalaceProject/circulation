@@ -1,10 +1,11 @@
 import functools
+from contextlib import contextmanager
 from unittest.mock import MagicMock, call, patch
 
 import pytest
 from psycopg2.extras import NumericRange
 from sqlalchemy import not_, text
-from sqlalchemy.engine import Connection
+from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.exc import MultipleResultsFound
 
@@ -20,7 +21,11 @@ from palace.manager.sqlalchemy.util import (
     pg_advisory_lock,
     tuple_to_numericrange,
 )
-from tests.fixtures.database import DatabaseFixture, DatabaseTransactionFixture
+from tests.fixtures.database import (
+    DatabaseFixture,
+    DatabaseTransactionFixture,
+    IdFixture,
+)
 
 
 class TestDatabaseInterface:
@@ -190,33 +195,59 @@ class TestNumericRangeConversion:
 
 
 class TestAdvisoryLock:
-    TEST_LOCK_ID = 999999
-
     def _lock_exists(self, connection: Connection, lock_id: int) -> bool:
         result = list(
             connection.execute(text(f"SELECT * from pg_locks where objid={lock_id}"))
         )
         return len(result) != 0
 
-    def test_lock_unlock(self, function_database: DatabaseFixture):
-        with function_database.engine.connect() as connection:
-            with pg_advisory_lock(connection, self.TEST_LOCK_ID):
-                assert self._lock_exists(connection, self.TEST_LOCK_ID) is True
-            assert self._lock_exists(connection, self.TEST_LOCK_ID) is False
+    @staticmethod
+    @contextmanager
+    def _connectable(engine: Engine, use_engine: bool):
+        """Yield either the engine itself or a connection from it."""
+        if use_engine:
+            yield engine
+        else:
+            with engine.connect() as connection:
+                yield connection
 
-    def test_exception_case(self, function_database: DatabaseFixture):
-        with function_database.engine.connect() as connection:
-            try:
-                with pg_advisory_lock(connection, self.TEST_LOCK_ID):
-                    assert self._lock_exists(connection, self.TEST_LOCK_ID) is True
-                    raise Exception("Lock should open!!")
-            except:
-                assert self._lock_exists(connection, self.TEST_LOCK_ID) is False
+    @pytest.mark.parametrize("use_engine", [True, False], ids=["engine", "connection"])
+    def test_lock_unlock(
+        self,
+        function_database: DatabaseFixture,
+        function_test_id: IdFixture,
+        use_engine: bool,
+    ) -> None:
+        lock_id = function_test_id.int_id
+        engine = function_database.engine
+        with self._connectable(engine, use_engine) as connectable:
+            with pg_advisory_lock(connectable, lock_id):
+                with engine.connect() as check_conn:
+                    assert self._lock_exists(check_conn, lock_id) is True
+        with engine.connect() as check_conn:
+            assert self._lock_exists(check_conn, lock_id) is False
 
-    def test_no_lock_id(self, function_database: DatabaseFixture):
-        with function_database.engine.connect() as connection:
-            with pg_advisory_lock(connection, None):
-                assert self._lock_exists(connection, self.TEST_LOCK_ID) is False
+    @pytest.mark.parametrize("use_engine", [True, False], ids=["engine", "connection"])
+    def test_exception_case(
+        self,
+        function_database: DatabaseFixture,
+        function_test_id: IdFixture,
+        use_engine: bool,
+    ):
+        lock_id = function_test_id.int_id
+        engine = function_database.engine
+        with (
+            self._connectable(engine, use_engine) as connectable,
+            pytest.raises(Exception, match="Lock should open"),
+        ):
+            with pg_advisory_lock(connectable, lock_id):
+                with engine.connect() as check_conn:
+                    assert self._lock_exists(check_conn, lock_id) is True
+                raise Exception("Lock should open!!")
+
+        # The lock should be released
+        with engine.connect() as check_conn:
+            assert self._lock_exists(check_conn, lock_id) is False
 
 
 class TestNumericRangeToString:

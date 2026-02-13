@@ -34,30 +34,32 @@ class TestInstanceInitializationScript:
             script = InstanceInitializationScript(engine_factory=mock_engine_factory)
             script.initialize_database = MagicMock()
             script.initialize_search = MagicMock()
-            script.run()
+            script.run([])
 
         advisory_lock.assert_called_once_with(
-            mock_engine_factory().begin().__enter__(),
+            mock_engine_factory.return_value,
             LOCK_ID_DB_INIT,
         )
-        advisory_lock().__enter__.assert_called_once()
-        advisory_lock().__exit__.assert_called_once()
+        advisory_lock.return_value.__enter__.assert_called_once()
+        advisory_lock.return_value.__exit__.assert_called_once()
 
         # Run called initialize_database and initialize_search while the lock was held
-        script.initialize_database.assert_called_once()
+        script.initialize_database.assert_called_once_with(
+            mock_engine_factory.return_value
+        )
         script.initialize_search.assert_called_once()
 
     def test_initialize_database(self, services_fixture: ServicesFixture):
-        # Test that the script inspects the database and initializes or migrates the database
-        # as necessary.
-        with patch("palace.manager.scripts.initialization.inspect") as inspect:
-            script = InstanceInitializationScript()
-            script.migrate_database = MagicMock()
-            script.initialize_database_schema = MagicMock()
+        # Test that the script initializes or migrates the database as necessary.
+        script = InstanceInitializationScript()
+        script.migrate_database = MagicMock()
+        script.initialize_database_schema = MagicMock()
+        mock_engine = MagicMock()
 
+        with patch("palace.manager.scripts.initialization.inspect") as inspect:
             # If the database is uninitialized, initialize_database() is called.
             inspect().has_table.return_value = False
-            script.initialize_database(MagicMock())
+            script.initialize_database(mock_engine)
             script.initialize_database_schema.assert_called_once()
             script.migrate_database.assert_not_called()
 
@@ -65,7 +67,7 @@ class TestInstanceInitializationScript:
             script.initialize_database_schema.reset_mock()
             script.migrate_database.reset_mock()
             inspect().has_table.return_value = True
-            script.initialize_database(MagicMock())
+            script.initialize_database(mock_engine)
             script.initialize_database_schema.assert_not_called()
             script.migrate_database.assert_called_once()
 
@@ -117,16 +119,14 @@ class TestInstanceInitializationScript:
 
     def test__get_alembic_config(self, db: DatabaseTransactionFixture):
         # Make sure we find alembic.ini for script command
-        mock_connection = MagicMock()
-        conf = InstanceInitializationScript._get_alembic_config(mock_connection, None)
+        mock_engine = MagicMock()
+        conf = InstanceInitializationScript._get_alembic_config(mock_engine, None)
         assert conf.config_file_name == "alembic.ini"
-        assert conf.attributes["connection"] == mock_connection.engine
+        assert conf.attributes["connection"] == mock_engine
         assert conf.attributes["configure_logger"] is False
 
         test_ini = Path("test.ini")
-        conf = InstanceInitializationScript._get_alembic_config(
-            mock_connection, test_ini
-        )
+        conf = InstanceInitializationScript._get_alembic_config(mock_engine, test_ini)
         assert conf.config_file_name == str(test_ini.resolve())
 
     def test_initialize_search(self, external_search_fixture: ExternalSearchFixture):

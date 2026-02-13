@@ -1,3 +1,4 @@
+from contextlib import nullcontext
 from logging.config import fileConfig
 
 from alembic import context
@@ -88,12 +89,12 @@ def run_migrations_online() -> None:
             # When alembic is run in the context of the application initialization script, the lock
             # is acquired by the application itself, so we don't need to do it here. That is why we
             # have the need_lock attribute, and why it defaults to True.
-            lock_id = (
-                LOCK_ID_DB_INIT
+            lock = (
+                pg_advisory_lock(connection, LOCK_ID_DB_INIT)
                 if context.config.attributes.get("need_lock", True)
-                else None
+                else nullcontext()
             )
-            with pg_advisory_lock(connection, lock_id):
+            with lock:
                 context.run_migrations()
 
 

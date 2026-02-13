@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Generator, Mapping
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from typing import Any, Literal, Self
 
 from frozendict import frozendict
 from psycopg2._range import NumericRange
 from sqlalchemy import text
-from sqlalchemy.engine import Connection
+from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext import mutable
 from sqlalchemy.orm import Session
@@ -19,19 +19,27 @@ LOCK_ID_DB_INIT = 1000000001
 
 
 @contextmanager
-def pg_advisory_lock(connection: Connection, lock_id: int | None) -> Generator[None]:
+def pg_advisory_lock(
+    connectable: Engine | Connection, lock_id: int
+) -> Generator[Connection]:
     """
-    Application wide locking based on Lock IDs
+    Application wide locking based on Lock IDs.
 
-    If lock_id is None, no lock is acquired.
+    :param connectable: An Engine or Connection to use for locking. If an Engine
+        is provided, a new connection is created and managed by this context manager.
+        If a Connection is provided, it is used directly.
+    :param lock_id: The lock ID to acquire.
     """
-    if lock_id is None:
-        yield
-    else:
+    connection_ctx = (
+        connectable.connect()
+        if isinstance(connectable, Engine)
+        else nullcontext(connectable)
+    )
+    with connection_ctx as connection:
         # Create the lock
         connection.execute(text(f"SELECT pg_advisory_lock({lock_id});"))
         try:
-            yield
+            yield connection
         except IntegrityError:
             # If there was an IntegrityError, and we are in a transaction,
             # we need to roll it back before we are able to release the lock.
