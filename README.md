@@ -577,6 +577,48 @@ and existing jobs are being migrated to `celery` as they are updated.
 The `cron` jobs are defined in the `docker/services/simplified_crontab` file. The `celery` jobs are defined
 in the `src/palace/manager/celery/tasks/` module.
 
+## Startup Tasks
+
+Startup tasks are one-time jobs that run automatically on the first application start after a
+deployment. They are useful when new code requires a data backfill, re-import, cache invalidation,
+or other post-deployment work that doesn't belong in a database migration.
+
+Each task receives the application's services container and a database session, giving it access
+to Redis, search, Celery dispatch, and any other service it needs.
+
+Tasks are defined as Python files in `startup_tasks/` at the project root. The filename becomes the
+task key (e.g. `2026_02_10_0000_force_harvest.py` → key `2026_02_10_0000_force_harvest`). On each container start the
+initialization script discovers all task files, checks a `startup_tasks` database table for previously
+executed keys, and runs any new ones. The process is idempotent — each task runs only once.
+
+### Creating a Startup Task
+
+Use the provided scaffolding command:
+
+```sh
+create_startup_task "force harvest opds for distributors"
+```
+
+This creates a dated file like `startup_tasks/2026_02_10_1430_force_harvest_opds_for_distributors.py`
+with a template. Implement the `run()` function:
+
+```python
+def run(services: Services, session: Session) -> None:
+    # Dispatch async Celery work:
+    from palace.manager.celery.tasks.opds_for_distributors import import_all
+    import_all.si(force=True).apply_async()
+
+    # Or do inline work with Redis, DB, etc.:
+    services.redis.client().delete("some:cache:key")
+```
+
+The `--date-prefix` flag can override the default `YYYY_MM_DD_HHMM` prefix if needed.
+
+### Cleaning Up
+
+Once every environment has run a task, delete the file. The database row is retained as a historical
+record and prevents the task from being re-executed even after the file is removed.
+
 ## Code Style
 
 Code style on this project is linted using [pre-commit](https://pre-commit.com/). This Python application is included
