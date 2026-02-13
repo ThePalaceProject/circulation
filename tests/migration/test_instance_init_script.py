@@ -6,9 +6,10 @@ from contextlib import contextmanager
 from io import StringIO
 from pathlib import Path
 from typing import Self
-from unittest.mock import MagicMock, Mock
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
+from alembic.util import CommandError
 from pytest_alembic import MigrationContext
 from sqlalchemy import inspect
 from sqlalchemy.engine import Engine
@@ -32,7 +33,6 @@ class InstanceInitScriptFixture:
         self.script = InstanceInitializationScript(
             config_file=self.alembic_config_path,
         )
-        self.connection = function_database.engine.connect()
 
         self.initialize_database_schema_mock = Mock(
             wraps=self.script.initialize_database_schema
@@ -43,8 +43,7 @@ class InstanceInitScriptFixture:
         self.script.migrate_database = self.migrate_database_mock
 
     def initialize_database(self) -> None:
-        with self.connection.begin():
-            self.script.initialize_database(self.connection)
+        self.script.initialize_database(self.database.engine)
 
     @classmethod
     @contextmanager
@@ -54,9 +53,7 @@ class InstanceInitScriptFixture:
         services_fixture: ServicesFixture,
         alembic_config_path: Path,
     ) -> Generator[Self, None, None]:
-        fixture = cls(function_database, services_fixture, alembic_config_path)
-        yield fixture
-        fixture.connection.close()
+        yield cls(function_database, services_fixture, alembic_config_path)
 
 
 @pytest.fixture
@@ -189,3 +186,26 @@ def test_migrate_database(
 
     assert instance_init_script_fixture.initialize_database_schema_mock.call_count == 0
     assert instance_init_script_fixture.migrate_database_mock.call_count == 1
+
+
+def test_initialize_database_rolls_back_when_stamp_fails(
+    instance_init_script_fixture: InstanceInitScriptFixture,
+) -> None:
+    # Drop any existing schema
+    instance_init_script_fixture.database.drop_existing_schema()
+    engine = instance_init_script_fixture.database.engine
+    inspector = inspect(engine)
+    assert len(inspector.get_table_names()) == 0
+
+    with (
+        pytest.raises(CommandError),
+        patch(
+            "palace.manager.scripts.initialization.command.stamp",
+            side_effect=CommandError("stamp failed"),
+        ),
+    ):
+        instance_init_script_fixture.script.initialize_database_schema(engine)
+
+    # Schema and seed data changes should be rolled back if stamp fails.
+    inspector = inspect(engine)
+    assert len(inspector.get_table_names()) == 0
