@@ -13,6 +13,8 @@ from palace.manager.api.admin.controller.integration_settings import (
 from palace.manager.api.admin.form_data import ProcessFormData
 from palace.manager.api.admin.problem_details import (
     FAILED_TO_RUN_SELF_TESTS,
+    MISSING_IDENTIFIER,
+    MISSING_SERVICE,
     MULTIPLE_BASIC_AUTH_SERVICES,
 )
 from palace.manager.api.authentication.base import AuthenticationProviderType
@@ -120,17 +122,26 @@ class PatronAuthServicesController(
         for integration, _ in libraries:
             self.library_integration_validation(integration)
 
-    def process_delete(self, service_id: int) -> Response | ProblemDetail:
+    def process_delete(self, service_id: int | str) -> Response | ProblemDetail:
         self.require_system_admin()
         try:
-            return self.delete_service(service_id)
+            sid = int(service_id) if isinstance(service_id, str) else service_id
+        except ValueError:
+            return MISSING_SERVICE
+        try:
+            return self.delete_service(sid)
         except ProblemDetailException as e:
             self._db.rollback()
             return e.problem_detail
 
     def process_patron_auth_service_self_tests(
-        self, identifier: int | None
+        self, identifier: int | str | None
     ) -> Response | ProblemDetail:
+        if identifier is not None and isinstance(identifier, str):
+            try:
+                identifier = int(identifier)
+            except ValueError:
+                return MISSING_IDENTIFIER
         return self.process_self_tests(identifier)
 
     def get_prior_test_results(
