@@ -19,7 +19,7 @@ from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.util.log import LoggerMixin
 from palace.manager.util.pydantic import HttpUrl
 from tests.fixtures.config import FixtureTestUrlConfiguration
-from tests.fixtures.database import DatabaseTransactionFixture, TestIdFixture
+from tests.fixtures.database import DatabaseTransactionFixture, IdFixture
 from tests.fixtures.services import ServicesFixture
 from tests.mocks.search import SearchServiceFake
 
@@ -41,7 +41,7 @@ class ExternalSearchFixture(LoggerMixin):
     """
 
     def __init__(
-        self, db: DatabaseTransactionFixture, services: Services, test_id: TestIdFixture
+        self, db: DatabaseTransactionFixture, services: Services, test_id: IdFixture
     ):
         self.search_config = SearchTestConfiguration.from_env()
         self.index_prefix = test_id.id
@@ -80,7 +80,7 @@ class ExternalSearchFixture(LoggerMixin):
     @classmethod
     @contextmanager
     def fixture(
-        cls, db: DatabaseTransactionFixture, services: Services, test_id: TestIdFixture
+        cls, db: DatabaseTransactionFixture, services: Services, test_id: IdFixture
     ):
         fixture = cls(db, services, test_id)
         try:
@@ -93,7 +93,7 @@ class ExternalSearchFixture(LoggerMixin):
 def external_search_fixture(
     db: DatabaseTransactionFixture,
     services_fixture: ServicesFixture,
-    function_test_id: TestIdFixture,
+    function_test_id: IdFixture,
 ) -> Generator[ExternalSearchFixture]:
     """Ask for an external search system."""
     """Note: You probably want EndToEndSearchFixture instead."""

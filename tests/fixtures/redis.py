@@ -9,7 +9,7 @@ from palace.manager.service.redis.container import RedisContainer
 from palace.manager.service.redis.redis import Redis
 from palace.manager.util.pydantic import RedisDsn
 from tests.fixtures.config import FixtureTestUrlConfiguration
-from tests.fixtures.database import TestIdFixture
+from tests.fixtures.database import IdFixture
 from tests.fixtures.services import ServicesFixture
 
 
@@ -19,7 +19,7 @@ class RedisTestConfiguration(FixtureTestUrlConfiguration):
 
 
 class RedisFixture:
-    def __init__(self, test_id: TestIdFixture, services_fixture: ServicesFixture):
+    def __init__(self, test_id: IdFixture, services_fixture: ServicesFixture):
         self.test_id = test_id
         self.config = RedisTestConfiguration.from_env()
         self.key_prefix = f"test::{self.test_id.id}"
@@ -48,7 +48,7 @@ class RedisFixture:
     @classmethod
     @contextmanager
     def fixture(
-        cls, test_id: TestIdFixture, services_fixture: ServicesFixture
+        cls, test_id: IdFixture, services_fixture: ServicesFixture
     ) -> Generator[Self, None, None]:
         fixture = cls(test_id, services_fixture)
         try:
@@ -59,7 +59,7 @@ class RedisFixture:
 
 @pytest.fixture(scope="function")
 def redis_fixture(
-    function_test_id: TestIdFixture, services_fixture: ServicesFixture
+    function_test_id: IdFixture, services_fixture: ServicesFixture
 ) -> Generator[RedisFixture, None, None]:
     with RedisFixture.fixture(function_test_id, services_fixture) as fixture:
         yield fixture

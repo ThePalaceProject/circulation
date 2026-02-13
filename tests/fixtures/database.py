@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import datetime
 import functools
+import hashlib
 import importlib
 import logging
 import shutil
@@ -115,7 +116,7 @@ if TYPE_CHECKING:
     from tests.fixtures.search import WorkQueueIndexingFixture
 
 
-class TestIdFixture:
+class IdFixture:
     """
     This fixture creates a unique test id. This ID is suitable for initializing shared resources.
     For example - database name, opensearch index name, etc.
@@ -141,9 +142,16 @@ class TestIdFixture:
         # This is the ID that should be used to create unique resources.
         return f"{self._prefix}_{self._worker_id}_{self.run_id}"
 
+    @cached_property
+    def int_id(self) -> int:
+        """
+        Provides a 32-bit integer unique for this test run.
+        """
+        return int(hashlib.md5(self.id.encode()).hexdigest()[:8], 16)
+
 
 @pytest.fixture(scope="session")
-def session_test_id(worker_id: str) -> TestIdFixture:
+def session_test_id(worker_id: str) -> IdFixture:
     """
     This is a session scoped fixture that provides a unique test id. Since session scoped fixtures
     are created only once per worker, per test run, this fixture provides a unique test ID that is
@@ -151,11 +159,11 @@ def session_test_id(worker_id: str) -> TestIdFixture:
 
     This is useful when initializing session scoped shared resources like databases, opensearch indexes, etc.
     """
-    return TestIdFixture(worker_id, "session")
+    return IdFixture(worker_id, "session")
 
 
 @pytest.fixture(scope="function")
-def function_test_id(worker_id: str) -> TestIdFixture:
+def function_test_id(worker_id: str) -> IdFixture:
     """
     This is a function scoped fixture that provides a unique test id. Since function scoped fixtures
     are created for each test function, this fixture provides a unique test ID that for each test function.
@@ -163,7 +171,7 @@ def function_test_id(worker_id: str) -> TestIdFixture:
     This is useful when initializing function scoped shared resources.
     """
 
-    return TestIdFixture(worker_id, "function")
+    return IdFixture(worker_id, "function")
 
 
 class DatabaseTestConfiguration(FixtureTestUrlConfiguration):
@@ -185,7 +193,7 @@ class DatabaseCreationFixture:
     In this case the database URL is used as is.
     """
 
-    def __init__(self, test_id: TestIdFixture):
+    def __init__(self, test_id: IdFixture):
         self.test_id = test_id
         config = DatabaseTestConfiguration.from_env()
         if not config.create_database and self.test_id.parallel:
@@ -267,7 +275,7 @@ class DatabaseCreationFixture:
 
     @classmethod
     @contextmanager
-    def fixture(cls, test_id: TestIdFixture) -> Generator[Self]:
+    def fixture(cls, test_id: IdFixture) -> Generator[Self]:
         db_name_fixture = cls(test_id)
         db_name_fixture._create_db()
         try:
@@ -278,7 +286,7 @@ class DatabaseCreationFixture:
 
 @pytest.fixture(scope="session")
 def database_creation(
-    session_test_id: TestIdFixture,
+    session_test_id: IdFixture,
 ) -> Generator[DatabaseCreationFixture]:
     """
     This is a session scoped fixture that provides a unique database for each worker in the test run.
@@ -289,7 +297,7 @@ def database_creation(
 
 @pytest.fixture(scope="function")
 def function_database_creation(
-    function_test_id: TestIdFixture,
+    function_test_id: IdFixture,
 ) -> Generator[DatabaseCreationFixture]:
     """
     This is a function scoped fixture that provides a unique database for each test function.
