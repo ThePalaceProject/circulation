@@ -486,9 +486,7 @@ def patron_auth_services() -> Any:
 @requires_admin
 @requires_csrf_token
 def patron_auth_service(service_id: str) -> Any:
-    return app.manager.admin_patron_auth_services_controller.process_delete(
-        int(service_id)
-    )
+    return app.manager.admin_patron_auth_services_controller.process_delete(service_id)
 
 
 @app.route(
@@ -499,7 +497,7 @@ def patron_auth_service(service_id: str) -> Any:
 @requires_csrf_token
 def patron_auth_self_tests(identifier: str) -> Any:
     return app.manager.admin_patron_auth_services_controller.process_patron_auth_service_self_tests(
-        int(identifier)
+        identifier
     )
 
 
@@ -551,9 +549,7 @@ def metadata_services() -> Any:
 @requires_admin
 @requires_csrf_token
 def metadata_service(service_id: str) -> Any:
-    return app.manager.admin_metadata_services_controller.process_delete(
-        int(service_id)
-    )
+    return app.manager.admin_metadata_services_controller.process_delete(service_id)
 
 
 @app.route("/admin/metadata_service_self_tests/<identifier>", methods=["GET", "POST"])
@@ -562,7 +558,7 @@ def metadata_service(service_id: str) -> Any:
 @requires_csrf_token
 def metadata_service_self_tests(identifier: str) -> Any:
     return app.manager.admin_metadata_services_controller.process_metadata_service_self_tests(
-        int(identifier)
+        identifier
     )
 
 
@@ -579,7 +575,7 @@ def catalog_services() -> Any:
 @requires_admin
 @requires_csrf_token
 def catalog_service(service_id: str) -> Any:
-    return app.manager.admin_catalog_services_controller.process_delete(int(service_id))
+    return app.manager.admin_catalog_services_controller.process_delete(service_id)
 
 
 @app.route("/admin/discovery_services", methods=["GET", "POST"])
@@ -595,9 +591,7 @@ def discovery_services() -> Any:
 @requires_admin
 @requires_csrf_token
 def discovery_service(service_id: str) -> Any:
-    return app.manager.admin_discovery_services_controller.process_delete(
-        int(service_id)
-    )
+    return app.manager.admin_discovery_services_controller.process_delete(service_id)
 
 
 @app.route("/admin/announcements", methods=["GET", "POST"])
@@ -642,7 +636,7 @@ def custom_lists_get() -> Any:
 @requires_admin
 @requires_csrf_token
 def custom_list_get(list_id: str) -> Any:
-    return app.manager.admin_custom_lists_controller.custom_list(int(list_id))
+    return app.manager.admin_custom_lists_controller.custom_list(list_id)
 
 
 @library_route("/admin/custom_list/<list_id>", methods=["POST"])
@@ -651,7 +645,7 @@ def custom_list_get(list_id: str) -> Any:
 @requires_admin
 @requires_csrf_token
 def custom_list_post(list_id: str) -> Any:
-    return app.manager.admin_custom_lists_controller.custom_list(int(list_id))
+    return app.manager.admin_custom_lists_controller.custom_list(list_id)
 
 
 @library_route("/admin/custom_list/<list_id>", methods=["DELETE"])
@@ -660,7 +654,7 @@ def custom_list_post(list_id: str) -> Any:
 @requires_admin
 @requires_csrf_token
 def custom_list_delete(list_id: str) -> Any:
-    return app.manager.admin_custom_lists_controller.custom_list(int(list_id))
+    return app.manager.admin_custom_lists_controller.custom_list(list_id)
 
 
 @library_route("/admin/custom_list/<list_id>/share", methods=["POST"])
@@ -670,7 +664,7 @@ def custom_list_delete(list_id: str) -> Any:
 @requires_csrf_token
 def custom_list_share(list_id: str) -> Any:
     """Share a custom list with all libraries in the CM that share the collections of this library and works of this list"""
-    return app.manager.admin_custom_lists_controller.share_locally(int(list_id))
+    return app.manager.admin_custom_lists_controller.share_locally(list_id)
 
 
 @library_route("/admin/custom_list/<list_id>/share", methods=["DELETE"])
@@ -680,7 +674,7 @@ def custom_list_share(list_id: str) -> Any:
 @requires_csrf_token
 def custom_list_unshare(list_id: str) -> Any:
     """Unshare the list from all libraries, as long as no other library is using the list in its lanes"""
-    return app.manager.admin_custom_lists_controller.share_locally(int(list_id))
+    return app.manager.admin_custom_lists_controller.share_locally(list_id)
 
 
 @library_route("/admin/lanes", methods=["GET", "POST"])
@@ -698,7 +692,7 @@ def lanes() -> Any:
 @requires_admin
 @requires_csrf_token
 def lane(lane_identifier: str) -> Any:
-    return app.manager.admin_lanes_controller.lane(int(lane_identifier))
+    return app.manager.admin_lanes_controller.lane(lane_identifier)
 
 
 @library_route("/admin/lane/<lane_identifier>/show", methods=["POST"])
@@ -707,7 +701,7 @@ def lane(lane_identifier: str) -> Any:
 @requires_admin
 @requires_csrf_token
 def lane_show(lane_identifier: str) -> Any:
-    return app.manager.admin_lanes_controller.show_lane(int(lane_identifier))
+    return app.manager.admin_lanes_controller.show_lane(lane_identifier)
 
 
 @library_route("/admin/lane/<lane_identifier>/hide", methods=["POST"])
@@ -716,7 +710,7 @@ def lane_show(lane_identifier: str) -> Any:
 @requires_admin
 @requires_csrf_token
 def lane_hide(lane_identifier: str) -> Any:
-    return app.manager.admin_lanes_controller.hide_lane(int(lane_identifier))
+    return app.manager.admin_lanes_controller.hide_lane(lane_identifier)
 
 
 @library_route("/admin/lanes/reset", methods=["POST"])
