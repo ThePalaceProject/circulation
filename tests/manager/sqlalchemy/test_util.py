@@ -261,6 +261,37 @@ class TestAdvisoryLock:
         with engine.connect() as check_conn:
             assert self._lock_exists(check_conn, lock_id) is False
 
+    @pytest.mark.parametrize(
+        "use_engine",
+        [
+            pytest.param(True, id="engine"),
+            pytest.param(False, id="connection"),
+        ],
+    )
+    def test_integrity_error(
+        self,
+        function_database: DatabaseFixture,
+        function_test_id: IdFixture,
+        use_engine: bool,
+    ) -> None:
+        """The lock is released even when an IntegrityError occurs mid-transaction."""
+        lock_id = function_test_id.int_id
+        engine = function_database.engine
+        with (
+            self._connectable(engine, use_engine) as connectable,
+            pytest.raises(IntegrityError),
+        ):
+            with pg_advisory_lock(connectable, lock_id) as conn:
+                # Create a temp table with a unique constraint, then violate
+                # it to trigger a real IntegrityError.
+                conn.execute(text("CREATE TEMP TABLE _test_integrity (id INT UNIQUE)"))
+                conn.execute(text("INSERT INTO _test_integrity VALUES (1)"))
+                conn.execute(text("INSERT INTO _test_integrity VALUES (1)"))
+
+        # The lock should be released despite the IntegrityError
+        with engine.connect() as check_conn:
+            assert self._lock_exists(check_conn, lock_id) is False
+
 
 class TestNumericRangeToString:
     def test_numericrange_to_string_float(self):
