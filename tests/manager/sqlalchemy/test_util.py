@@ -211,7 +211,13 @@ class TestAdvisoryLock:
             with engine.connect() as connection:
                 yield connection
 
-    @pytest.mark.parametrize("use_engine", [True, False], ids=["engine", "connection"])
+    @pytest.mark.parametrize(
+        "use_engine",
+        [
+            pytest.param(True, id="engine"),
+            pytest.param(False, id="connection"),
+        ],
+    )
     def test_lock_unlock(
         self,
         function_database: DatabaseFixture,
@@ -227,7 +233,13 @@ class TestAdvisoryLock:
         with engine.connect() as check_conn:
             assert self._lock_exists(check_conn, lock_id) is False
 
-    @pytest.mark.parametrize("use_engine", [True, False], ids=["engine", "connection"])
+    @pytest.mark.parametrize(
+        "use_engine",
+        [
+            pytest.param(True, id="engine"),
+            pytest.param(False, id="connection"),
+        ],
+    )
     def test_exception_case(
         self,
         function_database: DatabaseFixture,
