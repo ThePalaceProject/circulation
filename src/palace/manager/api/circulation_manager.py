@@ -43,6 +43,7 @@ from palace.manager.feed.annotator.circulation import (
     LibraryAnnotator,
 )
 from palace.manager.feed.worklist.base import WorkList
+from palace.manager.integration.patron_auth.oidc.controller import OIDCController
 from palace.manager.integration.patron_auth.saml.controller import SAMLController
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.service.container import Services
@@ -381,6 +382,7 @@ class CirculationManager(LoggerMixin):
         This method will be called fresh every time the site
         configuration changes.
         """
+        self.oidc_controller = OIDCController(self, self.auth)
         self.saml_controller = SAMLController(self, self.auth)
 
     def annotator(self, lane, facets=None, *args, **kwargs):
