@@ -33,22 +33,9 @@ TEST_SECRET_KEY = "test-secret-key"
 def oidc_settings_with_discovery() -> OIDCAuthSettings:
     """OIDC settings configured for discovery."""
     return OIDCAuthSettings(
+        client_id=TEST_CLIENT_ID,
+        client_secret=TEST_CLIENT_SECRET,
         issuer_url=TEST_ISSUER_URL,
-        client_id=TEST_CLIENT_ID,
-        client_secret=TEST_CLIENT_SECRET,
-    )
-
-
-@pytest.fixture
-def oidc_settings_manual() -> OIDCAuthSettings:
-    """OIDC settings with manual endpoint configuration."""
-    return OIDCAuthSettings(
-        authorization_endpoint=f"{TEST_ISSUER_URL}/authorize",
-        token_endpoint=f"{TEST_ISSUER_URL}/token",
-        jwks_uri=f"{TEST_ISSUER_URL}/.well-known/jwks.json",
-        userinfo_endpoint=f"{TEST_ISSUER_URL}/userinfo",
-        client_id=TEST_CLIENT_ID,
-        client_secret=TEST_CLIENT_SECRET,
     )
 
 
@@ -115,21 +102,21 @@ class TestOIDCAuthenticationManagerMetadata:
             mock_get.assert_called_once()
 
     def test_get_provider_metadata_with_manual_config(
-        self, oidc_settings_manual, redis_fixture
+        self, oidc_minimal_manual_mode_auth_settings, redis_fixture
     ):
-        """Test metadata loading from manual configuration."""
+        """Test metadata loading from manual mode configuration."""
         manager = OIDCAuthenticationManager(
-            settings=oidc_settings_manual,
+            settings=oidc_minimal_manual_mode_auth_settings,
             redis_client=redis_fixture.client,
         )
 
         metadata = manager.get_provider_metadata()
 
-        assert metadata["authorization_endpoint"] == f"{TEST_ISSUER_URL}/authorize"
-        assert metadata["token_endpoint"] == f"{TEST_ISSUER_URL}/token"
-        assert metadata["jwks_uri"] == f"{TEST_ISSUER_URL}/.well-known/jwks.json"
-        assert metadata["userinfo_endpoint"] == f"{TEST_ISSUER_URL}/userinfo"
-        assert metadata["issuer"] == "manual"
+        assert str(metadata["authorization_endpoint"]) == f"{TEST_ISSUER_URL}/authorize"
+        assert str(metadata["token_endpoint"]) == f"{TEST_ISSUER_URL}/token"
+        assert str(metadata["jwks_uri"]) == f"{TEST_ISSUER_URL}/.well-known/jwks.json"
+        assert str(metadata["userinfo_endpoint"]) == f"{TEST_ISSUER_URL}/userinfo"
+        assert metadata["issuer"] == TEST_ISSUER_URL
 
     def test_get_provider_metadata_caching(
         self, oidc_settings_with_discovery, redis_fixture, mock_discovery_document
@@ -514,6 +501,7 @@ class TestOIDCAuthenticationManagerTokenValidation:
         """Test ID token validation with manual endpoint configuration."""
         # Create settings with manual config
         settings = OIDCAuthSettings(
+            issuer=TEST_ISSUER_URL,
             authorization_endpoint=f"{TEST_ISSUER_URL}/authorize",
             token_endpoint=f"{TEST_ISSUER_URL}/token",
             jwks_uri=f"{TEST_ISSUER_URL}/.well-known/jwks.json",
@@ -526,10 +514,10 @@ class TestOIDCAuthenticationManagerTokenValidation:
             redis_client=redis_fixture.client,
         )
 
-        # Create ID token with issuer="manual" to match what the manager expects
+        # Create ID token with issuer matching the configured issuer
         now = int(time.time())
         claims = {
-            "iss": "manual",  # This matches what the manager sets for manual config
+            "iss": TEST_ISSUER_URL,
             "sub": "user123",
             "aud": TEST_CLIENT_ID,
             "exp": now + 3600,
@@ -712,10 +700,13 @@ class TestOIDCAuthenticationManagerUserInfo:
             assert userinfo["sub"] == "user123"
             assert userinfo["email"] == "testuser@example.com"
 
-    def test_fetch_userinfo_missing_endpoint(self, oidc_settings_manual, redis_fixture):
+    def test_fetch_userinfo_missing_endpoint(
+        self, oidc_minimal_manual_mode_auth_settings, redis_fixture
+    ):
         """Test UserInfo fetch when endpoint is not configured."""
         # Create settings without userinfo_endpoint
         settings = OIDCAuthSettings(
+            issuer=TEST_ISSUER_URL,
             authorization_endpoint=f"{TEST_ISSUER_URL}/authorize",
             token_endpoint=f"{TEST_ISSUER_URL}/token",
             jwks_uri=f"{TEST_ISSUER_URL}/.well-known/jwks.json",

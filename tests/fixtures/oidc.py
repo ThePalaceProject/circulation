@@ -17,9 +17,9 @@ RSA_KEY_SIZE = 2048
 RSA_PUBLIC_EXPONENT = 65537
 
 # Token expiry times (seconds)
-ID_TOKEN_EXPIRY_SECONDS = 3600  # 1 hour
-LOGOUT_TOKEN_EXPIRY_SECONDS = 120  # 2 minutes
-ACCESS_TOKEN_EXPIRY_SECONDS = 3600  # 1 hour
+ID_TOKEN_EXPIRY_SECONDS = 60 * 60  # 1 hour
+LOGOUT_TOKEN_EXPIRY_SECONDS = 2 * 60  # 2 minutes
+ACCESS_TOKEN_EXPIRY_SECONDS = 60 * 60  # 1 hour
 
 # Test key identifier
 TEST_KEY_ID = "test-key-id-1"

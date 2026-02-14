@@ -9,11 +9,17 @@ from flask_babel import lazy_gettext as _
 from pydantic import (
     HttpUrl,
     PositiveInt,
+    TypeAdapter,
+    UrlConstraints,
     field_validator,
     model_validator,
 )
+from pydantic_core.core_schema import ValidationInfo
 
-from palace.manager.api.admin.problem_details import INCOMPLETE_CONFIGURATION
+from palace.manager.api.admin.problem_details import (
+    INCOMPLETE_CONFIGURATION,
+    INVALID_CONFIGURATION_OPTION,
+)
 from palace.manager.api.authentication.base import (
     AuthProviderLibrarySettings,
     AuthProviderSettings,
@@ -25,6 +31,13 @@ from palace.manager.integration.settings import (
 )
 from palace.manager.util.log import LoggerMixin
 
+PRODUCTION_AUTH_ADAPTER = TypeAdapter(
+    Annotated[HttpUrl, UrlConstraints(allowed_schemes=["https"])]
+)
+TEST_MODE_AUTH_ADAPTER = TypeAdapter(
+    Annotated[HttpUrl, UrlConstraints(allowed_schemes=["https", "http"])]
+)
+
 
 class OIDCAuthSettings(AuthProviderSettings, LoggerMixin):
     """OIDC Authentication Provider Settings.
@@ -34,17 +47,60 @@ class OIDCAuthSettings(AuthProviderSettings, LoggerMixin):
     standard OIDC providers.
     """
 
+    # Test Mode
+    # This setting should be added before the others for a couple of reasons:
+    # - Most importantly, it needs to be available in the `ValidationInfo` to so that
+    #   validators can appropriately constrain URLs.
+    # - It provides context for the URLs in the discovery & manual mode configuration.
+    test_mode: Annotated[
+        bool,
+        FormMetadata(
+            label=_("Test Mode"),
+            description=_(
+                "Enable Test Mode to relax OIDC AUTH URL validation requirements. "
+                "Test mode should NEVER be enabled for integrations used for "
+                "production libraries."
+                "Default: True"
+            ),
+            type=FormFieldType.SELECT,
+            options={
+                False: "Production Mode (Required for production instances)",
+                True: "Testing Mode (Available for development and testing)",
+            },
+        ),
+    ] = False
+
     # Discovery & Endpoints
     issuer_url: Annotated[
         HttpUrl | None,
         FormMetadata(
-            label=_("Issuer URL"),
+            label=_("Issuer URL (Discovery Mode)"),
             description=_(
-                "OIDC provider's issuer URL (e.g., https://accounts.google.com). "
+                "OIDC provider's issuer URL. "
                 "The system will automatically discover endpoints via "
                 "/.well-known/openid-configuration. "
                 "If provided, this will be used for automatic discovery. "
-                "If not provided, you must manually specify all endpoint URLs below."
+                "If not provided, you must specify the Issuer Identifier "
+                "and the non-optional Manual Mode endpoint URLs below. "
+                "Example: https://accounts.google.com"
+            ),
+        ),
+    ] = None
+
+    issuer: Annotated[
+        # We can't use Pydantic's `HttpUrl` here because it normalizes the
+        # URL to lowercase and adds a trailing slash. This could break
+        # validation since this field must exactly match the ID token "iss" claim.
+        str | None,
+        FormMetadata(
+            label=_("Issuer (Manual Mode)"),
+            description=_(
+                "OIDC provider's issuer identifier. "
+                "This is the unique identifier for the provider used in ID token validation. "
+                "It must exactly match the 'iss' claim found in ID tokens. "
+                "Only required if Issuer URL is not provided (manual mode). "
+                "Must be an HTTPS URL per OIDC specification. "
+                "Example: https://accounts.google.com"
             ),
         ),
     ] = None
@@ -52,7 +108,7 @@ class OIDCAuthSettings(AuthProviderSettings, LoggerMixin):
     authorization_endpoint: Annotated[
         HttpUrl | None,
         FormMetadata(
-            label=_("Authorization Endpoint"),
+            label=_("Authorization Endpoint (Manual Mode)"),
             description=_(
                 "OIDC provider's authorization endpoint URL. "
                 "Only required if Issuer URL is not provided. "
@@ -64,7 +120,7 @@ class OIDCAuthSettings(AuthProviderSettings, LoggerMixin):
     token_endpoint: Annotated[
         HttpUrl | None,
         FormMetadata(
-            label=_("Token Endpoint"),
+            label=_("Token Endpoint (Manual Mode)"),
             description=_(
                 "OIDC provider's token endpoint URL. "
                 "Only required if Issuer URL is not provided. "
@@ -76,7 +132,7 @@ class OIDCAuthSettings(AuthProviderSettings, LoggerMixin):
     jwks_uri: Annotated[
         HttpUrl | None,
         FormMetadata(
-            label=_("JWKS URI"),
+            label=_("JWKS URI (Manual Mode)"),
             description=_(
                 "OIDC provider's JSON Web Key Set (JWKS) endpoint URL. "
                 "Used for validating ID token signatures. "
@@ -89,7 +145,7 @@ class OIDCAuthSettings(AuthProviderSettings, LoggerMixin):
     userinfo_endpoint: Annotated[
         HttpUrl | None,
         FormMetadata(
-            label=_("UserInfo Endpoint (Optional)"),
+            label=_("UserInfo Endpoint (Manual Mode - Optional)"),
             description=_(
                 "OIDC provider's UserInfo endpoint URL. "
                 "Optional - used to fetch additional user claims. "
@@ -330,32 +386,78 @@ class OIDCAuthSettings(AuthProviderSettings, LoggerMixin):
     ] = None
 
     @model_validator(mode="after")
-    def validate_endpoints(self) -> OIDCAuthSettings:
-        """Validate that either issuer_url or manual endpoints are provided."""
-        if not self.issuer_url:
-            # If no issuer_url, require manual endpoint configuration
-            if not self.authorization_endpoint:
-                raise SettingsValidationError(
-                    problem_detail=INCOMPLETE_CONFIGURATION.detailed(
-                        "Either 'Issuer URL' for automatic discovery or "
-                        "'Authorization Endpoint' must be provided."
-                    )
-                )
-            if not self.token_endpoint:
-                raise SettingsValidationError(
-                    problem_detail=INCOMPLETE_CONFIGURATION.detailed(
-                        "Either 'Issuer URL' for automatic discovery or "
-                        "'Token Endpoint' must be provided."
-                    )
-                )
-            if not self.jwks_uri:
-                raise SettingsValidationError(
-                    problem_detail=INCOMPLETE_CONFIGURATION.detailed(
-                        "Either 'Issuer URL' for automatic discovery or "
-                        "'JWKS URI' must be provided."
-                    )
-                )
+    def validate_configuration_mode(self) -> OIDCAuthSettings:
+        """Validate that the auth configuration is in either discovery or manual mode.
+
+        Discovery mode requires:
+        - issuer_url
+
+        Manual mode requires:
+        - issuer
+        - authorization_endpoint
+        - token_endpoint
+        - jwks_uri
+        """
+        if self.issuer_url:
+            # Discovery mode
+            return self
+
+        # Manual mode - verify that all required fields are present
+        missing_fields = []
+
+        if not self.issuer:
+            missing_fields.append("'Issuer Identifier'")
+        if not self.authorization_endpoint:
+            missing_fields.append("'Authorization Endpoint'")
+        if not self.token_endpoint:
+            missing_fields.append("'Token Endpoint'")
+        if not self.jwks_uri:
+            missing_fields.append("'JWKS URI'")
+
+        if missing_fields:
+            fields_list = ", ".join(missing_fields)
+            error_msg = (
+                f"Either 'Issuer URL' for automatic discovery or all manual mode fields must be provided. "
+                f"Missing: {fields_list}."
+            )
+            raise SettingsValidationError(
+                problem_detail=INCOMPLETE_CONFIGURATION.detailed(error_msg)
+            )
+
         return self
+
+    @field_validator(
+        "issuer_url",
+        "issuer",
+        "authorization_endpoint",
+        "token_endpoint",
+        "jwks_uri",
+        "userinfo_endpoint",
+        "end_session_endpoint",
+    )
+    @classmethod
+    def validate_url_fields(
+        cls, v: str | HttpUrl | None, info: ValidationInfo
+    ) -> str | None:
+        """Validate URL fields based on the test-mode setting."""
+        if v is None:
+            return v
+
+        test_mode = info.data.get("test_mode", False)
+        field_label = info.field_name.replace("_", " ").title()
+
+        # How we validate URLs depends on whether we're in test mode.
+        adapter = TEST_MODE_AUTH_ADAPTER if test_mode else PRODUCTION_AUTH_ADAPTER
+        try:
+            adapter.validate_python(str(v))
+        except Exception:
+            schemes = "HTTP or HTTPS" if test_mode else "HTTPS"
+            raise SettingsValidationError(
+                problem_detail=INVALID_CONFIGURATION_OPTION.detailed(
+                    f"'{field_label}' must be a valid {schemes} URL."
+                )
+            )
+        return v
 
     @field_validator("scopes")
     @classmethod
@@ -365,7 +467,7 @@ class OIDCAuthSettings(AuthProviderSettings, LoggerMixin):
             raise SettingsValidationError(
                 problem_detail=INCOMPLETE_CONFIGURATION.detailed(
                     "The 'openid' scope is required for OIDC authentication. "
-                    "Current scopes: " + ", ".join(v)
+                    f"Current scopes: {', '.join(v)}"
                 )
             )
         return v

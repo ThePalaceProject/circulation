@@ -96,26 +96,22 @@ class OIDCAuthenticationManager(LoggerMixin):
                 f"Discovering OIDC provider metadata from {self._settings.issuer_url}"
             )
             self._metadata = self._utility.discover_oidc_configuration(
-                self._settings.issuer_url, use_cache=use_cache
+                HttpUrl(self._settings.issuer_url), use_cache=use_cache
             )
             return self._metadata
 
         # Manual configuration
         self.log.info("Using manually configured OIDC endpoints")
         self._metadata = {
-            "issuer": (
-                str(self._settings.issuer_url)
-                if self._settings.issuer_url
-                else "manual"
-            ),
-            "authorization_endpoint": str(self._settings.authorization_endpoint),
-            "token_endpoint": str(self._settings.token_endpoint),
-            "jwks_uri": str(self._settings.jwks_uri),
+            "issuer": self._settings.issuer,
+            "authorization_endpoint": self._settings.authorization_endpoint,
+            "token_endpoint": self._settings.token_endpoint,
+            "jwks_uri": self._settings.jwks_uri,
         }
 
         # Add optional userinfo endpoint
         if self._settings.userinfo_endpoint:
-            self._metadata["userinfo_endpoint"] = str(self._settings.userinfo_endpoint)
+            self._metadata["userinfo_endpoint"] = self._settings.userinfo_endpoint
 
         return self._metadata
 
@@ -263,11 +259,8 @@ class OIDCAuthenticationManager(LoggerMixin):
         # Fetch JWKS
         jwks = self._utility.fetch_jwks(HttpUrl(jwks_uri))
 
-        # Determine expected issuer
-        # Use issuer from metadata if available, otherwise use issuer_url or "manual"
-        expected_issuer = metadata.get(
-            "issuer", str(self._settings.issuer_url or "manual")
-        )
+        # Get expected issuer from metadata
+        expected_issuer = metadata["issuer"]
 
         # Validate signature and claims
         claims = self._validator.validate_signature(id_token, jwks)
@@ -476,9 +469,7 @@ class OIDCAuthenticationManager(LoggerMixin):
                     ) from e
 
                 # Manually validate the required claims (without requiring 'sub')
-                expected_issuer = metadata.get(
-                    "issuer", str(self._settings.issuer_url or "manual")
-                )
+                expected_issuer = metadata["issuer"]
                 if claims.get("iss") != expected_issuer:
                     raise OIDCAuthenticationError(
                         f"Invalid issuer: expected {expected_issuer}, got {claims.get('iss')}"
