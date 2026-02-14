@@ -31,12 +31,12 @@ from palace.manager.integration.settings import (
 )
 from palace.manager.util.log import LoggerMixin
 
-PRODUCTION_AUTH_ADAPTER = TypeAdapter(
+PRODUCTION_AUTH_ADAPTER: TypeAdapter[
     Annotated[HttpUrl, UrlConstraints(allowed_schemes=["https"])]
-)
-TEST_MODE_AUTH_ADAPTER = TypeAdapter(
+] = TypeAdapter(Annotated[HttpUrl, UrlConstraints(allowed_schemes=["https"])])
+TEST_MODE_AUTH_ADAPTER: TypeAdapter[
     Annotated[HttpUrl, UrlConstraints(allowed_schemes=["https", "http"])]
-)
+] = TypeAdapter(Annotated[HttpUrl, UrlConstraints(allowed_schemes=["https", "http"])])
 
 
 class OIDCAuthSettings(AuthProviderSettings, LoggerMixin):
@@ -438,13 +438,14 @@ class OIDCAuthSettings(AuthProviderSettings, LoggerMixin):
     @classmethod
     def validate_url_fields(
         cls, v: str | HttpUrl | None, info: ValidationInfo
-    ) -> str | None:
+    ) -> str | HttpUrl | None:
         """Validate URL fields based on the test-mode setting."""
         if v is None:
             return v
 
         test_mode = info.data.get("test_mode", False)
-        field_label = info.field_name.replace("_", " ").title()
+        field_name = info.field_name or "(missing field name)"
+        field_label = field_name.replace("_", " ").title()
 
         # How we validate URLs depends on whether we're in test mode.
         adapter = TEST_MODE_AUTH_ADAPTER if test_mode else PRODUCTION_AUTH_ADAPTER
