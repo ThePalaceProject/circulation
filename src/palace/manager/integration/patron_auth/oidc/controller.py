@@ -257,11 +257,13 @@ class OIDCController(LoggerMixin):
 
         try:
             # Get the bearer token signing secret from any library authenticator
-            # (they all share the same global secret)
-            library_authenticator = next(
+            # (they all share the same global secret).
+            # TODO: We should really pull this secret up to (at least) controller's
+            #  `_authenticator` object itself, since `LibraryAuthenticator`s` share
+            #  the same secret.
+            secret = next(
                 iter(self._authenticator.library_authenticators.values())
-            )
-            secret = library_authenticator.bearer_token_signing_secret
+            ).bearer_token_signing_secret
             state_data = utility.validate_state(state, secret)
         except Exception as e:
             self.log.error(f"Invalid state parameter: {e}")
