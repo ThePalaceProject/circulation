@@ -311,8 +311,6 @@ class OIDCCredentialManager(LoggerMixin):
             # If no expiry provided, keep existing expiry logic
             self.log.warning("Refreshed token has no expiry information")
 
-        db.commit()
-
         self.log.info(f"Successfully refreshed credential {credential.id}")
         return credential
 
@@ -359,8 +357,6 @@ class OIDCCredentialManager(LoggerMixin):
             return
 
         credential.expires = utc_now()
-        db.commit()
-
         self.log.info(f"Invalidated credential {credential_id}")
 
     def invalidate_patron_credentials(self, db: Session, patron_id: int) -> int:
@@ -383,8 +379,6 @@ class OIDCCredentialManager(LoggerMixin):
         for credential in credentials:
             credential.expires = utc_now()
             count += 1
-
-        db.commit()
 
         self.log.info(f"Invalidated {count} credential(s) for patron {patron_id}")
         return count

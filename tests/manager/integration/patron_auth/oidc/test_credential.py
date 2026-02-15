@@ -745,7 +745,7 @@ class TestOIDCCredentialManagerLogout:
 
         manager.invalidate_credential(db.session, credential.id)
 
-        db.session.refresh(credential)
+        # Check the in-memory object directly (no refresh needed)
         assert credential.expires <= utc_now()
 
     def test_invalidate_credential_not_found(self, db, manager):
@@ -773,7 +773,7 @@ class TestOIDCCredentialManagerLogout:
         # Should invalidate exactly one credential (each patron has one OIDC credential)
         assert count == 1
 
-        db.session.refresh(credential)
+        # Check the in-memory object directly (no refresh needed)
         assert credential.expires <= utc_now()
 
     def test_invalidate_patron_credentials_no_credentials(self, db, manager):
