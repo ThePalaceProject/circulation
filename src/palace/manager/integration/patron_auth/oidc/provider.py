@@ -51,16 +51,6 @@ OIDC_TOKEN_EXPIRED = pd(
     ),
 )
 
-OIDC_PATRON_FILTERED = pd(
-    "http://palaceproject.io/terms/problem/auth/unrecoverable/oidc/patron-filtered",
-    status_code=403,
-    title=_("Access denied."),
-    detail=_(
-        "Your account does not meet the requirements for library access. "
-        "Please contact your library administrator for assistance."
-    ),
-)
-
 
 class OIDCAuthenticationProvider(
     BaseOIDCAuthenticationProvider[OIDCAuthSettings, OIDCAuthLibrarySettings]
@@ -240,7 +230,7 @@ class OIDCAuthenticationProvider(
 
         :param id_token_claims: Validated ID token claims
         :return: PatronData object
-        :raises: ProblemDetailException if patron cannot be determined or filtered
+        :raises: ProblemDetailException if patron cannot be determined
         """
         patron_id_claim = self._settings.patron_id_claim
         raw_patron_id = id_token_claims.get(patron_id_claim)
@@ -259,19 +249,6 @@ class OIDCAuthenticationProvider(
             patron_id = match.group("patron_id")
         else:
             patron_id = str(raw_patron_id)
-
-        if self._settings.filter_expression:
-            try:
-                allowed = eval(
-                    self._settings.filter_expression,
-                    {"__builtins__": {}},
-                    {"claims": id_token_claims},
-                )
-                if not allowed:
-                    raise ProblemDetailException(problem_detail=OIDC_PATRON_FILTERED)
-            except Exception as e:
-                self.log.error(f"Error evaluating filter expression: {e}")
-                raise ProblemDetailException(problem_detail=OIDC_PATRON_FILTERED)
 
         return PatronData(
             permanent_id=patron_id,

@@ -302,23 +302,6 @@ class OIDCAuthSettings(AuthProviderSettings, LoggerMixin):
         ),
     ] = "offline"
 
-    filter_expression: Annotated[
-        str | None,
-        FormMetadata(
-            label=_("Filter Expression (Optional)"),
-            description=_(
-                "Python expression to filter patrons based on ID token claims. "
-                "Access claims via the 'claims' dictionary. "
-                "Example to restrict by email domain: "
-                "<pre>claims.get('email', '').endswith('@example.edu')</pre>"
-                "Example to check membership: "
-                "<pre>'library-patron' in claims.get('groups', [])</pre>"
-                "Leave empty to allow all authenticated users."
-            ),
-            type=FormFieldType.TEXTAREA,
-        ),
-    ] = None
-
     # Authentication Link Settings
     auth_link_display_name: Annotated[
         str | None,
@@ -487,30 +470,6 @@ class OIDCAuthSettings(AuthProviderSettings, LoggerMixin):
                 )
         return v
 
-    @field_validator("filter_expression")
-    @classmethod
-    def validate_filter_expression(cls, v: str | None) -> str | None:
-        """Validate the filter expression syntax."""
-        if v is not None:
-            # Try to compile the expression to check for syntax errors
-            try:
-                compile(v, "<filter_expression>", "eval")
-            except SyntaxError as e:
-                cls.logger().exception("Invalid filter expression syntax")
-                raise SettingsValidationError(
-                    problem_detail=INCOMPLETE_CONFIGURATION.detailed(
-                        f"Filter expression has invalid syntax: {e.msg}"
-                    )
-                ) from e
-            except Exception as e:
-                cls.logger().exception("Unexpected error validating filter expression")
-                raise SettingsValidationError(
-                    problem_detail=INCOMPLETE_CONFIGURATION.detailed(
-                        f"Filter expression validation failed: {str(e)}"
-                    )
-                ) from e
-        return v
-
 
 class OIDCAuthLibrarySettings(AuthProviderLibrarySettings):
     """OIDC Authentication Library-Level Settings.
@@ -518,7 +477,6 @@ class OIDCAuthLibrarySettings(AuthProviderLibrarySettings):
     Currently empty (like SAML). Future enhancements may include:
     - Library-specific scope overrides
     - Custom claim mappings
-    - Library-specific filter expressions
     """
 
     ...

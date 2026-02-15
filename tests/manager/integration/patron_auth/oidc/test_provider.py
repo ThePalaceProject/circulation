@@ -13,7 +13,6 @@ from palace.manager.integration.patron_auth.oidc.configuration.model import (
 )
 from palace.manager.integration.patron_auth.oidc.provider import (
     OIDC_CANNOT_DETERMINE_PATRON,
-    OIDC_PATRON_FILTERED,
     OIDC_TOKEN_EXPIRED,
     OIDCAuthenticationProvider,
 )
@@ -335,50 +334,6 @@ class TestOIDCAuthenticationProvider:
             provider.remote_patron_lookup_from_oidc_claims(id_token_claims)
 
         assert exc_info.value.problem_detail == OIDC_CANNOT_DETERMINE_PATRON
-
-    @pytest.mark.parametrize(
-        "role,should_pass",
-        [
-            pytest.param("patron", True, id="allowed"),
-            pytest.param("staff", False, id="denied"),
-        ],
-    )
-    def test_remote_patron_lookup_from_oidc_claims_with_filter(self, role, should_pass):
-        """Test remote patron lookup with role-based filter."""
-        settings = OIDCAuthSettings(
-            issuer_url="https://idp.example.com",
-            client_id="test-client-id",
-            client_secret="test-client-secret",
-            filter_expression="claims.get('role') == 'patron'",
-        )
-        library_settings = OIDCAuthLibrarySettings()
-        provider = OIDCAuthenticationProvider(
-            library_id=1,
-            integration_id=1,
-            settings=settings,
-            library_settings=library_settings,
-        )
-
-        id_token_claims = {"sub": "test-user", "role": role}
-
-        if should_pass:
-            patron_data = provider.remote_patron_lookup_from_oidc_claims(
-                id_token_claims
-            )
-            assert patron_data.permanent_id == "test-user"
-        else:
-            with pytest.raises(ProblemDetailException) as exc_info:
-                provider.remote_patron_lookup_from_oidc_claims(id_token_claims)
-            assert exc_info.value.problem_detail == OIDC_PATRON_FILTERED
-
-    def test_remote_patron_lookup_from_oidc_claims_with_filter_error(self):
-        with pytest.raises(ProblemDetailException):
-            settings = OIDCAuthSettings(
-                issuer_url="https://idp.example.com",
-                client_id="test-client-id",
-                client_secret="test-client-secret",
-                filter_expression="invalid python syntax",
-            )
 
     def test_remote_patron_lookup_raises_not_supported(self, oidc_provider):
         with pytest.raises(PatronLookupNotSupported):

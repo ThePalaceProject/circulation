@@ -424,60 +424,6 @@ class TestOIDCAuthSettings:
             )
 
     @pytest.mark.parametrize(
-        "filter_expr,should_pass",
-        [
-            pytest.param(None, True, id="none"),
-            pytest.param(
-                "claims.get('email', '').endswith('@example.com')",
-                True,
-                id="simple-valid",
-            ),
-            pytest.param(
-                "'admin' in claims.get('roles', [])", True, id="complex-roles"
-            ),
-            pytest.param(
-                "claims.get('email_verified') is True", True, id="complex-boolean"
-            ),
-            pytest.param("claims.get('age', 0) >= 18", True, id="complex-comparison"),
-            pytest.param(
-                "'university' in claims.get('email', '').lower()",
-                True,
-                id="complex-string",
-            ),
-            pytest.param(
-                "claims.get('email' invalid syntax", False, id="invalid-syntax"
-            ),
-        ],
-    )
-    def test_filter_expression_validation(
-        self, filter_expr: str | None, should_pass: bool
-    ):
-        """Test filter expression validation with various expressions.
-
-        Filter expressions are Python expressions evaluated to determine patron eligibility.
-        Tests valid syntax, complex expressions, invalid syntax, and None.
-        """
-        if should_pass:
-            settings = OIDCAuthSettings(
-                issuer_url="https://example.com",
-                client_id="test-client-id",
-                client_secret="test-client-secret",
-                filter_expression=filter_expr,
-            )
-            assert settings.filter_expression == filter_expr
-        else:
-            with pytest.raises(ProblemDetailException) as exc_info:
-                OIDCAuthSettings(
-                    issuer_url="https://example.com",
-                    client_id="test-client-id",
-                    client_secret="test-client-secret",
-                    filter_expression=filter_expr,
-                )
-            assert exc_info.value.problem_detail.detail is not None
-            error_str = exc_info.value.problem_detail.detail.lower()
-            assert "syntax" in error_str or "invalid" in error_str
-
-    @pytest.mark.parametrize(
         "session_lifetime,should_pass",
         [
             pytest.param(None, True, id="none"),
