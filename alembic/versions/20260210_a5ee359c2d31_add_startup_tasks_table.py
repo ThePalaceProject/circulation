@@ -20,8 +20,12 @@ def upgrade() -> None:
     op.create_table(
         "startup_tasks",
         sa.Column("key", sa.Unicode(), nullable=False),
-        sa.Column("queued_at", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("run", sa.Boolean(), nullable=False),
+        sa.Column("recorded_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column(
+            "state",
+            sa.Enum("run", "marked", name="startuptaskstate"),
+            nullable=False,
+        ),
         sa.PrimaryKeyConstraint("key"),
     )
 

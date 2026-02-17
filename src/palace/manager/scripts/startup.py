@@ -53,13 +53,13 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
 from palace.manager.service.container import Services
-from palace.manager.sqlalchemy.model.startup_task import StartupTask
+from palace.manager.sqlalchemy.model.startup_task import StartupTask, StartupTaskState
 from palace.manager.util.datetime_helpers import utc_now
 
 logger = logging.getLogger(__name__)
 
 #: Type alias for a startup task callable.
-StartupTaskCallable = Callable[[Services, Session], Signature | None]
+StartupTaskCallable = Callable[[Services, Session, logging.Logger], Signature | None]
 
 #: Default location of startup task files — ``startup_tasks/`` at the
 #: project root, resolved relative to this file's position in the source
@@ -160,9 +160,9 @@ def _pending_tasks(
     return {k: v for k, v in tasks.items() if k not in existing_keys}
 
 
-def _record_task(session: Session, key: str, *, run: bool) -> None:
+def _record_task(session: Session, key: str, *, state: StartupTaskState) -> None:
     """Insert a :class:`StartupTask` row and flush (no commit)."""
-    session.add(StartupTask(key=key, queued_at=utc_now(), run=run))
+    session.add(StartupTask(key=key, recorded_at=utc_now(), state=state))
     session.flush()
 
 
@@ -182,7 +182,7 @@ def run_startup_tasks(
     :param tasks_dir: Directory to scan for task files.  Defaults to the
         project-root ``startup_tasks/`` directory.
     """
-    tasks = discover_startup_tasks(tasks_dir)
+    tasks = discover_startup_tasks(tasks_dir or STARTUP_TASKS_DIR)
     if not tasks:
         logger.info("No startup tasks discovered.")
         return
@@ -200,6 +200,7 @@ def run_startup_tasks(
         try:
             with Session(engine) as session, session.begin():
                 result = run_fn(services, session, logger)
+                _record_task(session, key, state=StartupTaskState.RUN)
         except Exception:
             logger.exception("Failed to execute startup task %r.", key)
             continue
@@ -212,8 +213,6 @@ def run_startup_tasks(
                 async_result.id,
             )
 
-        with Session(engine) as session, session.begin():
-            _record_task(session, key, run=True)
         logger.info("Executed startup task %r.", key)
 
 
@@ -230,7 +229,7 @@ def stamp_startup_tasks(
     :param tasks_dir: Directory to scan for task files.  Defaults to the
         project-root ``startup_tasks/`` directory.
     """
-    tasks = discover_startup_tasks(tasks_dir)
+    tasks = discover_startup_tasks(tasks_dir or STARTUP_TASKS_DIR)
     if not tasks:
         logger.info("No startup tasks discovered.")
         return
@@ -243,7 +242,7 @@ def stamp_startup_tasks(
     with Session(engine) as session, session.begin():
         pending = _pending_tasks(session, tasks)
         for key in pending:
-            _record_task(session, key, run=False)
+            _record_task(session, key, state=StartupTaskState.MARKED)
             logger.info("Stamped startup task %r.", key)
 
 

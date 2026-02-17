@@ -22,7 +22,7 @@ from palace.manager.scripts.startup import (
     stamp_startup_tasks,
 )
 from palace.manager.service.container import Services
-from palace.manager.sqlalchemy.model.startup_task import StartupTask
+from palace.manager.sqlalchemy.model.startup_task import StartupTask, StartupTaskState
 from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 
@@ -30,8 +30,8 @@ from tests.fixtures.database import DatabaseTransactionFixture
 class TestDiscoverStartupTasks:
     def test_discover_startup_tasks(self, tmp_path: Path) -> None:
         """Task modules are discovered and returned as a dict sorted by key."""
-        (tmp_path / "b_second.py").write_text("def run(services, session): pass\n")
-        (tmp_path / "a_first.py").write_text("def run(services, session): pass\n")
+        (tmp_path / "b_second.py").write_text("def run(services, session, log): pass\n")
+        (tmp_path / "a_first.py").write_text("def run(services, session, log): pass\n")
 
         result = discover_startup_tasks(tmp_path)
 
@@ -66,8 +66,8 @@ class TestDiscoverStartupTasks:
     def test_discover_skips_underscore_files(self, tmp_path: Path) -> None:
         """Files starting with _ are skipped."""
         (tmp_path / "__init__.py").write_text("")
-        (tmp_path / "_create.py").write_text("def run(services, session): pass\n")
-        (tmp_path / "_helper.py").write_text("def run(services, session): pass\n")
+        (tmp_path / "_create.py").write_text("def run(services, session, log): pass\n")
+        (tmp_path / "_helper.py").write_text("def run(services, session, log): pass\n")
 
         result = discover_startup_tasks(tmp_path)
 
@@ -141,8 +141,8 @@ class TestStartupTaskRunner:
         row = db.session.execute(
             select(StartupTask).where(StartupTask.key == "test_task")
         ).scalar_one()
-        assert row.queued_at is not None
-        assert row.run is True
+        assert row.recorded_at is not None
+        assert row.state == StartupTaskState.RUN
 
     def test_run_dispatches_celery_signature(
         self,
@@ -180,8 +180,8 @@ class TestStartupTaskRunner:
         """Tasks already recorded in the database are not re-executed."""
         existing = StartupTask(
             key="already_done",
-            queued_at=utc_now(),
-            run=True,
+            recorded_at=utc_now(),
+            state=StartupTaskState.RUN,
         )
         db.session.add(existing)
         db.session.flush()
@@ -320,8 +320,8 @@ class TestStartupTaskRunner:
         row = db.session.execute(
             select(StartupTask).where(StartupTask.key == "stamp_me")
         ).scalar_one()
-        assert row.queued_at is not None
-        assert row.run is False
+        assert row.recorded_at is not None
+        assert row.state == StartupTaskState.MARKED
 
         assert "Stamped startup task" in caplog.text
         assert "Fresh database install" in caplog.text
