@@ -23,7 +23,7 @@ def upgrade() -> None:
         sa.Column("recorded_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column(
             "state",
-            sa.Enum("run", "marked", name="startuptaskstate"),
+            sa.Enum("RUN", "MARKED", name="startuptaskstate"),
             nullable=False,
         ),
         sa.PrimaryKeyConstraint("key"),
@@ -32,3 +32,4 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_table("startup_tasks")
+    sa.Enum(name="startuptaskstate").drop(op.get_bind(), checkfirst=False)
