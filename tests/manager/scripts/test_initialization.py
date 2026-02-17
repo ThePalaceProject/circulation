@@ -383,34 +383,23 @@ class TestInstanceInitializationScript:
             mock_engine_factory.return_value, True
         )
 
-    def test_run_startup_tasks_calls_run(self, services_fixture: ServicesFixture):
-        """already_initialized=True calls _run_startup_tasks."""
+    @pytest.mark.parametrize("already_initialized", [True, False])
+    def test_run_startup_tasks_delegates(
+        self, services_fixture: ServicesFixture, already_initialized: bool
+    ):
+        """run_startup_tasks forwards engine, container, and already_initialized."""
         script = InstanceInitializationScript()
         mock_engine = MagicMock()
 
         with patch(
             "palace.manager.scripts.initialization._run_startup_tasks"
         ) as mock_run:
-            script.run_startup_tasks(mock_engine, already_initialized=True)
+            script.run_startup_tasks(
+                mock_engine, already_initialized=already_initialized
+            )
 
-        mock_run.assert_called_once_with(mock_engine, script._container)
-
-    def test_run_startup_tasks_fresh_install_calls_stamp(
-        self, services_fixture: ServicesFixture
-    ):
-        """already_initialized=False calls _stamp_startup_tasks instead of _run_startup_tasks."""
-        script = InstanceInitializationScript()
-        mock_engine = MagicMock()
-
-        with (
-            patch(
-                "palace.manager.scripts.initialization._run_startup_tasks"
-            ) as mock_run,
-            patch(
-                "palace.manager.scripts.initialization._stamp_startup_tasks"
-            ) as mock_stamp,
-        ):
-            script.run_startup_tasks(mock_engine, already_initialized=False)
-
-        mock_run.assert_not_called()
-        mock_stamp.assert_called_once_with(mock_engine)
+        mock_run.assert_called_once_with(
+            mock_engine,
+            script._container,
+            already_initialized=already_initialized,
+        )

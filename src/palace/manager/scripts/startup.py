@@ -1,38 +1,6 @@
 """One-time startup task registry with auto-discovery and database tracking.
 
-Developers register tasks by adding a Python file to the ``startup_tasks/``
-directory at the project root.  Each file must define a ``run`` function
-with the signature::
-
-    def run(services: Services, session: Session, log: logging.Logger) -> Signature | None: ...
-
-The function receives the application's services container, a database
-session, and a logger, giving it access to Redis, search, Celery dispatch,
-logging, and any other service it needs.
-
-If ``run`` returns a Celery :class:`~celery.canvas.Signature` (including
-chains, groups, or chords), the runner will dispatch it via
-``apply_async()`` and log the resulting task ID.  Returning ``None``
-(or nothing) is fine for tasks that do their work directly.
-
-On each application start the :class:`StartupTaskRunner` discovers registered
-tasks, checks the database for previously-executed entries, and runs any new
-ones.
-
-**Adding a task:**
-
-1. Run ``create_startup_task <short_description>`` to scaffold a new file.
-2. Implement ``run()`` in the generated file.
-3. Deploy — the init script auto-discovers and executes it.
-
-The task key is derived automatically from the filename (e.g.
-``2026_02_10_force_harvest.py`` → key ``2026_02_10_force_harvest``).
-The module docstring serves as the human-readable description.
-
-**Cleaning up:**
-
-Delete the file once every environment has executed the task.  The database
-row is retained as a historical record.
+See the *Startup Tasks* section in ``README.md`` for usage details.
 """
 
 from __future__ import annotations
@@ -169,9 +137,16 @@ def _record_task(session: Session, key: str, *, state: StartupTaskState) -> None
 def run_startup_tasks(
     engine: Engine,
     services: Services,
+    *,
+    already_initialized: bool,
     tasks_dir: Path | None = None,
 ) -> None:
-    """Discover tasks, check the database, and execute new ones.
+    """Discover and process one-time startup tasks.
+
+    On an existing database, new tasks are executed.  On a fresh install
+    (``already_initialized=False``), tasks are stamped as
+    :attr:`~StartupTaskState.MARKED` without running — there is no
+    existing data to migrate.
 
     Each task is executed with its own session and transaction so that a
     failure in one task does not affect others.
@@ -179,6 +154,8 @@ def run_startup_tasks(
     :param engine: SQLAlchemy engine used to create a connection.
     :param services: The application services container, passed to each
         task alongside a database session.
+    :param already_initialized: Whether the database existed before this
+        startup.  When ``False`` tasks are stamped instead of run.
     :param tasks_dir: Directory to scan for task files.  Defaults to the
         project-root ``startup_tasks/`` directory.
     """
@@ -187,6 +164,36 @@ def run_startup_tasks(
         logger.info("No startup tasks discovered.")
         return
 
+    if not already_initialized:
+        _stamp_tasks(engine, tasks)
+        return
+
+    _run_tasks(engine, services, tasks)
+
+
+def _stamp_tasks(
+    engine: Engine,
+    tasks: dict[str, StartupTaskCallable],
+) -> None:
+    """Record all tasks as already-executed without running them."""
+    logger.info(
+        "Fresh database install — stamping %d startup task(s) without running.",
+        len(tasks),
+    )
+
+    with Session(engine) as session, session.begin():
+        pending = _pending_tasks(session, tasks)
+        for key in pending:
+            _record_task(session, key, state=StartupTaskState.MARKED)
+            logger.info("Stamped startup task %r.", key)
+
+
+def _run_tasks(
+    engine: Engine,
+    services: Services,
+    tasks: dict[str, StartupTaskCallable],
+) -> None:
+    """Execute pending tasks and record them in the database."""
     logger.info("Discovered %d startup task(s).", len(tasks))
 
     with Session(engine) as session:
@@ -219,46 +226,25 @@ def run_startup_tasks(
         logger.info("Executed startup task %r.", key)
 
 
-def stamp_startup_tasks(
-    engine: Engine,
-    tasks_dir: Path | None = None,
-) -> None:
-    """Record all discovered tasks as already-executed **without** running them.
-
-    This is used on fresh database installs where there is no existing data
-    to migrate — analogous to ``alembic stamp head``.
-
-    :param engine: SQLAlchemy engine used to create a connection.
-    :param tasks_dir: Directory to scan for task files.  Defaults to the
-        project-root ``startup_tasks/`` directory.
-    """
-    tasks = discover_startup_tasks(tasks_dir or STARTUP_TASKS_DIR)
-    if not tasks:
-        logger.info("No startup tasks discovered.")
-        return
-
-    logger.info(
-        "Fresh database install — stamping %d startup task(s) without running.",
-        len(tasks),
-    )
-
-    with Session(engine) as session, session.begin():
-        pending = _pending_tasks(session, tasks)
-        for key in pending:
-            _record_task(session, key, state=StartupTaskState.MARKED)
-            logger.info("Stamped startup task %r.", key)
-
-
 # ---------------------------------------------------------------------------
 # Scaffolding command: create_startup_task
 # ---------------------------------------------------------------------------
 
 
+_MAX_SLUG_LENGTH = 60
+
+
 def _slugify(text: str) -> str:
-    """Convert a description into a valid Python identifier slug."""
+    """Convert a description into a valid Python identifier slug.
+
+    The result is truncated to :data:`_MAX_SLUG_LENGTH` characters,
+    trimmed at the last underscore boundary to avoid cutting mid-word.
+    """
     slug = text.lower().strip()
     slug = re.sub(r"[^a-z0-9]+", "_", slug)
     slug = slug.strip("_")
+    if len(slug) > _MAX_SLUG_LENGTH:
+        slug = slug[:_MAX_SLUG_LENGTH].rsplit("_", 1)[0]
     return slug
 
 

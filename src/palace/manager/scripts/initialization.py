@@ -11,10 +11,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
 from palace.manager.celery.tasks.search import get_migrate_search_chain
-from palace.manager.scripts.startup import (
-    run_startup_tasks as _run_startup_tasks,
-    stamp_startup_tasks as _stamp_startup_tasks,
-)
+from palace.manager.scripts.startup import run_startup_tasks as _run_startup_tasks
 from palace.manager.search.revision import SearchSchemaRevision
 from palace.manager.search.service import SearchService
 from palace.manager.service.container import container_instance
@@ -176,15 +173,10 @@ class InstanceInitializationScript(LoggerMixin):
         self.log.info("Search initialization complete.")
 
     def run_startup_tasks(self, engine: Engine, already_initialized: bool) -> None:
-        """Run any registered one-time startup tasks.
-
-        On a fresh database install, tasks state is set to stamped
-        without dispatching them — there is no existing data to migrate.
-        """
-        if already_initialized:
-            _run_startup_tasks(engine, self._container)
-        else:
-            _stamp_startup_tasks(engine)
+        """Run any registered one-time startup tasks."""
+        _run_startup_tasks(
+            engine, self._container, already_initialized=already_initialized
+        )
 
     def run(self, args: Sequence[str] | None = None) -> None:
         """
