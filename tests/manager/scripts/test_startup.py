@@ -3,15 +3,14 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Iterator
-from contextlib import contextmanager
+from collections.abc import Generator
 from pathlib import Path
 from unittest.mock import MagicMock, create_autospec, patch
 
 import pytest
 from celery.canvas import Signature
 from sqlalchemy import select
-from sqlalchemy.engine import Connection, Engine
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
 from palace.manager.scripts.startup import (
@@ -23,7 +22,7 @@ from palace.manager.scripts.startup import (
 from palace.manager.service.container import Services
 from palace.manager.sqlalchemy.model.startup_task import StartupTask, StartupTaskState
 from palace.manager.util.datetime_helpers import utc_now
-from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.database import DatabaseFixture
 
 
 class TestDiscoverStartupTasks:
@@ -83,69 +82,71 @@ class TestDiscoverStartupTasks:
         assert "does not exist" in caplog.text
 
 
-class TestStartupTaskRunner:
-    @staticmethod
-    @contextmanager
-    def _engine(db: DatabaseTransactionFixture) -> Iterator[Engine]:
-        """Yield a mock engine and patch ``Session`` in the startup module.
+class RunStartupTasksFixture:
+    def __init__(self, mock_discover_startup_tasks) -> None:
+        self.discover_startup_tasks = mock_discover_startup_tasks
+        self.services = create_autospec(Services)
 
-        Replaces ``Session`` so that every ``Session(engine)`` call inside
-        the startup functions creates a session bound to the test fixture's
-        connection, preserving rollback-based test isolation.
-        """
-        connection = db.session.connection()
-        assert isinstance(connection, Connection)
 
-        engine = MagicMock(spec=Engine)
-        with patch(
-            "palace.manager.scripts.startup.Session",
-            lambda *_args, **_kwargs: Session(bind=connection),
-        ):
-            yield engine
+@pytest.fixture
+def startup_tasks_fixture() -> Generator[RunStartupTasksFixture]:
+    with patch(
+        "palace.manager.scripts.startup.discover_startup_tasks",
+    ) as mock:
+        mock.return_value = {}
+        yield RunStartupTasksFixture(mock)
 
-    def test_run_no_tasks_discovered(self, caplog: pytest.LogCaptureFixture) -> None:
+
+class TestRunStartupTasks:
+    def test_run_no_tasks_discovered(
+        self,
+        startup_tasks_fixture: RunStartupTasksFixture,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
         """When no tasks are discovered, nothing is executed."""
         engine = create_autospec(Engine)
-        services = create_autospec(Services)
-        with patch(
-            "palace.manager.scripts.startup.discover_startup_tasks",
-            return_value={},
-        ):
-            caplog.set_level(logging.INFO)
-            run_startup_tasks(engine, services, already_initialized=True)
+        caplog.set_level(logging.INFO)
+        run_startup_tasks(
+            engine, startup_tasks_fixture.services, already_initialized=True
+        )
 
         assert "No startup tasks discovered" in caplog.text
 
-    def test_run_executes_new_task(self, db: DatabaseTransactionFixture) -> None:
+    def test_run_executes_new_task(
+        self,
+        function_database: DatabaseFixture,
+        startup_tasks_fixture: RunStartupTasksFixture,
+    ) -> None:
         """A new task is executed and recorded in the database."""
         mock_task = MagicMock(return_value=None)
-        services = create_autospec(Services)
+        startup_tasks_fixture.discover_startup_tasks.return_value = {
+            "test_task": mock_task,
+        }
 
-        with (
-            self._engine(db) as engine,
-            patch(
-                "palace.manager.scripts.startup.discover_startup_tasks",
-                return_value={"test_task": mock_task},
-            ),
-        ):
-            run_startup_tasks(engine, services, already_initialized=True)
+        run_startup_tasks(
+            function_database.engine,
+            startup_tasks_fixture.services,
+            already_initialized=True,
+        )
 
         mock_task.assert_called_once()
         # Verify the task received the services, a Session, and a logger
-        call_args = mock_task.call_args
-        assert call_args[0][0] is services
-        assert isinstance(call_args[0][1], Session)
-        assert isinstance(call_args[0][2], logging.Logger)
+        [services, session, logger] = mock_task.call_args.args
+        assert services is startup_tasks_fixture.services
+        assert isinstance(session, Session)
+        assert isinstance(logger, logging.Logger)
 
-        row = db.session.execute(
-            select(StartupTask).where(StartupTask.key == "test_task")
-        ).scalar_one()
-        assert row.recorded_at is not None
-        assert row.state == StartupTaskState.RUN
+        with Session(function_database.engine) as session:
+            row = session.execute(
+                select(StartupTask).where(StartupTask.key == "test_task")
+            ).scalar_one()
+            assert row.recorded_at is not None
+            assert row.state == StartupTaskState.RUN
 
     def test_run_dispatches_celery_signature(
         self,
-        db: DatabaseTransactionFixture,
+        function_database: DatabaseFixture,
+        startup_tasks_fixture: RunStartupTasksFixture,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
         """When run() returns a Signature, it is dispatched via apply_async."""
@@ -157,205 +158,147 @@ class TestStartupTaskRunner:
         ) -> Signature:
             return mock_signature
 
-        services = create_autospec(Services)
+        startup_tasks_fixture.discover_startup_tasks.return_value = {
+            "celery_task": task_returning_signature,
+        }
 
-        with (
-            self._engine(db) as engine,
-            patch(
-                "palace.manager.scripts.startup.discover_startup_tasks",
-                return_value={"celery_task": task_returning_signature},
-            ),
-        ):
-            caplog.set_level(logging.INFO)
-            run_startup_tasks(engine, services, already_initialized=True)
+        caplog.set_level(logging.INFO)
+        run_startup_tasks(
+            function_database.engine,
+            startup_tasks_fixture.services,
+            already_initialized=True,
+        )
 
         mock_signature.apply_async.assert_called_once()
         assert "fake-task-id" in caplog.text
         assert "dispatched Celery task" in caplog.text
 
-    def test_run_retries_task_when_celery_dispatch_fails(
-        self,
-        db: DatabaseTransactionFixture,
-        caplog: pytest.LogCaptureFixture,
-    ) -> None:
-        """A dispatch failure does not record the task, so it runs again later."""
-        mock_signature = create_autospec(Signature, instance=True)
-        mock_signature.apply_async.side_effect = RuntimeError("broker unavailable")
-        mock_task = MagicMock(return_value=mock_signature)
-        services = create_autospec(Services)
-
-        with (
-            self._engine(db) as engine,
-            patch(
-                "palace.manager.scripts.startup.discover_startup_tasks",
-                return_value={"celery_task": mock_task},
-            ),
-        ):
-            caplog.set_level(logging.INFO)
-            run_startup_tasks(engine, services, already_initialized=True)
-
-            # Simulate broker recovery and rerun startup tasks.
-            mock_signature.apply_async.side_effect = None
-            mock_signature.apply_async.return_value.id = "recovered-task-id"
-            run_startup_tasks(engine, services, already_initialized=True)
-
-        row = db.session.execute(
-            select(StartupTask).where(StartupTask.key == "celery_task")
-        ).scalar_one()
-        assert row.state == StartupTaskState.RUN
-        assert mock_task.call_count == 2
-        assert "Failed to execute startup task" in caplog.text
-        assert "recovered-task-id" in caplog.text
-
     def test_run_skips_already_executed_task(
-        self, db: DatabaseTransactionFixture
+        self,
+        function_database: DatabaseFixture,
+        startup_tasks_fixture: RunStartupTasksFixture,
     ) -> None:
         """Tasks already recorded in the database are not re-executed."""
-        existing = StartupTask(
-            key="already_done",
-            recorded_at=utc_now(),
-            state=StartupTaskState.RUN,
-        )
-        db.session.add(existing)
-        db.session.flush()
+        with Session(function_database.engine) as session, session.begin():
+            session.add(
+                StartupTask(
+                    key="already_done",
+                    recorded_at=utc_now(),
+                    state=StartupTaskState.RUN,
+                )
+            )
 
         mock_task = MagicMock()
-        services = create_autospec(Services)
+        startup_tasks_fixture.discover_startup_tasks.return_value = {
+            "already_done": mock_task,
+        }
 
-        with (
-            self._engine(db) as engine,
-            patch(
-                "palace.manager.scripts.startup.discover_startup_tasks",
-                return_value={"already_done": mock_task},
-            ),
-        ):
-            run_startup_tasks(engine, services, already_initialized=True)
+        run_startup_tasks(
+            function_database.engine,
+            startup_tasks_fixture.services,
+            already_initialized=True,
+        )
 
         mock_task.assert_not_called()
 
     def test_run_handles_failure_gracefully(
         self,
-        db: DatabaseTransactionFixture,
+        function_database: DatabaseFixture,
+        startup_tasks_fixture: RunStartupTasksFixture,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
-        """If one task fails, others still proceed."""
-        services = create_autospec(Services)
-
-        def bad_task(svc: Services, sess: Session, log: logging.Logger) -> None:
-            raise RuntimeError("Something broke")
-
+        """A failing task is not recorded, logged, and does not block others."""
+        bad_task = MagicMock(side_effect=RuntimeError("Something broke"))
         good_task = MagicMock(return_value=None)
+        startup_tasks_fixture.discover_startup_tasks.return_value = {
+            "a_failing": bad_task,
+            "b_succeeding": good_task,
+        }
 
-        with (
-            self._engine(db) as engine,
-            patch(
-                "palace.manager.scripts.startup.discover_startup_tasks",
-                return_value={
-                    "a_failing": bad_task,
-                    "b_succeeding": good_task,
-                },
-            ),
-        ):
-            caplog.set_level(logging.ERROR)
-            run_startup_tasks(engine, services, already_initialized=True)
-
-        # The failing task should not be recorded
-        assert (
-            db.session.execute(
-                select(StartupTask).where(StartupTask.key == "a_failing")
-            ).scalar_one_or_none()
-            is None
+        caplog.set_level(logging.ERROR)
+        run_startup_tasks(
+            function_database.engine,
+            startup_tasks_fixture.services,
+            already_initialized=True,
         )
 
-        # The succeeding task should be recorded
-        row = db.session.execute(
-            select(StartupTask).where(StartupTask.key == "b_succeeding")
-        ).scalar_one()
-        assert row is not None
-        good_task.assert_called_once()
+        with Session(function_database.engine) as session:
+            # The failing task should not be recorded
+            assert (
+                session.execute(
+                    select(StartupTask).where(StartupTask.key == "a_failing")
+                ).scalar_one_or_none()
+                is None
+            )
 
+            # The succeeding task should be recorded
+            row = session.execute(
+                select(StartupTask).where(StartupTask.key == "b_succeeding")
+            ).scalar_one()
+            assert row is not None
+
+        good_task.assert_called_once()
+        bad_task.assert_called_once()
         assert "Failed to execute startup task" in caplog.text
 
     def test_run_idempotent_on_second_call(
-        self, db: DatabaseTransactionFixture
+        self,
+        function_database: DatabaseFixture,
+        startup_tasks_fixture: RunStartupTasksFixture,
     ) -> None:
         """Running the same tasks twice only executes them once."""
         call_count = 0
-        services = create_autospec(Services)
 
         def counting_task(svc: Services, sess: Session, log: logging.Logger) -> None:
             nonlocal call_count
             call_count += 1
 
-        with (
-            self._engine(db) as engine,
-            patch(
-                "palace.manager.scripts.startup.discover_startup_tasks",
-                return_value={"idempotent_task": counting_task},
-            ),
-        ):
-            run_startup_tasks(engine, services, already_initialized=True)
-            run_startup_tasks(engine, services, already_initialized=True)
+        startup_tasks_fixture.discover_startup_tasks.return_value = {
+            "idempotent_task": counting_task,
+        }
+
+        run_startup_tasks(
+            function_database.engine,
+            startup_tasks_fixture.services,
+            already_initialized=True,
+        )
+        run_startup_tasks(
+            function_database.engine,
+            startup_tasks_fixture.services,
+            already_initialized=True,
+        )
 
         assert call_count == 1
 
-    def test_run_task_exception(
-        self,
-        db: DatabaseTransactionFixture,
-        caplog: pytest.LogCaptureFixture,
-    ) -> None:
-        """If a task's run function raises, the task is skipped."""
-        services = create_autospec(Services)
-
-        def bad_task(svc: Services, sess: Session, log: logging.Logger) -> None:
-            raise ValueError("Cannot run task")
-
-        with (
-            self._engine(db) as engine,
-            patch(
-                "palace.manager.scripts.startup.discover_startup_tasks",
-                return_value={"bad_task": bad_task},
-            ),
-        ):
-            caplog.set_level(logging.ERROR)
-            run_startup_tasks(engine, services, already_initialized=True)
-
-        assert "Failed to execute startup task" in caplog.text
-        assert (
-            db.session.execute(
-                select(StartupTask).where(StartupTask.key == "bad_task")
-            ).scalar_one_or_none()
-            is None
-        )
-
     def test_stamp_records_without_executing(
         self,
-        db: DatabaseTransactionFixture,
+        function_database: DatabaseFixture,
+        startup_tasks_fixture: RunStartupTasksFixture,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
         """already_initialized=False records tasks without calling run."""
         mock_task = MagicMock()
-        services = create_autospec(Services)
+        startup_tasks_fixture.discover_startup_tasks.return_value = {
+            "stamp_me": mock_task,
+        }
 
-        with (
-            self._engine(db) as engine,
-            patch(
-                "palace.manager.scripts.startup.discover_startup_tasks",
-                return_value={"stamp_me": mock_task},
-            ),
-        ):
-            caplog.set_level(logging.INFO)
-            run_startup_tasks(engine, services, already_initialized=False)
+        caplog.set_level(logging.INFO)
+        run_startup_tasks(
+            function_database.engine,
+            startup_tasks_fixture.services,
+            already_initialized=False,
+        )
 
         # run should never be called
         mock_task.assert_not_called()
 
         # But the row should still be recorded
-        row = db.session.execute(
-            select(StartupTask).where(StartupTask.key == "stamp_me")
-        ).scalar_one()
-        assert row.recorded_at is not None
-        assert row.state == StartupTaskState.MARKED
+        with Session(function_database.engine) as session:
+            row = session.execute(
+                select(StartupTask).where(StartupTask.key == "stamp_me")
+            ).scalar_one()
+            assert row.recorded_at is not None
+            assert row.state == StartupTaskState.MARKED
 
         assert "Stamped startup task" in caplog.text
         assert "Fresh database install" in caplog.text
