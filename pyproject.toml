@@ -36,8 +36,8 @@ profile = "black"
 # All new code should aim to pass mypy with strict settings.
 disallow_untyped_calls = false
 explicit_package_bases = true
-files = ["alembic", "src/palace", "startup_tasks", "tests"]
-mypy_path = ["alembic", "src", "startup_tasks"]
+files = ["alembic", "src/palace", "tests"]
+mypy_path = ["alembic", "src"]
 plugins = ["pydantic.mypy", "sqlalchemy.ext.mypy.plugin"]
 strict = true
 warn_redundant_casts = true
