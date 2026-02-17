@@ -197,14 +197,17 @@ def _run_tasks(
     tasks: dict[str, StartupTaskCallable],
 ) -> None:
     """Execute pending tasks and record them in the database."""
-    logger.info("Discovered %d startup task(s).", len(tasks))
-
     with Session(engine) as session:
         pending = _pending_tasks(session, tasks)
 
-    for key in tasks:
-        if key not in pending:
-            logger.info("Startup task %r already executed; skipping.", key)
+    already_run = len(tasks) - len(pending)
+    if already_run:
+        logger.info("%d startup task(s) already executed; skipping.", already_run)
+
+    if not pending:
+        return
+
+    logger.info("Running %d new startup task(s).", len(pending))
 
     for key, run_fn in pending.items():
         dispatched_task_id: str | None = None
