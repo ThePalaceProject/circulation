@@ -50,6 +50,7 @@ from palace.manager.api.problem_details import (
     PATRON_AUTH_ACCESS_TOKEN_EXPIRED,
     PATRON_OF_ANOTHER_LIBRARY,
     UNKNOWN_BEARER_TOKEN_PROVIDER,
+    UNKNOWN_OIDC_PROVIDER,
     UNSUPPORTED_AUTHENTICATION_MECHANISM,
 )
 from palace.manager.api.util.patron import PatronUtility
@@ -1315,6 +1316,57 @@ class TestLibraryAuthenticator:
             assert oidc_doc["links"][0]["rel"] == "authenticate"
             assert "/oidc/authenticate" in oidc_doc["links"][0]["href"]
             assert library.short_name in oidc_doc["links"][0]["href"]
+
+    def test_oidc_provider_lookup(
+        self, db: DatabaseTransactionFixture, library_fixture: LibraryFixture
+    ):
+        """Test LibraryAuthenticator.oidc_provider_lookup method."""
+        library = library_fixture.library()
+
+        # No providers configured
+        authenticator = LibraryAuthenticator(_db=db.session, library=library)
+        result = authenticator.oidc_provider_lookup("SomeProvider")
+        assert isinstance(result, ProblemDetail)
+        assert result.uri == UNKNOWN_OIDC_PROVIDER.uri
+        assert result.detail is not None
+        assert "No OIDC providers are configured" in result.detail
+
+        # Create two mock OIDC providers with different names
+        oidc_provider1 = MagicMock(spec=BaseOIDCAuthenticationProvider)
+        oidc_provider1.label.return_value = "OIDC Provider 1"
+
+        oidc_provider2 = MagicMock(spec=BaseOIDCAuthenticationProvider)
+        oidc_provider2.label.return_value = "OIDC Provider 2"
+
+        authenticator = LibraryAuthenticator(
+            _db=db.session,
+            library=library,
+            oidc_providers=[oidc_provider1, oidc_provider2],
+        )
+
+        # Provider not in list
+        result = authenticator.oidc_provider_lookup("NonExistentProvider")
+        assert isinstance(result, ProblemDetail)
+        assert result.uri == UNKNOWN_OIDC_PROVIDER.uri
+        assert result.detail is not None
+        assert "OIDC Provider 1" in result.detail
+        assert "OIDC Provider 2" in result.detail
+        assert "known providers are:" in result.detail
+
+        # None as provider name
+        result = authenticator.oidc_provider_lookup(None)
+        assert isinstance(result, ProblemDetail)
+        assert result.uri == UNKNOWN_OIDC_PROVIDER.uri
+
+        # Successful lookup of first provider
+        result = authenticator.oidc_provider_lookup("OIDC Provider 1")
+        assert result == oidc_provider1
+        assert isinstance(result, BaseOIDCAuthenticationProvider)
+
+        # Successful lookup of second provider
+        result = authenticator.oidc_provider_lookup("OIDC Provider 2")
+        assert result == oidc_provider2
+        assert isinstance(result, BaseOIDCAuthenticationProvider)
 
     def test_authenticated_patron_bearer_token_oidc(
         self, db: DatabaseTransactionFixture, library_fixture: LibraryFixture
