@@ -77,6 +77,154 @@ class OIDCAuthenticationManager(LoggerMixin):
         self._validator = OIDCTokenValidator()
         self._metadata: dict[str, Any] | None = None
 
+    def _extract_error_detail_from_response(
+        self, exception: RequestNetworkException
+    ) -> str:
+        """Extract error detail from a RequestNetworkException response.
+
+        Attempts to parse OAuth 2.0 error response format from the exception's
+        response attribute if available.
+
+        :param exception: The RequestNetworkException to extract details from
+        :return: Formatted error detail string (may be empty)
+        """
+        if not hasattr(exception, "response") or exception.response is None:
+            return ""
+
+        try:
+            error_data = exception.response.json()
+            error = error_data.get("error", "")
+            error_description = error_data.get("error_description", "")
+            return f": {error} - {error_description}"
+        except json.JSONDecodeError:
+            # If JSON parsing fails, return truncated response text
+            return f": {exception.response.text[:200]}"
+
+    def _handle_request_error(
+        self,
+        exception: RequestNetworkException | RequestException,
+        operation: str,
+        error_class: type[OIDCAuthenticationError],
+    ) -> None:
+        """Handle HTTP request errors consistently.
+
+        :param exception: The exception that was raised
+        :param operation: Description of the operation (e.g., "exchange authorization code")
+        :param error_class: The exception class to raise
+        :raises error_class: Always raises the specified error class
+        """
+        if isinstance(exception, RequestNetworkException):
+            self.log.exception(f"Network error during {operation}")
+            error_detail = self._extract_error_detail_from_response(exception)
+            raise error_class(f"Failed to {operation}{error_detail}") from exception
+        else:
+            # RequestException
+            self.log.exception(f"Request error during {operation}")
+            raise error_class(
+                f"Request error during {operation}: {str(exception)}"
+            ) from exception
+
+    def _prepare_token_endpoint_auth(
+        self, data: dict[str, str]
+    ) -> tuple[str, str] | None:
+        """Prepare authentication for token endpoint requests.
+
+        Modifies data dict in-place if using client_secret_post method.
+
+        :param data: Request data dictionary to potentially modify
+        :return: Auth tuple for HTTP Basic Auth, or None if using client_secret_post
+        """
+        if self._settings.token_endpoint_auth_method == "client_secret_basic":
+            # HTTP Basic Auth
+            return (self._settings.client_id, self._settings.client_secret)
+        else:
+            # client_secret_post (default)
+            data["client_id"] = self._settings.client_id
+            data["client_secret"] = self._settings.client_secret
+            return None
+
+    def _request_json_endpoint(
+        self,
+        url: str,
+        operation: str,
+        error_class: type[OIDCAuthenticationError],
+        method: str = "POST",
+        data: dict[str, str] | None = None,
+        headers: dict[str, str] | None = None,
+        auth: tuple[str, str] | None = None,
+    ) -> dict[str, Any]:
+        """Make an HTTP request to an endpoint and parse JSON response.
+
+        :param url: Endpoint URL
+        :param operation: Description of operation for error messages
+        :param error_class: Exception class to raise on errors
+        :param method: HTTP method (GET or POST)
+        :param data: Request body data (for POST)
+        :param headers: Additional headers
+        :param auth: HTTP Basic Auth tuple
+        :return: Parsed JSON response
+        :raises error_class: On any error
+        """
+        request_headers = {"Accept": "application/json"}
+        if headers:
+            request_headers.update(headers)
+
+        # Make HTTP request
+        try:
+            if method == "POST":
+                response = HTTP.post_with_timeout(
+                    url,
+                    data=data or {},
+                    auth=auth,
+                    headers=request_headers,
+                    allowed_response_codes=["2xx"],
+                )
+            else:  # GET
+                response = HTTP.get_with_timeout(
+                    url,
+                    headers=request_headers,
+                    allowed_response_codes=["2xx"],
+                )
+        except (RequestNetworkException, RequestException) as e:
+            self._handle_request_error(e, operation, error_class)
+
+        # Parse JSON response
+        try:
+            result = cast(dict[str, Any], response.json())
+        except json.JSONDecodeError as e:
+            self.log.exception("Failed to decode JSON response")
+            raise error_class(f"Invalid JSON in response: {str(e)}") from e
+
+        return result
+
+    def _request_token_endpoint(
+        self,
+        token_endpoint: str,
+        data: dict[str, str],
+        operation: str,
+        error_class: type[OIDCAuthenticationError],
+    ) -> dict[str, Any]:
+        """Make a POST request to the token endpoint and parse response.
+
+        :param token_endpoint: Token endpoint URL
+        :param data: Request body data
+        :param operation: Description of operation for error messages
+        :param error_class: Exception class to raise on errors
+        :return: Parsed token response
+        :raises error_class: On any error
+        """
+        # Prepare authentication
+        auth = self._prepare_token_endpoint_auth(data)
+
+        return self._request_json_endpoint(
+            token_endpoint,
+            operation,
+            error_class,
+            method="POST",
+            data=data,
+            auth=auth,
+        )
+
     def get_provider_metadata(self, use_cache: bool = True) -> dict[str, Any]:
         """Get OIDC provider metadata.
 
@@ -185,63 +333,21 @@ class OIDCAuthenticationManager(LoggerMixin):
         if code_verifier:
             data["code_verifier"] = code_verifier
 
-        # Prepare authentication
-        auth = None
-        if self._settings.token_endpoint_auth_method == "client_secret_basic":
-            # HTTP Basic Auth
-            auth = (self._settings.client_id, self._settings.client_secret)
-        else:
-            # client_secret_post (default)
-            data["client_id"] = self._settings.client_id
-            data["client_secret"] = self._settings.client_secret
-
         # Exchange code for tokens
         self.log.info(f"Exchanging authorization code for tokens at {token_endpoint}")
 
-        try:
-            response = HTTP.post_with_timeout(
-                token_endpoint,
-                data=data,
-                auth=auth,
-                headers={"Accept": "application/json"},
-                timeout=30.0,
-                allowed_response_codes=["2xx"],
-            )
-            tokens = cast(dict[str, Any], response.json())
+        tokens = self._request_token_endpoint(
+            token_endpoint, data, "exchange authorization code", OIDCTokenExchangeError
+        )
 
-            # Validate response
-            if "access_token" not in tokens:
-                raise OIDCTokenExchangeError("Token response missing access_token")
-            if "id_token" not in tokens:
-                raise OIDCTokenExchangeError("Token response missing id_token")
+        # Validate response contains required fields
+        if "access_token" not in tokens:
+            raise OIDCTokenExchangeError("Token response missing access_token")
+        if "id_token" not in tokens:
+            raise OIDCTokenExchangeError("Token response missing id_token")
 
-            self.log.info("Successfully exchanged authorization code for tokens")
-            return tokens
-
-        except RequestNetworkException as e:
-            self.log.exception("Network error during token exchange")
-            error_detail = ""
-            # RequestNetworkException may have a response attribute in some cases
-            if hasattr(e, "response") and e.response is not None:
-                try:
-                    error_data = e.response.json()
-                    error_detail = f": {error_data.get('error', '')} - {error_data.get('error_description', '')}"
-                except Exception:
-                    error_detail = f": {e.response.text[:200]}"
-
-            raise OIDCTokenExchangeError(
-                f"Failed to exchange authorization code{error_detail}"
-            ) from e
-        except RequestException as e:
-            self.log.exception("Request error during token exchange")
-            raise OIDCTokenExchangeError(
-                f"Request error during token exchange: {str(e)}"
-            ) from e
-        except Exception as e:
-            self.log.exception("Unexpected error during token exchange")
-            raise OIDCTokenExchangeError(
-                f"Unexpected error during token exchange: {str(e)}"
-            ) from e
+        self.log.info("Successfully exchanged authorization code for tokens")
+        return tokens
 
     def validate_id_token(
         self, id_token: str, nonce: str | None = None
@@ -289,56 +395,14 @@ class OIDCAuthenticationManager(LoggerMixin):
             "refresh_token": refresh_token,
         }
 
-        # Prepare authentication
-        auth = None
-        if self._settings.token_endpoint_auth_method == "client_secret_basic":
-            # HTTP Basic Auth
-            auth = (self._settings.client_id, self._settings.client_secret)
-        else:
-            # client_secret_post (default)
-            data["client_id"] = self._settings.client_id
-            data["client_secret"] = self._settings.client_secret
-
         # Request new tokens
         self.log.info("Refreshing access token")
 
-        try:
-            response = HTTP.post_with_timeout(
-                token_endpoint,
-                data=data,
-                auth=auth,
-                headers={"Accept": "application/json"},
-                allowed_response_codes=["2xx"],
-            )
-        except RequestNetworkException as e:
-            self.log.exception("Network error during token refresh")
-            error_detail = ""
-            # RequestNetworkException may have a response attribute in some cases
-            if hasattr(e, "response") and e.response is not None:
-                try:
-                    error_data = e.response.json()
-                    error_detail = f": {error_data.get('error', '')} - {error_data.get('error_description', '')}"
-                except Exception:
-                    error_detail = f": {e.response.text[:200]}"
+        tokens = self._request_token_endpoint(
+            token_endpoint, data, "refresh access token", OIDCRefreshTokenError
+        )
 
-            raise OIDCRefreshTokenError(
-                f"Failed to refresh access token{error_detail}"
-            ) from e
-        except RequestException as e:
-            self.log.exception("Request error during token refresh")
-            raise OIDCRefreshTokenError(
-                f"Request error during token refresh: {str(e)}"
-            ) from e
-
-        try:
-            tokens = cast(dict[str, Any], response.json())
-        except json.JSONDecodeError as e:
-            self.log.exception("Failed to decode token response JSON")
-            raise OIDCRefreshTokenError(
-                f"Invalid JSON in token response: {str(e)}"
-            ) from e
-
-        # Validate response
+        # Validate response contains required fields
         if "access_token" not in tokens:
             raise OIDCRefreshTokenError("Token response missing access_token")
 
@@ -363,23 +427,13 @@ class OIDCAuthenticationManager(LoggerMixin):
 
         self.log.info(f"Fetching user info from {userinfo_endpoint}")
 
-        try:
-            response = HTTP.get_with_timeout(
-                userinfo_endpoint,
-                headers={"Authorization": f"Bearer {access_token}"},
-                allowed_response_codes=["2xx"],
-            )
-        except (RequestNetworkException, RequestException) as e:
-            self.log.exception("Error fetching user info")
-            raise OIDCAuthenticationError(f"Failed to fetch user info: {str(e)}") from e
-
-        try:
-            userinfo = cast(dict[str, Any], response.json())
-        except json.JSONDecodeError as e:
-            self.log.exception("Failed to decode userinfo response JSON")
-            raise OIDCAuthenticationError(
-                f"Invalid JSON in userinfo response: {str(e)}"
-            ) from e
+        userinfo = self._request_json_endpoint(
+            userinfo_endpoint,
+            "fetch user info",
+            OIDCAuthenticationError,
+            method="GET",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
 
         self.log.debug("Successfully fetched user info")
         return userinfo
