@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 
 from palace.manager.service.container import Services
 from palace.manager.sqlalchemy.model.startup_task import StartupTask, StartupTaskState
+from palace.manager.sqlalchemy.util import create
 from palace.manager.util.datetime_helpers import utc_now
 
 logger = logging.getLogger(__name__)
@@ -129,9 +130,8 @@ def _pending_tasks(
 
 
 def _record_task(session: Session, key: str, *, state: StartupTaskState) -> None:
-    """Insert a :class:`StartupTask` row and flush (no commit)."""
-    session.add(StartupTask(key=key, recorded_at=utc_now(), state=state))
-    session.flush()
+    """Insert a :class:`StartupTask` row."""
+    create(session, StartupTask, key=key, recorded_at=utc_now(), state=state)
 
 
 def run_startup_tasks(
