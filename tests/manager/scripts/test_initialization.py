@@ -367,39 +367,19 @@ class TestInstanceInitializationScript:
             "run_startup_tasks",
         ]
 
+    @pytest.mark.parametrize("already_initialized", [True, False])
     def test_run_passes_already_initialized_to_startup_tasks(
-        self, services_fixture: ServicesFixture
+        self, services_fixture: ServicesFixture, already_initialized: bool
     ):
         """already_initialized value from initialize_database is forwarded to run_startup_tasks."""
         with patch("palace.manager.scripts.initialization.pg_advisory_lock"):
             mock_engine_factory = MagicMock()
             script = InstanceInitializationScript(engine_factory=mock_engine_factory)
-            script.initialize_database = MagicMock(return_value=True)
+            script.initialize_database = MagicMock(return_value=already_initialized)
             script.initialize_search = MagicMock()
             script.run_startup_tasks = MagicMock()
-            script.run()
+            script.run([])
 
         script.run_startup_tasks.assert_called_once_with(
-            mock_engine_factory.return_value, True
-        )
-
-    @pytest.mark.parametrize("already_initialized", [True, False])
-    def test_run_startup_tasks_delegates(
-        self, services_fixture: ServicesFixture, already_initialized: bool
-    ):
-        """run_startup_tasks forwards engine, container, and already_initialized."""
-        script = InstanceInitializationScript()
-        mock_engine = MagicMock()
-
-        with patch(
-            "palace.manager.scripts.initialization._run_startup_tasks"
-        ) as mock_run:
-            script.run_startup_tasks(
-                mock_engine, already_initialized=already_initialized
-            )
-
-        mock_run.assert_called_once_with(
-            mock_engine,
-            script._container,
-            already_initialized=already_initialized,
+            mock_engine_factory.return_value, already_initialized
         )
