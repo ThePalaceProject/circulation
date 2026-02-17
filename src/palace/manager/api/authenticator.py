@@ -420,7 +420,7 @@ class LibraryAuthenticator(LoggerMixin):
     def register_oidc_provider(
         self,
         provider: BaseOIDCAuthenticationProvider,
-    ):
+    ) -> None:
         already_registered = self.oidc_providers_by_name.get(provider.label())
         if already_registered and already_registered != provider:
             raise CannotLoadConfiguration(
