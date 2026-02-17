@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import json
 import time
 from unittest.mock import Mock, patch
 from urllib.parse import quote
 
 import pytest
+from requests import RequestException
 
 from palace.manager.integration.patron_auth.oidc.auth import (
     OIDCAuthenticationError,
@@ -321,11 +323,14 @@ class TestOIDCAuthenticationManagerTokenExchange:
             redis_client=redis_fixture.client,
         )
 
-        with patch(
-            "palace.manager.integration.patron_auth.oidc.util.HTTP.get_with_timeout"
-        ) as mock_get, patch(
-            "palace.manager.integration.patron_auth.oidc.auth.HTTP.post_with_timeout"
-        ) as mock_post:
+        with (
+            patch(
+                "palace.manager.integration.patron_auth.oidc.util.HTTP.get_with_timeout"
+            ) as mock_get,
+            patch(
+                "palace.manager.integration.patron_auth.oidc.auth.HTTP.post_with_timeout"
+            ) as mock_post,
+        ):
             # Mock discovery
             mock_get_response = Mock()
             mock_get_response.json.return_value = mock_discovery_document
@@ -402,11 +407,14 @@ class TestOIDCAuthenticationManagerTokenExchange:
             redis_client=redis_fixture.client,
         )
 
-        with patch(
-            "palace.manager.integration.patron_auth.oidc.util.HTTP.get_with_timeout"
-        ) as mock_get, patch(
-            "palace.manager.integration.patron_auth.oidc.auth.HTTP.post_with_timeout"
-        ) as mock_post:
+        with (
+            patch(
+                "palace.manager.integration.patron_auth.oidc.util.HTTP.get_with_timeout"
+            ) as mock_get,
+            patch(
+                "palace.manager.integration.patron_auth.oidc.auth.HTTP.post_with_timeout"
+            ) as mock_post,
+        ):
             # Mock discovery
             mock_get_response = Mock()
             mock_get_response.json.return_value = mock_discovery_document
@@ -423,31 +431,131 @@ class TestOIDCAuthenticationManagerTokenExchange:
                     redirect_uri=TEST_REDIRECT_URI,
                 )
 
+    @pytest.mark.parametrize(
+        "error_type,has_response,response_json,json_error,expected_match",
+        [
+            pytest.param(
+                RequestNetworkException,
+                False,
+                None,
+                False,
+                "Failed to exchange authorization code",
+                id="network-no-response",
+            ),
+            pytest.param(
+                RequestNetworkException,
+                True,
+                {"error": "invalid_grant", "error_description": "Code expired"},
+                False,
+                "invalid_grant - Code expired",
+                id="network-with-oauth-error",
+            ),
+            pytest.param(
+                RequestNetworkException,
+                True,
+                None,
+                True,
+                "Failed to exchange authorization code",
+                id="network-with-invalid-json",
+            ),
+            pytest.param(
+                RequestException,
+                False,
+                None,
+                False,
+                "Request error during exchange authorization code",
+                id="generic-request-error",
+            ),
+        ],
+    )
     def test_exchange_authorization_code_http_error(
-        self, oidc_settings_with_discovery, redis_fixture, mock_discovery_document
+        self,
+        error_type,
+        has_response,
+        response_json,
+        json_error,
+        expected_match,
+        oidc_settings_with_discovery,
+        redis_fixture,
+        mock_discovery_document,
     ):
-        """Test token exchange error handling for HTTP errors."""
+        """Test token exchange error handling for various HTTP error scenarios."""
         manager = OIDCAuthenticationManager(
             settings=oidc_settings_with_discovery,
             redis_client=redis_fixture.client,
         )
 
-        with patch(
-            "palace.manager.integration.patron_auth.oidc.util.HTTP.get_with_timeout"
-        ) as mock_get, patch(
-            "palace.manager.integration.patron_auth.oidc.auth.HTTP.post_with_timeout"
-        ) as mock_post:
+        with (
+            patch(
+                "palace.manager.integration.patron_auth.oidc.util.HTTP.get_with_timeout"
+            ) as mock_get,
+            patch(
+                "palace.manager.integration.patron_auth.oidc.auth.HTTP.post_with_timeout"
+            ) as mock_post,
+        ):
             # Mock discovery
             mock_get_response = Mock()
             mock_get_response.json.return_value = mock_discovery_document
             mock_get.return_value = mock_get_response
 
-            # Mock HTTP error
-            mock_post.side_effect = RequestNetworkException(
-                "https://example.com/token", "400 Bad Request"
-            )
+            # Create exception with optional response
+            if error_type == RequestNetworkException:
+                exception = RequestNetworkException(
+                    "https://example.com/token", "400 Bad Request"
+                )
+                if has_response:
+                    mock_response = Mock()
+                    mock_response.text = "Error response text"
+                    if json_error:
+                        mock_response.json.side_effect = json.JSONDecodeError(
+                            "test", "test", 0
+                        )
+                    else:
+                        mock_response.json.return_value = response_json
+                    exception.response = mock_response
+            else:
+                exception = RequestException("Connection refused")
 
-            with pytest.raises(OIDCTokenExchangeError):
+            mock_post.side_effect = exception
+
+            with pytest.raises(OIDCTokenExchangeError, match=expected_match):
+                manager.exchange_authorization_code(
+                    code="test-auth-code",
+                    redirect_uri=TEST_REDIRECT_URI,
+                )
+
+    def test_exchange_authorization_code_invalid_json_response(
+        self, oidc_settings_with_discovery, redis_fixture, mock_discovery_document
+    ):
+        """Test token exchange when server returns invalid JSON in 2xx response."""
+        manager = OIDCAuthenticationManager(
+            settings=oidc_settings_with_discovery,
+            redis_client=redis_fixture.client,
+        )
+
+        with (
+            patch(
+                "palace.manager.integration.patron_auth.oidc.util.HTTP.get_with_timeout"
+            ) as mock_get,
+            patch(
+                "palace.manager.integration.patron_auth.oidc.auth.HTTP.post_with_timeout"
+            ) as mock_post,
+        ):
+            # Mock discovery
+            mock_get_response = Mock()
+            mock_get_response.json.return_value = mock_discovery_document
+            mock_get.return_value = mock_get_response
+
+            # Mock successful HTTP response but invalid JSON
+            mock_post_response = Mock()
+            mock_post_response.json.side_effect = json.JSONDecodeError(
+                "test", "test", 0
+            )
+            mock_post.return_value = mock_post_response
+
+            with pytest.raises(
+                OIDCTokenExchangeError, match="Invalid JSON in response"
+            ):
                 manager.exchange_authorization_code(
                     code="test-auth-code",
                     redirect_uri=TEST_REDIRECT_URI,
@@ -578,11 +686,14 @@ class TestOIDCAuthenticationManagerTokenRefresh:
             "expires_in": 3600,
         }
 
-        with patch(
-            "palace.manager.integration.patron_auth.oidc.util.HTTP.get_with_timeout"
-        ) as mock_get, patch(
-            "palace.manager.integration.patron_auth.oidc.auth.HTTP.post_with_timeout"
-        ) as mock_post:
+        with (
+            patch(
+                "palace.manager.integration.patron_auth.oidc.util.HTTP.get_with_timeout"
+            ) as mock_get,
+            patch(
+                "palace.manager.integration.patron_auth.oidc.auth.HTTP.post_with_timeout"
+            ) as mock_post,
+        ):
             # Mock discovery
             mock_get_response = Mock()
             mock_get_response.json.return_value = mock_discovery_document
@@ -618,11 +729,14 @@ class TestOIDCAuthenticationManagerTokenRefresh:
             redis_client=redis_fixture.client,
         )
 
-        with patch(
-            "palace.manager.integration.patron_auth.oidc.util.HTTP.get_with_timeout"
-        ) as mock_get, patch(
-            "palace.manager.integration.patron_auth.oidc.auth.HTTP.post_with_timeout"
-        ) as mock_post:
+        with (
+            patch(
+                "palace.manager.integration.patron_auth.oidc.util.HTTP.get_with_timeout"
+            ) as mock_get,
+            patch(
+                "palace.manager.integration.patron_auth.oidc.auth.HTTP.post_with_timeout"
+            ) as mock_post,
+        ):
             # Mock discovery
             mock_get_response = Mock()
             mock_get_response.json.return_value = mock_discovery_document
@@ -636,31 +750,126 @@ class TestOIDCAuthenticationManagerTokenRefresh:
             with pytest.raises(OIDCRefreshTokenError, match="missing access_token"):
                 manager.refresh_access_token(refresh_token="test-refresh-token")
 
+    @pytest.mark.parametrize(
+        "error_type,has_response,response_json,json_error,expected_match",
+        [
+            pytest.param(
+                RequestNetworkException,
+                False,
+                None,
+                False,
+                "Failed to refresh access token",
+                id="network-no-response",
+            ),
+            pytest.param(
+                RequestNetworkException,
+                True,
+                {"error": "invalid_grant", "error_description": "Token revoked"},
+                False,
+                "invalid_grant - Token revoked",
+                id="network-with-oauth-error",
+            ),
+            pytest.param(
+                RequestNetworkException,
+                True,
+                None,
+                True,
+                "Failed to refresh access token",
+                id="network-with-invalid-json",
+            ),
+            pytest.param(
+                RequestException,
+                False,
+                None,
+                False,
+                "Request error during refresh access token",
+                id="generic-request-error",
+            ),
+        ],
+    )
     def test_refresh_access_token_http_error(
-        self, oidc_settings_with_discovery, redis_fixture, mock_discovery_document
+        self,
+        error_type,
+        has_response,
+        response_json,
+        json_error,
+        expected_match,
+        oidc_settings_with_discovery,
+        redis_fixture,
+        mock_discovery_document,
     ):
-        """Test refresh error handling for HTTP errors."""
+        """Test refresh error handling for various HTTP error scenarios."""
         manager = OIDCAuthenticationManager(
             settings=oidc_settings_with_discovery,
             redis_client=redis_fixture.client,
         )
 
-        with patch(
-            "palace.manager.integration.patron_auth.oidc.util.HTTP.get_with_timeout"
-        ) as mock_get, patch(
-            "palace.manager.integration.patron_auth.oidc.auth.HTTP.post_with_timeout"
-        ) as mock_post:
+        with (
+            patch(
+                "palace.manager.integration.patron_auth.oidc.util.HTTP.get_with_timeout"
+            ) as mock_get,
+            patch(
+                "palace.manager.integration.patron_auth.oidc.auth.HTTP.post_with_timeout"
+            ) as mock_post,
+        ):
             # Mock discovery
             mock_get_response = Mock()
             mock_get_response.json.return_value = mock_discovery_document
             mock_get.return_value = mock_get_response
 
-            # Mock HTTP error
-            mock_post.side_effect = RequestNetworkException(
-                "https://example.com/token", "400 Bad Request"
-            )
+            # Create exception with optional response
+            if error_type == RequestNetworkException:
+                exception = RequestNetworkException(
+                    "https://example.com/token", "400 Bad Request"
+                )
+                if has_response:
+                    mock_response = Mock()
+                    mock_response.text = "Error response text"
+                    if json_error:
+                        mock_response.json.side_effect = json.JSONDecodeError(
+                            "test", "test", 0
+                        )
+                    else:
+                        mock_response.json.return_value = response_json
+                    exception.response = mock_response
+            else:
+                exception = RequestException("Connection refused")
 
-            with pytest.raises(OIDCRefreshTokenError):
+            mock_post.side_effect = exception
+
+            with pytest.raises(OIDCRefreshTokenError, match=expected_match):
+                manager.refresh_access_token(refresh_token="test-refresh-token")
+
+    def test_refresh_access_token_invalid_json_response(
+        self, oidc_settings_with_discovery, redis_fixture, mock_discovery_document
+    ):
+        """Test token refresh when server returns invalid JSON in 2xx response."""
+        manager = OIDCAuthenticationManager(
+            settings=oidc_settings_with_discovery,
+            redis_client=redis_fixture.client,
+        )
+
+        with (
+            patch(
+                "palace.manager.integration.patron_auth.oidc.util.HTTP.get_with_timeout"
+            ) as mock_get,
+            patch(
+                "palace.manager.integration.patron_auth.oidc.auth.HTTP.post_with_timeout"
+            ) as mock_post,
+        ):
+            # Mock discovery
+            mock_get_response = Mock()
+            mock_get_response.json.return_value = mock_discovery_document
+            mock_get.return_value = mock_get_response
+
+            # Mock successful HTTP response but invalid JSON
+            mock_post_response = Mock()
+            mock_post_response.json.side_effect = json.JSONDecodeError(
+                "test", "test", 0
+            )
+            mock_post.return_value = mock_post_response
+
+            with pytest.raises(OIDCRefreshTokenError, match="Invalid JSON in response"):
                 manager.refresh_access_token(refresh_token="test-refresh-token")
 
 
@@ -724,10 +933,54 @@ class TestOIDCAuthenticationManagerUserInfo:
         ):
             manager.fetch_userinfo(access_token="test-access-token")
 
+    @pytest.mark.parametrize(
+        "error_type,has_response,response_json,json_error,expected_match",
+        [
+            pytest.param(
+                RequestNetworkException,
+                False,
+                None,
+                False,
+                "Failed to fetch user info",
+                id="network-no-response",
+            ),
+            pytest.param(
+                RequestNetworkException,
+                True,
+                {"error": "invalid_token", "error_description": "Token expired"},
+                False,
+                "invalid_token - Token expired",
+                id="network-with-oauth-error",
+            ),
+            pytest.param(
+                RequestNetworkException,
+                True,
+                None,
+                True,
+                "Failed to fetch user info",
+                id="network-with-invalid-json",
+            ),
+            pytest.param(
+                RequestException,
+                False,
+                None,
+                False,
+                "Request error during fetch user info",
+                id="generic-request-error",
+            ),
+        ],
+    )
     def test_fetch_userinfo_http_error(
-        self, oidc_settings_with_discovery, mock_discovery_document
+        self,
+        error_type,
+        has_response,
+        response_json,
+        json_error,
+        expected_match,
+        oidc_settings_with_discovery,
+        mock_discovery_document,
     ):
-        """Test UserInfo fetch error handling."""
+        """Test UserInfo fetch error handling for various HTTP error scenarios."""
         # Don't use Redis to avoid caching issues in tests
         manager = OIDCAuthenticationManager(
             settings=oidc_settings_with_discovery,
@@ -738,20 +991,65 @@ class TestOIDCAuthenticationManagerUserInfo:
             # Handler function to return discovery but fail on userinfo
             def mock_get_handler(url, **kwargs):
                 if ".well-known/openid-configuration" in str(url):
-                    # Discovery request - return mock response
+                    # Discovery request
                     mock_response = Mock()
                     mock_response.json = lambda: mock_discovery_document
                     return mock_response
                 else:
                     # UserInfo request - raise error
-                    raise RequestNetworkException(
-                        "https://example.com/userinfo", "401 Unauthorized"
-                    )
+                    if error_type == RequestNetworkException:
+                        exception = RequestNetworkException(
+                            "https://example.com/userinfo", "401 Unauthorized"
+                        )
+                        if has_response:
+                            mock_response = Mock()
+                            mock_response.text = "Error response text"
+                            if json_error:
+                                mock_response.json.side_effect = json.JSONDecodeError(
+                                    "test", "test", 0
+                                )
+                            else:
+                                mock_response.json.return_value = response_json
+                            exception.response = mock_response
+                    else:
+                        exception = RequestException("Connection refused")
+                    raise exception
 
             mock_get.side_effect = mock_get_handler
 
-            with pytest.raises(OIDCAuthenticationError):
+            with pytest.raises(OIDCAuthenticationError, match=expected_match):
                 manager.fetch_userinfo(access_token="invalid-token")
+
+    def test_fetch_userinfo_invalid_json_response(
+        self, oidc_settings_with_discovery, mock_discovery_document
+    ):
+        """Test UserInfo fetch when server returns invalid JSON in 2xx response."""
+        # Don't use Redis to avoid caching issues in tests
+        manager = OIDCAuthenticationManager(
+            settings=oidc_settings_with_discovery,
+            redis_client=None,
+        )
+
+        with patch("palace.manager.util.http.http.HTTP.get_with_timeout") as mock_get:
+            # Handler function to return different responses based on URL
+            def mock_get_handler(url, **kwargs):
+                mock_response = Mock()
+                if ".well-known/openid-configuration" in str(url):
+                    # Discovery request
+                    mock_response.json = lambda: mock_discovery_document
+                else:
+                    # UserInfo request - return invalid JSON
+                    mock_response.json.side_effect = json.JSONDecodeError(
+                        "test", "test", 0
+                    )
+                return mock_response
+
+            mock_get.side_effect = mock_get_handler
+
+            with pytest.raises(
+                OIDCAuthenticationError, match="Invalid JSON in response"
+            ):
+                manager.fetch_userinfo(access_token="test-access-token")
 
 
 class TestOIDCAuthenticationManagerLogout:
@@ -879,6 +1177,42 @@ class TestOIDCAuthenticationManagerLogout:
                 match="does not support RP-Initiated Logout",
             ):
                 manager.build_logout_url(id_token_hint, post_logout_redirect_uri)
+
+    def test_build_logout_url_fallback_to_settings(
+        self, redis_fixture, mock_discovery_document
+    ):
+        """Test logout URL uses settings endpoint when metadata doesn't have it."""
+        custom_endpoint = "https://custom.logout.endpoint/logout"
+        settings = OIDCAuthSettings(
+            issuer_url=TEST_ISSUER_URL,
+            client_id=TEST_CLIENT_ID,
+            client_secret=TEST_CLIENT_SECRET,
+            authorization_endpoint=f"{TEST_ISSUER_URL}/authorize",
+            token_endpoint=f"{TEST_ISSUER_URL}/token",
+            jwks_uri=f"{TEST_ISSUER_URL}/jwks",
+            end_session_endpoint=custom_endpoint,
+        )
+
+        # Discovery metadata without end_session_endpoint
+        mock_discovery_document.pop("end_session_endpoint", None)
+
+        manager = OIDCAuthenticationManager(
+            settings=settings,
+            redis_client=redis_fixture.client,
+        )
+
+        with patch(
+            "palace.manager.integration.patron_auth.oidc.util.HTTP.get_with_timeout"
+        ) as mock_get:
+            mock_response = Mock()
+            mock_response.json.return_value = mock_discovery_document
+            mock_get.return_value = mock_response
+
+            logout_url = manager.build_logout_url(
+                "test.id.token", "https://app.example.com/logout/callback"
+            )
+
+            assert custom_endpoint in logout_url
 
     def test_validate_id_token_hint(
         self,
@@ -1019,3 +1353,157 @@ class TestOIDCAuthenticationManagerBackChannelLogout:
 
             with pytest.raises(OIDCAuthenticationError, match=error_match):
                 manager.validate_logout_token(invalid_token)
+
+    @pytest.mark.parametrize(
+        "claim_modification,error_match",
+        [
+            pytest.param(
+                lambda claims: claims.update(
+                    {"events": {"http://example.com/other-event": {}}}
+                )
+                or claims,
+                "missing 'http://schemas.openid.net/event/backchannel-logout' event",
+                id="missing-backchannel-event",
+            ),
+            pytest.param(
+                lambda claims: (claims.pop("sub"), claims.pop("sid"), claims)[2],
+                "must contain either 'sub' or 'sid' claim",
+                id="missing-sub-and-sid-post-validation",
+            ),
+        ],
+    )
+    def test_validate_logout_token_additional_validation_fails(
+        self,
+        claim_modification,
+        error_match,
+        oidc_settings_with_discovery,
+        redis_fixture,
+        oidc_test_keys,
+        mock_logout_token_claims,
+        mock_discovery_document,
+        mock_jwks,
+    ):
+        """Test logout tokens that pass initial validation but fail additional checks."""
+        manager = OIDCAuthenticationManager(
+            settings=oidc_settings_with_discovery,
+            redis_client=redis_fixture.client,
+        )
+
+        # Modify claims but keep valid signature
+        modified_claims = mock_logout_token_claims.copy()
+        claim_modification(modified_claims)
+        token = oidc_test_keys.sign_jwt(modified_claims)
+
+        with patch(
+            "palace.manager.integration.patron_auth.oidc.util.HTTP.get_with_timeout"
+        ) as mock_get:
+
+            def mock_get_side_effect(url, **kwargs):
+                response = Mock()
+                if "jwks" in str(url):
+                    response.json.return_value = mock_jwks
+                else:
+                    response.json.return_value = mock_discovery_document
+                return response
+
+            mock_get.side_effect = mock_get_side_effect
+
+            with pytest.raises(OIDCAuthenticationError, match=error_match):
+                manager.validate_logout_token(token)
+
+    def test_validate_logout_token_manual_validation_with_sid(
+        self,
+        oidc_settings_with_discovery,
+        redis_fixture,
+        oidc_test_keys,
+        mock_logout_token_claims,
+        mock_discovery_document,
+        mock_jwks,
+    ):
+        """Test manual validation path when token has 'sid' but no 'sub'."""
+        manager = OIDCAuthenticationManager(
+            settings=oidc_settings_with_discovery,
+            redis_client=redis_fixture.client,
+        )
+
+        # Create token with 'sid' but no 'sub'
+        claims = mock_logout_token_claims.copy()
+        claims.pop("sub")
+        token = oidc_test_keys.sign_jwt(claims)
+
+        with patch(
+            "palace.manager.integration.patron_auth.oidc.util.HTTP.get_with_timeout"
+        ) as mock_get:
+
+            def mock_get_side_effect(url, **kwargs):
+                response = Mock()
+                if "jwks" in str(url):
+                    response.json.return_value = mock_jwks
+                else:
+                    response.json.return_value = mock_discovery_document
+                return response
+
+            mock_get.side_effect = mock_get_side_effect
+
+            result = manager.validate_logout_token(token)
+
+            assert "sub" not in result
+            assert result["sid"] == "session-id-abc123"
+
+    @pytest.mark.parametrize(
+        "invalid_claim,claim_value,error_match",
+        [
+            pytest.param(
+                "iss",
+                "https://wrong.issuer.com",
+                "Invalid issuer",
+                id="invalid-issuer",
+            ),
+            pytest.param(
+                "aud",
+                "wrong-client-id",
+                "Invalid audience",
+                id="invalid-audience",
+            ),
+        ],
+    )
+    def test_validate_logout_token_manual_validation_fails(
+        self,
+        invalid_claim,
+        claim_value,
+        error_match,
+        oidc_settings_with_discovery,
+        redis_fixture,
+        oidc_test_keys,
+        mock_logout_token_claims,
+        mock_discovery_document,
+        mock_jwks,
+    ):
+        """Test manual validation failures when token has 'sid' but no 'sub'."""
+        manager = OIDCAuthenticationManager(
+            settings=oidc_settings_with_discovery,
+            redis_client=redis_fixture.client,
+        )
+
+        # Create token with 'sid' but no 'sub', and invalid issuer or audience
+        claims = mock_logout_token_claims.copy()
+        claims.pop("sub")
+        claims[invalid_claim] = claim_value
+        token = oidc_test_keys.sign_jwt(claims)
+
+        with patch(
+            "palace.manager.integration.patron_auth.oidc.util.HTTP.get_with_timeout"
+        ) as mock_get:
+
+            def mock_get_side_effect(url, **kwargs):
+                response = Mock()
+                if "jwks" in str(url):
+                    response.json.return_value = mock_jwks
+                else:
+                    response.json.return_value = mock_discovery_document
+                return response
+
+            mock_get.side_effect = mock_get_side_effect
+
+            with pytest.raises(OIDCAuthenticationError, match=error_match):
+                manager.validate_logout_token(token)
