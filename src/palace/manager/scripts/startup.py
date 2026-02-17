@@ -116,7 +116,7 @@ def discover_startup_tasks(
 
         tasks[module_path.stem] = run_fn
 
-    return dict(sorted(tasks.items()))
+    return tasks
 
 
 def _pending_tasks(
