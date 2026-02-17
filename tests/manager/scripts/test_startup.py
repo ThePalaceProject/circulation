@@ -19,7 +19,6 @@ from palace.manager.scripts.startup import (
     create_startup_task,
     discover_startup_tasks,
     run_startup_tasks,
-    stamp_startup_tasks,
 )
 from palace.manager.service.container import Services
 from palace.manager.sqlalchemy.model.startup_task import StartupTask, StartupTaskState
@@ -113,7 +112,7 @@ class TestStartupTaskRunner:
             return_value={},
         ):
             caplog.set_level(logging.INFO)
-            run_startup_tasks(engine, services)
+            run_startup_tasks(engine, services, already_initialized=True)
 
         assert "No startup tasks discovered" in caplog.text
 
@@ -129,7 +128,7 @@ class TestStartupTaskRunner:
                 return_value={"test_task": mock_task},
             ),
         ):
-            run_startup_tasks(engine, services)
+            run_startup_tasks(engine, services, already_initialized=True)
 
         mock_task.assert_called_once()
         # Verify the task received the services, a Session, and a logger
@@ -168,7 +167,7 @@ class TestStartupTaskRunner:
             ),
         ):
             caplog.set_level(logging.INFO)
-            run_startup_tasks(engine, services)
+            run_startup_tasks(engine, services, already_initialized=True)
 
         mock_signature.apply_async.assert_called_once()
         assert "fake-task-id" in caplog.text
@@ -193,12 +192,12 @@ class TestStartupTaskRunner:
             ),
         ):
             caplog.set_level(logging.INFO)
-            run_startup_tasks(engine, services)
+            run_startup_tasks(engine, services, already_initialized=True)
 
             # Simulate broker recovery and rerun startup tasks.
             mock_signature.apply_async.side_effect = None
             mock_signature.apply_async.return_value.id = "recovered-task-id"
-            run_startup_tasks(engine, services)
+            run_startup_tasks(engine, services, already_initialized=True)
 
         row = db.session.execute(
             select(StartupTask).where(StartupTask.key == "celery_task")
@@ -230,7 +229,7 @@ class TestStartupTaskRunner:
                 return_value={"already_done": mock_task},
             ),
         ):
-            run_startup_tasks(engine, services)
+            run_startup_tasks(engine, services, already_initialized=True)
 
         mock_task.assert_not_called()
 
@@ -258,7 +257,7 @@ class TestStartupTaskRunner:
             ),
         ):
             caplog.set_level(logging.ERROR)
-            run_startup_tasks(engine, services)
+            run_startup_tasks(engine, services, already_initialized=True)
 
         # The failing task should not be recorded
         assert (
@@ -295,8 +294,8 @@ class TestStartupTaskRunner:
                 return_value={"idempotent_task": counting_task},
             ),
         ):
-            run_startup_tasks(engine, services)
-            run_startup_tasks(engine, services)
+            run_startup_tasks(engine, services, already_initialized=True)
+            run_startup_tasks(engine, services, already_initialized=True)
 
         assert call_count == 1
 
@@ -319,7 +318,7 @@ class TestStartupTaskRunner:
             ),
         ):
             caplog.set_level(logging.ERROR)
-            run_startup_tasks(engine, services)
+            run_startup_tasks(engine, services, already_initialized=True)
 
         assert "Failed to execute startup task" in caplog.text
         assert (
@@ -334,8 +333,9 @@ class TestStartupTaskRunner:
         db: DatabaseTransactionFixture,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
-        """stamp_startup_tasks records tasks without calling run."""
+        """already_initialized=False records tasks without calling run."""
         mock_task = MagicMock()
+        services = create_autospec(Services)
 
         with (
             self._engine(db) as engine,
@@ -345,7 +345,7 @@ class TestStartupTaskRunner:
             ),
         ):
             caplog.set_level(logging.INFO)
-            stamp_startup_tasks(engine)
+            run_startup_tasks(engine, services, already_initialized=False)
 
         # run should never be called
         mock_task.assert_not_called()
@@ -367,6 +367,13 @@ class TestCreateStartupTask:
         assert _slugify("  hello--world!!  ") == "hello_world"
         assert _slugify("simple") == "simple"
         assert _slugify("!!!") == ""
+
+    def test_slugify_truncates_long_descriptions(self) -> None:
+        """Long descriptions are truncated at a word boundary."""
+        long_desc = "word " * 30  # 150 chars
+        slug = _slugify(long_desc)
+        assert len(slug) <= 60
+        assert not slug.endswith("_")
 
     def test_creates_file(self, tmp_path: Path) -> None:
         """The create command generates a valid task file."""
