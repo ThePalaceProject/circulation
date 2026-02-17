@@ -599,10 +599,10 @@ executed keys, and runs any new ones. The process is idempotent — each task ru
 Use the provided scaffolding command:
 
 ```sh
-create_startup_task "force harvest opds for distributors"
+palace-startup-task "force harvest opds for distributors"
 ```
 
-This creates a dated file like `startup_tasks/2026_02_10_1430_force_harvest_opds_for_distributors.py`
+This creates a dated file like `startup_tasks/2026_02_10_force_harvest_opds_for_distributors.py`
 with a template. Implement the `run()` function:
 
 ```python
@@ -615,7 +615,7 @@ def run(services: Services, session: Session) -> None:
     services.redis.client().delete("some:cache:key")
 ```
 
-The `--date-prefix` flag can override the default `YYYY_MM_DD_HHMM` prefix if needed.
+The `--date-prefix` flag can override the default `YYYY_MM_DD` prefix if needed.
 
 ### Cleaning Up
 

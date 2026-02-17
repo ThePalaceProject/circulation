@@ -227,7 +227,7 @@ def _run_tasks(
 
 
 # ---------------------------------------------------------------------------
-# Scaffolding command: create_startup_task
+# Scaffolding command: palace-startup-task
 # ---------------------------------------------------------------------------
 
 
