@@ -12,12 +12,26 @@ jobs:
           JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
           JIRA_USER_EMAIL: ${{ secrets.JIRA_USER_EMAIL }}
           JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
-      - name: Create New Jira Version
-        id: create_version
-        uses: atlassian/gajira-create-version@v3
-        with:
-          project: "PP"
-          name: "CM ${{ github.event.release.tag_name }}"
+      - name: Create New Jira Release
+        id: create_jira_release
+        env:
+          JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
+          JIRA_USER_EMAIL: ${{ secrets.JIRA_USER_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+          JIRA_PROJECT_KEY: PP
+        run: |
+          RELEASE_NAME="CM ${{ github.event.release.tag_name }}"
+          curl -X POST \
+            --url "${{ secrets.JIRA_BASE_URL }}/rest/api/3/version" \
+            --user "${{ secrets.JIRA_USER_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
+            --header 'Accept: application/json' \
+            --header 'Content-Type: application/json' \
+            --data "{
+              \"name\": \"${RELEASE_NAME}\",
+              \"description\": \"Release created from GitHub build.\",
+              \"project\": \"${JIRA_PROJECT_KEY}\",
+              \"released\": false
+            }"
       - name: Link GitHub Release to Jira Version
         shell: bash
         run: |
