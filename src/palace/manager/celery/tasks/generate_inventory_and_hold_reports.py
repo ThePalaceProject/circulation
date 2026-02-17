@@ -5,21 +5,19 @@ import logging
 import tempfile
 import uuid
 import zipfile
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 from typing import IO, Any
 
 from celery import shared_task
 from sqlalchemy import (
-    and_,
     bindparam,
     case,
-    cast,
     exists,
     false,
     func,
     lateral,
-    literal_column,
     not_,
     or_,
     select,
@@ -30,7 +28,6 @@ from sqlalchemy.orm import Session, aliased
 from sqlalchemy.sql import Select, Subquery
 from sqlalchemy.sql.elements import BindParameter, ColumnElement
 from sqlalchemy.sql.selectable import Lateral
-from sqlalchemy.types import String
 
 from palace.manager.celery.task import Task
 from palace.manager.integration.goals import Goals
@@ -58,7 +55,7 @@ from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.licensing import License, LicensePool
 from palace.manager.sqlalchemy.model.patron import Hold, Loan, Patron
 from palace.manager.sqlalchemy.model.work import Work, WorkGenre
-from palace.manager.sqlalchemy.util import get_one
+from palace.manager.sqlalchemy.util import get_one, numericrange_to_string
 from palace.manager.util.log import elapsed_time_logging
 from palace.manager.util.uuid import uuid_encode
 
@@ -160,6 +157,7 @@ def generate_report(
                 csv_file=inventory_report_file,
                 sql_params=sql_params,
                 query=inventory_report_query(),
+                row_transform=_inventory_report_row_transform,
             )
 
             generate_csv_report(
@@ -226,6 +224,7 @@ def generate_csv_report(
     csv_file: IO[str],
     sql_params: dict[str, Any],
     query: Select,
+    row_transform: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
 ) -> None:
     with elapsed_time_logging(
         log_method=log.debug,
@@ -234,10 +233,21 @@ def generate_csv_report(
     ):
         writer = csv.writer(csv_file, delimiter=",")
         rows = db.execute(query, sql_params)
-        writer.writerow(rows.keys())
-        writer.writerows(rows)
+        keys = list(rows.keys())
+        writer.writerow(keys)
+        if row_transform is None:
+            writer.writerows(rows)
+        else:
+            for row in rows:
+                transformed_row = row_transform(dict(row._mapping))
+                writer.writerow([transformed_row.get(key, "") for key in keys])
         csv_file.flush()
         log.debug(f"report written to {csv_file.name}")
+
+
+def _inventory_report_row_transform(row: dict[str, Any]) -> dict[str, Any]:
+    row["target_age"] = numericrange_to_string(row["target_age"])
+    return row
 
 
 def _comma_separated_sorted_work_genre_list_subquery() -> Subquery:
@@ -418,41 +428,6 @@ def inventory_report_query() -> Select:
         else_="",
     ).label("visibility_status")
 
-    # Work.target_age formatted as numericrange_to_string (same as Work.target_age_string)
-    target_age_lower_raw = func.lower(Work.target_age)
-    target_age_upper_raw = func.upper(Work.target_age)
-    target_age_lower_adj: ColumnElement[Any] = case(
-        (func.lower_inc(Work.target_age), target_age_lower_raw),
-        else_=target_age_lower_raw + 1,
-    )
-    target_age_upper_adj: ColumnElement[Any] = case(
-        (func.upper_inc(Work.target_age), target_age_upper_raw),
-        else_=target_age_upper_raw - 1,
-    )
-    target_age_formatted: ColumnElement[Any] = case(
-        (
-            and_(
-                target_age_lower_raw.is_(None),
-                target_age_upper_raw.is_(None),
-            ),
-            literal_column("''"),
-        ),
-        (
-            target_age_upper_raw.is_(None),
-            func.concat(cast(target_age_lower_adj, String), "-"),
-        ),
-        (target_age_lower_raw.is_(None), cast(target_age_upper_adj, String)),
-        (
-            target_age_lower_adj == target_age_upper_adj,
-            cast(target_age_lower_adj, String),
-        ),
-        else_=func.concat(
-            cast(target_age_lower_adj, String),
-            "-",
-            cast(target_age_upper_adj, String),
-        ),
-    )
-
     return (
         select(
             LicensePool.status.label("item_status"),
@@ -473,7 +448,7 @@ def inventory_report_query() -> Select:
             Edition.medium.label("format"),
             Work.audience,
             func.coalesce(wg_subquery.c.genres, "").label("genres"),
-            func.coalesce(target_age_formatted, "").label("target_age"),
+            Work.target_age.label("target_age"),
             func.coalesce(bisac_subquery.c.bisac_subjects, "").label("bisac_subjects"),
             visible,
             visibility_status,
