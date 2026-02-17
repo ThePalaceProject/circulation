@@ -197,20 +197,23 @@ def run_startup_tasks(
             logger.info("Startup task %r already executed; skipping.", key)
 
     for key, run_fn in pending.items():
+        dispatched_task_id: str | None = None
         try:
             with Session(engine) as session, session.begin():
                 result = run_fn(services, session, logger)
+                if isinstance(result, Signature):
+                    async_result = result.apply_async()
+                    dispatched_task_id = async_result.id
                 _record_task(session, key, state=StartupTaskState.RUN)
         except Exception:
             logger.exception("Failed to execute startup task %r.", key)
             continue
 
-        if isinstance(result, Signature):
-            async_result = result.apply_async()
+        if dispatched_task_id is not None:
             logger.info(
                 "Startup task %r dispatched Celery task (Task ID: %s).",
                 key,
-                async_result.id,
+                dispatched_task_id,
             )
 
         logger.info("Executed startup task %r.", key)

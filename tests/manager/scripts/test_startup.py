@@ -174,6 +174,40 @@ class TestStartupTaskRunner:
         assert "fake-task-id" in caplog.text
         assert "dispatched Celery task" in caplog.text
 
+    def test_run_retries_task_when_celery_dispatch_fails(
+        self,
+        db: DatabaseTransactionFixture,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """A dispatch failure does not record the task, so it runs again later."""
+        mock_signature = create_autospec(Signature, instance=True)
+        mock_signature.apply_async.side_effect = RuntimeError("broker unavailable")
+        mock_task = MagicMock(return_value=mock_signature)
+        services = create_autospec(Services)
+
+        with (
+            self._engine(db) as engine,
+            patch(
+                "palace.manager.scripts.startup.discover_startup_tasks",
+                return_value={"celery_task": mock_task},
+            ),
+        ):
+            caplog.set_level(logging.INFO)
+            run_startup_tasks(engine, services)
+
+            # Simulate broker recovery and rerun startup tasks.
+            mock_signature.apply_async.side_effect = None
+            mock_signature.apply_async.return_value.id = "recovered-task-id"
+            run_startup_tasks(engine, services)
+
+        row = db.session.execute(
+            select(StartupTask).where(StartupTask.key == "celery_task")
+        ).scalar_one()
+        assert row.state == StartupTaskState.RUN
+        assert mock_task.call_count == 2
+        assert "Failed to execute startup task" in caplog.text
+        assert "recovered-task-id" in caplog.text
+
     def test_run_skips_already_executed_task(
         self, db: DatabaseTransactionFixture
     ) -> None:
