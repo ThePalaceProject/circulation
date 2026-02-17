@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from types import ModuleType
 
+import jinja2
 from celery.canvas import Signature
 from sqlalchemy import select
 from sqlalchemy.engine import Engine
@@ -35,8 +36,9 @@ StartupTaskCallable = Callable[[Services, Session, logging.Logger], Signature | 
 #: tree.
 STARTUP_TASKS_DIR = Path(__file__).parents[4] / "startup_tasks"
 
-_TEMPLATE = '''\
-"""{description}"""
+_TEMPLATE = jinja2.Template(
+    '''\
+"""{{ description }}"""
 
 from __future__ import annotations
 
@@ -51,6 +53,7 @@ from palace.manager.service.container import Services
 def run(services: Services, session: Session, log: logging.Logger) -> Signature | None:
     raise NotImplementedError("TODO: implement this startup task")
 '''
+)
 
 
 def _load_module_from_file(name: str, path: Path) -> ModuleType:
@@ -222,8 +225,8 @@ def _run_tasks(
                 key,
                 dispatched_task_id,
             )
-
-        logger.info("Executed startup task %r.", key)
+        else:
+            logger.info("Executed startup task %r.", key)
 
 
 # ---------------------------------------------------------------------------
@@ -283,7 +286,7 @@ def create_startup_task() -> None:
         print(f"Error: {filepath} already exists.")
         sys.exit(1)
 
-    content = _TEMPLATE.replace("{description}", description)
+    content = _TEMPLATE.render(description=description)
     filepath.write_text(content)
     try:
         display_path = filepath.relative_to(Path.cwd())
