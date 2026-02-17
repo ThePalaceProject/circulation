@@ -381,7 +381,7 @@ class TestCreateStartupTask:
             with patch(
                 "sys.argv",
                 [
-                    "create_startup_task",
+                    "palace-startup-task",
                     "reindex everything",
                     "--date-prefix",
                     "2026_03_15",
@@ -405,7 +405,7 @@ class TestCreateStartupTask:
             patch(
                 "sys.argv",
                 [
-                    "create_startup_task",
+                    "palace-startup-task",
                     "duplicate",
                     "--date-prefix",
                     "2026_03_15",
@@ -422,7 +422,7 @@ class TestCreateStartupTask:
         with (
             patch(
                 "sys.argv",
-                ["create_startup_task", "!!!"],
+                ["palace-startup-task", "!!!"],
             ),
             pytest.raises(SystemExit) as exc_info,
         ):

@@ -343,7 +343,7 @@ optional = true
 psycopg2 = "~2.9.5"
 
 [tool.poetry.scripts]
-create_startup_task = "palace.manager.scripts.startup:create_startup_task"
+palace-startup-task = "palace.manager.scripts.startup:create_startup_task"
 
 [tool.pytest.ini_options]
 addopts = [
