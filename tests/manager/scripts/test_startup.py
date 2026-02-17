@@ -49,6 +49,18 @@ class TestDiscoverStartupTasks:
         assert len(result) == 0
         assert "does not define 'run'" in caplog.text
 
+    def test_discover_skips_non_callable_run(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Modules where 'run' is not callable are skipped with a warning."""
+        (tmp_path / "bad_run.py").write_text("run = 42\n")
+
+        caplog.set_level(logging.WARNING)
+        result = discover_startup_tasks(tmp_path)
+
+        assert len(result) == 0
+        assert "not callable" in caplog.text
+
     def test_discover_skips_import_errors(
         self, tmp_path: Path, caplog: pytest.LogCaptureFixture
     ) -> None:
