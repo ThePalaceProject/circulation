@@ -178,11 +178,8 @@ class InstanceInitializationScript(LoggerMixin):
     def run_startup_tasks(self, engine: Engine, already_initialized: bool) -> None:
         """Run any registered one-time startup tasks.
 
-        On a fresh database install, tasks are stamped as already-queued
+        On a fresh database install, tasks state is set to stamped
         without dispatching them — there is no existing data to migrate.
-
-        Failures are logged but never propagated — startup tasks must not
-        prevent the application from starting.
         """
         if already_initialized:
             _run_startup_tasks(engine, self._container)

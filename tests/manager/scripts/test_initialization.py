@@ -62,18 +62,19 @@ class TestInstanceInitializationScript:
         mock_engine = MagicMock()
 
         with patch("palace.manager.scripts.initialization.inspect") as inspect:
-            # If the database is uninitialized, initialize_database() is called.
+            # If the database is uninitialized, initialize_database_schema() is
+            # called and the method returns False (not already initialized).
             inspect().has_table.return_value = False
-            assert script.initialize_database(mock_engine) is True
+            assert script.initialize_database(mock_engine) is False
             script.initialize_database_schema.assert_called_once()
             script.migrate_database.assert_not_called()
 
             # If the database is initialized, migrate_database() is called
-            # and returns False (existing install).
+            # and the method returns True (already initialized).
             script.initialize_database_schema.reset_mock()
             script.migrate_database.reset_mock()
             inspect().has_table.return_value = True
-            assert script.initialize_database(mock_engine) is False
+            assert script.initialize_database(mock_engine) is True
             script.initialize_database_schema.assert_not_called()
             script.migrate_database.assert_called_once()
 
@@ -366,10 +367,10 @@ class TestInstanceInitializationScript:
             "run_startup_tasks",
         ]
 
-    def test_run_passes_fresh_install_to_startup_tasks(
+    def test_run_passes_already_initialized_to_startup_tasks(
         self, services_fixture: ServicesFixture
     ):
-        """fresh_install=True is passed when initialize_database creates a new schema."""
+        """already_initialized value from initialize_database is forwarded to run_startup_tasks."""
         with patch("palace.manager.scripts.initialization.pg_advisory_lock"):
             mock_engine_factory = MagicMock()
             script = InstanceInitializationScript(engine_factory=mock_engine_factory)
@@ -379,65 +380,27 @@ class TestInstanceInitializationScript:
             script.run()
 
         script.run_startup_tasks.assert_called_once_with(
-            mock_engine_factory().begin().__enter__(), fresh_install=True
+            mock_engine_factory.return_value, True
         )
 
-    def test_run_startup_tasks_exception_does_not_block_startup(
-        self,
-        services_fixture: ServicesFixture,
-        caplog: LogCaptureFixture,
-    ):
-        """An exception in run_startup_tasks does not prevent startup."""
-        script = InstanceInitializationScript()
-        mock_connection = MagicMock()
-
-        with patch(
-            "palace.manager.scripts.initialization._run_startup_tasks"
-        ) as mock_run:
-            mock_run.side_effect = RuntimeError("Something broke")
-            caplog.set_level(logging.ERROR)
-            # Should not raise
-            script.run_startup_tasks(mock_connection)
-
-        assert "Error running startup tasks" in caplog.text
-
-    def test_run_startup_tasks_stamp_exception_does_not_block_startup(
-        self,
-        services_fixture: ServicesFixture,
-        caplog: LogCaptureFixture,
-    ):
-        """An exception in stamp_startup_tasks does not prevent startup."""
-        script = InstanceInitializationScript()
-        mock_connection = MagicMock()
-
-        with patch(
-            "palace.manager.scripts.initialization._stamp_startup_tasks"
-        ) as mock_stamp:
-            mock_stamp.side_effect = RuntimeError("Something broke")
-            caplog.set_level(logging.ERROR)
-            # Should not raise
-            script.run_startup_tasks(mock_connection, fresh_install=True)
-
-        assert "Error running startup tasks" in caplog.text
-
     def test_run_startup_tasks_calls_run(self, services_fixture: ServicesFixture):
-        """fresh_install=False calls _run_startup_tasks."""
+        """already_initialized=True calls _run_startup_tasks."""
         script = InstanceInitializationScript()
-        mock_connection = MagicMock()
+        mock_engine = MagicMock()
 
         with patch(
             "palace.manager.scripts.initialization._run_startup_tasks"
         ) as mock_run:
-            script.run_startup_tasks(mock_connection)
+            script.run_startup_tasks(mock_engine, already_initialized=True)
 
-        mock_run.assert_called_once_with(mock_connection, script._container, None)
+        mock_run.assert_called_once_with(mock_engine, script._container)
 
     def test_run_startup_tasks_fresh_install_calls_stamp(
         self, services_fixture: ServicesFixture
     ):
-        """fresh_install=True calls _stamp_startup_tasks instead of _run_startup_tasks."""
+        """already_initialized=False calls _stamp_startup_tasks instead of _run_startup_tasks."""
         script = InstanceInitializationScript()
-        mock_connection = MagicMock()
+        mock_engine = MagicMock()
 
         with (
             patch(
@@ -447,7 +410,7 @@ class TestInstanceInitializationScript:
                 "palace.manager.scripts.initialization._stamp_startup_tasks"
             ) as mock_stamp,
         ):
-            script.run_startup_tasks(mock_connection, fresh_install=True)
+            script.run_startup_tasks(mock_engine, already_initialized=False)
 
         mock_run.assert_not_called()
-        mock_stamp.assert_called_once_with(mock_connection, None)
+        mock_stamp.assert_called_once_with(mock_engine)

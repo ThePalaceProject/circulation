@@ -2,9 +2,9 @@
 """Initialize an instance of the Circulation Manager"""
 from pathlib import Path
 
+# Load the alembic configuration relative to this script
 from palace.manager.scripts.initialization import InstanceInitializationScript
 
-# Resolve paths relative to this script's location in the repository.
-repo_root = Path(__file__).parent.parent.parent
+alembic_ini = Path(__file__).parent.parent.parent / "alembic.ini"
 
-InstanceInitializationScript(repo_root=repo_root).run()
+InstanceInitializationScript(config_file=alembic_ini).run()
