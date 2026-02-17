@@ -1,0 +1,57 @@
+name: Jira Release Sync
+on:
+  release:
+    types: [published]
+jobs:
+  sync-to-jira:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Login to Jira
+        uses: atlassian/gajira-login@v3
+        env:
+          JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
+          JIRA_USER_EMAIL: ${{ secrets.JIRA_USER_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+      - name: Create New Jira Version
+        id: create_version
+        uses: atlassian/gajira-create-version@v3
+        with:
+          project: "PP"
+          name: "CM ${{ github.event.release.tag_name }}"
+      - name: Link GitHub Release to Jira Version
+        shell: bash
+        run: |
+          VERSION_NAME="CM ${{ github.event.release.tag_name }}"
+          RELEASE_URL="${{ github.event.release.html_url }}"
+          # 1. Get the Version ID from Jira based on the name
+          VERSION_ID=$(curl --user "${{ secrets.JIRA_USER_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
+            --url "${{ secrets.JIRA_BASE_URL }}/rest/api/3/project/PP/versions" \
+            | jq -r ".[] | select(.name == \"$VERSION_NAME\") | .id")
+          # 2. Add the GitHub Release link to the "Related Work" section
+          curl --request POST \
+            --url "${{ secrets.JIRA_BASE_URL }}/rest/api/3/version/$VERSION_ID/remotelink" \
+            --user "${{ secrets.JIRA_USER_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
+            --header 'Accept: application/json' \
+            --header 'Content-Type: application/json' \
+            --data "{
+              \"title\": \"GitHub Release Notes\",
+              \"url\": \"$RELEASE_URL\",
+              \"type\": \"release notes\"
+            }"
+      - name: Extract Jira Keys and Update Issues
+        shell: bash
+        run: |
+          KEYS=$(echo "${{ github.event.release.body }}" | grep -oE "PP-[0-9]+" | sort -u)
+          VERSION="CM ${{ github.event.release.tag_name }}"
+          if [ -z "$KEYS" ]; then
+            echo "No Jira keys found."
+            exit 0
+          fi
+          for KEY in $KEYS; do
+            curl --request PUT \
+              --url "${{ secrets.JIRA_BASE_URL }}/rest/api/3/issue/$KEY" \
+              --user "${{ secrets.JIRA_USER_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
+              --header 'Accept: application/json' \
+              --header 'Content-Type: application/json' \
+              --data "{\"update\": {\"fixVersions\": [{\"add\": {\"name\": \"$VERSION\"}}]}}"
+          done
