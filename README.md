@@ -584,7 +584,10 @@ deployment. They are useful when new code requires a data backfill, re-import, c
 or other post-deployment work that doesn't belong in a database migration.
 
 Each task receives the application's services container and a database session, giving it access
-to Redis, search, Celery dispatch, and any other service it needs.
+to Redis, search, Celery dispatch, and any other service it needs. Startup tasks run under a
+database advisory lock and block application startup, so they should complete quickly. For
+heavy work (data backfills, large re-imports, etc.), return a Celery `Signature` from `run()`
+to dispatch the work asynchronously rather than doing it inline.
 
 Tasks are defined as Python files in `startup_tasks/` at the project root. The filename becomes the
 task key (e.g. `2026_02_10_0000_force_harvest.py` → key `2026_02_10_0000_force_harvest`). On each container start the
