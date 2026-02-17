@@ -580,19 +580,20 @@ in the `src/palace/manager/celery/tasks/` module.
 ## Startup Tasks
 
 Startup tasks are one-time jobs that run automatically on the first application start after a
-deployment. They are useful when new code requires a data backfill, re-import, cache invalidation,
-or other post-deployment work that doesn't belong in a database migration.
+deployment. They are useful when new code requires a Celery task to be dispatched, a cache to be
+invalidated, or other post-deployment work that doesn't belong in a database migration.
 
-Each task receives the application's services container and a database session, giving it access
-to Redis, search, Celery dispatch, and any other service it needs. Startup tasks run under a
-database advisory lock and block application startup, so they should complete quickly. For
-heavy work (data backfills, large re-imports, etc.), return a Celery `Signature` from `run()`
-to dispatch the work asynchronously rather than doing it inline.
+Each task is a Python file in `startup_tasks/` at the project root that defines a `run()` function.
+The function receives the application's services container, a database session, and a logger, giving
+it access to Redis, search, Celery dispatch, and any other service it needs. Startup tasks run under
+a database advisory lock and block application startup, so they should complete quickly. For heavy
+work, return a Celery `Signature` from `run()` to dispatch the work asynchronously rather than doing
+it inline.
 
-Tasks are defined as Python files in `startup_tasks/` at the project root. The filename becomes the
-task key (e.g. `2026_02_10_0000_force_harvest.py` → key `2026_02_10_0000_force_harvest`). On each container start the
-initialization script discovers all task files, checks a `startup_tasks` database table for previously
-executed keys, and runs any new ones. The process is idempotent — each task runs only once.
+The filename becomes the task key (e.g. `2026_02_10_force_harvest.py` → key
+`2026_02_10_force_harvest`). On each container start, the initialization script discovers all task
+files, checks the `startup_tasks` database table for previously executed keys, and runs any new ones.
+The process is idempotent — each task runs only once.
 
 ### Creating a Startup Task
 
@@ -603,24 +604,9 @@ palace-startup-task "force harvest opds for distributors"
 ```
 
 This creates a dated file like `startup_tasks/2026_02_10_force_harvest_opds_for_distributors.py`
-with a template. Implement the `run()` function:
-
-```python
-def run(services: Services, session: Session) -> None:
-    # Dispatch async Celery work:
-    from palace.manager.celery.tasks.opds_for_distributors import import_all
-    import_all.si(force=True).apply_async()
-
-    # Or do inline work with Redis, DB, etc.:
-    services.redis.client().delete("some:cache:key")
-```
-
-The `--date-prefix` flag can override the default `YYYY_MM_DD` prefix if needed.
-
-### Cleaning Up
-
-Once every environment has run a task, delete the file. The database row is retained as a historical
-record and prevents the task from being re-executed even after the file is removed.
+with a template. Implement the `run()` function in the generated file. The function can optionally
+return a Celery `Signature`; if it does, the Celery task will be queued and its task ID will be
+logged.
 
 ## Code Style
 
