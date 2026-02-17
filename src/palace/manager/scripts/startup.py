@@ -78,7 +78,7 @@ def discover_startup_tasks(
 
     :param tasks_dir: Directory to scan.
     :returns: A dict mapping task key to the ``run`` callable,
-        sorted by key for deterministic ordering.
+        sorted by filename for deterministic ordering.
     """
     if not tasks_dir.is_dir():
         logger.info("Startup tasks directory %s does not exist; skipping.", tasks_dir)
@@ -231,7 +231,7 @@ def _run_tasks(
 # ---------------------------------------------------------------------------
 
 
-_MAX_SLUG_LENGTH = 60
+_MAX_SLUG_LENGTH = 45
 
 
 def _slugify(text: str) -> str:
@@ -283,7 +283,7 @@ def create_startup_task() -> None:
         print(f"Error: {filepath} already exists.")
         sys.exit(1)
 
-    content = _TEMPLATE.format(description=description)
+    content = _TEMPLATE.replace("{description}", description)
     filepath.write_text(content)
     try:
         display_path = filepath.relative_to(Path.cwd())

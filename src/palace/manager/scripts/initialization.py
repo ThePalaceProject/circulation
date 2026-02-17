@@ -197,7 +197,7 @@ class InstanceInitializationScript(LoggerMixin):
 
         engine = self._engine_factory()
         with pg_advisory_lock(engine, LOCK_ID_DB_INIT):
-            db_initialized = self.initialize_database(engine)
+            already_initialized = self.initialize_database(engine)
             self.initialize_search()
-            self.run_startup_tasks(engine, db_initialized)
+            self.run_startup_tasks(engine, already_initialized)
         engine.dispose()
