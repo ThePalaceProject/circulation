@@ -64,6 +64,118 @@ class OIDCUtility(LoggerMixin):
         """
         self._redis = redis_client
 
+    def _retrieve_from_cache(
+        self, key_prefix: str, identifier: str, description: str
+    ) -> tuple[str | None, dict[str, Any] | None]:
+        """Retrieve JSON data from cache with key generation.
+
+        :param key_prefix: Cache key prefix (e.g., DISCOVERY_KEY_PREFIX)
+        :param identifier: Identifier to hash for cache key (e.g., issuer URL)
+        :param description: Description for logging (e.g., "discovery document")
+        :return: Tuple of (cache_key, cached_data). Both None if caching disabled.
+        """
+        if not self._redis:
+            return None, None
+
+        cache_key = self._redis.get_key(
+            key_prefix + hashlib.sha256(identifier.encode()).hexdigest()
+        )
+        cached = self._redis.get(cache_key)
+
+        if not cached:
+            return cache_key, None
+
+        try:
+            return cache_key, cast(dict[str, Any], json.loads(cached))
+        except json.JSONDecodeError:
+            self.log.warning(f"Failed to decode cached {description}")
+            return cache_key, None
+
+    def _store_in_cache(self, cache_key: str, data: dict[str, Any], ttl: int) -> None:
+        """Store JSON data in cache.
+
+        :param cache_key: Redis cache key
+        :param data: Data to serialize and store
+        :param ttl: Time-to-live in seconds
+        """
+        if self._redis:
+            self._redis.set(cache_key, json.dumps(data), ex=ttl)
+
+    def _retrieve_token_data(
+        self, key_prefix: str, state_token: str, data_type: str, delete: bool = True
+    ) -> dict[str, Any] | None:
+        """Retrieve token-related data from Redis cache.
+
+        Generic method for retrieving PKCE, logout state, or other token data.
+
+        :param key_prefix: Cache key prefix (e.g., PKCE_KEY_PREFIX)
+        :param state_token: State token used as cache key
+        :param data_type: Description for logging (e.g., "PKCE", "logout state")
+        :param delete: Whether to delete the entry after retrieval (one-time use)
+        :return: Dictionary with token data, or None if not found
+        :raises OIDCUtilityError: If Redis client is not available
+        """
+        if not self._redis:
+            raise OIDCUtilityError(f"Redis client required for {data_type} retrieval")
+
+        cache_key = self._redis.get_key(key_prefix + state_token)
+        cached = self._redis.get(cache_key)
+
+        if not cached:
+            self.log.warning(f"No {data_type} found for state: {state_token[:16]}...")
+            return None
+
+        # Delete before decoding if requested (ensures one-time use even on decode error)
+        if delete:
+            self._redis.delete(cache_key)
+            self.log.debug(
+                f"Retrieved and deleted {data_type} for state: {state_token[:16]}..."
+            )
+        else:
+            self.log.debug(f"Retrieved {data_type} for state: {state_token[:16]}...")
+
+        # Decode cached data
+        try:
+            return cast(dict[str, Any], json.loads(cached))
+        except json.JSONDecodeError:
+            self.log.warning(
+                f"Failed to decode cached {data_type} data for state: {state_token[:16]}..."
+            )
+            return None
+
+    def _fetch_json(
+        self, url: str, description: str, error_class: type[OIDCUtilityError]
+    ) -> dict[str, Any]:
+        """Fetch JSON data from HTTP endpoint.
+
+        :param url: URL to fetch from
+        :param description: Description for logging (e.g., "discovery document")
+        :param error_class: Exception class to raise on errors
+        :return: Parsed JSON response
+        :raises error_class: On network or JSON parsing errors
+        """
+        self.log.info(f"Fetching {description} from {url}")
+
+        # Make HTTP request
+        try:
+            response = HTTP.get_with_timeout(
+                url,
+                allow_redirects=True,
+                allowed_response_codes=["2xx"],
+            )
+        except (RequestNetworkException, RequestException) as e:
+            self.log.exception(f"Network error fetching {description}: {e}")
+            raise error_class(
+                f"Failed to fetch {description} from {url}: {str(e)}"
+            ) from e
+
+        # Parse JSON response
+        try:
+            return cast(dict[str, Any], response.json())
+        except json.JSONDecodeError as e:
+            self.log.exception(f"Failed to decode {description} JSON")
+            raise error_class(f"Invalid JSON in {description}: {str(e)}") from e
+
     @staticmethod
     def generate_nonce(length: int = 32) -> str:
         """Generate a cryptographically random nonce.
@@ -138,48 +250,51 @@ class OIDCUtility(LoggerMixin):
         if max_age is None:
             max_age = cls.STATE_MAX_AGE
 
+        # Split signature and data
         try:
-            # Split signature and data
             encoded_signature, encoded_data = state.split(".", 1)
+        except ValueError as e:
+            cls.logger().exception("Failed to split state parameter")
+            raise OIDCStateValidationError(
+                f"Invalid state parameter format: {str(e)}"
+            ) from e
 
-            # Verify HMAC signature
-            expected_signature = hmac.new(
-                secret.encode("utf-8"), encoded_data.encode("utf-8"), hashlib.sha256
-            ).digest()
-            expected_encoded = base64.urlsafe_b64encode(expected_signature).decode(
-                "utf-8"
-            )
+        # Verify HMAC signature
+        expected_signature = hmac.new(
+            secret.encode("utf-8"), encoded_data.encode("utf-8"), hashlib.sha256
+        ).digest()
+        expected_encoded = base64.urlsafe_b64encode(expected_signature).decode("utf-8")
 
-            if not hmac.compare_digest(encoded_signature, expected_encoded):
-                raise OIDCStateValidationError("State signature verification failed")
+        if not hmac.compare_digest(encoded_signature, expected_encoded):
+            raise OIDCStateValidationError("State signature verification failed")
 
-            # Decode data
-            json_data = base64.urlsafe_b64decode(encoded_data).decode("utf-8")
+        # Decode data
+        json_data = base64.urlsafe_b64decode(encoded_data).decode("utf-8")
+        try:
             state_data = cast(dict[str, Any], json.loads(json_data))
-
-            # Validate timestamp
-            timestamp = state_data.get("timestamp")
-            if timestamp is None:
-                raise OIDCStateValidationError("State missing timestamp")
-
-            age = int(time.time()) - timestamp
-            if age > max_age:
-                raise OIDCStateValidationError(
-                    f"State expired (age: {age}s, max: {max_age}s)"
-                )
-
-            if age < 0:
-                raise OIDCStateValidationError("State timestamp is in the future")
-
-            # Remove timestamp from returned data
-            del state_data["timestamp"]
-            return state_data
-
-        except (ValueError, KeyError, json.JSONDecodeError) as e:
+        except (ValueError, json.JSONDecodeError) as e:
             cls.logger().exception("Failed to decode state parameter")
             raise OIDCStateValidationError(
                 f"Invalid state parameter format: {str(e)}"
             ) from e
+
+        # Validate timestamp
+        timestamp = state_data.get("timestamp")
+        if timestamp is None:
+            raise OIDCStateValidationError("State missing timestamp")
+
+        age = int(time.time()) - timestamp
+        if age > max_age:
+            raise OIDCStateValidationError(
+                f"State expired (age: {age}s, max: {max_age}s)"
+            )
+
+        if age < 0:
+            raise OIDCStateValidationError("State timestamp is in the future")
+
+        # Remove timestamp from returned data
+        del state_data["timestamp"]
+        return state_data
 
     def discover_oidc_configuration(
         self, issuer_url: HttpUrl, use_cache: bool = True
@@ -195,46 +310,23 @@ class OIDCUtility(LoggerMixin):
         :return: Discovery document dictionary
         """
         issuer_str = str(issuer_url).rstrip("/")
-        cache_key = None
 
         # Try cache first
-        if use_cache and self._redis:
-            cache_key = self._redis.get_key(
-                self.DISCOVERY_KEY_PREFIX
-                + hashlib.sha256(issuer_str.encode()).hexdigest()
+        cache_key, cached_document = None, None
+        if use_cache:
+            cache_key, cached_document = self._retrieve_from_cache(
+                self.DISCOVERY_KEY_PREFIX,
+                issuer_str,
+                f"discovery document for {issuer_str}",
             )
-            cached = self._redis.get(cache_key)
-            if cached:
-                try:
-                    return cast(dict[str, Any], json.loads(cached))
-                except json.JSONDecodeError:
-                    self.log.warning(
-                        f"Failed to decode cached discovery document for {issuer_str}"
-                    )
+            if cached_document:
+                return cached_document
 
         # Fetch discovery document
         discovery_url = f"{issuer_str}/.well-known/openid-configuration"
-        self.log.info(f"Fetching OIDC discovery document from {discovery_url}")
-
-        try:
-            response = HTTP.get_with_timeout(
-                discovery_url,
-                allow_redirects=True,
-                allowed_response_codes=["2xx"],
-            )
-        except (RequestNetworkException, RequestException) as e:
-            self.log.exception(f"Network error fetching discovery document: {e}")
-            raise OIDCDiscoveryError(
-                f"Failed to fetch discovery document from {discovery_url}: {str(e)}"
-            ) from e
-
-        try:
-            document = cast(dict[str, Any], response.json())
-        except json.JSONDecodeError as e:
-            self.log.exception("Failed to decode discovery document JSON")
-            raise OIDCDiscoveryError(
-                f"Invalid JSON in discovery document: {str(e)}"
-            ) from e
+        document = self._fetch_json(
+            discovery_url, "OIDC discovery document", OIDCDiscoveryError
+        )
 
         # Validate required fields
         required_fields = [
@@ -249,10 +341,8 @@ class OIDCUtility(LoggerMixin):
             )
 
         # Cache the result
-        if use_cache and self._redis and cache_key:
-            self._redis.set(
-                cache_key, json.dumps(document), ex=self.DISCOVERY_CACHE_TTL
-            )
+        if use_cache and cache_key:
+            self._store_in_cache(cache_key, document, self.DISCOVERY_CACHE_TTL)
 
         return document
 
@@ -265,48 +355,26 @@ class OIDCUtility(LoggerMixin):
         :return: JWKS dictionary
         """
         jwks_str = str(jwks_uri)
-        cache_key = None
 
         # Try cache first
-        if use_cache and self._redis:
-            cache_key = self._redis.get_key(
-                self.JWKS_KEY_PREFIX + hashlib.sha256(jwks_str.encode()).hexdigest()
+        cache_key, cached_jwks = None, None
+        if use_cache:
+            cache_key, cached_jwks = self._retrieve_from_cache(
+                self.JWKS_KEY_PREFIX, jwks_str, f"JWKS for {jwks_str}"
             )
-            cached = self._redis.get(cache_key)
-            if cached:
-                try:
-                    return cast(dict[str, Any], json.loads(cached))
-                except json.JSONDecodeError:
-                    self.log.warning(f"Failed to decode cached JWKS for {jwks_str}")
+            if cached_jwks:
+                return cached_jwks
 
         # Fetch JWKS
-        self.log.info(f"Fetching JWKS from {jwks_str}")
-
-        try:
-            response = HTTP.get_with_timeout(
-                jwks_str,
-                allow_redirects=True,
-                allowed_response_codes=["2xx"],
-            )
-        except (RequestNetworkException, RequestException) as e:
-            self.log.exception(f"Network error fetching JWKS: {e}")
-            raise OIDCUtilityError(
-                f"Failed to fetch JWKS from {jwks_uri}: {str(e)}"
-            ) from e
-
-        try:
-            jwks = cast(dict[str, Any], response.json())
-        except json.JSONDecodeError as e:
-            self.log.exception("Failed to decode JWKS JSON")
-            raise OIDCUtilityError(f"Invalid JSON in JWKS: {str(e)}") from e
+        jwks = self._fetch_json(jwks_str, "JWKS", OIDCUtilityError)
 
         # Validate structure
         if "keys" not in jwks or not isinstance(jwks["keys"], list):
             raise OIDCUtilityError("JWKS must contain a 'keys' array")
 
         # Cache the result
-        if use_cache and self._redis and cache_key:
-            self._redis.set(cache_key, json.dumps(jwks), ex=self.JWKS_CACHE_TTL)
+        if use_cache and cache_key:
+            self._store_in_cache(cache_key, jwks, self.JWKS_CACHE_TTL)
 
         return jwks
 
@@ -345,31 +413,9 @@ class OIDCUtility(LoggerMixin):
         :param delete: Whether to delete the entry after retrieval (one-time use)
         :return: Dictionary with code_verifier and metadata, or None if not found
         """
-        if not self._redis:
-            raise OIDCUtilityError("Redis client required for PKCE retrieval")
-
-        cache_key = self._redis.get_key(self.PKCE_KEY_PREFIX + state_token)
-        cached = self._redis.get(cache_key)
-
-        if cached:
-            if delete:
-                self._redis.delete(cache_key)
-                self.log.debug(
-                    f"Retrieved and deleted PKCE for state: {state_token[:16]}..."
-                )
-            else:
-                self.log.debug(f"Retrieved PKCE for state: {state_token[:16]}...")
-
-            try:
-                return cast(dict[str, Any], json.loads(cached))
-            except json.JSONDecodeError:
-                self.log.warning(
-                    f"Failed to decode cached PKCE data for state: {state_token[:16]}..."
-                )
-                return None
-
-        self.log.warning(f"No PKCE found for state: {state_token[:16]}...")
-        return None
+        return self._retrieve_token_data(
+            self.PKCE_KEY_PREFIX, state_token, "PKCE", delete
+        )
 
     def store_logout_state(
         self,
@@ -406,31 +452,9 @@ class OIDCUtility(LoggerMixin):
         :param delete: Whether to delete the entry after retrieval (one-time use)
         :return: Dictionary with redirect_uri and metadata, or None if not found
         """
-        if not self._redis:
-            raise OIDCUtilityError("Redis client required for logout state retrieval")
-
-        cache_key = self._redis.get_key(self.LOGOUT_STATE_KEY_PREFIX + state_token)
-        cached = self._redis.get(cache_key)
-
-        if cached:
-            if delete:
-                self._redis.delete(cache_key)
-                self.log.debug(
-                    f"Retrieved and deleted logout state: {state_token[:16]}..."
-                )
-            else:
-                self.log.debug(f"Retrieved logout state: {state_token[:16]}...")
-
-            try:
-                return cast(dict[str, Any], json.loads(cached))
-            except json.JSONDecodeError:
-                self.log.warning(
-                    f"Failed to decode cached logout state: {state_token[:16]}..."
-                )
-                return None
-
-        self.log.warning(f"No logout state found: {state_token[:16]}...")
-        return None
+        return self._retrieve_token_data(
+            self.LOGOUT_STATE_KEY_PREFIX, state_token, "logout state", delete
+        )
 
     def delete_logout_state(self, state_token: str) -> None:
         """Delete logout state from cache.

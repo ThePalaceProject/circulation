@@ -285,18 +285,49 @@ class TestOIDCUtilityDiscovery:
             with pytest.raises(OIDCDiscoveryError, match="Failed to fetch"):
                 utility.discover_oidc_configuration(TEST_ISSUER_URL)
 
-    def test_discover_oidc_configuration_invalid_json(self, redis_fixture):
+    @pytest.mark.parametrize(
+        "source,error_type,error_match",
+        [
+            pytest.param(
+                "response",
+                OIDCDiscoveryError,
+                "Invalid JSON",
+                id="response-invalid-json",
+            ),
+            pytest.param("cache", None, None, id="cached-invalid-json"),
+        ],
+    )
+    def test_discover_oidc_configuration_invalid_json(
+        self, mock_discovery_document, redis_fixture, source, error_type, error_match
+    ):
+        """Test discovery document with invalid JSON from response or cache."""
+        if source == "cache":
+            issuer_str = TEST_ISSUER_URL.rstrip("/")
+            cache_key = redis_fixture.client.get_key(
+                OIDCUtility.DISCOVERY_KEY_PREFIX
+                + hashlib.sha256(issuer_str.encode()).hexdigest()
+            )
+            redis_fixture.client.set(cache_key, "invalid-json{{{", ex=600)
+
         with patch(
             "palace.manager.integration.patron_auth.oidc.util.HTTP.get_with_timeout"
         ) as mock_get:
             mock_response = Mock()
-            mock_response.json.side_effect = json.JSONDecodeError("error", "doc", 0)
+            if source == "response":
+                mock_response.json.side_effect = json.JSONDecodeError("error", "doc", 0)
+            else:
+                mock_response.json.return_value = mock_discovery_document
             mock_get.return_value = mock_response
 
             utility = OIDCUtility(redis_client=redis_fixture.client)
 
-            with pytest.raises(OIDCDiscoveryError, match="Invalid JSON"):
-                utility.discover_oidc_configuration(TEST_ISSUER_URL)
+            if error_type:
+                with pytest.raises(error_type, match=error_match):
+                    utility.discover_oidc_configuration(TEST_ISSUER_URL)
+            else:
+                result = utility.discover_oidc_configuration(TEST_ISSUER_URL)
+                assert result == mock_discovery_document
+                mock_get.assert_called_once()
 
 
 class TestOIDCUtilityJWKS:
@@ -386,20 +417,50 @@ class TestOIDCUtilityJWKS:
             with pytest.raises(OIDCUtilityError, match="Failed to fetch JWKS"):
                 utility.fetch_jwks(jwks_uri)
 
-    def test_fetch_jwks_invalid_json(self, redis_fixture):
+    @pytest.mark.parametrize(
+        "source,error_type,error_match",
+        [
+            pytest.param(
+                "response",
+                OIDCUtilityError,
+                "Invalid JSON in JWKS",
+                id="response-invalid-json",
+            ),
+            pytest.param("cache", None, None, id="cached-invalid-json"),
+        ],
+    )
+    def test_fetch_jwks_invalid_json(
+        self, mock_jwks, redis_fixture, source, error_type, error_match
+    ):
+        """Test JWKS with invalid JSON from response or cache."""
         jwks_uri = f"{TEST_ISSUER_URL}/.well-known/jwks.json"
+
+        if source == "cache":
+            cache_key = redis_fixture.client.get_key(
+                OIDCUtility.JWKS_KEY_PREFIX
+                + hashlib.sha256(jwks_uri.encode()).hexdigest()
+            )
+            redis_fixture.client.set(cache_key, "invalid-json{{{", ex=600)
 
         with patch(
             "palace.manager.integration.patron_auth.oidc.util.HTTP.get_with_timeout"
         ) as mock_get:
             mock_response = Mock()
-            mock_response.json.side_effect = json.JSONDecodeError("error", "doc", 0)
+            if source == "response":
+                mock_response.json.side_effect = json.JSONDecodeError("error", "doc", 0)
+            else:
+                mock_response.json.return_value = mock_jwks
             mock_get.return_value = mock_response
 
             utility = OIDCUtility(redis_client=redis_fixture.client)
 
-            with pytest.raises(OIDCUtilityError, match="Invalid JSON in JWKS"):
-                utility.fetch_jwks(jwks_uri)
+            if error_type:
+                with pytest.raises(error_type, match=error_match):
+                    utility.fetch_jwks(jwks_uri)
+            else:
+                result = utility.fetch_jwks(jwks_uri)
+                assert result == mock_jwks
+                mock_get.assert_called_once()
 
 
 class TestOIDCUtilityPKCEStorage:
