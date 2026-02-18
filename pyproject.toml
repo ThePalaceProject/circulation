@@ -342,6 +342,9 @@ optional = true
 [tool.poetry.group.pg.dependencies]
 psycopg2 = "~2.9.5"
 
+[tool.poetry.scripts]
+palace-startup-task = "palace.manager.scripts.startup:create_startup_task"
+
 [tool.pytest.ini_options]
 addopts = [
     "--cov",

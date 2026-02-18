@@ -32,8 +32,9 @@ class TestInstanceInitializationScript:
         ) as advisory_lock:
             mock_engine_factory = MagicMock()
             script = InstanceInitializationScript(engine_factory=mock_engine_factory)
-            script.initialize_database = MagicMock()
+            script.initialize_database = MagicMock(return_value=False)
             script.initialize_search = MagicMock()
+            script.run_startup_tasks = MagicMock()
             script.run([])
 
         advisory_lock.assert_called_once_with(
@@ -43,11 +44,15 @@ class TestInstanceInitializationScript:
         advisory_lock.return_value.__enter__.assert_called_once()
         advisory_lock.return_value.__exit__.assert_called_once()
 
-        # Run called initialize_database and initialize_search while the lock was held
+        # Run called initialize_database, initialize_search, and
+        # run_startup_tasks while the lock was held.
         script.initialize_database.assert_called_once_with(
             mock_engine_factory.return_value
         )
         script.initialize_search.assert_called_once()
+        script.run_startup_tasks.assert_called_once_with(
+            mock_engine_factory.return_value, script.initialize_database.return_value
+        )
 
     def test_initialize_database(self, services_fixture: ServicesFixture):
         # Test that the script initializes or migrates the database as necessary.
@@ -57,17 +62,19 @@ class TestInstanceInitializationScript:
         mock_engine = MagicMock()
 
         with patch("palace.manager.scripts.initialization.inspect") as inspect:
-            # If the database is uninitialized, initialize_database() is called.
+            # If the database is uninitialized, initialize_database_schema() is
+            # called and the method returns False (not already initialized).
             inspect().has_table.return_value = False
-            script.initialize_database(mock_engine)
+            assert script.initialize_database(mock_engine) is False
             script.initialize_database_schema.assert_called_once()
             script.migrate_database.assert_not_called()
 
-            # If the database is initialized, migrate_database() is called.
+            # If the database is initialized, migrate_database() is called
+            # and the method returns True (already initialized).
             script.initialize_database_schema.reset_mock()
             script.migrate_database.reset_mock()
             inspect().has_table.return_value = True
-            script.initialize_database(mock_engine)
+            assert script.initialize_database(mock_engine) is True
             script.initialize_database_schema.assert_not_called()
             script.migrate_database.assert_called_once()
 
@@ -331,4 +338,48 @@ class TestInstanceInitializationScript:
         assert (
             "You may be running an old version of the application against a new search index"
             in caplog.text
+        )
+
+    def test_run_calls_startup_tasks(self, services_fixture: ServicesFixture):
+        """run_startup_tasks is called after initialize_search within the advisory lock."""
+        call_order: list[str] = []
+
+        with patch("palace.manager.scripts.initialization.pg_advisory_lock"):
+            mock_engine_factory = MagicMock()
+            script = InstanceInitializationScript(engine_factory=mock_engine_factory)
+
+            def _init_db_side_effect(*a: object) -> bool:
+                call_order.append("initialize_database")
+                return False
+
+            script.initialize_database = MagicMock(side_effect=_init_db_side_effect)
+            script.initialize_search = MagicMock(
+                side_effect=lambda: call_order.append("initialize_search")
+            )
+            script.run_startup_tasks = MagicMock(
+                side_effect=lambda *a, **kw: call_order.append("run_startup_tasks")
+            )
+            script.run()
+
+        assert call_order == [
+            "initialize_database",
+            "initialize_search",
+            "run_startup_tasks",
+        ]
+
+    @pytest.mark.parametrize("already_initialized", [True, False])
+    def test_run_passes_already_initialized_to_startup_tasks(
+        self, services_fixture: ServicesFixture, already_initialized: bool
+    ):
+        """already_initialized value from initialize_database is forwarded to run_startup_tasks."""
+        with patch("palace.manager.scripts.initialization.pg_advisory_lock"):
+            mock_engine_factory = MagicMock()
+            script = InstanceInitializationScript(engine_factory=mock_engine_factory)
+            script.initialize_database = MagicMock(return_value=already_initialized)
+            script.initialize_search = MagicMock()
+            script.run_startup_tasks = MagicMock()
+            script.run([])
+
+        script.run_startup_tasks.assert_called_once_with(
+            mock_engine_factory.return_value, already_initialized
         )
