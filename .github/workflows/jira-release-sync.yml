@@ -5,25 +5,21 @@ on:
 jobs:
   sync-to-jira:
     runs-on: ubuntu-latest
+    env:
+      JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
+      JIRA_USER_EMAIL: ${{ secrets.JIRA_USER_EMAIL }}
+      JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+      JIRA_PROJECT_KEY: PP
+      RELEASE_NAME: "CM ${{ github.event.release.tag_name }}"
     steps:
       - name: Login to Jira
         uses: atlassian/gajira-login@v3
-        env:
-          JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
-          JIRA_USER_EMAIL: ${{ secrets.JIRA_USER_EMAIL }}
-          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
       - name: Create New Jira Release
         id: create_jira_release
-        env:
-          JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
-          JIRA_USER_EMAIL: ${{ secrets.JIRA_USER_EMAIL }}
-          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
-          JIRA_PROJECT_KEY: PP
         run: |
-          RELEASE_NAME="CM ${{ github.event.release.tag_name }}"
           curl -X POST \
-            --url "${{ secrets.JIRA_BASE_URL }}/rest/api/3/version" \
-            --user "${{ secrets.JIRA_USER_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
+            --url "${JIRA_BASE_URL}/rest/api/3/version" \
+            --user "${JIRA_USER_EMAIL}:${JIRA_API_TOKEN}" \
             --header 'Accept: application/json' \
             --header 'Content-Type: application/json' \
             --data "{
@@ -35,16 +31,15 @@ jobs:
       - name: Link GitHub Release to Jira Version
         shell: bash
         run: |
-          VERSION_NAME="CM ${{ github.event.release.tag_name }}"
           RELEASE_URL="${{ github.event.release.html_url }}"
           # 1. Get the Version ID from Jira based on the name
-          VERSION_ID=$(curl --user "${{ secrets.JIRA_USER_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
-            --url "${{ secrets.JIRA_BASE_URL }}/rest/api/3/project/PP/versions" \
-            | jq -r ".[] | select(.name == \"$VERSION_NAME\") | .id")
+          VERSION_ID=$(curl --user "${JIRA_USER_EMAIL}:${JIRA_API_TOKEN}" \
+            --url "${JIRA_BASE_URL}/rest/api/3/project/${JIRA_PROJECT_KEY}/versions" \
+            | jq -r ".[] | select(.name == \"$RELEASE_NAME\") | .id")
           # 2. Add the GitHub Release link to the "Related Work" section
           curl --request POST \
-            --url "${{ secrets.JIRA_BASE_URL }}/rest/api/3/version/$VERSION_ID/remotelink" \
-            --user "${{ secrets.JIRA_USER_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
+            --url "${JIRA_BASE_URL}/rest/api/3/version/$VERSION_ID/remotelink" \
+            --user "${JIRA_USER_EMAIL}:${JIRA_API_TOKEN}" \
             --header 'Accept: application/json' \
             --header 'Content-Type: application/json' \
             --data "{
@@ -55,17 +50,16 @@ jobs:
       - name: Extract Jira Keys and Update Issues
         shell: bash
         run: |
-          KEYS=$(echo "${{ github.event.release.body }}" | grep -oE "PP-[0-9]+" | sort -u)
-          VERSION="CM ${{ github.event.release.tag_name }}"
+          KEYS=$(echo "${{ github.event.release.body }}" | grep -oE "${JIRA_PROJECT_KEY}-[0-9]+" | sort -u)
           if [ -z "$KEYS" ]; then
             echo "No Jira keys found."
             exit 0
           fi
           for KEY in $KEYS; do
             curl --request PUT \
-              --url "${{ secrets.JIRA_BASE_URL }}/rest/api/3/issue/$KEY" \
-              --user "${{ secrets.JIRA_USER_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
+              --url "${JIRA_BASE_URL}/rest/api/3/issue/$KEY" \
+              --user "${JIRA_USER_EMAIL}:${JIRA_API_TOKEN}" \
               --header 'Accept: application/json' \
               --header 'Content-Type: application/json' \
-              --data "{\"update\": {\"fixVersions\": [{\"add\": {\"name\": \"$VERSION\"}}]}}"
+              --data "{\"update\": {\"fixVersions\": [{\"add\": {\"name\": \"$RELEASE_NAME\"}}]}}"
           done
