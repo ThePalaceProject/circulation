@@ -266,7 +266,7 @@ multipledispatch = "^1.0"
 nameparser = "^1.1"  # nameparser is for author name manipulations
 opensearch-py = "^3.0"
 pillow = "^12.0.0"
-pycountry = "^24.6.1"
+pycountry = "^26.2.16"
 pycryptodome = "^3.18"
 pydantic = {version = "^2.12", extras = ["email"]}
 pydantic-settings = "^2.5.2"
