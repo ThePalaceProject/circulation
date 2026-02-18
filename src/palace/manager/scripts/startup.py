@@ -85,7 +85,7 @@ def discover_startup_tasks(
         sorted by filename for deterministic ordering.
     """
     if not tasks_dir.is_dir():
-        logger.info("Startup tasks directory %s does not exist; skipping.", tasks_dir)
+        logger.info(f"Startup tasks directory {tasks_dir} does not exist; skipping.")
         return {}
 
     tasks: dict[str, StartupTaskCallable] = {}
@@ -98,23 +98,21 @@ def discover_startup_tasks(
             module = _load_module_from_file(module_path.stem, module_path)
         except Exception:
             logger.exception(
-                "Failed to import startup task module %s.", module_path.stem
+                f"Failed to import startup task module {module_path.stem}."
             )
             continue
 
         run_fn = getattr(module, "run", None)
         if run_fn is None:
             logger.warning(
-                "Startup task module %s does not define 'run'; skipping.",
-                module_path.stem,
+                f"Startup task module {module_path.stem} does not define 'run'; skipping."
             )
             continue
 
         if not callable(run_fn):
             logger.warning(
-                "Startup task module %s has a 'run' attribute "
-                "that is not callable; skipping.",
-                module_path.stem,
+                f"Startup task module {module_path.stem} has a 'run' attribute "
+                "that is not callable; skipping."
             )
             continue
 
@@ -180,15 +178,14 @@ def _stamp_tasks(
 ) -> None:
     """Record all tasks as already-executed without running them."""
     logger.info(
-        "Fresh database install — stamping %d startup task(s) without running.",
-        len(tasks),
+        f"Fresh database install — stamping {len(tasks)} startup task(s) without running."
     )
 
     with Session(engine) as session, session.begin():
         pending = _pending_tasks(session, tasks)
         for key in pending:
             _record_task(session, key, state=StartupTaskState.MARKED)
-            logger.info("Stamped startup task %r.", key)
+            logger.info(f"Stamped startup task {key!r}.")
 
 
 def _run_tasks(
@@ -202,12 +199,12 @@ def _run_tasks(
 
     already_run = len(tasks) - len(pending)
     if already_run:
-        logger.info("%d startup task(s) already executed; skipping.", already_run)
+        logger.info(f"{already_run} startup task(s) already executed; skipping.")
 
     if not pending:
         return
 
-    logger.info("Running %d new startup task(s).", len(pending))
+    logger.info(f"Running {len(pending)} new startup task(s).")
 
     for key, run_fn in pending.items():
         dispatched_task_id: str | None = None
@@ -219,17 +216,15 @@ def _run_tasks(
                     dispatched_task_id = async_result.id
                 _record_task(session, key, state=StartupTaskState.RUN)
         except Exception:
-            logger.exception("Failed to execute startup task %r.", key)
+            logger.exception(f"Failed to execute startup task {key!r}.")
             continue
 
         if dispatched_task_id is not None:
             logger.info(
-                "Startup task %r dispatched Celery task (Task ID: %s).",
-                key,
-                dispatched_task_id,
+                f"Startup task {key!r} dispatched Celery task (Task ID: {dispatched_task_id})."
             )
         else:
-            logger.info("Executed startup task %r.", key)
+            logger.info(f"Executed startup task {key!r}.")
 
 
 # ---------------------------------------------------------------------------
