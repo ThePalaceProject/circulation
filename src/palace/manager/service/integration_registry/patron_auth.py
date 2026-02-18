@@ -23,6 +23,9 @@ class PatronAuthRegistry(IntegrationRegistry["AuthenticationProviderType"]):
         from palace.manager.integration.patron_auth.millenium_patron import (
             MilleniumPatronAPI,
         )
+        from palace.manager.integration.patron_auth.oidc.provider import (
+            OIDCAuthenticationProvider,
+        )
         from palace.manager.integration.patron_auth.saml.provider import (
             SAMLWebSSOAuthenticationProvider,
         )
@@ -45,6 +48,7 @@ class PatronAuthRegistry(IntegrationRegistry["AuthenticationProviderType"]):
         self.register(MilleniumPatronAPI, canonical="api.millenium_patron")
         self.register(SIP2AuthenticationProvider, canonical="api.sip")
         self.register(KansasAuthenticationAPI, canonical="api.kansas_patron")
+        self.register(OIDCAuthenticationProvider, canonical="api.oidc.provider")
         self.register(SAMLWebSSOAuthenticationProvider, canonical="api.saml.provider")
         self.register(
             SirsiDynixHorizonAuthenticationProvider,

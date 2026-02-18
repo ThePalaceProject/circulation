@@ -5,6 +5,7 @@ import logging
 import tempfile
 import uuid
 import zipfile
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 from typing import IO, Any
@@ -54,7 +55,7 @@ from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.licensing import License, LicensePool
 from palace.manager.sqlalchemy.model.patron import Hold, Loan, Patron
 from palace.manager.sqlalchemy.model.work import Work, WorkGenre
-from palace.manager.sqlalchemy.util import get_one
+from palace.manager.sqlalchemy.util import get_one, numericrange_to_string
 from palace.manager.util.log import elapsed_time_logging
 from palace.manager.util.uuid import uuid_encode
 
@@ -156,6 +157,7 @@ def generate_report(
                 csv_file=inventory_report_file,
                 sql_params=sql_params,
                 query=inventory_report_query(),
+                row_transform=_inventory_report_row_transform,
             )
 
             generate_csv_report(
@@ -222,6 +224,7 @@ def generate_csv_report(
     csv_file: IO[str],
     sql_params: dict[str, Any],
     query: Select,
+    row_transform: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
 ) -> None:
     with elapsed_time_logging(
         log_method=log.debug,
@@ -230,10 +233,21 @@ def generate_csv_report(
     ):
         writer = csv.writer(csv_file, delimiter=",")
         rows = db.execute(query, sql_params)
-        writer.writerow(rows.keys())
-        writer.writerows(rows)
+        keys = list(rows.keys())
+        writer.writerow(keys)
+        if row_transform is None:
+            writer.writerows(rows)
+        else:
+            for row in rows:
+                transformed_row = row_transform(dict(row._mapping))
+                writer.writerow([transformed_row.get(key, "") for key in keys])
         csv_file.flush()
         log.debug(f"report written to {csv_file.name}")
+
+
+def _inventory_report_row_transform(row: dict[str, Any]) -> dict[str, Any]:
+    row["target_age"] = numericrange_to_string(row["target_age"])
+    return row
 
 
 def _comma_separated_sorted_work_genre_list_subquery() -> Subquery:
@@ -257,24 +271,10 @@ def _comma_separated_sorted_work_genre_list_subquery() -> Subquery:
 
 
 def _bisac_subjects_subquery() -> Subquery:
-    """Comma-separated BISAC subjects and age ranges for an identifier."""
+    """Comma-separated BISAC subjects for an identifier."""
     classification_alias = aliased(Classification)
     subject_alias = aliased(Subject)
     bisac_value = func.coalesce(subject_alias.name, subject_alias.identifier)
-    age_range_lower = func.lower(subject_alias.target_age)
-    age_range_upper = func.upper(subject_alias.target_age)
-    age_range_lower_adjusted: ColumnElement[Any] = case(
-        (func.lower_inc(subject_alias.target_age), age_range_lower),
-        else_=age_range_lower + 1,
-    )
-    age_range_upper_adjusted: ColumnElement[Any] = case(
-        (func.upper_inc(subject_alias.target_age), age_range_upper),
-        else_=age_range_upper - 1,
-    )
-    age_range_value: ColumnElement[Any] = case(
-        (or_(age_range_lower.is_(None), age_range_upper.is_(None)), None),
-        else_=func.concat(age_range_lower_adjusted, "-", age_range_upper_adjusted),
-    )
     return (
         select(
             classification_alias.identifier_id.label("identifier_id"),
@@ -284,14 +284,6 @@ def _bisac_subjects_subquery() -> Subquery:
                 ),
                 "|",
             ).label("bisac_subjects"),
-            func.array_to_string(
-                func.array_agg(
-                    aggregate_order_by(
-                        age_range_value.distinct(), age_range_value.asc()
-                    )
-                ),
-                "|",
-            ).label("age_ranges"),
         )
         .join(subject_alias, classification_alias.subject_id == subject_alias.id)
         .where(subject_alias.type == Subject.BISAC)
@@ -456,7 +448,7 @@ def inventory_report_query() -> Select:
             Edition.medium.label("format"),
             Work.audience,
             func.coalesce(wg_subquery.c.genres, "").label("genres"),
-            func.coalesce(bisac_subquery.c.age_ranges, "").label("age_ranges"),
+            Work.target_age.label("target_age"),
             func.coalesce(bisac_subquery.c.bisac_subjects, "").label("bisac_subjects"),
             visible,
             visibility_status,

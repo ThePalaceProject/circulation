@@ -32,7 +32,6 @@ from palace.manager.sqlalchemy.model.licensing import LicensePoolStatus
 from palace.manager.sqlalchemy.model.patron import Hold
 from palace.manager.sqlalchemy.util import (
     get_one_or_create,
-    numericrange_to_string,
     tuple_to_numericrange,
 )
 from palace.manager.util.datetime_helpers import utc_now
@@ -123,7 +122,7 @@ def test_only_active_collections_are_included(
                 "format",
                 "audience",
                 "genres",
-                "age_ranges",
+                "target_age",
                 "bisac_subjects",
                 "visible",
                 "visibility_status",
@@ -293,10 +292,6 @@ def test_generate_report(
     db.classification(identifier, bisac_subject_two, ds)
     db.classification(identifier, non_bisac_subject, ds)
 
-    expected_age_range_one = numericrange_to_string(bisac_subject_one.target_age)
-    expected_age_range_two = numericrange_to_string(bisac_subject_two.target_age)
-    expected_non_bisac_age_range = numericrange_to_string(non_bisac_subject.target_age)
-
     licensepool = db.licensepool(
         edition=edition,
         open_access=False,
@@ -335,7 +330,8 @@ def test_generate_report(
         collection=collection,
         genre="genre_z",
     )
-    work2.target_age = tuple_to_numericrange((6, 8))
+    # No upper bound follows numericrange_to_string behavior.
+    work2.target_age = tuple_to_numericrange((18, None))
 
     licensepool_no_licenses_owned = db.licensepool(
         edition=edition2,
@@ -543,16 +539,8 @@ def test_generate_report(
                     "BISAC Subject One",
                     "BISAC Subject Two",
                 ]
-                assert expected_age_range_one in book1_available_row["age_ranges"]
-                assert expected_age_range_two in book1_available_row["age_ranges"]
-                assert "|" in book1_available_row["age_ranges"]
-                assert sorted(book1_available_row["age_ranges"].split("|")) == sorted(
-                    [expected_age_range_one, expected_age_range_two]
-                )
-                assert (
-                    expected_non_bisac_age_range
-                    not in book1_available_row["age_ranges"]
-                )
+                # target_age comes from Work.target_age (12-14 for book 1)
+                assert book1_available_row["target_age"] == "12-14"
                 assert book1_available_row["format"] == edition.BOOK_MEDIUM
                 assert book1_available_row["data_source"] == data_source
                 assert book1_available_row["collection_name"] == collection_name
@@ -585,6 +573,7 @@ def test_generate_report(
                 assert book1_unavailable_row["published_date"] == "2019-05-17"
                 assert book1_unavailable_row["audience"] == "young adult"
                 assert book1_unavailable_row["genres"] == "genre_a,genre_z"
+                assert book1_unavailable_row["target_age"] == "12-14"
                 assert book1_unavailable_row["format"] == edition.BOOK_MEDIUM
                 assert book1_unavailable_row["data_source"] == data_source
                 assert book1_unavailable_row["collection_name"] == collection_name
@@ -607,6 +596,8 @@ def test_generate_report(
                 assert book2_row["published_date"] == "2020-10-05"
                 assert book2_row["audience"] == "Adult"  # Default audience
                 assert book2_row["genres"] == "genre_z"
+                # No upper bound formats as "{lower}".
+                assert book2_row["target_age"] == "18"
                 assert book2_row["format"] == edition.BOOK_MEDIUM
                 assert book2_row["data_source"] == data_source
                 assert book2_row["collection_name"] == collection_name
@@ -626,6 +617,7 @@ def test_generate_report(
                 )
                 assert book3_no_holds_row is not None
                 assert book3_no_holds_row["identifier"] == no_holds_identifier_value
+                assert book3_no_holds_row["target_age"] == ""
                 assert book3_no_holds_row["data_source"] == data_source
                 assert book3_no_holds_row["collection_name"] == collection_name
                 # We didn't set a language, so we get the default.
