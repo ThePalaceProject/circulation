@@ -38,6 +38,7 @@ from palace.manager.api.authentication.basic_token import (
 )
 from palace.manager.api.authenticator import (
     Authenticator,
+    BaseOIDCAuthenticationProvider,
     BaseSAMLAuthenticationProvider,
     BearerTokenType,
     CirculationPatronProfileStorage,
@@ -48,6 +49,8 @@ from palace.manager.api.problem_details import (
     LIBRARY_NOT_FOUND,
     PATRON_AUTH_ACCESS_TOKEN_EXPIRED,
     PATRON_OF_ANOTHER_LIBRARY,
+    UNKNOWN_BEARER_TOKEN_PROVIDER,
+    UNKNOWN_OIDC_PROVIDER,
     UNSUPPORTED_AUTHENTICATION_MECHANISM,
 )
 from palace.manager.api.util.patron import PatronUtility
@@ -58,6 +61,13 @@ from palace.manager.integration.goals import Goals
 from palace.manager.integration.patron_auth.millenium_patron import (
     MilleniumPatronAPI,
     MilleniumPatronSettings,
+)
+from palace.manager.integration.patron_auth.oidc.configuration.model import (
+    OIDCAuthLibrarySettings,
+    OIDCAuthSettings,
+)
+from palace.manager.integration.patron_auth.oidc.provider import (
+    OIDCAuthenticationProvider,
 )
 from palace.manager.integration.patron_auth.simple_authentication import (
     SimpleAuthenticationProvider,
@@ -1250,6 +1260,323 @@ class TestLibraryAuthenticator:
             )
             headers = real_authenticator.create_authentication_headers()
             assert "WWW-Authenticate" not in headers
+
+    def test_register_oidc_provider(
+        self, db: DatabaseTransactionFixture, library_fixture: LibraryFixture
+    ):
+        """Test that OIDC providers are properly registered and appear in authentication documents."""
+        from palace.manager.api.app import app
+
+        library = library_fixture.library()
+
+        # Create an OIDC provider
+        settings = OIDCAuthSettings(
+            issuer_url="https://idp.example.com",
+            client_id="test-client-id",
+            client_secret="test-client-secret",
+        )
+        library_settings = OIDCAuthLibrarySettings()
+        oidc_provider = OIDCAuthenticationProvider(
+            library_id=library.id,
+            integration_id=1,
+            settings=settings,
+            library_settings=library_settings,
+        )
+
+        # Create authenticator with OIDC provider
+        authenticator = LibraryAuthenticator(
+            _db=db.session,
+            library=library,
+            oidc_providers=[oidc_provider],
+        )
+
+        # Verify provider is registered
+        assert oidc_provider.label() in authenticator.oidc_providers_by_name
+        assert (
+            authenticator.oidc_providers_by_name[oidc_provider.label()] == oidc_provider
+        )
+
+        # Verify provider appears in providers list
+        providers = list(authenticator.providers)
+        assert oidc_provider in providers
+
+        # Verify provider appears in authentication document
+        with app.test_request_context("/"):
+            doc = json.loads(authenticator.create_authentication_document())
+            authenticators = doc["authentication"]
+
+            # Should have one OIDC authentication flow
+            assert len(authenticators) == 1
+            [oidc_doc] = authenticators
+
+            # Verify it's the OIDC flow
+            assert oidc_doc["type"] == "http://palaceproject.io/authtype/OpenIDConnect"
+            assert oidc_doc["description"] == oidc_provider.label()
+            assert len(oidc_doc["links"]) == 1
+            assert oidc_doc["links"][0]["rel"] == "authenticate"
+            assert "/oidc/authenticate" in oidc_doc["links"][0]["href"]
+            assert library.short_name in oidc_doc["links"][0]["href"]
+
+    def test_oidc_provider_lookup(
+        self, db: DatabaseTransactionFixture, library_fixture: LibraryFixture
+    ):
+        """Test LibraryAuthenticator.oidc_provider_lookup method."""
+        library = library_fixture.library()
+
+        # No providers configured
+        authenticator = LibraryAuthenticator(_db=db.session, library=library)
+        result = authenticator.oidc_provider_lookup("SomeProvider")
+        assert isinstance(result, ProblemDetail)
+        assert result.uri == UNKNOWN_OIDC_PROVIDER.uri
+        assert result.detail is not None
+        assert "No OIDC providers are configured" in result.detail
+
+        # Create two mock OIDC providers with different names
+        oidc_provider1 = MagicMock(spec=BaseOIDCAuthenticationProvider)
+        oidc_provider1.label.return_value = "OIDC Provider 1"
+
+        oidc_provider2 = MagicMock(spec=BaseOIDCAuthenticationProvider)
+        oidc_provider2.label.return_value = "OIDC Provider 2"
+
+        authenticator = LibraryAuthenticator(
+            _db=db.session,
+            library=library,
+            oidc_providers=[oidc_provider1, oidc_provider2],
+        )
+
+        # Provider not in list
+        result = authenticator.oidc_provider_lookup("NonExistentProvider")
+        assert isinstance(result, ProblemDetail)
+        assert result.uri == UNKNOWN_OIDC_PROVIDER.uri
+        assert result.detail is not None
+        assert "OIDC Provider 1" in result.detail
+        assert "OIDC Provider 2" in result.detail
+        assert "known providers are:" in result.detail
+
+        # None as provider name
+        result = authenticator.oidc_provider_lookup(None)
+        assert isinstance(result, ProblemDetail)
+        assert result.uri == UNKNOWN_OIDC_PROVIDER.uri
+
+        # Successful lookup of first provider
+        result = authenticator.oidc_provider_lookup("OIDC Provider 1")
+        assert result == oidc_provider1
+        assert isinstance(result, BaseOIDCAuthenticationProvider)
+
+        # Successful lookup of second provider
+        result = authenticator.oidc_provider_lookup("OIDC Provider 2")
+        assert result == oidc_provider2
+        assert isinstance(result, BaseOIDCAuthenticationProvider)
+
+    def test_authenticated_patron_bearer_token_oidc(
+        self, db: DatabaseTransactionFixture, library_fixture: LibraryFixture
+    ):
+        """Test that OIDC bearer tokens are properly routed to OIDC providers."""
+        library = library_fixture.library()
+
+        # Create mock OIDC provider
+        oidc_provider = MagicMock(spec=BaseOIDCAuthenticationProvider)
+        oidc_provider.label.return_value = "OpenID Connect"
+
+        # Create patron to return
+        patron = db.patron()
+        patron.authorization_identifier = "oidc-test-user"
+        oidc_provider.authenticated_patron.return_value = patron
+
+        # Create authenticator with OIDC provider
+        authenticator = LibraryAuthenticator(
+            _db=db.session,
+            library=library,
+            oidc_providers=[oidc_provider],
+            bearer_token_signing_secret="test-secret-at-least-32-bytes-long-for-hmac-sha256",
+        )
+
+        # Mock the decode to return provider name and token
+        with patch.object(authenticator, "decode_bearer_token") as decode:
+            decode.return_value = ("OpenID Connect", "oidc-credential-token")
+            bearer_token = authenticator.create_bearer_token(
+                "OpenID Connect", "oidc-credential-token"
+            )
+            authenticated = authenticator.authenticated_patron(
+                db.session, Authorization(auth_type="Bearer", token=bearer_token)
+            )
+
+            # Verify decode was called
+            assert decode.call_count == 1
+            decode.assert_called_with(bearer_token)
+
+            # Verify OIDC provider was called
+            assert authenticated == patron
+            oidc_provider.authenticated_patron.assert_called_once_with(
+                db.session, "oidc-credential-token"
+            )
+
+    def test_authenticated_patron_bearer_token_saml_and_oidc(
+        self, db: DatabaseTransactionFixture, library_fixture: LibraryFixture
+    ):
+        """Test that both SAML and OIDC bearer tokens work in the same authenticator."""
+        library = library_fixture.library()
+
+        # Create mock SAML provider
+        saml_provider = MagicMock(spec=BaseSAMLAuthenticationProvider)
+        saml_provider.label.return_value = "SAML Provider"
+        saml_patron = db.patron()
+        saml_patron.authorization_identifier = "saml-test-user"
+        saml_provider.authenticated_patron.return_value = saml_patron
+
+        # Create mock OIDC provider
+        oidc_provider = MagicMock(spec=BaseOIDCAuthenticationProvider)
+        oidc_provider.label.return_value = "OpenID Connect"
+        oidc_patron = db.patron()
+        oidc_patron.authorization_identifier = "oidc-test-user"
+        oidc_provider.authenticated_patron.return_value = oidc_patron
+
+        # Create authenticator with both SAML and OIDC providers
+        authenticator = LibraryAuthenticator(
+            _db=db.session,
+            library=library,
+            saml_providers=[saml_provider],
+            oidc_providers=[oidc_provider],
+            bearer_token_signing_secret="test-secret-at-least-32-bytes-long-for-hmac-sha256",
+        )
+
+        # Test SAML bearer token
+        with patch.object(authenticator, "decode_bearer_token") as decode:
+            decode.return_value = ("SAML Provider", "saml-credential-token")
+            saml_bearer_token = authenticator.create_bearer_token(
+                "SAML Provider", "saml-credential-token"
+            )
+            saml_authenticated = authenticator.authenticated_patron(
+                db.session, Authorization(auth_type="Bearer", token=saml_bearer_token)
+            )
+
+            # Verify SAML provider was called
+            assert saml_authenticated == saml_patron
+            saml_provider.authenticated_patron.assert_called_once_with(
+                db.session, "saml-credential-token"
+            )
+
+        # Test OIDC bearer token
+        with patch.object(authenticator, "decode_bearer_token") as decode:
+            decode.return_value = ("OpenID Connect", "oidc-credential-token")
+            oidc_bearer_token = authenticator.create_bearer_token(
+                "OpenID Connect", "oidc-credential-token"
+            )
+            oidc_authenticated = authenticator.authenticated_patron(
+                db.session, Authorization(auth_type="Bearer", token=oidc_bearer_token)
+            )
+
+            # Verify OIDC provider was called
+            assert oidc_authenticated == oidc_patron
+            oidc_provider.authenticated_patron.assert_called_once_with(
+                db.session, "oidc-credential-token"
+            )
+
+    def test_authenticated_patron_bearer_token_unknown_provider(
+        self,
+        db: DatabaseTransactionFixture,
+        library_fixture: LibraryFixture,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        """Test that unknown provider names in bearer tokens return appropriate errors."""
+        library = library_fixture.library()
+
+        # Create authenticator with bearer token signing secret but no providers
+        authenticator = LibraryAuthenticator(
+            _db=db.session,
+            library=library,
+            bearer_token_signing_secret="test-secret-at-least-32-bytes-long-for-hmac-sha256",
+        )
+
+        # Mock the decode to return a non-existent provider
+        with patch.object(authenticator, "decode_bearer_token") as decode:
+            decode.return_value = ("NonExistentProvider", "some-credential")
+            bearer_token = authenticator.create_bearer_token(
+                "NonExistentProvider", "some-credential"
+            )
+            result = authenticator.authenticated_patron(
+                db.session, Authorization(auth_type="Bearer", token=bearer_token)
+            )
+
+            # Should return a ProblemDetail about unknown bearer token provider
+            assert result.uri == UNKNOWN_BEARER_TOKEN_PROVIDER.uri
+            # The detail should only contain the basic error message with provider name
+            assert isinstance(result.detail, str)
+            assert "NonExistentProvider" in result.detail
+            assert "isn't one of the known providers" in result.detail
+
+            # The full error message with provider lists should be logged
+            error_logs = [
+                r
+                for r in caplog.records
+                if r.levelname == "ERROR" and "authenticator" in r.name
+            ]
+            assert len(error_logs) == 1
+            log_message = error_logs[0].message
+            assert "NonExistentProvider" in log_message
+            assert "SAML providers: (none configured)" in log_message
+            assert "OIDC providers: (none configured)" in log_message
+
+    def test_authenticated_patron_bearer_token_unknown_provider_with_configured_providers(
+        self,
+        db: DatabaseTransactionFixture,
+        library_fixture: LibraryFixture,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        """Test that error message lists all configured providers when token specifies unknown provider."""
+        library = library_fixture.library()
+
+        # Create mock SAML providers
+        saml_provider1 = MagicMock(spec=BaseSAMLAuthenticationProvider)
+        saml_provider1.label.return_value = "SAML Provider 1"
+        saml_provider2 = MagicMock(spec=BaseSAMLAuthenticationProvider)
+        saml_provider2.label.return_value = "SAML Provider 2"
+
+        # Create mock OIDC providers
+        oidc_provider1 = MagicMock(spec=BaseOIDCAuthenticationProvider)
+        oidc_provider1.label.return_value = "OIDC Provider 1"
+        oidc_provider2 = MagicMock(spec=BaseOIDCAuthenticationProvider)
+        oidc_provider2.label.return_value = "OIDC Provider 2"
+
+        # Create authenticator with both SAML and OIDC providers
+        authenticator = LibraryAuthenticator(
+            _db=db.session,
+            library=library,
+            saml_providers=[saml_provider1, saml_provider2],
+            oidc_providers=[oidc_provider1, oidc_provider2],
+            bearer_token_signing_secret="test-secret-at-least-32-bytes-long-for-hmac-sha256",
+        )
+
+        # Mock the decode to return a non-existent provider
+        with patch.object(authenticator, "decode_bearer_token") as decode:
+            decode.return_value = ("UnknownProvider", "some-credential")
+            bearer_token = authenticator.create_bearer_token(
+                "UnknownProvider", "some-credential"
+            )
+            result = authenticator.authenticated_patron(
+                db.session, Authorization(auth_type="Bearer", token=bearer_token)
+            )
+
+            # Should return a ProblemDetail about unknown bearer token provider
+            assert result.uri == UNKNOWN_BEARER_TOKEN_PROVIDER.uri
+            # The detail should only contain the basic error message with provider name
+            assert isinstance(result.detail, str)
+            assert "UnknownProvider" in result.detail
+            assert "isn't one of the known providers" in result.detail
+
+            # The full error message with provider lists should be logged
+            error_logs = [
+                r
+                for r in caplog.records
+                if r.levelname == "ERROR" and "authenticator" in r.name
+            ]
+            assert len(error_logs) == 1
+            log_message = error_logs[0].message
+            assert "UnknownProvider" in log_message
+            # Should list all SAML providers in log
+            assert "SAML providers: SAML Provider 1, SAML Provider 2" in log_message
+            # Should list all OIDC providers in log
+            assert "OIDC providers: OIDC Provider 1, OIDC Provider 2" in log_message
 
     def test_create_authentication_document_no_delete_adobe_id_link_when_authdata_utility_is_none(
         self,

@@ -5,7 +5,7 @@ import json
 import logging
 from abc import ABC
 from collections.abc import Iterable
-from typing import Self
+from typing import Any, Self
 
 import flask
 import jwt
@@ -29,6 +29,8 @@ from palace.manager.api.config import Configuration
 from palace.manager.api.problem_details import (
     INVALID_SAML_BEARER_TOKEN,
     LIBRARY_NOT_FOUND,
+    UNKNOWN_BEARER_TOKEN_PROVIDER,
+    UNKNOWN_OIDC_PROVIDER,
     UNKNOWN_SAML_PROVIDER,
     UNSUPPORTED_AUTHENTICATION_MECHANISM,
 )
@@ -168,6 +170,9 @@ class Authenticator(LoggerMixin):
     def decode_bearer_token(self, *args, **kwargs):
         return self.invoke_authenticator_method("decode_bearer_token", *args, **kwargs)
 
+    def oidc_provider_lookup(self, *args, **kwargs):
+        return self.invoke_authenticator_method("oidc_provider_lookup", *args, **kwargs)
+
 
 class LibraryAuthenticator(LoggerMixin):
     """Use the registered AuthenticationProviders to turn incoming
@@ -218,6 +223,7 @@ class LibraryAuthenticator(LoggerMixin):
         library: Library,
         basic_auth_provider: BasicAuthenticationProvider | None = None,
         saml_providers: list[BaseSAMLAuthenticationProvider] | None = None,
+        oidc_providers: list[BaseOIDCAuthenticationProvider] | None = None,
         bearer_token_signing_secret: str | None = None,
         integration_registry: None | (
             IntegrationRegistry[AuthenticationProvider]
@@ -237,9 +243,11 @@ class LibraryAuthenticator(LoggerMixin):
         :param saml_providers: A list of AuthenticationProviders that handle
         SAML requests.
 
+        :param oidc_providers: A list of AuthenticationProviders that handle
+        OIDC requests.
+
         :param bearer_token_signing_secret: The secret to use when
         signing JWTs for use as bearer tokens.
-
         """
         self._db = _db
         self.library_id = library.id
@@ -252,7 +260,12 @@ class LibraryAuthenticator(LoggerMixin):
             else integration_registry
         )
 
-        self.saml_providers_by_name = {}
+        self.saml_providers_by_name: dict[
+            str, BaseSAMLAuthenticationProvider[Any, Any]
+        ] = {}
+        self.oidc_providers_by_name: dict[
+            str, BaseOIDCAuthenticationProvider[Any, Any]
+        ] = {}
         self.bearer_token_signing_secret = (
             bearer_token_signing_secret
             or Key.get_key(
@@ -271,13 +284,21 @@ class LibraryAuthenticator(LoggerMixin):
             self.register_basic_auth_provider(basic_auth_provider)
 
         if saml_providers:
-            for provider in saml_providers:
-                self.saml_providers_by_name[provider.label()] = provider
+            for saml_provider in saml_providers:
+                self.saml_providers_by_name[saml_provider.label()] = saml_provider
+
+        if oidc_providers:
+            for oidc_provider in oidc_providers:
+                self.oidc_providers_by_name[oidc_provider.label()] = oidc_provider
 
     @property
     def supports_patron_authentication(self) -> bool:
         """Does this library have any way of authenticating patrons at all?"""
-        if self.basic_auth_provider or self.saml_providers_by_name:
+        if (
+            self.basic_auth_provider
+            or self.saml_providers_by_name
+            or self.oidc_providers_by_name
+        ):
             return True
         return False
 
@@ -359,10 +380,13 @@ class LibraryAuthenticator(LoggerMixin):
             # the ability to run one.
         elif isinstance(provider, BaseSAMLAuthenticationProvider):
             self.register_saml_provider(provider)
+        elif isinstance(provider, BaseOIDCAuthenticationProvider):
+            self.register_oidc_provider(provider)
         else:
             raise CannotLoadConfiguration(
-                f"Authentication provider {impl_cls.__name__} is neither a BasicAuthenticationProvider nor a "
-                "BaseSAMLAuthenticationProvider. I can create it, but not sure where to put it."
+                f"Authentication provider {impl_cls.__name__} is neither BasicAuthenticationProvider, "
+                "BaseSAMLAuthenticationProvider, nor BaseOIDCAuthenticationProvider. "
+                "I can create it, but not sure where to put it."
             )
 
     def register_basic_auth_provider(
@@ -393,6 +417,17 @@ class LibraryAuthenticator(LoggerMixin):
             )
         self.saml_providers_by_name[provider.label()] = provider
 
+    def register_oidc_provider(
+        self,
+        provider: BaseOIDCAuthenticationProvider,
+    ) -> None:
+        already_registered = self.oidc_providers_by_name.get(provider.label())
+        if already_registered and already_registered != provider:
+            raise CannotLoadConfiguration(
+                'Two different OIDC providers claim the name "%s"' % (provider.label())
+            )
+        self.oidc_providers_by_name[provider.label()] = provider
+
     @property
     def providers(self) -> Iterable[AuthenticationProvider]:
         """An iterator over all registered AuthenticationProviders."""
@@ -401,6 +436,7 @@ class LibraryAuthenticator(LoggerMixin):
         if self.basic_auth_provider:
             yield self.basic_auth_provider
         yield from self.saml_providers_by_name.values()
+        yield from self.oidc_providers_by_name.values()
 
     def _unique_basic_lookup_providers(
         self, auth_providers: Iterable[AuthenticationProvider | None]
@@ -426,6 +462,7 @@ class LibraryAuthenticator(LoggerMixin):
             ]
         )
         yield from self.saml_providers_by_name.values()
+        yield from self.oidc_providers_by_name.values()
 
     def authenticated_patron(
         self, _db: Session, auth: Authorization
@@ -458,17 +495,46 @@ class LibraryAuthenticator(LoggerMixin):
                     _db, token_str
                 )
             elif token_type == BearerTokenType.JWT:
-                # The patron wants to use an SAMLAuthenticationProvider. Figure out which one.
+                # The patron wants to use an OAuth provider (SAML or OIDC). Figure out which one.
                 try:
                     provider_name, provider_token = self.decode_bearer_token(token_str)
                 except jwt.exceptions.InvalidTokenError as e:
                     return INVALID_SAML_BEARER_TOKEN
+
+                # Try SAML first (for backwards compatibility)
                 saml_provider = self.saml_provider_lookup(provider_name)
-                if isinstance(saml_provider, ProblemDetail):
-                    # There was a problem turning the provider name into
-                    # a registered SAMLAuthenticationProvider.
-                    return saml_provider
-                return saml_provider.authenticated_patron(_db, provider_token)
+                if not isinstance(saml_provider, ProblemDetail):
+                    return saml_provider.authenticated_patron(_db, provider_token)
+
+                # If not SAML, try OIDC
+                oidc_provider = self.oidc_provider_lookup(provider_name)
+                if not isinstance(oidc_provider, ProblemDetail):
+                    return oidc_provider.authenticated_patron(_db, provider_token)
+
+                # Neither SAML nor OIDC provider found. Log a helpful error
+                # listing the available SAML & OIDC providers and return a
+                # problem detail.
+                saml_names = (
+                    list(self.saml_providers_by_name.keys())
+                    if self.saml_providers_by_name
+                    else []
+                )
+                oidc_names = (
+                    list(self.oidc_providers_by_name.keys())
+                    if self.oidc_providers_by_name
+                    else []
+                )
+                saml_list = ", ".join(saml_names) if saml_names else "(none configured)"
+                oidc_list = ", ".join(oidc_names) if oidc_names else "(none configured)"
+
+                detail = f"The specified provider name '{provider_name}' isn't one of the known providers"
+                message = (
+                    f"{detail}: "
+                    f"SAML providers: {saml_list}; "
+                    f"OIDC providers: {oidc_list}."
+                )
+                self.log.error(message)
+                return UNKNOWN_BEARER_TOKEN_PROVIDER.detailed(detail)
 
         return UNSUPPORTED_AUTHENTICATION_MECHANISM
 
@@ -511,6 +577,26 @@ class LibraryAuthenticator(LoggerMixin):
                 + _(" The known providers are: %s") % possibilities
             )
         return self.saml_providers_by_name[provider_name]
+
+    def oidc_provider_lookup(
+        self, provider_name: str | None
+    ) -> BaseOIDCAuthenticationProvider | ProblemDetail:
+        """Look up the OIDCAuthenticationProvider with the given name.
+
+        If that doesn't work, return an appropriate ProblemDetail.
+        """
+        if not self.oidc_providers_by_name:
+            return UNKNOWN_OIDC_PROVIDER.detailed(
+                _("No OIDC providers are configured.")
+            )
+
+        if not provider_name or provider_name not in self.oidc_providers_by_name:
+            possibilities = ", ".join(list(self.oidc_providers_by_name.keys()))
+            return UNKNOWN_OIDC_PROVIDER.detailed(
+                UNKNOWN_OIDC_PROVIDER.detail
+                + _(" The known providers are: %s") % possibilities
+            )
+        return self.oidc_providers_by_name[provider_name]
 
     def create_bearer_token(
         self, provider_name: str | None, provider_token: str | None
@@ -810,3 +896,13 @@ class BaseSAMLAuthenticationProvider[
     @property
     def flow_type(self) -> str:
         return "http://librarysimplified.org/authtype/SAML-2.0"
+
+
+class BaseOIDCAuthenticationProvider[
+    SettingsType: AuthProviderSettings, LibrarySettingsType: AuthProviderLibrarySettings
+](AuthenticationProvider[SettingsType, LibrarySettingsType], ABC):
+    """Base class for OIDC authentication providers."""
+
+    @property
+    def flow_type(self) -> str:
+        return "http://palaceproject.io/authtype/OpenIDConnect"

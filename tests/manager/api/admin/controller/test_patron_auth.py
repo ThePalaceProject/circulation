@@ -110,14 +110,15 @@ class TestPatronAuth:
         controller = controller_fixture.controller
         with flask_app_fixture.test_request_context_system_admin("/"):
             response = controller.process_patron_auth_services()
-
         assert isinstance(response, Response)
+
         response_data = response.json
         assert isinstance(response_data, dict)
         assert response_data.get("patron_auth_services") == []
+
         protocols = response_data.get("protocols")
         assert isinstance(protocols, list)
-        assert 7 == len(protocols)
+        assert len(protocols) == 8
         assert "settings" in protocols[0]
         assert "library_settings" in protocols[0]
 

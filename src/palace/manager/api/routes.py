@@ -552,6 +552,57 @@ def track_playtime_events(collection_id, identifier_type, identifier):
     )
 
 
+# Route that redirects to the authentication URL for an OIDC provider
+@library_route("/oidc/authenticate", methods=["GET"])
+@has_library
+@returns_problem_detail
+def oidc_authenticate():
+    return app.manager.oidc_controller.oidc_authentication_redirect(
+        flask.request.args, app.manager._db
+    )
+
+
+# Redirect URI for OIDC providers
+# NOTE: For simplicity, we use a constant `redirect_uri` without the library short name.
+# While OIDC allows multiple redirect URIs to be registered (unlike SAML),
+# a constant callback URL means we only need to register one URI with each provider.
+# Library information is passed via the state parameter and processed in the controller.
+@returns_problem_detail
+@app.route("/oidc/callback", methods=["GET"])
+def oidc_callback():
+    return app.manager.oidc_controller.oidc_authentication_callback(
+        flask.request.args, app.manager._db
+    )
+
+
+# Route that initiates OIDC logout
+@library_route("/oidc/logout", methods=["GET"])
+@has_library
+@returns_problem_detail
+def oidc_logout():
+    return app.manager.oidc_controller.oidc_logout_initiate(
+        flask.request.args, app.manager._db
+    )
+
+
+# Redirect URI for OIDC logout callback
+@returns_problem_detail
+@app.route("/oidc/logout_callback", methods=["GET"])
+def oidc_logout_callback():
+    return app.manager.oidc_controller.oidc_logout_callback(
+        flask.request.args, app.manager._db
+    )
+
+
+@app.route("/oidc/backchannel_logout", methods=["POST"])
+def oidc_backchannel_logout():
+    """Handle OIDC back-channel logout requests from providers."""
+    body, status = app.manager.oidc_controller.oidc_backchannel_logout(
+        flask.request.form, app.manager._db
+    )
+    return body, status
+
+
 # Route that redirects to the authentication URL for a SAML provider
 @library_route("/saml_authenticate")
 @has_library
