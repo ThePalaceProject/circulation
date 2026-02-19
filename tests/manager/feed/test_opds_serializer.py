@@ -4,6 +4,7 @@ from unittest.mock import patch
 import pytz
 from lxml import etree
 
+from palace.manager.core.user_profile import ProfileController
 from palace.manager.feed.serializer.opds import (
     OPDS1Version1Serializer,
     OPDS1Version2Serializer,
@@ -17,6 +18,7 @@ from palace.manager.feed.types import (
     FeedData,
     IndirectAcquisition,
     Link,
+    LinkContentType,
     Rating,
     RichText,
     Series,
@@ -447,3 +449,65 @@ class TestOPDSSerializer:
         child = element.findall(f"{{{OPDSFeed.SCHEMA_NS}}}alternativeHeadline")
         assert len(child) == 1
         assert child[0].text == "test"
+
+    def test_resolve_type_maps_link_content_types(self):
+        """LinkContentType values are mapped to OPDS1-specific content types."""
+        serializer = OPDS1Version1Serializer()
+        assert (
+            serializer._resolve_type(LinkContentType.OPDS_FEED)
+            == OPDSFeed.ACQUISITION_FEED_TYPE
+        )
+        assert (
+            serializer._resolve_type(LinkContentType.OPDS_ENTRY) == OPDSFeed.ENTRY_TYPE
+        )
+
+    def test_resolve_type_passes_through_concrete_types(self):
+        """Concrete content types are passed through unchanged."""
+        serializer = OPDS1Version1Serializer()
+        assert serializer._resolve_type("text/html") == "text/html"
+        assert serializer._resolve_type("application/json") == "application/json"
+        assert serializer._resolve_type(None) is None
+
+    def test_resolve_rel_maps_profile(self):
+        """Standard 'profile' rel is mapped to Palace-specific profile rel."""
+        serializer = OPDS1Version1Serializer()
+        assert serializer._resolve_rel("profile") == ProfileController.LINK_RELATION
+
+    def test_resolve_rel_passes_through_other_rels(self):
+        """Non-mapped rels are passed through unchanged."""
+        serializer = OPDS1Version1Serializer()
+        assert serializer._resolve_rel("self") == "self"
+        assert serializer._resolve_rel("alternate") == "alternate"
+        assert serializer._resolve_rel(None) is None
+
+    def test_serialize_link_resolves_link_content_type(self):
+        """_serialize_link resolves LinkContentType to OPDS1 type."""
+        link = Link(
+            href="http://example.com/feed",
+            rel="http://opds-spec.org/shelf",
+            type=LinkContentType.OPDS_FEED,
+        )
+        serializer = OPDS1Version1Serializer()
+        element = serializer._serialize_link(link)
+        assert element.get("type") == OPDSFeed.ACQUISITION_FEED_TYPE
+
+    def test_serialize_link_resolves_profile_rel(self):
+        """_serialize_link resolves standard 'profile' rel to Palace-specific rel."""
+        link = Link(
+            href="http://example.com/profile",
+            rel="profile",
+        )
+        serializer = OPDS1Version1Serializer()
+        element = serializer._serialize_link(link)
+        assert element.get("rel") == ProfileController.LINK_RELATION
+
+    def test_serialize_acquisition_link_resolves_link_content_type(self):
+        """_serialize_acquisition_link resolves LinkContentType to OPDS1 type."""
+        link = Acquisition(
+            href="http://example.com/borrow",
+            rel="http://opds-spec.org/acquisition/borrow",
+            type=LinkContentType.OPDS_ENTRY,
+        )
+        serializer = OPDS1Version1Serializer()
+        element = serializer._serialize_acquisition_link(link)
+        assert element.get("type") == OPDSFeed.ENTRY_TYPE

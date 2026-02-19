@@ -13,6 +13,17 @@ from palace.manager.sqlalchemy.model.licensing import LicensePool
 from palace.manager.sqlalchemy.model.work import Work
 
 
+class LinkContentType(StrEnum):
+    """Semantic content types for links that reference OPDS feeds or entries.
+
+    Each serializer maps these to its format-specific content type.
+    Links with concrete types (text/html, application/json, etc.) bypass this.
+    """
+
+    OPDS_FEED = "opds:feed"
+    OPDS_ENTRY = "opds:entry"
+
+
 class LinkAttributes(TypedDict):
     """Typed mapping for attributes used in OPDS1 link serialization."""
 

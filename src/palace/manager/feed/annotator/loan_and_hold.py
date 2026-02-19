@@ -57,7 +57,7 @@ class LibraryLoanAndHoldAnnotator(LibraryAnnotator):
         for the current patron.
         """
         return Link(
-            rel="http://librarysimplified.org/terms/rel/user-profile",
+            rel="profile",
             href=self.url_for(
                 "patron_profile",
                 library_short_name=self.library.short_name,

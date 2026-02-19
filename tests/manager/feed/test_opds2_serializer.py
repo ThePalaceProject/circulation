@@ -18,11 +18,13 @@ from palace.manager.feed.types import (
     FeedMetadata,
     IndirectAcquisition,
     Link,
+    LinkContentType,
     RichText,
     Series,
     WorkEntry,
     WorkEntryData,
 )
+from palace.manager.opds import opds2
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.work import Work
@@ -911,3 +913,90 @@ class TestOPDS2Serializer:
         assert len(nav) == 1
         assert nav[0]["title"] == "Real Nav"
         assert nav[0]["href"] == "http://nav"
+
+    def test_resolve_type_maps_opds_feed(self):
+        """LinkContentType.OPDS_FEED maps to OPDS2 feed content type."""
+        serializer = OPDS2Serializer()
+        assert (
+            serializer._resolve_type(LinkContentType.OPDS_FEED)
+            == opds2.Feed.content_type()
+        )
+
+    def test_resolve_type_maps_opds_entry(self):
+        """LinkContentType.OPDS_ENTRY maps to OPDS2 publication content type."""
+        serializer = OPDS2Serializer()
+        assert (
+            serializer._resolve_type(LinkContentType.OPDS_ENTRY)
+            == opds2.BasePublication.content_type()
+        )
+
+    def test_resolve_type_passes_through_concrete_types(self):
+        """Concrete content types are passed through unchanged."""
+        serializer = OPDS2Serializer()
+        assert serializer._resolve_type("text/html") == "text/html"
+        assert serializer._resolve_type(None) is None
+
+    def test_feed_link_resolves_link_content_type(self):
+        """Feed links with LinkContentType are resolved to OPDS2 types."""
+        serializer = OPDS2Serializer()
+        link = Link(
+            href="http://example.com/shelf",
+            rel="http://opds-spec.org/shelf",
+            type=LinkContentType.OPDS_FEED,
+        )
+        result = serializer._serialize_feed_link(link)
+        assert result is not None
+        assert result.type == opds2.Feed.content_type()
+
+    def test_acquisition_link_resolves_link_content_type(self):
+        """Acquisition links with LinkContentType.OPDS_ENTRY are resolved."""
+        serializer = OPDS2Serializer()
+        link = Acquisition(
+            href="http://example.com/borrow",
+            rel="http://opds-spec.org/acquisition/borrow",
+            type=LinkContentType.OPDS_ENTRY,
+        )
+        result = serializer._acquisition_link_type(link)
+        assert result == opds2.BasePublication.content_type()
+
+    def test_publication_links_resolve_link_content_type(self):
+        """Publication other_links with LinkContentType are resolved."""
+        serializer = OPDS2Serializer()
+        data = WorkEntryData(
+            title="Test",
+            identifier="urn:id",
+            image_links=[Link(href="http://image", rel="image", type="image/png")],
+            acquisition_links=[
+                Acquisition(
+                    href="http://acq",
+                    rel=OPDSFeed.OPEN_ACCESS_REL,
+                    type="application/epub+zip",
+                )
+            ],
+            other_links=[
+                Link(
+                    href="http://example.com/recommendations",
+                    rel="recommendations",
+                    type=LinkContentType.OPDS_FEED,
+                    title="Recommended Works",
+                ),
+            ],
+        )
+        publication = serializer._publication(data)
+        # Find the recommendations link in the publication links
+        rec_links = [
+            link for link in publication.links if link.rel == "recommendations"
+        ]
+        assert len(rec_links) == 1
+        assert rec_links[0].type == opds2.Feed.content_type()
+
+    def test_profile_link_keeps_standard_rel(self):
+        """Profile link with standard 'profile' rel is kept as-is in OPDS2."""
+        serializer = OPDS2Serializer()
+        link = Link(
+            href="http://example.com/profile",
+            rel="profile",
+        )
+        result = serializer._serialize_feed_link(link)
+        assert result is not None
+        assert result.rel == "profile"

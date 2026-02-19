@@ -14,6 +14,7 @@ from palace.manager.feed.types import (
     FeedData,
     IndirectAcquisition,
     Link,
+    LinkContentType,
     WorkEntryData,
 )
 from palace.manager.opds import opds2, rwpm, schema_org
@@ -47,6 +48,17 @@ PALACE_PROPERTIES_DEFAULT = AtomFeed.PALACE_PROPERTIES_DEFAULT
 
 
 class OPDS2Serializer(SerializerInterface[dict[str, Any]], LoggerMixin):
+    _CONTENT_TYPE_MAP: dict[str, str] = {
+        LinkContentType.OPDS_FEED: opds2.Feed.content_type(),
+        LinkContentType.OPDS_ENTRY: opds2.BasePublication.content_type(),
+    }
+
+    def _resolve_type(self, type_value: str | None) -> str | None:
+        """Map semantic LinkContentType values to OPDS2-specific types."""
+        if type_value is not None and type_value in self._CONTENT_TYPE_MAP:
+            return self._CONTENT_TYPE_MAP[type_value]
+        return type_value
+
     def serialize_feed(
         self, feed: FeedData, precomposed_entries: list[Any] | None = None
     ) -> str:
@@ -201,14 +213,15 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]], LoggerMixin):
             if link.rel is None:
                 self.log.warning(f"Skipping OPDS2 link without rel: {link.href}")
                 continue
-            if link.type is None:
+            resolved_type = self._resolve_type(link.type)
+            if resolved_type is None:
                 self.log.error(f"Skipping OPDS2 link without type: {link.href}")
                 continue
             links.append(
                 self._strict_link(
                     href=link.href,
                     rel=link.rel,
-                    type=link.type,
+                    type=resolved_type,
                     title=link.title,
                     properties=self._link_properties(),
                 )
@@ -342,10 +355,11 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]], LoggerMixin):
         if link.rel is None:
             self.log.warning(f"Skipping OPDS2 feed link without rel: {link.href}")
             return None
+        resolved_type = self._resolve_type(link.type)
         return self._strict_link(
             href=link.href,
             rel=link.rel,
-            type=link.type or self.content_type(),
+            type=resolved_type or self.content_type(),
             title=link.title,
             properties=self._link_properties(),
         )
@@ -428,7 +442,7 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]], LoggerMixin):
 
     def _acquisition_link_type(self, link: Acquisition) -> str | None:
         if link.type:
-            return link.type
+            return self._resolve_type(link.type)
         for indirect in link.indirect_acquisitions:
             if indirect.type:
                 return indirect.type

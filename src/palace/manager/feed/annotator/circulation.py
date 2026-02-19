@@ -38,6 +38,7 @@ from palace.manager.feed.types import (
     FeedData,
     IndirectAcquisition,
     Link,
+    LinkContentType,
     LinkKwargs,
     PatronData,
     WorkEntry,
@@ -738,7 +739,6 @@ class LibraryAnnotator(CirculationManagerAnnotator):
         return self._top_level_title
 
     def permalink_for(self, identifier: Identifier) -> tuple[str, str]:
-        # TODO: Do not force OPDS types
         url = self.url_for(
             "permalink",
             identifier_type=identifier.type,
@@ -746,7 +746,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
             library_short_name=self.library.short_name,
             _external=True,
         )
-        return url, OPDSFeed.ENTRY_TYPE
+        return url, LinkContentType.OPDS_ENTRY
 
     def groups_url(
         self, lane: WorkList | None, facets: FacetsWithEntryPoint | None = None
@@ -895,7 +895,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
             entry.computed.other_links.append(
                 Link(
                     rel="recommendations",
-                    type=OPDSFeed.ACQUISITION_FEED_TYPE,
+                    type=LinkContentType.OPDS_FEED,
                     title="Recommended Works",
                     href=self.url_for(
                         "recommendations",
@@ -912,7 +912,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
             entry.computed.other_links.append(
                 Link(
                     rel="related",
-                    type=OPDSFeed.ACQUISITION_FEED_TYPE,
+                    type=LinkContentType.OPDS_FEED,
                     title="Recommended Works",
                     href=self.url_for(
                         "related_books",
@@ -1022,7 +1022,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
 
             author_entry.link = Link(
                 rel="contributor",
-                type=OPDSFeed.ACQUISITION_FEED_TYPE,
+                type=LinkContentType.OPDS_FEED,
                 title=name,
                 href=self.url_for(
                     "contributor",
@@ -1065,7 +1065,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
         )
         series_entry.link = Link(
             rel="series",
-            type=OPDSFeed.ACQUISITION_FEED_TYPE,
+            type=LinkContentType.OPDS_FEED,
             title=series_name,
             href=href,
         )
@@ -1118,7 +1118,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
                     _external=True,
                 ),
                 rel="http://opds-spec.org/shelf",
-                type=OPDSFeed.ACQUISITION_FEED_TYPE,
+                type=LinkContentType.OPDS_FEED,
             )
 
             feed.add_link(
@@ -1151,7 +1151,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
                 feed.add_link(
                     href=crawlable_url,
                     rel="http://opds-spec.org/crawlable",
-                    type=OPDSFeed.ACQUISITION_FEED_TYPE,
+                    type=LinkContentType.OPDS_FEED,
                 )
 
         self.add_configuration_links(feed)
@@ -1358,7 +1358,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
         borrow_link = Acquisition(
             rel=rel,
             href=borrow_url,
-            type=OPDSFeed.ENTRY_TYPE,
+            type=LinkContentType.OPDS_ENTRY,
             is_hold=True if active_hold else False,
         )
 

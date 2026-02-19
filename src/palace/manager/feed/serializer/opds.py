@@ -7,6 +7,7 @@ from typing import Any, cast
 
 from lxml import etree
 
+from palace.manager.core.user_profile import ProfileController
 from palace.manager.feed.facets.constants import FacetConstants
 from palace.manager.feed.serializer.base import SerializerInterface
 from palace.manager.feed.types import (
@@ -18,6 +19,7 @@ from palace.manager.feed.types import (
     FeedMetadata,
     IndirectAcquisition,
     Link,
+    LinkContentType,
     PatronData,
     Rating,
     Series,
@@ -73,8 +75,29 @@ def is_sort_facet(link: Link) -> bool:
 
 
 class BaseOPDS1Serializer(SerializerInterface[etree._Element], OPDSFeed, abc.ABC):
+    _CONTENT_TYPE_MAP: dict[str, str] = {
+        LinkContentType.OPDS_FEED: OPDSFeed.ACQUISITION_FEED_TYPE,
+        LinkContentType.OPDS_ENTRY: OPDSFeed.ENTRY_TYPE,
+    }
+
+    _REL_MAP: dict[str, str] = {
+        "profile": ProfileController.LINK_RELATION,
+    }
+
     def __init__(self) -> None:
         pass
+
+    def _resolve_type(self, type_value: str | None) -> str | None:
+        """Map semantic LinkContentType values to OPDS1-specific types."""
+        if type_value is not None and type_value in self._CONTENT_TYPE_MAP:
+            return self._CONTENT_TYPE_MAP[type_value]
+        return type_value
+
+    def _resolve_rel(self, rel_value: str | None) -> str | None:
+        """Map standard rels to OPDS1/Palace-specific rels."""
+        if rel_value is not None and rel_value in self._REL_MAP:
+            return self._REL_MAP[rel_value]
+        return rel_value
 
     def _tag(
         self, tag_name: str, *args: Any, mapping: dict[str, str] | None = None
@@ -325,13 +348,15 @@ class BaseOPDS1Serializer(SerializerInterface[etree._Element], OPDSFeed, abc.ABC
         return entry
 
     def _serialize_link(self, link: Link) -> etree._Element:
+        resolved_type = self._resolve_type(link.type)
+        resolved_rel = self._resolve_rel(link.rel)
         attrs: dict[str, str] = {}
         if link.href is not None:
             attrs["href"] = link.href
-        if link.rel is not None:
-            attrs["rel"] = link.rel
-        if link.type is not None:
-            attrs["type"] = link.type
+        if resolved_rel is not None:
+            attrs["rel"] = resolved_rel
+        if resolved_type is not None:
+            attrs["type"] = resolved_type
         if link.title is not None:
             attrs["title"] = link.title
         if link.role is not None:
@@ -410,7 +435,16 @@ class BaseOPDS1Serializer(SerializerInterface[etree._Element], OPDSFeed, abc.ABC
     def _serialize_acquisition_link(self, link: Acquisition) -> etree._Element:
 
         link_func = OPDSFeed.tlink if link.templated else OPDSFeed.link
-        element = link_func(**link.link_attribs())
+        attribs = link.link_attribs()
+        if "type" in attribs:
+            resolved = self._resolve_type(attribs["type"])
+            if resolved is not None:
+                attribs["type"] = resolved
+        if "rel" in attribs:
+            resolved_rel = self._resolve_rel(attribs["rel"])
+            if resolved_rel is not None:
+                attribs["rel"] = resolved_rel
+        element = link_func(**attribs)
 
         def _indirect(item: IndirectAcquisition) -> etree._Element:
             tag = self._tag("indirectAcquisition")
