@@ -83,24 +83,28 @@ class TestOIDCAuthenticationProvider:
 
             result = oidc_provider._authentication_flow_document(db.session)
 
-            assert result["type"] == "http://palaceproject.io/authtype/OpenIDConnect"
-            assert result["description"] == "OpenID Connect"
-            assert len(result["links"]) == 1
+            assert result.type == "http://palaceproject.io/authtype/OpenIDConnect"
+            assert result.description == "OpenID Connect"
+            assert len(result.links) == 1
 
-            link = result["links"][0]
-            assert link["rel"] == "authenticate"
-            assert library.short_name in link["href"]
-            assert "oidc_authenticate" in link["href"]
+            link = result.links[0]
+            assert link.rel == "authenticate"
+            assert library.short_name in link.href
+            assert "oidc_authenticate" in link.href
 
-            assert link["display_names"] == [
-                {"value": "OpenID Connect", "language": "en"}
-            ]
-            assert link["descriptions"] == [
-                {"value": "OpenID Connect", "language": "en"}
-            ]
-            assert link["information_urls"] == []
-            assert link["privacy_statement_urls"] == []
-            assert link["logo_urls"] == []
+            assert link.display_names is not None
+            assert len(link.display_names) == 1
+            assert link.display_names[0].value == "OpenID Connect"
+            assert link.display_names[0].language == "en"
+
+            assert link.descriptions is not None
+            assert len(link.descriptions) == 1
+            assert link.descriptions[0].value == "OpenID Connect"
+            assert link.descriptions[0].language == "en"
+
+            assert link.information_urls is None
+            assert link.privacy_statement_urls is None
+            assert link.logo_urls is None
 
             mock_url_for.assert_called_once_with(
                 "oidc_authenticate",
@@ -142,27 +146,39 @@ class TestOIDCAuthenticationProvider:
 
             result = provider._authentication_flow_document(db.session)
 
-            assert result["type"] == "http://palaceproject.io/authtype/OpenIDConnect"
-            assert result["description"] == "OpenID Connect"
-            assert len(result["links"]) == 1
+            assert result.type == "http://palaceproject.io/authtype/OpenIDConnect"
+            assert result.description == "OpenID Connect"
+            assert len(result.links) == 1
 
-            link = result["links"][0]
-            assert link["rel"] == "authenticate"
-            assert link["display_names"] == [
-                {"value": "University Single Sign-On", "language": "en"}
-            ]
-            assert link["descriptions"] == [
-                {"value": "Log in with your university credentials", "language": "en"}
-            ]
-            assert link["information_urls"] == [
-                {"value": "https://help.university.example.com/", "language": "en"}
-            ]
-            assert link["privacy_statement_urls"] == [
-                {"value": "https://university.example.com/privacy", "language": "en"}
-            ]
-            assert link["logo_urls"] == [
-                {"value": "https://university.example.com/logo.png", "language": "en"}
-            ]
+            link = result.links[0]
+            assert link.rel == "authenticate"
+
+            assert link.display_names is not None
+            assert link.display_names[0].value == "University Single Sign-On"
+            assert link.display_names[0].language == "en"
+
+            assert link.descriptions is not None
+            assert (
+                link.descriptions[0].value == "Log in with your university credentials"
+            )
+            assert link.descriptions[0].language == "en"
+
+            assert link.information_urls is not None
+            assert (
+                link.information_urls[0].value == "https://help.university.example.com/"
+            )
+            assert link.information_urls[0].language == "en"
+
+            assert link.privacy_statement_urls is not None
+            assert (
+                link.privacy_statement_urls[0].value
+                == "https://university.example.com/privacy"
+            )
+            assert link.privacy_statement_urls[0].language == "en"
+
+            assert link.logo_urls is not None
+            assert link.logo_urls[0].value == "https://university.example.com/logo.png"
+            assert link.logo_urls[0].language == "en"
 
     def test_authentication_flow_document_no_library(
         self, db: DatabaseTransactionFixture, oidc_provider

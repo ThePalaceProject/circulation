@@ -3,25 +3,33 @@ Models for the Authentication for OPDS 1.0 specification.
 https://drafts.opds.io/authentication-for-opds-1.0
 """
 
-from pydantic import BaseModel, Field, field_validator
+from typing import ClassVar
+
+from pydantic import Field, field_validator
 
 from palace.manager.core.exceptions import PalaceValueError
+from palace.manager.opds.base import BaseOpdsModel
 from palace.manager.opds.rwpm import Link
 from palace.manager.opds.types.link import CompactCollection
 
 
-class AuthenticationLabels(BaseModel):
+class AuthenticationLabels(BaseOpdsModel):
     login: str
     password: str
 
 
-class Authentication(BaseModel):
+class Authentication(BaseOpdsModel):
     type: str
     labels: AuthenticationLabels | None = None
     links: CompactCollection[Link]
 
 
-class AuthenticationDocument(BaseModel):
+class AuthenticationDocument(BaseOpdsModel):
+    """Authentication for OPDS 1.0 document."""
+
+    MEDIA_TYPE: ClassVar[str] = "application/vnd.opds.authentication.v1.0+json"
+    LINK_RELATION: ClassVar[str] = "http://opds-spec.org/auth/document"
+
     @staticmethod
     def content_types() -> list[str]:
         return [

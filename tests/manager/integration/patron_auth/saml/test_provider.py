@@ -318,8 +318,8 @@ class TestSAMLWebSSOAuthenticationProvider:
                     controller_fixture.db.session
                 )
 
-            # Assert
-            assert expected_result == result
+            # Assert - compare model dump to expected dict
+            assert expected_result == result.model_dump(mode="json", exclude_none=True)
 
     @pytest.mark.parametrize(
         "subject, expected_result, patron_id_use_name_id, patron_id_attributes, patron_id_regular_expression",
