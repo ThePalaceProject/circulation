@@ -165,7 +165,15 @@ class LanesController(CirculationManagerController, AdminPermissionsControllerMi
                 return Response(str(lane.id), 200)
         raise RuntimeError("Unsupported method")
 
-    def lane(self, lane_identifier: int) -> Response | ProblemDetail:
+    def lane(self, lane_identifier: int | str) -> Response | ProblemDetail:
+        try:
+            lane_identifier = (
+                int(lane_identifier)
+                if isinstance(lane_identifier, str)
+                else lane_identifier
+            )
+        except ValueError:
+            return MISSING_LANE
         if flask.request.method == "DELETE":
             library = get_request_library()
             self.require_library_manager(library)
@@ -197,7 +205,15 @@ class LanesController(CirculationManagerController, AdminPermissionsControllerMi
                 LANE_WITH_PARENT_AND_DISPLAY_NAME_ALREADY_EXISTS
             )
 
-    def show_lane(self, lane_identifier: int) -> Response | ProblemDetail:
+    def show_lane(self, lane_identifier: int | str) -> Response | ProblemDetail:
+        try:
+            lane_identifier = (
+                int(lane_identifier)
+                if isinstance(lane_identifier, str)
+                else lane_identifier
+            )
+        except ValueError:
+            return MISSING_LANE
         library = get_request_library()
         self.require_library_manager(library)
 
@@ -209,7 +225,15 @@ class LanesController(CirculationManagerController, AdminPermissionsControllerMi
         lane.visible = True
         return Response(str(_("Success")), 200)
 
-    def hide_lane(self, lane_identifier: int) -> Response | ProblemDetail:
+    def hide_lane(self, lane_identifier: int | str) -> Response | ProblemDetail:
+        try:
+            lane_identifier = (
+                int(lane_identifier)
+                if isinstance(lane_identifier, str)
+                else lane_identifier
+            )
+        except ValueError:
+            return MISSING_LANE
         library = get_request_library()
         self.require_library_manager(library)
 
