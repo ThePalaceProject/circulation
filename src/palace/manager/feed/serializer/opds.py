@@ -439,18 +439,17 @@ class BaseOPDS1Serializer(SerializerInterface[etree._Element], OPDSFeed, abc.ABC
         return entry
 
     def _serialize_acquisition_link(self, link: Acquisition) -> etree._Element:
+        resolved_type = self._resolve_type(link.type)
+        resolved_rel = self._resolve_rel(link.rel)
+
+        attrs: dict[str, str] = {"href": link.href}
+        if resolved_rel is not None:
+            attrs["rel"] = resolved_rel
+        if resolved_type is not None:
+            attrs["type"] = resolved_type
 
         link_func = OPDSFeed.tlink if link.templated else OPDSFeed.link
-        attribs = link.link_attribs()
-        if "type" in attribs:
-            resolved = self._resolve_type(attribs["type"])
-            if resolved is not None:
-                attribs["type"] = resolved
-        if "rel" in attribs:
-            resolved_rel = self._resolve_rel(attribs["rel"])
-            if resolved_rel is not None:
-                attribs["rel"] = resolved_rel
-        element = link_func(**attribs)
+        element = link_func(**attrs)
 
         def _indirect(item: IndirectAcquisition) -> etree._Element:
             tag = self._tag("indirectAcquisition")
