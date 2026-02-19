@@ -873,7 +873,6 @@ class LibraryAnnotator(CirculationManagerAnnotator):
         identifier = entry.identifier
 
         permalink_uri, permalink_type = self.permalink_for(identifier)
-        # TODO: Do not force OPDS types
         if permalink_uri:
             entry.computed.other_links.append(
                 Link(href=permalink_uri, rel="alternate", type=permalink_type)
