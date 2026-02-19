@@ -21,6 +21,7 @@ from palace.manager.feed.types import (
     IndirectAcquisition,
     Link,
     LinkContentType,
+    LinkType,
     PatronData,
     Rating,
     Series,
@@ -76,7 +77,7 @@ def is_sort_facet(link: Link) -> bool:
 
 
 class BaseOPDS1Serializer(SerializerInterface[etree._Element], OPDSFeed, abc.ABC):
-    _CONTENT_TYPE_MAP: frozendict[str, str] = frozendict(
+    _CONTENT_TYPE_MAP: frozendict[LinkContentType, str] = frozendict(
         {
             LinkContentType.OPDS_FEED: OPDSFeed.ACQUISITION_FEED_TYPE,
             LinkContentType.OPDS_ENTRY: OPDSFeed.ENTRY_TYPE,
@@ -92,9 +93,9 @@ class BaseOPDS1Serializer(SerializerInterface[etree._Element], OPDSFeed, abc.ABC
     def __init__(self) -> None:
         pass
 
-    def _resolve_type(self, type_value: str | None) -> str | None:
+    def _resolve_type(self, type_value: LinkType | None) -> str | None:
         """Map semantic LinkContentType values to OPDS1-specific types."""
-        if type_value is not None and type_value in self._CONTENT_TYPE_MAP:
+        if isinstance(type_value, LinkContentType):
             return self._CONTENT_TYPE_MAP[type_value]
         return type_value
 

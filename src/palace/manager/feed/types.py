@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import date, datetime
-from enum import StrEnum
+from enum import Enum, StrEnum, auto
 from typing import Literal, NotRequired, TypedDict, Unpack
 
 from palace.manager.sqlalchemy.model.edition import Edition
@@ -13,15 +13,20 @@ from palace.manager.sqlalchemy.model.licensing import LicensePool
 from palace.manager.sqlalchemy.model.work import Work
 
 
-class LinkContentType(StrEnum):
+class LinkContentType(Enum):
     """Semantic content types for links that reference OPDS feeds or entries.
 
     Each serializer maps these to its format-specific content type.
     Links with concrete types (text/html, application/json, etc.) bypass this.
     """
 
-    OPDS_FEED = "opds:feed"
-    OPDS_ENTRY = "opds:entry"
+    OPDS_FEED = auto()
+    OPDS_ENTRY = auto()
+
+
+#: Union type for link type fields that accept either concrete MIME types or
+#: semantic :class:`LinkContentType` values resolved at serialization time.
+LinkType = str | LinkContentType
 
 
 class LinkAttributes(TypedDict):
@@ -29,14 +34,14 @@ class LinkAttributes(TypedDict):
 
     href: str
     rel: NotRequired[str]
-    type: NotRequired[str]
+    type: NotRequired[LinkType]
 
 
 class LinkKwargs(TypedDict):
     """Typed keyword arguments accepted by FeedData.add_link."""
 
     rel: NotRequired[str]
-    type: NotRequired[str]
+    type: NotRequired[LinkType]
     title: NotRequired[str]
     role: NotRequired[str]
     facet_group: NotRequired[str]
@@ -60,7 +65,7 @@ class Link:
 
     href: str
     rel: str | None = None
-    type: str | None = None
+    type: LinkType | None = None
 
     # Additional types
     role: str | None = None

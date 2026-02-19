@@ -40,6 +40,7 @@ from palace.manager.feed.types import (
     Link,
     LinkContentType,
     LinkKwargs,
+    LinkType,
     PatronData,
     WorkEntry,
 )
@@ -738,7 +739,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
     def top_level_title(self) -> str:
         return self._top_level_title
 
-    def permalink_for(self, identifier: Identifier) -> tuple[str, str]:
+    def permalink_for(self, identifier: Identifier) -> tuple[str, LinkType]:
         url = self.url_for(
             "permalink",
             identifier_type=identifier.type,

@@ -16,6 +16,7 @@ from palace.manager.feed.types import (
     IndirectAcquisition,
     Link,
     LinkContentType,
+    LinkType,
     WorkEntryData,
 )
 from palace.manager.opds import opds2, rwpm, schema_org
@@ -49,16 +50,16 @@ PALACE_PROPERTIES_DEFAULT = AtomFeed.PALACE_PROPERTIES_DEFAULT
 
 
 class OPDS2Serializer(SerializerInterface[dict[str, Any]], LoggerMixin):
-    _CONTENT_TYPE_MAP: frozendict[str, str] = frozendict(
+    _CONTENT_TYPE_MAP: frozendict[LinkContentType, str] = frozendict(
         {
             LinkContentType.OPDS_FEED: opds2.Feed.content_type(),
             LinkContentType.OPDS_ENTRY: opds2.BasePublication.content_type(),
         }
     )
 
-    def _resolve_type(self, type_value: str | None) -> str | None:
+    def _resolve_type(self, type_value: LinkType | None) -> str | None:
         """Map semantic LinkContentType values to OPDS2-specific types."""
-        if type_value is not None and type_value in self._CONTENT_TYPE_MAP:
+        if isinstance(type_value, LinkContentType):
             return self._CONTENT_TYPE_MAP[type_value]
         return type_value
 
@@ -240,7 +241,7 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]], LoggerMixin):
         return opds2.Link(
             href=link.href,
             rel=link.rel,
-            type=link.type,
+            type=self._resolve_type(link.type),
             title=link.title,
         )
 
@@ -389,7 +390,7 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]], LoggerMixin):
                         href=link.href,
                         title=title,
                         rel=rel,
-                        type=link.type,
+                        type=self._resolve_type(link.type),
                         properties=props,
                     )
                 )
@@ -417,7 +418,7 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]], LoggerMixin):
         return self._strict_link(
             href=link.href,
             rel=PALACE_REL_SORT,
-            type=link.type or self.content_type(),
+            type=self._resolve_type(link.type) or self.content_type(),
             title=link.title,
             properties=self._link_properties(
                 palace_active_sort=link.active_facet or None,
@@ -437,7 +438,7 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]], LoggerMixin):
                         href=link.href,
                         title=title,
                         rel=link.rel,
-                        type=link.type,
+                        type=self._resolve_type(link.type),
                         properties=self._link_properties(),
                     )
                 )
