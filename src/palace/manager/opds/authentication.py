@@ -3,14 +3,17 @@ Models for the Authentication for OPDS 1.0 specification.
 https://drafts.opds.io/authentication-for-opds-1.0
 """
 
-from typing import ClassVar
+from typing import ClassVar, Generic
 
 from pydantic import Field, field_validator
+from typing_extensions import TypeVar
 
 from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.opds.base import BaseOpdsModel
 from palace.manager.opds.rwpm import Link
-from palace.manager.opds.types.link import CompactCollection
+from palace.manager.opds.types.link import BaseLink, CompactCollection
+
+_LinkT = TypeVar("_LinkT", bound=BaseLink, default=Link, covariant=True)
 
 
 class AuthenticationLabels(BaseOpdsModel):
@@ -18,13 +21,16 @@ class AuthenticationLabels(BaseOpdsModel):
     password: str
 
 
-class Authentication(BaseOpdsModel):
+class Authentication(BaseOpdsModel, Generic[_LinkT]):
     type: str
     labels: AuthenticationLabels | None = None
-    links: CompactCollection[Link]
+    links: CompactCollection[_LinkT]
 
 
-class AuthenticationDocument(BaseOpdsModel):
+_AuthT = TypeVar("_AuthT", bound=Authentication[BaseLink], default=Authentication)
+
+
+class AuthenticationDocument(BaseOpdsModel, Generic[_AuthT, _LinkT]):
     """Authentication for OPDS 1.0 document."""
 
     MEDIA_TYPE: ClassVar[str] = "application/vnd.opds.authentication.v1.0+json"
@@ -43,9 +49,9 @@ class AuthenticationDocument(BaseOpdsModel):
 
     id: str
     title: str
-    authentication: list[Authentication]
+    authentication: list[_AuthT]
     description: str | None = None
-    links: CompactCollection[Link] = Field(default_factory=CompactCollection)
+    links: CompactCollection[_LinkT] = Field(default_factory=CompactCollection)
 
     @field_validator("authentication")
     @classmethod
@@ -65,7 +71,7 @@ class AuthenticationDocument(BaseOpdsModel):
 
         return value
 
-    def by_type(self, auth_type: str) -> Authentication:
+    def by_type(self, auth_type: str) -> _AuthT:
         for auth in self.authentication:
             if auth.type == auth_type:
                 return auth

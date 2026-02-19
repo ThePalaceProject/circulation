@@ -65,7 +65,7 @@ class AuthenticationInputs(BaseOpdsModel):
     password: InputDescriptor
 
 
-class PalaceAuthentication(Authentication):
+class PalaceAuthentication(Authentication[PalaceAuthenticationLink]):
     """Palace-specific authentication flow entry.
 
     Extends the standard :class:`Authentication` with Palace fields
@@ -74,11 +74,9 @@ class PalaceAuthentication(Authentication):
 
     description: str | None = None
     inputs: AuthenticationInputs | None = None
-    links: CompactCollection[PalaceAuthenticationLink] = Field(  # type: ignore[assignment]
+    links: CompactCollection[PalaceAuthenticationLink] = Field(
         default_factory=CompactCollection
     )
-    # CompactCollection is invariant; PalaceAuthenticationLink is a
-    # subclass of BaseLink but the generic type is not covariant.
     labels: AuthenticationLabels | None = None
 
 
@@ -112,7 +110,9 @@ class AuthenticationAnnouncement(BaseOpdsModel):
     content: str
 
 
-class PalaceAuthenticationDocument(AuthenticationDocument):
+class PalaceAuthenticationDocument(
+    AuthenticationDocument[PalaceAuthentication, PalaceAuthenticationLink]
+):
     """Palace-specific authentication document.
 
     Extends the standard :class:`AuthenticationDocument` with
@@ -121,15 +121,6 @@ class PalaceAuthenticationDocument(AuthenticationDocument):
 
     MEDIA_TYPE: ClassVar[str] = "application/vnd.opds.authentication.v1.0+json"
     LINK_RELATION: ClassVar[str] = "http://opds-spec.org/auth/document"
-
-    authentication: list[PalaceAuthentication]  # type: ignore[assignment]
-    # PalaceAuthentication is a subclass of Authentication, but the
-    # list type is invariant so we must ignore the assignment.
-    links: CompactCollection[PalaceAuthenticationLink] = Field(  # type: ignore[assignment]
-        default_factory=CompactCollection
-    )
-    # CompactCollection is invariant; PalaceAuthenticationLink is a
-    # subclass of BaseLink but the generic type is not covariant.
 
     service_description: str | None = None
     color_scheme: str | None = None
