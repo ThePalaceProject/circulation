@@ -3,6 +3,7 @@ from collections import defaultdict
 from collections.abc import Iterable
 from typing import Any
 
+from frozendict import frozendict
 from pydantic import ValidationError
 
 from palace.manager.feed.serializer.base import SerializerInterface
@@ -48,10 +49,12 @@ PALACE_PROPERTIES_DEFAULT = AtomFeed.PALACE_PROPERTIES_DEFAULT
 
 
 class OPDS2Serializer(SerializerInterface[dict[str, Any]], LoggerMixin):
-    _CONTENT_TYPE_MAP: dict[str, str] = {
-        LinkContentType.OPDS_FEED: opds2.Feed.content_type(),
-        LinkContentType.OPDS_ENTRY: opds2.BasePublication.content_type(),
-    }
+    _CONTENT_TYPE_MAP: frozendict[str, str] = frozendict(
+        {
+            LinkContentType.OPDS_FEED: opds2.Feed.content_type(),
+            LinkContentType.OPDS_ENTRY: opds2.BasePublication.content_type(),
+        }
+    )
 
     def _resolve_type(self, type_value: str | None) -> str | None:
         """Map semantic LinkContentType values to OPDS2-specific types."""
@@ -322,7 +325,7 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]], LoggerMixin):
                 rwpm.Link(
                     href=link.href,
                     rel=link.rel,
-                    type=link.type,
+                    type=self._resolve_type(link.type),
                 )
             ]
             if (link := author.link) and link.href

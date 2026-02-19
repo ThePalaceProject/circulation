@@ -354,6 +354,26 @@ class TestOPDS2Serializer:
         assert result["sortAs"] == "Author,"
         assert result["links"] == [{"href": "http://author", "rel": "contributor"}]
 
+    def test__serialize_contributor_resolves_link_content_type(self):
+        author = Author(
+            name="Author",
+            sort_name="Author,",
+            link=Link(
+                href="http://author",
+                rel="contributor",
+                type=LinkContentType.OPDS_FEED,
+            ),
+        )
+        serializer = OPDS2Serializer()
+        result = serializer._dump_model(serializer._serialize_contributor(author))
+        assert result["links"] == [
+            {
+                "href": "http://author",
+                "rel": "contributor",
+                "type": opds2.Feed.content_type(),
+            }
+        ]
+
     def test_serialize_opds_message(self):
         assert OPDS2Serializer().serialize_opds_message(
             OPDSMessage("URN", 200, "Description")

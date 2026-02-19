@@ -5,6 +5,7 @@ import datetime
 from functools import partial
 from typing import Any, cast
 
+from frozendict import frozendict
 from lxml import etree
 
 from palace.manager.core.user_profile import ProfileController
@@ -75,14 +76,18 @@ def is_sort_facet(link: Link) -> bool:
 
 
 class BaseOPDS1Serializer(SerializerInterface[etree._Element], OPDSFeed, abc.ABC):
-    _CONTENT_TYPE_MAP: dict[str, str] = {
-        LinkContentType.OPDS_FEED: OPDSFeed.ACQUISITION_FEED_TYPE,
-        LinkContentType.OPDS_ENTRY: OPDSFeed.ENTRY_TYPE,
-    }
+    _CONTENT_TYPE_MAP: frozendict[str, str] = frozendict(
+        {
+            LinkContentType.OPDS_FEED: OPDSFeed.ACQUISITION_FEED_TYPE,
+            LinkContentType.OPDS_ENTRY: OPDSFeed.ENTRY_TYPE,
+        }
+    )
 
-    _REL_MAP: dict[str, str] = {
-        "profile": ProfileController.LINK_RELATION,
-    }
+    _REL_MAP: frozendict[str, str] = frozendict(
+        {
+            "profile": ProfileController.LINK_RELATION,
+        }
+    )
 
     def __init__(self) -> None:
         pass
