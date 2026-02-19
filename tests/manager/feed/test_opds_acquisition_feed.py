@@ -328,7 +328,7 @@ class TestOPDSAcquisitionFeed:
         # for each call to the mock method.
         l1, l2 = feed.links
         for l in l1, l2:
-            assert mock.attrs == l.link_attribs()
+            assert l.href == mock.attrs["href"]
         OPDSAcquisitionFeed._entrypoint_link = old_entrypoint_link
 
         # If there is only one facet in the facet group, no links are

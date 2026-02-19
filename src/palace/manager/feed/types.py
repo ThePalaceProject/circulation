@@ -29,14 +29,6 @@ class LinkContentType(Enum):
 LinkType = str | LinkContentType
 
 
-class LinkAttributes(TypedDict):
-    """Typed mapping for attributes used in OPDS1 link serialization."""
-
-    href: str
-    rel: NotRequired[str]
-    type: NotRequired[LinkType]
-
-
 class LinkKwargs(TypedDict):
     """Typed keyword arguments accepted by FeedData.add_link."""
 
@@ -77,15 +69,6 @@ class Link:
     active_facet: bool = False
     default_facet: bool = False
     active_sort: bool = False
-
-    def link_attribs(self) -> LinkAttributes:
-        """Return the basic link attributes required for OPDS1."""
-        attrs: LinkAttributes = {"href": self.href}
-        if self.rel is not None:
-            attrs["rel"] = self.rel
-        if self.type is not None:
-            attrs["type"] = self.type
-        return attrs
 
 
 @dataclass(slots=True)

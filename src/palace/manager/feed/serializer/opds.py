@@ -84,6 +84,8 @@ class BaseOPDS1Serializer(SerializerInterface[etree._Element], OPDSFeed, abc.ABC
         }
     )
 
+    # OPDS1 uses Palace-specific relation URIs for some standard rels.
+    # OPDS2 uses standard IANA rels directly and needs no mapping.
     _REL_MAP: frozendict[str, str] = frozendict(
         {
             "profile": ProfileController.LINK_RELATION,
