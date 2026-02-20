@@ -10,7 +10,7 @@ from croniter import croniter
 from sqlalchemy.orm import Session
 from uritemplate import URITemplate
 
-from palace.manager.api.circulation.base import BaseCirculationAPI
+from palace.manager.api.circulation.base import BaseCirculationAPI, SupportsImport
 from palace.manager.api.circulation.exceptions import CannotFulfill
 from palace.manager.api.circulation.fulfillment import RedirectFulfillment
 from palace.manager.integration.license.opds.base.api import BaseOPDSAPI
@@ -48,7 +48,9 @@ SAML_TEMPLATE_VARIABLES: frozenset[str] = frozenset(
 SUPPORTED_TEMPLATE_VARIABLES: frozenset[str] = frozenset(TemplateVariable)
 
 
-class OPDS2API(BaseOPDSAPI[OPDS2ImporterSettings, OPDS2ImporterLibrarySettings]):
+class OPDS2API(
+    BaseOPDSAPI[OPDS2ImporterSettings, OPDS2ImporterLibrarySettings], SupportsImport
+):
     TOKEN_AUTH_CONFIG_KEY = "token_auth_endpoint"
     LAST_REAP_TIME_KEY = "last_reap_time"
 

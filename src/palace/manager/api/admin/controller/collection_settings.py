@@ -12,13 +12,15 @@ from palace.manager.api.admin.controller.integration_settings import (
 from palace.manager.api.admin.form_data import ProcessFormData
 from palace.manager.api.admin.problem_details import (
     CANNOT_DELETE_COLLECTION_WITH_CHILDREN,
+    IMPORT_NOT_SUPPORTED,
     MISSING_COLLECTION,
     MISSING_PARENT,
     MISSING_SERVICE,
     PROTOCOL_DOES_NOT_SUPPORT_PARENTS,
+    UNKNOWN_PROTOCOL,
 )
 from palace.manager.api.admin.util.flask import get_request_admin
-from palace.manager.api.circulation.base import CirculationApiType
+from palace.manager.api.circulation.base import CirculationApiType, SupportsImport
 from palace.manager.celery.tasks.collection_delete import collection_delete
 from palace.manager.celery.tasks.reaper import (
     reap_unassociated_holds,
@@ -145,14 +147,11 @@ class CollectionSettingsController(
             # If we have an importer task for this protocol, we start it
             # in the background, so that the collection is ready to go
             # as quickly as possible.
-            try:
+            if issubclass(impl_cls, SupportsImport):
                 impl_cls.import_task(integration.collection.id).apply_async(
                     # Delay the task to ensure the collection has been created by the time the task starts
                     countdown=10
                 )
-            except NotImplementedError:
-                # If the protocol does not support import tasks, we just skip it.
-                ...
 
         except ProblemDetailException as e:
             self._db.rollback()
@@ -194,6 +193,44 @@ class CollectionSettingsController(
         collection.marked_for_deletion = True
         collection_delete.delay(collection.id)
         return Response("Deleted", 200)
+
+    def process_import(self, service_id: int) -> Response | ProblemDetail:
+        """Queue a collection import task on demand.
+
+        :param service_id: The integration configuration ID of the collection to import.
+        :return: A 200 response on success, or a ProblemDetail on error.
+        """
+        self.require_system_admin()
+
+        integration = get_one(
+            self._db,
+            IntegrationConfiguration,
+            id=service_id,
+            goal=self.registry.goal,
+        )
+        if not integration:
+            return MISSING_SERVICE
+
+        collection = integration.collection
+        if not collection:
+            return MISSING_COLLECTION
+
+        if collection.marked_for_deletion:
+            return MISSING_COLLECTION
+
+        protocol = integration.protocol
+        if protocol not in self.registry:
+            return UNKNOWN_PROTOCOL
+
+        impl_cls = self.registry[protocol]
+        force = flask.request.form.get("force", "false").lower() == "true"
+
+        if not issubclass(impl_cls, SupportsImport):
+            return IMPORT_NOT_SUPPORTED
+
+        impl_cls.import_task(collection.id, force=force).apply_async()
+
+        return Response("Import task queued.", 200)
 
     def process_collection_self_tests(
         self, identifier: int | None

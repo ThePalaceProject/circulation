@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from celery.canvas import Signature
 
+from palace.manager.api.circulation.base import SupportsImport
 from palace.manager.integration.license.opds.base.api import BaseOPDSAPI
 from palace.manager.integration.license.opds.opds1.settings import (
     OPDSImporterLibrarySettings,
@@ -9,7 +10,9 @@ from palace.manager.integration.license.opds.opds1.settings import (
 )
 
 
-class OPDSAPI(BaseOPDSAPI[OPDSImporterSettings, OPDSImporterLibrarySettings]):
+class OPDSAPI(
+    BaseOPDSAPI[OPDSImporterSettings, OPDSImporterLibrarySettings], SupportsImport
+):
     @classmethod
     def settings_class(cls) -> type[OPDSImporterSettings]:
         return OPDSImporterSettings

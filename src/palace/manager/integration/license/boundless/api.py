@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from palace.manager.api.circulation.base import (
     BaseCirculationAPI,
     PatronActivityCirculationAPI,
+    SupportsImport,
 )
 from palace.manager.api.circulation.data import HoldInfo, LoanInfo
 from palace.manager.api.circulation.exceptions import (
@@ -77,6 +78,7 @@ from palace.manager.util.datetime_helpers import utc_now
 class BoundlessApi(
     PatronActivityCirculationAPI[BoundlessSettings, BoundlessLibrarySettings],
     HasCollectionSelfTests,
+    SupportsImport,
 ):
     SET_DELIVERY_MECHANISM_AT = BaseCirculationAPI.BORROW_STEP
 

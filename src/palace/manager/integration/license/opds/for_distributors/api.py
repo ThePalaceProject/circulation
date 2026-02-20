@@ -9,7 +9,7 @@ from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 from celery.canvas import Signature
 from sqlalchemy.orm import Session
 
-from palace.manager.api.circulation.base import BaseCirculationAPI
+from palace.manager.api.circulation.base import BaseCirculationAPI, SupportsImport
 from palace.manager.api.circulation.data import HoldInfo, LoanInfo
 from palace.manager.api.circulation.exceptions import (
     CannotFulfill,
@@ -46,6 +46,7 @@ from palace.manager.util.datetime_helpers import utc_now
 class OPDSForDistributorsAPI(
     BaseCirculationAPI[OPDSForDistributorsSettings, OPDSForDistributorsLibrarySettings],
     HasCollectionSelfTests,
+    SupportsImport,
 ):
     @classmethod
     def settings_class(cls) -> type[OPDSForDistributorsSettings]:

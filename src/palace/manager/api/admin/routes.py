@@ -15,6 +15,7 @@ from palace.manager.api.admin.model.dashboard_statistics import StatisticsRespon
 from palace.manager.api.admin.problem_details import (
     ADMIN_NOT_AUTHORIZED,
     INVALID_ADMIN_CREDENTIALS,
+    MISSING_SERVICE,
 )
 from palace.manager.api.app import app
 from palace.manager.api.controller.static_file import StaticFileController
@@ -415,6 +416,21 @@ def collections():
 def collection(collection_id):
     return app.manager.admin_collection_settings_controller.process_delete(
         collection_id
+    )
+
+
+@app.route("/admin/collection/<collection_id>/import", methods=["POST"])
+@returns_json_or_response_or_problem_detail
+@requires_admin
+@requires_csrf_token
+def collection_import(collection_id):
+    try:
+        integration_id = int(collection_id)
+    except ValueError:
+        return MISSING_SERVICE
+
+    return app.manager.admin_collection_settings_controller.process_import(
+        integration_id
     )
 
 
