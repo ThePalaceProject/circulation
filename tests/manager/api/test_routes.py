@@ -463,7 +463,7 @@ class TestHealthCheck:
 
 class TestOIDCRoutes:
     @pytest.mark.parametrize(
-        "route_func,patch_method,query_string,expected_params",
+        "route_func,patch_method,query_string,expected_params,passes_headers",
         [
             pytest.param(
                 routes.oidc_authenticate,
@@ -473,6 +473,7 @@ class TestOIDCRoutes:
                     "provider": "OpenID Connect",
                     "redirect_uri": "https://app.example.com",
                 },
+                False,
                 id="authenticate",
             ),
             pytest.param(
@@ -480,6 +481,7 @@ class TestOIDCRoutes:
                 "oidc_authentication_callback",
                 "/?code=test-code&state=test-state",
                 {"code": "test-code", "state": "test-state"},
+                False,
                 id="callback",
             ),
             pytest.param(
@@ -491,6 +493,7 @@ class TestOIDCRoutes:
                     "id_token_hint": "test-token",
                     "post_logout_redirect_uri": "https://app.example.com",
                 },
+                True,
                 id="logout",
             ),
             pytest.param(
@@ -498,6 +501,7 @@ class TestOIDCRoutes:
                 "oidc_logout_callback",
                 "/?state=test-logout-state",
                 {"state": "test-logout-state"},
+                False,
                 id="logout-callback",
             ),
         ],
@@ -508,6 +512,7 @@ class TestOIDCRoutes:
         patch_method,
         query_string,
         expected_params,
+        passes_headers,
         controller_fixture: ControllerFixture,
     ):
         """Test OIDC route controller logic."""
@@ -528,6 +533,8 @@ class TestOIDCRoutes:
             assert isinstance(call_args[0][0], ImmutableMultiDict)
             for key, value in expected_params.items():
                 assert call_args[0][0][key] == value
+            if passes_headers:
+                assert isinstance(call_args[0][1], dict)
 
     def test_oidc_backchannel_logout_route(self, controller_fixture: ControllerFixture):
         """Test the /oidc/backchannel_logout route controller logic."""
