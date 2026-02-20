@@ -8,9 +8,8 @@ https://schema.org/
 """
 
 from enum import StrEnum
-from typing import Literal
 
-from pydantic import Field
+from pydantic import AliasChoices, Field
 
 from palace.manager.opds.base import BaseOpdsModel
 
@@ -60,8 +59,16 @@ class WorkExample(BaseOpdsModel):
     #   so we need to confirm with DeMarque what we should be expecting here, before
     #   switching the types.
     type: str | None = Field(None, alias="@type")
-    book_format: str | None = Field(None, alias="schema:bookFormat")
-    isbn: str | None = Field(None, alias="schema:isbn")
+    book_format: str | None = Field(
+        None,
+        serialization_alias="schema:bookFormat",
+        validation_alias=AliasChoices("schema:bookFormat", "bookFormat"),
+    )
+    isbn: str | None = Field(
+        None,
+        serialization_alias="schema:isbn",
+        validation_alias=AliasChoices("schema:isbn", "isbn"),
+    )
 
 
 class Audience(BaseOpdsModel):
@@ -71,10 +78,22 @@ class Audience(BaseOpdsModel):
     https://schema.org/Audience
     """
 
-    type: Literal["schema:PeopleAudience"] = Field(..., alias="@type")
-    suggested_min_age: int | None = Field(None, alias="schema:suggestedMinAge")
-    suggested_max_age: int | None = Field(None, alias="schema:suggestedMaxAge")
-    audience_type: str | None = Field(None, alias="schema:audienceType")
+    type: str | None = Field(None, alias="@type")
+    suggested_min_age: int | None = Field(
+        None,
+        serialization_alias="schema:suggestedMinAge",
+        validation_alias=AliasChoices("schema:suggestedMinAge", "suggestedMinAge"),
+    )
+    suggested_max_age: int | None = Field(
+        None,
+        serialization_alias="schema:suggestedMaxAge",
+        validation_alias=AliasChoices("schema:suggestedMaxAge", "suggestedMaxAge"),
+    )
+    audience_type: str | None = Field(
+        None,
+        serialization_alias="schema:audienceType",
+        validation_alias=AliasChoices("schema:audienceType", "audienceType"),
+    )
 
 
 class PublicationMetadata(BaseOpdsModel):
@@ -85,24 +104,38 @@ class PublicationMetadata(BaseOpdsModel):
     additional information about the publication.
     """
 
-    encoding_format: str | None = Field(None, alias="schema:encodingFormat")
+    encoding_format: str | None = Field(
+        None,
+        serialization_alias="schema:encodingFormat",
+        validation_alias=AliasChoices("schema:encodingFormat", "encodingFormat"),
+    )
     """
     https://schema.org/encodingFormat
     """
 
     work_example: list[WorkExample] = Field(
-        default_factory=list, alias="schema:workExample"
+        default_factory=list,
+        serialization_alias="schema:workExample",
+        validation_alias=AliasChoices("schema:workExample", "workExample"),
     )
     """
     https://schema.org/workExample
     """
 
-    audience: Audience | None = Field(None, alias="schema:audience")
+    audience: Audience | None = Field(
+        None,
+        serialization_alias="schema:audience",
+        validation_alias=AliasChoices("schema:audience", "audience"),
+    )
     """
     https://schema.org/Audience
     """
 
-    typical_age_range: str | None = Field(None, alias="schema:typicalAgeRange")
+    typical_age_range: str | None = Field(
+        None,
+        serialization_alias="schema:typicalAgeRange",
+        validation_alias=AliasChoices("schema:typicalAgeRange", "typicalAgeRange"),
+    )
     """
     https://schema.org/typicalAgeRange
     """
