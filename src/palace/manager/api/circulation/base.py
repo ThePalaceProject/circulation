@@ -212,9 +212,10 @@ class BaseCirculationAPI[
         """Include ``supports_import`` so the admin UI knows whether to
         offer an import button for collections using this protocol."""
         details = super().protocol_details(db)
-        details["supports_import"] = (
-            cls.import_task is not BaseCirculationAPI.import_task
+        import_task_owner = next(
+            base for base in cls.__mro__ if "import_task" in base.__dict__
         )
+        details["supports_import"] = import_task_owner is not BaseCirculationAPI
         return details
 
     @classmethod

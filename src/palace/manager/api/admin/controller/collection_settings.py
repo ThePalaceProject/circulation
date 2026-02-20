@@ -17,6 +17,7 @@ from palace.manager.api.admin.problem_details import (
     MISSING_PARENT,
     MISSING_SERVICE,
     PROTOCOL_DOES_NOT_SUPPORT_PARENTS,
+    UNKNOWN_PROTOCOL,
 )
 from palace.manager.api.admin.util.flask import get_request_admin
 from palace.manager.api.circulation.base import CirculationApiType
@@ -220,7 +221,11 @@ class CollectionSettingsController(
         if collection.marked_for_deletion:
             return MISSING_COLLECTION
 
-        impl_cls = self.registry[integration.protocol]
+        protocol = integration.protocol
+        if protocol not in self.registry:
+            return UNKNOWN_PROTOCOL
+
+        impl_cls = self.registry[protocol]
         force = flask.request.form.get("force", "false").lower() == "true"
 
         try:

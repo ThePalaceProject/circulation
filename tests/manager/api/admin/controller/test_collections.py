@@ -1046,6 +1046,20 @@ class TestCollectionSettings:
             )
         assert response == MISSING_COLLECTION
 
+    def test_process_import_unknown_protocol(
+        self,
+        controller: CollectionSettingsController,
+        flask_app_fixture: FlaskAppFixture,
+        db: DatabaseTransactionFixture,
+    ):
+        collection = db.collection(protocol=BoundlessApi)
+        integration = collection.integration_configuration
+        integration.protocol = "UnknownProtocol"
+        assert integration.id is not None
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
+            response = controller.process_import(integration.id)
+        assert response == UNKNOWN_PROTOCOL
+
     def test_process_import_unsupported_protocol(
         self,
         controller: CollectionSettingsController,
