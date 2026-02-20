@@ -6,6 +6,7 @@ import json
 from typing import TYPE_CHECKING
 from urllib.parse import SplitResult, parse_qs, urlencode, urlsplit
 
+import jwt
 from flask import redirect, url_for
 from flask_babel import lazy_gettext as _
 from sqlalchemy.orm import Session
@@ -345,11 +346,15 @@ class OIDCController(LoggerMixin):
         return redirect(final_redirect_uri)
 
     def oidc_logout_initiate(
-        self, request_args: dict[str, str], db: Session
+        self,
+        request_args: dict[str, str],
+        request_headers: dict[str, str],
+        db: Session,
     ) -> BaseResponse | ProblemDetail:
         """Initiate OIDC RP-Initiated Logout flow.
 
         :param request_args: Request arguments from Flask
+        :param request_headers: Request headers from Flask
         :param db: Database session
         :return: Redirect to provider logout endpoint or error
         """
@@ -381,9 +386,32 @@ class OIDCController(LoggerMixin):
                 _("No authenticator found for library")
             )
 
+        # Validate CM bearer token — ensures patron has an active CM session.
+        auth_header = request_headers.get("Authorization", "")
+        if not auth_header.startswith("Bearer "):
+            return OIDC_INVALID_REQUEST.detailed(
+                _("Missing or invalid Authorization header")
+            )
+
+        cm_jwt = auth_header.removeprefix("Bearer ")
+        try:
+            _provider_name, provider_token = library_authenticator.decode_bearer_token(
+                cm_jwt
+            )
+        except jwt.exceptions.InvalidTokenError:
+            return OIDC_INVALID_REQUEST.detailed(_("Invalid bearer token"))
+
         provider = library_authenticator.oidc_provider_lookup(provider_name)
         if isinstance(provider, ProblemDetail):
             return provider
+
+        oidc_credential = provider._credential_manager.lookup_oidc_token_by_value(  # type: ignore[attr-defined]
+            db, provider_token, library.id
+        )
+        if not oidc_credential:
+            return OIDC_INVALID_REQUEST.detailed(
+                _("Bearer token is expired or not found")
+            )
 
         try:
             auth_manager = provider.get_authentication_manager()  # type: ignore[attr-defined]
@@ -414,6 +442,18 @@ class OIDCController(LoggerMixin):
 
         except Exception as e:
             self.log.exception("Failed to invalidate credentials")
+
+        # Best-effort: revoke the OAuth refresh token to prevent silent re-authentication
+        # at the IdP after local CM logout. Errors are non-fatal.
+        try:
+            token_data = provider._credential_manager.extract_token_data(oidc_credential)  # type: ignore[attr-defined]
+            refresh_token = token_data.get("refresh_token")
+            if refresh_token:
+                auth_manager.revoke_token(refresh_token)
+        except Exception:
+            self.log.warning(
+                "Failed to revoke refresh token (non-critical)", exc_info=True
+            )
 
         callback_url = url_for("oidc_logout_callback", _external=True)
 
