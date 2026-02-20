@@ -25,7 +25,18 @@ class OPDSAuthenticationFlow(ABC):
         for use in the ``authentication`` list of an Authentication For
         OPDS document.
         """
-        return self._authentication_flow_document(_db)
+        result = self._authentication_flow_document(_db)
+        if result.type != self.flow_type:
+            raise ValueError(
+                f"authentication flow type mismatch: "
+                f"expected '{self.flow_type}', got '{result.type}'"
+            )
+        return result
 
     @abstractmethod
-    def _authentication_flow_document(self, _db: Session) -> PalaceAuthentication: ...
+    def _authentication_flow_document(self, _db: Session) -> PalaceAuthentication:
+        """Build the :class:`PalaceAuthentication` model for this flow.
+
+        Implementations must set ``type`` to :attr:`flow_type`.
+        """
+        ...

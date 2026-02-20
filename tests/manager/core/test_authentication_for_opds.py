@@ -1,5 +1,6 @@
 from unittest.mock import MagicMock
 
+import pytest
 from sqlalchemy.orm import Session
 
 from palace.manager.opds.palace_authentication import PalaceAuthentication
@@ -44,3 +45,12 @@ class TestOPDSAuthenticationFlow:
         result = flow.authentication_flow_document(db)
         assert result is expected
         flow._authentication_flow_document.assert_called_once_with(db)
+
+    def test_flow_type_mismatch_raises(self):
+        """authentication_flow_document raises if type doesn't match flow_type."""
+        db = MagicMock(spec=Session)
+        flow = MockFlow("description")
+        wrong_type = PalaceAuthentication(type="http://wrong/", description="test")
+        flow._authentication_flow_document = MagicMock(return_value=wrong_type)  # type: ignore[method-assign]
+        with pytest.raises(ValueError, match="flow type mismatch"):
+            flow.authentication_flow_document(db)

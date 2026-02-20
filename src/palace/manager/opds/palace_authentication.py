@@ -6,7 +6,7 @@ with Palace-specific fields, following the same pattern as :mod:`palace.manager.
 for OPDS 2.0 feed extensions.
 """
 
-from typing import Any, ClassVar, cast
+from typing import Any, cast
 
 from pydantic import Field, model_serializer
 from pydantic_core.core_schema import SerializerFunctionWrapHandler
@@ -118,9 +118,6 @@ class PalaceAuthenticationDocument(
     Extends the standard :class:`AuthenticationDocument` with
     Palace-specific fields for branding, features, and announcements.
     """
-
-    MEDIA_TYPE: ClassVar[str] = "application/vnd.opds.authentication.v1.0+json"
-    LINK_RELATION: ClassVar[str] = "http://opds-spec.org/auth/document"
 
     service_description: str | None = None
     color_scheme: str | None = None
