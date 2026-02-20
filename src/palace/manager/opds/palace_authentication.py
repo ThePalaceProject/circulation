@@ -8,7 +8,7 @@ for OPDS 2.0 feed extensions.
 
 from typing import Any, cast
 
-from pydantic import Field, model_serializer
+from pydantic import Field, field_validator, model_serializer
 from pydantic_core.core_schema import SerializerFunctionWrapHandler
 
 from palace.manager.opds.authentication import (
@@ -125,6 +125,23 @@ class PalaceAuthenticationDocument(
     public_key: PublicKey | None = None
     features: Features | None = None
     announcements: list[AuthenticationAnnouncement] = Field(default_factory=list)
+
+    @field_validator("authentication")
+    @classmethod
+    def _validate_authentication(
+        cls, value: list[PalaceAuthentication]
+    ) -> list[PalaceAuthentication]:
+        """Allow open-access libraries to provide an empty authentication list."""
+        if not value:
+            return value
+
+        auth_types = set()
+        for auth in value:
+            if auth.type in auth_types:
+                raise ValueError(f"Duplicate authentication type '{auth.type}'.")
+            auth_types.add(auth.type)
+
+        return value
 
     @model_serializer(mode="wrap")
     def _serialize(self, serializer: SerializerFunctionWrapHandler) -> dict[str, Any]:

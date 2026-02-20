@@ -1266,6 +1266,22 @@ class TestLibraryAuthenticator:
             headers = real_authenticator.create_authentication_headers()
             assert "WWW-Authenticate" not in headers
 
+    def test_create_authentication_document_with_no_authentication_providers(
+        self,
+        controller_fixture: ControllerFixture,
+        library_fixture: LibraryFixture,
+    ):
+        db = controller_fixture.db
+        library = library_fixture.library()
+        authenticator = LibraryAuthenticator(_db=db.session, library=library)
+
+        with controller_fixture.request_context_with_library("/", library=library):
+            doc = json.loads(authenticator.create_authentication_document())
+
+        assert doc["authentication"] == []
+        assert "features" in doc
+        assert "announcements" in doc
+
     def test_register_oidc_provider(
         self, db: DatabaseTransactionFixture, library_fixture: LibraryFixture
     ):

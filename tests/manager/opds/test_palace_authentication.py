@@ -131,6 +131,14 @@ class TestPalaceAuthentication:
 
 
 class TestPalaceAuthenticationDocument:
+    def test_allows_empty_authentication(self):
+        doc = PalaceAuthenticationDocument(
+            id="http://example.com/auth",
+            title="Open Access Library",
+            authentication=[],
+        )
+        assert doc.authentication == []
+
     def test_basic_document(self):
         doc = PalaceAuthenticationDocument(
             id="http://example.com/auth",
