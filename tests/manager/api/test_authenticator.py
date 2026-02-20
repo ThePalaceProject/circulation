@@ -76,6 +76,7 @@ from palace.manager.integration.patron_auth.sip2.provider import (
     SIP2AuthenticationProvider,
     SIP2Settings,
 )
+from palace.manager.opds.authentication import AuthenticationDocument
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.service.integration_registry.base import IntegrationRegistry
 from palace.manager.sqlalchemy.constants import LinkRelations
@@ -87,7 +88,6 @@ from palace.manager.sqlalchemy.model.integration import (
 from palace.manager.sqlalchemy.model.library import Library, LibraryLogo
 from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.util import MoneyUtility
-from palace.manager.util.authentication_for_opds import AuthenticationForOPDSDocument
 from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.http.exception import RemoteIntegrationException
 from palace.manager.util.opds_writer import OPDSFeed
@@ -1096,7 +1096,12 @@ class TestLibraryAuthenticator:
             assert BasicTokenAuthenticationProvider.FLOW_TYPE == token_doc["type"]
 
             expect_basic = basic.authentication_flow_document(db.session)
-            assert expect_basic == basic_doc
+            assert (
+                expect_basic.model_dump(
+                    mode="json", exclude_none=True, exclude_unset=True
+                )
+                == basic_doc
+            )
 
             # We also need to test that the library's name and ID
             # were placed in the document.
@@ -1241,14 +1246,14 @@ class TestLibraryAuthenticator:
             # provider, that provider's .authentication_header is used
             # for WWW-Authenticate.
             headers = authenticator.create_authentication_headers()
-            assert AuthenticationForOPDSDocument.MEDIA_TYPE == headers["Content-Type"]
+            assert AuthenticationDocument.MEDIA_TYPE == headers["Content-Type"]
             assert basic.authentication_header == headers["WWW-Authenticate"]
 
             # The response contains a Link header pointing to the authentication
             # document
             expect = "<{}>; rel={}".format(
                 authenticator.authentication_document_url(),
-                AuthenticationForOPDSDocument.LINK_RELATION,
+                AuthenticationDocument.LINK_RELATION,
             )
             assert expect == headers["Link"]
 
@@ -1260,6 +1265,22 @@ class TestLibraryAuthenticator:
             )
             headers = real_authenticator.create_authentication_headers()
             assert "WWW-Authenticate" not in headers
+
+    def test_create_authentication_document_with_no_authentication_providers(
+        self,
+        controller_fixture: ControllerFixture,
+        library_fixture: LibraryFixture,
+    ):
+        db = controller_fixture.db
+        library = library_fixture.library()
+        authenticator = LibraryAuthenticator(_db=db.session, library=library)
+
+        with controller_fixture.request_context_with_library("/", library=library):
+            doc = json.loads(authenticator.create_authentication_document())
+
+        assert doc["authentication"] == []
+        assert "features" in doc
+        assert "announcements" in doc
 
     def test_register_oidc_provider(
         self, db: DatabaseTransactionFixture, library_fixture: LibraryFixture
@@ -2700,33 +2721,34 @@ class TestBasicAuthenticationProvider:
         # Mock url_for so that the document can be generated.
         with patch("palace.manager.api.authentication.basic.url_for") as url_for_patch:
             url_for_patch.return_value = "http://localhost/"
-            doc = provider.authentication_flow_document(db)
-            assert doc["description"] == provider.label()
-            assert doc["type"] == provider.flow_type
+            flow = provider.authentication_flow_document(db)
+            assert flow.description == provider.label()
+            assert flow.type == provider.flow_type
 
-            labels = doc["labels"]
-            assert labels["login"] == provider.identifier_label
-            assert labels["password"] == provider.password_label
+            assert flow.labels is not None
+            assert flow.labels.login == provider.identifier_label
+            assert flow.labels.password == provider.password_label
 
-            inputs = doc["inputs"]
-            assert inputs["login"]["keyboard"] == provider.identifier_keyboard.value
-            assert inputs["password"]["keyboard"] == provider.password_keyboard.value
+            assert flow.inputs is not None
+            assert flow.inputs.login.keyboard == provider.identifier_keyboard.value
+            assert flow.inputs.password.keyboard == provider.password_keyboard.value
 
             assert (
-                inputs["login"]["barcode_format"]
+                flow.inputs.login.barcode_format
                 == provider.identifier_barcode_format.value
             )
 
             assert (
-                inputs["login"]["maximum_length"] == provider.identifier_maximum_length
+                flow.inputs.login.maximum_length == provider.identifier_maximum_length
             )
             assert (
-                inputs["password"]["maximum_length"] == provider.password_maximum_length
+                flow.inputs.password.maximum_length == provider.password_maximum_length
             )
 
-            [logo_link] = doc["links"]
-            assert "logo" == logo_link["rel"]
-            assert "http://localhost/" == logo_link["href"]
+            assert len(flow.links) == 1
+            logo_link = flow.links[0]
+            assert "logo" == logo_link.rel
+            assert "http://localhost/" == logo_link.href
             url_for_patch.assert_called_once()
             assert "filename" in url_for_patch.call_args.kwargs
             assert (

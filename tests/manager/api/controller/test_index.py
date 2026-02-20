@@ -1,7 +1,7 @@
 import json
 
+from palace.manager.opds.authentication import AuthenticationDocument
 from palace.manager.sqlalchemy.model.lane import Lane
-from palace.manager.util.authentication_for_opds import AuthenticationForOPDSDocument
 from tests.fixtures.api_controller import CirculationControllerFixture
 
 
@@ -93,10 +93,7 @@ class TestIndexController:
                 circulation_fixture.manager.index_controller.authentication_document()
             )
             assert 200 == response.status_code
-            assert (
-                AuthenticationForOPDSDocument.MEDIA_TYPE
-                == response.headers["Content-Type"]
-            )
+            assert AuthenticationDocument.MEDIA_TYPE == response.headers["Content-Type"]
             data = response.get_data(as_text=True)
             assert (
                 circulation_fixture.manager.auth.create_authentication_document()

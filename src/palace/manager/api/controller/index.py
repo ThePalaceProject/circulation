@@ -6,7 +6,7 @@ from palace.manager.api.controller.circulation_manager import (
     CirculationManagerController,
 )
 from palace.manager.api.util.flask import get_request_library
-from palace.manager.util.authentication_for_opds import AuthenticationForOPDSDocument
+from palace.manager.opds.authentication import AuthenticationDocument
 from palace.manager.util.problem_detail import ProblemDetail
 
 
@@ -34,7 +34,7 @@ class IndexController(CirculationManagerController):
         return Response(
             self.manager.authentication_for_opds_document,
             200,
-            {"Content-Type": AuthenticationForOPDSDocument.MEDIA_TYPE},
+            {"Content-Type": AuthenticationDocument.MEDIA_TYPE},
         )
 
     def has_root_lanes(self):

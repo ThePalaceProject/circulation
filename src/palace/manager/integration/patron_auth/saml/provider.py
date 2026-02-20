@@ -1,3 +1,5 @@
+from collections.abc import Sequence
+
 from flask import url_for
 from flask_babel import lazy_gettext as _
 from sqlalchemy.orm import Session
@@ -17,6 +19,12 @@ from palace.manager.integration.patron_auth.saml.metadata.model import (
     SAMLLocalizedMetadataItem,
     SAMLSubject,
     SAMLSubjectPatronIDExtractor,
+)
+from palace.manager.opds.palace_authentication import (
+    LocalizedLogoUrl,
+    LocalizedString,
+    PalaceAuthentication,
+    PalaceAuthenticationLink,
 )
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.sqlalchemy.model.credential import Credential
@@ -104,111 +112,45 @@ class SAMLWebSSOAuthenticationProvider(
         # We cannot extract the credential from the header, so we just return None
         return None
 
-    def _authentication_flow_document(self, db):
-        """Creates a Authentication Flow object for use in an Authentication for OPDS document.
-
-        Example:
-        {
-            "type": "http://opds-spec.org/auth/saml"
-            "description": "SAML 2.0 authentication provider",
-            "links": [
-                {
-                    "rel" : "authenticate"
-                    "href": "https://circulation.library.org/saml_authenticate?provider=SAML+2.0?idp_entity_id=https%3A%2F%2Fidp.saml.net%2Fidp%2Fshibboleth",
-                    "display_names": [
-                        {
-                            "language": "en",
-                            "value": "Test Shibboleth IdP Provider"
-                        },
-                        {
-                            "language": "es",
-                            "value": "Prueba de proveedor de IdP Shibboleth"
-                        }
-                    ],
-                    "descriptions": [
-                        {
-                            "language": "en",
-                            "value": "Test Shibboleth IdP Provider"
-                        },
-                        {
-                            "language": "es",
-                            "value": "Prueba de proveedor de IdP Shibboleth"
-                        }
-                    ],
-                    "information_urls": [
-                        {
-                            "language": "en",
-                            "value": "https://idp.saml.net/info/en"
-                        },
-                        {
-                            "language": "es",
-                            "value": "https://idp.saml.net/info/es"
-                        }
-                    ],
-                    "privacy_statement_urls": [
-                        {
-                            "language": "en",
-                            "value": "https://idp.saml.net/privacy/en"
-                        },
-                        {
-                            "language": "es",
-                            "value": "https://idp.saml.net/privacy/es"
-                        }
-                    ],
-                    "logo_urls": [
-                        {
-                            "language": "en",
-                            "height": 16,
-                            "width": 16,
-                            "value": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABGdBTUEAALGPC/xhBQAAACBjSFJNAAB6JgAAgIQAAPoAAACA6AAAdTAAAOpgAAA6mAAAF3CculE8AAAACXBIWXMAABYlAAAWJQFJUiTwAAABWWlUWHRYTUw6Y29tLmFkb2JlLnhtcAAAAAAAPHg6eG1wbWV0YSB4bWxuczp4PSJhZG9iZTpuczptZXRhLyIgeDp4bXB0az0iWE1QIENvcmUgNS40LjAiPgogICA8cmRmOlJERiB4bWxuczpyZGY9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkvMDIvMjItcmRmLXN5bnRheC1ucyMiPgogICAgICA8cmRmOkRlc2NyaXB0aW9uIHJkZjphYm91dD0iIgogICAgICAgICAgICB4bWxuczp0aWZmPSJodHRwOi8vbnMuYWRvYmUuY29tL3RpZmYvMS4wLyI+CiAgICAgICAgIDx0aWZmOk9yaWVudGF0aW9uPjE8L3RpZmY6T3JpZW50YXRpb24+CiAgICAgIDwvcmRmOkRlc2NyaXB0aW9uPgogICA8L3JkZjpSREY+CjwveDp4bXBtZXRhPgpMwidZAAADA0lEQVQ4EV2TzW9VRRjGfzPn3N7b76KAClFCuRFiEbxtgYSFIjEqNGGhscGF0AIr/gnqyrhlB4G0pWoMdeNH3BgVTEgJvfTShBaMRahaLR/ho7eU3ttzzvicqWycxZw5M+/zzDPP+76GD84GDHfHtJ1tILfwBo56LIskNGLYgHN/YM1vYJq0jrHO4hKDMQvEptaQjsKpdQThW0TuF670Klhjx2dNRNW8gLsUPEWx5xu//3TaOriW8YMzhtf6WwjN+xRv9UNfQseJZlzmXZyNsMlfWDsvVZuE20Biv2XswDXyx7M0N+7jcu9wKLm7cTVf/wfO4LLvELjzjPbMPr1M3wk6Bz7ERq9TOFNPPlfixuPF9DwEWyX3pELn4HZMUiWyv2MrIR1D7SRVvTma4dGLZdzsr5ggxERNAu8U9mFKYEGGVGwXDTfHiN0zmPgllsLN+u4hCNZBzRGabr+tyLsybwdjh36SuTsJZLQnsHqrCf5hbv0rereR43LYVuT4TRL3QETfyfk1LBmpMC+nIA3js6WFFLgWRg+c194S9tkRZeJHGpMRGfQFtckVikeuUjx0QrGrBLvNrp/1DDOtC+ZSplAvWM+2z1uJq81QrlMa76UHGoYLh8secO7NSJnaIoU/UL6VF+aOLvYmS0F8UeD9StkKqKxcxrq0Ppxfp+DO/v0qmr9pzRV1exvG1VH60xOEBGZSzFmxPi/MRoGu03EyJHc6x2KUhexRVeUspYMjlHTaMfic0jzq006ftdRP3yNJahnrUSFxkfaBT+V8F1XzKuS6RXpHZye9mvZTeelqoRJM+n+OeamwbaCNhbppJrrnKQxtVT20yt4ZgTfxpO5LauZewAYFnx1kXhzPUzo8nvaRCkkko2bCM+a/z1LaO07n0CIufk/SL5Etd2Ezai57lcsfTVE4vUZkm3388KQTgZFZqZKPDVN7K2w5sxqi7UrjJ8sy/zc32/vMuYbl3b5EWUhHaroaKW3pjNtDpv4rv522uj/sS+sljTWc61UFWue7VRv/Ajz9JzIyIjhZAAAAAElFTkSuQmCC"
-                        },
-                        {
-                            "language": "es",
-                            "height": 16,
-                            "width": 16,
-                            "value": "https://idp.saml.net/logo.png"
-                        }
-                    ],
-                }
-            ]
-        }
+    def _authentication_flow_document(self, db: Session) -> PalaceAuthentication:
+        """Create an Authentication Flow object for use in an Authentication for OPDS document.
 
         :param db: Database session
-        :type db: sqlalchemy.orm.session.Session
-
-        :return: Authentication Flow object for use in an Authentication for OPDS document
-        :rtype: Dict
+        :return: :class:`PalaceAuthentication` model
         """
-        flow_doc = {"type": self.flow_type, "description": self.label(), "links": []}
-
         configuration = self.get_authentication_manager().configuration
 
+        links: list[PalaceAuthenticationLink] = []
         for index, identity_provider in enumerate(
             configuration.get_identity_providers(db)
         ):
-            link = {
-                "rel": "authenticate",
-                "href": self._create_authenticate_url(db, identity_provider.entity_id),
-                "display_names": self._join_ui_info_items(
-                    self._get_idp_display_names(index + 1, identity_provider)
-                ),
-                "descriptions": self._join_ui_info_items(
-                    identity_provider.ui_info.descriptions
-                ),
-                "information_urls": self._join_ui_info_items(
-                    identity_provider.ui_info.information_urls
-                ),
-                "privacy_statement_urls": self._join_ui_info_items(
-                    identity_provider.ui_info.privacy_statement_urls
-                ),
-                "logo_urls": self._join_ui_info_items(
-                    identity_provider.ui_info.logo_urls
-                ),
-            }
+            links.append(
+                PalaceAuthenticationLink(
+                    rel="authenticate",
+                    href=self._create_authenticate_url(db, identity_provider.entity_id),
+                    display_names=self._to_localized_strings(
+                        self._get_idp_display_names(index + 1, identity_provider)
+                    ),
+                    descriptions=self._to_localized_strings(
+                        identity_provider.ui_info.descriptions
+                    ),
+                    information_urls=self._to_localized_strings(
+                        identity_provider.ui_info.information_urls
+                    ),
+                    privacy_statement_urls=self._to_localized_strings(
+                        identity_provider.ui_info.privacy_statement_urls
+                    ),
+                    logo_urls=self._to_localized_logo_urls(
+                        identity_provider.ui_info.logo_urls
+                    ),
+                )
+            )
 
-            flow_doc["links"].append(link)
-
-        return flow_doc
+        return PalaceAuthentication(
+            type=self.flow_type,
+            description=self.label(),
+            links=links,
+        )
 
     @staticmethod
     def _get_idp_display_names(identity_provider_index, identity_provider):
@@ -258,29 +200,36 @@ class SAMLWebSSOAuthenticationProvider(
         )
 
     @staticmethod
-    def _join_ui_info_items(*ui_info_item_lists):
-        """Joins all UI info items (like, display names, descriptions, etc.) to a single list of dicts
+    def _to_localized_strings(
+        items: Sequence[SAMLLocalizedMetadataItem] | None,
+    ) -> list[LocalizedString]:
+        """Convert SAML localized metadata items to :class:`LocalizedString` models.
 
-        :param ui_info_item_lists: List of child LocalizableMetadataInfo objects
-        :type: List[LocalizableMetadataItem]
-
-        :return: List of dicts containing UI information (display names, descriptions, etc.)
-        :rtype: List[Dict]
+        :param items: SAML localized metadata items
+        :return: List of :class:`LocalizedString` models
         """
-        result = []
+        if not items:
+            return []
+        return [
+            LocalizedString(value=item.value, language=item.language or "")
+            for item in items
+        ]
 
-        if ui_info_item_lists:
-            for ui_info_item_list in ui_info_item_lists:
-                if ui_info_item_list:
-                    for ui_info_item in ui_info_item_list:
-                        result.append(
-                            {
-                                "value": ui_info_item.value,
-                                "language": ui_info_item.language,
-                            }
-                        )
+    @staticmethod
+    def _to_localized_logo_urls(
+        items: Sequence[SAMLLocalizedMetadataItem] | None,
+    ) -> list[LocalizedLogoUrl]:
+        """Convert SAML localized metadata items to :class:`LocalizedLogoUrl` models.
 
-        return result
+        :param items: SAML localized metadata items
+        :return: List of :class:`LocalizedLogoUrl` models
+        """
+        if not items:
+            return []
+        return [
+            LocalizedLogoUrl(value=item.value, language=item.language or "")
+            for item in items
+        ]
 
     def _run_self_tests(self, _db):
         pass
