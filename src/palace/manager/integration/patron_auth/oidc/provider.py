@@ -15,6 +15,7 @@ from werkzeug.datastructures import Authorization
 
 from palace.manager.api.authentication.base import PatronData, PatronLookupNotSupported
 from palace.manager.api.authenticator import BaseOIDCAuthenticationProvider
+from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.integration.patron_auth.oidc.auth import OIDCAuthenticationManager
 from palace.manager.integration.patron_auth.oidc.configuration.model import (
     OIDCAuthLibrarySettings,
@@ -166,7 +167,7 @@ class OIDCAuthenticationProvider(
         """
         library = self.library(db)
         if not library:
-            raise ValueError("Library not found")
+            raise PalaceValueError("Library not found")
 
         authenticate_url = url_for(
             "oidc_authenticate",
@@ -174,12 +175,24 @@ class OIDCAuthenticationProvider(
             library_short_name=library.short_name,
             provider=self.label(),
         )
-        link = self._create_authentication_link(authenticate_url)
+        links: list[dict[str, Any]] = [
+            self._create_authentication_link(authenticate_url)
+        ]
+
+        auth_manager = self.get_authentication_manager()
+        if auth_manager.supports_logout():
+            logout_url = url_for(
+                "oidc_logout",
+                _external=True,
+                library_short_name=library.short_name,
+                provider=self.label(),
+            )
+            links.append({"rel": "logout", "href": logout_url})
 
         return {
             "type": self.flow_type,
             "description": self.label(),
-            "links": [link],
+            "links": links,
         }
 
     def _run_self_tests(self, db: Session) -> Generator[SelfTestResult]:
