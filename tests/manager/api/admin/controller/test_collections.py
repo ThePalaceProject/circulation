@@ -1122,10 +1122,10 @@ class TestCollectionSettings:
         self,
         db: DatabaseTransactionFixture,
     ):
-        # BoundlessApi overrides import_task, so supports_import should be True.
+        # BoundlessApi implements SupportsImport, so supports_import should be True.
         boundless_details = BoundlessApi.protocol_details(db.session)
         assert boundless_details["supports_import"] is True
 
-        # OverdriveAPI does not override import_task, so supports_import should be False.
+        # OverdriveAPI does not implement SupportsImport, so supports_import should be False.
         overdrive_details = OverdriveAPI.protocol_details(db.session)
         assert overdrive_details["supports_import"] is False

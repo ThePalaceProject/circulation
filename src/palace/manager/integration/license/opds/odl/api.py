@@ -14,7 +14,7 @@ from pydantic import ValidationError
 from sqlalchemy.orm import Session
 from uritemplate import URITemplate
 
-from palace.manager.api.circulation.base import BaseCirculationAPI
+from palace.manager.api.circulation.base import BaseCirculationAPI, SupportsImport
 from palace.manager.api.circulation.data import HoldInfo, LoanInfo
 from palace.manager.api.circulation.exceptions import (
     AlreadyCheckedOut,
@@ -84,6 +84,7 @@ from palace.manager.util.http.exception import (
 
 class OPDS2WithODLApi(
     BaseCirculationAPI[OPDS2WithODLSettings, OPDS2WithODLLibrarySettings],
+    SupportsImport,
 ):
     """ODL (Open Distribution to Libraries) is a specification that allows
     libraries to manage their own loans and holds. It offers a deeper level

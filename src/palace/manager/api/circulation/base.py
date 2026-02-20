@@ -64,6 +64,20 @@ class CirculationInternalFormatsMixin:
         return internal_format
 
 
+class SupportsImport(ABC):
+    """Mixin for circulation APIs that support collection import."""
+
+    @classmethod
+    @abstractmethod
+    def import_task(cls, collection_id: int, force: bool = False) -> Signature:
+        """Return the Celery task signature for importing the collection.
+
+        :param collection_id: The ID of the collection to import.
+        :param force: If True, the import will be forced even if it has already been done.
+        """
+        ...
+
+
 class BaseCirculationAPI[
     SettingsType: BaseCirculationApiSettings, LibrarySettingsType: BaseSettings
 ](
@@ -212,21 +226,8 @@ class BaseCirculationAPI[
         """Include ``supports_import`` so the admin UI knows whether to
         offer an import button for collections using this protocol."""
         details = super().protocol_details(db)
-        import_task_owner = next(
-            base for base in cls.__mro__ if "import_task" in base.__dict__
-        )
-        details["supports_import"] = import_task_owner is not BaseCirculationAPI
+        details["supports_import"] = issubclass(cls, SupportsImport)
         return details
-
-    @classmethod
-    def import_task(cls, collection_id: int, force: bool = False) -> Signature:
-        """
-        Return the signature for a Celery task that will import the collection.
-
-        :param collection_id: The ID of the collection to import.
-        :param force: If True, the import will be forced even if it has already been done.
-        """
-        raise NotImplementedError()
 
     @property
     @abstractmethod

@@ -20,7 +20,7 @@ from palace.manager.api.admin.problem_details import (
     UNKNOWN_PROTOCOL,
 )
 from palace.manager.api.admin.util.flask import get_request_admin
-from palace.manager.api.circulation.base import CirculationApiType
+from palace.manager.api.circulation.base import CirculationApiType, SupportsImport
 from palace.manager.celery.tasks.collection_delete import collection_delete
 from palace.manager.celery.tasks.reaper import (
     reap_unassociated_holds,
@@ -147,14 +147,11 @@ class CollectionSettingsController(
             # If we have an importer task for this protocol, we start it
             # in the background, so that the collection is ready to go
             # as quickly as possible.
-            try:
+            if issubclass(impl_cls, SupportsImport):
                 impl_cls.import_task(integration.collection.id).apply_async(
                     # Delay the task to ensure the collection has been created by the time the task starts
                     countdown=10
                 )
-            except NotImplementedError:
-                # If the protocol does not support import tasks, we just skip it.
-                ...
 
         except ProblemDetailException as e:
             self._db.rollback()
@@ -228,10 +225,10 @@ class CollectionSettingsController(
         impl_cls = self.registry[protocol]
         force = flask.request.form.get("force", "false").lower() == "true"
 
-        try:
-            impl_cls.import_task(collection.id, force=force).apply_async()
-        except NotImplementedError:
+        if not issubclass(impl_cls, SupportsImport):
             return IMPORT_NOT_SUPPORTED
+
+        impl_cls.import_task(collection.id, force=force).apply_async()
 
         return Response("Import task queued.", 200)
 
