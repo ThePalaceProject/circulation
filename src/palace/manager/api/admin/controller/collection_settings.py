@@ -197,10 +197,10 @@ class CollectionSettingsController(
         collection_delete.delay(collection.id)
         return Response("Deleted", 200)
 
-    def process_import(self, collection_id: int) -> Response | ProblemDetail:
+    def process_import(self, service_id: int) -> Response | ProblemDetail:
         """Queue a collection import task on demand.
 
-        :param collection_id: The integration configuration ID of the collection to import.
+        :param service_id: The integration configuration ID of the collection to import.
         :return: A 200 response on success, or a ProblemDetail on error.
         """
         self.require_system_admin()
@@ -208,7 +208,7 @@ class CollectionSettingsController(
         integration = get_one(
             self._db,
             IntegrationConfiguration,
-            id=collection_id,
+            id=service_id,
             goal=self.registry.goal,
         )
         if not integration:
