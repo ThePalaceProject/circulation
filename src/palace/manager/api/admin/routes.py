@@ -418,6 +418,16 @@ def collection(collection_id):
     )
 
 
+@app.route("/admin/collection/<collection_id>/import", methods=["POST"])
+@returns_json_or_response_or_problem_detail
+@requires_admin
+@requires_csrf_token
+def collection_import(collection_id):
+    return app.manager.admin_collection_settings_controller.process_import(
+        int(collection_id)
+    )
+
+
 @app.route("/admin/collection_self_tests/<identifier>", methods=["GET", "POST"])
 @returns_json_or_response_or_problem_detail
 @requires_admin

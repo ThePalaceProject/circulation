@@ -482,6 +482,13 @@ CANNOT_SHOW_LANE_WITH_HIDDEN_PARENT = pd(
     detail=_("You can only make a lane visible if its parent is already visible."),
 )
 
+IMPORT_NOT_SUPPORTED = pd(
+    "http://palaceproject.io/terms/problem/import-not-supported",
+    status_code=400,
+    title=_("Import not supported"),
+    detail=_("The collection's protocol does not support import."),
+)
+
 COLLECTION_DOES_NOT_SUPPORT_REGISTRATION = pd(
     "http://librarysimplified.org/terms/problem/collection-does-not-support-registration",
     status_code=400,

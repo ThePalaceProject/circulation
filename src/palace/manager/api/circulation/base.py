@@ -5,7 +5,7 @@ import datetime
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Mapping
 from functools import cached_property
-from typing import TypedDict, Unpack
+from typing import Any, TypedDict, Unpack
 
 from celery.canvas import Signature
 from flask_babel import lazy_gettext as _
@@ -206,6 +206,16 @@ class BaseCirculationAPI[
         """The modulus part of the RSA public key used for DRM."""
         exponent: str | None
         """The exponent part of the RSA public key used for DRM."""
+
+    @classmethod
+    def protocol_details(cls, db: Session) -> dict[str, Any]:
+        """Include ``supports_import`` so the admin UI knows whether to
+        offer an import button for collections using this protocol."""
+        details = super().protocol_details(db)
+        details["supports_import"] = (
+            cls.import_task is not BaseCirculationAPI.import_task
+        )
+        return details
 
     @classmethod
     def import_task(cls, collection_id: int, force: bool = False) -> Signature:

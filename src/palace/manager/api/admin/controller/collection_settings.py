@@ -12,6 +12,7 @@ from palace.manager.api.admin.controller.integration_settings import (
 from palace.manager.api.admin.form_data import ProcessFormData
 from palace.manager.api.admin.problem_details import (
     CANNOT_DELETE_COLLECTION_WITH_CHILDREN,
+    IMPORT_NOT_SUPPORTED,
     MISSING_COLLECTION,
     MISSING_PARENT,
     MISSING_SERVICE,
@@ -194,6 +195,40 @@ class CollectionSettingsController(
         collection.marked_for_deletion = True
         collection_delete.delay(collection.id)
         return Response("Deleted", 200)
+
+    def process_import(self, collection_id: int) -> Response | ProblemDetail:
+        """Queue a collection import task on demand.
+
+        :param collection_id: The integration configuration ID of the collection to import.
+        :return: A 200 response on success, or a ProblemDetail on error.
+        """
+        self.require_system_admin()
+
+        integration = get_one(
+            self._db,
+            IntegrationConfiguration,
+            id=collection_id,
+            goal=self.registry.goal,
+        )
+        if not integration:
+            return MISSING_SERVICE
+
+        collection = integration.collection
+        if not collection:
+            return MISSING_COLLECTION
+
+        if collection.marked_for_deletion:
+            return MISSING_COLLECTION
+
+        impl_cls = self.registry[integration.protocol]
+        force = flask.request.form.get("force", "false").lower() == "true"
+
+        try:
+            impl_cls.import_task(collection.id, force=force).apply_async()
+        except NotImplementedError:
+            return IMPORT_NOT_SUPPORTED
+
+        return Response("Import task queued.", 200)
 
     def process_collection_self_tests(
         self, identifier: int | None
