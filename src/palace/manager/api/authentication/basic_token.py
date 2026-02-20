@@ -91,9 +91,12 @@ class BasicTokenAuthenticationProvider(
 
     def _authentication_flow_document(self, _db: Session) -> PalaceAuthentication:
         """This auth type should follow the entry of its basic auth provider."""
+        library = self.library(_db)
+        if not library:
+            raise ValueError("Library not found")
         token_url = url_for(
             "patron_auth_token",
-            library_short_name=self.library(_db).short_name,
+            library_short_name=library.short_name,
             _external=True,
         )
         basic_flow = self.basic_provider._authentication_flow_document(_db)

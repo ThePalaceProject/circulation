@@ -41,7 +41,7 @@ class TestOPDSAuthenticationFlow:
         db = MagicMock(spec=Session)
         flow = MockFlow("description")
         expected = PalaceAuthentication(type="http://mock1/", description="test")
-        flow._authentication_flow_document = MagicMock(return_value=expected)  # type: ignore[method-assign]
+        flow._authentication_flow_document = MagicMock(return_value=expected)
         result = flow.authentication_flow_document(db)
         assert result is expected
         flow._authentication_flow_document.assert_called_once_with(db)
@@ -51,6 +51,6 @@ class TestOPDSAuthenticationFlow:
         db = MagicMock(spec=Session)
         flow = MockFlow("description")
         wrong_type = PalaceAuthentication(type="http://wrong/", description="test")
-        flow._authentication_flow_document = MagicMock(return_value=wrong_type)  # type: ignore[method-assign]
+        flow._authentication_flow_document = MagicMock(return_value=wrong_type)
         with pytest.raises(ValueError, match="flow type mismatch"):
             flow.authentication_flow_document(db)
