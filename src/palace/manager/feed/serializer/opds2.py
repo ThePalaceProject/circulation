@@ -307,7 +307,8 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]], LoggerMixin):
     def _serialize_indirect_acquisition(
         self, indirect: IndirectAcquisition
     ) -> opds2.AcquisitionObject | None:
-        if indirect.type is None:
+        indirect_type = self._resolve_type(indirect.type)
+        if indirect_type is None:
             self.log.error(f"Skipping indirect acquisition without type")
             return None
         children = [
@@ -316,7 +317,7 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]], LoggerMixin):
             if (acq := self._serialize_indirect_acquisition(child)) is not None
         ]
         return opds2.AcquisitionObject(
-            type=indirect.type,
+            type=indirect_type,
             child=children,
         )
 
@@ -448,8 +449,9 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]], LoggerMixin):
         if link.type:
             return self._resolve_type(link.type)
         for indirect in link.indirect_acquisitions:
-            if indirect.type:
-                return indirect.type
+            indirect_type = self._resolve_type(indirect.type)
+            if indirect_type:
+                return indirect_type
         self.log.error(f"Skipping acquisition link without type: {link.href}")
         return None
 

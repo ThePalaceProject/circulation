@@ -36,6 +36,7 @@ from palace.manager.feed.types import (
     Acquisition,
     FeedData,
     Link,
+    LinkContentType,
     WorkEntry,
     WorkEntryData,
 )
@@ -597,7 +598,7 @@ class TestOPDSAcquisitionFeed:
             DeliveryMechanism.OVERDRIVE_DRM,
         )
         assert [
-            OPDSFeed.ENTRY_TYPE,
+            LinkContentType.OPDS_ENTRY,
             Representation.TEXT_HTML_MEDIA_TYPE + DeliveryMechanism.STREAMING_PROFILE,
         ] == m(overdrive_streaming_text)
 

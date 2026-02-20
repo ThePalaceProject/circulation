@@ -455,7 +455,9 @@ class BaseOPDS1Serializer(SerializerInterface[etree._Element], OPDSFeed, abc.ABC
 
         def _indirect(item: IndirectAcquisition) -> etree._Element:
             tag = self._tag("indirectAcquisition")
-            tag.set("type", item.type)
+            resolved_indirect_type = self._resolve_type(item.type)
+            if resolved_indirect_type is not None:
+                tag.set("type", resolved_indirect_type)
             for child in item.children:
                 tag.append(_indirect(child))
             return tag

@@ -599,6 +599,22 @@ class TestOPDS2Serializer:
         dumped = serializer._dump_model(result)
         assert dumped["type"] == "application/epub+zip"
 
+    def test_acquisition_link_type_fallback_to_semantic_indirect(self):
+        """Semantic indirect types are resolved when direct type is missing."""
+        serializer = OPDS2Serializer()
+        acquisition = Acquisition(
+            href="http://indirect-type",
+            rel="acquisition",
+            type=None,
+            indirect_acquisitions=[
+                IndirectAcquisition(type=LinkContentType.OPDS_ENTRY),
+            ],
+        )
+        result = serializer._serialize_acquisition_link(acquisition)
+        assert result is not None
+        dumped = serializer._dump_model(result)
+        assert dumped["type"] == opds2.BasePublication.content_type()
+
     def test_indirect_acquisition_without_type(self):
         """An indirect acquisition with type=None is skipped."""
         serializer = OPDS2Serializer()

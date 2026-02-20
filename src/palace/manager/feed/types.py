@@ -126,7 +126,7 @@ class DRMLicensor:
 class IndirectAcquisition:
     """Tree structure for indirect acquisitions in OPDS1."""
 
-    type: str | None = None
+    type: LinkType | None = None
     children: list[IndirectAcquisition] = field(default_factory=list)
 
 

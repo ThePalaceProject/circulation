@@ -511,3 +511,18 @@ class TestOPDSSerializer:
         serializer = OPDS1Version1Serializer()
         element = serializer._serialize_acquisition_link(link)
         assert element.get("type") == OPDSFeed.ENTRY_TYPE
+
+    def test_serialize_acquisition_link_resolves_indirect_content_type(self):
+        """Indirect acquisition LinkContentType values are resolved to OPDS1 types."""
+        link = Acquisition(
+            href="http://example.com/borrow",
+            rel="http://opds-spec.org/acquisition/borrow",
+            indirect_acquisitions=[
+                IndirectAcquisition(type=LinkContentType.OPDS_ENTRY)
+            ],
+        )
+        serializer = OPDS1Version1Serializer()
+        element = serializer._serialize_acquisition_link(link)
+        indirect = element.find(f"{{{OPDSFeed.OPDS_NS}}}indirectAcquisition")
+        assert indirect is not None
+        assert indirect.get("type") == OPDSFeed.ENTRY_TYPE

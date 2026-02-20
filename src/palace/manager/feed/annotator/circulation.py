@@ -188,15 +188,15 @@ class AcquisitionHelper:
         )
 
     @classmethod
-    def format_types(cls, delivery_mechanism: DeliveryMechanism) -> list[str]:
+    def format_types(cls, delivery_mechanism: DeliveryMechanism) -> list[LinkType]:
         """Generate a set of types suitable for passing into
         acquisition_link().
         """
-        types = []
+        types: list[LinkType] = []
         # If this is a streaming book, you have to get an OPDS entry, then
         # get a direct link to the streaming reader from that.
         if delivery_mechanism.is_streaming:
-            types.append(OPDSFeed.ENTRY_TYPE)
+            types.append(LinkContentType.OPDS_ENTRY)
 
         # If this is a DRM-encrypted book, you have to get through the DRM
         # to get the goodies inside.
@@ -626,7 +626,7 @@ class CirculationManagerAnnotator(Annotator):
         cls,
         rel: str,
         href: str,
-        types: list[str] | None,
+        types: list[LinkType] | None,
         active_loan: Loan | None = None,
         templated: bool = False,
     ) -> Acquisition:
@@ -651,7 +651,7 @@ class CirculationManagerAnnotator(Annotator):
 
     @classmethod
     def indirect_acquisition(
-        cls, indirect_types: list[str]
+        cls, indirect_types: list[LinkType]
     ) -> IndirectAcquisition | None:
         top_level_parent: IndirectAcquisition | None = None
         parent: IndirectAcquisition | None = None
@@ -1421,7 +1421,9 @@ class LibraryAnnotator(CirculationManagerAnnotator):
             _external=True,
         )
 
-        if template_vars := self.FULFILL_LINK_TEMPLATED_TYPES.get(format_types[0]):
+        first_format_type = format_types[0]
+        template_key = first_format_type if isinstance(first_format_type, str) else None
+        if template_vars := self.FULFILL_LINK_TEMPLATED_TYPES.get(template_key):
             fulfill_url = fulfill_url + "{?" + ",".join(template_vars) + "}"
             templated = True
         else:
