@@ -37,9 +37,6 @@ runs:
 
     - name: Create New Jira Release
       shell: bash
-      env:
-        JIRA_PROJECT_KEY: ${{ inputs.jira-project-key }}
-        RELEASE_NAME: ${{ inputs.release-name }}
       run: |
         curl -X POST \
           --url "${{ inputs.jira-base-url }}/rest/api/3/version" \
@@ -47,23 +44,19 @@ runs:
           --header 'Accept: application/json' \
           --header 'Content-Type: application/json' \
           --data "{
-            \"name\": \"${RELEASE_NAME}\",
+            \"name\": \"${{ inputs.release-name }}\",
             \"description\": \"Release created from GitHub build.\",
-            \"project\": \"${JIRA_PROJECT_KEY}\",
+            \"project\": \"${{ inputs.jira-project-key }}\",
             \"released\": false
           }"
 
     - name: Link GitHub Release to Jira Version
       shell: bash
-      env:
-        JIRA_PROJECT_KEY: ${{ inputs.jira-project-key }}
-        RELEASE_NAME: ${{ inputs.release-name }}
-        RELEASE_URL: ${{ inputs.release-url }}
       run: |
         # 1. Get the Version ID from Jira based on the name
         VERSION_ID=$(curl --user "${{ inputs.jira-user-email }}:${{ inputs.jira-api-token }}" \
-          --url "${{ inputs.jira-base-url }}/rest/api/3/project/${JIRA_PROJECT_KEY}/versions" \
-          | jq -r ".[] | select(.name == \"$RELEASE_NAME\") | .id")
+          --url "${{ inputs.jira-base-url }}/rest/api/3/project/${{ inputs.jira-project-key }}/versions" \
+          | jq -r ".[] | select(.name == \"${{ inputs.release-name }}\") | .id")
         # 2. Add the GitHub Release link to the "Related Work" section
         curl --request POST \
           --url "${{ inputs.jira-base-url }}/rest/api/3/version/$VERSION_ID/remotelink" \
@@ -72,18 +65,14 @@ runs:
           --header 'Content-Type: application/json' \
           --data "{
             \"title\": \"GitHub Release Notes\",
-            \"url\": \"${RELEASE_URL}\",
+            \"url\": \"${{ inputs.release-url }}\",
             \"type\": \"release notes\"
           }"
 
     - name: Extract Jira Keys and Update Issues
       shell: bash
-      env:
-        JIRA_PROJECT_KEY: ${{ inputs.jira-project-key }}
-        RELEASE_NAME: ${{ inputs.release-name }}
-        RELEASE_BODY: ${{ inputs.release-body }}
       run: |
-        KEYS=$(echo "${RELEASE_BODY}" | grep -oE "${JIRA_PROJECT_KEY}-[0-9]+" | sort -u)
+        KEYS=$(echo "${{ inputs.release-body }}" | grep -oE "${{ inputs.jira-project-key }}-[0-9]+" | sort -u)
         if [ -z "$KEYS" ]; then
           echo "No Jira keys found."
           exit 0
@@ -94,5 +83,5 @@ runs:
             --user "${{ inputs.jira-user-email }}:${{ inputs.jira-api-token }}" \
             --header 'Accept: application/json' \
             --header 'Content-Type: application/json' \
-            --data "{\"update\": {\"fixVersions\": [{\"add\": {\"name\": \"$RELEASE_NAME\"}}]}}"
+            --data "{\"update\": {\"fixVersions\": [{\"add\": {\"name\": \"${{ inputs.release-name }}\"}}]}}"
         done
