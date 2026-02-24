@@ -952,6 +952,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
                         library_short_name=self.library.short_name,
                         _external=True,
                     ),
+                    type="text/html",
                 )
             )
 

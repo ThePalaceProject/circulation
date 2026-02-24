@@ -177,7 +177,7 @@ class Author:
 class WorkEntryData:
     """Computed metadata used by OPDS serializers for a single work entry."""
 
-    additional_type: str | None = None
+    medium: str | None = None
     identifier: str | None = None
     pwid: str | None = None
     issued: datetime | date | None = None
