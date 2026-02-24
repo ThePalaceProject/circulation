@@ -21,11 +21,11 @@ from palace.manager.api.admin.problem_details import (
     ADMIN_NOT_AUTHORIZED,
     INVALID_ADMIN_CREDENTIALS,
     INVALID_CSRF_TOKEN,
-    MISSING_SERVICE,
 )
 from palace.manager.api.controller.circulation_manager import (
     CirculationManagerController,
 )
+from palace.manager.core.problem_details import INVALID_INPUT
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.admin import Admin, AdminRole
 from palace.manager.util import base64
@@ -720,9 +720,9 @@ class TestAdminCollectionSettings:
             fixture.manager.admin_sign_in_controller.authenticated = False
 
         body, status_code, _ = response
-        assert status_code == MISSING_SERVICE.status_code
+        assert status_code == INVALID_INPUT.status_code
         payload = json.loads(body)
-        assert payload["type"] == MISSING_SERVICE.uri
+        assert payload["type"] == INVALID_INPUT.uri
 
     def test_process_collection_self_tests(self, fixture: AdminRouteFixture):
         url = "/admin/collection_self_tests/<identifier>"

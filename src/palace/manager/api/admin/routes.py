@@ -15,12 +15,12 @@ from palace.manager.api.admin.model.dashboard_statistics import StatisticsRespon
 from palace.manager.api.admin.problem_details import (
     ADMIN_NOT_AUTHORIZED,
     INVALID_ADMIN_CREDENTIALS,
-    MISSING_SERVICE,
 )
 from palace.manager.api.app import app
 from palace.manager.api.controller.static_file import StaticFileController
 from palace.manager.api.routes import allows_library, has_library, library_route
 from palace.manager.core.app_server import returns_problem_detail
+from palace.manager.core.problem_details import INVALID_INPUT
 from palace.manager.sqlalchemy.model.admin import Admin
 from palace.manager.util.problem_detail import BaseProblemDetailException, ProblemDetail
 
@@ -427,7 +427,7 @@ def collection_import(collection_id):
     try:
         integration_id = int(collection_id)
     except ValueError:
-        return MISSING_SERVICE
+        return INVALID_INPUT
 
     return app.manager.admin_collection_settings_controller.process_import(
         integration_id
