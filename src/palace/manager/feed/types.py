@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import date, datetime
-from enum import StrEnum
+from enum import Enum, StrEnum, auto
 from typing import Literal, NotRequired, TypedDict, Unpack
 
 from palace.manager.sqlalchemy.model.edition import Edition
@@ -13,19 +13,27 @@ from palace.manager.sqlalchemy.model.licensing import LicensePool
 from palace.manager.sqlalchemy.model.work import Work
 
 
-class LinkAttributes(TypedDict):
-    """Typed mapping for attributes used in OPDS1 link serialization."""
+class LinkContentType(Enum):
+    """Semantic content types for links that reference OPDS feeds or entries.
 
-    href: str
-    rel: NotRequired[str]
-    type: NotRequired[str]
+    Each serializer maps these to its format-specific content type.
+    Links with concrete types (text/html, application/json, etc.) bypass this.
+    """
+
+    OPDS_FEED = auto()
+    OPDS_ENTRY = auto()
+
+
+#: Union type for link type fields that accept either concrete MIME types or
+#: semantic :class:`LinkContentType` values resolved at serialization time.
+LinkType = str | LinkContentType
 
 
 class LinkKwargs(TypedDict):
     """Typed keyword arguments accepted by FeedData.add_link."""
 
     rel: NotRequired[str]
-    type: NotRequired[str]
+    type: NotRequired[LinkType]
     title: NotRequired[str]
     role: NotRequired[str]
     facet_group: NotRequired[str]
@@ -49,7 +57,7 @@ class Link:
 
     href: str
     rel: str | None = None
-    type: str | None = None
+    type: LinkType | None = None
 
     # Additional types
     role: str | None = None
@@ -61,15 +69,6 @@ class Link:
     active_facet: bool = False
     default_facet: bool = False
     active_sort: bool = False
-
-    def link_attribs(self) -> LinkAttributes:
-        """Return the basic link attributes required for OPDS1."""
-        attrs: LinkAttributes = {"href": self.href}
-        if self.rel is not None:
-            attrs["rel"] = self.rel
-        if self.type is not None:
-            attrs["type"] = self.type
-        return attrs
 
 
 @dataclass(slots=True)
@@ -127,7 +126,7 @@ class DRMLicensor:
 class IndirectAcquisition:
     """Tree structure for indirect acquisitions in OPDS1."""
 
-    type: str | None = None
+    type: LinkType | None = None
     children: list[IndirectAcquisition] = field(default_factory=list)
 
 

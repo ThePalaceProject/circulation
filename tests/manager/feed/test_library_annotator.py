@@ -31,7 +31,7 @@ from palace.manager.feed.annotator.loan_and_hold import LibraryLoanAndHoldAnnota
 from palace.manager.feed.facets.base import FacetsWithEntryPoint
 from palace.manager.feed.facets.feed import Facets
 from palace.manager.feed.opds import UnfulfillableWork
-from palace.manager.feed.types import FeedData, WorkEntry
+from palace.manager.feed.types import FeedData, LinkContentType, WorkEntry
 from palace.manager.feed.util import strftime
 from palace.manager.feed.worklist.contributor import ContributorLane
 from palace.manager.integration.goals import Goals
@@ -525,7 +525,7 @@ class TestLibraryAnnotator:
             pool.identifier
         )
         assert alternate == permalink
-        assert OPDSFeed.ENTRY_TYPE == type
+        assert LinkContentType.OPDS_ENTRY == type
         assert permalink_type == type
 
         # Make sure we are using the 'permalink' controller -- we were using
@@ -825,7 +825,7 @@ class TestLibraryAnnotator:
         expected_rel_and_partial = dict(contributor="/contributor")
         self.assert_link_on_entry(
             entry.computed.authors,
-            link_type=OPDSFeed.ACQUISITION_FEED_TYPE,
+            link_type=LinkContentType.OPDS_FEED,
             partials_by_rel=expected_rel_and_partial,
         )
 
@@ -841,7 +841,7 @@ class TestLibraryAnnotator:
         assert 2 == len(contributor_links)
         contributor_links.sort(key=lambda l: l.href)
         for l in contributor_links:
-            assert l.type == OPDSFeed.ACQUISITION_FEED_TYPE
+            assert l.type == LinkContentType.OPDS_FEED
             assert "/contributor" in l.href
         assert contributor1.sort_name in contributor_links[0].href
         assert "Oprah" in contributor_links[1].href
@@ -868,7 +868,7 @@ class TestLibraryAnnotator:
         expected_rel_and_partial = dict(series="/series")
         self.assert_link_on_entry(
             entry.computed.series,
-            link_type=OPDSFeed.ACQUISITION_FEED_TYPE,
+            link_type=LinkContentType.OPDS_FEED,
             partials_by_rel=expected_rel_and_partial,
         )
 
@@ -903,7 +903,7 @@ class TestLibraryAnnotator:
         expected_rel_and_partial = dict(recommendations="/recommendations")
         self.assert_link_on_entry(
             entry,
-            link_type=OPDSFeed.ACQUISITION_FEED_TYPE,
+            link_type=LinkContentType.OPDS_FEED,
             partials_by_rel=expected_rel_and_partial,
         )
 
