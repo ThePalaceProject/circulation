@@ -1,0 +1,89 @@
+name: "Jira Release Sync"
+description: "Create Jira version, link release notes, and update fixVersions"
+
+inputs:
+  jira-base-url:
+    description: "Jira base URL"
+    required: true
+  jira-user-email:
+    description: "Jira user email"
+    required: true
+  jira-api-token:
+    description: "Jira API token"
+    required: true
+  jira-project-key:
+    description: "Jira project key"
+    required: false
+    default: "PP"
+  release-name:
+    description: "Jira release/version name"
+    required: true
+  release-url:
+    description: "GitHub release URL"
+    required: true
+  release-body:
+    description: "GitHub release body"
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Create New Jira Release
+      shell: bash
+      run: |
+        curl -X POST \
+          --url "${{ inputs.jira-base-url }}/rest/api/3/version" \
+          --user "${{ inputs.jira-user-email }}:${{ inputs.jira-api-token }}" \
+          --header 'Accept: application/json' \
+          --header 'Content-Type: application/json' \
+          --fail \
+          --data "{
+            \"name\": \"${{ inputs.release-name }}\",
+            \"description\": \"Release created from GitHub build.\",
+            \"project\": \"${{ inputs.jira-project-key }}\",
+            \"released\": false
+          }"
+
+    - name: Link GitHub Release to Jira Version
+      shell: bash
+      run: |
+        # 1. Get the Version ID from Jira based on the name
+        VERSION_ID=$(curl --user "${{ inputs.jira-user-email }}:${{ inputs.jira-api-token }}" \
+          --url "${{ inputs.jira-base-url }}/rest/api/3/project/${{ inputs.jira-project-key }}/versions" \
+          | jq -r ".[] | select(.name == \"${{ inputs.release-name }}\") | .id")
+        # 2. Add the GitHub Release link to the "Related Work" section
+        curl --request POST \
+          --url "${{ inputs.jira-base-url }}/rest/api/3/version/$VERSION_ID/remotelink" \
+          --user "${{ inputs.jira-user-email }}:${{ inputs.jira-api-token }}" \
+          --header 'Accept: application/json' \
+          --header 'Content-Type: application/json' \
+          --fail \
+          --data "{
+            \"title\": \"GitHub Release Notes\",
+            \"url\": \"${{ inputs.release-url }}\",
+            \"type\": \"release notes\"
+          }"
+
+    - name: Extract Jira Keys and Update Issues
+      shell: bash
+      env:
+        RELEASE_BODY: ${{ github.event.release.body }}
+        JIRA_PROJECT_KEY: ${{ inputs.jira-project-key }}
+      run: |
+        # The '|| echo ""' command ensures that if there are no keys, the line will not exit
+        # prematurely with an error in the likely case that bash is running with strict error
+        # checking (ie bash -e -o pipefail)
+        KEYS=$((echo "$RELEASE_BODY" | grep -oE "$JIRA_PROJECT_KEY-[0-9]+" | sort -u) || echo "")
+        if [ -z "$KEYS" ]; then
+          echo "No Jira keys found."
+          exit 0
+        fi
+        for KEY in $KEYS; do
+          curl --request PUT \
+            --url "${{ inputs.jira-base-url }}/rest/api/3/issue/$KEY" \
+            --user "${{ inputs.jira-user-email }}:${{ inputs.jira-api-token }}" \
+            --header 'Accept: application/json' \
+            --header 'Content-Type: application/json' \
+            --fail \
+            --data "{\"update\": {\"fixVersions\": [{\"add\": {\"name\": \"${{ inputs.release-name }}\"}}]}}"
+        done
