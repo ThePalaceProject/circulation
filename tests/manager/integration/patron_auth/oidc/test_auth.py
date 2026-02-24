@@ -1559,27 +1559,110 @@ class TestOIDCAuthenticationManagerBackChannelLogout:
                 manager.validate_logout_token(token)
 
 
-class TestOIDCAuthManagerSupportsLogout:
-    """Tests for OIDCAuthenticationManager.supports_logout()."""
+class TestOIDCAuthManagerSupportsRpInitiatedLogout:
+    """Tests for OIDCAuthenticationManager.supports_rp_initiated_logout()."""
 
     @pytest.mark.parametrize(
-        "metadata,manual_end_session_endpoint,expected",
+        "metadata,settings_kwargs,expected",
         [
             pytest.param(
                 {"end_session_endpoint": "https://idp.example.com/logout"},
-                None,
+                {},
                 True,
                 id="discovered-end-session-endpoint",
             ),
             pytest.param(
+                {"revocation_endpoint": "https://idp.example.com/revoke"},
                 {},
-                HttpUrl("https://idp.example.com/logout"),
-                True,
-                id="no-discovered-endpoint-manual-setting-present",
+                False,
+                id="revocation-endpoint-only-not-rp-initiated",
             ),
             pytest.param(
                 {},
-                None,
+                {"end_session_endpoint": HttpUrl("https://idp.example.com/logout")},
+                True,
+                id="manual-end-session-endpoint",
+            ),
+            pytest.param(
+                {},
+                {"revocation_endpoint": HttpUrl("https://idp.example.com/revoke")},
+                False,
+                id="manual-revocation-only-not-rp-initiated",
+            ),
+            pytest.param(
+                {},
+                {},
+                False,
+                id="neither",
+            ),
+        ],
+    )
+    def test_supports_rp_initiated_logout(
+        self,
+        oidc_settings_with_discovery,
+        metadata,
+        settings_kwargs,
+        expected,
+    ):
+        """Test supports_rp_initiated_logout only returns True for end_session_endpoint."""
+        if settings_kwargs:
+            oidc_settings_with_discovery = OIDCAuthSettings(
+                client_id=TEST_CLIENT_ID,
+                client_secret=TEST_CLIENT_SECRET,
+                issuer_url=TEST_ISSUER_URL,
+                **settings_kwargs,
+            )
+
+        manager = OIDCAuthenticationManager(settings=oidc_settings_with_discovery)
+
+        with patch.object(manager, "get_provider_metadata", return_value=metadata):
+            result = manager.supports_rp_initiated_logout()
+
+        assert result is expected
+
+
+class TestOIDCAuthManagerSupportsLogout:
+    """Tests for OIDCAuthenticationManager.supports_logout()."""
+
+    @pytest.mark.parametrize(
+        "metadata,settings_kwargs,expected",
+        [
+            pytest.param(
+                {"end_session_endpoint": "https://idp.example.com/logout"},
+                {},
+                True,
+                id="discovered-end-session-endpoint",
+            ),
+            pytest.param(
+                {"revocation_endpoint": "https://idp.example.com/revoke"},
+                {},
+                True,
+                id="discovered-revocation-endpoint-only",
+            ),
+            pytest.param(
+                {
+                    "end_session_endpoint": "https://idp.example.com/logout",
+                    "revocation_endpoint": "https://idp.example.com/revoke",
+                },
+                {},
+                True,
+                id="discovered-both-endpoints",
+            ),
+            pytest.param(
+                {},
+                {"end_session_endpoint": HttpUrl("https://idp.example.com/logout")},
+                True,
+                id="no-discovered-endpoint-manual-end-session-present",
+            ),
+            pytest.param(
+                {},
+                {"revocation_endpoint": HttpUrl("https://idp.example.com/revoke")},
+                True,
+                id="no-discovered-endpoint-manual-revocation-present",
+            ),
+            pytest.param(
+                {},
+                {},
                 False,
                 id="neither-discovered-nor-manual",
             ),
@@ -1589,16 +1672,16 @@ class TestOIDCAuthManagerSupportsLogout:
         self,
         oidc_settings_with_discovery,
         metadata,
-        manual_end_session_endpoint,
+        settings_kwargs,
         expected,
     ):
         """Test supports_logout with various discovery and manual config combinations."""
-        if manual_end_session_endpoint:
+        if settings_kwargs:
             oidc_settings_with_discovery = OIDCAuthSettings(
                 client_id=TEST_CLIENT_ID,
                 client_secret=TEST_CLIENT_SECRET,
                 issuer_url=TEST_ISSUER_URL,
-                end_session_endpoint=manual_end_session_endpoint,
+                **settings_kwargs,
             )
 
         manager = OIDCAuthenticationManager(settings=oidc_settings_with_discovery)
@@ -1609,15 +1692,20 @@ class TestOIDCAuthManagerSupportsLogout:
         assert result is expected
 
     @pytest.mark.parametrize(
-        "manual_end_session_endpoint,expected",
+        "settings_kwargs,expected",
         [
             pytest.param(
-                HttpUrl("https://idp.example.com/logout"),
+                {"end_session_endpoint": HttpUrl("https://idp.example.com/logout")},
                 True,
-                id="discovery-error-manual-setting-present",
+                id="discovery-error-manual-end-session-present",
             ),
             pytest.param(
-                None,
+                {"revocation_endpoint": HttpUrl("https://idp.example.com/revoke")},
+                True,
+                id="discovery-error-manual-revocation-present",
+            ),
+            pytest.param(
+                {},
                 False,
                 id="discovery-error-no-manual-setting",
             ),
@@ -1626,16 +1714,16 @@ class TestOIDCAuthManagerSupportsLogout:
     def test_supports_logout_discovery_error(
         self,
         oidc_settings_with_discovery,
-        manual_end_session_endpoint,
+        settings_kwargs,
         expected,
     ):
-        """Test supports_logout falls back to manual setting on OIDCDiscoveryError."""
-        if manual_end_session_endpoint:
+        """Test supports_logout falls back to manual settings on OIDCDiscoveryError."""
+        if settings_kwargs:
             oidc_settings_with_discovery = OIDCAuthSettings(
                 client_id=TEST_CLIENT_ID,
                 client_secret=TEST_CLIENT_SECRET,
                 issuer_url=TEST_ISSUER_URL,
-                end_session_endpoint=manual_end_session_endpoint,
+                **settings_kwargs,
             )
 
         manager = OIDCAuthenticationManager(settings=oidc_settings_with_discovery)

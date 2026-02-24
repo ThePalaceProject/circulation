@@ -486,13 +486,13 @@ class OIDCAuthenticationManager(LoggerMixin):
         self.log.info(f"Built logout URL for provider: {end_session_endpoint}")
         return logout_url
 
-    def supports_logout(self) -> bool:
+    def supports_rp_initiated_logout(self) -> bool:
         """Check if the OIDC provider supports RP-Initiated Logout.
 
         Returns True if an end_session_endpoint is available via auto-discovery
         or manual configuration.
 
-        :return: True if logout is supported
+        :return: True if RP-Initiated Logout is supported
         """
         try:
             metadata = self.get_provider_metadata()
@@ -501,6 +501,27 @@ class OIDCAuthenticationManager(LoggerMixin):
         except OIDCDiscoveryError:
             pass
         return bool(self._settings.end_session_endpoint)
+
+    def supports_logout(self) -> bool:
+        """Check if the OIDC provider supports any form of logout.
+
+        Returns True if either an end_session_endpoint (RP-Initiated Logout) or
+        a revocation_endpoint (RFC 7009 token revocation) is available via
+        auto-discovery or manual configuration.
+
+        :return: True if any logout mechanism is supported
+        """
+        try:
+            metadata = self.get_provider_metadata()
+            if metadata.get("end_session_endpoint") or metadata.get(
+                "revocation_endpoint"
+            ):
+                return True
+        except OIDCDiscoveryError:
+            pass
+        return bool(
+            self._settings.end_session_endpoint or self._settings.revocation_endpoint
+        )
 
     def revoke_token(self, token: str, token_type_hint: str = "refresh_token") -> None:
         """Revoke an OAuth 2.0 token via the token revocation endpoint (RFC 7009).

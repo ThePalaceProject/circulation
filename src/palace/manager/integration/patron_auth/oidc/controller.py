@@ -327,6 +327,7 @@ class OIDCController(LoggerMixin):
                 tokens.get("access_token"),
                 tokens.get("refresh_token"),
                 tokens.get("expires_in"),
+                id_token,
             )
         except ProblemDetailException as e:
             return self._redirect_with_error(redirect_uri, e.problem_detail)
@@ -359,17 +360,11 @@ class OIDCController(LoggerMixin):
         :return: Redirect to provider logout endpoint or error
         """
         provider_name = request_args.get(self.PROVIDER_NAME)
-        id_token_hint = request_args.get(self.ID_TOKEN_HINT)
         post_logout_redirect_uri = request_args.get(self.POST_LOGOUT_REDIRECT_URI)
 
         if not provider_name:
             return OIDC_INVALID_REQUEST.detailed(
                 _("Missing 'provider' parameter in logout request")
-            )
-
-        if not id_token_hint:
-            return OIDC_INVALID_ID_TOKEN_HINT.detailed(
-                _("Missing 'id_token_hint' parameter in logout request")
             )
 
         if not post_logout_redirect_uri:
@@ -413,20 +408,27 @@ class OIDCController(LoggerMixin):
                 _("Bearer token is expired or not found")
             )
 
+        auth_manager = provider.get_authentication_manager()  # type: ignore[attr-defined]
+
+        # Extract the stored token data from the credential rather than requiring
+        # the client to re-supply the raw id_token_hint as a separate parameter.
         try:
-            auth_manager = provider.get_authentication_manager()  # type: ignore[attr-defined]
-            claims = auth_manager.validate_id_token_hint(id_token_hint)
+            token_data = provider._credential_manager.extract_token_data(oidc_credential)  # type: ignore[attr-defined]
         except Exception as e:
-            self.log.exception("ID token hint validation failed")
-            return OIDC_INVALID_ID_TOKEN_HINT.detailed(
-                _(f"ID token hint validation failed: {str(e)}")
+            self.log.exception("Failed to extract token data from credential")
+            return OIDC_INVALID_REQUEST.detailed(_("Invalid credential data"))
+
+        id_token_claims = token_data.get("id_token_claims", {})
+        patron_identifier = id_token_claims.get(provider._settings.patron_id_claim)  # type: ignore[attr-defined]
+        if not patron_identifier:
+            return OIDC_INVALID_REQUEST.detailed(
+                _("Credential missing patron identifier claim")
             )
 
-        patron_identifier = claims.get(provider._settings.patron_id_claim)  # type: ignore[attr-defined]
-        if not patron_identifier:
-            return OIDC_INVALID_ID_TOKEN_HINT.detailed(
-                _("ID token hint missing patron identifier claim")
-            )
+        # The raw id_token JWT stored at authentication time; used as id_token_hint
+        # for RP-Initiated Logout. May be absent for credentials created before this
+        # feature was introduced — in that case RP-Initiated Logout is skipped.
+        stored_id_token = token_data.get("id_token")
 
         try:
             credential_manager = provider._credential_manager  # type: ignore[attr-defined]
@@ -445,15 +447,23 @@ class OIDCController(LoggerMixin):
 
         # Best-effort: revoke the OAuth refresh token to prevent silent re-authentication
         # at the IdP after local CM logout. Errors are non-fatal.
-        try:
-            token_data = provider._credential_manager.extract_token_data(oidc_credential)  # type: ignore[attr-defined]
-            refresh_token = token_data.get("refresh_token")
-            if refresh_token:
+        refresh_token = token_data.get("refresh_token")
+        if refresh_token:
+            try:
                 auth_manager.revoke_token(refresh_token)
-        except Exception:
-            self.log.warning(
-                "Failed to revoke refresh token (non-critical)", exc_info=True
+            except Exception:
+                self.log.warning(
+                    "Failed to revoke refresh token (non-critical)", exc_info=True
+                )
+
+        # If the provider does not support RP-Initiated Logout (only token revocation),
+        # or if no id_token was stored (credentials pre-dating this feature), redirect
+        # directly — local invalidation and token revocation are already done.
+        if not auth_manager.supports_rp_initiated_logout() or not stored_id_token:
+            final_redirect_uri = self._add_params_to_url(
+                post_logout_redirect_uri, {self.LOGOUT_STATUS: "success"}
             )
+            return redirect(final_redirect_uri)
 
         callback_url = url_for("oidc_logout_callback", _external=True)
 
@@ -471,7 +481,7 @@ class OIDCController(LoggerMixin):
 
         try:
             logout_url = auth_manager.build_logout_url(
-                id_token_hint, callback_url, logout_state
+                stored_id_token, callback_url, logout_state
             )
         except Exception as e:
             self.log.exception("Failed to build logout URL")

@@ -13,7 +13,6 @@ from palace.manager.integration.patron_auth.oidc.configuration.model import (
     OIDCAuthSettings,
 )
 from palace.manager.integration.patron_auth.oidc.controller import (
-    OIDC_INVALID_ID_TOKEN_HINT,
     OIDC_INVALID_REQUEST,
     OIDC_INVALID_RESPONSE,
     OIDC_INVALID_STATE,
@@ -714,6 +713,7 @@ class TestOIDCControllerLogout:
         mock_auth_manager.validate_id_token_hint.return_value = {
             "sub": "user123@example.com"
         }
+        mock_auth_manager.supports_rp_initiated_logout.return_value = True
         mock_auth_manager.build_logout_url.return_value = (
             "https://oidc.provider.test/logout"
             "?id_token_hint=test.token"
@@ -741,6 +741,7 @@ class TestOIDCControllerLogout:
             "id_token_claims": {"sub": "user123@example.com"},
             "access_token": "access-token",
             "refresh_token": "refresh-token",
+            "id_token": "raw.id.token.jwt",
         }
 
         # Set up library_authenticators dict
@@ -761,7 +762,6 @@ class TestOIDCControllerLogout:
 
             params = {
                 "provider": "Test OIDC",
-                "id_token_hint": "test.id.token",
                 "post_logout_redirect_uri": "https://app.example.com/logout/callback",
             }
             headers = {"Authorization": "Bearer valid.jwt.token"}
@@ -777,6 +777,92 @@ class TestOIDCControllerLogout:
             )
             # Verify refresh token revocation was attempted
             mock_auth_manager.revoke_token.assert_called_once_with("refresh-token")
+            # Verify stored id_token was used as id_token_hint for RP-Initiated Logout
+            mock_auth_manager.build_logout_url.assert_called_once_with(
+                "raw.id.token.jwt",
+                "https://cm.test/oidc_logout_callback",
+                mock_auth_manager.build_logout_url.call_args[0][2],
+            )
+
+    def test_oidc_logout_initiate_revocation_only(self, logout_controller, db):
+        """Test logout for providers with revocation_endpoint but no end_session_endpoint.
+
+        The flow should: invalidate CM credential, revoke token, redirect directly
+        to post_logout_redirect_uri without going through the IdP.
+        """
+        controller = logout_controller
+        patron = db.patron()
+        patron.authorization_identifier = "user123@example.com"
+        db.session.commit()
+
+        library = db.default_library()
+
+        mock_library_auth = Mock()
+        mock_library_auth.bearer_token_signing_secret = "test-secret"
+        mock_provider = Mock()
+        mock_provider._settings = Mock()
+        mock_provider._settings.patron_id_claim = "sub"
+        mock_provider._credential_manager = Mock()
+        mock_provider.integration_id = 1
+
+        mock_auth_manager = Mock()
+        # Provider has revocation but NOT RP-Initiated Logout
+        mock_auth_manager.supports_rp_initiated_logout.return_value = False
+        mock_provider.get_authentication_manager.return_value = mock_auth_manager
+
+        mock_patron = Mock()
+        mock_patron.id = patron.id
+        mock_provider._credential_manager.lookup_patron_by_identifier.return_value = (
+            mock_patron
+        )
+        mock_provider._credential_manager.invalidate_patron_credentials.return_value = 1
+        mock_provider._credential_manager.extract_token_data.return_value = {
+            "id_token_claims": {"sub": "user123@example.com"},
+            "access_token": "access-token",
+            "refresh_token": "refresh-token",
+        }
+
+        mock_library_auth.oidc_provider_lookup.return_value = mock_provider
+        mock_library_auth.decode_bearer_token.return_value = (
+            "Test OIDC",
+            "provider-token",
+        )
+        mock_provider._credential_manager.lookup_oidc_token_by_value.return_value = (
+            Mock()
+        )
+
+        controller._authenticator.library_authenticators[library.short_name] = (
+            mock_library_auth
+        )
+
+        with patch(
+            "palace.manager.integration.patron_auth.oidc.controller.get_request_library",
+            return_value=library,
+        ):
+            params = {
+                "provider": "Test OIDC",
+                "id_token_hint": "test.id.token",
+                "post_logout_redirect_uri": "https://app.example.com/logout/callback",
+            }
+            headers = {"Authorization": "Bearer valid.jwt.token"}
+
+            result = controller.oidc_logout_initiate(params, headers, db.session)
+
+            # Should redirect directly, not to the IdP
+            assert result.status_code == 302
+            assert "https://app.example.com/logout/callback" in result.location
+            assert "logout_status=success" in result.location
+
+            # Verify RP-Initiated Logout was NOT attempted
+            mock_auth_manager.build_logout_url.assert_not_called()
+
+            # Verify token was revoked
+            mock_auth_manager.revoke_token.assert_called_once_with("refresh-token")
+
+            # Verify CM credentials were invalidated
+            mock_provider._credential_manager.invalidate_patron_credentials.assert_called_once_with(
+                db.session, patron.id
+            )
 
     @pytest.mark.parametrize(
         "library_index,patron_email,logout_url",
@@ -806,6 +892,7 @@ class TestOIDCControllerLogout:
         patrons = []
         mock_library_auths = []
         mock_auth_managers = []
+        mock_providers = []
 
         for i, library in enumerate(libraries):
             # Create patron
@@ -825,9 +912,7 @@ class TestOIDCControllerLogout:
             mock_provider.integration_id = i + 1
 
             mock_auth_manager = Mock()
-            mock_auth_manager.validate_id_token_hint.return_value = {
-                "sub": patron.authorization_identifier
-            }
+            mock_auth_manager.supports_rp_initiated_logout.return_value = True
             mock_auth_manager.build_logout_url.return_value = (
                 f"https://provider{i+1}.test/logout"
             )
@@ -843,12 +928,19 @@ class TestOIDCControllerLogout:
             mock_provider._credential_manager.lookup_oidc_token_by_value.return_value = (
                 Mock()
             )
+            mock_provider._credential_manager.extract_token_data.return_value = {
+                "id_token_claims": {"sub": patron.authorization_identifier},
+                "access_token": "access-token",
+                "refresh_token": "refresh-token",
+                "id_token": f"raw.id.token.{i+1}",
+            }
             mock_library_auth.decode_bearer_token.return_value = (
                 "Test OIDC",
                 "provider-token",
             )
             mock_library_auth.oidc_provider_lookup.return_value = mock_provider
             mock_library_auths.append(mock_library_auth)
+            mock_providers.append(mock_provider)
 
             # Register library authenticator
             controller._authenticator.library_authenticators[library.short_name] = (
@@ -894,57 +986,40 @@ class TestOIDCControllerLogout:
             assert result.status_code == 302
             assert logout_url in result.location
 
-            # Verify correct auth manager was called
-            target_auth_manager.validate_id_token_hint.assert_called_once()
-            for i, auth_manager in enumerate(mock_auth_managers):
+            # Verify correct provider's credential data was used
+            mock_providers[
+                library_index
+            ]._credential_manager.extract_token_data.assert_called_once()
+            for i, provider in enumerate(mock_providers):
                 if i != library_index:
-                    auth_manager.validate_id_token_hint.assert_not_called()
+                    provider._credential_manager.extract_token_data.assert_not_called()
 
     @pytest.mark.parametrize(
-        "params,error_constant_name,expected_message",
+        "params,expected_message",
         [
             pytest.param(
                 {
-                    "id_token_hint": "test.id.token",
                     "post_logout_redirect_uri": "https://app.example.com/logout/callback",
                 },
-                "OIDC_INVALID_REQUEST",
                 "Missing 'provider' parameter in logout request",
                 id="missing-provider",
             ),
             pytest.param(
                 {
                     "provider": "Test OIDC",
-                    "post_logout_redirect_uri": "https://app.example.com/logout/callback",
                 },
-                "OIDC_INVALID_ID_TOKEN_HINT",
-                "Missing 'id_token_hint' parameter in logout request",
-                id="missing-id-token-hint",
-            ),
-            pytest.param(
-                {
-                    "provider": "Test OIDC",
-                    "id_token_hint": "test.id.token",
-                },
-                "OIDC_INVALID_REQUEST",
                 "Missing 'post_logout_redirect_uri' parameter in logout request",
                 id="missing-post-logout-redirect-uri",
             ),
         ],
     )
     def test_oidc_logout_initiate_missing_parameter(
-        self, logout_controller, db, params, error_constant_name, expected_message
+        self, logout_controller, db, params, expected_message
     ):
         """Test OIDC logout initiate with missing required parameters."""
-        error_constant = (
-            OIDC_INVALID_REQUEST
-            if error_constant_name == "OIDC_INVALID_REQUEST"
-            else OIDC_INVALID_ID_TOKEN_HINT
-        )
-
         result = logout_controller.oidc_logout_initiate(params, {}, db.session)
 
-        assert result == error_constant.detailed(expected_message)
+        assert result == OIDC_INVALID_REQUEST.detailed(expected_message)
 
     def test_oidc_logout_initiate_no_authenticator_for_library(
         self, logout_controller, db
@@ -958,7 +1033,6 @@ class TestOIDCControllerLogout:
         ):
             params = {
                 "provider": "Test OIDC",
-                "id_token_hint": "test.id.token",
                 "post_logout_redirect_uri": "https://app.example.com/logout/callback",
             }
 
@@ -1030,7 +1104,6 @@ class TestOIDCControllerLogout:
         request_headers = {} if auth_header is None else {"Authorization": auth_header}
         params = {
             "provider": "Test OIDC",
-            "id_token_hint": "test.id.token",
             "post_logout_redirect_uri": "https://app.example.com/logout/callback",
         }
 
@@ -1065,7 +1138,6 @@ class TestOIDCControllerLogout:
         ):
             params = {
                 "provider": "Unknown",
-                "id_token_hint": "test.id.token",
                 "post_logout_redirect_uri": "https://app.example.com/logout/callback",
             }
             headers = {"Authorization": "Bearer valid.jwt.token"}
@@ -1075,34 +1147,31 @@ class TestOIDCControllerLogout:
             assert result == UNKNOWN_OIDC_PROVIDER
 
     @pytest.mark.parametrize(
-        "validation_error,claims_returned,expected_uri,expected_message",
+        "extract_side_effect,token_data,expected_message",
         [
             pytest.param(
-                Exception("Token expired"),
+                ValueError("Corrupt credential"),
                 None,
-                OIDC_INVALID_ID_TOKEN_HINT.uri,
-                "ID token hint validation failed",
-                id="validation-exception",
+                "Invalid credential data",
+                id="extract-token-data-exception",
             ),
             pytest.param(
                 None,
-                {"iss": "issuer"},
-                OIDC_INVALID_ID_TOKEN_HINT.uri,
-                "missing patron identifier claim",
+                {"id_token_claims": {"iss": "issuer"}, "access_token": "tok"},
+                "Credential missing patron identifier claim",
                 id="missing-patron-claim",
             ),
         ],
     )
-    def test_oidc_logout_initiate_id_token_hint_errors(
+    def test_oidc_logout_initiate_credential_data_errors(
         self,
         logout_controller,
         db,
-        validation_error,
-        claims_returned,
-        expected_uri,
+        extract_side_effect,
+        token_data,
         expected_message,
     ):
-        """Test logout initiate ID token hint validation errors."""
+        """Test logout initiate errors when stored credential data is invalid."""
         library = db.default_library()
 
         mock_library_auth = Mock()
@@ -1118,11 +1187,16 @@ class TestOIDCControllerLogout:
             Mock()
         )
 
-        mock_auth_manager = Mock()
-        if validation_error:
-            mock_auth_manager.validate_id_token_hint.side_effect = validation_error
+        if extract_side_effect:
+            mock_provider._credential_manager.extract_token_data.side_effect = (
+                extract_side_effect
+            )
         else:
-            mock_auth_manager.validate_id_token_hint.return_value = claims_returned
+            mock_provider._credential_manager.extract_token_data.return_value = (
+                token_data
+            )
+
+        mock_auth_manager = Mock()
         mock_provider.get_authentication_manager.return_value = mock_auth_manager
 
         mock_library_auth.oidc_provider_lookup.return_value = mock_provider
@@ -1136,14 +1210,13 @@ class TestOIDCControllerLogout:
         ):
             params = {
                 "provider": "Test OIDC",
-                "id_token_hint": "test.id.token",
                 "post_logout_redirect_uri": "https://app.example.com/logout/callback",
             }
             headers = {"Authorization": "Bearer valid.jwt.token"}
 
             result = logout_controller.oidc_logout_initiate(params, headers, db.session)
 
-            assert result.uri == expected_uri
+            assert result.uri == OIDC_INVALID_REQUEST.uri
             assert expected_message in result.detail
 
     @pytest.mark.parametrize(
@@ -1220,8 +1293,20 @@ class TestOIDCControllerLogout:
                 None
             )
 
+        token_data: dict = {
+            "id_token_claims": {"sub": "user@test.com"},
+            "access_token": "access-token",
+        }
+        if build_url_error:
+            # RP-Initiated Logout path — needs id_token and the method to return True
+            token_data["id_token"] = "test.id.token"
+
+        mock_provider._credential_manager.extract_token_data.return_value = token_data
+
         mock_auth_manager = Mock()
-        mock_auth_manager.validate_id_token_hint.return_value = {"sub": "user@test.com"}
+        mock_auth_manager.supports_rp_initiated_logout.return_value = bool(
+            build_url_error
+        )
         if build_url_error:
             mock_auth_manager.build_logout_url.side_effect = build_url_error
         else:
@@ -1248,7 +1333,6 @@ class TestOIDCControllerLogout:
 
             params = {
                 "provider": "Test OIDC",
-                "id_token_hint": "test.id.token",
                 "post_logout_redirect_uri": "https://app.example.com/logout/callback",
             }
             headers = {"Authorization": "Bearer valid.jwt.token"}
