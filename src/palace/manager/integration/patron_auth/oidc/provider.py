@@ -291,6 +291,7 @@ class OIDCAuthenticationProvider(
         access_token: str,
         refresh_token: str | None = None,
         expires_in: int | None = None,
+        id_token: str | None = None,
     ) -> tuple[Credential, Patron, PatronData]:
         """Handle OIDC callback after successful authentication.
 
@@ -299,6 +300,7 @@ class OIDCAuthenticationProvider(
         :param access_token: Access token from token exchange
         :param refresh_token: Optional refresh token
         :param expires_in: Token expiry in seconds
+        :param id_token: Raw ID token JWT (stored for use as id_token_hint on logout)
         :return: 3-tuple (Credential, Patron, PatronData)
         """
         patron_data = self.remote_patron_lookup_from_oidc_claims(id_token_claims)
@@ -315,6 +317,7 @@ class OIDCAuthenticationProvider(
             refresh_token,
             expires_in,
             self._settings.session_lifetime,
+            id_token,
         )
 
         return credential, patron, patron_data
