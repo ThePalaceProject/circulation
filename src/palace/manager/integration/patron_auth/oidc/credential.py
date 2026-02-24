@@ -57,21 +57,25 @@ class OIDCCredentialManager(LoggerMixin):
         id_token_claims: dict[str, Any],
         access_token: str,
         refresh_token: str | None = None,
+        id_token: str | None = None,
     ) -> str:
         """Create OIDC token value by serializing token data.
 
         :param id_token_claims: Validated ID token claims
         :param access_token: Access token
         :param refresh_token: Optional refresh token
+        :param id_token: Raw ID token JWT (stored for use as id_token_hint on logout)
         :return: JSON-serialized token data
         """
-        token_data = {
+        token_data: dict[str, Any] = {
             "id_token_claims": id_token_claims,
             "access_token": access_token,
         }
 
         if refresh_token:
             token_data["refresh_token"] = refresh_token
+        if id_token:
+            token_data["id_token"] = id_token
 
         return json.dumps(token_data)
 
@@ -108,6 +112,7 @@ class OIDCCredentialManager(LoggerMixin):
         refresh_token: str | None = None,
         expires_in: int | None = None,
         session_lifetime_days: int | None = None,
+        id_token: str | None = None,
     ) -> Credential:
         """Create a Credential object for OIDC tokens.
 
@@ -118,6 +123,7 @@ class OIDCCredentialManager(LoggerMixin):
         :param refresh_token: Optional refresh token
         :param expires_in: Token lifetime in seconds (from provider)
         :param session_lifetime_days: Override session lifetime in days
+        :param id_token: Raw ID token JWT (stored for use as id_token_hint on logout)
         :return: Created Credential object
         """
         # Calculate expiry
@@ -138,7 +144,7 @@ class OIDCCredentialManager(LoggerMixin):
 
         # Create token value
         token_value = self._create_token_value(
-            id_token_claims, access_token, refresh_token
+            id_token_claims, access_token, refresh_token, id_token
         )
 
         # Get data source
@@ -279,25 +285,26 @@ class OIDCCredentialManager(LoggerMixin):
             self.log.exception("Failed to refresh OIDC token")
             raise
 
-        # Validate new ID token if present
-        new_id_token_claims = token_data[
-            "id_token_claims"
-        ]  # Keep old claims as fallback
+        # Validate new ID token if present; fall back to stored values.
+        new_id_token_claims = token_data["id_token_claims"]
+        new_id_token = token_data.get("id_token")
         if "id_token" in new_tokens:
             try:
                 # Validate new ID token (no nonce check for refresh)
                 new_id_token_claims = auth_manager.validate_id_token(
                     new_tokens["id_token"], nonce=None
                 )
+                new_id_token = new_tokens["id_token"]
             except Exception as e:
                 self.log.warning(f"Failed to validate refreshed ID token: {e}")
-                # Keep using old claims if new token validation fails
+                # Keep using old claims and token if new token validation fails
 
         # Update credential with new tokens
         new_token_value = self._create_token_value(
             new_id_token_claims,
             new_tokens["access_token"],
             new_tokens.get("refresh_token", refresh_token),  # Use new or keep old
+            new_id_token,
         )
 
         credential.credential = new_token_value
