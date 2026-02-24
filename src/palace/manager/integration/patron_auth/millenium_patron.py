@@ -8,12 +8,13 @@ import dateutil
 from flask_babel import lazy_gettext as _
 from lxml import etree
 
-from palace.manager.api.authentication.base import PatronData
+from palace.manager.api.authentication.base import PatronAuthResult, PatronData
 from palace.manager.api.authentication.basic import (
     BasicAuthenticationProvider,
     BasicAuthProviderLibrarySettings,
     BasicAuthProviderSettings,
 )
+from palace.manager.api.authentication.patron_debug import HasPatronDebug
 from palace.manager.integration.settings import (
     FormFieldType,
     FormMetadata,
@@ -131,7 +132,10 @@ class MilleniumPatronLibrarySettings(BasicAuthProviderLibrarySettings):
 
 
 class MilleniumPatronAPI(
-    BasicAuthenticationProvider[MilleniumPatronSettings, MilleniumPatronLibrarySettings]
+    BasicAuthenticationProvider[
+        MilleniumPatronSettings, MilleniumPatronLibrarySettings
+    ],
+    HasPatronDebug,
 ):
     @classmethod
     def label(cls) -> str:
@@ -242,38 +246,45 @@ class MilleniumPatronAPI(
                 return patrondata
         return None
 
-    def _remote_authenticate_pintest(
-        self, username: str, password: str | None
-    ) -> PatronData | None:
-        # Patrons are authenticated with a secret PIN.
-        #
-        # The PIN is URL-encoded. The username is not: as far as
-        # we can tell Millenium Patron doesn't even try to decode
-        # it.
+    def _pintest_request(self, username: str, password: str | None) -> dict[str, str]:
+        """Perform a PIN test HTTP request and return the parsed response.
+
+        The PIN is URL-encoded. The username is not: as far as we can tell
+        Millenium Patron doesn't even try to decode it.
+
+        :param username: The patron barcode / identifier.
+        :param password: The patron PIN.
+        :return: A dict of the parsed response fields (e.g. ``{"RETCOD": "0"}``).
+        """
         quoted_password = parse.quote(password, safe="") if password else password
 
-        result: dict = {}
         if self.use_post:
             data = f"number={username}&pin={quoted_password}"
-            path = "pintest"
-            url = self.root + path
+            url = self.root + "pintest"
             response = self.request_post(
                 url,
                 data=data,
                 headers={"content-type": "application/x-www-form-urlencoded"},
             )
-            result = dict(self._extract_text_nodes(response.content))
         else:
             path = "%(barcode)s/%(pin)s/pintest" % dict(
                 barcode=username, pin=quoted_password
             )
             url = self.root + path
             response = self.request(url)
-            result = dict(self._extract_text_nodes(response.content))
 
+        return dict(self._extract_text_nodes(response.content))
+
+    def _remote_authenticate_pintest(
+        self, username: str, password: str | None
+    ) -> PatronData | None:
+        """Authenticate a patron via PIN test.
+
+        :return: A minimal :class:`PatronData` on success, or ``None``.
+        """
+        result = self._pintest_request(username, password)
         if result.get("RETCOD") == "0":
             return PatronData(authorization_identifier=username, complete=False)
-
         return None
 
     @classmethod
@@ -290,20 +301,29 @@ class MilleniumPatronAPI(
             return True
         return False
 
+    def _patron_dump_request(self, identifier: str) -> bytes:
+        """Fetch the raw patron dump for *identifier*.
+
+        :param identifier: The patron barcode / identifier.
+        :return: The raw response content from the dump endpoint.
+        """
+        path = "%(barcode)s/dump" % dict(barcode=identifier)
+        url = self.root + path
+        response = self.request(url)
+        return response.content
+
     def remote_patron_lookup(
         self, patron_or_patrondata_or_identifier: PatronData | Patron | str
     ) -> PatronData | None:
+        """Look up patron information for the given identifier."""
         if isinstance(patron_or_patrondata_or_identifier, str):
             identifier = patron_or_patrondata_or_identifier
         else:
             if not patron_or_patrondata_or_identifier.authorization_identifier:
                 return None
             identifier = patron_or_patrondata_or_identifier.authorization_identifier
-        """Look up patron information for the given identifier."""
-        path = "%(barcode)s/dump" % dict(barcode=identifier)
-        url = self.root + path
-        response = self.request(url)
-        return self.patron_dump_to_patrondata(identifier, response.content)
+        content = self._patron_dump_request(identifier)
+        return self.patron_dump_to_patrondata(identifier, content)
 
     # End implementation of BasicAuthenticationProvider abstract
     # methods.
@@ -523,6 +543,85 @@ class MilleniumPatronAPI(
                 self.log.warning("Unexpected line in patron dump: %s", line)
                 continue
             yield kv.split("=", 1)
+
+    def patron_debug(
+        self, username: str, password: str | None
+    ) -> list[PatronAuthResult]:
+        """Run step-by-step diagnostic checks against the Millenium Patron API."""
+        results: list[PatronAuthResult] = []
+
+        results.append(self.server_side_validation(username, password))
+
+        # PIN test (if applicable)
+        if self.collects_password and self.auth_mode == AuthenticationMode.PIN:
+            pintest_result = self._pintest_request(username, password)
+            auth_success = pintest_result.get("RETCOD") == "0"
+            results.append(
+                PatronAuthResult(
+                    label="PIN Test",
+                    success=auth_success,
+                    details=pintest_result,
+                )
+            )
+
+        # Patron dump
+        dump_content = self._patron_dump_request(username)
+        dump_details = {
+            self._code_from_field(k): v
+            for k, v in self._extract_text_nodes(dump_content)
+        }
+        has_error = self.ERROR_MESSAGE_FIELD in dump_details
+        results.append(
+            PatronAuthResult(
+                label="Patron Dump (Raw HTML)",
+                success=not has_error,
+                details=dump_content.decode(),
+            )
+        )
+
+        results.append(
+            PatronAuthResult(
+                label="Patron Dump (Parsed)",
+                success=not has_error,
+                details=dump_details,
+            )
+        )
+
+        # Parse patron data
+        patrondata = self.patron_dump_to_patrondata(username, dump_content)
+        if patrondata is not None:
+            # Family name verification
+            if (
+                self.collects_password
+                and self.auth_mode == AuthenticationMode.FAMILY_NAME
+            ):
+                name_match = self.family_name_match(patrondata.personal_name, password)
+                results.append(
+                    PatronAuthResult(
+                        label="Family Name Verification",
+                        success=name_match,
+                        details={
+                            "personal_name": patrondata.personal_name,
+                        },
+                    )
+                )
+
+            # Library identifier restriction
+            patrondata, restriction_result = self.check_library_identifier_restriction(
+                patrondata
+            )
+            results.append(restriction_result)
+
+            # Final parsed patron data
+            results.append(
+                PatronAuthResult(
+                    label="Parsed Patron Data",
+                    success=True,
+                    details=patrondata.to_dict,
+                )
+            )
+
+        return results
 
     # A number of regular expressions for finding postal codes in
     # freeform addresses, with more reliable techniques at the front.

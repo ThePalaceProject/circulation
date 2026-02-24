@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Mapping, Sequence
 from typing import Any, TypeVar
 
+from pydantic import BaseModel
 from sqlalchemy import or_
 from sqlalchemy.exc import NoResultFound
 from sqlalchemy.orm import Session
@@ -23,6 +25,27 @@ from palace.manager.util.authentication_for_opds import OPDSAuthenticationFlow
 from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.log import LoggerMixin
 from palace.manager.util.problem_detail import ProblemDetail
+
+type ResultDetails = (
+    str
+    | int
+    | float
+    | bool
+    | None
+    | Sequence[ResultDetails]
+    | Mapping[str, ResultDetails]
+)
+
+
+class PatronAuthResult(BaseModel):
+    """The result of a single patron authentication check."""
+
+    label: str
+    success: bool
+    details: ResultDetails = None
+
+    def __bool__(self) -> bool:
+        return self.success
 
 
 class PatronLookupNotSupported(BasePalaceException):

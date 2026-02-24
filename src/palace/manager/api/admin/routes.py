@@ -513,6 +513,23 @@ def reset_adobe_id():
     return app.manager.admin_patron_controller.reset_adobe_id()
 
 
+@library_route("/admin/manage_patrons/auth_methods", methods=["GET"])
+@has_library
+@returns_json_or_response_or_problem_detail
+@requires_admin
+def patron_auth_methods():
+    return app.manager.admin_patron_controller.get_auth_methods()
+
+
+@library_route("/admin/manage_patrons/debug_auth", methods=["POST"])
+@has_library
+@returns_json_or_response_or_problem_detail
+@requires_admin
+@requires_csrf_token
+def patron_debug_auth():
+    return app.manager.admin_patron_controller.debug_auth()
+
+
 @app.route("/admin/metadata_services", methods=["GET", "POST"])
 @returns_json_or_response_or_problem_detail
 @requires_admin
