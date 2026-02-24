@@ -1,5 +1,7 @@
 import json
-from unittest.mock import MagicMock, PropertyMock, create_autospec
+import logging
+from contextlib import nullcontext
+from unittest.mock import MagicMock, PropertyMock, create_autospec, patch
 from urllib.parse import parse_qs, urlencode, urlsplit
 
 import pytest
@@ -10,6 +12,10 @@ from palace.manager.api.authenticator import Authenticator
 from palace.manager.integration.patron_auth.saml.auth import (
     SAML_INCORRECT_RESPONSE,
     SAMLAuthenticationManager,
+)
+from palace.manager.integration.patron_auth.saml.configuration.problem_details import (
+    SAML_INCORRECT_METADATA,
+    SAML_METADATA_NOT_CONFIGURED,
 )
 from palace.manager.integration.patron_auth.saml.controller import (
     SAML_INVALID_REQUEST,
@@ -472,3 +478,139 @@ class TestSAMLController:
                     controller_fixture.db.session,
                     finish_authentication_result,
                 )
+
+    @pytest.mark.parametrize(
+        "library_in_context, register_provider, sp_metadata_xml, expected_problem, expected_log_message",
+        [
+            pytest.param(
+                False,
+                False,
+                None,
+                SAML_METADATA_NOT_CONFIGURED,
+                "SAML metadata is not configured.",
+                id="no-library-no-env-metadata",
+            ),
+            pytest.param(
+                False,
+                False,
+                saml_strings.CORRECT_XML_WITH_ONE_SP,
+                None,
+                None,
+                id="no-library-env-metadata-configured",
+            ),
+            pytest.param(
+                False,
+                False,
+                "<invalid",
+                SAML_INCORRECT_METADATA,
+                "SAML metadata has an incorrect format.",
+                id="no-library-invalid-metadata",
+            ),
+            pytest.param(
+                True,
+                False,
+                None,
+                SAML_METADATA_NOT_CONFIGURED,
+                "is not configured for SAML authentication.",
+                id="library-no-saml-integration",
+            ),
+            pytest.param(
+                True,
+                True,
+                saml_strings.CORRECT_XML_WITH_ONE_SP,
+                None,
+                None,
+                id="library-saml-integration-metadata-configured",
+            ),
+            pytest.param(
+                True,
+                True,
+                None,
+                SAML_METADATA_NOT_CONFIGURED,
+                "SAML metadata is not configured.",
+                id="library-saml-integration-no-metadata",
+            ),
+            pytest.param(
+                True,
+                True,
+                "<invalid",
+                SAML_INCORRECT_METADATA,
+                "SAML metadata has an incorrect format.",
+                id="library-saml-integration-invalid-metadata",
+            ),
+        ],
+    )
+    def test_saml_sp_metadata(
+        self,
+        controller_fixture: ControllerFixture,
+        caplog: pytest.LogCaptureFixture,
+        library_in_context: bool,
+        register_provider: bool,
+        sp_metadata_xml: str | None,
+        expected_problem: ProblemDetail | None,
+        expected_log_message: str | None,
+    ):
+        authenticator = Authenticator(
+            controller_fixture.db.session,
+            controller_fixture.db.session.query(Library),
+        )
+
+        if register_provider:
+            provider = create_autospec(spec=SAMLWebSSOAuthenticationProvider)
+            provider.label = MagicMock(
+                return_value=SAMLWebSSOAuthenticationProvider.label()
+            )
+            provider.get_sp_metadata_xml = MagicMock(return_value=sp_metadata_xml)
+            authenticator.library_authenticators["default"].register_saml_provider(
+                provider
+            )
+
+        controller = SAMLController(controller_fixture.app.manager, authenticator)
+
+        raises = (
+            pytest.raises(ProblemDetailException) if expected_problem else nullcontext()
+        )
+        caplog.set_level(
+            logging.ERROR,
+            logger="palace.manager.integration.patron_auth.saml.controller",
+        )
+        with controller_fixture.app.test_request_context("/saml/metadata/sp"):
+            if library_in_context:
+                request.library = controller_fixture.db.default_library()  # type: ignore[attr-defined]
+
+            with patch(
+                "palace.manager.integration.patron_auth.saml.controller"
+                ".SamlServiceProviderConfiguration.get_metadata",
+                return_value=sp_metadata_xml,
+            ):
+                with raises as exc_info:
+                    result = controller.saml_sp_metadata()
+
+        if expected_problem:
+            assert exc_info.value.problem_detail.uri == expected_problem.uri
+            assert (
+                exc_info.value.problem_detail.status_code
+                == expected_problem.status_code
+            )
+        else:
+            assert result.status_code == 200
+            assert result.content_type == "application/xml"
+            stripped = sp_metadata_xml.strip()
+            expected_xml = (
+                '<?xml version="1.0" encoding="UTF-8"?>\n' + stripped
+                if not stripped.startswith("<?xml")
+                else stripped
+            )
+            assert result.get_data(as_text=True) == expected_xml
+
+        controller_errors = [
+            r
+            for r in caplog.records
+            if r.levelno == logging.ERROR
+            and r.name == "palace.manager.integration.patron_auth.saml.controller"
+        ]
+        if expected_log_message:
+            assert len(controller_errors) == 1
+            assert expected_log_message in controller_errors[0].message
+        else:
+            assert controller_errors == []

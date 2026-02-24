@@ -12,6 +12,9 @@ from palace.manager.integration.patron_auth.saml.configuration.model import (
     SAMLWebSSOAuthLibrarySettings,
     SAMLWebSSOAuthSettings,
 )
+from palace.manager.integration.patron_auth.saml.configuration.service_provider import (
+    SamlServiceProviderConfiguration,
+)
 from palace.manager.integration.patron_auth.saml.credential import SAMLCredentialManager
 from palace.manager.integration.patron_auth.saml.metadata.model import (
     SAMLLocalizedMetadataItem,
@@ -324,6 +327,18 @@ class SAMLWebSSOAuthenticationProvider(
         )
 
         return authentication_manager
+
+    def get_sp_metadata_xml(self) -> str | None:
+        """Returns the raw SP metadata XML string for this integration.
+
+        Returns integration-level metadata if configured, falling back to
+        system-wide environment configuration.
+
+        :return: Raw SP metadata XML string, or None if not configured.
+        """
+        if self._settings.service_provider_xml_metadata:
+            return self._settings.service_provider_xml_metadata
+        return SamlServiceProviderConfiguration().get_metadata()
 
     def remote_patron_lookup_from_saml_subject(
         self, subject: SAMLSubject

@@ -9,9 +9,24 @@ from urllib.parse import (
     urlunparse,
 )
 
-from flask import redirect
+from flask import Response, redirect
 from flask_babel import lazy_gettext as _
 
+from palace.manager.api.util.flask import get_request_library
+from palace.manager.integration.patron_auth.saml.configuration.problem_details import (
+    SAML_INCORRECT_METADATA,
+    SAML_METADATA_NOT_CONFIGURED,
+)
+from palace.manager.integration.patron_auth.saml.configuration.service_provider import (
+    SamlServiceProviderConfiguration,
+)
+from palace.manager.integration.patron_auth.saml.metadata.parser import (
+    SAMLMetadataParser,
+    SAMLMetadataParsingError,
+)
+from palace.manager.integration.patron_auth.saml.provider import (
+    SAMLWebSSOAuthenticationProvider,
+)
 from palace.manager.util.problem_detail import (
     ProblemDetail,
     ProblemDetail as pd,
@@ -356,3 +371,53 @@ class SAMLController:
         redirect_uri = self._add_params_to_url(redirect_uri, params)
 
         return redirect(redirect_uri)
+
+    def saml_sp_metadata(self) -> Response:
+        """Returns the SAML SP metadata XML for the active library or system-wide.
+
+        When a library is set in the request context (via the ``allows_library``
+        decorator), returns the SP metadata for that library's SAML integration.
+        Otherwise returns the system-wide SP metadata from environment configuration.
+
+        :return: Flask response with SP metadata XML.
+        :raises ProblemDetailException: If the metadata is not configured or has an
+            incorrect format.
+        """
+        library = get_request_library(default=None)
+
+        if library is not None:
+            provider = self._authenticator.saml_provider_lookup(
+                SAMLWebSSOAuthenticationProvider.label()
+            )
+            if isinstance(provider, ProblemDetail):
+                message = (
+                    f"Library '{library.name}' ('{library.short_name}')"
+                    " is not configured for SAML authentication."
+                )
+                self._logger.error(message)
+                raise ProblemDetailException(
+                    SAML_METADATA_NOT_CONFIGURED.detailed(_(message))
+                )
+            xml = provider.get_sp_metadata_xml()
+        else:
+            xml = SamlServiceProviderConfiguration().get_metadata()
+
+        if not xml:
+            message = "SAML metadata is not configured."
+            self._logger.error(message)
+            raise ProblemDetailException(
+                SAML_METADATA_NOT_CONFIGURED.detailed(_(message))
+            )
+
+        try:
+            SAMLMetadataParser().parse(xml)
+        except SAMLMetadataParsingError as e:
+            message = "SAML metadata has an incorrect format."
+            self._logger.error(message)
+            raise ProblemDetailException(SAML_INCORRECT_METADATA) from e
+
+        xml = xml.strip()
+        if not xml.startswith("<?xml"):
+            xml = '<?xml version="1.0" encoding="UTF-8"?>\n' + xml
+
+        return Response(xml, 200, {"Content-Type": "application/xml"})
