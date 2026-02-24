@@ -5,7 +5,7 @@ import datetime
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Mapping
 from functools import cached_property
-from typing import TypedDict, Unpack
+from typing import Any, TypedDict, Unpack
 
 from celery.canvas import Signature
 from flask_babel import lazy_gettext as _
@@ -62,6 +62,20 @@ class CirculationInternalFormatsMixin:
                 )
             )
         return internal_format
+
+
+class SupportsImport(ABC):
+    """Mixin for circulation APIs that support collection import."""
+
+    @classmethod
+    @abstractmethod
+    def import_task(cls, collection_id: int, force: bool = False) -> Signature:
+        """Return the Celery task signature for importing the collection.
+
+        :param collection_id: The ID of the collection to import.
+        :param force: If True, the import will be forced even if it has already been done.
+        """
+        ...
 
 
 class BaseCirculationAPI[
@@ -208,14 +222,12 @@ class BaseCirculationAPI[
         """The exponent part of the RSA public key used for DRM."""
 
     @classmethod
-    def import_task(cls, collection_id: int, force: bool = False) -> Signature:
-        """
-        Return the signature for a Celery task that will import the collection.
-
-        :param collection_id: The ID of the collection to import.
-        :param force: If True, the import will be forced even if it has already been done.
-        """
-        raise NotImplementedError()
+    def protocol_details(cls, db: Session) -> dict[str, Any]:
+        """Include ``supports_import`` so the admin UI knows whether to
+        offer an import button for collections using this protocol."""
+        details = super().protocol_details(db)
+        details["supports_import"] = issubclass(cls, SupportsImport)
+        return details
 
     @property
     @abstractmethod

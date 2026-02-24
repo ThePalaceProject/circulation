@@ -20,6 +20,7 @@ from palace.manager.api.app import app
 from palace.manager.api.controller.static_file import StaticFileController
 from palace.manager.api.routes import allows_library, has_library, library_route
 from palace.manager.core.app_server import returns_problem_detail
+from palace.manager.core.problem_details import INVALID_INPUT
 from palace.manager.sqlalchemy.model.admin import Admin
 from palace.manager.util.problem_detail import BaseProblemDetailException, ProblemDetail
 
@@ -415,6 +416,21 @@ def collections():
 def collection(collection_id):
     return app.manager.admin_collection_settings_controller.process_delete(
         collection_id
+    )
+
+
+@app.route("/admin/collection/<collection_id>/import", methods=["POST"])
+@returns_json_or_response_or_problem_detail
+@requires_admin
+@requires_csrf_token
+def collection_import(collection_id):
+    try:
+        integration_id = int(collection_id)
+    except ValueError:
+        return INVALID_INPUT
+
+    return app.manager.admin_collection_settings_controller.process_import(
+        integration_id
     )
 
 

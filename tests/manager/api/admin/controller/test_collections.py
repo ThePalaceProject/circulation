@@ -15,8 +15,10 @@ from palace.manager.api.admin.problem_details import (
     CANNOT_CHANGE_PROTOCOL,
     CANNOT_DELETE_COLLECTION_WITH_CHILDREN,
     FAILED_TO_RUN_SELF_TESTS,
+    IMPORT_NOT_SUPPORTED,
     INCOMPLETE_CONFIGURATION,
     INTEGRATION_NAME_ALREADY_IN_USE,
+    MISSING_COLLECTION,
     MISSING_IDENTIFIER,
     MISSING_PARENT,
     MISSING_SERVICE,
@@ -393,12 +395,7 @@ class TestCollectionSettings:
             short_name="L3",
         )
 
-        with (
-            flask_app_fixture.test_request_context_system_admin("/", method="POST"),
-            patch.object(
-                OverdriveAPI, "import_task", autospec=True
-            ) as mock_import_task,
-        ):
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
                     ("name", "New Collection"),
@@ -443,10 +440,6 @@ class TestCollectionSettings:
                 "overdrive_client_secret"
             ]
         )
-
-        # We queued up an import task for the new collection.
-        mock_import_task.assert_called_once_with(collection.id)
-        mock_import_task.return_value.apply_async.assert_called_once()
 
         # Two libraries now have access to the collection.
         assert [collection] == l1.associated_collections
@@ -523,15 +516,7 @@ class TestCollectionSettings:
             short_name="L1",
         )
 
-        with (
-            flask_app_fixture.test_request_context_system_admin("/", method="POST"),
-            patch.object(
-                OverdriveAPI,
-                "import_task",
-                autospec=True,
-                side_effect=NotImplementedError,
-            ) as mock_import_task,
-        ):
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
                     ("id", str(collection.integration_configuration.id)),
@@ -553,10 +538,6 @@ class TestCollectionSettings:
             assert isinstance(response, Response)
 
         assert collection.integration_configuration.id == int(response.get_data())
-
-        # We tried to queue up an import task for the collection, but it failed
-        # with a NotImplementedError. This is expected and silently handled.
-        mock_import_task.assert_called_once_with(collection.id)
 
         # The collection has been changed.
         assert "user2" == collection.integration_configuration.settings_dict.get(
@@ -1004,3 +985,126 @@ class TestCollectionSettings:
         mock.assert_called_once_with(db.session, collection)
         mock()._run_self_tests.assert_called_once_with(db.session)
         assert mock().store_self_test_results.call_count == 1
+
+    def test_process_import_requires_system_admin(
+        self,
+        controller: CollectionSettingsController,
+        flask_app_fixture: FlaskAppFixture,
+        db: DatabaseTransactionFixture,
+    ):
+        collection = db.collection(protocol=BoundlessApi)
+        assert collection.integration_configuration.id is not None
+        with flask_app_fixture.test_request_context("/", method="POST"):
+            pytest.raises(
+                AdminNotAuthorized,
+                controller.process_import,
+                collection.integration_configuration.id,
+            )
+
+    def test_process_import_missing_service(
+        self,
+        controller: CollectionSettingsController,
+        flask_app_fixture: FlaskAppFixture,
+    ):
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
+            response = controller.process_import(999999)
+        assert response == MISSING_SERVICE
+
+    def test_process_import_marked_for_deletion(
+        self,
+        controller: CollectionSettingsController,
+        flask_app_fixture: FlaskAppFixture,
+        db: DatabaseTransactionFixture,
+    ):
+        collection = db.collection(protocol=BoundlessApi)
+        collection.marked_for_deletion = True
+        assert collection.integration_configuration.id is not None
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
+            response = controller.process_import(
+                collection.integration_configuration.id
+            )
+        assert response == MISSING_COLLECTION
+
+    def test_process_import_unknown_protocol(
+        self,
+        controller: CollectionSettingsController,
+        flask_app_fixture: FlaskAppFixture,
+        db: DatabaseTransactionFixture,
+    ):
+        collection = db.collection(protocol=BoundlessApi)
+        integration = collection.integration_configuration
+        integration.protocol = "UnknownProtocol"
+        assert integration.id is not None
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
+            response = controller.process_import(integration.id)
+        assert response == UNKNOWN_PROTOCOL
+
+    def test_process_import_unsupported_protocol(
+        self,
+        controller: CollectionSettingsController,
+        flask_app_fixture: FlaskAppFixture,
+        db: DatabaseTransactionFixture,
+    ):
+        collection = db.collection(protocol=OverdriveAPI)
+        assert collection.integration_configuration.id is not None
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
+            flask.request.form = ImmutableMultiDict({})
+            response = controller.process_import(
+                collection.integration_configuration.id
+            )
+        assert response == IMPORT_NOT_SUPPORTED
+
+    def test_process_import_success(
+        self,
+        controller: CollectionSettingsController,
+        flask_app_fixture: FlaskAppFixture,
+        db: DatabaseTransactionFixture,
+    ):
+        collection = db.collection(protocol=BoundlessApi)
+        assert collection.integration_configuration.id is not None
+        with (
+            flask_app_fixture.test_request_context_system_admin("/", method="POST"),
+            patch.object(boundless, "import_collection") as mock_import,
+        ):
+            flask.request.form = ImmutableMultiDict({})
+            response = controller.process_import(
+                collection.integration_configuration.id
+            )
+        assert isinstance(response, Response)
+        assert response.status_code == 200
+        assert response.get_data(as_text=True) == "Import task queued."
+        mock_import.s.assert_called_once_with(collection.id, import_all=False)
+        mock_import.s.return_value.apply_async.assert_called_once()
+
+    def test_process_import_with_force(
+        self,
+        controller: CollectionSettingsController,
+        flask_app_fixture: FlaskAppFixture,
+        db: DatabaseTransactionFixture,
+    ):
+        collection = db.collection(protocol=BoundlessApi)
+        assert collection.integration_configuration.id is not None
+        with (
+            flask_app_fixture.test_request_context_system_admin("/", method="POST"),
+            patch.object(boundless, "import_collection") as mock_import,
+        ):
+            flask.request.form = ImmutableMultiDict({"force": "true"})
+            response = controller.process_import(
+                collection.integration_configuration.id
+            )
+        assert isinstance(response, Response)
+        assert response.status_code == 200
+        mock_import.s.assert_called_once_with(collection.id, import_all=True)
+        mock_import.s.return_value.apply_async.assert_called_once()
+
+    def test_protocol_details_supports_import(
+        self,
+        db: DatabaseTransactionFixture,
+    ):
+        # BoundlessApi implements SupportsImport, so supports_import should be True.
+        boundless_details = BoundlessApi.protocol_details(db.session)
+        assert boundless_details["supports_import"] is True
+
+        # OverdriveAPI does not implement SupportsImport, so supports_import should be False.
+        overdrive_details = OverdriveAPI.protocol_details(db.session)
+        assert overdrive_details["supports_import"] is False

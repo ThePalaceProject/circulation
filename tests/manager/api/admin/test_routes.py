@@ -25,6 +25,7 @@ from palace.manager.api.admin.problem_details import (
 from palace.manager.api.controller.circulation_manager import (
     CirculationManagerController,
 )
+from palace.manager.core.problem_details import INVALID_INPUT
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.admin import Admin, AdminRole
 from palace.manager.util import base64
@@ -700,6 +701,28 @@ class TestAdminCollectionSettings:
             http_method="DELETE",
         )
         fixture.assert_supported_methods(url, "DELETE")
+
+    def test_process_import(self, fixture: AdminRouteFixture):
+        url = "/admin/collection/123/import"
+        fixture.assert_authenticated_request_calls(
+            url,
+            fixture.controller.process_import,
+            123,
+            http_method="POST",
+        )
+        fixture.assert_supported_methods(url, "POST")
+
+    def test_process_import_invalid_collection_id(self, fixture: AdminRouteFixture):
+        fixture.manager.admin_sign_in_controller.authenticated = True
+        try:
+            response = fixture.request("/admin/collection/not-a-number/import", "POST")
+        finally:
+            fixture.manager.admin_sign_in_controller.authenticated = False
+
+        body, status_code, _ = response
+        assert status_code == INVALID_INPUT.status_code
+        payload = json.loads(body)
+        assert payload["type"] == INVALID_INPUT.uri
 
     def test_process_collection_self_tests(self, fixture: AdminRouteFixture):
         url = "/admin/collection_self_tests/<identifier>"
