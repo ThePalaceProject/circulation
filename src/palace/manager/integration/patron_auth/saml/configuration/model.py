@@ -145,6 +145,7 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
                 "List of federated (for example, from InCommon Federation) IdPs supported by this authentication provider. "
                 "Try to type the name of the IdP to find it in the list."
             ),
+            type=FormFieldType.MENU,
             options=FederatedIdentityProviderOptions(),
         ),
     ] = None
