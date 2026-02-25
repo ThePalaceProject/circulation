@@ -334,6 +334,11 @@ class SAMLWebSSOAuthenticationProvider(
         Returns integration-level metadata if configured, falling back to
         system-wide environment configuration.
 
+        Note: It is possible for both sources to be absent if the integration
+        was created while a site-wide env var was set (satisfying validation),
+        but the service is later restarted without that env var. In that case
+        this method returns None.
+
         :return: Raw SP metadata XML string, or None if not configured.
         """
         if self._settings.service_provider_xml_metadata:

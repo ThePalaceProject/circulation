@@ -1001,3 +1001,49 @@ class TestSAMLWebSSOAuthenticationProvider:
         assert "NameID" not in problem_detail.detail
         assert "eduPersonUniqueId" not in problem_detail.detail
         assert "uid" not in problem_detail.detail
+
+    @pytest.mark.parametrize(
+        "integration_metadata, env_metadata, expected",
+        [
+            pytest.param(
+                saml_strings.CORRECT_XML_WITH_ONE_SP,
+                None,
+                saml_strings.CORRECT_XML_WITH_ONE_SP,
+                id="integration-metadata-configured",
+            ),
+            pytest.param(
+                None,
+                saml_strings.CORRECT_XML_WITH_ONE_SP,
+                saml_strings.CORRECT_XML_WITH_ONE_SP,
+                id="no-integration-metadata-falls-back-to-env",
+            ),
+            pytest.param(
+                None,
+                None,
+                None,
+                id="no-metadata-configured",
+            ),
+        ],
+    )
+    def test_get_sp_metadata_xml(
+        self,
+        create_saml_provider: Callable[..., SAMLWebSSOAuthenticationProvider],
+        integration_metadata: str | None,
+        env_metadata: str | None,
+        expected: str | None,
+    ):
+        provider = create_saml_provider()
+        # We need to override `_settings` directly here, since passing
+        # `None` for `service_provider_xml_metadata` would fail validation.
+        provider._settings = MagicMock(
+            service_provider_xml_metadata=integration_metadata
+        )
+
+        with patch(
+            "palace.manager.integration.patron_auth.saml.provider"
+            ".SamlServiceProviderConfiguration.get_metadata",
+            return_value=env_metadata,
+        ):
+            result = provider.get_sp_metadata_xml()
+
+        assert result == expected

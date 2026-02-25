@@ -41,6 +41,10 @@ from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailExcep
 from tests.fixtures.api_controller import ControllerFixture
 from tests.mocks import saml_strings
 
+CORRECT_XML_WITH_DECLARATION = (
+    '<?xml version="1.0" encoding="UTF-8"?>\n' + saml_strings.CORRECT_XML_WITH_ONE_SP
+)
+
 SERVICE_PROVIDER = SAMLServiceProviderMetadata(
     saml_strings.SP_ENTITY_ID,
     SAMLUIInfo(),
@@ -480,7 +484,7 @@ class TestSAMLController:
                 )
 
     @pytest.mark.parametrize(
-        "library_in_context, register_provider, sp_metadata_xml, expected_problem, expected_log_message",
+        "library_in_request, register_provider, sp_metadata_xml, expected_problem, expected_log_message",
         [
             pytest.param(
                 False,
@@ -520,7 +524,7 @@ class TestSAMLController:
                 saml_strings.CORRECT_XML_WITH_ONE_SP,
                 None,
                 None,
-                id="library-saml-integration-metadata-configured",
+                id="library-has-saml-with-metadata",
             ),
             pytest.param(
                 True,
@@ -528,7 +532,7 @@ class TestSAMLController:
                 None,
                 SAML_METADATA_NOT_CONFIGURED,
                 "SAML metadata is not configured.",
-                id="library-saml-integration-no-metadata",
+                id="library-has-saml-no-metadata",
             ),
             pytest.param(
                 True,
@@ -536,7 +540,23 @@ class TestSAMLController:
                 "<invalid",
                 SAML_INCORRECT_METADATA,
                 "SAML metadata has an incorrect format.",
-                id="library-saml-integration-invalid-metadata",
+                id="library-has-saml-invalid-metadata",
+            ),
+            pytest.param(
+                False,
+                False,
+                CORRECT_XML_WITH_DECLARATION,
+                None,
+                None,
+                id="no-library-env-metadata-has-declaration",
+            ),
+            pytest.param(
+                True,
+                True,
+                CORRECT_XML_WITH_DECLARATION,
+                None,
+                None,
+                id="library-has-saml-metadata-has-declaration",
             ),
         ],
     )
@@ -544,7 +564,7 @@ class TestSAMLController:
         self,
         controller_fixture: ControllerFixture,
         caplog: pytest.LogCaptureFixture,
-        library_in_context: bool,
+        library_in_request,
         register_provider: bool,
         sp_metadata_xml: str | None,
         expected_problem: ProblemDetail | None,
@@ -575,7 +595,7 @@ class TestSAMLController:
             logger="palace.manager.integration.patron_auth.saml.controller",
         )
         with controller_fixture.app.test_request_context("/saml/metadata/sp"):
-            if library_in_context:
+            if library_in_request:
                 request.library = controller_fixture.db.default_library()  # type: ignore[attr-defined]
 
             with patch(
