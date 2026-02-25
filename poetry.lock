@@ -988,18 +988,6 @@ files = [
 ]
 
 [[package]]
-name = "chardet"
-version = "6.0.0.post1"
-description = "Universal encoding detector for Python 3"
-optional = false
-python-versions = ">=3.10"
-groups = ["ci"]
-files = [
-    {file = "chardet-6.0.0.post1-py3-none-any.whl", hash = "sha256:c894a36800549adf7bb5f2af47033281b75fdfcd2aa0f0243be0ad22a52e2dcb"},
-    {file = "chardet-6.0.0.post1.tar.gz", hash = "sha256:6b78048c3c97c7b2ed1fbad7a18f76f5a6547f7d34dbab536cc13887c9a92fa4"},
-]
-
-[[package]]
 name = "charset-normalizer"
 version = "3.4.3"
 description = "The Real First Universal Charset Detector. Open, modern and actively maintained alternative to Chardet."
@@ -5325,26 +5313,25 @@ tests = ["numpy", "pytest"]
 
 [[package]]
 name = "tox"
-version = "4.45.0"
+version = "4.46.3"
 description = "tox is a generic virtualenv management and test command line tool"
 optional = false
 python-versions = ">=3.10"
 groups = ["ci"]
 files = [
-    {file = "tox-4.45.0-py3-none-any.whl", hash = "sha256:a9910fab652c9b378659a4d13a2cbdaebd3737c60bd1a96b7b573a89824f4e7c"},
-    {file = "tox-4.45.0.tar.gz", hash = "sha256:c0ce50ce0f7ace524cca9cf85d4a9fbd8e338aaa830e33521d3355f3f2f97c05"},
+    {file = "tox-4.46.3-py3-none-any.whl", hash = "sha256:e9e1a91bce2836dba8169c005254913bd22aac490131c75a5ffc4fd091dffe0b"},
+    {file = "tox-4.46.3.tar.gz", hash = "sha256:2e87609b7832c818cad093304ea23d7eb124f8ecbab0625463b73ce5e850e1c2"},
 ]
 
 [package.dependencies]
 cachetools = ">=7.0.1"
-chardet = ">=6.0.0.post1"
 colorama = ">=0.4.6"
 filelock = ">=3.24.3"
 packaging = ">=26"
 platformdirs = ">=4.9.2"
 pluggy = ">=1.6"
 pyproject-api = ">=1.10"
-virtualenv = ">=20.38"
+virtualenv = ">=20.39"
 
 [package.extras]
 completion = ["argcomplete (>=3.6.3)"]
