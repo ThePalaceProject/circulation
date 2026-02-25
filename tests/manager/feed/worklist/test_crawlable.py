@@ -11,8 +11,8 @@ from tests.fixtures.search import ExternalSearchFixtureFake
 
 class TestCrawlableCollectionBasedLane:
     def test_init(self, db: DatabaseTransactionFixture):
-        # Collection-based crawlable feeds are cached for 2 hours.
-        assert 2 * 60 * 60 == CrawlableCollectionBasedLane.MAX_CACHE_AGE
+        # Collection-based crawlable feeds are cached for 5 minutes.
+        assert 5 * 60 == CrawlableCollectionBasedLane.MAX_CACHE_AGE
 
         # This library has two collections.
         library = db.default_library()
