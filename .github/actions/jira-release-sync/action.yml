@@ -53,7 +53,7 @@ runs:
           | jq -r ".[] | select(.name == \"${{ inputs.release-name }}\") | .id")
         # 2. Add the GitHub Release link to the "Related Work" section
         curl --request POST \
-          --url "${{ inputs.jira-base-url }}/rest/api/3/version/$VERSION_ID/remotelink" \
+          --url "${{ inputs.jira-base-url }}/rest/api/3/version/$VERSION_ID/relatedwork" \
           --user "${{ inputs.jira-user-email }}:${{ inputs.jira-api-token }}" \
           --header 'Accept: application/json' \
           --header 'Content-Type: application/json' \
@@ -61,7 +61,7 @@ runs:
           --data "{
             \"title\": \"GitHub Release Notes\",
             \"url\": \"${{ inputs.release-url }}\",
-            \"type\": \"release notes\"
+            \"category\": \"release notes\"
           }"
 
     - name: Extract Jira Keys and Update Issues
