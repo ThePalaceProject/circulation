@@ -6,7 +6,7 @@ This module provides the OIDC authentication provider implementation for patron 
 from __future__ import annotations
 
 from collections.abc import Generator
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from flask import url_for
 from flask_babel import lazy_gettext as _
@@ -21,6 +21,12 @@ from palace.manager.integration.patron_auth.oidc.configuration.model import (
     OIDCAuthSettings,
 )
 from palace.manager.integration.patron_auth.oidc.credential import OIDCCredentialManager
+from palace.manager.opds.palace_authentication import (
+    LocalizedLogoUrl,
+    LocalizedString,
+    PalaceAuthentication,
+    PalaceAuthenticationLink,
+)
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.sqlalchemy.model.credential import Credential
 from palace.manager.sqlalchemy.model.patron import Patron
@@ -120,49 +126,54 @@ class OIDCAuthenticationProvider(
             return auth.token
         return None
 
-    def _create_authentication_link(self, authenticate_url: str) -> dict[str, Any]:
+    def _create_authentication_link(
+        self, authenticate_url: str
+    ) -> PalaceAuthenticationLink:
         """Build an authentication link for an authentication entry."""
         display_name = self._settings.auth_link_display_name or self.label()
         description = self._settings.auth_link_description or display_name
 
-        # Build link with metadata
-        link: dict[str, Any] = {
-            "rel": "authenticate",
-            "href": authenticate_url,
-            "display_names": [{"value": display_name, "language": "en"}],
-            "descriptions": [{"value": description, "language": "en"}],
-            "information_urls": [],
-            "privacy_statement_urls": [],
-            "logo_urls": [],
-        }
-
-        # Add optional fields where provided
+        information_urls: list[LocalizedString] = []
         if self._settings.auth_link_information_url:
-            link["information_urls"] = [
-                {
-                    "value": str(self._settings.auth_link_information_url),
-                    "language": "en",
-                }
+            information_urls = [
+                LocalizedString(
+                    value=str(self._settings.auth_link_information_url),
+                    language="en",
+                )
             ]
+
+        privacy_statement_urls: list[LocalizedString] = []
         if self._settings.auth_link_privacy_statement_url:
-            link["privacy_statement_urls"] = [
-                {
-                    "value": str(self._settings.auth_link_privacy_statement_url),
-                    "language": "en",
-                }
+            privacy_statement_urls = [
+                LocalizedString(
+                    value=str(self._settings.auth_link_privacy_statement_url),
+                    language="en",
+                )
             ]
+
+        logo_urls: list[LocalizedLogoUrl] = []
         if self._settings.auth_link_logo_url:
-            link["logo_urls"] = [
-                {"value": str(self._settings.auth_link_logo_url), "language": "en"}
+            logo_urls = [
+                LocalizedLogoUrl(
+                    value=str(self._settings.auth_link_logo_url), language="en"
+                )
             ]
 
-        return link
+        return PalaceAuthenticationLink(
+            rel="authenticate",
+            href=authenticate_url,
+            display_names=[LocalizedString(value=display_name, language="en")],
+            descriptions=[LocalizedString(value=description, language="en")],
+            information_urls=information_urls or None,
+            privacy_statement_urls=privacy_statement_urls or None,
+            logo_urls=logo_urls or None,
+        )
 
-    def _authentication_flow_document(self, db: Session) -> dict[str, Any]:
-        """Build an `authentication` entry suitable for an authentication document.
+    def _authentication_flow_document(self, db: Session) -> PalaceAuthentication:
+        """Build an ``authentication`` entry suitable for an authentication document.
 
         :param db: Database session
-        :return: Authentication entry
+        :return: :class:`PalaceAuthentication` model
         """
         library = self.library(db)
         if not library:
@@ -176,11 +187,11 @@ class OIDCAuthenticationProvider(
         )
         link = self._create_authentication_link(authenticate_url)
 
-        return {
-            "type": self.flow_type,
-            "description": self.label(),
-            "links": [link],
-        }
+        return PalaceAuthentication(
+            type=self.flow_type,
+            description=self.label(),
+            links=[link],
+        )
 
     def _run_self_tests(self, db: Session) -> Generator[SelfTestResult]:
         """Run self-tests for this authentication provider."""

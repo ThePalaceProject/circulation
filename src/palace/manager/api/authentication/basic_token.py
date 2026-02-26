@@ -15,6 +15,10 @@ from palace.manager.api.authentication.base import (
 )
 from palace.manager.api.authentication.basic import BasicAuthenticationProvider
 from palace.manager.core.selftest import SelfTestResult
+from palace.manager.opds.palace_authentication import (
+    PalaceAuthentication,
+    PalaceAuthenticationLink,
+)
 from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.sqlalchemy.util import get_one
 from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
@@ -85,23 +89,24 @@ class BasicTokenAuthenticationProvider(
 
         return None
 
-    def _authentication_flow_document(self, _db):
-        """This auth type should follow the entry of it's basic auth provider"""
+    def _authentication_flow_document(self, _db: Session) -> PalaceAuthentication:
+        """This auth type should follow the entry of its basic auth provider."""
+        library = self.library(_db)
+        if not library:
+            raise ValueError("Library not found")
         token_url = url_for(
             "patron_auth_token",
-            library_short_name=self.library(_db).short_name,
+            library_short_name=library.short_name,
             _external=True,
         )
-        links = [
-            {
-                "rel": "authenticate",
-                "href": token_url,
-            }
-        ]
-        flow_doc = self.basic_provider._authentication_flow_document(_db)
-        flow_doc["description"] = str(self.label())
-        flow_doc["links"] = links
-        return flow_doc
+        basic_flow = self.basic_provider._authentication_flow_document(_db)
+        return PalaceAuthentication(
+            type=self.flow_type,
+            description=str(self.label()),
+            labels=basic_flow.labels,
+            inputs=basic_flow.inputs,
+            links=[PalaceAuthenticationLink(rel="authenticate", href=token_url)],
+        )
 
     def remote_patron_lookup(self, patron_or_patrondata):
         """Delegate remote patron lookup to the underlying basic provider."""

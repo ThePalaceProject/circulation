@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Generator
 from enum import Enum
 from re import Pattern
-from typing import Annotated, Any, cast
+from typing import Annotated, cast
 
 from flask import url_for
 from pydantic import PositiveInt, field_validator
@@ -35,6 +35,13 @@ from palace.manager.integration.settings import (
     FormFieldType,
     FormMetadata,
     SettingsValidationError,
+)
+from palace.manager.opds.authentication import AuthenticationLabels
+from palace.manager.opds.palace_authentication import (
+    AuthenticationInputs,
+    InputDescriptor,
+    PalaceAuthentication,
+    PalaceAuthenticationLink,
 )
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.sqlalchemy.model.patron import Patron
@@ -572,42 +579,53 @@ class BasicAuthenticationProvider[
     def authentication_header(self) -> str:
         return f'Basic realm="{self.authentication_realm}"'
 
-    def _authentication_flow_document(self, _db: Session) -> dict[str, Any]:
+    def _authentication_flow_document(self, _db: Session) -> PalaceAuthentication:
         """Create a Authentication Flow object for use in an Authentication for
         OPDS document.
         """
-
-        login_inputs: dict[str, Any] = dict(keyboard=self.identifier_keyboard.value)
-        if self.identifier_maximum_length:
-            login_inputs["maximum_length"] = self.identifier_maximum_length
-        if self.identifier_barcode_format != BarcodeFormats.NONE:
-            login_inputs["barcode_format"] = self.identifier_barcode_format.value
-
-        password_inputs: dict[str, Any] = dict(keyboard=self.password_keyboard.value)
-        if self.password_maximum_length:
-            password_inputs["maximum_length"] = self.password_maximum_length
-
-        flow_doc: dict[str, Any] = dict(
-            description=str(self.label()),
-            labels=dict(
-                login=self.identifier_label,
-                password=self.password_label,
+        login_input = InputDescriptor(
+            keyboard=self.identifier_keyboard.value,
+            maximum_length=self.identifier_maximum_length or None,
+            barcode_format=(
+                self.identifier_barcode_format.value
+                if self.identifier_barcode_format != BarcodeFormats.NONE
+                else None
             ),
-            inputs=dict(login=login_inputs, password=password_inputs),
         )
+        password_input = InputDescriptor(
+            keyboard=self.password_keyboard.value,
+            maximum_length=self.password_maximum_length or None,
+        )
+
+        links: list[PalaceAuthenticationLink] = []
         if self.login_button_image:
             # TODO: I'm not sure if logo is appropriate for this, since it's a button
             # with the logo on it rather than a plain logo. Perhaps we should use plain
             # logos instead.
-            flow_doc["links"] = [
-                dict(
+            links.append(
+                PalaceAuthenticationLink(
                     rel="logo",
                     href=url_for(
-                        "static_image", filename=self.login_button_image, _external=True
+                        "static_image",
+                        filename=self.login_button_image,
+                        _external=True,
                     ),
                 )
-            ]
-        return flow_doc
+            )
+
+        return PalaceAuthentication(
+            type=self.flow_type,
+            description=str(self.label()),
+            labels=AuthenticationLabels(
+                login=self.identifier_label,
+                password=self.password_label,
+            ),
+            inputs=AuthenticationInputs(
+                login=login_input,
+                password=password_input,
+            ),
+            links=links,
+        )
 
     @property
     def login_button_image(self) -> str | None:
