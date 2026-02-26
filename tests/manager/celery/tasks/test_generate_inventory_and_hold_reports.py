@@ -596,8 +596,8 @@ def test_generate_report(
                 assert book2_row["published_date"] == "2020-10-05"
                 assert book2_row["audience"] == "Adult"  # Default audience
                 assert book2_row["genres"] == "genre_z"
-                # No upper bound formats as "{lower}".
-                assert book2_row["target_age"] == "18"
+                # No upper bound formats as "{lower}-".
+                assert book2_row["target_age"] == "18-"
                 assert book2_row["format"] == edition.BOOK_MEDIUM
                 assert book2_row["data_source"] == data_source
                 assert book2_row["collection_name"] == collection_name

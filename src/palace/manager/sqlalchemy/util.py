@@ -163,7 +163,7 @@ def numericrange_to_string(r: NumericRange | None) -> str:
     if upper is None and lower is None:
         return ""
     if upper is None:
-        return str(lower)
+        return f"{lower}-"
     if lower is None:
         return str(upper)
     # Currently this function only supports integer ranges, but NumericRange

@@ -297,3 +297,21 @@ class TestNumericRangeToString:
     def test_numericrange_to_string_float(self):
         with pytest.raises(AssertionError):
             numericrange_to_string(NumericRange(1.1, 1.8, "[]"))
+
+    def test_numericrange_to_string_no_upper_bound(self):
+        assert numericrange_to_string(NumericRange(18, None)) == "18-"
+
+    def test_numericrange_to_string_no_lower_bound(self):
+        assert numericrange_to_string(NumericRange(None, 12)) == "12"
+
+    def test_numericrange_to_string_range(self):
+        assert numericrange_to_string(NumericRange(8, 12, "[]")) == "8-12"
+
+    def test_numericrange_to_string_single_value(self):
+        assert numericrange_to_string(NumericRange(5, 6, "[)")) == "5"
+
+    def test_numericrange_to_string_none(self):
+        assert numericrange_to_string(None) == ""
+
+    def test_numericrange_to_string_empty(self):
+        assert numericrange_to_string(NumericRange(None, None)) == ""
