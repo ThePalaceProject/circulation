@@ -1,6 +1,7 @@
 import argparse
 import csv
 from collections.abc import Sequence
+from datetime import datetime, timezone
 from enum import Enum, auto
 from typing import cast
 
@@ -167,6 +168,7 @@ class SuppressWorkForLibraryScript(Script):
         parsed = self.parse_command_line(self._db, cmd_args=cmd_args)
         library = self.load_library(parsed.library)
         dry_run: bool = parsed.dry_run
+        started_at = datetime.now(tz=timezone.utc)
 
         if parsed.file:
             pairs = self.load_identifiers_from_file(parsed.file, parsed.identifier_type)
@@ -189,12 +191,18 @@ class SuppressWorkForLibraryScript(Script):
             self._db.rollback()
             raise
 
-        self._print_results(results, dry_run)
+        duration = datetime.now(tz=timezone.utc) - started_at
+        self._print_results(
+            results, dry_run, library, started_at, duration.total_seconds()
+        )
 
     def _print_results(
         self,
         results: dict[tuple[str, str], SuppressResult],
         dry_run: bool,
+        library: Library,
+        started_at: datetime,
+        duration_seconds: float,
     ) -> None:
         newly_suppressed = [
             k for k, v in results.items() if v == SuppressResult.NEWLY_SUPPRESSED
@@ -209,6 +217,11 @@ class SuppressWorkForLibraryScript(Script):
 
         col = 20
         print(f"\n{prefix}Suppression Results Summary:")
+        print(f"  {'Library:':<{col}} {library.name} ({library.short_name})")
+        print(
+            f"  {'Started at:':<{col}} {started_at.strftime('%Y-%m-%d %H:%M:%S UTC')}"
+        )
+        print(f"  {'Duration:':<{col}} {duration_seconds:.2f}s")
         print(f"  {suppress_label + ':':<{col}} {len(newly_suppressed)}")
         print(f"  {'Already suppressed:':<{col}} {len(already_suppressed)}")
         print(f"  {'Not found:':<{col}} {len(not_found)}")
