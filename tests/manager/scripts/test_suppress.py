@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import textwrap
+from datetime import datetime, timezone
 from unittest.mock import create_autospec, patch
 
 import pytest
@@ -354,16 +355,27 @@ class TestSuppressWorkForLibraryScript:
         assert result == SuppressResult.ALREADY_SUPPRESSED
 
     def test_print_results_normal(self, db: DatabaseTransactionFixture, capsys):
+        test_library = db.library(short_name="mylib", name="My Library")
         script = SuppressWorkForLibraryScript(db.session)
         results = {
             ("ISBN", "111"): SuppressResult.NEWLY_SUPPRESSED,
             ("ISBN", "222"): SuppressResult.ALREADY_SUPPRESSED,
             ("ISBN", "333"): SuppressResult.NOT_FOUND,
         }
-        script._print_results(results, dry_run=False)
+        started_at = datetime(2026, 2, 26, 12, 0, 0, tzinfo=timezone.utc)
+        script._print_results(
+            results,
+            dry_run=False,
+            library=test_library,
+            started_at=started_at,
+            duration_seconds=1.23,
+        )
 
         out = capsys.readouterr().out
         assert "Suppression Results Summary" in out
+        assert "My Library (mylib)" in out
+        assert "2026-02-26 12:00:00 UTC" in out
+        assert "1.23s" in out
         assert "Newly suppressed:    1" in out
         assert "Already suppressed:  1" in out
         assert "Not found:           1" in out
@@ -373,15 +385,26 @@ class TestSuppressWorkForLibraryScript:
         assert "[DRY RUN]" not in out
 
     def test_print_results_dry_run(self, db: DatabaseTransactionFixture, capsys):
+        test_library = db.library(short_name="mylib", name="My Library")
         script = SuppressWorkForLibraryScript(db.session)
         results = {
             ("ISBN", "111"): SuppressResult.NEWLY_SUPPRESSED,
             ("ISBN", "222"): SuppressResult.NOT_FOUND,
         }
-        script._print_results(results, dry_run=True)
+        started_at = datetime(2026, 2, 26, 9, 30, 0, tzinfo=timezone.utc)
+        script._print_results(
+            results,
+            dry_run=True,
+            library=test_library,
+            started_at=started_at,
+            duration_seconds=0.05,
+        )
 
         out = capsys.readouterr().out
         assert "[DRY RUN] Suppression Results Summary" in out
+        assert "My Library (mylib)" in out
+        assert "2026-02-26 09:30:00 UTC" in out
+        assert "0.05s" in out
         assert "Would suppress:      1" in out
         assert "Not found:           1" in out
         assert "[WOULD SUPPRESS] ISBN/111" in out
