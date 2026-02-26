@@ -4,7 +4,8 @@ from abc import ABC, abstractmethod
 from collections.abc import Mapping, Sequence
 from typing import Any, TypeVar
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
+from pydantic.alias_generators import to_camel
 from sqlalchemy import or_
 from sqlalchemy.exc import NoResultFound
 from sqlalchemy.orm import Session
@@ -39,6 +40,12 @@ type ResultDetails = (
 
 class PatronAuthResult(BaseModel):
     """The result of a single patron authentication check."""
+
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        validate_by_name=True,
+        validate_by_alias=False,
+    )
 
     label: str
     success: bool
