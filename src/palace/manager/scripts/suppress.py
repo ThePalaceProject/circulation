@@ -1,5 +1,7 @@
 import argparse
+import csv
 from collections.abc import Sequence
+from enum import Enum, auto
 from typing import cast
 
 from sqlalchemy import select
@@ -9,6 +11,12 @@ from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.scripts.base import Script, _normalize_cmd_args
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.library import Library
+
+
+class SuppressResult(Enum):
+    NEWLY_SUPPRESSED = auto()
+    ALREADY_SUPPRESSED = auto()
+    NOT_FOUND = auto()
 
 
 class SuppressWorkForLibraryScript(Script):
@@ -24,8 +32,7 @@ class SuppressWorkForLibraryScript(Script):
         parser.add_argument(
             "-l",
             "--library",
-            help="Short name of the library. Libraries on this system: %s."
-            % library_names,
+            help=f"Short name of the library. Libraries on this system: {library_names}.",
             required=True,
             metavar="SHORT_NAME",
         )
@@ -36,11 +43,25 @@ class SuppressWorkForLibraryScript(Script):
             f'To name identifiers by their database ID, use --identifier-type="{cls.BY_DATABASE_ID}".',
             default="ISBN",
         )
-        parser.add_argument(
+
+        id_group = parser.add_mutually_exclusive_group(required=True)
+        id_group.add_argument(
             "-i",
             "--identifier",
             help="The identifier to suppress.",
-            required=True,
+        )
+        id_group.add_argument(
+            "-f",
+            "--file",
+            help='Path to a CSV file with "identifier" and optional "identifier_type" columns.',
+            metavar="FILE_PATH",
+        )
+
+        parser.add_argument(
+            "--dry-run",
+            help="Report what would be suppressed without making any changes.",
+            action="store_true",
+            default=False,
         )
         return parser
 
@@ -86,23 +107,115 @@ class SuppressWorkForLibraryScript(Script):
 
         return identifier_obj
 
-    def do_run(self, cmd_args: list[str] | None = None) -> None:
-        parsed = self.parse_command_line(self._db, cmd_args=cmd_args)
+    def load_identifiers_from_file(
+        self, file_path: str, default_identifier_type: str
+    ) -> list[tuple[str, str]]:
+        """Load (identifier_type, identifier) pairs from a CSV file.
 
-        library = self.load_library(parsed.library)
-        identifier = self.load_identifier(parsed.identifier_type, parsed.identifier)
+        The CSV must have an "identifier" column. The "identifier_type" column
+        is optional; rows missing a type value fall back to default_identifier_type.
+        """
+        identifiers: list[tuple[str, str]] = []
+        with open(file_path, newline="", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            if not reader.fieldnames or "identifier" not in reader.fieldnames:
+                raise PalaceValueError(
+                    f'CSV file must contain an "identifier" column. '
+                    f"Found columns: {reader.fieldnames}"
+                )
+            has_type_column = "identifier_type" in reader.fieldnames
+            for row in reader:
+                identifier = row["identifier"].strip()
+                if not identifier:
+                    continue
+                if has_type_column and row.get("identifier_type", "").strip():
+                    id_type = row["identifier_type"].strip()
+                else:
+                    id_type = default_identifier_type
+                identifiers.append((id_type, identifier))
+        return identifiers
 
-        self.suppress_work(library, identifier)
-
-    def suppress_work(self, library: Library, identifier: Identifier) -> None:
+    def suppress_work(
+        self,
+        library: Library,
+        identifier: Identifier,
+        dry_run: bool = False,
+    ) -> SuppressResult:
         work = identifier.work
         if not work:
             self.log.warning(f"No work found for {identifier}")
-            return
+            return SuppressResult.NOT_FOUND
 
-        work.suppressed_for.append(library)
+        if library in work.suppressed_for:
+            return SuppressResult.ALREADY_SUPPRESSED
+
+        if not dry_run:
+            work.suppressed_for.append(library)
+
         self.log.info(
-            f"Suppressed {identifier.type}/{identifier.identifier} (work id: {work.id}) for {library.short_name}."
+            f"{'[DRY RUN] Would suppress' if dry_run else 'Suppressing'} "
+            f"{identifier.type}/{identifier.identifier} (work id: {work.id}) "
+            f"for {library.short_name}."
         )
+        return SuppressResult.NEWLY_SUPPRESSED
 
-        self._db.commit()
+    def do_run(self, cmd_args: list[str] | None = None) -> None:
+        parsed = self.parse_command_line(self._db, cmd_args=cmd_args)
+        library = self.load_library(parsed.library)
+        dry_run: bool = parsed.dry_run
+
+        if parsed.file:
+            pairs = self.load_identifiers_from_file(parsed.file, parsed.identifier_type)
+        else:
+            pairs = [(parsed.identifier_type, parsed.identifier)]
+
+        results: dict[tuple[str, str], SuppressResult] = {}
+        try:
+            for id_type, id_value in pairs:
+                try:
+                    identifier = self.load_identifier(id_type, id_value)
+                    result = self.suppress_work(library, identifier, dry_run=dry_run)
+                except PalaceValueError:
+                    result = SuppressResult.NOT_FOUND
+                results[(id_type, id_value)] = result
+
+            if not dry_run:
+                self._db.commit()
+        except Exception:
+            self._db.rollback()
+            raise
+
+        self._print_results(results, dry_run)
+
+    def _print_results(
+        self,
+        results: dict[tuple[str, str], SuppressResult],
+        dry_run: bool,
+    ) -> None:
+        newly_suppressed = [
+            k for k, v in results.items() if v == SuppressResult.NEWLY_SUPPRESSED
+        ]
+        already_suppressed = [
+            k for k, v in results.items() if v == SuppressResult.ALREADY_SUPPRESSED
+        ]
+        not_found = [k for k, v in results.items() if v == SuppressResult.NOT_FOUND]
+
+        prefix = "[DRY RUN] " if dry_run else ""
+        suppress_label = "Would suppress" if dry_run else "Newly suppressed"
+
+        print(f"\n{prefix}Suppression Results Summary:")
+        print(f"  {suppress_label}:  {len(newly_suppressed)}")
+        print(f"  Already suppressed: {len(already_suppressed)}")
+        print(f"  Not found:          {len(not_found)}")
+
+        print(f"\n{prefix}Details:")
+        status_map = {
+            SuppressResult.NEWLY_SUPPRESSED: (
+                "WOULD SUPPRESS" if dry_run else "SUPPRESSED"
+            ),
+            SuppressResult.ALREADY_SUPPRESSED: "ALREADY SUPPRESSED",
+            SuppressResult.NOT_FOUND: "NOT FOUND",
+        }
+        for (id_type, id_value), result in results.items():
+            status = status_map.get(result, "UNKNOWN")
+            print(f"  [{status}] {id_type}/{id_value}")
