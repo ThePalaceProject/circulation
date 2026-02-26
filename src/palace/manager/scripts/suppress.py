@@ -27,7 +27,9 @@ class SuppressWorkForLibraryScript(Script):
     @classmethod
     def arg_parser(cls, _db: Session) -> argparse.ArgumentParser:
         parser = argparse.ArgumentParser()
-        library_name_list = sorted(str(l.short_name) for l in _db.query(Library))
+        library_name_list = sorted(
+            str(l.short_name) for l in _db.scalars(select(Library))
+        )
         library_names = '"' + '", "'.join(library_name_list) + '"'
         parser.add_argument(
             "-l",
@@ -61,7 +63,6 @@ class SuppressWorkForLibraryScript(Script):
             "--dry-run",
             help="Report what would be suppressed without making any changes.",
             action="store_true",
-            default=False,
         )
         return parser
 
@@ -82,7 +83,7 @@ class SuppressWorkForLibraryScript(Script):
                 select(Library).where(Library.short_name == library_short_name)
             ).one_or_none(),
         )
-        if not library:
+        if library is None:
             raise PalaceValueError(f"Unknown library: {library_short_name}")
         return library
 
@@ -100,7 +101,7 @@ class SuppressWorkForLibraryScript(Script):
         identifier_obj = cast(
             Identifier | None, self._db.scalars(query).unique().one_or_none()
         )
-        if not identifier_obj:
+        if identifier_obj is None:
             raise PalaceValueError(
                 f"Unknown identifier: {identifier_type}/{identifier}"
             )
@@ -116,23 +117,26 @@ class SuppressWorkForLibraryScript(Script):
         is optional; rows missing a type value fall back to default_identifier_type.
         """
         identifiers: list[tuple[str, str]] = []
-        with open(file_path, newline="", encoding="utf-8") as f:
-            reader = csv.DictReader(f)
-            if not reader.fieldnames or "identifier" not in reader.fieldnames:
-                raise PalaceValueError(
-                    f'CSV file must contain an "identifier" column. '
-                    f"Found columns: {reader.fieldnames}"
-                )
-            has_type_column = "identifier_type" in reader.fieldnames
-            for row in reader:
-                identifier = row["identifier"].strip()
-                if not identifier:
-                    continue
-                if has_type_column and row.get("identifier_type", "").strip():
-                    id_type = row["identifier_type"].strip()
-                else:
-                    id_type = default_identifier_type
-                identifiers.append((id_type, identifier))
+        try:
+            with open(file_path, newline="", encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                if not reader.fieldnames or "identifier" not in reader.fieldnames:
+                    raise PalaceValueError(
+                        f'CSV file must contain an "identifier" column. '
+                        f"Found columns: {reader.fieldnames}"
+                    )
+                has_type_column = "identifier_type" in reader.fieldnames
+                for row in reader:
+                    identifier = row["identifier"].strip()
+                    if not identifier:
+                        continue
+                    if has_type_column and row["identifier_type"].strip():
+                        id_type = row["identifier_type"].strip()
+                    else:
+                        id_type = default_identifier_type
+                    identifiers.append((id_type, identifier))
+        except FileNotFoundError:
+            raise PalaceValueError(f"CSV file not found: {file_path}")
         return identifiers
 
     def suppress_work(
@@ -203,10 +207,11 @@ class SuppressWorkForLibraryScript(Script):
         prefix = "[DRY RUN] " if dry_run else ""
         suppress_label = "Would suppress" if dry_run else "Newly suppressed"
 
+        col = 20
         print(f"\n{prefix}Suppression Results Summary:")
-        print(f"  {suppress_label}:  {len(newly_suppressed)}")
-        print(f"  Already suppressed: {len(already_suppressed)}")
-        print(f"  Not found:          {len(not_found)}")
+        print(f"  {suppress_label + ':':<{col}} {len(newly_suppressed)}")
+        print(f"  {'Already suppressed:':<{col}} {len(already_suppressed)}")
+        print(f"  {'Not found:':<{col}} {len(not_found)}")
 
         print(f"\n{prefix}Details:")
         status_map = {
@@ -217,5 +222,5 @@ class SuppressWorkForLibraryScript(Script):
             SuppressResult.NOT_FOUND: "NOT FOUND",
         }
         for (id_type, id_value), result in results.items():
-            status = status_map.get(result, "UNKNOWN")
+            status = status_map[result]
             print(f"  [{status}] {id_type}/{id_value}")
