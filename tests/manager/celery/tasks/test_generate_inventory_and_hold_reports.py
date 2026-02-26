@@ -62,11 +62,11 @@ def test_generate_csv_report(
         query=query,
     )
 
-    # Verify the CSV was actually written
+    # Verify the CSV was actually written (QUOTE_NONNUMERIC quotes all string fields)
     csv_file.seek(0)
     csv_content = csv_file.read()
-    assert "id,short_name" in csv_content
-    assert "test_library" in csv_content
+    assert '"id","short_name"' in csv_content
+    assert '"test_library"' in csv_content
 
     # Verify that the elapsed time log message was written
     assert (

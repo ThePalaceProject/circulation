@@ -158,7 +158,6 @@ def generate_report(
                 sql_params=sql_params,
                 query=inventory_report_query(),
                 row_transform=_inventory_report_row_transform,
-                quoting=csv.QUOTE_NONNUMERIC,
             )
 
             generate_csv_report(
@@ -226,14 +225,13 @@ def generate_csv_report(
     sql_params: dict[str, Any],
     query: Select,
     row_transform: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
-    quoting: int = csv.QUOTE_MINIMAL,
 ) -> None:
     with elapsed_time_logging(
         log_method=log.debug,
         message_prefix=f"generate_csv_report - {csv_file.name}",
         skip_start=True,
     ):
-        writer = csv.writer(csv_file, delimiter=",", quoting=quoting)
+        writer = csv.writer(csv_file, delimiter=",", quoting=csv.QUOTE_NONNUMERIC)
         rows = db.execute(query, sql_params)
         keys = list(rows.keys())
         writer.writerow(keys)
