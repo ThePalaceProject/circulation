@@ -231,7 +231,7 @@ def generate_csv_report(
         message_prefix=f"generate_csv_report - {csv_file.name}",
         skip_start=True,
     ):
-        writer = csv.writer(csv_file, delimiter=",")
+        writer = csv.writer(csv_file, delimiter=",", quoting=csv.QUOTE_NONNUMERIC)
         rows = db.execute(query, sql_params)
         keys = list(rows.keys())
         writer.writerow(keys)

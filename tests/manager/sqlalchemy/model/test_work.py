@@ -1550,7 +1550,7 @@ class TestWork:
         assert "0-8" == work.target_age_string
 
         work.target_age = NumericRange(8, None, "[]")
-        assert "8" == work.target_age_string
+        assert "8-" == work.target_age_string
 
         work.target_age = NumericRange(None, 8, "[]")
         assert "8" == work.target_age_string

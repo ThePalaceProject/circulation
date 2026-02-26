@@ -62,11 +62,11 @@ def test_generate_csv_report(
         query=query,
     )
 
-    # Verify the CSV was actually written
+    # Verify the CSV was actually written (QUOTE_NONNUMERIC quotes all string fields)
     csv_file.seek(0)
     csv_content = csv_file.read()
-    assert "id,short_name" in csv_content
-    assert "test_library" in csv_content
+    assert '"id","short_name"' in csv_content
+    assert '"test_library"' in csv_content
 
     # Verify that the elapsed time log message was written
     assert (
@@ -596,8 +596,8 @@ def test_generate_report(
                 assert book2_row["published_date"] == "2020-10-05"
                 assert book2_row["audience"] == "Adult"  # Default audience
                 assert book2_row["genres"] == "genre_z"
-                # No upper bound formats as "{lower}".
-                assert book2_row["target_age"] == "18"
+                # No upper bound formats as "{lower}-".
+                assert book2_row["target_age"] == "18-"
                 assert book2_row["format"] == edition.BOOK_MEDIUM
                 assert book2_row["data_source"] == data_source
                 assert book2_row["collection_name"] == collection_name
