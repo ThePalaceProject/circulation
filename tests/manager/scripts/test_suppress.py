@@ -178,6 +178,28 @@ class TestSuppressWorkForLibraryScript:
             ("Overdrive ID", "12345"),
         ]
 
+    def test_load_identifiers_from_file_with_duplicates(
+        self, db: DatabaseTransactionFixture, tmp_path
+    ):
+        csv_file = tmp_path / "ids.csv"
+        csv_file.write_text(
+            textwrap.dedent(
+                """\
+                identifier,identifier_type
+                978-0-06-112008-4,ISBN
+                978-0-06-112008-4,ISBN
+            """
+            )
+        )
+
+        script = SuppressWorkForLibraryScript(db.session)
+        pairs = script.load_identifiers_from_file(str(csv_file), "ISBN")
+
+        assert pairs == [
+            ("ISBN", "978-0-06-112008-4"),
+            ("ISBN", "978-0-06-112008-4"),
+        ]
+
     def test_load_identifiers_from_file_missing_identifier_column(
         self, db: DatabaseTransactionFixture, tmp_path
     ):
@@ -261,9 +283,9 @@ class TestSuppressWorkForLibraryScript:
         assert test_library in work2.suppressed_for
 
         out = capsys.readouterr().out
-        assert "Newly suppressed:  2" in out
-        assert "Already suppressed: 0" in out
-        assert "Not found:          0" in out
+        assert "Newly suppressed:    2" in out
+        assert "Already suppressed:  0" in out
+        assert "Not found:           0" in out
 
     def test_suppress_work(self, db: DatabaseTransactionFixture):
         test_library = db.library(short_name="test")
@@ -342,9 +364,9 @@ class TestSuppressWorkForLibraryScript:
 
         out = capsys.readouterr().out
         assert "Suppression Results Summary" in out
-        assert "Newly suppressed:  1" in out
-        assert "Already suppressed: 1" in out
-        assert "Not found:          1" in out
+        assert "Newly suppressed:    1" in out
+        assert "Already suppressed:  1" in out
+        assert "Not found:           1" in out
         assert "[SUPPRESSED] ISBN/111" in out
         assert "[ALREADY SUPPRESSED] ISBN/222" in out
         assert "[NOT FOUND] ISBN/333" in out
@@ -360,8 +382,8 @@ class TestSuppressWorkForLibraryScript:
 
         out = capsys.readouterr().out
         assert "[DRY RUN] Suppression Results Summary" in out
-        assert "Would suppress:  1" in out
-        assert "Not found:          1" in out
+        assert "Would suppress:      1" in out
+        assert "Not found:           1" in out
         assert "[WOULD SUPPRESS] ISBN/111" in out
         assert "[NOT FOUND] ISBN/222" in out
 
@@ -381,8 +403,8 @@ class TestSuppressWorkForLibraryScript:
         )
 
         out = capsys.readouterr().out
-        assert "Newly suppressed:  0" in out
-        assert "Not found:          1" in out
+        assert "Newly suppressed:    0" in out
+        assert "Not found:           1" in out
         assert "[NOT FOUND] ISBN/nonexistent-id" in out
 
     def test_do_run_commits_once_for_all_suppressions(
@@ -460,6 +482,32 @@ class TestSuppressWorkForLibraryScript:
                     ]
                 )
             mock_rollback.assert_called_once()
+
+    def test_do_run_dry_run_does_not_commit(
+        self, db: DatabaseTransactionFixture, capsys
+    ):
+        test_library = db.library(short_name="test")
+        test_identifier = db.identifier()
+
+        script = SuppressWorkForLibraryScript(db.session)
+        with patch.object(db.session, "commit") as mock_commit:
+            script.do_run(
+                [
+                    "--library",
+                    test_library.short_name,
+                    "--identifier-type",
+                    test_identifier.type,
+                    "--identifier",
+                    test_identifier.identifier,
+                    "--dry-run",
+                ]
+            )
+        mock_commit.assert_not_called()
+
+    def test_load_identifiers_from_file_not_found(self, db: DatabaseTransactionFixture):
+        script = SuppressWorkForLibraryScript(db.session)
+        with pytest.raises(ValueError, match="CSV file not found"):
+            script.load_identifiers_from_file("/nonexistent/path/ids.csv", "ISBN")
 
     def test_suppress_work_does_not_commit(self, db: DatabaseTransactionFixture):
         test_library = db.library(short_name="test")
