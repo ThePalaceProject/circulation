@@ -156,7 +156,7 @@ class TestOPDSSerializer:
 
     def test_serialize_work_entry(self):
         data = WorkEntryData(
-            additional_type="type",
+            medium="Book",
             identifier="identifier",
             pwid="permanent-work-id",
             summary=RichText(text="summary"),
@@ -183,7 +183,7 @@ class TestOPDSSerializer:
 
         assert (
             element.get(f"{{{OPDSFeed.SCHEMA_NS}}}additionalType")
-            == data.additional_type
+            == "http://schema.org/EBook"
         )
 
         child = element.xpath(f"id")

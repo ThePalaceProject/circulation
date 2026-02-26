@@ -23,6 +23,7 @@ from palace.manager.opds import opds2, rwpm, schema_org
 from palace.manager.opds.base import BaseOpdsModel
 from palace.manager.opds.palace import DrmMetadata, LinkActions
 from palace.manager.opds.util import StrModelOrTuple
+from palace.manager.sqlalchemy.constants import EditionConstants
 from palace.manager.sqlalchemy.model.contributor import Contributor
 from palace.manager.util.log import LoggerMixin
 from palace.manager.util.opds_writer import AtomFeed, OPDSMessage
@@ -50,6 +51,13 @@ PALACE_PROPERTIES_DEFAULT = AtomFeed.PALACE_PROPERTIES_DEFAULT
 
 
 class OPDS2Serializer(SerializerInterface[dict[str, Any]], LoggerMixin):
+    _MEDIUM_TO_PUBLICATION_TYPE: frozendict[str, str] = frozendict(
+        {
+            EditionConstants.BOOK_MEDIUM: schema_org.PublicationTypes.book,
+            EditionConstants.AUDIO_MEDIUM: schema_org.PublicationTypes.audiobook,
+        }
+    )
+
     _CONTENT_TYPE_MAP: frozendict[LinkContentType, str] = frozendict(
         {
             LinkContentType.OPDS_FEED: opds2.Feed.content_type(),
@@ -126,7 +134,9 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]], LoggerMixin):
         self, data: WorkEntryData
     ) -> opds2.PublicationMetadata:
         identifier = data.identifier
-        additional_type = data.additional_type or schema_org.PublicationTypes.book
+        additional_type = self._MEDIUM_TO_PUBLICATION_TYPE.get(
+            data.medium or "", schema_org.PublicationTypes.book
+        )
         title = data.title
         subtitle = data.subtitle
         description = data.summary.text if data.summary else None

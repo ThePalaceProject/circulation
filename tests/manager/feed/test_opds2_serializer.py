@@ -51,7 +51,7 @@ class TestOPDS2Serializer:
             identifier="identifier",
             pwid="permanent-id",
             title="Work Title",
-            additional_type="http://schema.org/Book",
+            medium="Book",
             image_links=[
                 Link(
                     href="http://image",
@@ -139,7 +139,7 @@ class TestOPDS2Serializer:
 
     def test_serialize_work_entry(self):
         data = WorkEntryData(
-            additional_type="http://schema.org/Book",
+            medium="Book",
             title="The Title",
             sort_title="Title, The",
             subtitle="Sub Title",
@@ -177,7 +177,7 @@ class TestOPDS2Serializer:
         entry = serializer.serialize_work_entry(data)
         metadata = entry["metadata"]
 
-        assert metadata["@type"] == data.additional_type
+        assert metadata["@type"] == "http://schema.org/Book"
         assert metadata["title"] == data.title
         assert metadata["sortAs"] == data.sort_title
         assert metadata["duration"] == data.duration
@@ -212,7 +212,7 @@ class TestOPDS2Serializer:
 
         # Test the different author types
         data = WorkEntryData(
-            additional_type="http://schema.org/Book",
+            medium="Book",
             title="Author Work",
             identifier="urn:id",
             image_links=[
@@ -806,13 +806,13 @@ class TestOPDS2Serializer:
         assert "publisher" not in metadata
         assert "imprint" not in metadata
 
-    def test_serialize_work_entry_default_additional_type(self):
-        """When additional_type is None, defaults to schema_org Book type."""
+    def test_serialize_work_entry_default_medium(self):
+        """When medium is None, defaults to schema_org Book type."""
         serializer = OPDS2Serializer()
         data = WorkEntryData(
             title="Default Type",
             identifier="urn:id",
-            additional_type=None,
+            medium=None,
             image_links=[Link(href="http://image", rel="image", type="image/png")],
             acquisition_links=[
                 Acquisition(

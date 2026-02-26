@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import datetime
-import logging
 from collections import defaultdict
 from decimal import Decimal
 from functools import cmp_to_key
@@ -302,10 +301,7 @@ class Annotator(ToFeedEntry):
         other_links.sort(key=cmp_to_key(self._sample_link_comparator))
 
         if edition.medium:
-            additional_type = Edition.medium_to_additional_type.get(str(edition.medium))
-            if not additional_type:
-                logging.warning("No additionalType for medium %s", edition.medium)
-            computed.additional_type = additional_type
+            computed.medium = str(edition.medium)
 
         computed.title = edition.title or OPDSFeed.NO_TITLE
 

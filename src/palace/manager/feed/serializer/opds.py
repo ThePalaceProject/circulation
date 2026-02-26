@@ -27,6 +27,7 @@ from palace.manager.feed.types import (
     Series,
     WorkEntryData,
 )
+from palace.manager.sqlalchemy.constants import EditionConstants
 from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.opds_writer import AtomFeed, OPDSFeed, OPDSMessage
 
@@ -187,10 +188,12 @@ class BaseOPDS1Serializer(SerializerInterface[etree._Element], OPDSFeed, abc.ABC
     def serialize_work_entry(self, feed_entry: WorkEntryData) -> etree._Element:
         entry: etree._Element = OPDSFeed.entry()
 
-        if feed_entry.additional_type:
-            entry.set(
-                f"{{{OPDSFeed.SCHEMA_NS}}}additionalType", feed_entry.additional_type
+        if feed_entry.medium:
+            additional_type = EditionConstants.medium_to_additional_type.get(
+                feed_entry.medium
             )
+            if additional_type:
+                entry.set(f"{{{OPDSFeed.SCHEMA_NS}}}additionalType", additional_type)
 
         if feed_entry.title:
             entry.append(OPDSFeed.E("title", feed_entry.title))
