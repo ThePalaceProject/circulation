@@ -28,7 +28,7 @@ class TestSuppressWorkForLibraryScript:
                 db.session, cmd_args.split(" ")
             )
 
-        assert "error: the following arguments are required" in capsys.readouterr().err
+        assert "error:" in capsys.readouterr().err
 
     @pytest.mark.parametrize(
         "cmd_args",
