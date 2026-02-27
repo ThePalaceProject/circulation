@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
+import socket
+from collections.abc import Callable, Generator
 from datetime import datetime
 from typing import Annotated, Any
 
 from annotated_types import Ge, Le
 from pydantic import PositiveInt
+from sqlalchemy.orm import Session
 
 from palace.manager.api.authentication.base import PatronAuthResult, PatronData
 from palace.manager.api.authentication.basic import (
@@ -16,6 +18,7 @@ from palace.manager.api.authentication.basic import (
 )
 from palace.manager.api.authentication.patron_debug import HasPatronDebug
 from palace.manager.api.problem_details import INVALID_CREDENTIALS
+from palace.manager.core.selftest import SelfTestResult
 from palace.manager.integration.patron_auth.sip2.client import Sip2Encoding, SIPClient
 from palace.manager.integration.patron_auth.sip2.dialect import Dialect as Sip2Dialect
 from palace.manager.integration.settings import (
@@ -307,7 +310,7 @@ class SIP2AuthenticationProvider(
         return SIP2LibrarySettings
 
     def patron_information(
-        self, username: str | None, password: str | None
+        self, username: str, password: str | None
     ) -> dict[str, Any] | ProblemDetail:
         try:
             sip = self.client
@@ -329,13 +332,14 @@ class SIP2AuthenticationProvider(
     def remote_patron_lookup(
         self, patron_or_patrondata: PatronData | Patron
     ) -> PatronData | None | ProblemDetail:
-        info = self.patron_information(
-            patron_or_patrondata.authorization_identifier, None
-        )
+        authorization_identifier = patron_or_patrondata.authorization_identifier
+        if authorization_identifier is None:
+            return None
+        info = self.patron_information(authorization_identifier, None)
         return self.info_to_patrondata(info, False)
 
     def remote_authenticate(
-        self, username: str | None, password: str | None
+        self, username: str, password: str | None
     ) -> PatronData | None | ProblemDetail:
         """Authenticate a patron with the SIP2 server.
 
@@ -450,8 +454,8 @@ class SIP2AuthenticationProvider(
 
         return results
 
-    def _run_self_tests(self, _db):
-        def makeConnection(sip):
+    def _run_self_tests(self, _db: Session) -> Generator[SelfTestResult]:
+        def makeConnection(sip: SIPClient) -> socket.socket | None:
             sip.connect()
             return sip.connection
 
@@ -471,7 +475,7 @@ class SIP2AuthenticationProvider(
         )
         yield login
 
-        def raw_sc_status_information():
+        def raw_sc_status_information() -> str:
             info = sip.sc_status()
             return json.dumps(info, indent=2)
 
@@ -481,18 +485,17 @@ class SIP2AuthenticationProvider(
 
         # Log in was successful so test patron's test credentials
         if login.success:
-            if self.test_username:
+            test_username = self.test_username
+            if test_username:
 
-                def raw_patron_information():
-                    info = sip.patron_information(
-                        self.test_username, self.test_password
-                    )
+                def raw_patron_information() -> str:
+                    info = sip.patron_information(test_username, self.test_password)
                     return json.dumps(info, indent=1)
 
                 yield self.run_test(
                     "Patron information request",
                     sip.patron_information_request,
-                    self.test_username,
+                    test_username,
                     patron_password=self.test_password,
                 )
 
@@ -548,7 +551,7 @@ class SIP2AuthenticationProvider(
         # If we don't have any expiry information, we set it to NO_VALUE,
         # so the expiry gets cleared if there once was an expiry, and there
         # no longer is, since this can prevent borrowing otherwise.
-        patron_expiry = PatronData.NO_VALUE
+        patron_expiry: PatronData.NoValue | datetime = PatronData.NO_VALUE
         for expire_field in [
             "sipserver_patron_expiration",
             "polaris_patron_expiration",
@@ -569,7 +572,7 @@ class SIP2AuthenticationProvider(
         return patrondata
 
     def info_to_patrondata_block_reason(
-        self, info, patrondata: PatronData
+        self, info: dict[str, Any], patrondata: PatronData
     ) -> PatronData.NoValue | str:
         # A True value in most (but not all) subfields of the
         # patron_status field will prohibit the patron from borrowing
@@ -599,13 +602,15 @@ class SIP2AuthenticationProvider(
         return block_reason
 
     @classmethod
-    def parse_date(cls, value):
-        """Try to parse `value` using any of several common date formats."""
+    def parse_date(cls, value: str | None) -> datetime | None:
+        """Try to parse ``value`` using any of several common date formats."""
+        if value is None:
+            return None
         date_value = None
         for format in cls.DATE_FORMATS:
             try:
                 date_value = datetime.strptime(value, format)
                 break
-            except ValueError as e:
+            except ValueError:
                 continue
         return date_value

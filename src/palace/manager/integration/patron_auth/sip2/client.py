@@ -24,8 +24,9 @@ limitations under the License.
 
 """
 
+from __future__ import annotations
+
 import datetime
-import logging
 import os
 import re
 import socket
@@ -34,6 +35,7 @@ import tempfile
 import time
 from collections.abc import Callable
 from enum import Enum
+from typing import Any
 
 import certifi
 
@@ -46,18 +48,18 @@ from palace.manager.util.log import LoggerMixin
 # fields in a way that makes it easy to reliably parse response
 # documents.
 
-# Client-level logger.
-client_logger = logging.getLogger("SIPClient")
 
-
-class fixed:
+class FixedField:
     """A fixed-width field in a SIP2 response."""
 
-    def __init__(self, internal_name, length):
-        self.internal_name = internal_name
+    def __init__(self, length: int) -> None:
+        self.internal_name = ""
         self.length = length
 
-    def consume(self, data, in_progress):
+    def __set_name__(self, owner: type, name: str) -> None:
+        self.internal_name = name
+
+    def consume(self, data: str, in_progress: dict[str, Any]) -> str:
         """Remove the value of this field from the beginning of the
         input string, and store it in the given dictionary.
 
@@ -72,83 +74,81 @@ class fixed:
         in_progress[self.internal_name] = value
         return data[self.length :]
 
-    @classmethod
-    def _add(cls, internal_name, *args, **kwargs):
-        obj = cls(internal_name, *args, **kwargs)
-        setattr(cls, internal_name, obj)
+
+class Fixed:
+    """Namespace for fixed-width SIP2 response fields."""
+
+    patron_status = FixedField(14)
+    language = FixedField(3)
+    transaction_date = FixedField(18)
+    hold_items_count = FixedField(4)
+    overdue_items_count = FixedField(4)
+    charged_items_count = FixedField(4)
+    fine_items_count = FixedField(4)
+    recall_items_count = FixedField(4)
+    unavailable_holds_count = FixedField(4)
+    login_ok = FixedField(1)
+    end_session = FixedField(1)
+
+    # ACS Status fixed fields.
+    # These next fields have values "Y" or "N".
+    online_status = FixedField(1)
+    checkin_ok = FixedField(1)
+    checkout_ok = FixedField(1)
+    acs_renewal_policy = FixedField(1)
+    status_update_ok = FixedField(1)
+    offline_ok = FixedField(1)
+
+    # Other ACS Status fixed fields.
+    timeout_period = FixedField(3)
+    retries_allowed = FixedField(3)
+    datetime_sync = FixedField(18)
+    protocol_version = FixedField(4)
 
 
-fixed._add("patron_status", 14)
-fixed._add("language", 3)
-fixed._add("transaction_date", 18)
-fixed._add("hold_items_count", 4)
-fixed._add("overdue_items_count", 4)
-fixed._add("charged_items_count", 4)
-fixed._add("fine_items_count", 4)
-fixed._add("recall_items_count", 4)
-fixed._add("unavailable_holds_count", 4)
-fixed._add("login_ok", 1)
-fixed._add("end_session", 1)
-
-# ACS Status fixed fields.
-# These next fields have values "Y" or "N".
-fixed._add("online_status", 1)
-fixed._add("checkin_ok", 1)
-fixed._add("checkout_ok", 1)
-fixed._add("acs_renewal_policy", 1)
-fixed._add("status_update_ok", 1)
-fixed._add("offline_ok", 1)
-
-# Other ACS Status fixed fields.
-fixed._add("timeout_period", 3)
-fixed._add("retries_allowed", 3)
-fixed._add("datetime_sync", 18)
-fixed._add("protocol_version", 4)
-
-
-class named:
+class NamedField(LoggerMixin):
     """A variable-length field in a SIP2 response."""
 
     def __init__(
         self,
-        internal_name: str,
         sip_code: str,
-        required=False,
+        *,
+        internal_name: str = "",
+        required: bool = False,
         length: int | None = None,
-        allow_multiple=False,
-        log: logging.Logger | None = None,
-    ):
+        allow_multiple: bool = False,
+    ) -> None:
         self.sip_code = sip_code
         self.internal_name = internal_name
-        self.req = required
+        self.required = required
         self.length = length
         self.allow_multiple = allow_multiple
-        self.log = log or client_logger
 
-    @property
-    def required(self):
+    def __set_name__(self, owner: type, name: str) -> None:
+        self.internal_name = name
+
+    def as_required(self) -> NamedField:
         """Create a variant of this field which is required.
 
         Most variable-length fields are not required, but certain
         fields may be required in the responses to specific types of
         requests.
-
-        To check whether a specific field actually is required, check
-        `field.req`.
         """
-        return named(
-            self.internal_name,
+        if self.required:
+            return self
+
+        return NamedField(
             self.sip_code,
-            True,
-            self.length,
-            self.allow_multiple,
-            log=self.log,
+            internal_name=self.internal_name,
+            required=True,
+            length=self.length,
+            allow_multiple=self.allow_multiple,
         )
 
-    def consume(self, value, in_progress):
+    def consume(self, value: str, in_progress: dict[str, Any]) -> None:
         """Process the given value for this field.
 
-        Unlike fixed.consume, this does not modify the value -- it's
+        Unlike FixedField.consume, this does not modify the value -- it's
         assumed that this particular field value has already been
         isolated from the response string.
 
@@ -168,64 +168,62 @@ class named:
         else:
             in_progress[self.internal_name] = value
 
-    @classmethod
-    def _add(cls, internal_name, *args, **kwargs):
-        obj = cls(internal_name, *args, **kwargs)
-        setattr(cls, internal_name, obj)
 
+class Named:
+    """Namespace for variable-length SIP2 response fields."""
 
-named._add("institution_id", "AO")
-named._add("patron_identifier", "AA")
-named._add("personal_name", "AE")
-named._add("hold_items_limit", "BZ", length=4)
-named._add("overdue_items_limit", "CA", length=4)
-named._add("charged_items_limit", "CB", length=4)
-named._add("valid_patron", "BL", length=1)
-named._add("valid_patron_password", "CQ", length=1)
-named._add("currency_type", "BH", length=3)
-named._add("fee_amount", "BV")
-named._add("fee_limit", "CC")
-named._add("hold_items", "AS", allow_multiple=True)
-named._add("overdue_items", "AT", allow_multiple=True)
-named._add("charged_items", "AU", allow_multiple=True)
-named._add("fine_items", "AV", allow_multiple=True)
-named._add("recall_items", "BU", allow_multiple=True)
-named._add("unavailable_hold_items", "CD", allow_multiple=True)
-named._add("home_address", "BD")
-named._add("email_address", "BE")
-named._add("phone_number", "BF")
-named._add("sequence_number", "AY")
+    institution_id = NamedField("AO")
+    patron_identifier = NamedField("AA")
+    personal_name = NamedField("AE")
+    hold_items_limit = NamedField("BZ", length=4)
+    overdue_items_limit = NamedField("CA", length=4)
+    charged_items_limit = NamedField("CB", length=4)
+    valid_patron = NamedField("BL", length=1)
+    valid_patron_password = NamedField("CQ", length=1)
+    currency_type = NamedField("BH", length=3)
+    fee_amount = NamedField("BV")
+    fee_limit = NamedField("CC")
+    hold_items = NamedField("AS", allow_multiple=True)
+    overdue_items = NamedField("AT", allow_multiple=True)
+    charged_items = NamedField("AU", allow_multiple=True)
+    fine_items = NamedField("AV", allow_multiple=True)
+    recall_items = NamedField("BU", allow_multiple=True)
+    unavailable_hold_items = NamedField("CD", allow_multiple=True)
+    home_address = NamedField("BD")
+    email_address = NamedField("BE")
+    phone_number = NamedField("BF")
+    sequence_number = NamedField("AY")
 
-# The spec doesn't say there can be more than one screen message,
-# but I have seen it happen.
-named._add("screen_message", "AF", allow_multiple=True)
-named._add("print_line", "AG")
+    # The spec doesn't say there can be more than one screen message,
+    # but I have seen it happen.
+    screen_message = NamedField("AF", allow_multiple=True)
+    print_line = NamedField("AG")
 
-# This is a standard field for items, but Evergreen allows it to
-# be returned in a Patron Information response (64) message.
-named._add("permanent_location", "AQ")
+    # This is a standard field for items, but Evergreen allows it to
+    # be returned in a Patron Information response (64) message.
+    permanent_location = NamedField("AQ")
 
-# SIP extensions defined by Georgia Public Library Service's SIP
-# server, used by Evergreen and Koha.
-named._add("sipserver_patron_expiration", "PA")
-named._add("sipserver_patron_class", "PC")
-named._add("sipserver_internet_privileges", "PI")
-named._add("sipserver_internal_id", "XI")
+    # SIP extensions defined by Georgia Public Library Service's SIP
+    # server, used by Evergreen and Koha.
+    sipserver_patron_expiration = NamedField("PA")
+    sipserver_patron_class = NamedField("PC")
+    sipserver_internet_privileges = NamedField("PI")
+    sipserver_internal_id = NamedField("XI")
 
-# SIP extensions defined by Polaris.
-named._add("polaris_patron_birthdate", "BC")
-named._add("polaris_postal_code", "PZ")
-named._add("polaris_patron_expiration", "PX")
-named._add("polaris_patron_expired", "PY")
+    # SIP extensions defined by Polaris.
+    polaris_patron_birthdate = NamedField("BC")
+    polaris_postal_code = NamedField("PZ")
+    polaris_patron_expiration = NamedField("PX")
+    polaris_patron_expired = NamedField("PY")
 
-# Some fields first seen in an OCLC Wise SIP2 response.
-# This first group included in the spec.
-named._add("library_name", "AM")
-named._add("supported_messages", "BX")
-named._add("terminal_location", "AN")
-# Not seen in the spec, but seen in the OCLC Wise SIP2 response.
-# See: https://help.wise.oclc.org/Staff_client/Library_self-service/SIP2_for_Wise/SIP2_suppliers#SIP2_licenses
-named._add("wise_licenses_and_extensions", "GG")
+    # Some fields first seen in an OCLC Wise SIP2 response.
+    # This first group included in the spec.
+    library_name = NamedField("AM")
+    supported_messages = NamedField("BX")
+    terminal_location = NamedField("AN")
+    # Not seen in the spec, but seen in the OCLC Wise SIP2 response.
+    # See: https://help.wise.oclc.org/Staff_client/Library_self-service/SIP2_for_Wise/SIP2_suppliers#SIP2_licenses
+    wise_licenses_and_extensions = NamedField("GG")
 
 
 # A potential problem: Polaris defines PA to refer to something else.
@@ -312,23 +310,23 @@ class SIPClient(Constants, LoggerMixin):
 
     def __init__(
         self,
-        target_server,
-        target_port,
+        target_server: str,
+        target_port: int = 6001,
         *,
-        login_user_id=None,
-        login_password=None,
-        location_code=None,
-        institution_id="",
-        separator=None,
-        use_ssl=False,
-        ssl_cert=None,
-        ssl_key=None,
-        ssl_verification=True,
+        login_user_id: str | None = None,
+        login_password: str | None = None,
+        location_code: str | None = None,
+        institution_id: str = "",
+        separator: str | None = None,
+        use_ssl: bool = False,
+        ssl_cert: str | None = None,
+        ssl_key: str | None = None,
+        ssl_verification: bool = True,
         ssl_contexts: Callable[[ssl._SSLMethod], ssl.SSLContext] = ssl.SSLContext,
-        encoding=Constants.DEFAULT_ENCODING,
-        dialect=Dialect.GENERIC_ILS,
+        encoding: str = Constants.DEFAULT_ENCODING,
+        dialect: Dialect = Dialect.GENERIC_ILS,
         timeout: int | None = None,
-    ):
+    ) -> None:
         """Initialize a client for (but do not connect to) a SIP2 server.
 
         :param use_ssl: If this is True, all socket connections to the SIP2
@@ -344,10 +342,7 @@ class SIPClient(Constants, LoggerMixin):
             server.
         """
         self.target_server = target_server
-        if not target_port:
-            target_port = 6001
-        if target_port:
-            self.target_port = int(target_port)
+        self.target_port = target_port
         self.location_code = location_code
         self.institution_id = institution_id
         self.separator = separator or "|"
@@ -382,7 +377,7 @@ class SIPClient(Constants, LoggerMixin):
         self.login_password = login_password
         self.dialect_config = dialect.config
 
-    def sc_status(self) -> dict[str, str] | None:
+    def sc_status(self) -> dict[str, Any] | None:
         """Get information about the SIP server.
 
         Per the SIP v2.0 spec, "This message will be the first message sent by
@@ -398,7 +393,7 @@ class SIPClient(Constants, LoggerMixin):
             self.sc_status_response_parser,
         )
 
-    def login(self):
+    def login(self) -> dict[str, Any] | None:
         """Log in to the SIP server if required."""
         if self.must_log_in:
             response = self.make_request(
@@ -411,29 +406,46 @@ class SIPClient(Constants, LoggerMixin):
             if response["login_ok"] != "1":
                 raise OSError("Error logging in: %r" % response)
             return response
+        return None
 
-    def patron_information(self, *args, **kwargs):
+    def patron_information(
+        self,
+        patron_identifier: str,
+        patron_password: str | None = None,
+        terminal_password: str = "",
+        language: str | None = None,
+        summary: str | None = None,
+    ) -> dict[str, Any]:
         """Get information about a patron."""
         return self.make_request(
             self.patron_information_request,
             self.patron_information_parser,
-            *args,
-            **kwargs,
+            patron_identifier,
+            patron_password,
+            terminal_password,
+            language,
+            summary,
         )
 
-    def end_session(self, *args, **kwargs):
+    def end_session(
+        self,
+        patron_identifier: str,
+        patron_password: str | None = None,
+        terminal_password: str = "",
+    ) -> dict[str, Any] | None:
         """Send end session message."""
         if self.dialect_config.send_end_session:
             return self.make_request(
                 self.end_session_message,
                 self.end_session_response_parser,
-                *args,
-                **kwargs,
+                patron_identifier,
+                patron_password,
+                terminal_password,
             )
         else:
             return None
 
-    def connect(self):
+    def connect(self) -> None:
         """Create a socket connection to a SIP server."""
         try:
             if self.connection:
@@ -455,11 +467,11 @@ class SIPClient(Constants, LoggerMixin):
         # Since this is a new socket connection, reset the message count
         self.reset_connection_state()
 
-    def make_insecure_connection(self):
+    def make_insecure_connection(self) -> socket.socket:
         """Actually set up a socket connection."""
         return socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-    def make_secure_connection(self):
+    def make_secure_connection(self) -> ssl.SSLSocket:
         """Create an SSL-enabled socket connection."""
 
         # If a certificate and/or key were provided, write them to
@@ -515,27 +527,33 @@ class SIPClient(Constants, LoggerMixin):
 
         return connection
 
-    def reset_connection_state(self):
+    def reset_connection_state(self) -> None:
         """Reset connection-specific state.
         Specifically, the sequence number.
         """
         self.sequence_number = 0
 
-    def disconnect(self):
+    def disconnect(self) -> None:
         """Close the connection to the SIP server."""
-        self.connection.close()
+        if self.connection:
+            self.connection.close()
         self.connection = None
 
-    def make_request(self, message_creator, parser, *args, **kwargs):
+    def make_request[**P](
+        self,
+        message_creator: Callable[P, str],
+        parser: Callable[[bytes], dict[str, Any]],
+        *args: P.args,
+        **kwargs: P.kwargs,
+    ) -> dict[str, Any]:
         """Send a request to a SIP server and parse the response.
 
-        :param connection: Socket to send data over.
         :param message_creator: A function that creates the message to send.
         :param parser: A function that parses the response message.
         """
         original_message = message_creator(*args, **kwargs)
         message_with_checksum = self.append_checksum(original_message)
-        parsed = None
+        parsed: dict[str, Any] | None = None
         retries = 0
         while not parsed:
             if retries >= self.MAXIMUM_RETRIES:
@@ -546,7 +564,7 @@ class SIPClient(Constants, LoggerMixin):
             response = self.read_message()
             try:
                 parsed = parser(response)
-            except RequestResend as e:
+            except RequestResend:
                 # Instead of a response, we got a request to resend the data.
                 # Generate a new checksum but do not include or increment
                 # the sequence number.
@@ -586,63 +604,63 @@ class SIPClient(Constants, LoggerMixin):
 
         return "99" + code + _max_print_width + _protocol_version
 
-    def sc_status_response_parser(self, message):
+    def sc_status_response_parser(self, message: bytes) -> dict[str, Any]:
         """Parse the response from a status message."""
         return self.parse_response(
             message,
             98,
-            fixed.online_status,
-            fixed.checkin_ok,
-            fixed.checkout_ok,
-            fixed.acs_renewal_policy,
-            fixed.status_update_ok,
-            fixed.offline_ok,
-            fixed.timeout_period,
-            fixed.retries_allowed,
-            fixed.datetime_sync,
-            fixed.protocol_version,
-            named.institution_id,
-            named.library_name,
-            named.supported_messages,
-            named.terminal_location,
-            named.screen_message,
-            named.print_line,
-            named.wise_licenses_and_extensions,
+            Fixed.online_status,
+            Fixed.checkin_ok,
+            Fixed.checkout_ok,
+            Fixed.acs_renewal_policy,
+            Fixed.status_update_ok,
+            Fixed.offline_ok,
+            Fixed.timeout_period,
+            Fixed.retries_allowed,
+            Fixed.datetime_sync,
+            Fixed.protocol_version,
+            Named.institution_id,
+            Named.library_name,
+            Named.supported_messages,
+            Named.terminal_location,
+            Named.screen_message,
+            Named.print_line,
+            Named.wise_licenses_and_extensions,
         )
 
     def login_message(
         self,
-        login_user_id,
-        login_password,
-        location_code="",
-        uid_algorithm="0",
-        pwd_algorithm="0",
-    ):
+        login_user_id: str | None,
+        login_password: str | None,
+        location_code: str | None = None,
+        uid_algorithm: str = "0",
+        pwd_algorithm: str = "0",
+    ) -> str:
         """Generate a message for logging in to a SIP server."""
         message = (
             "93"
             + uid_algorithm
             + pwd_algorithm
             + "CN"
-            + login_user_id
+            + (login_user_id or "")
             + self.separator
             + "CO"
-            + login_password
+            + (login_password or "")
         )
         if location_code:
             message = message + self.separator + "CP" + location_code
         return message
 
-    def login_response_parser(self, message):
+    def login_response_parser(self, message: bytes) -> dict[str, Any]:
         """Parse the response from a login message."""
-        return self.parse_response(message, 94, fixed.login_ok)
+        return self.parse_response(message, 94, Fixed.login_ok)
 
     def end_session_message(
         self,
-        patron_identifier,
-        patron_password="",
-        terminal_password="",
-    ):
+        patron_identifier: str,
+        patron_password: str | None = None,
+        terminal_password: str = "",
+    ) -> str:
         """
         This message will be sent when a patron has completed all of their
         transactions. The ACS may, upon receipt of this command, close any
@@ -677,27 +695,27 @@ class SIPClient(Constants, LoggerMixin):
             message += self.separator + "AD" + patron_password
         return message
 
-    def end_session_response_parser(self, message):
+    def end_session_response_parser(self, message: bytes) -> dict[str, Any]:
         """Parse the response from a end session message."""
         return self.parse_response(
             message,
             36,
-            fixed.end_session,
-            fixed.transaction_date,
-            named.institution_id,
-            named.patron_identifier.required,
-            named.screen_message,
-            named.print_line,
+            Fixed.end_session,
+            Fixed.transaction_date,
+            Named.institution_id,
+            Named.patron_identifier.as_required(),
+            Named.screen_message,
+            Named.print_line,
         )
 
     def patron_information_request(
         self,
-        patron_identifier,
-        patron_password="",
-        terminal_password="",
-        language=None,
-        summary=None,
-    ):
+        patron_identifier: str,
+        patron_password: str | None = None,
+        terminal_password: str = "",
+        language: str | None = None,
+        summary: str | None = None,
+    ) -> str:
         """
         A superset of patron status request.
 
@@ -737,7 +755,7 @@ class SIPClient(Constants, LoggerMixin):
             message += self.separator + "AD" + patron_password
         return message
 
-    def patron_information_parser(self, data):
+    def patron_information_parser(self, data: bytes) -> dict[str, Any]:
         """
         Parse the message sent in response to a patron information request.
 
@@ -785,73 +803,75 @@ class SIPClient(Constants, LoggerMixin):
         response = self.parse_response(
             data,
             64,
-            fixed.patron_status,
-            fixed.language,
-            fixed.transaction_date,
-            fixed.hold_items_count,
-            fixed.overdue_items_count,
-            fixed.charged_items_count,
-            fixed.fine_items_count,
-            fixed.recall_items_count,
-            fixed.unavailable_holds_count,
-            named.institution_id,
-            named.patron_identifier.required,
-            named.personal_name.required,
-            named.hold_items_limit,
-            named.overdue_items_limit,
-            named.charged_items_limit,
-            named.valid_patron,
-            named.valid_patron_password,
-            named.currency_type,
-            named.fee_amount,
-            named.fee_limit,
-            named.hold_items,
-            named.overdue_items,
-            named.charged_items,
-            named.fine_items,
-            named.recall_items,
-            named.unavailable_hold_items,
-            named.home_address,
-            named.email_address,
-            named.phone_number,
-            named.screen_message,
-            named.print_line,
+            Fixed.patron_status,
+            Fixed.language,
+            Fixed.transaction_date,
+            Fixed.hold_items_count,
+            Fixed.overdue_items_count,
+            Fixed.charged_items_count,
+            Fixed.fine_items_count,
+            Fixed.recall_items_count,
+            Fixed.unavailable_holds_count,
+            Named.institution_id,
+            Named.patron_identifier.as_required(),
+            Named.personal_name.as_required(),
+            Named.hold_items_limit,
+            Named.overdue_items_limit,
+            Named.charged_items_limit,
+            Named.valid_patron,
+            Named.valid_patron_password,
+            Named.currency_type,
+            Named.fee_amount,
+            Named.fee_limit,
+            Named.hold_items,
+            Named.overdue_items,
+            Named.charged_items,
+            Named.fine_items,
+            Named.recall_items,
+            Named.unavailable_hold_items,
+            Named.home_address,
+            Named.email_address,
+            Named.phone_number,
+            Named.screen_message,
+            Named.print_line,
             # Add common extension fields.
-            named.permanent_location,
-            named.sipserver_patron_expiration,
-            named.polaris_patron_expiration,
-            named.sipserver_patron_class,
-            named.sipserver_internet_privileges,
-            named.sipserver_internal_id,
+            Named.permanent_location,
+            Named.sipserver_patron_expiration,
+            Named.polaris_patron_expiration,
+            Named.sipserver_patron_class,
+            Named.sipserver_internet_privileges,
+            Named.sipserver_internal_id,
         )
 
         # As a convenience, parse the patron_status field from a
         # 14-character string into a dictionary of booleans.
         try:
             parsed = self.parse_patron_status(response.get("patron_status"))
-        except ValueError as e:
+        except ValueError:
             parsed = {}
         response["patron_status_parsed"] = parsed
         return response
 
-    def parse_response(self, data, expect_status_code, *fields):
+    def parse_response(
+        self, data: bytes, expect_status_code: int, *fields: FixedField | NamedField
+    ) -> dict[str, Any]:
         """Verify that the given response string starts with the expected
         status code. Then extract the values of both fixed-width and
         named fields.
 
         :param return: A dictionary containing the parsed-out information.
         """
-        data = data.decode(self.encoding)
+        decoded = data.decode(self.encoding)
 
         # We save the original data that is parsed so we can log it if there would be some errors.
-        original_data = data
+        original_data = decoded
 
-        parsed = {}
-        data = self.consume_status_code(data, str(expect_status_code), parsed)
+        parsed: dict[str, Any] = {}
+        decoded = self.consume_status_code(decoded, str(expect_status_code), parsed)
 
-        fields_by_sip_code = dict()
+        fields_by_sip_code: dict[str, NamedField] = {}
 
-        required_fields_not_seen = set()
+        required_fields_not_seen: set[NamedField] = set()
 
         # We've been given a list of unnamed fixed-width fields (which
         # must appear at the front) followed by a list of named
@@ -864,25 +884,25 @@ class SIPClient(Constants, LoggerMixin):
         # fixed-width fields, and build a dictionary of named fields
         # to use later.
         for field in fields:
-            if isinstance(field, fixed):
-                data = field.consume(data, parsed)
+            if isinstance(field, FixedField):
+                decoded = field.consume(decoded, parsed)
             else:
                 fields_by_sip_code[field.sip_code] = field
-                if field.req:
+                if field.required:
                     required_fields_not_seen.add(field)
 
         # We now have a list of named fields separated by
         # self.separator.  Use separator_re to split the data in a way
         # that minimizes the chances that embedded separators (which
         # shouldn't happen, but do) don't ruin the data.
-        split = self.separator_re.split(data)
+        split = self.separator_re.split(decoded)
 
         # We now have alternating field name/value pairs, except for
         # the first field, which wasn't split because it didn't start with
         # the separator. Fix that.
         first_field = split[0]
-        first_field = [first_field[:2], first_field[2:]]
-        split = first_field + split[1:]
+        first_field_parts = [first_field[:2], first_field[2:]]
+        split = first_field_parts + split[1:]
         i = 0
 
         # Now go through each name/value pair, find the corresponding
@@ -890,35 +910,41 @@ class SIPClient(Constants, LoggerMixin):
         while i < len(split):
             sip_code = split[i]
             value = split[i + 1]
-            if sip_code == named.sequence_number.sip_code:
+            if sip_code == Named.sequence_number.sip_code:
                 # Sequence number is special in two ways. First, it
                 # indicates the end of the message. Second, it doesn't
                 # have to be explicitly mentioned in the list of
                 # fields -- we always expect it.
-                named.sequence_number.consume(value, parsed)
+                Named.sequence_number.consume(value, parsed)
                 break
             else:
-                field = fields_by_sip_code.get(sip_code)
-                if sip_code and not field:
+                named_field = fields_by_sip_code.get(sip_code)
+                if sip_code and not named_field:
                     # This is an extension field. Do the best we can.
                     # This basically means storing it in the dictionary
                     # under its SIP code.
-                    field = named(sip_code, sip_code, allow_multiple=True, log=self.log)
+                    named_field = NamedField(
+                        sip_code,
+                        internal_name=sip_code,
+                        allow_multiple=True,
+                    )
 
-                if field:
-                    field.consume(value, parsed)
-                    if field.required and field in required_fields_not_seen:
-                        required_fields_not_seen.remove(field)
+                if named_field:
+                    named_field.consume(value, parsed)
+                    if named_field.required and named_field in required_fields_not_seen:
+                        required_fields_not_seen.remove(named_field)
             i += 2
 
         # If a named field is required and never showed up, sound the alarm.
-        for field in required_fields_not_seen:
+        for remaining_field in required_fields_not_seen:
             self.log.error(
-                f"Expected required field {field.sip_code} but did not find it. Response data:{original_data}. SIP2 server:{self.target_server}"
+                f"Expected required field {remaining_field.sip_code} but did not find it. Response data:{original_data}. SIP2 server:{self.target_server}"
             )
         return parsed
 
-    def consume_status_code(self, data, expected, in_progress):
+    def consume_status_code(
+        self, data: str, expected: str, in_progress: dict[str, Any]
+    ) -> str:
         """Pull the status code (the first two characters) off the
         given response string, and verify that it's as expected.
         """
@@ -932,21 +958,21 @@ class SIPClient(Constants, LoggerMixin):
         return data[2:]
 
     @classmethod
-    def parse_patron_status(cls, status_string):
+    def parse_patron_status(cls, status_string: str | None) -> dict[str, bool]:
         """Parse the raw 14-character patron_status string.
 
         :return: A 14-element dictionary mapping flag names to boolean values.
         """
-        if not isinstance(status_string, (bytes, str)) or len(status_string) != 14:
+        if not isinstance(status_string, str) or len(status_string) != 14:
             raise ValueError("Patron status must be a 14-character string.")
-        status = {}
+        status: dict[str, bool] = {}
         for i, field in enumerate(cls.PATRON_STATUS_FIELDS):
             # ' ' means false, 'Y' means true.
             value = status_string[i] != " "
             status[field] = value
         return status
 
-    def now(self):
+    def now(self) -> str:
         """Return the current time, formatted as SIP expects it."""
         tz_spaces = self.dialect_config.tz_spaces
         now = utc_now()
@@ -955,13 +981,13 @@ class SIPClient(Constants, LoggerMixin):
 
     def summary(
         self,
-        hold_items=False,
-        overdue_items=False,
-        charged_items=False,
-        fine_items=False,
-        recall_items=False,
-        unavailable_holds=False,
-    ):
+        hold_items: bool = False,
+        overdue_items: bool = False,
+        charged_items: bool = False,
+        fine_items: bool = False,
+        recall_items: bool = False,
+        unavailable_holds: bool = False,
+    ) -> str:
         """Generate the SIP summary field: a 10-character query string for
         requesting detailed information about a patron's relationship
         with items.
@@ -989,22 +1015,23 @@ class SIPClient(Constants, LoggerMixin):
             )
         return summary
 
-    def send(self, data):
+    def send(self, data: str) -> None:
         """Send a message over the socket and update the sequence index."""
         data = data + self.TERMINATOR_CHAR
-        return self.do_send(data.encode(self.encoding))
+        self.do_send(data.encode(self.encoding))
 
-    def do_send(self, data):
+    def do_send(self, data: bytes) -> None:
         """Actually send data over the socket.
 
         This method exists only to be subclassed by MockSIPClient.
         """
         start_time = time.time()
+        assert self.connection is not None
         self.connection.sendall(data)
         time_taken = time.time() - start_time
         self.log.info("Sent %s bytes in %.2f seconds: %r", len(data), time_taken, data)
 
-    def read_message(self, max_size=1024 * 1024):
+    def read_message(self, max_size: int = 1024 * 1024) -> bytes:
         """Read a SIP2 message from the socket connection.
 
         A SIP2 message ends with a \\r character.
@@ -1012,6 +1039,7 @@ class SIPClient(Constants, LoggerMixin):
         start_time = time.time()
         done = False
         data = b""
+        assert self.connection is not None
         while not done:
             if time.time() - start_time > self.timeout:
                 raise OSError("Timeout reading from socket.")
@@ -1029,7 +1057,7 @@ class SIPClient(Constants, LoggerMixin):
         )
         return data
 
-    def append_checksum(self, text, include_sequence_number=True):
+    def append_checksum(self, text: str, include_sequence_number: bool = True) -> str:
         """Calculates checksum for passed-in message, and returns the message
         with the checksum appended.
 

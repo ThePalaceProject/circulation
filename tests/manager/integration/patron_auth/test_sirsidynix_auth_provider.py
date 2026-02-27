@@ -194,8 +194,6 @@ class TestSirsiDynixAuthenticationProvider:
         self, sirsi_auth_fixture: SirsiAuthFixture
     ):
         provider = sirsi_auth_fixture.provider()
-        response = provider.remote_authenticate(None, "pwd")
-        assert response is None
 
         response = provider.remote_authenticate("username", None)
         assert response is None

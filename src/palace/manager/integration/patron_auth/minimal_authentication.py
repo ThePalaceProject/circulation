@@ -46,7 +46,7 @@ class MinimalAuthenticationProvider(
         return BasicAuthProviderLibrarySettings
 
     def remote_authenticate(
-        self, username: str | None, password: str | None
+        self, username: str, password: str | None
     ) -> PatronData | None:
         """No Auth authentication: Allow everyone through as long as they have a username."""
         if not username:

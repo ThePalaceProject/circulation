@@ -353,7 +353,7 @@ class BasicAuthenticationProvider[
 
     @abstractmethod
     def remote_authenticate(
-        self, username: str | None, password: str | None
+        self, username: str, password: str | None
     ) -> PatronData | ProblemDetail | None:
         """Does the source of truth approve of these credentials?
 
@@ -504,7 +504,7 @@ class BasicAuthenticationProvider[
         :return: A Patron if one can be authenticated; a ProblemDetail
             if an error occurs; None if the credentials are missing or wrong.
         """
-        username = self.scrub_credential(credentials.get("username"))
+        username = self.scrub_credential(credentials.get("username")) or ""
         password = self.scrub_credential(credentials.get("password"))
         if not self.server_side_validation(username, password):
             return None

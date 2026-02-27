@@ -150,8 +150,6 @@ module = [
     "palace.manager.integration.patron_auth.saml.provider",
     "palace.manager.integration.patron_auth.saml.python_expression_dsl.ast",
     "palace.manager.integration.patron_auth.saml.python_expression_dsl.evaluator",
-    "palace.manager.integration.patron_auth.sip2.client",
-    "palace.manager.integration.patron_auth.sip2.provider",
     "palace.manager.integration.patron_auth.sirsidynix_authentication_provider",
     "palace.manager.search.filter",
     "palace.manager.search.pagination",
