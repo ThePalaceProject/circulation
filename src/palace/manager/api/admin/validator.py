@@ -1,4 +1,10 @@
+from __future__ import annotations
+
+# mypy: warn_unreachable=false
 import re
+from collections.abc import Callable
+from re import Match
+from typing import Any
 
 from flask_babel import lazy_gettext as _
 
@@ -7,11 +13,14 @@ from palace.manager.api.admin.problem_details import (
     INVALID_NUMBER,
     INVALID_URL,
 )
+from palace.manager.util.problem_detail import ProblemDetail
 
 
 class Validator:
-    def validate(self, settings, content):
-        validators = [
+    def validate(
+        self, settings: list[dict[str, Any]] | str, content: dict[str, Any]
+    ) -> ProblemDetail | None:
+        validators: list[Callable[..., ProblemDetail | None],] = [
             self.validate_email,
             self.validate_url,
             self.validate_number,
@@ -21,12 +30,20 @@ class Validator:
             error = validator(settings, content)
             if error:
                 return error
+        return None
 
     def _extract_inputs(
-        self, settings, value, form, key="format", is_list=False, should_zip=False
-    ):
+        self,
+        settings: list[dict[str, Any]],
+        value: str,
+        form: dict[str, Any] | None,
+        key: str = "format",
+        is_list: bool = False,
+        should_zip: bool = False,
+    ) -> list[Any]:
         if not (isinstance(settings, list)):
             return []
+        form = form or {}
 
         fields = [s for s in settings if s.get(key) == value and self._value(s, form)]
 
@@ -40,7 +57,9 @@ class Validator:
         else:
             return values
 
-    def validate_email(self, settings, content):
+    def validate_email(
+        self, settings: list[dict[str, Any]] | str, content: dict[str, Any]
+    ) -> ProblemDetail | None:
         """Find any email addresses that the user has submitted, and make sure that
         they are in a valid format.
         This method is used by individual_admin_settings and library_settings.
@@ -49,7 +68,9 @@ class Validator:
             # If :param settings is a list of objects--i.e. the LibrarySettingsController
             # is calling this method--then we need to pull out the relevant input strings
             # to validate.
-            email_inputs = self._extract_inputs(settings, "email", content.get("form"))
+            email_inputs = self._extract_inputs(
+                settings, "email", content.get("form") or {}
+            )
         else:
             # If the IndividualAdminSettingsController is calling this method, then we already have the
             # input string; it was passed in directly.
@@ -64,15 +85,20 @@ class Validator:
                     return INVALID_EMAIL.detailed(
                         _('"%(email)s" is not a valid email address.', email=email)
                     )
+        return None
 
-    def _is_email(self, email):
+    def _is_email(self, email: str) -> Match[str] | None:
         """Email addresses must be in the format 'x@y.z'."""
         email_format = r".+\@.+\..+"
         return re.search(email_format, email)
 
-    def validate_url(self, settings, content):
+    def validate_url(
+        self, settings: list[dict[str, Any]] | str, content: dict[str, Any]
+    ) -> ProblemDetail | None:
         """Find any URLs that the user has submitted, and make sure that
         they are in a valid format."""
+        if not isinstance(settings, list):
+            return None
         # Find the fields that have to do with URLs and are not blank.
         url_inputs = self._extract_inputs(
             settings, "url", content.get("form"), should_zip=True
@@ -89,9 +115,10 @@ class Validator:
                     return INVALID_URL.detailed(
                         _('"%(url)s" is not a valid URL.', url=url)
                     )
+        return None
 
     @classmethod
-    def _is_url(cls, url, allowed):
+    def _is_url(cls, url: str, allowed: list[str]) -> bool:
         if not url:
             return False
         has_protocol = any(
@@ -99,9 +126,13 @@ class Validator:
         )
         return has_protocol or (url in allowed)
 
-    def validate_number(self, settings, content):
+    def validate_number(
+        self, settings: list[dict[str, Any]] | str, content: dict[str, Any]
+    ) -> ProblemDetail | None:
         """Find any numbers that the user has submitted, and make sure that they are 1) actually numbers,
         2) positive, and 3) lower than the specified maximum, if there is one."""
+        if not isinstance(settings, list):
+            return None
         # Find the fields that should have numeric input and are not blank.
         number_inputs = self._extract_inputs(
             settings, "number", content.get("form"), key="type", should_zip=True
@@ -110,8 +141,9 @@ class Validator:
             error = self._number_error(field, number)
             if error:
                 return error
+        return None
 
-    def _number_error(self, field, number):
+    def _number_error(self, field: dict[str, Any], number: Any) -> ProblemDetail | None:
         min = field.get("min") or 0
         max = field.get("max")
 
@@ -138,21 +170,28 @@ class Validator:
                     max=max,
                 )
             )
+        return None
 
-    def _list_of_values(self, fields, form):
-        result = []
+    def _list_of_values(self, fields: list[dict[str, Any]], form: Any) -> list[Any]:
+        result: list[Any] = []
         for field in fields:
             result += self._value(field, form)
         return [_f for _f in result if _f]
 
-    def _value(self, field, form):
+    def _value(self, field: dict[str, Any], form: Any) -> Any:
         # Extract the user's input for this field. If this is a sitewide setting,
         # then the input needs to be accessed via "value" rather than via the setting's key.
         # We use getlist instead of get so that, if the field is such that the user can input multiple values
         # (e.g. language codes), we'll extract all the values, not just the first one.
-        value = form.getlist(field.get("key"))
+        # form is typed as Any because it may be ImmutableMultiDict (has getlist) or dict-like.
+        getlist = getattr(form, "getlist", None)
+        if getlist is not None:
+            value = list(getlist(field.get("key")))
+        else:
+            v = form.get(field.get("key"))
+            value = [v] if v is not None else []
         if not value:
             return form.get("value")
-        elif len(value) == 1:
+        if len(value) == 1:
             return value[0]
-        return [x for x in value if x != None and x != ""]
+        return [x for x in value if x is not None and x != ""]

@@ -313,8 +313,12 @@ class CustomListsController(
         return url_fn
 
     def custom_list(
-        self, list_id: int
+        self, list_id: int | str
     ) -> Response | dict[str, Any] | ProblemDetail | None:
+        try:
+            list_id = int(list_id) if isinstance(list_id, str) else list_id
+        except ValueError:
+            return MISSING_CUSTOM_LIST
         library = get_request_library()
         self.require_librarian(library)
         data_source = DataSource.lookup(self._db, DataSource.LIBRARY_STAFF)
@@ -398,9 +402,15 @@ class CustomListsController(
         return None
 
     def share_locally(
-        self, customlist_id: int
+        self, customlist_id: int | str
     ) -> ProblemDetail | dict[str, int] | Response:
         """Share this customlist with all libraries on this local CM"""
+        try:
+            customlist_id = (
+                int(customlist_id) if isinstance(customlist_id, str) else customlist_id
+            )
+        except ValueError:
+            return MISSING_CUSTOM_LIST
         if not customlist_id:
             return INVALID_INPUT
         customlist = get_one(self._db, CustomList, id=customlist_id)

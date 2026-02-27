@@ -75,11 +75,6 @@ disallow_incomplete_defs = false
 disallow_untyped_decorators = false
 disallow_untyped_defs = false
 module = [
-    "palace.manager.api.admin.admin_authentication_provider",
-    "palace.manager.api.admin.model.custom_lists",
-    "palace.manager.api.admin.password_admin_authentication_provider",
-    "palace.manager.api.admin.routes",
-    "palace.manager.api.admin.validator",
     "palace.manager.api.annotations",
     "palace.manager.api.app",
     "palace.manager.api.authentication.base",

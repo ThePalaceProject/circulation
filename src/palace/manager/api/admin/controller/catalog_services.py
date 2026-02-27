@@ -7,7 +7,10 @@ from palace.manager.api.admin.controller.integration_settings import (
     UpdatedLibrarySettingsTuple,
 )
 from palace.manager.api.admin.form_data import ProcessFormData
-from palace.manager.api.admin.problem_details import MULTIPLE_SERVICES_FOR_LIBRARY
+from palace.manager.api.admin.problem_details import (
+    MISSING_SERVICE,
+    MULTIPLE_SERVICES_FOR_LIBRARY,
+)
 from palace.manager.integration.catalog.marc.exporter import MarcExporter
 from palace.manager.integration.goals import Goals
 from palace.manager.integration.settings import BaseSettings
@@ -102,6 +105,10 @@ class CatalogServicesController(
 
         return Response(str(catalog_service.id), response_code)
 
-    def process_delete(self, service_id: int) -> Response:
+    def process_delete(self, service_id: int | str) -> Response | ProblemDetail:
         self.require_system_admin()
-        return self.delete_service(service_id)
+        try:
+            sid = int(service_id) if isinstance(service_id, str) else service_id
+        except ValueError:
+            return MISSING_SERVICE
+        return self.delete_service(sid)
