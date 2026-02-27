@@ -4,6 +4,7 @@ from datetime import datetime
 from decimal import Decimal
 from functools import partial
 from typing import cast
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -15,6 +16,7 @@ from palace.manager.api.authentication.basic import (
     LibraryIdentifierRestriction,
 )
 from palace.manager.api.problem_details import (
+    BLOCKED_CREDENTIALS,
     INVALID_CREDENTIALS,
     PATRON_OF_ANOTHER_LIBRARY,
 )
@@ -22,12 +24,16 @@ from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.integration.patron_auth.sip2.client import Sip2Encoding
 from palace.manager.integration.patron_auth.sip2.dialect import Dialect
 from palace.manager.integration.patron_auth.sip2.provider import (
+    PatronBlockingRule,
     SIP2AuthenticationProvider,
     SIP2LibrarySettings,
     SIP2Settings,
+    check_patron_blocking_rules,
 )
+from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.problem_detail import raises_problem_detail
 from tests.mocks.sip import MockSIPClient
 
 
@@ -956,3 +962,331 @@ class TestSIP2AuthenticationProvider:
         labels = [r.label for r in results]
         assert "Library Identifier Restriction" not in labels
         assert "Parsed Patron Data" not in labels
+
+
+class TestPatronBlockingRule:
+    """Tests for the PatronBlockingRule model."""
+
+    def test_basic_construction(self) -> None:
+        rule = PatronBlockingRule(name="rule1", rule="BLOCK")
+        assert rule.name == "rule1"
+        assert rule.rule == "BLOCK"
+        assert rule.message is None
+
+    def test_with_message(self) -> None:
+        rule = PatronBlockingRule(
+            name="rule1", rule="BLOCK", message="You are blocked."
+        )
+        assert rule.message == "You are blocked."
+
+    def test_strips_whitespace(self) -> None:
+        rule = PatronBlockingRule(name="  rule1  ", rule="  BLOCK  ")
+        assert rule.name == "rule1"
+        assert rule.rule == "BLOCK"
+
+    def test_frozen(self) -> None:
+        rule = PatronBlockingRule(name="rule1", rule="BLOCK")
+        with pytest.raises(Exception):
+            rule.name = "other"  # type: ignore[misc]
+
+    def test_round_trip_dict(self) -> None:
+        rule = PatronBlockingRule(name="r", rule="BLOCK", message="msg")
+        as_dict = rule.model_dump()
+        restored = PatronBlockingRule.model_validate(as_dict)
+        assert restored == rule
+
+
+class TestSIP2LibrarySettingsBlockingRules:
+    """Tests for patron_blocking_rules field on SIP2LibrarySettings."""
+
+    def test_default_is_empty_list(self) -> None:
+        settings = SIP2LibrarySettings()
+        assert settings.patron_blocking_rules == []
+
+    def test_round_trip_with_rules(self) -> None:
+        settings = SIP2LibrarySettings(
+            patron_blocking_rules=[
+                {"name": "block-all", "rule": "BLOCK", "message": "Sorry"},
+                {"name": "no-op", "rule": "ALLOW"},
+            ]
+        )
+        assert len(settings.patron_blocking_rules) == 2
+        assert settings.patron_blocking_rules[0].name == "block-all"
+        assert settings.patron_blocking_rules[0].rule == "BLOCK"
+        assert settings.patron_blocking_rules[0].message == "Sorry"
+        assert settings.patron_blocking_rules[1].name == "no-op"
+        assert settings.patron_blocking_rules[1].message is None
+
+    def test_model_dump_excludes_empty_list_by_default(self) -> None:
+        """Empty list (default) is excluded from model_dump to avoid storing defaults."""
+        settings = SIP2LibrarySettings()
+        dumped = settings.model_dump()
+        assert "patron_blocking_rules" not in dumped
+
+    def test_model_dump_includes_non_empty_list(self) -> None:
+        settings = SIP2LibrarySettings(
+            patron_blocking_rules=[{"name": "r", "rule": "BLOCK"}]
+        )
+        dumped = settings.model_dump()
+        assert "patron_blocking_rules" in dumped
+        assert len(dumped["patron_blocking_rules"]) == 1
+        assert dumped["patron_blocking_rules"][0]["name"] == "r"
+
+    def test_model_validate_missing_field_produces_default(self) -> None:
+        """Loading settings dict without patron_blocking_rules yields empty list."""
+        settings = SIP2LibrarySettings.model_validate({})
+        assert settings.patron_blocking_rules == []
+
+    def test_validate_empty_name_raises(self) -> None:
+        with raises_problem_detail() as info:
+            SIP2LibrarySettings(patron_blocking_rules=[{"name": "", "rule": "BLOCK"}])
+        assert info.value.detail is not None
+        assert "index 0" in info.value.detail
+        assert "'name' must not be empty" in info.value.detail
+
+    def test_validate_whitespace_only_name_raises(self) -> None:
+        # str_strip_whitespace=True on PatronBlockingRule turns "  " into ""
+        with raises_problem_detail() as info:
+            SIP2LibrarySettings(
+                patron_blocking_rules=[{"name": "   ", "rule": "BLOCK"}]
+            )
+        assert info.value.detail is not None
+        assert "index 0" in info.value.detail
+        assert "'name' must not be empty" in info.value.detail
+
+    def test_validate_empty_rule_raises(self) -> None:
+        with raises_problem_detail() as info:
+            SIP2LibrarySettings(
+                patron_blocking_rules=[{"name": "valid-name", "rule": ""}]
+            )
+        assert info.value.detail is not None
+        assert "index 0" in info.value.detail
+        assert "'rule' expression must not be empty" in info.value.detail
+
+    def test_validate_duplicate_name_raises(self) -> None:
+        with raises_problem_detail() as info:
+            SIP2LibrarySettings(
+                patron_blocking_rules=[
+                    {"name": "same", "rule": "BLOCK"},
+                    {"name": "same", "rule": "ALLOW"},
+                ]
+            )
+        assert info.value.detail is not None
+        assert "index 1" in info.value.detail
+        assert "duplicate rule name" in info.value.detail
+        assert "'same'" in info.value.detail
+
+    def test_validate_duplicate_at_higher_index(self) -> None:
+        """The index in the error message reflects the second occurrence."""
+        with raises_problem_detail() as info:
+            SIP2LibrarySettings(
+                patron_blocking_rules=[
+                    {"name": "a", "rule": "BLOCK"},
+                    {"name": "b", "rule": "BLOCK"},
+                    {"name": "a", "rule": "BLOCK"},
+                ]
+            )
+        assert info.value.detail is not None
+        assert "index 2" in info.value.detail
+
+    def test_non_sip2_library_settings_unaffected(self) -> None:
+        """BasicAuthProviderLibrarySettings has no patron_blocking_rules field."""
+        settings = BasicAuthProviderLibrarySettings()
+        assert not hasattr(settings, "patron_blocking_rules")
+
+
+class TestCheckPatronBlockingRules:
+    """Tests for the check_patron_blocking_rules module-level function."""
+
+    def test_empty_rules_returns_none(self) -> None:
+        assert check_patron_blocking_rules([]) is None
+
+    def test_non_block_rule_returns_none(self) -> None:
+        rules = [PatronBlockingRule(name="allow", rule="ALLOW")]
+        assert check_patron_blocking_rules(rules) is None
+
+    def test_multiple_non_block_rules_return_none(self) -> None:
+        rules = [
+            PatronBlockingRule(name="r1", rule="SOMETHING"),
+            PatronBlockingRule(name="r2", rule="ELSE"),
+        ]
+        assert check_patron_blocking_rules(rules) is None
+
+    def test_block_rule_returns_problem_detail(self) -> None:
+        rules = [PatronBlockingRule(name="block-all", rule="BLOCK")]
+        result = check_patron_blocking_rules(rules)
+        assert isinstance(result, ProblemDetail)
+        assert result.status_code == 403
+        assert result.uri == BLOCKED_CREDENTIALS.uri
+
+    def test_block_rule_uses_custom_message(self) -> None:
+        rules = [
+            PatronBlockingRule(
+                name="block-all", rule="BLOCK", message="Custom patron message."
+            )
+        ]
+        result = check_patron_blocking_rules(rules)
+        assert isinstance(result, ProblemDetail)
+        assert result.detail == "Custom patron message."
+
+    def test_block_rule_uses_default_message_when_no_message(self) -> None:
+        rules = [PatronBlockingRule(name="block-all", rule="BLOCK")]
+        result = check_patron_blocking_rules(rules)
+        assert isinstance(result, ProblemDetail)
+        assert result.detail == "Access blocked by library policy."
+
+    def test_first_block_rule_wins(self) -> None:
+        """If multiple BLOCK rules exist, the first one is returned."""
+        rules = [
+            PatronBlockingRule(name="first", rule="BLOCK", message="First."),
+            PatronBlockingRule(name="second", rule="BLOCK", message="Second."),
+        ]
+        result = check_patron_blocking_rules(rules)
+        assert isinstance(result, ProblemDetail)
+        assert result.detail == "First."
+
+    def test_non_block_rule_before_block_rule(self) -> None:
+        """A BLOCK rule that is preceded by a non-BLOCK rule still triggers."""
+        rules = [
+            PatronBlockingRule(name="allow", rule="ALLOW"),
+            PatronBlockingRule(name="block", rule="BLOCK", message="Blocked."),
+        ]
+        result = check_patron_blocking_rules(rules)
+        assert isinstance(result, ProblemDetail)
+        assert result.detail == "Blocked."
+
+
+class TestSIP2AuthenticateWithBlockingRules:
+    """Integration tests for the authenticate override in SIP2AuthenticationProvider."""
+
+    def test_authenticate_blocked_when_patron_returned(
+        self,
+        create_provider: Callable[..., SIP2AuthenticationProvider],
+        create_library_settings: Callable[..., SIP2LibrarySettings],
+    ) -> None:
+        """When base authenticate returns a Patron and a BLOCK rule is active,
+        authenticate returns a ProblemDetail instead of the Patron."""
+        library_settings = create_library_settings(
+            patron_blocking_rules=[
+                {"name": "block-all", "rule": "BLOCK", "message": "Library A blocks."}
+            ]
+        )
+        provider = create_provider(library_settings=library_settings)
+
+        mock_patron = MagicMock(spec=Patron)
+        with patch(
+            "palace.manager.api.authentication.basic.BasicAuthenticationProvider.authenticate",
+            return_value=mock_patron,
+        ):
+            result = provider.authenticate(
+                MagicMock(), {"username": "u", "password": "p"}
+            )
+
+        assert isinstance(result, ProblemDetail)
+        assert result.status_code == 403
+        assert result.detail == "Library A blocks."
+
+    def test_authenticate_not_blocked_when_no_block_rule(
+        self,
+        create_provider: Callable[..., SIP2AuthenticationProvider],
+        create_library_settings: Callable[..., SIP2LibrarySettings],
+    ) -> None:
+        """When no BLOCK rule is active, authenticate returns the Patron unchanged."""
+        library_settings = create_library_settings(
+            patron_blocking_rules=[
+                {"name": "allow", "rule": "ALLOW"},
+            ]
+        )
+        provider = create_provider(library_settings=library_settings)
+
+        mock_patron = MagicMock(spec=Patron)
+        with patch(
+            "palace.manager.api.authentication.basic.BasicAuthenticationProvider.authenticate",
+            return_value=mock_patron,
+        ):
+            result = provider.authenticate(
+                MagicMock(), {"username": "u", "password": "p"}
+            )
+
+        assert result is mock_patron
+
+    def test_authenticate_no_rules_returns_patron(
+        self,
+        create_provider: Callable[..., SIP2AuthenticationProvider],
+    ) -> None:
+        """With no blocking rules configured, authenticate returns the Patron normally."""
+        provider = create_provider()
+        assert provider.patron_blocking_rules == []
+
+        mock_patron = MagicMock(spec=Patron)
+        with patch(
+            "palace.manager.api.authentication.basic.BasicAuthenticationProvider.authenticate",
+            return_value=mock_patron,
+        ):
+            result = provider.authenticate(
+                MagicMock(), {"username": "u", "password": "p"}
+            )
+
+        assert result is mock_patron
+
+    def test_authenticate_passes_through_none(
+        self,
+        create_provider: Callable[..., SIP2AuthenticationProvider],
+        create_library_settings: Callable[..., SIP2LibrarySettings],
+    ) -> None:
+        """If base authenticate returns None (bad credentials), blocking rules are skipped."""
+        library_settings = create_library_settings(
+            patron_blocking_rules=[{"name": "block-all", "rule": "BLOCK"}]
+        )
+        provider = create_provider(library_settings=library_settings)
+
+        with patch(
+            "palace.manager.api.authentication.basic.BasicAuthenticationProvider.authenticate",
+            return_value=None,
+        ):
+            result = provider.authenticate(
+                MagicMock(), {"username": "u", "password": "p"}
+            )
+
+        assert result is None
+
+    def test_authenticate_passes_through_problem_detail(
+        self,
+        create_provider: Callable[..., SIP2AuthenticationProvider],
+        create_library_settings: Callable[..., SIP2LibrarySettings],
+    ) -> None:
+        """If base authenticate returns a ProblemDetail (e.g. server error),
+        blocking rules are skipped and the original ProblemDetail is returned."""
+        library_settings = create_library_settings(
+            patron_blocking_rules=[{"name": "block-all", "rule": "BLOCK"}]
+        )
+        provider = create_provider(library_settings=library_settings)
+
+        base_problem = INVALID_CREDENTIALS.detailed("Server error.")
+        with patch(
+            "palace.manager.api.authentication.basic.BasicAuthenticationProvider.authenticate",
+            return_value=base_problem,
+        ):
+            result = provider.authenticate(
+                MagicMock(), {"username": "u", "password": "p"}
+            )
+
+        assert result is base_problem
+
+    def test_patron_blocking_rules_stored_on_provider(
+        self,
+        create_provider: Callable[..., SIP2AuthenticationProvider],
+        create_library_settings: Callable[..., SIP2LibrarySettings],
+    ) -> None:
+        """patron_blocking_rules attribute is populated from library_settings."""
+        rules = [
+            {"name": "r1", "rule": "BLOCK", "message": "Msg"},
+            {"name": "r2", "rule": "ALLOW"},
+        ]
+        library_settings = create_library_settings(patron_blocking_rules=rules)
+        provider = create_provider(library_settings=library_settings)
+
+        assert len(provider.patron_blocking_rules) == 2
+        assert provider.patron_blocking_rules[0].name == "r1"
+        assert provider.patron_blocking_rules[0].rule == "BLOCK"
+        assert provider.patron_blocking_rules[1].name == "r2"
