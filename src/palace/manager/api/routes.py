@@ -630,6 +630,13 @@ def saml_callback():
     )
 
 
+@library_route("/saml/metadata/sp")
+@allows_library
+@raises_problem_detail
+def saml_sp_metadata():
+    return app.manager.saml_controller.saml_sp_metadata()
+
+
 # Loan notifications for OPDS + ODL distributors
 @library_route("/odl/notify/<patron_identifier>/<license_identifier>", methods=["POST"])
 @has_library

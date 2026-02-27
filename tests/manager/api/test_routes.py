@@ -551,3 +551,23 @@ class TestOIDCRoutes:
             call_args = mock_backchannel.call_args
             assert isinstance(call_args[0][0], ImmutableMultiDict)
             assert call_args[0][0]["logout_token"] == "test.logout.token"
+
+
+class TestSAMLRoutes:
+    CONTROLLER_NAME = "saml_controller"
+
+    @pytest.fixture(scope="function")
+    def fixture(self, route_test: RouteTestFixture) -> RouteTestFixture:
+        route_test.set_controller_name(self.CONTROLLER_NAME)
+        return route_test
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            pytest.param("/saml/metadata/sp", id="no-library"),
+            pytest.param("/LIBSHORTNAME/saml/metadata/sp", id="with-library"),
+        ],
+    )
+    def test_saml_sp_metadata(self, fixture: RouteTestFixture, url: str):
+        fixture.assert_request_calls(url, fixture.controller.saml_sp_metadata)
+        fixture.assert_supported_methods(url, "GET")
