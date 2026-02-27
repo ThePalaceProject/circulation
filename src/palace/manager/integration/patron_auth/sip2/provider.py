@@ -4,13 +4,12 @@ import json
 import socket
 from collections.abc import Callable, Generator
 from datetime import datetime
-from typing import Annotated, Any
+from typing import Annotated, Any, ClassVar
 
 from annotated_types import Ge, Le
 from pydantic import BaseModel, ConfigDict, PositiveInt, field_validator
 from sqlalchemy.orm import Session
 
-from palace.manager.api.admin.problem_details import INVALID_CONFIGURATION_OPTION
 from palace.manager.api.authentication.base import PatronAuthResult, PatronData
 from palace.manager.api.authentication.basic import (
     BasicAuthenticationProvider,
@@ -25,23 +24,12 @@ from palace.manager.integration.patron_auth.sip2.dialect import Dialect as Sip2D
 from palace.manager.integration.settings import (
     FormFieldType,
     FormMetadata,
-    SettingsValidationError,
 )
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.util import MoneyUtility
 from palace.manager.util.network_diagnostics import run_network_diagnostics
 from palace.manager.util.problem_detail import ProblemDetail
-
-
-class PatronBlockingRule(BaseModel):
-    """A single patron blocking rule stored in SIP2 per-library settings."""
-
-    model_config = ConfigDict(frozen=True, str_strip_whitespace=True)
-
-    name: str
-    rule: str
-    message: str | None = None
 
 
 class SIP2Settings(BasicAuthProviderSettings):
@@ -221,69 +209,13 @@ class SIP2LibrarySettings(BasicAuthProviderLibrarySettings):
         ),
     ] = None
 
-    patron_blocking_rules: Annotated[
-        list[PatronBlockingRule],
-        FormMetadata(
-            label="Patron Blocking Rules",
-            description=(
-                "A list of rules that can block patron access. Each rule has a name, "
-                "a rule expression, and an optional message shown to the patron when blocked."
-            ),
-            hidden=True,
-        ),
-    ] = []
-
-    @field_validator("patron_blocking_rules")
-    @classmethod
-    def validate_patron_blocking_rules(
-        cls, rules: list[PatronBlockingRule]
-    ) -> list[PatronBlockingRule]:
-        names_seen: set[str] = set()
-        for i, rule in enumerate(rules):
-            if not rule.name:
-                raise SettingsValidationError(
-                    INVALID_CONFIGURATION_OPTION.detailed(
-                        f"Rule at index {i}: 'name' must not be empty"
-                    )
-                )
-            if not rule.rule:
-                raise SettingsValidationError(
-                    INVALID_CONFIGURATION_OPTION.detailed(
-                        f"Rule at index {i}: 'rule' expression must not be empty"
-                    )
-                )
-            if rule.name in names_seen:
-                raise SettingsValidationError(
-                    INVALID_CONFIGURATION_OPTION.detailed(
-                        f"Rule at index {i}: duplicate rule name '{rule.name}'"
-                    )
-                )
-            names_seen.add(rule.name)
-        return rules
-
-
-def check_patron_blocking_rules(
-    rules: list[PatronBlockingRule],
-) -> ProblemDetail | None:
-    """Check a patron against a list of blocking rules.
-
-    For v1, any rule whose ``rule`` expression equals the literal string
-    ``"BLOCK"`` triggers a block. All other expressions are ignored (stub).
-
-    :param rules: The list of PatronBlockingRule objects configured for a library.
-    :return: A ProblemDetail if the patron is blocked, else None.
-    """
-    for rule in rules:
-        if rule.rule == "BLOCK":
-            detail = rule.message or "Access blocked by library policy."
-            return BLOCKED_CREDENTIALS.detailed(detail)
-    return None
-
 
 class SIP2AuthenticationProvider(
     BasicAuthenticationProvider[SIP2Settings, SIP2LibrarySettings],
     HasPatronDebug,
 ):
+    supports_patron_blocking_rules: ClassVar[bool] = True
+
     DATE_FORMATS = ["%Y%m%d", "%Y%m%d%Z%H%M%S", "%Y%m%d    %H%M%S"]
 
     # Map the reasons why SIP2 might report a patron is blocked to the
@@ -328,7 +260,6 @@ class SIP2AuthenticationProvider(
         self.ssl_verification = settings.ssl_verification
         self.dialect = settings.ils
         self.institution_id = library_settings.institution_id
-        self.patron_blocking_rules = library_settings.patron_blocking_rules
         self.timeout = settings.timeout
         self._client = client
 
@@ -364,20 +295,6 @@ class SIP2AuthenticationProvider(
             dialect=self.dialect,
             timeout=self.timeout,
         )
-
-    def authenticate(self, _db, credentials: dict) -> Patron | ProblemDetail | None:
-        """Authenticate a patron and apply any configured blocking rules.
-
-        Blocking rules are evaluated after the base authentication succeeds.
-        If a rule triggers a block, authentication is stopped and a ProblemDetail
-        is returned instead of the Patron object.
-        """
-        result = super().authenticate(_db, credentials)
-        if isinstance(result, Patron):
-            blocked = check_patron_blocking_rules(self.patron_blocking_rules)
-            if blocked is not None:
-                return blocked
-        return result
 
     @classmethod
     def label(cls) -> str:
