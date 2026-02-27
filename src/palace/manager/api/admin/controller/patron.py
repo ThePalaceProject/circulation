@@ -8,16 +8,34 @@ from flask_babel import lazy_gettext as _
 
 from palace.manager.api.admin.controller.base import AdminPermissionsControllerMixin
 from palace.manager.api.admin.controller.util import required_library_from_request
-from palace.manager.api.admin.problem_details import NO_SUCH_PATRON
+from palace.manager.api.admin.model.patron_debug import (
+    AuthMethodInfo,
+    AuthMethodsResponse,
+    PatronDebugResponse,
+)
+from palace.manager.api.admin.problem_details import MISSING_INTEGRATION, NO_SUCH_PATRON
 from palace.manager.api.adobe_vendor_id import AuthdataUtility
 from palace.manager.api.authentication.base import (
     CannotCreateLocalPatron,
+    PatronAuthResult,
     PatronData,
     PatronLookupNotSupported,
 )
+from palace.manager.api.authentication.basic import (
+    BasicAuthProviderSettings,
+    Keyboards,
+)
+from palace.manager.api.authentication.patron_debug import HasPatronDebug
 from palace.manager.api.authenticator import LibraryAuthenticator
 from palace.manager.api.controller.circulation_manager import (
     CirculationManagerController,
+)
+from palace.manager.core.problem_details import INVALID_INPUT
+from palace.manager.integration.goals import Goals
+from palace.manager.service.integration_registry.patron_auth import PatronAuthRegistry
+from palace.manager.sqlalchemy.model.integration import (
+    IntegrationConfiguration,
+    IntegrationLibraryConfiguration,
 )
 from palace.manager.util.problem_detail import ProblemDetail
 
@@ -131,3 +149,138 @@ class PatronController(CirculationManagerController, AdminPermissionsControllerM
             ),
             200,
         )
+
+    def get_auth_methods(self) -> dict[str, Any] | ProblemDetail:
+        """Return the list of authentication methods for the library,
+        including whether each supports patron debug authentication.
+        """
+        library = required_library_from_request(flask.request)
+        self.require_librarian(library)
+
+        registry: PatronAuthRegistry = (
+            self.manager.services.integration_registry.patron_auth()
+        )
+
+        # Find all patron auth integrations configured for this library
+        library_configs = (
+            self._db.query(IntegrationLibraryConfiguration)
+            .join(IntegrationConfiguration)
+            .filter(
+                IntegrationLibraryConfiguration.library_id == library.id,
+                IntegrationConfiguration.goal == Goals.PATRON_AUTH_GOAL,
+            )
+            .all()
+        )
+
+        methods: list[AuthMethodInfo] = []
+        for lib_config in library_configs:
+            integration = lib_config.parent
+            protocol_class = registry.get(integration.protocol, None)
+            if protocol_class is None:
+                continue
+
+            supports_debug = issubclass(protocol_class, HasPatronDebug)
+
+            # Try to extract labels from settings
+            identifier_label = "Username"
+            password_label = "Password"
+            supports_password = True
+            settings = protocol_class.settings_load(integration)
+            if isinstance(settings, BasicAuthProviderSettings):
+                identifier_label = settings.identifier_label
+                password_label = settings.password_label
+                supports_password = settings.password_keyboard != Keyboards.NULL
+
+            methods.append(
+                AuthMethodInfo(
+                    id=integration.id,
+                    name=integration.name or integration.protocol,
+                    protocol=integration.protocol,
+                    supports_debug=supports_debug,
+                    supports_password=supports_password,
+                    identifier_label=identifier_label,
+                    password_label=password_label,
+                )
+            )
+
+        return AuthMethodsResponse(auth_methods=methods).api_dict()
+
+    def debug_auth(self) -> dict[str, Any] | ProblemDetail:
+        """Run patron debug authentication against a specific integration."""
+        library = required_library_from_request(flask.request)
+        self.require_librarian(library)
+
+        integration_id = flask.request.form.get("integration_id")
+        username = flask.request.form.get("username")
+        password = flask.request.form.get("password")
+
+        if not integration_id or not username:
+            return INVALID_INPUT.detailed(
+                _("An integration ID and username are required.")
+            )
+
+        try:
+            parsed_integration_id = int(integration_id)
+        except ValueError:
+            return INVALID_INPUT.detailed(
+                _(
+                    "Invalid integration ID: %(integration_id)s",
+                    integration_id=integration_id,
+                )
+            )
+
+        # Find the integration and its library configuration
+        integration = (
+            self._db.query(IntegrationConfiguration)
+            .filter(
+                IntegrationConfiguration.id == parsed_integration_id,
+                IntegrationConfiguration.goal == Goals.PATRON_AUTH_GOAL,
+            )
+            .one_or_none()
+        )
+
+        if integration is None:
+            return MISSING_INTEGRATION
+
+        lib_config = integration.for_library(library)
+        if lib_config is None:
+            return MISSING_INTEGRATION.detailed(
+                _("This integration is not configured for this library.")
+            )
+
+        # Load the provider class and instantiate it
+        registry: PatronAuthRegistry = (
+            self.manager.services.integration_registry.patron_auth()
+        )
+        protocol_class = registry.get(integration.protocol, None)
+        if protocol_class is None:
+            return MISSING_INTEGRATION.detailed(
+                _("Unknown protocol: %(protocol)s", protocol=integration.protocol)
+            )
+
+        if not issubclass(protocol_class, HasPatronDebug):
+            return INVALID_INPUT.detailed(
+                _("This authentication method does not support debug authentication.")
+            )
+
+        settings = protocol_class.settings_load(integration)
+        library_settings = protocol_class.library_settings_load(lib_config)
+        provider = protocol_class(
+            library_id=library.id,
+            integration_id=integration.id,
+            settings=settings,
+            library_settings=library_settings,
+        )
+
+        try:
+            results = provider.patron_debug(username, password)
+        except Exception as e:
+            self.log.exception("patron_debug failed")
+            results = [
+                PatronAuthResult(
+                    label="Unexpected Error",
+                    success=False,
+                    details=f"{type(e).__name__}: {e}",
+                )
+            ]
+        return PatronDebugResponse(results=results).api_dict()

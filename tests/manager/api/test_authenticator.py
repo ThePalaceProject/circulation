@@ -2364,6 +2364,45 @@ class TestBasicAuthenticationProvider:
         patrondata = PatronData(authorization_identifier="12345")
         assert provider.enforce_library_identifier_restriction(patrondata) == patrondata
 
+    def test_check_library_identifier_restriction(
+        self,
+        mock_basic: MockBasicFixture,
+    ):
+        """Test check_library_identifier_restriction returns diagnostic results."""
+        provider = mock_basic()
+
+        # NONE restriction always succeeds
+        provider.library_identifier_restriction_type = LibraryIdentifierRestriction.NONE
+        patrondata = PatronData(authorization_identifier="12345")
+        returned_patrondata, result = provider.check_library_identifier_restriction(
+            patrondata
+        )
+        assert returned_patrondata == patrondata
+        assert result.success is True
+        assert result.details == "No restriction configured"
+
+        # Matching restriction succeeds
+        provider.library_identifier_restriction_type = (
+            LibraryIdentifierRestriction.PREFIX
+        )
+        provider.library_identifier_restriction_criteria = "123"
+        provider.library_identifier_field = (
+            LibraryIdenfitierRestrictionField.BARCODE.value
+        )
+        patrondata = PatronData(authorization_identifier="12345")
+        _, result = provider.check_library_identifier_restriction(patrondata)
+        assert result.success is True
+        assert isinstance(result.details, dict)
+        assert result.details["result"] == "match"
+
+        # Non-matching restriction fails
+        provider.library_identifier_restriction_criteria = "999"
+        _, result = provider.check_library_identifier_restriction(patrondata)
+        assert result.success is False
+        assert isinstance(result.details, dict)
+        assert result.details["result"] == "no match"
+        assert "failure_reason" in result.details
+
     def test_patron_identifier_restriction(self, mock_basic: MockBasicFixture):
         # If the type is regex its converted into a regular expression.
         provider = mock_basic(
@@ -2573,10 +2612,10 @@ class TestBasicAuthenticationProvider:
                 password_regular_expression=re.compile("bar"),
             )
         )
-        assert provider.server_side_validation("food", "barbecue") is True
-        assert provider.server_side_validation("food", "arbecue") is False
-        assert provider.server_side_validation("ood", "barbecue") is False
-        assert provider.server_side_validation(None, None) is False
+        assert provider.server_side_validation("food", "barbecue").success is True
+        assert provider.server_side_validation("food", "arbecue").success is False
+        assert provider.server_side_validation("ood", "barbecue").success is False
+        assert provider.server_side_validation(None, None).success is False
 
         # If this authenticator does not look at provided passwords,
         # then the only values that will pass validation are null
@@ -2588,20 +2627,20 @@ class TestBasicAuthenticationProvider:
                 password_keyboard=Keyboards.NULL,
             )
         )
-        assert provider.server_side_validation("food", "barbecue") is False
-        assert provider.server_side_validation("food", "is good") is False
-        assert provider.server_side_validation("food", " ") is False
-        assert provider.server_side_validation("food", None) is True
-        assert provider.server_side_validation("food", "") is True
+        assert provider.server_side_validation("food", "barbecue").success is False
+        assert provider.server_side_validation("food", "is good").success is False
+        assert provider.server_side_validation("food", " ").success is False
+        assert provider.server_side_validation("food", None).success is True
+        assert provider.server_side_validation("food", "").success is True
 
         # It's okay not to provide anything for server side validation.
         # The default settings will be used.
         provider = mock_basic()
         assert isinstance(provider.identifier_re, re.Pattern)
         assert provider.password_re is None
-        assert provider.server_side_validation("food", "barbecue") is True
-        assert provider.server_side_validation("a", "abc") is True
-        assert provider.server_side_validation("!@#$", "def") is False
+        assert provider.server_side_validation("food", "barbecue").success is True
+        assert provider.server_side_validation("a", "abc").success is True
+        assert provider.server_side_validation("!@#$", "def").success is False
 
         # Test maximum length of identifier and password.
         provider = mock_basic(
@@ -2610,9 +2649,11 @@ class TestBasicAuthenticationProvider:
                 password_maximum_length=10,
             )
         )
-        assert provider.server_side_validation("a", "1234") is True
-        assert provider.server_side_validation("a", "123456789012345") is False
-        assert provider.server_side_validation("abcdefghijklmnop", "1234") is False
+        assert provider.server_side_validation("a", "1234").success is True
+        assert provider.server_side_validation("a", "123456789012345").success is False
+        assert (
+            provider.server_side_validation("abcdefghijklmnop", "1234").success is False
+        )
 
     def test_local_patron_lookup(
         self, db: DatabaseTransactionFixture, mock_basic: MockBasicFixture

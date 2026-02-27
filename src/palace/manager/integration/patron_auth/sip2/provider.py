@@ -8,12 +8,13 @@ from typing import Annotated, Any
 from annotated_types import Ge, Le
 from pydantic import PositiveInt
 
-from palace.manager.api.authentication.base import PatronData
+from palace.manager.api.authentication.base import PatronAuthResult, PatronData
 from palace.manager.api.authentication.basic import (
     BasicAuthenticationProvider,
     BasicAuthProviderLibrarySettings,
     BasicAuthProviderSettings,
 )
+from palace.manager.api.authentication.patron_debug import HasPatronDebug
 from palace.manager.api.problem_details import INVALID_CREDENTIALS
 from palace.manager.integration.patron_auth.sip2.client import Sip2Encoding, SIPClient
 from palace.manager.integration.patron_auth.sip2.dialect import Dialect as Sip2Dialect
@@ -206,7 +207,8 @@ class SIP2LibrarySettings(BasicAuthProviderLibrarySettings):
 
 
 class SIP2AuthenticationProvider(
-    BasicAuthenticationProvider[SIP2Settings, SIP2LibrarySettings]
+    BasicAuthenticationProvider[SIP2Settings, SIP2LibrarySettings],
+    HasPatronDebug,
 ):
     DATE_FORMATS = ["%Y%m%d", "%Y%m%d%Z%H%M%S", "%Y%m%d    %H%M%S"]
 
@@ -347,6 +349,106 @@ class SIP2AuthenticationProvider(
             password = None
         info = self.patron_information(username, password)
         return self.info_to_patrondata(info)
+
+    def patron_debug(
+        self, username: str, password: str | None
+    ) -> list[PatronAuthResult]:
+        """Run step-by-step diagnostic checks against the SIP2 server."""
+        results: list[PatronAuthResult] = []
+
+        validation_result = self.server_side_validation(username, password)
+        results.append(validation_result)
+
+        sip = None
+        try:
+            sip = self.client
+            sip.connect()
+            results.append(
+                PatronAuthResult(
+                    label="SIP2 Connection",
+                    success=True,
+                    details=f"{self.server}:{self.port}",
+                )
+            )
+
+            results.append(
+                PatronAuthResult(
+                    label="SIP2 Login",
+                    success=True,
+                    details=sip.login(),
+                )
+            )
+
+            results.append(
+                PatronAuthResult(
+                    label="SC Status",
+                    success=True,
+                    details=sip.sc_status(),
+                )
+            )
+
+            info = sip.patron_information(username, password)
+            results.append(
+                PatronAuthResult(
+                    label="Patron Information Request",
+                    success=True,
+                    details=info,
+                )
+            )
+
+            valid_password = info.get("valid_patron_password", "")
+            valid_patron = info.get("valid_patron", "")
+            results.append(
+                PatronAuthResult(
+                    label="Password Validation",
+                    success=valid_password != "N" and valid_patron != "N",
+                    details=f"valid_patron={valid_patron}, valid_patron_password={valid_password}",
+                )
+            )
+
+            patron_status_parsed = info.get("patron_status_parsed", {}).copy()
+            blocking_flags = [
+                k
+                for k in self.fields_that_deny_borrowing
+                if patron_status_parsed.get(k) is True
+            ]
+            status_success = (
+                len(blocking_flags) == 0 or not self.patron_status_should_block
+            )
+            if not status_success:
+                patron_status_parsed["blocking_flags"] = ", ".join(blocking_flags)
+            results.append(
+                PatronAuthResult(
+                    label="Patron Status Flags",
+                    success=status_success,
+                    details=patron_status_parsed,
+                )
+            )
+
+            patrondata = self.info_to_patrondata(info, validate_password=False)
+            if isinstance(patrondata, PatronData):
+                patrondata, restriction_result = (
+                    self.check_library_identifier_restriction(patrondata)
+                )
+                results.append(restriction_result)
+
+                results.append(
+                    PatronAuthResult(
+                        label="Parsed Patron Data",
+                        success=True,
+                        details=patrondata.to_dict,
+                    )
+                )
+
+        finally:
+            if sip is not None:
+                try:
+                    sip.end_session(username, password)
+                    sip.disconnect()
+                except Exception:
+                    self.log.exception("Failed to close SIP session")
+
+        return results
 
     def _run_self_tests(self, _db):
         def makeConnection(sip):

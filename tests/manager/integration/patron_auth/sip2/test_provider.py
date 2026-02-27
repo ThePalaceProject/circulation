@@ -851,3 +851,108 @@ class TestSIP2AuthenticationProvider:
         # test results for syncing metadata and the raw data from `patron_information`
         assert results[6].name == "Syncing patron metadata"
         assert results[6].success == True
+
+    def test_patron_debug_success(
+        self,
+        create_provider: Callable[..., SIP2AuthenticationProvider],
+    ):
+        """A successful patron_debug run returns all diagnostic steps in order."""
+        provider = create_provider()
+        client = cast(MockSIPClient, provider.client)
+
+        client.queue_response(self.sierra_valid_login)
+        client.queue_response(self.end_session_response)
+
+        results = provider.patron_debug("user", "pass")
+
+        assert len(results) == 9
+
+        assert results[0].label == "Server-Side Validation"
+        assert results[0].success is True
+
+        assert results[1].label == "SIP2 Connection"
+        assert results[1].success is True
+        assert isinstance(results[1].details, str)
+        assert "server.com:6001" == results[1].details
+
+        assert results[2].label == "SIP2 Login"
+        assert results[2].success is True
+
+        assert results[3].label == "SC Status"
+        assert results[3].success is True
+
+        assert results[4].label == "Patron Information Request"
+        assert results[4].success is True
+        assert isinstance(results[4].details, dict)
+        assert results[4].details["patron_identifier"] == "12345"
+
+        assert results[5].label == "Password Validation"
+        assert results[5].success is True
+        assert isinstance(results[5].details, str)
+        assert "valid_patron=Y" in results[5].details
+        assert "valid_patron_password=Y" in results[5].details
+
+        assert results[6].label == "Patron Status Flags"
+        assert results[6].success is True
+
+        assert results[7].label == "Library Identifier Restriction"
+        assert results[7].success is True
+
+        assert results[8].label == "Parsed Patron Data"
+        assert results[8].success is True
+        assert isinstance(results[8].details, dict)
+        assert results[8].details["authorization_identifier"] == "12345"
+        assert results[8].details["personal_name"] == "LE CARRÉ, JOHN"
+
+    def test_patron_debug_invalid_password(
+        self,
+        create_provider: Callable[..., SIP2AuthenticationProvider],
+    ):
+        """When the patron's password is invalid, the password validation step
+        fails but the flow continues to gather all diagnostic info.
+        """
+        provider = create_provider()
+        client = cast(MockSIPClient, provider.client)
+
+        client.queue_response(self.sierra_invalid_login)
+        client.queue_response(self.end_session_response)
+
+        results = provider.patron_debug("user", "wrong_pass")
+
+        assert results[5].label == "Password Validation"
+        assert results[5].success is False
+        assert isinstance(results[5].details, str)
+        assert "valid_patron_password=N" in results[5].details
+
+        # Patron status flags show blocking flags
+        assert results[6].label == "Patron Status Flags"
+        assert results[6].success is False
+
+        # info_to_patrondata with validate_password=False still returns PatronData
+        # so we still get restriction and parsed data
+        parsed_result = next(r for r in results if r.label == "Parsed Patron Data")
+        assert parsed_result.success is True
+
+    def test_patron_debug_no_such_patron(
+        self,
+        create_provider: Callable[..., SIP2AuthenticationProvider],
+    ):
+        """When the patron doesn't exist, info_to_patrondata returns None,
+        so library restriction and parsed patron data steps are skipped.
+        """
+        provider = create_provider()
+        client = cast(MockSIPClient, provider.client)
+
+        client.queue_response(self.polaris_no_such_patron)
+        client.queue_response(self.end_session_response)
+
+        results = provider.patron_debug("user", "pass")
+
+        # Password validation fails (valid_patron=N)
+        password_result = next(r for r in results if r.label == "Password Validation")
+        assert password_result.success is False
+
+        # No library restriction or parsed patron data
+        labels = [r.label for r in results]
+        assert "Library Identifier Restriction" not in labels
+        assert "Parsed Patron Data" not in labels

@@ -837,3 +837,180 @@ class TestMilleniumPatronAPI:
 
         # Some cases where we incorrectly detect a ZIP code where there is none.
         assert "12345" == m("10145 Main Street, Apartment #12345$Arvin CA")
+
+    def test_patron_debug_pin_mode_success(
+        self,
+        create_provider: Callable[..., MockAPI],
+    ):
+        """A successful patron_debug run with PIN authentication mode.
+
+        The default mode is PIN, so the flow includes:
+        1. Server-side validation
+        2. PIN test
+        3. Patron dump (raw HTML)
+        4. Patron dump (parsed)
+        5. Library identifier restriction
+        6. Parsed patron data
+        """
+        api = create_provider()
+        api.enqueue("pintest.good.html")
+        api.enqueue("dump.success.html")
+
+        results = api.patron_debug("44444444444447", "1234")
+
+        assert len(results) == 6
+
+        # 1. Server-side validation passes
+        assert results[0].label == "Server-Side Validation"
+        assert results[0].success is True
+
+        # 2. PIN test passes (RETCOD=0)
+        assert results[1].label == "PIN Test"
+        assert results[1].success is True
+        assert isinstance(results[1].details, dict)
+        assert results[1].details["RETCOD"] == "0"
+
+        # 3. Patron dump raw HTML is returned
+        assert results[2].label == "Patron Dump (Raw HTML)"
+        assert results[2].success is True
+        assert isinstance(results[2].details, str)
+        assert results[2].details == api.files.sample_text("dump.success.html")
+
+        # 4. Patron dump parsed fields
+        assert results[3].label == "Patron Dump (Parsed)"
+        assert results[3].success is True
+        assert isinstance(results[3].details, dict)
+        assert results[3].details["pn"] == "SHELDON, ALICE"
+        assert results[3].details["pb"] == "44444444444447"
+
+        # 5. Library identifier restriction (no restriction configured)
+        assert results[4].label == "Library Identifier Restriction"
+        assert results[4].success is True
+
+        # 6. Final parsed patron data
+        assert results[5].label == "Parsed Patron Data"
+        assert results[5].success is True
+
+    def test_patron_debug_pin_mode_bad_pin(
+        self,
+        create_provider: Callable[..., MockAPI],
+    ):
+        """PIN test fails but patron dump still succeeds.
+
+        The flow continues past a failed PIN test to gather diagnostic info.
+        """
+        api = create_provider()
+        api.enqueue("pintest.bad.html")
+        api.enqueue("dump.success.html")
+
+        results = api.patron_debug("44444444444447", "wrong_pin")
+
+        assert len(results) == 6
+
+        # Server-side validation still passes
+        assert results[0].label == "Server-Side Validation"
+        assert results[0].success is True
+
+        # PIN test fails (RETCOD != 0)
+        assert results[1].label == "PIN Test"
+        assert results[1].success is False
+
+        # Patron dump still proceeds and succeeds
+        assert results[2].label == "Patron Dump (Raw HTML)"
+        assert results[2].success is True
+        assert results[3].label == "Patron Dump (Parsed)"
+        assert results[3].success is True
+
+    def test_patron_debug_no_such_barcode(
+        self,
+        create_provider: Callable[..., MockAPI],
+    ):
+        """Patron dump returns an error when the barcode is not found.
+
+        When patron_dump_to_patrondata returns None, the family name
+        verification, library restriction, and parsed patron data steps
+        are all skipped.
+        """
+        api = create_provider()
+        api.enqueue("pintest.bad.html")
+        api.enqueue("dump.no such barcode.html")
+
+        results = api.patron_debug("bad.barcode", "1234")
+
+        # Only 4 results: server validation, PIN test, raw dump, parsed dump
+        assert len(results) == 4
+
+        assert results[0].label == "Server-Side Validation"
+        assert results[0].success is True
+
+        assert results[1].label == "PIN Test"
+        assert results[1].success is False
+
+        # Patron dump fails because ERRMSG is present
+        assert results[2].label == "Patron Dump (Raw HTML)"
+        assert results[2].success is False
+
+        assert results[3].label == "Patron Dump (Parsed)"
+        assert results[3].success is False
+        assert isinstance(results[3].details, dict)
+        assert "ERRMSG" in results[3].details
+
+    def test_patron_debug_no_password_mode(
+        self,
+        create_provider: Callable[..., MockAPI],
+        create_settings: Callable[..., MilleniumPatronSettings],
+    ):
+        """When the provider doesn't collect passwords, the PIN test step
+        is skipped entirely.
+        """
+        settings = create_settings(password_keyboard=Keyboards.NULL)
+        api = create_provider(settings=settings)
+        api.enqueue("dump.success.html")
+
+        results = api.patron_debug("44444444444447", None)
+
+        # No PIN test step
+        assert len(results) == 5
+        assert "PIN Test" not in [r.label for r in results]
+
+        assert results[0].label == "Server-Side Validation"
+        assert results[0].success is True
+
+        # Patron dump steps
+        assert results[1].label == "Patron Dump (Raw HTML)"
+        assert results[1].success is True
+        assert results[2].label == "Patron Dump (Parsed)"
+        assert results[2].success is True
+
+        # Library restriction and parsed data
+        assert results[3].label == "Library Identifier Restriction"
+        assert results[3].success is True
+        assert results[4].label == "Parsed Patron Data"
+        assert results[4].success is True
+
+    def test_patron_debug_family_name_mode_success(
+        self,
+        create_provider: Callable[..., MockAPI],
+        create_settings: Callable[..., MilleniumPatronSettings],
+    ):
+        """Family name authentication mode includes a family name verification
+        step instead of PIN test.
+        """
+        settings = create_settings(authentication_mode=AuthenticationMode.FAMILY_NAME)
+        api = create_provider(settings=settings)
+        api.enqueue("dump.success.html")
+
+        results = api.patron_debug("44444444444447", "Sheldon")
+
+        labels = [r.label for r in results]
+        # No PIN test in family name mode
+        assert "PIN Test" not in labels
+        # Family name verification is present
+        assert "Family Name Verification" in labels
+
+        family_result = next(
+            r for r in results if r.label == "Family Name Verification"
+        )
+        assert family_result.success is True
+        assert isinstance(family_result.details, dict)
+        assert family_result.details["personal_name"] == "SHELDON, ALICE"

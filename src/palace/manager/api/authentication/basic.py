@@ -4,6 +4,7 @@ import re
 from abc import ABC, abstractmethod
 from collections.abc import Generator
 from enum import Enum
+from functools import partial
 from re import Pattern
 from typing import Annotated, Any, cast
 
@@ -20,6 +21,7 @@ from palace.manager.api.authentication.base import (
     AuthenticationProvider,
     AuthProviderLibrarySettings,
     AuthProviderSettings,
+    PatronAuthResult,
     PatronData,
     PatronLookupNotSupported,
 )
@@ -442,6 +444,50 @@ class BasicAuthenticationProvider[
             "Syncing patron metadata", self.update_patron_metadata, patron
         )
 
+    def check_library_identifier_restriction(
+        self, patrondata: PatronData
+    ) -> tuple[PatronData, PatronAuthResult]:
+        """Check whether the patron matches the configured library identifier restriction.
+
+        Returns the (possibly updated) *patrondata* together with a
+        :class:`PatronAuthResult` carrying diagnostic details.
+        :meth:`enforce_library_identifier_restriction` delegates to this method
+        and raises on failure.
+
+        :param patrondata: A PatronData object.
+        :returns: A 2-tuple of (patrondata, result).
+        """
+        result = partial(PatronAuthResult, label="Library Identifier Restriction")
+
+        restriction_type = self.library_identifier_restriction_type
+        if restriction_type == LibraryIdentifierRestriction.NONE:
+            return patrondata, result(success=True, details="No restriction configured")
+
+        field = self.library_identifier_field
+        if not field or not restriction_type:
+            return patrondata, result(
+                success=True, details="No restriction field configured"
+            )
+
+        criteria = self.library_identifier_restriction_criteria
+        patrondata, field_value = self.get_library_identifier_field_data(patrondata)
+
+        is_valid, reason = self._restriction_matches(
+            field_value, criteria, restriction_type
+        )
+
+        details: dict[str, str] = {
+            "restriction_type": restriction_type.value,
+            "field": str(field),
+            "criteria": str(criteria),
+            "field_value": str(field_value),
+            "result": "match" if is_valid else "no match",
+        }
+        if not is_valid:
+            details["failure_reason"] = reason
+
+        return patrondata, result(success=is_valid, details=details)
+
     def scrub_credential(self, value: str | None) -> str | None:
         """Scrub an incoming value that is part of a patron's set of credentials."""
         if not isinstance(value, str):
@@ -533,40 +579,74 @@ class BasicAuthenticationProvider[
 
     def server_side_validation(
         self, username: str | None, password: str | None
-    ) -> bool:
-        """Do these credentials even look right?
+    ) -> PatronAuthResult:
+        """Validate credentials locally before checking with the ILS.
 
-        Sometimes egregious problems can be caught without needing to
-        check with the ILS.
+        Returns a :class:`PatronAuthResult` with diagnostic details.
+        The result is falsy when validation fails (via ``__bool__``),
+        so existing call sites like ``if not self.server_side_validation(...)``
+        continue to work unchanged.
         """
+        result = partial(PatronAuthResult, label="Server-Side Validation")
+
         if username is None or username == "":
-            return False
+            return result(success=False, details="Username is empty")
 
         if self.identifier_re and self.identifier_re.match(username) is None:
-            return False
+            return result(
+                success=False,
+                details=f"Identifier {username!r} does not match pattern {self.identifier_re.pattern!r}",
+            )
 
         if (
             self.identifier_maximum_length
             and len(username) > self.identifier_maximum_length
         ):
-            return False
+            return result(
+                success=False,
+                details=f"Identifier exceeds maximum length of {self.identifier_maximum_length}",
+            )
 
-        # The only legal password is an empty one.
         if not self.collects_password:
             if password not in (None, ""):
-                return False
+                return result(
+                    success=False,
+                    details="Password provided but this method does not collect passwords",
+                )
         else:
             if password is None:
-                return False
+                return result(
+                    success=False,
+                    details="Password is required but was not provided",
+                )
             if self.password_re and self.password_re.match(password) is None:
-                return False
+                return result(
+                    success=False,
+                    details=f"Password does not match pattern {self.password_re.pattern!r}",
+                )
             if (
                 self.password_maximum_length
                 and len(password) > self.password_maximum_length
             ):
-                return False
+                return result(
+                    success=False,
+                    details=f"Password exceeds maximum length of {self.password_maximum_length}",
+                )
 
-        return True
+        return result(
+            success=True,
+            details={
+                "identifier_regular_expression": (
+                    self.identifier_re.pattern if self.identifier_re else None
+                ),
+                "identifier_maximum_length": self.identifier_maximum_length,
+                "password_regular_expression": (
+                    self.password_re.pattern if self.password_re else None
+                ),
+                "password_maximum_length": self.password_maximum_length,
+                "collects_password": self.collects_password,
+            },
+        )
 
     @property
     def authentication_header(self) -> str:
@@ -716,36 +796,24 @@ class BasicAuthenticationProvider[
     def enforce_library_identifier_restriction(
         self, patrondata: PatronData
     ) -> PatronData:
-        """Does the given patron match the configured library identifier restriction?
+        """Ensure the patron matches the configured library identifier restriction.
 
-        If not, raise a ProblemDetail exception.
+        Delegates to :meth:`check_library_identifier_restriction` and raises
+        when the check fails.
 
         :param patrondata: A PatronData object.
-        :returns: A PatronData object.
+        :returns: The (possibly updated) PatronData object.
         :raises ProblemDetailException: With `PATRON_OF_ANOTHER_LIBRARY`
             ProblemDetail, if the given patron does not match.
         """
-        if (
-            self.library_identifier_restriction_type
-            == LibraryIdentifierRestriction.NONE
-        ):
-            # No restriction to enforce.
-            return patrondata
-
-        if (
-            not self.library_identifier_field
-            or not self.library_identifier_restriction_type
-        ):
-            # Restriction field is blank, so everything matches.
-            return patrondata
-
-        patrondata, field_value = self.get_library_identifier_field_data(patrondata)
-        is_valid, reason = self._restriction_matches(
-            field_value,
-            self.library_identifier_restriction_criteria,
-            self.library_identifier_restriction_type,
-        )
-        if not is_valid:
+        patrondata, result = self.check_library_identifier_restriction(patrondata)
+        if not result:
+            details = result.details
+            reason = (
+                details.get("failure_reason", "")
+                if isinstance(details, dict)
+                else str(details)
+            )
             raise ProblemDetailException(
                 PATRON_OF_ANOTHER_LIBRARY.with_debug(
                     f"{self.library_identifier_field!r} does not match library restriction: {reason}."
