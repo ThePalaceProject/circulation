@@ -4,7 +4,7 @@ from palace.manager.util.problem_detail import ProblemDetail as pd
 
 SAML_METADATA_NOT_CONFIGURED = pd(
     "http://palaceproject.io/terms/problem/saml/metadata-not-configured",
-    status_code=400,
+    status_code=404,
     title=_("SAML metadata not configured."),
     detail=_("SAML metadata is not configured."),
 )

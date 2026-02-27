@@ -226,6 +226,14 @@ class CirculationManager(LoggerMixin):
 
         return patron_web_domains
 
+    def clear_settings_caches(self) -> None:
+        """Clear all caches whose contents depend on settings.
+
+        Called at the start of `load_settings` so that stale cache values
+        are not served after a configuration change.
+        """
+        SAMLController.clear_metadata_cache()
+
     @log_elapsed_time(log_level=LogLevel.info, message_prefix="load_settings")
     def load_settings(self):
         """Load all necessary configuration settings and external
@@ -236,6 +244,8 @@ class CirculationManager(LoggerMixin):
         configuration after changes are made in the administrative
         interface.
         """
+        self.clear_settings_caches()
+
         with elapsed_time_logging(
             log_method=self.log.debug,
             skip_start=True,

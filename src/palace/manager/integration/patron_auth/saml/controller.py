@@ -1,3 +1,4 @@
+import functools
 import json
 import logging
 from urllib.parse import (
@@ -11,6 +12,7 @@ from urllib.parse import (
 
 from flask import Response, redirect
 from flask_babel import lazy_gettext as _
+from lxml import etree
 
 from palace.manager.api.util.flask import get_request_library
 from palace.manager.integration.patron_auth.saml.configuration.problem_details import (
@@ -49,6 +51,26 @@ SAML_INVALID_RESPONSE = pd(
 )
 
 
+@functools.lru_cache(maxsize=32)
+def _process_sp_metadata_xml(xml: str) -> str:
+    """Validate SP metadata XML and return a normalized XML string ready to serve.
+
+    Uses `SAMLMetadataParser` for structural validation, then re-serializes
+    via lxml so that the output always includes an XML declaration and is free
+    of any leading BOM or extraneous whitespace.
+
+    Results are cached since SP metadata shouldn't change between settings reloads.
+    The cache should be cleared if settings change.
+
+    :param xml: Raw SP metadata XML string.
+    :return: Validated and normalized XML string with an XML declaration.
+    :raises SAMLMetadataParsingError: If the XML is not valid SAML metadata.
+    """
+    SAMLMetadataParser().parse(xml)
+    root = etree.fromstring(xml.encode())
+    return etree.tostring(root, xml_declaration=True, encoding="UTF-8").decode()
+
+
 class SAMLController:
     """Controller used for handing SAML 2.0 authentication requests"""
 
@@ -60,6 +82,15 @@ class SAMLController:
     RELAY_STATE = "RelayState"
     ACCESS_TOKEN = "access_token"
     PATRON_INFO = "patron_info"
+
+    @classmethod
+    def clear_metadata_cache(cls) -> None:
+        """Clear the SP metadata XML processing cache.
+
+        Should be called whenever SAML settings may have changed so that the next
+        request re-validates and re-serializes the metadata from scratch.
+        """
+        _process_sp_metadata_xml.cache_clear()
 
     def __init__(self, circulation_manager, authenticator):
         """Initializes a new instance of SAMLController class
@@ -410,14 +441,10 @@ class SAMLController:
             )
 
         try:
-            SAMLMetadataParser().parse(xml)
+            xml = _process_sp_metadata_xml(xml)
         except SAMLMetadataParsingError as e:
             message = "SAML metadata has an incorrect format."
             self._logger.error(message)
             raise ProblemDetailException(SAML_INCORRECT_METADATA) from e
 
-        xml = xml.strip()
-        if not xml.startswith("<?xml"):
-            xml = '<?xml version="1.0" encoding="UTF-8"?>\n' + xml
-
-        return Response(xml, 200, {"Content-Type": "application/xml"})
+        return Response(xml, 200, {"Content-Type": "application/samlmetadata+xml"})

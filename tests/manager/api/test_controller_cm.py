@@ -1,4 +1,4 @@
-from unittest.mock import MagicMock, create_autospec
+from unittest.mock import MagicMock, create_autospec, patch
 
 from pytest import LogCaptureFixture, MonkeyPatch
 
@@ -11,6 +11,7 @@ from palace.manager.feed.annotator.circulation import (
 )
 from palace.manager.feed.facets.feed import Facets
 from palace.manager.feed.worklist.base import WorkList
+from palace.manager.integration.patron_auth.saml.controller import SAMLController
 from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.sqlalchemy.model.discovery_service_registration import (
     DiscoveryServiceRegistration,
@@ -137,6 +138,24 @@ class TestCirculationManager:
             "http://subdomain.3.com",
             "http://registration",
         } == manager.patron_web_domains
+
+    def test_load_settings_calls_clear_settings_caches(
+        self,
+        circulation_fixture: CirculationControllerFixture,
+        monkeypatch: MonkeyPatch,
+    ):
+        mock_clear = create_autospec(CirculationManager.clear_settings_caches)
+        monkeypatch.setattr(CirculationManager, "clear_settings_caches", mock_clear)
+        circulation_fixture.manager.load_settings()
+        mock_clear.assert_called_once()
+
+    def test_clear_settings_caches(
+        self,
+        circulation_fixture: CirculationControllerFixture,
+    ):
+        with patch.object(SAMLController, "clear_metadata_cache") as mock_clear:
+            circulation_fixture.manager.clear_settings_caches()
+        mock_clear.assert_called_once()
 
     def test_annotator(self, circulation_fixture: CirculationControllerFixture):
         # Test our ability to find an appropriate OPDSAnnotator for

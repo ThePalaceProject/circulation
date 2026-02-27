@@ -6,6 +6,7 @@ from urllib.parse import parse_qs, urlencode, urlsplit
 
 import pytest
 from flask import request
+from lxml import etree
 
 from palace.manager.api.authentication.base import PatronData
 from palace.manager.api.authenticator import Authenticator
@@ -21,6 +22,7 @@ from palace.manager.integration.patron_auth.saml.controller import (
     SAML_INVALID_REQUEST,
     SAML_INVALID_RESPONSE,
     SAMLController,
+    _process_sp_metadata_xml,
 )
 from palace.manager.integration.patron_auth.saml.metadata.model import (
     SAMLIdentityProviderMetadata,
@@ -558,18 +560,27 @@ class TestSAMLController:
                 None,
                 id="library-has-saml-metadata-has-declaration",
             ),
+            pytest.param(
+                False,
+                False,
+                "\ufeff" + saml_strings.CORRECT_XML_WITH_ONE_SP,
+                None,
+                None,
+                id="no-library-env-metadata-with-bom",
+            ),
         ],
     )
     def test_saml_sp_metadata(
         self,
         controller_fixture: ControllerFixture,
         caplog: pytest.LogCaptureFixture,
-        library_in_request,
+        library_in_request: bool,
         register_provider: bool,
         sp_metadata_xml: str | None,
         expected_problem: ProblemDetail | None,
         expected_log_message: str | None,
     ):
+        SAMLController.clear_metadata_cache()
         authenticator = Authenticator(
             controller_fixture.db.session,
             controller_fixture.db.session.query(Library),
@@ -614,13 +625,11 @@ class TestSAMLController:
             )
         else:
             assert result.status_code == 200
-            assert result.content_type == "application/xml"
-            stripped = sp_metadata_xml.strip()
-            expected_xml = (
-                '<?xml version="1.0" encoding="UTF-8"?>\n' + stripped
-                if not stripped.startswith("<?xml")
-                else stripped
-            )
+            assert result.content_type == "application/samlmetadata+xml"
+            root = etree.fromstring(sp_metadata_xml.encode())
+            expected_xml = etree.tostring(
+                root, xml_declaration=True, encoding="UTF-8"
+            ).decode()
             assert result.get_data(as_text=True) == expected_xml
 
         controller_errors = [
@@ -634,3 +643,11 @@ class TestSAMLController:
             assert expected_log_message in controller_errors[0].message
         else:
             assert controller_errors == []
+
+    def test_clear_metadata_cache(self):
+        SAMLController.clear_metadata_cache()
+        _process_sp_metadata_xml(saml_strings.CORRECT_XML_WITH_ONE_SP)
+        assert _process_sp_metadata_xml.cache_info().currsize == 1
+
+        SAMLController.clear_metadata_cache()
+        assert _process_sp_metadata_xml.cache_info().currsize == 0
