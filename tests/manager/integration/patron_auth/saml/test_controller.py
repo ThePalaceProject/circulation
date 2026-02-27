@@ -22,7 +22,6 @@ from palace.manager.integration.patron_auth.saml.controller import (
     SAML_INVALID_REQUEST,
     SAML_INVALID_RESPONSE,
     SAMLController,
-    _process_sp_metadata_xml,
 )
 from palace.manager.integration.patron_auth.saml.metadata.model import (
     SAMLIdentityProviderMetadata,
@@ -646,8 +645,148 @@ class TestSAMLController:
 
     def test_clear_metadata_cache(self):
         SAMLController.clear_metadata_cache()
-        _process_sp_metadata_xml(saml_strings.CORRECT_XML_WITH_ONE_SP)
-        assert _process_sp_metadata_xml.cache_info().currsize == 1
+        SAMLController._validated_sp_metadata(
+            None, saml_strings.CORRECT_XML_WITH_ONE_SP
+        )
+        assert len(SAMLController._sp_metadata_cache) == 1
 
         SAMLController.clear_metadata_cache()
-        assert _process_sp_metadata_xml.cache_info().currsize == 0
+        assert len(SAMLController._sp_metadata_cache) == 0
+
+    @pytest.mark.parametrize(
+        "xml, expect_cached_value",
+        [
+            pytest.param(
+                saml_strings.CORRECT_XML_WITH_ONE_SP,
+                True,
+                id="valid-xml-cached",
+            ),
+            pytest.param(
+                None,
+                False,
+                id="none-cached-as-none",
+            ),
+        ],
+    )
+    def test_validated_sp_metadata(
+        self, xml: str | None, expect_cached_value: bool
+    ) -> None:
+        SAMLController.clear_metadata_cache()
+        result = SAMLController._validated_sp_metadata("key", xml)
+
+        assert "key" in SAMLController._sp_metadata_cache
+        if expect_cached_value:
+            assert result is not None
+            assert result == SAMLController._sp_metadata_cache["key"]
+            # Result should be normalized XML with declaration
+            assert result.startswith("<?xml")
+        else:
+            assert result is None
+            assert SAMLController._sp_metadata_cache["key"] is None
+
+    def test_validated_sp_metadata_invalid_xml_not_cached(self) -> None:
+        SAMLController.clear_metadata_cache()
+        with pytest.raises(Exception):
+            SAMLController._validated_sp_metadata("key", "<invalid")
+        assert "key" not in SAMLController._sp_metadata_cache
+
+    def test_saml_sp_metadata_uses_cache(
+        self, controller_fixture: ControllerFixture
+    ) -> None:
+        """A second request for the same key returns the cached value without
+        re-fetching from configuration."""
+        SAMLController.clear_metadata_cache()
+        authenticator = Authenticator(
+            controller_fixture.db.session,
+            controller_fixture.db.session.query(Library),
+        )
+        controller = SAMLController(controller_fixture.app.manager, authenticator)
+
+        with controller_fixture.app.test_request_context("/saml/metadata/sp"):
+            with patch.object(
+                controller,
+                "_load_sp_metadata_xml",
+                return_value=saml_strings.CORRECT_XML_WITH_ONE_SP,
+            ) as mock_load:
+                controller.saml_sp_metadata()
+                controller.saml_sp_metadata()
+
+        mock_load.assert_called_once()
+
+    @pytest.mark.parametrize(
+        "library, provider_result, expected_xml",
+        [
+            pytest.param(
+                False,
+                None,
+                saml_strings.CORRECT_XML_WITH_ONE_SP,
+                id="no-library-returns-env-metadata",
+            ),
+            pytest.param(
+                True,
+                saml_strings.CORRECT_XML_WITH_ONE_SP,
+                saml_strings.CORRECT_XML_WITH_ONE_SP,
+                id="library-returns-provider-metadata",
+            ),
+            pytest.param(
+                True,
+                None,
+                None,
+                id="library-provider-returns-none",
+            ),
+        ],
+    )
+    def test_load_sp_metadata_xml(
+        self,
+        controller_fixture: ControllerFixture,
+        library: bool,
+        provider_result: str | None,
+        expected_xml: str | None,
+    ) -> None:
+        authenticator = Authenticator(
+            controller_fixture.db.session,
+            controller_fixture.db.session.query(Library),
+        )
+        lib = controller_fixture.db.default_library() if library else None
+
+        if library:
+            provider = create_autospec(spec=SAMLWebSSOAuthenticationProvider)
+            provider.label = MagicMock(
+                return_value=SAMLWebSSOAuthenticationProvider.label()
+            )
+            provider.get_sp_metadata_xml = MagicMock(return_value=provider_result)
+            authenticator.library_authenticators["default"].register_saml_provider(
+                provider
+            )
+
+        controller = SAMLController(controller_fixture.app.manager, authenticator)
+
+        with controller_fixture.app.test_request_context("/saml/metadata/sp"):
+            if lib is not None:
+                request.library = lib  # type: ignore[attr-defined]
+            with patch(
+                "palace.manager.integration.patron_auth.saml.controller"
+                ".SamlServiceProviderConfiguration.get_metadata",
+                return_value=saml_strings.CORRECT_XML_WITH_ONE_SP,
+            ):
+                result = controller._load_sp_metadata_xml(lib)
+
+        assert result == expected_xml
+
+    def test_load_sp_metadata_xml_library_no_saml(
+        self, controller_fixture: ControllerFixture
+    ) -> None:
+        """Raises ProblemDetailException when a library has no SAML provider."""
+        authenticator = Authenticator(
+            controller_fixture.db.session,
+            controller_fixture.db.session.query(Library),
+        )
+        controller = SAMLController(controller_fixture.app.manager, authenticator)
+        lib = controller_fixture.db.default_library()
+
+        with controller_fixture.app.test_request_context("/saml/metadata/sp"):
+            request.library = lib  # type: ignore[attr-defined]
+            with pytest.raises(ProblemDetailException) as exc_info:
+                controller._load_sp_metadata_xml(lib)
+
+        assert exc_info.value.problem_detail.uri == SAML_METADATA_NOT_CONFIGURED.uri

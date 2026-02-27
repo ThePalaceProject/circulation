@@ -1,6 +1,6 @@
-import functools
 import json
 import logging
+from typing import ClassVar
 from urllib.parse import (
     SplitResult,
     parse_qs,
@@ -29,6 +29,7 @@ from palace.manager.integration.patron_auth.saml.metadata.parser import (
 from palace.manager.integration.patron_auth.saml.provider import (
     SAMLWebSSOAuthenticationProvider,
 )
+from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.util.problem_detail import (
     ProblemDetail,
     ProblemDetail as pd,
@@ -51,26 +52,6 @@ SAML_INVALID_RESPONSE = pd(
 )
 
 
-@functools.lru_cache(maxsize=32)
-def _process_sp_metadata_xml(xml: str) -> str:
-    """Validate SP metadata XML and return a normalized XML string ready to serve.
-
-    Uses `SAMLMetadataParser` for structural validation, then re-serializes
-    via lxml so that the output always includes an XML declaration and is free
-    of any leading BOM or extraneous whitespace.
-
-    Results are cached since SP metadata shouldn't change between settings reloads.
-    The cache should be cleared if settings change.
-
-    :param xml: Raw SP metadata XML string.
-    :return: Validated and normalized XML string with an XML declaration.
-    :raises SAMLMetadataParsingError: If the XML is not valid SAML metadata.
-    """
-    SAMLMetadataParser().parse(xml)
-    root = etree.fromstring(xml.encode())
-    return etree.tostring(root, xml_declaration=True, encoding="UTF-8").decode()
-
-
 class SAMLController:
     """Controller used for handing SAML 2.0 authentication requests"""
 
@@ -83,6 +64,8 @@ class SAMLController:
     ACCESS_TOKEN = "access_token"
     PATRON_INFO = "patron_info"
 
+    _sp_metadata_cache: ClassVar[dict[str | None, str | None]] = {}
+
     @classmethod
     def clear_metadata_cache(cls) -> None:
         """Clear the SP metadata XML processing cache.
@@ -90,7 +73,37 @@ class SAMLController:
         Should be called whenever SAML settings may have changed so that the next
         request re-validates and re-serializes the metadata from scratch.
         """
-        _process_sp_metadata_xml.cache_clear()
+        cls._sp_metadata_cache.clear()
+
+    @classmethod
+    def _validated_sp_metadata(cls, key: str | None, xml: str | None) -> str | None:
+        """Validate and normalize SP metadata XML, then store the result in the cache.
+
+        Uses `SAMLMetadataParser` for structural validation, then
+        re-serializes via lxml so that the output always includes an XML
+        declaration and is free of any leading BOM or extraneous whitespace.
+
+        Results are stored in the cache under *key* (the library short name,
+        or ``None`` for site-wide metadata). The raw *xml* is never stored as
+        a cache key, keeping the cache memory footprint small.
+
+        :param key: Cache key — the library short name for a specific library,
+            or ``None`` for site-wide metadata.
+        :param xml: Raw SP metadata XML string to validate and normalize, or
+            ``None`` if no metadata is configured (cached as-is).
+        :return: Validated and normalized XML string with an XML declaration,
+            or ``None`` if *xml* is ``None``.
+        :raises SAMLMetadataParsingError: If the XML is not valid SAML metadata.
+        """
+        if isinstance(xml, str):
+            SAMLMetadataParser().parse(xml)
+            root = etree.fromstring(xml.encode())
+            cls._sp_metadata_cache[key] = etree.tostring(
+                root, xml_declaration=True, encoding="UTF-8"
+            ).decode()
+        else:
+            cls._sp_metadata_cache[key] = None
+        return cls._sp_metadata_cache[key]
 
     def __init__(self, circulation_manager, authenticator):
         """Initializes a new instance of SAMLController class
@@ -415,7 +428,30 @@ class SAMLController:
             incorrect format.
         """
         library = get_request_library(default=None)
+        key = library.short_name if library is not None else None
 
+        # On a cache miss, fetch the raw XML and validate/normalize it into the cache.
+        # None (no XML configured) is also cached to avoid redundant lookups on
+        # repeated requests. The cache is cleared on settings reload.
+        if key not in self._sp_metadata_cache:
+            raw_xml = self._load_sp_metadata_xml(library)
+            try:
+                self._validated_sp_metadata(key, raw_xml)
+            except SAMLMetadataParsingError as e:
+                message = "SAML metadata has an incorrect format."
+                self._logger.error(message)
+                raise ProblemDetailException(SAML_INCORRECT_METADATA) from e
+
+        if not (xml := self._sp_metadata_cache[key]):
+            message = "SAML metadata is not configured."
+            self._logger.error(message)
+            raise ProblemDetailException(
+                SAML_METADATA_NOT_CONFIGURED.detailed(_(message))
+            )
+
+        return Response(xml, 200, {"Content-Type": "application/samlmetadata+xml"})
+
+    def _load_sp_metadata_xml(self, library: Library | None) -> str | None:
         if library is not None:
             provider = self._authenticator.saml_provider_lookup(
                 SAMLWebSSOAuthenticationProvider.label()
@@ -432,19 +468,4 @@ class SAMLController:
             xml = provider.get_sp_metadata_xml()
         else:
             xml = SamlServiceProviderConfiguration().get_metadata()
-
-        if not xml:
-            message = "SAML metadata is not configured."
-            self._logger.error(message)
-            raise ProblemDetailException(
-                SAML_METADATA_NOT_CONFIGURED.detailed(_(message))
-            )
-
-        try:
-            xml = _process_sp_metadata_xml(xml)
-        except SAMLMetadataParsingError as e:
-            message = "SAML metadata has an incorrect format."
-            self._logger.error(message)
-            raise ProblemDetailException(SAML_INCORRECT_METADATA) from e
-
-        return Response(xml, 200, {"Content-Type": "application/samlmetadata+xml"})
+        return xml
