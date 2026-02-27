@@ -646,7 +646,8 @@ class TestSAMLController:
     def test_clear_metadata_cache(self):
         SAMLController.clear_metadata_cache()
         SAMLController._validated_sp_metadata(
-            None, saml_strings.CORRECT_XML_WITH_ONE_SP
+            SAMLController._SITE_WIDE_METADATA_CACHE_KEY,
+            saml_strings.CORRECT_XML_WITH_ONE_SP,
         )
         assert len(SAMLController._sp_metadata_cache) == 1
 

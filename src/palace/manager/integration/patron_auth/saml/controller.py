@@ -64,6 +64,7 @@ class SAMLController:
     ACCESS_TOKEN = "access_token"
     PATRON_INFO = "patron_info"
 
+    _SITE_WIDE_METADATA_CACHE_KEY: ClassVar[str | None] = None
     _sp_metadata_cache: ClassVar[dict[str | None, str | None]] = {}
 
     @classmethod
@@ -428,7 +429,11 @@ class SAMLController:
             incorrect format.
         """
         library = get_request_library(default=None)
-        key = library.short_name if library is not None else None
+        key = (
+            self._SITE_WIDE_METADATA_CACHE_KEY
+            if library is None
+            else library.short_name
+        )
 
         # On a cache miss, fetch the raw XML and validate/normalize it into the cache.
         # None (no XML configured) is also cached to avoid redundant lookups on
