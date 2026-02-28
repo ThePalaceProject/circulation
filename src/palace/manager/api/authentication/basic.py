@@ -35,8 +35,10 @@ from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.core.exceptions import IntegrationException
 from palace.manager.core.selftest import SelfTestResult
 from palace.manager.integration.patron_auth.patron_blocking import (
+    RULE_VALIDATION_TEST_VALUES,
     PatronBlockingRule,
-    check_patron_blocking_rules,
+    build_runtime_values_from_patron,
+    check_patron_blocking_rules_with_evaluator,
 )
 from palace.manager.integration.settings import (
     FormFieldType,
@@ -292,7 +294,16 @@ class BasicAuthProviderLibrarySettings(AuthProviderLibrarySettings):
     def validate_patron_blocking_rules(
         cls, rules: list[PatronBlockingRule]
     ) -> list[PatronBlockingRule]:
-        """Validate patron blocking rules: non-empty name/rule, no duplicate names."""
+        """Validate patron blocking rules: non-empty name/rule, no duplicate names,
+        valid simpleeval expression, and message length."""
+        from palace.manager.api.authentication.patron_blocking_rules.rule_engine import (
+            MAX_MESSAGE_LENGTH,
+            RuleValidationError,
+            make_evaluator,
+            validate_rule_expression,
+        )
+
+        evaluator = make_evaluator()
         names_seen: set[str] = set()
         for i, rule in enumerate(rules):
             if not rule.name:
@@ -314,6 +325,28 @@ class BasicAuthProviderLibrarySettings(AuthProviderLibrarySettings):
                     )
                 )
             names_seen.add(rule.name)
+
+            # Validate rule expression via simpleeval (syntax + bool result).
+            try:
+                validate_rule_expression(
+                    rule.rule, RULE_VALIDATION_TEST_VALUES, evaluator
+                )
+            except RuleValidationError as exc:
+                raise SettingsValidationError(
+                    INVALID_CONFIGURATION_OPTION.detailed(
+                        f"Rule at index {i} ('{rule.name}'): {exc.message}"
+                    )
+                ) from exc
+
+            # Validate optional message length.
+            if rule.message is not None and len(rule.message) > MAX_MESSAGE_LENGTH:
+                raise SettingsValidationError(
+                    INVALID_CONFIGURATION_OPTION.detailed(
+                        f"Rule at index {i} ('{rule.name}'): message must not exceed "
+                        f"{MAX_MESSAGE_LENGTH} characters."
+                    )
+                )
+
         return rules
 
 
@@ -565,7 +598,10 @@ class BasicAuthenticationProvider[
         """
         result = self._do_authenticate(_db, credentials)
         if self.supports_patron_blocking_rules and isinstance(result, Patron):
-            blocked = check_patron_blocking_rules(self.patron_blocking_rules)
+            values = build_runtime_values_from_patron(result)
+            blocked = check_patron_blocking_rules_with_evaluator(
+                self.patron_blocking_rules, values, log=self.log
+            )
             if blocked is not None:
                 return blocked
         return result
