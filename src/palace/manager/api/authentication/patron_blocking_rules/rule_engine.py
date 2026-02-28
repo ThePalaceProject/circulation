@@ -6,7 +6,10 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Any
 
-from simpleeval import EvalWithCompoundTypes, NameNotDefined
+from simpleeval import (  # type: ignore[import-untyped]
+    EvalWithCompoundTypes,
+    NameNotDefined,
+)
 
 from palace.manager.core.exceptions import BasePalaceException
 
