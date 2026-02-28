@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 from datetime import datetime
-from typing import Annotated, Any
+from typing import Annotated, Any, ClassVar
 
 from annotated_types import Ge, Le
 from pydantic import PositiveInt
@@ -210,6 +210,8 @@ class SIP2AuthenticationProvider(
     BasicAuthenticationProvider[SIP2Settings, SIP2LibrarySettings],
     HasPatronDebug,
 ):
+    supports_patron_blocking_rules: ClassVar[bool] = True
+
     DATE_FORMATS = ["%Y%m%d", "%Y%m%d%Z%H%M%S", "%Y%m%d    %H%M%S"]
 
     # Map the reasons why SIP2 might report a patron is blocked to the
