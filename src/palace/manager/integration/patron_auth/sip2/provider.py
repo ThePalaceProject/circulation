@@ -312,6 +312,85 @@ class SIP2AuthenticationProvider(
     def library_settings_class(cls) -> type[SIP2LibrarySettings]:
         return SIP2LibrarySettings
 
+    @classmethod
+    def fetch_live_rule_validation_values(
+        cls, settings: SIP2Settings
+    ) -> dict[str, Any]:
+        """Make a live SIP2 call and return placeholder values for rule validation.
+
+        Called at admin-save time when the library settings include patron blocking
+        rules.  Uses the provider's configured test identifier to fetch real patron
+        information from the SIP server and builds a values dict suitable for
+        passing to :func:`~palace.manager.api.authentication.patron_blocking_rules
+        .rule_engine.validate_rule_expression`.
+
+        This is intentionally a classmethod so it can be called without a
+        database session — the temporary provider instance it creates is never
+        persisted.
+
+        Args:
+            settings: The validated :class:`SIP2Settings` for this integration.
+
+        Returns:
+            A dict mapping placeholder key to resolved value, produced by
+            :func:`~palace.manager.integration.patron_auth.patron_blocking
+            .build_values_from_sip2_info`.
+
+        Raises:
+            :class:`~palace.manager.util.problem_detail.ProblemDetailException`:
+                If ``test_identifier`` is not configured, the SIP2 server cannot
+                be reached, or the server returns an error response.
+        """
+        from palace.manager.api.admin.problem_details import (
+            INVALID_CONFIGURATION_OPTION,
+        )
+        from palace.manager.integration.patron_auth.patron_blocking import (
+            build_values_from_sip2_info,
+        )
+        from palace.manager.util.problem_detail import ProblemDetailException
+
+        if not settings.test_identifier:
+            raise ProblemDetailException(
+                INVALID_CONFIGURATION_OPTION.detailed(
+                    "A test identifier must be configured on this authentication "
+                    "service before patron blocking rules can be validated against "
+                    "live patron data."
+                )
+            )
+
+        # Instantiate a temporary provider to reuse patron_information().
+        # library_id=0 and integration_id=0 are placeholders — they are never
+        # written to the database.
+        provider = cls(
+            library_id=0,
+            integration_id=0,
+            settings=settings,
+            library_settings=cls.library_settings_class()(),
+        )
+
+        try:
+            info = provider.patron_information(
+                settings.test_identifier, settings.test_password or ""
+            )
+        except Exception as exc:
+            raise ProblemDetailException(
+                INVALID_CONFIGURATION_OPTION.detailed(
+                    f"Could not contact the SIP2 server while validating patron "
+                    f"blocking rules: {exc}"
+                )
+            ) from exc
+
+        if isinstance(info, ProblemDetail):
+            raise ProblemDetailException(
+                INVALID_CONFIGURATION_OPTION.detailed(
+                    f"SIP2 server returned an error while validating patron blocking "
+                    f"rules for test identifier {settings.test_identifier!r}: "
+                    f"{info.detail}"
+                )
+            )
+
+        return build_values_from_sip2_info(info)
+
     def patron_information(
         self, username: str, password: str | None
     ) -> dict[str, Any] | ProblemDetail:

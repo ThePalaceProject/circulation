@@ -13,11 +13,20 @@ from palace.manager.api.admin.controller.integration_settings import (
 from palace.manager.api.admin.form_data import ProcessFormData
 from palace.manager.api.admin.problem_details import (
     FAILED_TO_RUN_SELF_TESTS,
+    INVALID_CONFIGURATION_OPTION,
     MULTIPLE_BASIC_AUTH_SERVICES,
 )
 from palace.manager.api.authentication.base import AuthenticationProviderType
 from palace.manager.api.authentication.basic import BasicAuthenticationProvider
+from palace.manager.api.authentication.patron_blocking_rules.rule_engine import (
+    RuleValidationError,
+    make_evaluator,
+    validate_rule_expression,
+)
 from palace.manager.integration.goals import Goals
+from palace.manager.integration.patron_auth.sip2.provider import (
+    SIP2AuthenticationProvider,
+)
 from palace.manager.integration.settings import BaseSettings
 from palace.manager.sqlalchemy.listeners import site_configuration_has_changed
 from palace.manager.sqlalchemy.model.integration import (
@@ -90,8 +99,18 @@ class PatronAuthServicesController(
     def library_integration_validation(
         self, integration: IntegrationLibraryConfiguration
     ) -> None:
-        """Check that the library didn't end up with multiple basic auth services."""
+        """Validate a library integration after its settings have been saved.
 
+        Performs two checks in order:
+
+        1. Ensures the library does not end up with more than one basic-auth
+           patron authentication service.
+        2. For SIP2 integrations that include patron blocking rules, makes a
+           live SIP2 call using the configured test identifier and re-validates
+           every rule against the real values returned.  This catches rules that
+           pass static syntax checks but would fail (or produce wrong results)
+           against actual patron data.
+        """
         library = integration.library
         basic_auth_integrations = (
             self._db.query(IntegrationConfiguration)
@@ -110,6 +129,30 @@ class PatronAuthServicesController(
                     f"to {library.short_name}, but it already has one."
                 )
             )
+
+        # Live SIP2 rule validation — only runs for SIP2 integrations with rules.
+        protocol_class = self.get_protocol_class(integration.parent.protocol)
+        if not issubclass(protocol_class, SIP2AuthenticationProvider):
+            return
+        library_settings = protocol_class.library_settings_load(integration)
+        if not library_settings.patron_blocking_rules:
+            return
+
+        settings = protocol_class.settings_load(integration.parent)
+        # fetch_live_rule_validation_values raises ProblemDetailException on
+        # any SIP2 failure (missing test_identifier, network error, etc.).
+        live_values = protocol_class.fetch_live_rule_validation_values(settings)
+
+        evaluator = make_evaluator()
+        for i, rule in enumerate(library_settings.patron_blocking_rules):
+            try:
+                validate_rule_expression(rule.rule, live_values, evaluator)
+            except RuleValidationError as exc:
+                raise ProblemDetailException(
+                    INVALID_CONFIGURATION_OPTION.detailed(
+                        f"Rule at index {i} ('{rule.name}'): {exc.message}"
+                    )
+                ) from exc
 
     def process_updated_libraries(
         self,

@@ -35,7 +35,6 @@ from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.core.exceptions import IntegrationException
 from palace.manager.core.selftest import SelfTestResult
 from palace.manager.integration.patron_auth.patron_blocking import (
-    RULE_VALIDATION_TEST_VALUES,
     PatronBlockingRule,
     build_runtime_values_from_patron,
     check_patron_blocking_rules_with_evaluator,
@@ -295,15 +294,18 @@ class BasicAuthProviderLibrarySettings(AuthProviderLibrarySettings):
         cls, rules: list[PatronBlockingRule]
     ) -> list[PatronBlockingRule]:
         """Validate patron blocking rules: non-empty name/rule, no duplicate names,
-        valid simpleeval expression, and message length."""
+        rule length <= 1000, and message length <= 1000.
+
+        Full expression validation (syntax, placeholder resolution, bool result)
+        is deferred to admin-save time via a live SIP2 call in
+        ``PatronAuthServicesController.library_integration_validation``, where
+        real patron values are available.
+        """
         from palace.manager.api.authentication.patron_blocking_rules.rule_engine import (
             MAX_MESSAGE_LENGTH,
-            RuleValidationError,
-            make_evaluator,
-            validate_rule_expression,
+            MAX_RULE_LENGTH,
         )
 
-        evaluator = make_evaluator()
         names_seen: set[str] = set()
         for i, rule in enumerate(rules):
             if not rule.name:
@@ -326,17 +328,14 @@ class BasicAuthProviderLibrarySettings(AuthProviderLibrarySettings):
                 )
             names_seen.add(rule.name)
 
-            # Validate rule expression via simpleeval (syntax + bool result).
-            try:
-                validate_rule_expression(
-                    rule.rule, RULE_VALIDATION_TEST_VALUES, evaluator
-                )
-            except RuleValidationError as exc:
+            # Enforce rule length limit.
+            if len(rule.rule) > MAX_RULE_LENGTH:
                 raise SettingsValidationError(
                     INVALID_CONFIGURATION_OPTION.detailed(
-                        f"Rule at index {i} ('{rule.name}'): {exc.message}"
+                        f"Rule at index {i} ('{rule.name}'): rule expression must not "
+                        f"exceed {MAX_RULE_LENGTH} characters."
                     )
-                ) from exc
+                )
 
             # Validate optional message length.
             if rule.message is not None and len(rule.message) > MAX_MESSAGE_LENGTH:

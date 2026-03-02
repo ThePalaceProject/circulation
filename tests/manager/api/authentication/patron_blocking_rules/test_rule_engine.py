@@ -82,15 +82,40 @@ class TestCompileRuleExpression:
 
 class TestBuildNames:
     def test_maps_key_to_var_name(self):
-        compiled = compile_rule_expression("age_in_years({dob}) >= 18")
-        names = build_names(compiled, {"dob": "1990-01-01"})
-        assert names == {"__v_dob": "1990-01-01"}
+        compiled = compile_rule_expression("{fines} >= 5")
+        names = build_names(compiled, {"fines": 5.0})
+        assert names == {"__v_fines": 5.0}
 
     def test_missing_key_raises(self):
         compiled = compile_rule_expression("{fines} > 5")
         with pytest.raises(MissingPlaceholderError) as exc_info:
             build_names(compiled, {})
         assert exc_info.value.key == "fines"
+
+    def test_missing_key_error_lists_available_keys(self):
+        """Error message must list all available keys and their values."""
+        compiled = compile_rule_expression("{amount_owed} > 10")
+        with pytest.raises(MissingPlaceholderError) as exc_info:
+            build_names(compiled, {"fines": 5.0, "patron_type": "adult"})
+        msg = str(exc_info.value)
+        assert "amount_owed" in msg
+        assert "fines" in msg
+        assert "patron_type" in msg
+
+    def test_missing_key_available_dict_is_stored(self):
+        """The .available attribute holds the dict that was passed in."""
+        compiled = compile_rule_expression("{missing} > 0")
+        avail = {"x": 1, "y": 2}
+        with pytest.raises(MissingPlaceholderError) as exc_info:
+            build_names(compiled, avail)
+        assert exc_info.value.available == avail
+
+    def test_missing_key_with_empty_available_shows_none(self):
+        """When no keys are available the message says '(none)'."""
+        compiled = compile_rule_expression("{fines} > 5")
+        with pytest.raises(MissingPlaceholderError) as exc_info:
+            build_names(compiled, {})
+        assert "(none)" in str(exc_info.value)
 
     def test_missing_key_message_contains_key(self):
         compiled = compile_rule_expression("{amount_owed} > 10")
@@ -181,10 +206,26 @@ class TestValidateRuleExpression:
         with pytest.raises(RuleValidationError) as exc_info:
             validate_rule_expression(
                 "{missing_key} > 0",
-                test_values={},
+                test_values={"fines": 5.0, "patron_type": "adult"},
                 evaluator=evaluator,
             )
-        assert "missing_key" in str(exc_info.value)
+        msg = str(exc_info.value)
+        assert "missing_key" in msg
+        # Available keys should be listed in the error.
+        assert "fines" in msg
+        assert "patron_type" in msg
+
+    def test_unknown_function_error_lists_allowed_functions(self, evaluator):
+        """A call to an unsupported function raises RuleValidationError listing
+        the allowed functions so the operator knows what to use."""
+        with pytest.raises(RuleValidationError) as exc_info:
+            validate_rule_expression(
+                "bad_func({x}) > 0",
+                test_values={"x": 1},
+                evaluator=evaluator,
+            )
+        msg = str(exc_info.value)
+        assert "age_in_years" in msg  # the only allowed function
 
     def test_syntax_error_raises(self, evaluator):
         with pytest.raises(RuleValidationError):
@@ -253,21 +294,38 @@ class TestEvaluateRuleExpressionStrictBool:
     def test_missing_placeholder_raises_rule_evaluation_error(self, evaluator):
         with pytest.raises(RuleEvaluationError) as exc_info:
             evaluate_rule_expression_strict_bool(
-                "{dob} == '2000-01-01'",
-                values={},
+                "{some_field} == 'expected'",
+                values={"fines": 5.0, "patron_type": "adult"},
                 evaluator=evaluator,
             )
-        assert "dob" in str(exc_info.value)
+        msg = str(exc_info.value)
+        assert "some_field" in msg
+        # Available fields should be listed so operators can fix the rule.
+        assert "fines" in msg
+        assert "patron_type" in msg
 
     def test_missing_placeholder_error_includes_rule_name(self, evaluator):
         with pytest.raises(RuleEvaluationError) as exc_info:
             evaluate_rule_expression_strict_bool(
-                "{dob} == '2000-01-01'",
+                "{some_field} == 'expected'",
                 values={},
                 evaluator=evaluator,
                 rule_name="underage_check",
             )
         assert exc_info.value.rule_name == "underage_check"
+
+    def test_unknown_function_error_lists_allowed_functions(self, evaluator):
+        """A call to an unsupported function raises RuleEvaluationError and
+        the message includes the list of allowed functions."""
+        with pytest.raises(RuleEvaluationError) as exc_info:
+            evaluate_rule_expression_strict_bool(
+                "bad_func({x}) > 0",
+                values={"x": 1},
+                evaluator=evaluator,
+                rule_name="bad-rule",
+            )
+        msg = str(exc_info.value)
+        assert "age_in_years" in msg
 
     def test_invalid_expression_raises_rule_evaluation_error(self, evaluator):
         with pytest.raises(RuleEvaluationError):
