@@ -580,6 +580,30 @@ class BasicAuthenticationProvider[
             return value
         return value.strip()
 
+    def _build_blocking_rule_values(
+        self, patron: Patron, credentials: dict
+    ) -> dict[str, Any]:
+        """Build the values dict used when evaluating patron blocking rules.
+
+        The base implementation extracts the small set of values available on
+        the :class:`~palace.manager.sqlalchemy.model.patron.Patron` DB model
+        (``fines``, ``patron_type``).
+
+        Provider subclasses that have access to richer upstream data (e.g. the
+        full SIP2 response dict) should override this to return a more complete
+        mapping.
+
+        Args:
+            patron: The successfully authenticated patron.
+            credentials: The raw credentials dict passed to :meth:`authenticate`.
+
+        Returns:
+            Dict mapping placeholder key to resolved value for
+            :func:`~palace.manager.integration.patron_auth.patron_blocking
+            .check_patron_blocking_rules_with_evaluator`.
+        """
+        return build_runtime_values_from_patron(patron)
+
     def authenticate(
         self, _db: Session, credentials: dict
     ) -> Patron | ProblemDetail | None:
@@ -596,8 +620,12 @@ class BasicAuthenticationProvider[
             credentials are missing or wrong.
         """
         result = self._do_authenticate(_db, credentials)
-        if self.supports_patron_blocking_rules and isinstance(result, Patron):
-            values = build_runtime_values_from_patron(result)
+        if (
+            self.supports_patron_blocking_rules
+            and self.patron_blocking_rules
+            and isinstance(result, Patron)
+        ):
+            values = self._build_blocking_rule_values(result, credentials)
             blocked = check_patron_blocking_rules_with_evaluator(
                 self.patron_blocking_rules, values, log=self.log
             )
