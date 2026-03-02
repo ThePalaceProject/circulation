@@ -235,6 +235,7 @@ def age_in_years(
 #: Default set of functions available in rule expressions.
 DEFAULT_ALLOWED_FUNCTIONS: dict[str, Callable[..., Any]] = {
     "age_in_years": age_in_years,
+    "int": int,
 }
 
 

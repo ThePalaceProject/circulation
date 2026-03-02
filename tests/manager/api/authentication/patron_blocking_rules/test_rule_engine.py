@@ -180,6 +180,13 @@ class TestValidateRuleExpression:
             evaluator=evaluator,
         )
 
+    def test_valid_int_expression_passes(self, evaluator):
+        validate_rule_expression(
+            "int({patron_class}) > 2",
+            test_values={"patron_class": "3"},
+            evaluator=evaluator,
+        )
+
     def test_empty_expression_raises(self, evaluator):
         with pytest.raises(RuleValidationError):
             validate_rule_expression("", test_values={}, evaluator=evaluator)
@@ -225,7 +232,8 @@ class TestValidateRuleExpression:
                 evaluator=evaluator,
             )
         msg = str(exc_info.value)
-        assert "age_in_years" in msg  # the only allowed function
+        assert "age_in_years" in msg
+        assert "int" in msg
 
     def test_syntax_error_raises(self, evaluator):
         with pytest.raises(RuleValidationError):
@@ -326,6 +334,24 @@ class TestEvaluateRuleExpressionStrictBool:
             )
         msg = str(exc_info.value)
         assert "age_in_years" in msg
+        assert "int" in msg
+
+    def test_int_function_converts_string_field(self, evaluator):
+        """int() converts a string-valued SIP2 field before comparison."""
+        result = evaluate_rule_expression_strict_bool(
+            "int({patron_class}) > 2",
+            values={"patron_class": "3"},
+            evaluator=evaluator,
+        )
+        assert result is True
+
+    def test_int_function_does_not_block_below_threshold(self, evaluator):
+        result = evaluate_rule_expression_strict_bool(
+            "int({patron_class}) > 2",
+            values={"patron_class": "1"},
+            evaluator=evaluator,
+        )
+        assert result is False
 
     def test_invalid_expression_raises_rule_evaluation_error(self, evaluator):
         with pytest.raises(RuleEvaluationError):
