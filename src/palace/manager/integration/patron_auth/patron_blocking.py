@@ -135,32 +135,6 @@ def build_values_from_sip2_info(info: dict[str, Any]) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# Legacy pure-function evaluator (v1 literal BLOCK string)
-# ---------------------------------------------------------------------------
-
-
-def check_patron_blocking_rules(
-    rules: list[PatronBlockingRule],
-) -> ProblemDetail | None:
-    """Evaluate a list of blocking rules using the legacy literal-BLOCK check.
-
-    .. deprecated::
-        Prefer :func:`check_patron_blocking_rules_with_evaluator` for
-        simpleeval-based rule evaluation.  This function is retained for
-        backward compatibility with unit tests of the pure function itself.
-
-    :param rules: The list of PatronBlockingRule objects configured for a library.
-    :return: A ProblemDetail (HTTP 403) if the patron should be blocked,
-             or ``None`` if authentication should proceed normally.
-    """
-    for rule in rules:
-        if rule.rule == "BLOCK":
-            detail = rule.message or "Access blocked by library policy."
-            return BLOCKED_CREDENTIALS.detailed(detail)
-    return None
-
-
-# ---------------------------------------------------------------------------
 # simpleeval-based runtime evaluator
 # ---------------------------------------------------------------------------
 
@@ -184,8 +158,8 @@ def check_patron_blocking_rules_with_evaluator(
 
     Args:
         rules: The list of :class:`PatronBlockingRule` objects for the library.
-        values: Runtime placeholder values produced by
-            :func:`build_runtime_values_from_patron`.
+        values: Runtime placeholder values; for SIP2 providers this is the full
+            raw SIP2 response dict (see :func:`build_values_from_sip2_info`).
         log: Optional logger for server-side error diagnostics.
 
     Returns:

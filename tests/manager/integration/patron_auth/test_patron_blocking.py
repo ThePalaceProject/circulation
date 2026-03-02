@@ -26,7 +26,6 @@ from palace.manager.integration.patron_auth.patron_blocking import (
     PatronBlockingRule,
     build_runtime_values_from_patron,
     build_values_from_sip2_info,
-    check_patron_blocking_rules,
     check_patron_blocking_rules_with_evaluator,
 )
 from palace.manager.integration.patron_auth.sip2.provider import (
@@ -68,77 +67,6 @@ class TestPatronBlockingRule:
         rule = PatronBlockingRule(name="r", rule="True", message="msg")
         restored = PatronBlockingRule.model_validate(rule.model_dump())
         assert restored == rule
-
-
-# ---------------------------------------------------------------------------
-# Legacy check_patron_blocking_rules pure function
-# ---------------------------------------------------------------------------
-
-
-class TestCheckPatronBlockingRules:
-    """Unit tests for the legacy check_patron_blocking_rules() pure function.
-
-    This function uses the literal-BLOCK sentinel and is retained for
-    backward compatibility; new code should use
-    check_patron_blocking_rules_with_evaluator().
-    """
-
-    def test_empty_rules_returns_none(self) -> None:
-        assert check_patron_blocking_rules([]) is None
-
-    def test_non_block_rule_returns_none(self) -> None:
-        rules = [PatronBlockingRule(name="allow", rule="ALLOW")]
-        assert check_patron_blocking_rules(rules) is None
-
-    def test_multiple_non_block_rules_return_none(self) -> None:
-        rules = [
-            PatronBlockingRule(name="r1", rule="SOMETHING"),
-            PatronBlockingRule(name="r2", rule="ELSE"),
-        ]
-        assert check_patron_blocking_rules(rules) is None
-
-    def test_block_rule_returns_problem_detail(self) -> None:
-        rules = [PatronBlockingRule(name="block-all", rule="BLOCK")]
-        result = check_patron_blocking_rules(rules)
-        assert isinstance(result, ProblemDetail)
-        assert result.status_code == 403
-        assert result.uri == BLOCKED_CREDENTIALS.uri
-
-    def test_block_rule_uses_custom_message(self) -> None:
-        rules = [
-            PatronBlockingRule(
-                name="block-all", rule="BLOCK", message="Custom patron message."
-            )
-        ]
-        result = check_patron_blocking_rules(rules)
-        assert isinstance(result, ProblemDetail)
-        assert result.detail == "Custom patron message."
-
-    def test_block_rule_uses_default_message_when_no_message(self) -> None:
-        rules = [PatronBlockingRule(name="block-all", rule="BLOCK")]
-        result = check_patron_blocking_rules(rules)
-        assert isinstance(result, ProblemDetail)
-        assert result.detail == "Access blocked by library policy."
-
-    def test_first_block_rule_wins(self) -> None:
-        """If multiple BLOCK rules exist the first one is returned."""
-        rules = [
-            PatronBlockingRule(name="first", rule="BLOCK", message="First."),
-            PatronBlockingRule(name="second", rule="BLOCK", message="Second."),
-        ]
-        result = check_patron_blocking_rules(rules)
-        assert isinstance(result, ProblemDetail)
-        assert result.detail == "First."
-
-    def test_non_block_rule_before_block_rule(self) -> None:
-        """A BLOCK rule preceded by a non-BLOCK rule still triggers."""
-        rules = [
-            PatronBlockingRule(name="allow", rule="ALLOW"),
-            PatronBlockingRule(name="block", rule="BLOCK", message="Blocked."),
-        ]
-        result = check_patron_blocking_rules(rules)
-        assert isinstance(result, ProblemDetail)
-        assert result.detail == "Blocked."
 
 
 # ---------------------------------------------------------------------------
