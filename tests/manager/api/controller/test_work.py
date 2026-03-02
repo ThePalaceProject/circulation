@@ -48,8 +48,8 @@ from palace.manager.util.opds_writer import AtomFeed, OPDSFeed
 from palace.manager.util.problem_detail import ProblemDetail
 from tests.fixtures.api_controller import CirculationControllerFixture
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.opds import OPDSSerializationTestHelper
 from tests.fixtures.services import ServicesFixture
-from tests.manager.api.controller.test_loan import OPDSSerializationTestHelper
 
 
 class WorkFixture(CirculationControllerFixture):
@@ -328,7 +328,7 @@ class TestWorkController:
                 work_fixture.identifier.type, work_fixture.identifier.identifier
             )
 
-        assert 200 == response.status_code
+        assert response.status_code == 200
         assert response.content_type == expected_content_type
 
     def test_permalink_does_not_return_fulfillment_links_for_authenticated_patrons_without_loans(
@@ -667,7 +667,7 @@ class TestWorkController:
                 identifier.type, identifier.identifier, novelist_api=mock_api
             )
 
-        assert 200 == response.status_code
+        assert response.status_code == 200
         assert response.content_type == expected_content_type
 
     def test_related_books(self, work_fixture: WorkFixture):
