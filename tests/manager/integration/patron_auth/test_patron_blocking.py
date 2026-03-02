@@ -23,9 +23,9 @@ from palace.manager.api.authentication.basic import (
 )
 from palace.manager.api.problem_details import BLOCKED_CREDENTIALS
 from palace.manager.integration.patron_auth.patron_blocking import (
-    RULE_VALIDATION_TEST_VALUES,
     PatronBlockingRule,
     build_runtime_values_from_patron,
+    build_values_from_sip2_info,
     check_patron_blocking_rules,
     check_patron_blocking_rules_with_evaluator,
 )
@@ -290,25 +290,6 @@ class TestBuildRuntimeValuesFromPatron:
 
 
 # ---------------------------------------------------------------------------
-# RULE_VALIDATION_TEST_VALUES
-# ---------------------------------------------------------------------------
-
-
-class TestRuleValidationTestValues:
-    def test_contains_fines(self) -> None:
-        assert "fines" in RULE_VALIDATION_TEST_VALUES
-
-    def test_contains_patron_type(self) -> None:
-        assert "patron_type" in RULE_VALIDATION_TEST_VALUES
-
-    def test_contains_dob(self) -> None:
-        assert "dob" in RULE_VALIDATION_TEST_VALUES
-
-    def test_fines_is_numeric(self) -> None:
-        assert isinstance(RULE_VALIDATION_TEST_VALUES["fines"], (int, float))
-
-
-# ---------------------------------------------------------------------------
 # BasicAuthProviderLibrarySettings — patron_blocking_rules field validation
 # ---------------------------------------------------------------------------
 
@@ -454,52 +435,26 @@ class TestBasicAuthLibrarySettingsBlockingRules:
             ]
         )
 
-    def test_validate_invalid_syntax_raises(self) -> None:
-        """A syntactically invalid rule expression is rejected."""
-        with raises_problem_detail() as info:
-            BasicAuthProviderLibrarySettings(
-                patron_blocking_rules=[
-                    {"name": "bad", "rule": "{fines} >>>??? bad syntax"}
-                ]
-            )
-        assert info.value.detail is not None
-        assert "index 0" in info.value.detail
-
-    def test_validate_non_bool_result_raises(self) -> None:
-        """An expression that does not evaluate to a bool is rejected."""
-        with raises_problem_detail() as info:
-            BasicAuthProviderLibrarySettings(
-                patron_blocking_rules=[{"name": "not-bool", "rule": "{fines} + 1"}]
-            )
-        assert info.value.detail is not None
-        assert "index 0" in info.value.detail
-
-    def test_validate_valid_placeholder_expression_passes(self) -> None:
-        """A valid simpleeval expression using known placeholders is accepted."""
-        settings = BasicAuthProviderLibrarySettings(
-            patron_blocking_rules=[{"name": "fines-check", "rule": "{fines} > 10.0"}]
-        )
-        assert settings.patron_blocking_rules[0].name == "fines-check"
-
-    def test_validate_age_in_years_expression_passes(self) -> None:
-        """age_in_years() built-in function is available in validation."""
+    def test_validate_any_rule_expression_passes_static_check(self) -> None:
+        """Any non-empty rule expression that fits within 1000 chars is accepted
+        by static Pydantic validation.  Full syntax/semantic validation happens
+        at admin-save time via a live SIP2 call."""
         settings = BasicAuthProviderLibrarySettings(
             patron_blocking_rules=[
-                {"name": "age-check", "rule": "age_in_years({dob}) < 18"}
+                {"name": "fines-check", "rule": "{fines} > 10.0"},
+                {"name": "any-field", "rule": "{totally_unknown_key} > 0"},
+                {"name": "non-bool", "rule": "{fines} + 1"},
             ]
         )
-        assert settings.patron_blocking_rules[0].name == "age-check"
+        assert len(settings.patron_blocking_rules) == 3
 
-    def test_validate_unknown_placeholder_raises(self) -> None:
-        """A placeholder not in RULE_VALIDATION_TEST_VALUES is rejected."""
-        with raises_problem_detail() as info:
-            BasicAuthProviderLibrarySettings(
-                patron_blocking_rules=[
-                    {"name": "unknown", "rule": "{totally_unknown_key} > 0"}
-                ]
-            )
-        assert info.value.detail is not None
-        assert "index 0" in info.value.detail
+    def test_validate_rule_exactly_1000_chars_passes(self) -> None:
+        """rule text of exactly 1000 chars is accepted."""
+        rule = "T" * 1000
+        settings = BasicAuthProviderLibrarySettings(
+            patron_blocking_rules=[{"name": "r", "rule": rule}]
+        )
+        assert settings.patron_blocking_rules[0].rule == rule
 
 
 # ---------------------------------------------------------------------------
@@ -606,3 +561,63 @@ class TestSupportsPatronBlockingRulesFlag:
         result = BasicAuthenticationProvider.authenticate(provider, MagicMock(), {})
 
         assert result is mock_patron
+
+
+# ---------------------------------------------------------------------------
+# build_values_from_sip2_info
+# ---------------------------------------------------------------------------
+
+
+class TestBuildValuesFromSip2Info:
+    """Tests for build_values_from_sip2_info()."""
+
+    def test_fee_amount_plain_float_string(self) -> None:
+        """fee_amount like '5.00' is parsed to a float under the 'fines' key."""
+        values = build_values_from_sip2_info({"fee_amount": "5.00"})
+        assert values["fines"] == pytest.approx(5.0)
+
+    def test_fee_amount_dollar_prefix(self) -> None:
+        """fee_amount like '$12.50' (dollar sign prefix) is parsed correctly."""
+        values = build_values_from_sip2_info({"fee_amount": "$12.50"})
+        assert values["fines"] == pytest.approx(12.5)
+
+    def test_fee_amount_missing_defaults_to_zero(self) -> None:
+        """Absent fee_amount → fines = 0.0."""
+        values = build_values_from_sip2_info({})
+        assert values["fines"] == pytest.approx(0.0)
+
+    def test_fee_amount_unparseable_defaults_to_zero(self) -> None:
+        """Unparseable fee_amount → fines = 0.0 (no exception raised)."""
+        values = build_values_from_sip2_info({"fee_amount": "not-a-number"})
+        assert values["fines"] == pytest.approx(0.0)
+
+    def test_all_raw_sip2_fields_are_included(self) -> None:
+        """Every key in the raw info dict is present verbatim in the result."""
+        info = {
+            "fee_amount": "3.50",
+            "sipserver_patron_class": "student",
+            "polaris_patron_birthdate": "2000-06-15",
+            "patron_status": "active",
+            "personal_name": "Jane Doe",
+        }
+        values = build_values_from_sip2_info(info)
+        # All raw keys must be present.
+        for k, v in info.items():
+            assert values[k] == v
+
+    def test_normalized_fines_added_alongside_raw_fee_amount(self) -> None:
+        """The 'fines' key (float) is added IN ADDITION to the raw fee_amount."""
+        info = {"fee_amount": "3.50"}
+        values = build_values_from_sip2_info(info)
+        assert "fee_amount" in values  # raw field preserved
+        assert values["fines"] == pytest.approx(3.5)  # normalised key added
+
+    def test_empty_info_dict_has_only_fines_key(self) -> None:
+        """An empty SIP2 response still produces the 'fines' key (defaulting to 0)."""
+        values = build_values_from_sip2_info({})
+        assert values == {"fines": pytest.approx(0.0)}
+
+    def test_polaris_patron_birthdate_accessible_directly(self) -> None:
+        """polaris_patron_birthdate is accessible under its own raw key."""
+        values = build_values_from_sip2_info({"polaris_patron_birthdate": "1990-01-01"})
+        assert values["polaris_patron_birthdate"] == "1990-01-01"

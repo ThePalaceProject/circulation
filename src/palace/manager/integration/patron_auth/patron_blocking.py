@@ -55,25 +55,6 @@ class PatronBlockingRule(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Validation test values
-# ---------------------------------------------------------------------------
-
-#: Deterministic placeholder values used *only* during admin-save validation.
-#: They provide a representative sample so that ``validate_rule_expression``
-#: can do a trial evaluation and confirm that expressions return a bool.
-#: Keys here define the full set of placeholder names that rules are allowed
-#: to reference in validation context.
-RULE_VALIDATION_TEST_VALUES: dict[str, Any] = {
-    "fines": 5.00,
-    "patron_type": "adult",
-    # dob is validated but resolved at runtime only when the auth provider
-    # supplies it; rules using {dob} will fail-closed if the patron record
-    # does not carry a date-of-birth.
-    "dob": "1990-01-01",
-}
-
-
-# ---------------------------------------------------------------------------
 # Runtime values builder
 # ---------------------------------------------------------------------------
 
@@ -111,6 +92,44 @@ def build_runtime_values_from_patron(patron: Patron) -> dict[str, Any]:
     # NOTE: "dob" is intentionally NOT included here yet.  Rules that
     # reference {dob} will fail-closed (block) until a future version
     # populates it from the patron record or SIP2 response.
+
+    return values
+
+
+# ---------------------------------------------------------------------------
+# SIP2 live-response values builder
+# ---------------------------------------------------------------------------
+
+
+def build_values_from_sip2_info(info: dict[str, Any]) -> dict[str, Any]:
+    """Build a simpleeval values dict from a raw SIP2 ``patron_information`` dict.
+
+    Returns **all** fields present in the SIP2 response so that operators have
+    the widest possible set of keys to reference in blocking rules, plus a
+    normalised ``fines`` key derived from ``fee_amount``.
+
+    This is used at admin-save validation time (live SIP2 call) and may also
+    be used at runtime once richer SIP2 data is available in the auth flow.
+
+    Args:
+        info: The dict returned by
+            :meth:`~palace.manager.integration.patron_auth.sip2.client.SIPClient.patron_information`.
+
+    Returns:
+        Dict mapping placeholder key to resolved value.  All raw SIP2 fields
+        are included verbatim; the additional ``fines`` key is a parsed
+        :class:`float` derived from ``fee_amount``.
+    """
+    from palace.manager.util import MoneyUtility
+
+    # Include every raw SIP2 field so rules can reference any server-returned key.
+    values: dict[str, Any] = dict(info)
+
+    # Add normalised 'fines' from fee_amount (BV); may be "$5.00", "5.00", or absent.
+    try:
+        values["fines"] = float(MoneyUtility.parse(info.get("fee_amount") or "0"))
+    except (ValueError, TypeError):
+        values["fines"] = 0.0
 
     return values
 
