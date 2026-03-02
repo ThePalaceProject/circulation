@@ -27,6 +27,7 @@ from palace.manager.feed.annotator.circulation import LibraryAnnotator
 from palace.manager.feed.facets.contributor import ContributorFacets
 from palace.manager.feed.facets.feed import Facets, FeaturedFacets
 from palace.manager.feed.facets.series import SeriesFacets
+from palace.manager.feed.serializer.opds2 import OPDS2Serializer
 from palace.manager.feed.types import WorkEntry
 from palace.manager.feed.worklist.contributor import ContributorLane
 from palace.manager.feed.worklist.recommendation import (
@@ -43,11 +44,12 @@ from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.sqlalchemy.util import get_one, tuple_to_numericrange
 from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.flask_util import Response
-from palace.manager.util.opds_writer import OPDSFeed
+from palace.manager.util.opds_writer import AtomFeed, OPDSFeed
 from palace.manager.util.problem_detail import ProblemDetail
 from tests.fixtures.api_controller import CirculationControllerFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.services import ServicesFixture
+from tests.manager.api.controller.test_loan import OPDSSerializationTestHelper
 
 
 class WorkFixture(CirculationControllerFixture):
@@ -298,6 +300,36 @@ class TestWorkController:
         assert 200 == response.status_code
         assert expect.data == response.get_data()
         assert OPDSFeed.ENTRY_TYPE == response.headers["Content-Type"]
+
+    @pytest.mark.parametrize(
+        *OPDSSerializationTestHelper.PARAMETRIZED_SINGLE_ENTRY_ACCEPT_HEADERS
+    )
+    def test_permalink_content_negotiation(
+        self,
+        work_fixture: WorkFixture,
+        accept_header: str | None,
+        expected_content_type: str,
+    ):
+        """Verify the permalink endpoint respects the Accept header for OPDS content negotiation."""
+        serialization_helper = OPDSSerializationTestHelper(
+            accept_header, expected_content_type
+        )
+        headers = serialization_helper.merge_accept_header({})
+
+        # OPDS2 serialization requires cover images.
+        edition = work_fixture.english_1.presentation_edition
+        edition.cover_full_url = "http://example.com/cover.png"
+        edition.cover_thumbnail_url = "http://example.com/cover-thumb.png"
+
+        with work_fixture.request_context_with_library("/", headers=headers):
+            assert work_fixture.identifier.type is not None
+            assert work_fixture.identifier.identifier is not None
+            response = work_fixture.manager.work_controller.permalink(
+                work_fixture.identifier.type, work_fixture.identifier.identifier
+            )
+
+        assert 200 == response.status_code
+        assert response.content_type == expected_content_type
 
     def test_permalink_does_not_return_fulfillment_links_for_authenticated_patrons_without_loans(
         self, work_fixture: WorkFixture
@@ -597,6 +629,46 @@ class TestWorkController:
                 **url_kwargs,
             )
         assert kwargs.pop("url") == expect_url
+
+    @pytest.mark.parametrize(
+        "accept_header,expected_content_type",
+        [
+            (None, OPDSFeed.ACQUISITION_FEED_TYPE + "; api-version=1"),
+            ("default-foo-bar", OPDSFeed.ACQUISITION_FEED_TYPE + "; api-version=1"),
+            (AtomFeed.ATOM_TYPE, OPDSFeed.ACQUISITION_FEED_TYPE + "; api-version=1"),
+            (OPDS2Serializer.content_type(), OPDS2Serializer.content_type()),
+        ],
+    )
+    def test_recommendations_content_negotiation(
+        self,
+        work_fixture: WorkFixture,
+        accept_header: str | None,
+        expected_content_type: str,
+    ):
+        """Verify the recommendations endpoint respects the Accept header for OPDS content negotiation."""
+        [lp] = work_fixture.english_1.license_pools
+        identifier = lp.identifier
+
+        # OPDS2 serialization requires cover images.
+        edition = work_fixture.english_1.presentation_edition
+        edition.cover_full_url = "http://example.com/cover.png"
+        edition.cover_thumbnail_url = "http://example.com/cover-thumb.png"
+
+        mock_api = create_autospec(NoveListAPI)
+        mock_api.lookup_recommendations.return_value = [
+            IdentifierData.from_identifier(
+                work_fixture.english_1.presentation_edition.primary_identifier
+            )
+        ]
+
+        headers = {"Accept": accept_header} if accept_header else {}
+        with work_fixture.request_context_with_library("/", headers=headers):
+            response = work_fixture.manager.work_controller.recommendations(
+                identifier.type, identifier.identifier, novelist_api=mock_api
+            )
+
+        assert 200 == response.status_code
+        assert response.content_type == expected_content_type
 
     def test_related_books(self, work_fixture: WorkFixture):
         # Test the related_books controller.

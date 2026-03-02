@@ -1364,6 +1364,66 @@ class TestLoanController:
             assert isinstance(response, ProblemDetail)
             assert INVALID_INPUT.uri == response.uri
 
+    @pytest.mark.parametrize(
+        *OPDSSerializationTestHelper.PARAMETRIZED_SINGLE_ENTRY_ACCEPT_HEADERS
+    )
+    def test_detail_loan(
+        self,
+        loan_fixture: LoanFixture,
+        accept_header: str | None,
+        expected_content_type: str,
+    ):
+        """Verify the detail endpoint respects the Accept header when returning a loan."""
+        serialization_helper = OPDSSerializationTestHelper(
+            accept_header, expected_content_type
+        )
+        headers = serialization_helper.merge_accept_header(
+            {"Authorization": loan_fixture.valid_auth}
+        )
+
+        with loan_fixture.request_context_with_library("/", headers=headers):
+            patron = loan_fixture.manager.loans.authenticated_patron_from_request()
+            assert isinstance(patron, Patron)
+            loan_fixture.pool.loan_to(patron)
+
+            response = loan_fixture.manager.loans.detail(
+                loan_fixture.identifier_type, loan_fixture.identifier_identifier
+            )
+
+        assert isinstance(response, FlaskResponse)
+        assert 200 == response.status_code
+        assert response.content_type == expected_content_type
+
+    @pytest.mark.parametrize(
+        *OPDSSerializationTestHelper.PARAMETRIZED_SINGLE_ENTRY_ACCEPT_HEADERS
+    )
+    def test_detail_hold(
+        self,
+        loan_fixture: LoanFixture,
+        accept_header: str | None,
+        expected_content_type: str,
+    ):
+        """Verify the detail endpoint respects the Accept header when returning a hold."""
+        serialization_helper = OPDSSerializationTestHelper(
+            accept_header, expected_content_type
+        )
+        headers = serialization_helper.merge_accept_header(
+            {"Authorization": loan_fixture.valid_auth}
+        )
+
+        with loan_fixture.request_context_with_library("/", headers=headers):
+            patron = loan_fixture.manager.loans.authenticated_patron_from_request()
+            assert isinstance(patron, Patron)
+            loan_fixture.pool.on_hold_to(patron)
+
+            response = loan_fixture.manager.loans.detail(
+                loan_fixture.identifier_type, loan_fixture.identifier_identifier
+            )
+
+        assert isinstance(response, FlaskResponse)
+        assert 200 == response.status_code
+        assert response.content_type == expected_content_type
+
     def test_hold_fails_when_holds_disallowed(self, loan_fixture: LoanFixture):
         edition, pool = loan_fixture.db.edition(with_license_pool=True)
         pool.open_access = False

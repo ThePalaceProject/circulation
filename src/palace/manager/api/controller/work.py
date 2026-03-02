@@ -131,7 +131,9 @@ class WorkController(CirculationManagerController):
             pool = pool or pools[0]
 
             return OPDSAcquisitionFeed.single_entry_loans_feed(
-                self.circulation, item or pool
+                self.circulation,
+                item or pool,
+                mime_types=flask.request.accept_mimetypes,
             )
         else:
             annotator = self.manager.annotator(lane=None)
@@ -139,6 +141,7 @@ class WorkController(CirculationManagerController):
             return OPDSAcquisitionFeed.entry_as_response(
                 OPDSAcquisitionFeed.single_entry(work, annotator),
                 max_age=OPDSFeed.DEFAULT_MAX_AGE,
+                mime_types=flask.request.accept_mimetypes,
             )
 
     def related(
@@ -256,7 +259,9 @@ class WorkController(CirculationManagerController):
             pagination=pagination,
             annotator=annotator,
             search_engine=search_engine,
-        ).as_response(max_age=lane.max_cache_age())
+        ).as_response(
+            max_age=lane.max_cache_age(), mime_types=flask.request.accept_mimetypes
+        )
 
     def series(self, series_name, languages, audiences, feed_class=OPDSAcquisitionFeed):
         """Serve a feed of books in a given series."""
