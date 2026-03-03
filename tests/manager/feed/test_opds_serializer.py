@@ -16,14 +16,20 @@ from palace.manager.feed.types import (
     Category,
     DRMLicensor,
     FeedData,
+    FeedEntryGroup,
+    FeedMetadata,
     IndirectAcquisition,
     Link,
     LinkContentType,
     Rating,
     RichText,
     Series,
+    WorkEntry,
     WorkEntryData,
 )
+from palace.manager.sqlalchemy.model.edition import Edition
+from palace.manager.sqlalchemy.model.identifier import Identifier
+from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.util.opds_writer import OPDSFeed, OPDSMessage
 
 
@@ -526,3 +532,106 @@ class TestOPDSSerializer:
         indirect = element.find(f"{{{OPDSFeed.OPDS_NS}}}indirectAcquisition")
         assert indirect is not None
         assert indirect.get("type") == OPDSFeed.ENTRY_TYPE
+
+    def test_entry_groups_produce_flat_entries_with_collection_links(self):
+        """entry_groups in FeedData produce flat entries with rel='collection' links in OPDS1."""
+        entry1 = WorkEntry(work=Work(), edition=Edition(), identifier=Identifier())
+        entry1.computed = WorkEntryData(
+            identifier="urn:1",
+            title="Book One",
+        )
+
+        entry2 = WorkEntry(work=Work(), edition=Edition(), identifier=Identifier())
+        entry2.computed = WorkEntryData(
+            identifier="urn:2",
+            title="Book Two",
+        )
+
+        feed = FeedData(
+            metadata=FeedMetadata(title="Grouped Feed"),
+            entry_groups=[
+                FeedEntryGroup(
+                    href="http://group/space-opera",
+                    title="Space Opera",
+                    entries=[entry1],
+                ),
+                FeedEntryGroup(
+                    href="http://group/cyberpunk",
+                    title="Cyberpunk",
+                    entries=[entry2],
+                ),
+            ],
+        )
+
+        serializer = OPDS1Version1Serializer()
+        result = serializer.serialize_feed(feed)
+        root = etree.fromstring(result.encode())
+
+        # There should be 2 entry elements.
+        entries = root.findall(f"{{{OPDSFeed.ATOM_NS}}}entry")
+        assert len(entries) == 2
+
+        # First entry should have a collection link for Space Opera.
+        links1 = entries[0].findall(f"{{{OPDSFeed.ATOM_NS}}}link")
+        collection_links1 = [l for l in links1 if l.get("rel") == OPDSFeed.GROUP_REL]
+        assert len(collection_links1) == 1
+        assert collection_links1[0].get("href") == "http://group/space-opera"
+        assert collection_links1[0].get("title") == "Space Opera"
+
+        # Second entry should have a collection link for Cyberpunk.
+        links2 = entries[1].findall(f"{{{OPDSFeed.ATOM_NS}}}link")
+        collection_links2 = [l for l in links2 if l.get("rel") == OPDSFeed.GROUP_REL]
+        assert len(collection_links2) == 1
+        assert collection_links2[0].get("href") == "http://group/cyberpunk"
+        assert collection_links2[0].get("title") == "Cyberpunk"
+
+    def test_entry_groups_and_flat_entries_coexist(self):
+        """Both entry_groups and flat entries can coexist in the same feed."""
+        grouped_entry = WorkEntry(
+            work=Work(), edition=Edition(), identifier=Identifier()
+        )
+        grouped_entry.computed = WorkEntryData(
+            identifier="urn:grouped",
+            title="Grouped Book",
+        )
+
+        flat_entry = WorkEntry(work=Work(), edition=Edition(), identifier=Identifier())
+        flat_entry.computed = WorkEntryData(
+            identifier="urn:flat",
+            title="Flat Book",
+        )
+
+        feed = FeedData(
+            metadata=FeedMetadata(title="Mixed Feed"),
+            entry_groups=[
+                FeedEntryGroup(
+                    href="http://group/test",
+                    title="Test Group",
+                    entries=[grouped_entry],
+                ),
+            ],
+            entries=[flat_entry],
+        )
+
+        serializer = OPDS1Version1Serializer()
+        result = serializer.serialize_feed(feed)
+        root = etree.fromstring(result.encode())
+
+        entries = root.findall(f"{{{OPDSFeed.ATOM_NS}}}entry")
+        assert len(entries) == 2
+
+        # First entry (from group) has a collection link.
+        grouped_links = [
+            l
+            for l in entries[0].findall(f"{{{OPDSFeed.ATOM_NS}}}link")
+            if l.get("rel") == OPDSFeed.GROUP_REL
+        ]
+        assert len(grouped_links) == 1
+
+        # Second entry (flat) has no collection link.
+        flat_links = [
+            l
+            for l in entries[1].findall(f"{{{OPDSFeed.ATOM_NS}}}link")
+            if l.get("rel") == OPDSFeed.GROUP_REL
+        ]
+        assert len(flat_links) == 0

@@ -250,6 +250,15 @@ class DataEntry:
 
 
 @dataclass(slots=True)
+class FeedEntryGroup:
+    """A named group of work entries in a grouped feed."""
+
+    href: str
+    title: str
+    entries: list[WorkEntry] = field(default_factory=list)
+
+
+@dataclass(slots=True)
 class FeedData:
     """Container for all feed-level data passed to serializers."""
 
@@ -257,6 +266,7 @@ class FeedData:
     breadcrumbs: list[Link] = field(default_factory=list)
     facet_links: list[Link] = field(default_factory=list)
     entries: list[WorkEntry] = field(default_factory=list)
+    entry_groups: list[FeedEntryGroup] = field(default_factory=list)
     data_entries: list[DataEntry] = field(default_factory=list)
     metadata: FeedMetadata = field(default_factory=lambda: FeedMetadata())
     entrypoint: str | None = None

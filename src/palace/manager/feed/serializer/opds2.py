@@ -13,6 +13,7 @@ from palace.manager.feed.types import (
     Author,
     DataEntryTypes,
     FeedData,
+    FeedEntryGroup,
     IndirectAcquisition,
     Link,
     LinkContentType,
@@ -75,6 +76,17 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]], LoggerMixin):
     def serialize_feed(
         self, feed: FeedData, precomposed_entries: list[Any] | None = None
     ) -> str:
+        feed_links = self._serialize_feed_links(feed)
+        feed_links.extend(self._serialize_sort_links(feed))
+
+        metadata = self._serialize_metadata(feed)
+        navigation = self._serialize_navigation(feed)
+        facets = self._serialize_facet_links(feed)
+
+        # Build groups from entry_groups (grouped feeds).
+        groups = self._serialize_entry_groups(feed.entry_groups)
+
+        # Build flat publications from ungrouped entries.
         publications: list[opds2.Publication] = []
         for entry in feed.entries:
             if entry.computed is None:
@@ -89,20 +101,20 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]], LoggerMixin):
                     f"Skipping invalid OPDS2 publication (identifier={entry.identifier!r}): {exc}"
                 )
 
-        feed_links = self._serialize_feed_links(feed)
-        feed_links.extend(self._serialize_sort_links(feed))
-
-        metadata = self._serialize_metadata(feed)
-        navigation = self._serialize_navigation(feed)
-        facets = self._serialize_facet_links(feed)
-
-        feed_model = opds2.Feed(
+        # Build the Feed model with the appropriate collection type.
+        feed_kwargs: dict[str, Any] = dict(
             metadata=metadata,
             links=feed_links,
-            publications=publications,
-            navigation=navigation,
             facets=facets,
         )
+        if groups:
+            feed_kwargs["groups"] = groups
+        elif navigation:
+            feed_kwargs["navigation"] = navigation
+        else:
+            feed_kwargs["publications"] = publications
+
+        feed_model = opds2.Feed(**feed_kwargs)
 
         return self.to_string(self._dump_model(feed_model))
 
@@ -455,6 +467,40 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]], LoggerMixin):
                     )
                 )
         return navigation
+
+    def _serialize_entry_groups(
+        self, entry_groups: list[FeedEntryGroup]
+    ) -> list[opds2.PublicationsGroup]:
+        """Serialize FeedEntryGroup objects into OPDS2 PublicationsGroup models."""
+        groups: list[opds2.PublicationsGroup] = []
+        for group in entry_groups:
+            publications: list[opds2.Publication] = []
+            for entry in group.entries:
+                if entry.computed is None:
+                    continue
+                try:
+                    publications.append(self._publication(entry.computed))
+                except ValidationError as exc:
+                    self.log.exception(
+                        f"Skipping invalid OPDS2 publication in group '{group.title}' "
+                        f"(identifier={entry.identifier!r}): {exc}"
+                    )
+            if not publications:
+                continue
+            groups.append(
+                opds2.PublicationsGroup(
+                    metadata=opds2.FeedMetadata(title=group.title),
+                    links=[
+                        opds2.StrictLink(
+                            href=group.href,
+                            rel="self",
+                            type=self.content_type(),
+                        )
+                    ],
+                    publications=publications,
+                )
+            )
+        return groups
 
     def _acquisition_link_type(self, link: Acquisition) -> str | None:
         if link.type:

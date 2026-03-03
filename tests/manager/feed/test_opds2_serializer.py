@@ -15,6 +15,7 @@ from palace.manager.feed.types import (
     DataEntryTypes,
     DRMLicensor,
     FeedData,
+    FeedEntryGroup,
     FeedMetadata,
     IndirectAcquisition,
     Link,
@@ -1076,3 +1077,161 @@ class TestOPDS2Serializer:
         result = serializer._serialize_feed_link(link)
         assert result is not None
         assert result.rel == "profile"
+
+    def _make_work_entry(
+        self,
+        title: str = "Work Title",
+        identifier: str = "urn:id",
+    ) -> WorkEntry:
+        """Helper to create a WorkEntry with computed data for testing."""
+        entry = WorkEntry(
+            work=Work(),
+            edition=Edition(),
+            identifier=Identifier(),
+        )
+        entry.computed = WorkEntryData(
+            identifier=identifier,
+            title=title,
+            medium="Book",
+            image_links=[
+                Link(
+                    href="http://image",
+                    rel=OPDSFeed.FULL_IMAGE_REL,
+                    type="image/png",
+                )
+            ],
+            acquisition_links=[
+                Acquisition(
+                    href="http://acquisition",
+                    rel=OPDSFeed.OPEN_ACCESS_REL,
+                    type="application/epub+zip",
+                )
+            ],
+        )
+        return entry
+
+    def test_entry_groups_produce_opds2_groups(self):
+        """entry_groups in FeedData produces OPDS2 groups in output."""
+        entry1 = self._make_work_entry("Book One", "urn:1")
+        entry2 = self._make_work_entry("Book Two", "urn:2")
+
+        feed = FeedData(
+            metadata=FeedMetadata(title="Grouped Feed", id="http://feed"),
+            links=[Link(href="http://feed", rel="self")],
+            entry_groups=[
+                FeedEntryGroup(
+                    href="http://group/space-opera",
+                    title="Space Opera",
+                    entries=[entry1],
+                ),
+                FeedEntryGroup(
+                    href="http://group/cyberpunk",
+                    title="Cyberpunk",
+                    entries=[entry2],
+                ),
+            ],
+        )
+
+        serialized = OPDS2Serializer().serialize_feed(feed)
+        result = json.loads(serialized)
+
+        # Groups should be present, not publications.
+        assert "groups" in result
+        assert "publications" not in result
+
+        groups = result["groups"]
+        assert len(groups) == 2
+
+        # First group: Space Opera
+        assert groups[0]["metadata"]["title"] == "Space Opera"
+        assert len(groups[0]["links"]) == 1
+        assert groups[0]["links"][0]["href"] == "http://group/space-opera"
+        assert groups[0]["links"][0]["rel"] == "self"
+        assert groups[0]["links"][0]["type"] == OPDS2_CONTENT_TYPE
+        assert len(groups[0]["publications"]) == 1
+        assert groups[0]["publications"][0]["metadata"]["title"] == "Book One"
+
+        # Second group: Cyberpunk
+        assert groups[1]["metadata"]["title"] == "Cyberpunk"
+        assert len(groups[1]["publications"]) == 1
+        assert groups[1]["publications"][0]["metadata"]["title"] == "Book Two"
+
+    def test_entry_groups_preserve_first_seen_order(self):
+        """Group ordering follows first-seen order of groups."""
+        entry1 = self._make_work_entry("Book A", "urn:a")
+        entry2 = self._make_work_entry("Book B", "urn:b")
+        entry3 = self._make_work_entry("Book C", "urn:c")
+
+        feed = FeedData(
+            metadata=FeedMetadata(title="Feed", id="http://feed"),
+            links=[Link(href="http://feed", rel="self")],
+            entry_groups=[
+                FeedEntryGroup(
+                    href="http://group/z",
+                    title="Zeta",
+                    entries=[entry1],
+                ),
+                FeedEntryGroup(
+                    href="http://group/a",
+                    title="Alpha",
+                    entries=[entry2],
+                ),
+                FeedEntryGroup(
+                    href="http://group/m",
+                    title="Middle",
+                    entries=[entry3],
+                ),
+            ],
+        )
+
+        serialized = OPDS2Serializer().serialize_feed(feed)
+        result = json.loads(serialized)
+
+        titles = [g["metadata"]["title"] for g in result["groups"]]
+        assert titles == ["Zeta", "Alpha", "Middle"]
+
+    def test_no_entry_groups_produces_flat_publications(self):
+        """When no entry_groups exist, existing behavior (flat publications) is unchanged."""
+        entry = self._make_work_entry("Flat Book", "urn:flat")
+
+        feed = FeedData(
+            metadata=FeedMetadata(title="Flat Feed", id="http://feed"),
+            links=[Link(href="http://feed", rel="self")],
+            entries=[entry],
+        )
+
+        serialized = OPDS2Serializer().serialize_feed(feed)
+        result = json.loads(serialized)
+
+        assert "publications" in result
+        assert "groups" not in result
+        assert len(result["publications"]) == 1
+        assert result["publications"][0]["metadata"]["title"] == "Flat Book"
+
+    def test_entry_groups_skip_empty_groups(self):
+        """Groups with no valid publications (e.g. all entries have computed=None) are skipped."""
+        entry = WorkEntry(
+            work=Work(),
+            edition=Edition(),
+            identifier=Identifier(),
+        )
+        # computed is None by default
+
+        feed = FeedData(
+            metadata=FeedMetadata(title="Feed", id="http://feed"),
+            links=[Link(href="http://feed", rel="self")],
+            entry_groups=[
+                FeedEntryGroup(
+                    href="http://group/empty",
+                    title="Empty Group",
+                    entries=[entry],
+                ),
+            ],
+        )
+
+        serialized = OPDS2Serializer().serialize_feed(feed)
+        result = json.loads(serialized)
+
+        # The group with no valid publications should be skipped,
+        # and we fall back to publications (empty).
+        assert "groups" not in result or result.get("groups") == []
