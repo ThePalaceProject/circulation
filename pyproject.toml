@@ -281,7 +281,7 @@ pyspellchecker = "0.8.4"
 python = ">=3.12,<4"
 python-dateutil = "2.9.0.post0"
 python3-saml = "^1.16"  # python-saml is required for SAML authentication
-pytz = "^2025.1"
+pytz = "^2026.1"
 pyyaml = "^6.0"
 redis = "^6.4.0"
 redmail = "^0.6.0"
