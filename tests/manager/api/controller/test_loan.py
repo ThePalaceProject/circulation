@@ -47,7 +47,6 @@ from palace.manager.api.problem_details import (
 from palace.manager.core.classifier import Classifier
 from palace.manager.core.problem_details import INTEGRATION_ERROR, INVALID_INPUT
 from palace.manager.feed.acquisition import OPDSAcquisitionFeed
-from palace.manager.feed.serializer.opds2 import OPDS2Serializer
 from palace.manager.integration.license.bibliotheca import BibliothecaAPI
 from palace.manager.integration.license.opds.opds1.api import OPDSAPI
 from palace.manager.service.redis.models.patron_activity import PatronActivity
@@ -69,12 +68,13 @@ from palace.manager.sqlalchemy.util import get_one, get_one_or_create
 from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.flask_util import OPDSEntryResponse, Response
 from palace.manager.util.http.exception import RemoteIntegrationException
-from palace.manager.util.opds_writer import AtomFeed, OPDSFeed
+from palace.manager.util.opds_writer import OPDSFeed
 from palace.manager.util.problem_detail import ProblemDetail
 from tests.fixtures.api_controller import CirculationControllerFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.http import MockHttpClientFixture
 from tests.fixtures.library import LibraryFixture
+from tests.fixtures.opds import OPDSSerializationTestHelper
 from tests.fixtures.redis import RedisFixture
 from tests.fixtures.services import ServicesFixture
 from tests.mocks.circulation import MockPatronActivityCirculationAPI
@@ -134,46 +134,6 @@ def set_work_cover(work: Work | None, url: str) -> None:
         return
     work.presentation_edition.cover_full_url = url
     work.presentation_edition.cover_thumbnail_url = url
-
-
-class OPDSSerializationTestHelper:
-    OPDS2_CONTENT_TYPE = OPDS2Serializer().content_type()
-    PARAMETRIZED_SINGLE_ENTRY_ACCEPT_HEADERS = (
-        "accept_header,expected_content_type",
-        [
-            (None, OPDSFeed.ENTRY_TYPE),
-            ("default-foo-bar", OPDSFeed.ENTRY_TYPE),
-            (AtomFeed.ATOM_TYPE, OPDSFeed.ENTRY_TYPE),
-            (OPDS2_CONTENT_TYPE, OPDS2_CONTENT_TYPE),
-        ],
-    )
-
-    def __init__(
-        self,
-        accept_header: str | None = None,
-        expected_content_type: str | None = None,
-    ):
-        self.accept_header = accept_header
-        self.expected_content_type = expected_content_type
-
-    def merge_accept_header(self, headers):
-        return headers | ({"Accept": self.accept_header} if self.accept_header else {})
-
-    def verify_and_get_single_entry_feed_links(self, response):
-        assert response.content_type == self.expected_content_type
-        if self.expected_content_type == OPDSFeed.ENTRY_TYPE:
-            feed = feedparser.parse(response.get_data())
-            [entry] = feed["entries"]
-        elif self.expected_content_type == self.OPDS2_CONTENT_TYPE:
-            entry = response.get_json()
-        else:
-            assert (
-                False
-            ), f"Unexpected content type prefix: {self.expected_content_type}"
-
-        # Ensure that the response content parsed correctly.
-        assert "links" in entry
-        return entry["links"]
 
 
 class TestLoanController:
@@ -1363,6 +1323,66 @@ class TestLoanController:
             response = loan_fixture.manager.loans.revoke(-10)
             assert isinstance(response, ProblemDetail)
             assert INVALID_INPUT.uri == response.uri
+
+    @pytest.mark.parametrize(
+        *OPDSSerializationTestHelper.PARAMETRIZED_SINGLE_ENTRY_ACCEPT_HEADERS
+    )
+    def test_detail_loan(
+        self,
+        loan_fixture: LoanFixture,
+        accept_header: str | None,
+        expected_content_type: str,
+    ):
+        """Verify the detail endpoint respects the Accept header when returning a loan."""
+        serialization_helper = OPDSSerializationTestHelper(
+            accept_header, expected_content_type
+        )
+        headers = serialization_helper.merge_accept_header(
+            {"Authorization": loan_fixture.valid_auth}
+        )
+
+        with loan_fixture.request_context_with_library("/", headers=headers):
+            patron = loan_fixture.manager.loans.authenticated_patron_from_request()
+            assert isinstance(patron, Patron)
+            loan_fixture.pool.loan_to(patron)
+
+            response = loan_fixture.manager.loans.detail(
+                loan_fixture.identifier_type, loan_fixture.identifier_identifier
+            )
+
+        assert isinstance(response, FlaskResponse)
+        assert response.status_code == 200
+        assert response.content_type == expected_content_type
+
+    @pytest.mark.parametrize(
+        *OPDSSerializationTestHelper.PARAMETRIZED_SINGLE_ENTRY_ACCEPT_HEADERS
+    )
+    def test_detail_hold(
+        self,
+        loan_fixture: LoanFixture,
+        accept_header: str | None,
+        expected_content_type: str,
+    ):
+        """Verify the detail endpoint respects the Accept header when returning a hold."""
+        serialization_helper = OPDSSerializationTestHelper(
+            accept_header, expected_content_type
+        )
+        headers = serialization_helper.merge_accept_header(
+            {"Authorization": loan_fixture.valid_auth}
+        )
+
+        with loan_fixture.request_context_with_library("/", headers=headers):
+            patron = loan_fixture.manager.loans.authenticated_patron_from_request()
+            assert isinstance(patron, Patron)
+            loan_fixture.pool.on_hold_to(patron)
+
+            response = loan_fixture.manager.loans.detail(
+                loan_fixture.identifier_type, loan_fixture.identifier_identifier
+            )
+
+        assert isinstance(response, FlaskResponse)
+        assert response.status_code == 200
+        assert response.content_type == expected_content_type
 
     def test_hold_fails_when_holds_disallowed(self, loan_fixture: LoanFixture):
         edition, pool = loan_fixture.db.edition(with_license_pool=True)

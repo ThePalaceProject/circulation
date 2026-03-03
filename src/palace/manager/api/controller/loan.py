@@ -501,11 +501,15 @@ class LoanController(CirculationManagerController):
 
         loan, pool = self.get_patron_loan(patron, pools)
         if loan:
-            return OPDSAcquisitionFeed.single_entry_loans_feed(self.circulation, loan)
+            return OPDSAcquisitionFeed.single_entry_loans_feed(
+                self.circulation, loan, mime_types=flask.request.accept_mimetypes
+            )
 
         hold, pool = self.get_patron_hold(patron, pools)
         if hold:
-            return OPDSAcquisitionFeed.single_entry_loans_feed(self.circulation, hold)
+            return OPDSAcquisitionFeed.single_entry_loans_feed(
+                self.circulation, hold, mime_types=flask.request.accept_mimetypes
+            )
 
         if pool and pool.work and pool.work.title:
             title = pool.work.title
