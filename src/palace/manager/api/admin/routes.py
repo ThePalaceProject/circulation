@@ -1,5 +1,3 @@
-# Decorators from palace.manager.api.routes and core.app_server are untyped.
-# mypy: disallow_untyped_decorators=false
 from collections.abc import Callable
 from datetime import timedelta
 from functools import wraps
@@ -34,13 +32,12 @@ P = ParamSpec("P")
 T = TypeVar("T")
 
 
-def allows_admin_auth_setup(
-    f: Callable[..., Any],
-) -> Callable[..., Any]:
+def allows_admin_auth_setup[**P, T](f: Callable[P, T]) -> Callable[P, T]:
     @wraps(f)
-    def decorated(*args: Any, **kwargs: Any) -> Any:
+    def decorated(*args: P.args, **kwargs: P.kwargs) -> T:
         setting_up = app.manager.admin_sign_in_controller.admin_auth_providers == []
-        return f(*args, setting_up=setting_up, **kwargs)
+        kwargs["setting_up"] = setting_up
+        return f(*args, **kwargs)
 
     return decorated
 
@@ -66,9 +63,9 @@ def requires_basic_auth[**P, T](func: Callable[P, T]) -> Callable[P, T | Problem
     return wrapper
 
 
-def requires_admin(f: Callable[..., Any]) -> Callable[..., Any]:
+def requires_admin[**P, T](f: Callable[P, T]) -> Callable[P, T | Response]:
     @wraps(f)
-    def decorated(*args: Any, **kwargs: Any) -> Any:
+    def decorated(*args: P.args, **kwargs: P.kwargs) -> T | Response:
         if "setting_up" in kwargs:
             # If the function also requires a CSRF token,
             # setting_up needs to stay in the arguments for
@@ -94,11 +91,11 @@ def requires_admin(f: Callable[..., Any]) -> Callable[..., Any]:
     return decorated
 
 
-def requires_csrf_token(f: Callable[..., Any]) -> Callable[..., Any]:
+def requires_csrf_token[**P, T](f: Callable[P, T]) -> Callable[P, T | ProblemDetail]:
     f.__dict__["requires_csrf_token"] = True
 
     @wraps(f)
-    def decorated(*args: Any, **kwargs: Any) -> Any:
+    def decorated(*args: P.args, **kwargs: P.kwargs) -> T | ProblemDetail:
         if "setting_up" in kwargs:
             setting_up = kwargs.pop("setting_up")
         else:
@@ -112,21 +109,23 @@ def requires_csrf_token(f: Callable[..., Any]) -> Callable[..., Any]:
     return decorated
 
 
-def returns_json_or_response_or_problem_detail(
-    f: Callable[..., Any],
-) -> Callable[..., Any]:
+def returns_json_or_response_or_problem_detail[**P, T](
+    f: Callable[P, T],
+) -> Callable[P, Response | tuple[str, int, dict[str, str]]]:
     @wraps(f)
-    def decorated(*args: Any, **kwargs: Any) -> Any:
+    def decorated(
+        *args: P.args, **kwargs: P.kwargs
+    ) -> Response | tuple[str, int, dict[str, str]]:
         try:
             v = f(*args, **kwargs)
         except BaseProblemDetailException as ex:
             # A ProblemDetailException just needs to be converted to a ProblemDetail.
-            v = ex.problem_detail
+            v = ex.problem_detail  # type: ignore[assignment]
         if isinstance(v, ProblemDetail):
             return v.response
         if isinstance(v, Response):
             return v
-        return flask.jsonify(**v)
+        return flask.jsonify(**v)  # type: ignore[arg-type]
 
     return decorated
 
@@ -429,7 +428,7 @@ def collection(collection_id: str) -> Any:
 @returns_json_or_response_or_problem_detail
 @requires_admin
 @requires_csrf_token
-def collection_import(collection_id):
+def collection_import(collection_id: str) -> Any:
     try:
         integration_id = int(collection_id)
     except ValueError:
@@ -533,7 +532,7 @@ def reset_adobe_id() -> Any:
 @has_library
 @returns_json_or_response_or_problem_detail
 @requires_admin
-def patron_auth_methods():
+def patron_auth_methods() -> Any:
     return app.manager.admin_patron_controller.get_auth_methods()
 
 
@@ -542,7 +541,7 @@ def patron_auth_methods():
 @returns_json_or_response_or_problem_detail
 @requires_admin
 @requires_csrf_token
-def patron_debug_auth():
+def patron_debug_auth() -> Any:
     return app.manager.admin_patron_controller.debug_auth()
 
 

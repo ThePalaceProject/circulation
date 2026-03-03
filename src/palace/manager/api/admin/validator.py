@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-# mypy: warn_unreachable=false
 import re
 from collections.abc import Callable
 from re import Match
@@ -41,8 +40,6 @@ class Validator:
         is_list: bool = False,
         should_zip: bool = False,
     ) -> list[Any]:
-        if not (isinstance(settings, list)):
-            return []
         form = form or {}
 
         fields = [s for s in settings if s.get(key) == value and self._value(s, form)]
@@ -172,23 +169,25 @@ class Validator:
             )
         return None
 
-    def _list_of_values(self, fields: list[dict[str, Any]], form: Any) -> list[Any]:
+    def _list_of_values(
+        self, fields: list[dict[str, Any]], form: dict[str, Any]
+    ) -> list[Any]:
         result: list[Any] = []
         for field in fields:
             result += self._value(field, form)
         return [_f for _f in result if _f]
 
-    def _value(self, field: dict[str, Any], form: Any) -> Any:
+    def _value(self, field: dict[str, Any], form: dict[str, Any]) -> Any:
         # Extract the user's input for this field. If this is a sitewide setting,
         # then the input needs to be accessed via "value" rather than via the setting's key.
         # We use getlist instead of get so that, if the field is such that the user can input multiple values
         # (e.g. language codes), we'll extract all the values, not just the first one.
-        # form is typed as Any because it may be ImmutableMultiDict (has getlist) or dict-like.
         getlist = getattr(form, "getlist", None)
         if getlist is not None:
             value = list(getlist(field.get("key")))
         else:
-            v = form.get(field.get("key"))
+            field_key = field.get("key")
+            v = form.get(field_key) if isinstance(field_key, str) else None
             value = [v] if v is not None else []
         if not value:
             return form.get("value")
