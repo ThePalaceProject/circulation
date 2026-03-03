@@ -59,14 +59,13 @@ class TestMinimalAuthenticationProvider:
             ),
             pytest.param("user123", None, True, id="valid_username_no_password"),
             pytest.param("user123", "", True, id="valid_username_empty_password"),
-            pytest.param(None, "password", False, id="no_username_returns_none"),
             pytest.param("", "password", False, id="empty_username_returns_none"),
         ],
     )
     def test_remote_authenticate(
         self,
         minimal_auth_fixture: MinimalAuthFixture,
-        username: str | None,
+        username: str,
         password: str | None,
         expect_success: bool,
     ):

@@ -61,7 +61,7 @@ class KansasAuthenticationAPI(
     # methods.
 
     def remote_authenticate(
-        self, username: str | None, password: str | None
+        self, username: str, password: str | None
     ) -> PatronData | None:
         # Create XML doc for request
         authorization_request = self.create_authorize_request(username, password)

@@ -169,10 +169,10 @@ class SirsiDynixHorizonAuthenticationProvider(
         self.patron_blocks_enforced = settings.patron_blocks_enforced
 
     def remote_authenticate(
-        self, username: str | None, password: str | None
+        self, username: str, password: str | None
     ) -> PatronData | None:
         """Authenticate this user with the remote server."""
-        if username is None or password is None:
+        if password is None:
             return None
 
         data = self.api_patron_login(username, password)

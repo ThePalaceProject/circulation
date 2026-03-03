@@ -374,14 +374,6 @@ class TestMilleniumPatronAPI:
         }
         assert url == "http://url.com/pintest"
 
-    def test_remote_authenticate_username_none(
-        self,
-        create_provider: Callable[..., MockAPI],
-    ):
-        """If the username is none, we get none as a return value."""
-        api = create_provider()
-        assert api.remote_authenticate(None, "pin") is None
-
     def test_authentication_updates_patron_authorization_identifier(
         self,
         create_provider: Callable[..., MockAPI],

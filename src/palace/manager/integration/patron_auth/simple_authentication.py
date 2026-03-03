@@ -95,7 +95,7 @@ class SimpleAuthenticationProvider(
                 self.test_identifiers += [identifier, identifier + "_username"]
 
     def remote_authenticate(
-        self, username: str | None, password: str | None
+        self, username: str, password: str | None
     ) -> PatronData | None:
         """Fake 'remote' authentication."""
         if not username or (self.collects_password and not password):

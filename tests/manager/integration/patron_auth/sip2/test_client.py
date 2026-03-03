@@ -148,7 +148,7 @@ class TestSIPClient:
 
     @pytest.mark.parametrize("timeout", [None, 1, 10])
     def test_connect(self, timeout: int | None):
-        target_server = object()
+        target_server = "test-server"
         sip = SIPClient(target_server, 999, timeout=timeout)
 
         with patch.object(socket, "socket", MockSocket):
@@ -307,7 +307,7 @@ class TestSIPClient:
         assert wrap_called.kwargs["server_hostname"] == target_server
 
     def test_send(self, mock_socket: MockSocketFixture):
-        target_server = object()
+        target_server = "test-server"
         sip = SIPClient(target_server, 999)
         sip.connect()
 

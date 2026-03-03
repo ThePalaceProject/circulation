@@ -71,7 +71,6 @@ class TestSimpleAuth:
 
         assert provider.remote_authenticate("user", "wrongpass") is None
         assert provider.remote_authenticate("user", None) is None
-        assert provider.remote_authenticate(None, "pass") is None
         user = provider.remote_authenticate("barcode", "pass")
         assert isinstance(user, PatronData)
         assert "barcode" == user.authorization_identifier
@@ -113,7 +112,6 @@ class TestSimpleAuth:
         provider = create_provider(settings=settings)
 
         assert provider.remote_authenticate("a", None) is None
-        assert provider.remote_authenticate(None, "pass") is None
 
         user = provider.remote_authenticate("a", "pass")
         assert isinstance(user, PatronData)

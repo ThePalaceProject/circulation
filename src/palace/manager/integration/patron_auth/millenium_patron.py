@@ -208,7 +208,7 @@ class MilleniumPatronAPI(
         """Make an HTTP request and parse the response."""
 
     def remote_authenticate(
-        self, username: str | None, password: str | None
+        self, username: str, password: str | None
     ) -> PatronData | None:
         """Does the Millenium Patron API approve of these credentials?
 
