@@ -107,7 +107,7 @@ class TestOPDSFeedProtocol:
             entry, mime_types=MIMEAccept([("application/opds+json", 0.9)])
         )
         assert isinstance(response, OPDSEntryResponse)
-        assert response.content_type == "application/opds+json"
+        assert response.content_type == "application/opds-publication+json"
 
         response = BaseOPDSFeed.entry_as_response(
             OPDSMessage("URN", 204, "Test OPDS Message")

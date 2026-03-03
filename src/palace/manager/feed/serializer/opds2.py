@@ -355,6 +355,10 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]], LoggerMixin):
         return opds2.Feed.content_type()
 
     @classmethod
+    def entry_content_type(cls) -> str:
+        return opds2.BasePublication.content_type()
+
+    @classmethod
     def to_string(cls, data: dict[str, Any]) -> str:
         return json.dumps(data, indent=2)
 

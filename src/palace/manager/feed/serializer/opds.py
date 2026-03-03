@@ -514,6 +514,9 @@ class BaseOPDS1Serializer(SerializerInterface[etree._Element], OPDSFeed, abc.ABC
     def to_string(cls, element: etree._Element) -> str:
         return cast(str, etree.tostring(element, encoding="unicode"))
 
+    def entry_content_type(self) -> str:
+        return OPDSFeed.ENTRY_TYPE
+
     @abc.abstractmethod
     def content_type(self) -> str:
         """return the content type associated with the serialization. This value should include the api-version."""
