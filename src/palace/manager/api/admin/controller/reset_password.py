@@ -43,13 +43,14 @@ class ResetPasswordController(AdminController):
 
         logged_in_admin = self.authenticated_admin_from_request()
 
-        admin_view_redirect = redirect(url_for("admin_view"))
+        admin_view_url = url_for("admin_view")
+        admin_view_redirect = redirect(admin_view_url)
 
         if isinstance(logged_in_admin, Admin):
             return admin_view_redirect
 
         if flask.request.method == "GET":
-            auth_provider_html = auth.forgot_password_template(admin_view_redirect)
+            auth_provider_html = auth.forgot_password_template(admin_view_url)
 
             html = self.FORGOT_PASSWORD_TEMPLATE % dict(
                 auth_provider_html=auth_provider_html,
@@ -118,7 +119,8 @@ class ResetPasswordController(AdminController):
 
         logged_in_admin = self.authenticated_admin_from_request()
 
-        admin_view_redirect = redirect(url_for("admin_view"))
+        admin_view_url = url_for("admin_view")
+        admin_view_redirect = redirect(admin_view_url)
 
         # If the admin is logged in we redirect it since in that case the logged in change password option can be used
         if isinstance(logged_in_admin, Admin):
@@ -139,7 +141,7 @@ class ResetPasswordController(AdminController):
 
         if flask.request.method == "GET":
             auth_provider_html = auth.reset_password_template(
-                reset_password_token, admin_id, admin_view_redirect
+                reset_password_token, admin_id, admin_view_url
             )
 
             html = self.RESET_PASSWORD_TEMPLATE % dict(
