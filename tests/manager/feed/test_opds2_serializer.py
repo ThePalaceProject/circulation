@@ -950,6 +950,46 @@ class TestOPDS2Serializer:
         assert nav[0]["title"] == "Real Nav"
         assert nav[0]["href"] == "http://nav"
 
+    def test_navigation_resolves_link_content_type(self):
+        """Navigation entries with LinkContentType.OPDS_NAVIGATION resolve to the OPDS2 feed type."""
+        feed = FeedData(
+            metadata=FeedMetadata(title="Nav Feed", id="http://feed"),
+        )
+        feed.links = [Link(href="http://feed", rel="self")]
+        feed.data_entries = [
+            DataEntry(
+                type=DataEntryTypes.NAVIGATION,
+                title="Child Nav",
+                links=[
+                    Link(
+                        href="http://child-nav",
+                        rel="subsection",
+                        type=LinkContentType.OPDS_NAVIGATION,
+                    )
+                ],
+            ),
+            DataEntry(
+                type=DataEntryTypes.NAVIGATION,
+                title="Child Feed",
+                links=[
+                    Link(
+                        href="http://child-feed",
+                        rel="subsection",
+                        type=LinkContentType.OPDS_FEED,
+                    )
+                ],
+            ),
+        ]
+
+        serialized = OPDS2Serializer().serialize_feed(feed)
+        result = json.loads(serialized)
+        nav = result["navigation"]
+        assert len(nav) == 2
+        # Both OPDS_NAVIGATION and OPDS_FEED resolve to the OPDS2 feed content type.
+        opds2_feed_type = opds2.Feed.content_type()
+        assert nav[0]["type"] == opds2_feed_type
+        assert nav[1]["type"] == opds2_feed_type
+
     def test_resolve_type_maps_opds_feed(self):
         """LinkContentType.OPDS_FEED maps to OPDS2 feed content type."""
         serializer = OPDS2Serializer()

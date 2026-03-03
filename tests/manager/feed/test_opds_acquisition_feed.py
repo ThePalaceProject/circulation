@@ -1373,14 +1373,14 @@ class TestNavigationFeed:
         [fantasy_link] = fantasy.links
         assert "http://%s/" % data.fantasy.id == fantasy_link.href
         assert "subsection" == fantasy_link.rel
-        assert OPDSFeed.ACQUISITION_FEED_TYPE == fantasy_link.type
+        assert LinkContentType.OPDS_FEED == fantasy_link.type
 
         assert data.romance.display_name == romance.title
         assert "http://navigation/%s" % data.romance.id == romance.id
         [romance_link] = romance.links
         assert "http://navigation/%s" % data.romance.id == romance_link.href
         assert "subsection" == romance_link.rel
-        assert OPDSFeed.NAVIGATION_FEED_TYPE == romance_link.type
+        assert LinkContentType.OPDS_NAVIGATION == romance_link.type
 
     def test_navigation_without_sublanes(
         self, navigation_feed_fixture: TestNavigationFeedFixture
@@ -1407,7 +1407,7 @@ class TestNavigationFeed:
         [fantasy_link] = fantasy.links
         assert "http://%s/" % data.fantasy.id == fantasy_link.href
         assert "subsection" == fantasy_link.rel
-        assert OPDSFeed.ACQUISITION_FEED_TYPE == fantasy_link.type
+        assert LinkContentType.OPDS_FEED == fantasy_link.type
 
 
 class TestGroupFeed:

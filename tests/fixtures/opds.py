@@ -17,6 +17,15 @@ class OPDSSerializationTestHelper:
             (OPDS2_CONTENT_TYPE, OPDS2_CONTENT_TYPE),
         ],
     )
+    PARAMETRIZED_NAVIGATION_ACCEPT_HEADERS = (
+        "accept_header,expected_content_type",
+        [
+            (None, OPDSFeed.NAVIGATION_FEED_TYPE),
+            ("default-foo-bar", OPDSFeed.NAVIGATION_FEED_TYPE),
+            (AtomFeed.ATOM_TYPE, OPDSFeed.NAVIGATION_FEED_TYPE),
+            (OPDS2_CONTENT_TYPE, OPDS2_CONTENT_TYPE),
+        ],
+    )
 
     def __init__(
         self,

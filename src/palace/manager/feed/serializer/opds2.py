@@ -62,6 +62,7 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]], LoggerMixin):
         {
             LinkContentType.OPDS_FEED: opds2.Feed.content_type(),
             LinkContentType.OPDS_ENTRY: opds2.BasePublication.content_type(),
+            LinkContentType.OPDS_NAVIGATION: opds2.Feed.content_type(),
         }
     )
 

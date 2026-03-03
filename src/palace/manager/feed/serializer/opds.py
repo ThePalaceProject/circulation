@@ -82,6 +82,7 @@ class BaseOPDS1Serializer(SerializerInterface[etree._Element], OPDSFeed, abc.ABC
         {
             LinkContentType.OPDS_FEED: OPDSFeed.ACQUISITION_FEED_TYPE,
             LinkContentType.OPDS_ENTRY: OPDSFeed.ENTRY_TYPE,
+            LinkContentType.OPDS_NAVIGATION: OPDSFeed.NAVIGATION_FEED_TYPE,
         }
     )
 
