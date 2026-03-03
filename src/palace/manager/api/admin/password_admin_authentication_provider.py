@@ -1,7 +1,6 @@
-from flask import Response, render_template, url_for
+from flask import render_template, url_for
 from sqlalchemy.orm.session import Session
 from werkzeug.datastructures import ImmutableMultiDict
-from werkzeug.wrappers.response import Response as WerkzeugResponse
 
 from palace.manager.api.admin.admin_authentication_provider import (
     AdminAuthenticationProvider,
@@ -47,7 +46,7 @@ class PasswordAdminAuthenticationProvider(AdminAuthenticationProvider, LoggerMix
 
     @staticmethod
     def forgot_password_template(
-        redirect: str | None | Response | WerkzeugResponse,
+        redirect: str | None,
     ) -> str:
         forgot_password_url = url_for("admin_forgot_password")
         return render_template(
@@ -63,7 +62,7 @@ class PasswordAdminAuthenticationProvider(AdminAuthenticationProvider, LoggerMix
     def reset_password_template(
         reset_password_token: str,
         admin_id: int,
-        redirect: str | None | Response | WerkzeugResponse,
+        redirect: str | None,
     ) -> str:
         reset_password_url = url_for(
             "admin_reset_password",

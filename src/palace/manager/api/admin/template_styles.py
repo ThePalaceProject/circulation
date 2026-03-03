@@ -1,4 +1,4 @@
-body_style: str = """
+body_style = """
     margin: 10vh auto;
     font-family: 'Open Sans',Helvetica,Arial,sans-serif;
     padding: 25px 15px;
@@ -11,17 +11,17 @@ body_style: str = """
     align-items: center;
 """
 
-label_style: str = """
+label_style = """
     font-weight: 700;
 """
 
-error_style: str = (
+error_style = (
     body_style
     + """
     border-color: #D0343A;
 """
 )
-input_style: str = """
+input_style = """
     border-radius: .25em;
     display: block;
     padding: 10px;
@@ -32,14 +32,14 @@ input_style: str = """
     width: 25vw;
 """
 
-section_style: str = """
+section_style = """
     width: 25vw;
     padding: 12px;
     display: flex;
     justify-content: space-between;
     align-items: center;
 """
-button_style: str = """
+button_style = """
     background: #242DAB;
     border-color: transparent;
     border-radius: .25em;
@@ -53,7 +53,7 @@ button_style: str = """
     margin: 2vh auto;
 """
 
-link_style: str = """
+link_style = """
     background: #242DAB;
     text-align: center;
     text-decoration: none;
@@ -68,7 +68,7 @@ link_style: str = """
     margin: 2vh auto;
 """
 
-small_link_style: str = (
+small_link_style = (
     link_style
     + """
     width: 5vw;
@@ -76,14 +76,14 @@ small_link_style: str = (
 """
 )
 
-hr_style: str = """
+hr_style = """
     width: 10vw;
     margin: 3px 0 0 0;
     border: none;
     border-bottom: 1px solid #403d37;
 """
 
-logo_style: str = """
+logo_style = """
     width: 200px;
     margin: 20px;
 """
