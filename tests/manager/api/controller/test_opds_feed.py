@@ -4,6 +4,7 @@ from unittest.mock import MagicMock
 from urllib.parse import quote_plus
 
 import feedparser
+import pytest
 from flask import url_for
 
 from palace.manager.core.entrypoint import AudiobooksEntryPoint, EverythingEntryPoint
@@ -17,6 +18,7 @@ from palace.manager.util.flask_util import Response
 from palace.manager.util.problem_detail import ProblemDetail
 from tests.fixtures.api_controller import CirculationControllerFixture, WorkSpec
 from tests.fixtures.library import LibraryFixture
+from tests.fixtures.opds import OPDSSerializationTestHelper
 
 
 class TestOPDSFeedController:
@@ -436,6 +438,33 @@ class TestOPDSFeedController:
         facets = kwargs["facets"]
         assert isinstance(facets, NavigationFacets)
         NavigationFeed.navigation = old_navigation
+
+    @pytest.mark.parametrize(
+        *OPDSSerializationTestHelper.PARAMETRIZED_NAVIGATION_ACCEPT_HEADERS
+    )
+    def test_navigation_content_negotiation(
+        self,
+        circulation_fixture: CirculationControllerFixture,
+        accept_header: str | None,
+        expected_content_type: str,
+    ):
+        """Verify the navigation endpoint respects the Accept header for OPDS content negotiation."""
+        circulation_fixture.add_works(self._EXTRA_BOOKS)
+
+        library = circulation_fixture.db.default_library()
+        lane = circulation_fixture.manager.top_level_lanes[library.id]
+        session = circulation_fixture.db.session
+        lane = session.merge(lane)
+        session.expire_all()
+
+        helper = OPDSSerializationTestHelper(accept_header, expected_content_type)
+        headers = helper.merge_accept_header({})
+
+        with circulation_fixture.request_context_with_library("/", headers=headers):
+            response = circulation_fixture.manager.opds_feeds.navigation(lane.id)
+
+        assert response.status_code == 200
+        assert response.content_type == expected_content_type
 
     def mock_search(self, *args, **kwargs):
         self.called_with = (args, kwargs)

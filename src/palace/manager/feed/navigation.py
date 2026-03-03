@@ -8,7 +8,8 @@ from werkzeug.datastructures import MIMEAccept
 from palace.manager.feed.annotator.circulation import CirculationManagerAnnotator
 from palace.manager.feed.facets.base import BaseFacets
 from palace.manager.feed.opds import BaseOPDSFeed, NavigationFacets
-from palace.manager.feed.types import DataEntry, DataEntryTypes, Link
+from palace.manager.feed.serializer.opds2 import OPDS2Serializer
+from palace.manager.feed.types import DataEntry, DataEntryTypes, Link, LinkContentType
 from palace.manager.feed.util import strftime
 from palace.manager.feed.worklist.base import WorkList
 from palace.manager.search.pagination import Pagination
@@ -61,21 +62,24 @@ class NavigationFeed(BaseOPDSFeed):
             # Worklist's page-type feed instead.
             title = "All " + self.lane.display_name
             page_url = self.annotator.feed_url(self.lane)
-            self.add_entry(page_url, title, OPDSFeed.ACQUISITION_FEED_TYPE)
+            self.add_entry(page_url, title, LinkContentType.OPDS_FEED)
 
         for child in self.lane.visible_children:
             title = child.display_name
             if child.children:
                 child_url = self.annotator.navigation_url(child)
-                self.add_entry(child_url, title, OPDSFeed.NAVIGATION_FEED_TYPE)
+                self.add_entry(child_url, title, LinkContentType.OPDS_NAVIGATION)
             else:
                 child_url = self.annotator.feed_url(child)
-                self.add_entry(child_url, title, OPDSFeed.ACQUISITION_FEED_TYPE)
+                self.add_entry(child_url, title, LinkContentType.OPDS_FEED)
 
         self.annotator.annotate_feed(self._feed)
 
     def add_entry(
-        self, url: str, title: str, type: str = OPDSFeed.NAVIGATION_FEED_TYPE
+        self,
+        url: str,
+        title: str,
+        type: LinkContentType = LinkContentType.OPDS_NAVIGATION,
     ) -> None:
         """Create an OPDS navigation entry for a URL."""
         entry = DataEntry(type=DataEntryTypes.NAVIGATION, title=title, id=url)
@@ -88,5 +92,8 @@ class NavigationFeed(BaseOPDSFeed):
         **kwargs: Any,
     ) -> OPDSFeedResponse:
         response = super().as_response(mime_types=mime_types, **kwargs)
-        response.content_type = OPDSFeed.NAVIGATION_FEED_TYPE
+        # OPDS1 navigation feeds use a distinct content type from acquisition feeds.
+        # OPDS2 uses a single content type for all feeds, so only override for OPDS1.
+        if response.content_type != OPDS2Serializer.content_type():
+            response.content_type = OPDSFeed.NAVIGATION_FEED_TYPE
         return response

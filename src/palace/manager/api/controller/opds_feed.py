@@ -177,7 +177,9 @@ class OPDSFeedController(CirculationManagerController):
             worklist=lane,
             annotator=annotator,
             facets=facets,
-        ).as_response(max_age=lane.max_cache_age())
+        ).as_response(
+            max_age=lane.max_cache_age(), mime_types=flask.request.accept_mimetypes
+        )
 
     def crawlable_library_feed(self):
         """Build or retrieve a crawlable acquisition feed for the

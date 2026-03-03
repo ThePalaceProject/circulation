@@ -22,6 +22,7 @@ class LinkContentType(Enum):
 
     OPDS_FEED = auto()
     OPDS_ENTRY = auto()
+    OPDS_NAVIGATION = auto()
 
 
 #: Union type for link type fields that accept either concrete MIME types or
