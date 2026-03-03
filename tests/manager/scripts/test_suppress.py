@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import textwrap
 from datetime import datetime, timezone
 from unittest.mock import create_autospec, patch
@@ -157,6 +158,31 @@ class TestSuppressWorkForLibraryScript:
             ("ISBN", "12345"),
         ]
 
+    def test_load_identifiers_from_file_omitted_type_value_falls_back_to_default(
+        self, db: DatabaseTransactionFixture, tmp_path
+    ):
+        """When identifier_type column exists but a row omits the value (e.g. '12345'
+        instead of '12345,'), DictReader sets it to None. We must not call .strip()
+        on None."""
+        csv_file = tmp_path / "ids.csv"
+        csv_file.write_text(
+            textwrap.dedent(
+                """\
+                identifier,identifier_type
+                978-0-06-112008-4
+                12345,Overdrive ID
+            """
+            )
+        )
+
+        script = SuppressWorkForLibraryScript(db.session)
+        pairs = script.load_identifiers_from_file(str(csv_file), "ISBN")
+
+        assert pairs == [
+            ("ISBN", "978-0-06-112008-4"),
+            ("Overdrive ID", "12345"),
+        ]
+
     def test_load_identifiers_from_file_empty_type_falls_back_to_default(
         self, db: DatabaseTransactionFixture, tmp_path
     ):
@@ -200,6 +226,35 @@ class TestSuppressWorkForLibraryScript:
             ("ISBN", "978-0-06-112008-4"),
             ("ISBN", "978-0-06-112008-4"),
         ]
+
+    def test_do_run_deduplicates_and_warns(
+        self, db: DatabaseTransactionFixture, tmp_path, caplog
+    ):
+        """When CSV contains duplicate identifiers, they are deduplicated before
+        processing and a warning is logged."""
+        import logging
+
+        test_library = db.library(short_name="test")
+        work1 = db.work(with_license_pool=True)
+        work2 = db.work(with_license_pool=True)
+        id1 = work1.presentation_edition.primary_identifier
+        id2 = work2.presentation_edition.primary_identifier
+
+        csv_file = tmp_path / "ids.csv"
+        csv_file.write_text(
+            f"identifier,identifier_type\n"
+            f"{id1.identifier},{id1.type}\n"
+            f"{id1.identifier},{id1.type}\n"
+            f"{id2.identifier},{id2.type}\n"
+        )
+
+        caplog.set_level(logging.WARNING)
+        script = SuppressWorkForLibraryScript(db.session)
+        script.do_run(["--library", test_library.short_name, "--file", str(csv_file)])
+
+        assert "Removed 1 duplicate identifier(s) from input" in caplog.text
+        assert test_library in work1.suppressed_for
+        assert test_library in work2.suppressed_for
 
     def test_load_identifiers_from_file_missing_identifier_column(
         self, db: DatabaseTransactionFixture, tmp_path
@@ -284,9 +339,9 @@ class TestSuppressWorkForLibraryScript:
         assert test_library in work2.suppressed_for
 
         out = capsys.readouterr().out
-        assert "Newly suppressed:    2" in out
-        assert "Already suppressed:  0" in out
-        assert "Not found:           0" in out
+        assert re.search(r"Newly suppressed:\s+2", out)
+        assert re.search(r"Already suppressed:\s+0", out)
+        assert re.search(r"Not found:\s+0", out)
 
     def test_suppress_work(self, db: DatabaseTransactionFixture):
         test_library = db.library(short_name="test")
@@ -376,9 +431,9 @@ class TestSuppressWorkForLibraryScript:
         assert "My Library (mylib)" in out
         assert "2026-02-26 12:00:00 UTC" in out
         assert "1.23s" in out
-        assert "Newly suppressed:    1" in out
-        assert "Already suppressed:  1" in out
-        assert "Not found:           1" in out
+        assert re.search(r"Newly suppressed:\s+1", out)
+        assert re.search(r"Already suppressed:\s+1", out)
+        assert re.search(r"Not found:\s+1", out)
         assert "[SUPPRESSED] ISBN/111" in out
         assert "[ALREADY SUPPRESSED] ISBN/222" in out
         assert "[NOT FOUND] ISBN/333" in out
@@ -405,8 +460,8 @@ class TestSuppressWorkForLibraryScript:
         assert "My Library (mylib)" in out
         assert "2026-02-26 09:30:00 UTC" in out
         assert "0.05s" in out
-        assert "Would suppress:      1" in out
-        assert "Not found:           1" in out
+        assert re.search(r"Would suppress:\s+1", out)
+        assert re.search(r"Not found:\s+1", out)
         assert "[WOULD SUPPRESS] ISBN/111" in out
         assert "[NOT FOUND] ISBN/222" in out
 
@@ -426,8 +481,8 @@ class TestSuppressWorkForLibraryScript:
         )
 
         out = capsys.readouterr().out
-        assert "Newly suppressed:    0" in out
-        assert "Not found:           1" in out
+        assert re.search(r"Newly suppressed:\s+0", out)
+        assert re.search(r"Not found:\s+1", out)
         assert "[NOT FOUND] ISBN/nonexistent-id" in out
 
     def test_do_run_commits_once_for_all_suppressions(

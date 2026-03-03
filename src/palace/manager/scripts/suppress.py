@@ -131,8 +131,9 @@ class SuppressWorkForLibraryScript(Script):
                     identifier = row["identifier"].strip()
                     if not identifier:
                         continue
-                    if has_type_column and row["identifier_type"].strip():
-                        id_type = row["identifier_type"].strip()
+                    id_type_val = row.get("identifier_type") or ""
+                    if has_type_column and id_type_val.strip():
+                        id_type = id_type_val.strip()
                     else:
                         id_type = default_identifier_type
                     identifiers.append((id_type, identifier))
@@ -175,6 +176,18 @@ class SuppressWorkForLibraryScript(Script):
         else:
             pairs = [(parsed.identifier_type, parsed.identifier)]
 
+        seen: set[tuple[str, str]] = set()
+        unique_pairs: list[tuple[str, str]] = []
+        for pair in pairs:
+            if pair not in seen:
+                seen.add(pair)
+                unique_pairs.append(pair)
+        if len(unique_pairs) < len(pairs):
+            self.log.warning(
+                f"Removed {len(pairs) - len(unique_pairs)} duplicate identifier(s) from input."
+            )
+        pairs = unique_pairs
+
         results: dict[tuple[str, str], SuppressResult] = {}
         try:
             for id_type, id_value in pairs:
@@ -215,16 +228,18 @@ class SuppressWorkForLibraryScript(Script):
         prefix = "[DRY RUN] " if dry_run else ""
         suppress_label = "Would suppress" if dry_run else "Newly suppressed"
 
-        col = 20
+        summary_rows = [
+            ("Library:", f"{library.name} ({library.short_name})"),
+            ("Started at:", started_at.strftime("%Y-%m-%d %H:%M:%S UTC")),
+            ("Duration:", f"{duration_seconds:.2f}s"),
+            (suppress_label + ":", len(newly_suppressed)),
+            ("Already suppressed:", len(already_suppressed)),
+            ("Not found:", len(not_found)),
+        ]
+        col = max(len(label) for label, _ in summary_rows)
         print(f"\n{prefix}Suppression Results Summary:")
-        print(f"  {'Library:':<{col}} {library.name} ({library.short_name})")
-        print(
-            f"  {'Started at:':<{col}} {started_at.strftime('%Y-%m-%d %H:%M:%S UTC')}"
-        )
-        print(f"  {'Duration:':<{col}} {duration_seconds:.2f}s")
-        print(f"  {suppress_label + ':':<{col}} {len(newly_suppressed)}")
-        print(f"  {'Already suppressed:':<{col}} {len(already_suppressed)}")
-        print(f"  {'Not found:':<{col}} {len(not_found)}")
+        for label, value in summary_rows:
+            print(f"  {label:<{col}} {value}")
 
         print(f"\n{prefix}Details:")
         status_map = {
