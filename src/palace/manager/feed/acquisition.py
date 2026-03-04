@@ -736,7 +736,7 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
                 group_href = annotator.feed_url(worklist, annotator.facets)
             else:
                 # The work is featured within a sublane (e.g., "Space Opera").
-                group_title = sublane.display_name
+                group_title = str(sublane.display_name)
                 group_href = annotator.lane_url(sublane, annotator.facets)
 
             key = (group_href, group_title)
@@ -753,11 +753,11 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
         feed.generate_feed()
 
         # Reassign the entries created by __init__ into their groups.
-        work_to_entry: dict[int, WorkEntry] = {
-            id(entry.work): entry for entry in feed._feed.entries
+        work_to_entry: dict[int | None, WorkEntry] = {
+            entry.work.id: entry for entry in feed._feed.entries
         }
         for work, key in zip(all_works, work_group_keys):
-            entry = work_to_entry.get(id(work))
+            entry = work_to_entry.get(work.id)
             if entry is not None:
                 groups_by_key[key].entries.append(entry)
 

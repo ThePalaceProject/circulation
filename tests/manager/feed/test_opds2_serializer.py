@@ -1078,8 +1078,8 @@ class TestOPDS2Serializer:
         assert result is not None
         assert result.rel == "profile"
 
+    @staticmethod
     def _make_work_entry(
-        self,
         title: str = "Work Title",
         identifier: str = "urn:id",
     ) -> WorkEntry:
@@ -1234,4 +1234,4 @@ class TestOPDS2Serializer:
 
         # The group with no valid publications should be skipped,
         # and we fall back to publications (empty).
-        assert "groups" not in result or result.get("groups") == []
+        assert "groups" not in result
