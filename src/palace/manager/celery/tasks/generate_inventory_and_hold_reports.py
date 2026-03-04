@@ -5,7 +5,7 @@ import logging
 import tempfile
 import uuid
 import zipfile
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from datetime import datetime
 from pathlib import Path
 from typing import IO, Any
@@ -158,6 +158,7 @@ def generate_report(
                 sql_params=sql_params,
                 query=inventory_report_query(),
                 row_transform=_inventory_report_row_transform,
+                columns_to_stringify={"identifier", "isbn", "target_age"},
             )
 
             generate_csv_report(
@@ -165,6 +166,7 @@ def generate_report(
                 csv_file=inventory_activity_report_file,
                 sql_params=sql_params,
                 query=palace_inventory_activity_report_query(),
+                columns_to_stringify={"identifier", "isbn"},
             )
 
             generate_csv_report(
@@ -172,6 +174,7 @@ def generate_report(
                 csv_file=holds_with_no_licenses_report_file,
                 sql_params=sql_params,
                 query=holds_with_no_licenses_report_query(),
+                columns_to_stringify={"identifier", "isbn"},
             )
 
             with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as archive:
@@ -219,13 +222,40 @@ def create_temp_file() -> IO[str]:
     return tempfile.NamedTemporaryFile("w", encoding="utf-8")
 
 
+def _to_csv_cell(value: Any) -> str:
+    """Convert a value to a string for CSV output.
+
+    Ensures numeric-looking values (e.g. ISBNs) are written as plain strings
+    so they get quoted and avoid scientific notation in spreadsheet apps.
+    """
+    if value is None:
+        return ""
+    if isinstance(value, float) and value == int(value):
+        return str(int(value))
+    return str(value)
+
+
 def generate_csv_report(
     db: Session,
     csv_file: IO[str],
     sql_params: dict[str, Any],
     query: Select,
     row_transform: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+    columns_to_stringify: Iterable[str] | None = None,
 ) -> None:
+    """Generate a CSV report from a database query.
+
+    :param columns_to_stringify: Column names whose values should be forced to
+        strings (and thus quoted). Use for identifier, isbn, target_age to
+        prevent spreadsheet apps from misinterpreting them.
+    """
+    stringify_cols = frozenset(columns_to_stringify or ())
+
+    def cell_value(key: str, value: Any) -> Any:
+        if key in stringify_cols:
+            return _to_csv_cell(value)
+        return value if value is not None else ""
+
     with elapsed_time_logging(
         log_method=log.debug,
         message_prefix=f"generate_csv_report - {csv_file.name}",
@@ -236,11 +266,14 @@ def generate_csv_report(
         keys = list(rows.keys())
         writer.writerow(keys)
         if row_transform is None:
-            writer.writerows(rows)
+            for row in rows:
+                writer.writerow([cell_value(key, row._mapping[key]) for key in keys])
         else:
             for row in rows:
                 transformed_row = row_transform(dict(row._mapping))
-                writer.writerow([transformed_row.get(key, "") for key in keys])
+                writer.writerow(
+                    [cell_value(key, transformed_row.get(key, "")) for key in keys]
+                )
         csv_file.flush()
         log.debug(f"report written to {csv_file.name}")
 

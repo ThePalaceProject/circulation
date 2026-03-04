@@ -9,10 +9,11 @@ from unittest.mock import MagicMock, create_autospec
 
 import pytest
 from pytest import LogCaptureFixture
-from sqlalchemy import select
+from sqlalchemy import literal, select
 from sqlalchemy.sql import Select
 
 from palace.manager.celery.tasks.generate_inventory_and_hold_reports import (
+    _inventory_report_row_transform,
     generate_csv_report,
     generate_inventory_and_hold_reports,
     generate_report,
@@ -74,6 +75,88 @@ def test_generate_csv_report(
         in caplog.text
     )
     assert "report written to test_report.csv" in caplog.text
+
+
+def test_generate_csv_report_quotes_numeric_identifiers(
+    db: DatabaseTransactionFixture,
+):
+    """Numeric-looking identifiers (e.g. ISBNs) are written as quoted strings.
+
+    This prevents spreadsheet apps from converting them to scientific notation.
+    """
+    # Use a literal to simulate a numeric value from the DB (e.g. ISBN as number)
+    query = select(
+        literal(9780306406157).label("identifier"),
+        literal("Title").label("title"),
+    )
+
+    csv_file = io.StringIO()
+    csv_file.name = "test_report.csv"
+
+    generate_csv_report(
+        db=db.session,
+        csv_file=csv_file,
+        sql_params={},
+        query=query,
+        columns_to_stringify={"identifier"},
+    )
+
+    csv_file.seek(0)
+    csv_content = csv_file.read()
+
+    # The numeric identifier must be quoted to avoid scientific notation in Excel
+    assert '"9780306406157"' in csv_content
+    assert "9.78" not in csv_content  # No scientific notation
+
+
+def test_generate_csv_report_quotes_target_age(
+    db: DatabaseTransactionFixture,
+    services_fixture: ServicesFixture,
+):
+    """target_age values are written as quoted strings in the inventory report.
+
+    This prevents spreadsheet apps from misinterpreting values like "5-8" as
+    dates or formulas.
+    """
+    library = db.library(short_name="test_library")
+    collection = create_test_opds_collection(
+        "Target Age Collection", "TargetAgeSource", db, library
+    )
+    ds = collection.data_source
+    assert ds is not None
+
+    work = db.work(
+        data_source_name=ds.name, collection=collection, with_license_pool=True
+    )
+    work.target_age = tuple_to_numericrange((5, 8))
+
+    integration_ids = [collection.integration_configuration.id]
+    sql_params = {
+        "library_id": library.id,
+        "integration_ids": tuple(integration_ids),
+        "filtered_audiences": (),
+        "filtered_audiences_enabled": False,
+        "filtered_genres": (),
+        "filtered_genres_enabled": False,
+    }
+
+    csv_file = io.StringIO()
+    csv_file.name = "test_target_age_report.csv"
+
+    generate_csv_report(
+        db=db.session,
+        csv_file=csv_file,
+        sql_params=sql_params,
+        query=inventory_report_query(),
+        row_transform=_inventory_report_row_transform,
+        columns_to_stringify={"identifier", "isbn", "target_age"},
+    )
+
+    csv_file.seek(0)
+    csv_content = csv_file.read()
+
+    # target_age "5-8" must be quoted to avoid Excel interpreting it as date/formula
+    assert '"5-8"' in csv_content
 
 
 def test_only_active_collections_are_included(
