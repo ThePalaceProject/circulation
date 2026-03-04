@@ -132,6 +132,19 @@ class BaseOPDS1Serializer(SerializerInterface[etree._Element], OPDSFeed, abc.ABC
 
         serialized.extend(self._serialize_feed_metadata(feed.metadata))
 
+        for group in feed.entry_groups:
+            for entry in group.entries:
+                if entry.computed:
+                    element = self.serialize_work_entry(entry.computed)
+                    element.append(
+                        OPDSFeed.link(
+                            href=group.href,
+                            rel=OPDSFeed.GROUP_REL,
+                            title=group.title,
+                        )
+                    )
+                    serialized.append(element)
+
         for entry in feed.entries:
             if entry.computed:
                 element = self.serialize_work_entry(entry.computed)

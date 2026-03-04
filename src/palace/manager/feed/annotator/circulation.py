@@ -6,7 +6,6 @@ import logging
 import urllib.error
 import urllib.parse
 import urllib.request
-from collections import defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass
 from functools import cached_property
@@ -716,16 +715,11 @@ class LibraryAnnotator(CirculationManagerAnnotator):
         self.circulation = circulation
         self.library: Library = library
         self.patron = patron
-        self._lanes_by_work: dict[Work, list[Any]] = defaultdict(list)
         self.facet_view = facet_view
         self._adobe_id_cache: dict[str, DRMLicensor | None] = {}
         self._top_level_title = top_level_title
         self.identifies_patrons = library_identifies_patrons
         self.facets = facets or None
-
-    @property
-    def lanes_by_work(self) -> dict[Work, list[Any]]:
-        return self._lanes_by_work
 
     @cached_property
     def is_novelist_configured(self) -> bool:
@@ -801,46 +795,6 @@ class LibraryAnnotator(CirculationManagerAnnotator):
             _external=True,
             **kwargs,
         )
-
-    def group_uri(
-        self, work: Work, license_pool: LicensePool | None, identifier: Identifier
-    ) -> tuple[str | None, str]:
-        if not work in self.lanes_by_work:
-            return None, ""
-
-        lanes = self.lanes_by_work[work]
-        if not lanes:
-            # I don't think this should ever happen?
-            lane_name = None
-            url = self.url_for(
-                "acquisition_groups",
-                lane_identifier=None,
-                library_short_name=self.library.short_name,
-                _external=True,
-            )
-            title = "All Books"
-            return url, title
-
-        lane = lanes[0]
-        self.lanes_by_work[work] = lanes[1:]
-        lane_name = ""
-        show_feed = False
-
-        if isinstance(lane, dict):
-            show_feed = lane.get("link_to_list_feed", show_feed)
-            title = lane.get("label", lane_name)
-            lane = lane["lane"]
-
-        if isinstance(lane, str):
-            return lane, lane_name
-
-        if hasattr(lane, "display_name") and not title:
-            title = lane.display_name
-
-        if show_feed:
-            return self.feed_url(lane, self.facets), title
-
-        return self.lane_url(lane, self.facets), title
 
     def lane_url(
         self, lane: WorkList | None, facets: FacetsWithEntryPoint | None = None
@@ -954,15 +908,6 @@ class LibraryAnnotator(CirculationManagerAnnotator):
                     ),
                     type="text/html",
                 )
-            )
-
-        # Groups is only from the library annotator
-        group_uri, group_title = self.group_uri(
-            entry.work, entry.license_pool, entry.identifier
-        )
-        if group_uri:
-            entry.computed.other_links.append(
-                Link(href=group_uri, rel=OPDSFeed.GROUP_REL, title=str(group_title))
             )
 
     def active_licensepool_for(

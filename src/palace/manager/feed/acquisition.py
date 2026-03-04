@@ -23,7 +23,7 @@ from palace.manager.feed.facets.constants import FacetConstants
 from palace.manager.feed.facets.feed import Facets
 from palace.manager.feed.facets.search import SearchFacets
 from palace.manager.feed.opds import BaseOPDSFeed, UnfulfillableWork
-from palace.manager.feed.types import FeedData, Link, WorkEntry
+from palace.manager.feed.types import FeedData, FeedEntryGroup, Link, WorkEntry
 from palace.manager.feed.util import strftime
 from palace.manager.search.external_search import (
     ExternalSearchIndex,
@@ -715,47 +715,54 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
                 debug=search_debug,
             )
         ]
-        # Make a typical grouped feed.
-        all_works = []
-        for work, sublane in works_and_lanes:
 
-            # skip works in the exclusion list
+        # Build group assignments for each (work, sublane) pair.
+        # Track which group each work belongs to so we can reassign
+        # entries into FeedEntryGroup objects after __init__ creates them.
+        all_works: list[Work] = []
+        work_group_keys: list[tuple[str, str]] = []
+        groups_by_key: dict[tuple[str, str], FeedEntryGroup] = {}
+        group_order: list[tuple[str, str]] = []
+
+        for work, sublane in works_and_lanes:
+            # Skip works in the exclusion list.
             if work_ids_to_exclude and work.id in work_ids_to_exclude:
                 continue
 
             if sublane == worklist:
-                # We are looking at the groups feed for (e.g.)
-                # "Science Fiction", and we're seeing a book
-                # that is featured within "Science Fiction" itself
-                # rather than one of the sublanes.
-                #
-                # We want to assign this work to a group called "All
-                # Science Fiction" and point its 'group URI' to
-                # the linear feed of the "Science Fiction" lane
-                # (as opposed to the groups feed, which is where we
-                # are now).
-                v = dict(
-                    lane=worklist,
-                    label=worklist.display_name_for_all,
-                    link_to_list_feed=True,
-                )
+                # The work is featured within the worklist itself.
+                # Point its group to the linear feed ("All Science Fiction").
+                group_title = str(worklist.display_name_for_all)
+                group_href = annotator.feed_url(worklist, annotator.facets)
             else:
-                # We are looking at the groups feed for (e.g.)
-                # "Science Fiction", and we're seeing a book
-                # that is featured within one of its sublanes,
-                # such as "Space Opera".
-                #
-                # We want to assign this work to a group derived
-                # from the sublane.
-                v = dict(lane=sublane)
+                # The work is featured within a sublane (e.g., "Space Opera").
+                group_title = str(sublane.display_name)
+                group_href = annotator.lane_url(sublane, annotator.facets)
 
-            annotator.lanes_by_work[work].append(v)
+            key = (group_href, group_title)
+            if key not in groups_by_key:
+                groups_by_key[key] = FeedEntryGroup(href=group_href, title=group_title)
+                group_order.append(key)
+
             all_works.append(work)
+            work_group_keys.append(key)
 
         feed = OPDSAcquisitionFeed(
             title, url, all_works, annotator, facets=facets, pagination=pagination
         )
         feed.generate_feed()
+
+        # Reassign the entries created by __init__ into their groups.
+        work_to_entry: dict[int | None, WorkEntry] = {
+            entry.work.id: entry for entry in feed._feed.entries
+        }
+        for work, key in zip(all_works, work_group_keys):
+            entry = work_to_entry.get(work.id)
+            if entry is not None:
+                groups_by_key[key].entries.append(entry)
+
+        feed._feed.entry_groups = [groups_by_key[k] for k in group_order]
+        feed._feed.entries = []
 
         # Regardless of whether or not the entries in feed can be
         # grouped together, we want to apply certain feed-level

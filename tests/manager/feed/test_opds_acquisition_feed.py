@@ -1,11 +1,11 @@
 import datetime
 import logging
-from collections import defaultdict
 from collections.abc import Callable, Generator
 from typing import Any
 from unittest.mock import MagicMock, create_autospec, patch
 
 import pytest
+from flask_babel import lazy_gettext
 from sqlalchemy.orm import Session
 from werkzeug.datastructures import MIMEAccept
 
@@ -130,7 +130,7 @@ class TestOPDSFeedProtocol:
 
 class MockAnnotator(CirculationManagerAnnotator):
     def __init__(self):
-        self.lanes_by_work = defaultdict(list)
+        self.facets = None
 
     @classmethod
     def lane_url(cls, lane):
@@ -1413,6 +1413,7 @@ class TestNavigationFeed:
 class TestGroupFeed:
     def test_exclude_by_work_ids(self, db: DatabaseTransactionFixture):
         wl = create_autospec(WorkList)
+        wl.display_name_for_all = "All Test"
         # Create two works.
         w1: Work = db.work(with_license_pool=True)
         w2: Work = db.work(with_license_pool=True)
@@ -1421,6 +1422,9 @@ class TestGroupFeed:
             (w2, wl),
         ]
         annotator = create_autospec(LibraryAnnotator)
+        annotator.facets = None
+        annotator.feed_url.return_value = "http://localhost/feed"
+        annotator.lane_url.return_value = "http://localhost/lane"
         feed = OPDSAcquisitionFeed.groups(
             _db=db.session,
             title="title",
@@ -1431,6 +1435,139 @@ class TestGroupFeed:
             facets=None,
             work_ids_to_exclude=[w1.id],
         )
-        assert annotator.lanes_by_work[w2].append.call_count == 1
-        assert len(feed._feed.entries) == 1
-        assert feed._feed.entries[0].work == w2
+        # w1 is excluded: only w2 should appear in the groups
+        assert len(feed._feed.entry_groups) == 1
+        group = feed._feed.entry_groups[0]
+        assert len(group.entries) == 1
+        assert group.entries[0].work == w2
+        # entries should be empty (all entries moved to groups)
+        assert len(feed._feed.entries) == 0
+
+    def test_groups_populates_entry_groups(self, db: DatabaseTransactionFixture):
+        """Verify that groups() populates entry_groups with correct structure."""
+        parent_lane = db.lane(display_name="Science Fiction")
+        sublane1 = db.lane(parent=parent_lane, display_name="Space Opera")
+        sublane2 = db.lane(parent=parent_lane, display_name="Cyberpunk")
+
+        w1: Work = db.work(with_license_pool=True)
+        w2: Work = db.work(with_license_pool=True)
+        w3: Work = db.work(with_license_pool=True)
+
+        wl = create_autospec(WorkList)
+        wl.display_name_for_all = "All Science Fiction"
+        wl.groups.return_value = [
+            (w1, sublane1),
+            (w2, sublane2),
+            (w3, wl),
+        ]
+
+        annotator = create_autospec(LibraryAnnotator)
+        annotator.facets = None
+        annotator.feed_url.return_value = "http://localhost/feed/sci-fi"
+        annotator.lane_url.side_effect = lambda lane, facets=None: (
+            f"http://localhost/lane/{lane.display_name.lower().replace(' ', '-')}"
+        )
+
+        feed = OPDSAcquisitionFeed.groups(
+            _db=db.session,
+            title="Science Fiction",
+            url="http://localhost/groups/sci-fi",
+            worklist=wl,
+            annotator=annotator,
+            pagination=None,
+            facets=None,
+        )
+
+        # Entries list should be empty since all entries are in groups.
+        assert len(feed._feed.entries) == 0
+
+        # Three groups: Space Opera, Cyberpunk, All Science Fiction
+        assert len(feed._feed.entry_groups) == 3
+
+        group1, group2, group3 = feed._feed.entry_groups
+        assert group1.title == "Space Opera"
+        assert group1.href == "http://localhost/lane/space-opera"
+        assert len(group1.entries) == 1
+
+        assert group2.title == "Cyberpunk"
+        assert group2.href == "http://localhost/lane/cyberpunk"
+        assert len(group2.entries) == 1
+
+        assert group3.title == "All Science Fiction"
+        assert group3.href == "http://localhost/feed/sci-fi"
+        assert len(group3.entries) == 1
+
+    def test_groups_work_in_multiple_sublanes(self, db: DatabaseTransactionFixture):
+        """A work appearing in multiple sublanes is placed into each corresponding group."""
+        parent_lane = db.lane(display_name="Fiction")
+        sublane1 = db.lane(parent=parent_lane, display_name="Space Opera")
+        sublane2 = db.lane(parent=parent_lane, display_name="Military SF")
+
+        # A single work that belongs to both sublanes.
+        shared_work: Work = db.work(with_license_pool=True)
+
+        wl = create_autospec(WorkList)
+        wl.display_name_for_all = "All Fiction"
+        wl.groups.return_value = [
+            (shared_work, sublane1),
+            (shared_work, sublane2),
+        ]
+
+        annotator = create_autospec(LibraryAnnotator)
+        annotator.facets = None
+        annotator.feed_url.return_value = "http://localhost/feed/fiction"
+        annotator.lane_url.side_effect = lambda lane, facets=None: (
+            f"http://localhost/lane/{lane.display_name.lower().replace(' ', '-')}"
+        )
+
+        feed = OPDSAcquisitionFeed.groups(
+            _db=db.session,
+            title="Fiction",
+            url="http://localhost/groups/fiction",
+            worklist=wl,
+            annotator=annotator,
+            pagination=None,
+            facets=None,
+        )
+
+        assert len(feed._feed.entries) == 0
+        assert len(feed._feed.entry_groups) == 2
+
+        group1, group2 = feed._feed.entry_groups
+        assert group1.title == "Space Opera"
+        assert len(group1.entries) == 1
+        assert group1.entries[0].work == shared_work
+
+        assert group2.title == "Military SF"
+        assert len(group2.entries) == 1
+        assert group2.entries[0].work == shared_work
+
+    def test_groups_coerces_lazy_parent_lane_title_to_string(
+        self, db: DatabaseTransactionFixture
+    ) -> None:
+        wl = create_autospec(WorkList)
+        wl.display_name_for_all = lazy_gettext("All Test")
+        work: Work = db.work(with_license_pool=True)
+        wl.groups.return_value = [(work, wl)]
+
+        annotator = create_autospec(LibraryAnnotator)
+        annotator.facets = None
+        annotator.feed_url.return_value = "http://localhost/feed"
+        annotator.lane_url.return_value = "http://localhost/lane"
+
+        feed = OPDSAcquisitionFeed.groups(
+            _db=db.session,
+            title="title",
+            url="http://localhost/",
+            worklist=wl,
+            annotator=annotator,
+            pagination=None,
+            facets=None,
+        )
+
+        [group] = feed._feed.entry_groups
+        assert isinstance(group.title, str)
+        assert group.title == "All Test"
+
+        response = feed.as_response()
+        assert response.status_code == 200

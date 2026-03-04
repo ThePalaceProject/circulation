@@ -154,29 +154,6 @@ class TestLibraryAnnotator:
     def test_top_level_title(self, annotator_fixture: LibraryAnnotatorFixture):
         assert "Test Top Level Title" == annotator_fixture.annotator.top_level_title()
 
-    def test_group_uri_with_flattened_lane(
-        self, annotator_fixture: LibraryAnnotatorFixture
-    ):
-        spanish_lane = annotator_fixture.db.lane(
-            display_name="Spanish", languages=["spa"]
-        )
-        flat_spanish_lane = dict(
-            {"lane": spanish_lane, "label": "All Spanish", "link_to_list_feed": True}
-        )
-        spanish_work = annotator_fixture.db.work(
-            title="Spanish Book", with_license_pool=True, language="spa"
-        )
-        lp = spanish_work.license_pools[0]
-        annotator_fixture.annotator.lanes_by_work[spanish_work].append(
-            flat_spanish_lane
-        )
-
-        feed_url = annotator_fixture.annotator.feed_url(spanish_lane)
-        group_uri = annotator_fixture.annotator.group_uri(
-            spanish_work, lp, lp.identifier
-        )
-        assert (feed_url, "All Spanish") == group_uri
-
     def test_lane_url(self, annotator_fixture: LibraryAnnotatorFixture):
         fantasy_lane_with_sublanes = annotator_fixture.db.lane(
             display_name="Fantasy with sublanes", languages=["eng"]
