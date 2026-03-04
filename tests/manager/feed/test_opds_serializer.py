@@ -14,6 +14,7 @@ from palace.manager.feed.types import (
     Author,
     Category,
     DRMLicensor,
+    FacetData,
     FeedData,
     FeedEntryGroup,
     FeedMetadata,
@@ -26,6 +27,7 @@ from palace.manager.feed.types import (
     WorkEntry,
     WorkEntryData,
 )
+from palace.manager.sqlalchemy.constants import LinkRelations
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.work import Work
@@ -40,8 +42,6 @@ class TestOPDSSerializer:
             type="type",
             title="title",
             role="role",
-            facet_group="Group",
-            facet_group_type="entrypoint",
             active_facet=True,
         )
 
@@ -53,6 +53,19 @@ class TestOPDSSerializer:
         assert serialized.get("type") == "type"
         assert serialized.get("title") == "title"
         assert serialized.get("role") == "role"
+        assert serialized.get(f"{{{OPDSFeed.OPDS_NS}}}activeFacet") == "true"
+        # Group-level attributes are not set by _serialize_link (use _serialize_facet_link)
+        assert serialized.get(f"{{{OPDSFeed.OPDS_NS}}}facetGroup") is None
+        assert serialized.get(f"{{{OPDSFeed.SIMPLIFIED_NS}}}facetGroupType") is None
+
+    def test__serialize_facet_link(self):
+        """_serialize_facet_link adds group attributes and facet rel from FacetData."""
+        link = Link(href="http://link", active_facet=True)
+        facet_data = FacetData(group="Group", type="entrypoint")
+
+        serialized = OPDS1Version1Serializer()._serialize_facet_link(link, facet_data)
+
+        assert serialized.get("rel") == LinkRelations.FACET_REL
         assert serialized.get(f"{{{OPDSFeed.OPDS_NS}}}facetGroup") == "Group"
         assert (
             serialized.get(f"{{{OPDSFeed.SIMPLIFIED_NS}}}facetGroupType")
@@ -290,7 +303,6 @@ class TestOPDSSerializer:
             href="test",
             rel="test_rel",
             title="text1",
-            facet_group="Sort by",
             active_facet=True,
             default_facet=True,
         )
@@ -299,14 +311,16 @@ class TestOPDSSerializer:
             href="test",
             rel="test_rel",
             title="text1",
-            facet_group="non_sort_group",
             active_facet=True,
             default_facet=True,
         )
 
         serializer = OPDS1Version2Serializer()
         feed = FeedData()
-        feed.facet_links = [sort_link_input, facet_link]
+        feed.facets = [
+            FacetData(group="Sort by", type=PALACE_REL_SORT, links=[sort_link_input]),
+            FacetData(group="non_sort_group", links=[facet_link]),
+        ]
 
         sort_links = serializer._serialize_sort_links(feed)
         # we expect only the sort link to be returned.
@@ -330,11 +344,10 @@ class TestOPDSSerializer:
             assert serialize_sort_links.call_count == 1
 
     def test_serialize_non_sort_facetgroup_link_v2(self):
-        facet_link = Link(
+        facet_link_data = Link(
             href="test",
             rel="test_rel",
             title="text1",
-            facet_group="non_sort_group",
             active_facet=True,
             default_facet=True,
         )
@@ -343,13 +356,15 @@ class TestOPDSSerializer:
             href="test",
             rel="test_rel",
             title="text1",
-            facet_group="Sort by",
             active_facet=True,
             default_facet=True,
         )
         serializer = OPDS1Version2Serializer()
         feed = FeedData()
-        feed.facet_links = [facet_link, sort_link]
+        feed.facets = [
+            FacetData(group="non_sort_group", links=[facet_link_data]),
+            FacetData(group="Sort by", type=PALACE_REL_SORT, links=[sort_link]),
+        ]
         facet_links = serializer._serialize_facet_links(feed)
 
         # we expect only the non sort facet links to be returned.
@@ -357,7 +372,7 @@ class TestOPDSSerializer:
         facet_link = facet_links[0]
         assert facet_link.attrib["title"] == "text1"
         assert facet_link.attrib["href"] == "test"
-        assert facet_link.attrib["rel"] == "test_rel"
+        assert facet_link.attrib["rel"] == LinkRelations.FACET_REL
         assert (
             facet_link.attrib["{http://opds-spec.org/2010/catalog}activeFacet"]
             == "true"
@@ -377,23 +392,24 @@ class TestOPDSSerializer:
             href="test",
             rel="test_rel",
             title="text1",
-            facet_group="Sort by",
             active_facet=True,
             default_facet=True,
         )
 
-        facet_link = Link(
+        facet_link_data = Link(
             href="test",
             rel="test_rel",
             title="text1",
-            facet_group="non_sort_group",
             active_facet=True,
             default_facet=True,
         )
 
         serializer = OPDS1Version1Serializer()
         feed = FeedData()
-        feed.facet_links = [sort_link_input, facet_link]
+        feed.facets = [
+            FacetData(group="Sort by", type=PALACE_REL_SORT, links=[sort_link_input]),
+            FacetData(group="non_sort_group", links=[facet_link_data]),
+        ]
 
         sort_links = serializer._serialize_sort_links(feed)
         # we expect no sort links to be returned
@@ -406,7 +422,7 @@ class TestOPDSSerializer:
         sort_link = facet_links[0]
         assert sort_link.attrib["title"] == "text1"
         assert sort_link.attrib["href"] == "test"
-        assert sort_link.attrib["rel"] == "test_rel"
+        assert sort_link.attrib["rel"] == LinkRelations.FACET_REL
         assert (
             sort_link.attrib["{http://opds-spec.org/2010/catalog}activeFacet"] == "true"
         )
@@ -422,7 +438,7 @@ class TestOPDSSerializer:
         facet_link = facet_links[1]
         assert facet_link.attrib["title"] == "text1"
         assert facet_link.attrib["href"] == "test"
-        assert facet_link.attrib["rel"] == "test_rel"
+        assert facet_link.attrib["rel"] == LinkRelations.FACET_REL
         assert (
             facet_link.attrib["{http://opds-spec.org/2010/catalog}activeFacet"]
             == "true"

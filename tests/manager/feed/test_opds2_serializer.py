@@ -2,7 +2,6 @@ import json
 from unittest.mock import patch
 
 from palace.manager.feed.serializer.opds2 import (
-    PALACE_PROPERTIES_ACTIVE_SORT,
     PALACE_PROPERTIES_DEFAULT,
     PALACE_REL_SORT,
     OPDS2Serializer,
@@ -14,6 +13,7 @@ from palace.manager.feed.types import (
     DataEntry,
     DataEntryTypes,
     DRMLicensor,
+    FacetData,
     FeedData,
     FeedEntryGroup,
     FeedMetadata,
@@ -70,19 +70,20 @@ class TestOPDS2Serializer:
         )
         feed.entries = [w]
         feed.links = [Link(href="http://link", rel="self")]
-        feed.facet_links = [
-            Link(
-                href="http://facet-link-1",
-                rel="facet-rel",
-                title="Facet One",
-                facet_group="FacetGroup",
-            ),
-            Link(
-                href="http://facet-link-2",
-                rel="facet-rel",
-                title="Facet Two",
-                facet_group="FacetGroup",
-            ),
+        feed.facets = [
+            FacetData(
+                group="FacetGroup",
+                links=[
+                    Link(
+                        href="http://facet-link-1",
+                        title="Facet One",
+                    ),
+                    Link(
+                        href="http://facet-link-2",
+                        title="Facet Two",
+                    ),
+                ],
+            )
         ]
 
         serialized = OPDS2Serializer().serialize_feed(feed)
@@ -127,12 +128,10 @@ class TestOPDS2Serializer:
             links=[
                 {
                     "href": "http://facet-link-1",
-                    "rel": "facet-rel",
                     "title": "Facet One",
                 },
                 {
                     "href": "http://facet-link-2",
-                    "rel": "facet-rel",
                     "title": "Facet Two",
                 },
             ],
@@ -384,35 +383,46 @@ class TestOPDS2Serializer:
         feed_data = FeedData(metadata=FeedMetadata(title="Sort Feed", id="http://feed"))
         feed_data.links.append(Link(href="http://feed", rel="self"))
 
-        # specify a sort link
-        link = Link(
-            href="test",
-            rel="test_rel",
-            title="text1",
-            facet_group="Sort by",
-            active_facet=True,
-            default_facet=True,
+        # Sort facet group with @type
+        sort_facet = FacetData(
+            group="Sort by",
+            type=PALACE_REL_SORT,
+            links=[
+                Link(
+                    href="test",
+                    rel="test_rel",
+                    title="text1",
+                    active_facet=True,
+                    default_facet=True,
+                ),
+                Link(
+                    href="test_sort2",
+                    rel="test_rel2",
+                    title="text_sort2",
+                ),
+            ],
         )
 
-        # include a non-sort facet
-        link2 = Link(
-            href="test2",
-            title="text2",
-            rel="test_2_rel",
-            facet_group="test_group",
-            active_facet=True,
-            default_facet=True,
-        )
-        link3 = Link(
-            href="test3",
-            title="text3",
-            rel="test_3_rel",
-            facet_group="test_group",
+        # Non-sort facet group
+        filter_facet = FacetData(
+            group="test_group",
+            links=[
+                Link(
+                    href="test2",
+                    title="text2",
+                    rel="test_2_rel",
+                    active_facet=True,
+                    default_facet=True,
+                ),
+                Link(
+                    href="test3",
+                    title="text3",
+                    rel="test_3_rel",
+                ),
+            ],
         )
 
-        feed_data.facet_links.append(link)
-        feed_data.facet_links.append(link2)
-        feed_data.facet_links.append(link3)
+        feed_data.facets = [sort_facet, filter_facet]
         links = json.loads(OPDS2Serializer().serialize_feed(feed=feed_data))
 
         assert links == {
@@ -424,18 +434,28 @@ class TestOPDS2Serializer:
                     "rel": "self",
                     "type": OPDS2_CONTENT_TYPE,
                 },
-                {
-                    "href": "test",
-                    "rel": PALACE_REL_SORT,
-                    "title": "text1",
-                    "type": OPDS2_CONTENT_TYPE,
-                    "properties": {
-                        PALACE_PROPERTIES_ACTIVE_SORT: True,
-                        PALACE_PROPERTIES_DEFAULT: True,
-                    },
-                },
             ],
             "facets": [
+                {
+                    "metadata": {
+                        "title": "Sort by",
+                        "@type": PALACE_REL_SORT,
+                    },
+                    "links": [
+                        {
+                            "href": "test",
+                            "rel": "self",
+                            "title": "text1",
+                            "properties": {
+                                PALACE_PROPERTIES_DEFAULT: True,
+                            },
+                        },
+                        {
+                            "href": "test_sort2",
+                            "title": "text_sort2",
+                        },
+                    ],
+                },
                 {
                     "metadata": {"title": "test_group"},
                     "links": [
@@ -449,11 +469,10 @@ class TestOPDS2Serializer:
                         },
                         {
                             "href": "test3",
-                            "rel": "test_3_rel",
                             "title": "text3",
                         },
                     ],
-                }
+                },
             ],
         }
 
@@ -656,13 +675,16 @@ class TestOPDS2Serializer:
             metadata=FeedMetadata(title="Feed", id="http://feed"),
         )
         feed.links = [Link(href="http://feed", rel="self")]
-        feed.facet_links = [
-            Link(
-                href="http://lone-facet",
-                rel="facet-rel",
-                title="Only One",
-                facet_group="LoneGroup",
-            ),
+        feed.facets = [
+            FacetData(
+                group="LoneGroup",
+                links=[
+                    Link(
+                        href="http://lone-facet",
+                        title="Only One",
+                    ),
+                ],
+            )
         ]
 
         serialized = OPDS2Serializer().serialize_feed(feed)
@@ -854,31 +876,33 @@ class TestOPDS2Serializer:
         assert "http://good-acq" in link_hrefs
 
     def test_facet_link_title_fallback(self):
-        """Facet links fall back to rel or href for title when title is None."""
+        """Facet links fall back to href for title when title is None."""
         feed = FeedData(
             metadata=FeedMetadata(title="Feed", id="http://feed"),
         )
         feed.links = [Link(href="http://feed", rel="self")]
-        feed.facet_links = [
-            Link(
-                href="http://facet1",
-                rel="facet-rel",
-                title=None,
-                facet_group="Group",
-            ),
-            Link(
-                href="http://facet2",
-                rel=None,
-                title=None,
-                facet_group="Group",
-            ),
+        feed.facets = [
+            FacetData(
+                group="Group",
+                links=[
+                    Link(
+                        href="http://facet1",
+                        title=None,
+                    ),
+                    Link(
+                        href="http://facet2",
+                        rel=None,
+                        title=None,
+                    ),
+                ],
+            )
         ]
 
         serialized = OPDS2Serializer().serialize_feed(feed)
         result = json.loads(serialized)
         facet_links = result["facets"][0]["links"]
-        # First facet falls back to rel
-        assert facet_links[0]["title"] == "facet-rel"
+        # First facet falls back to href (title is None)
+        assert facet_links[0]["title"] == "http://facet1"
         # Second facet falls back to href
         assert facet_links[1]["title"] == "http://facet2"
 

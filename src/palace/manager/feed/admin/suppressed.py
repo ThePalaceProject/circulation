@@ -11,6 +11,7 @@ from sqlalchemy.sql import ColumnElement
 
 from palace.manager.feed.acquisition import OPDSAcquisitionFeed
 from palace.manager.feed.annotator.admin.suppressed import AdminSuppressedAnnotator
+from palace.manager.feed.types import FacetData
 from palace.manager.search.filter import SuppressedWorkFilter
 from palace.manager.search.pagination import Pagination
 from palace.manager.sqlalchemy.model.classification import Genre
@@ -207,16 +208,17 @@ class AdminSuppressedFeed(OPDSAcquisitionFeed):
         feed.add_link(start_url, rel="start", title=top_level_title)
 
         # Add facet links for visibility filtering
+        facet_group_data = FacetData(group=SuppressedFacets.VISIBILITY_FACET_GROUP_NAME)
         for facet_group in facets.facet_groups:
             facet_url = annotator.suppressed_url(**dict(facet_group.facets.items()))
             facet_link = cls.facet_link(
                 href=facet_url,
                 title=facet_group.filter_value.display_title,
-                facet_group_name=facet_group.group_name,
                 is_active=facet_group.is_selected,
                 is_default=facet_group.is_default,
             )
-            feed._feed.facet_links.append(facet_link)
+            facet_group_data.links.append(facet_link)
+        feed._feed.facets.append(facet_group_data)
 
         # Link to next page only if there are more entries than current page size.
         if next_page_item_count > 0:
