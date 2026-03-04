@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Annotated, Any, ClassVar
 
 from annotated_types import Ge, Le
-from pydantic import BaseModel, ConfigDict, PositiveInt, field_validator
+from pydantic import PositiveInt
 from sqlalchemy.orm import Session
 
 from palace.manager.api.authentication.base import PatronAuthResult, PatronData
@@ -18,7 +18,7 @@ from palace.manager.api.authentication.basic import (
     BasicAuthProviderSettings,
 )
 from palace.manager.api.authentication.patron_debug import HasPatronDebug
-from palace.manager.api.problem_details import BLOCKED_CREDENTIALS, INVALID_CREDENTIALS
+from palace.manager.api.problem_details import INVALID_CREDENTIALS
 from palace.manager.core.selftest import SelfTestResult
 from palace.manager.integration.patron_auth.sip2.client import Sip2Encoding, SIPClient
 from palace.manager.integration.patron_auth.sip2.dialect import Dialect as Sip2Dialect
