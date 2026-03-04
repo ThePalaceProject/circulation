@@ -1497,6 +1497,51 @@ class TestGroupFeed:
         assert group3.href == "http://localhost/feed/sci-fi"
         assert len(group3.entries) == 1
 
+    def test_groups_work_in_multiple_sublanes(self, db: DatabaseTransactionFixture):
+        """A work appearing in multiple sublanes is placed into each corresponding group."""
+        parent_lane = db.lane(display_name="Fiction")
+        sublane1 = db.lane(parent=parent_lane, display_name="Space Opera")
+        sublane2 = db.lane(parent=parent_lane, display_name="Military SF")
+
+        # A single work that belongs to both sublanes.
+        shared_work: Work = db.work(with_license_pool=True)
+
+        wl = create_autospec(WorkList)
+        wl.display_name_for_all = "All Fiction"
+        wl.groups.return_value = [
+            (shared_work, sublane1),
+            (shared_work, sublane2),
+        ]
+
+        annotator = create_autospec(LibraryAnnotator)
+        annotator.facets = None
+        annotator.feed_url.return_value = "http://localhost/feed/fiction"
+        annotator.lane_url.side_effect = lambda lane, facets=None: (
+            f"http://localhost/lane/{lane.display_name.lower().replace(' ', '-')}"
+        )
+
+        feed = OPDSAcquisitionFeed.groups(
+            _db=db.session,
+            title="Fiction",
+            url="http://localhost/groups/fiction",
+            worklist=wl,
+            annotator=annotator,
+            pagination=None,
+            facets=None,
+        )
+
+        assert len(feed._feed.entries) == 0
+        assert len(feed._feed.entry_groups) == 2
+
+        group1, group2 = feed._feed.entry_groups
+        assert group1.title == "Space Opera"
+        assert len(group1.entries) == 1
+        assert group1.entries[0].work == shared_work
+
+        assert group2.title == "Military SF"
+        assert len(group2.entries) == 1
+        assert group2.entries[0].work == shared_work
+
     def test_groups_coerces_lazy_parent_lane_title_to_string(
         self, db: DatabaseTransactionFixture
     ) -> None:
