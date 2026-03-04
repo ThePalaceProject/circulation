@@ -101,20 +101,14 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]], LoggerMixin):
                     f"Skipping invalid OPDS2 publication (identifier={entry.identifier!r}): {exc}"
                 )
 
-        # Build the Feed model with the appropriate collection type.
-        feed_kwargs: dict[str, Any] = dict(
+        feed_model = opds2.Feed(
             metadata=metadata,
             links=feed_links,
             facets=facets,
+            groups=groups,
+            navigation=navigation,
+            publications=publications,
         )
-        if groups:
-            feed_kwargs["groups"] = groups
-        elif navigation:
-            feed_kwargs["navigation"] = navigation
-        else:
-            feed_kwargs["publications"] = publications
-
-        feed_model = opds2.Feed(**feed_kwargs)
 
         return self.to_string(self._dump_model(feed_model))
 

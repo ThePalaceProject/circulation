@@ -1,4 +1,5 @@
 import json
+import uuid
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -6,9 +7,15 @@ from pydantic import ValidationError
 
 from palace.manager.opds.opds2 import (
     Availability,
+    Feed,
+    FeedMetadata,
+    Link,
     Publication,
     PublicationFeed,
     PublicationFeedNoValidation,
+    PublicationMetadata,
+    PublicationsGroup,
+    StrictLink,
 )
 from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.files import OPDS2FilesFixture
@@ -262,3 +269,95 @@ class TestAvailability:
         """Test that invalid datetime formats raise ValidationError."""
         with pytest.raises(ValidationError, match=error_pattern):
             Availability.model_validate({"since": invalid_since})
+
+
+class TestFeed:
+    @classmethod
+    def _minimal_publication(cls) -> Publication:
+        return Publication(
+            metadata=PublicationMetadata(
+                title="Test",
+                identifier=f"urn:uuid:{uuid.uuid4()}",
+                type="http://schema.org/Book",
+            ),
+            images=[Link(href="http://img", type="image/png")],
+            links=[
+                StrictLink(
+                    href="http://acq",
+                    rel="http://opds-spec.org/acquisition/open-access",
+                    type="application/epub+zip",
+                )
+            ],
+        )
+
+    @classmethod
+    def _minimal_group(cls) -> PublicationsGroup:
+        pub = cls._minimal_publication()
+        return PublicationsGroup(
+            metadata=FeedMetadata(title="Group"),
+            publications=[pub],
+        )
+
+    @classmethod
+    def _self_link(cls) -> list[StrictLink]:
+        return [
+            StrictLink(href="http://feed", rel="self", type="application/opds+json")
+        ]
+
+    def test_serialization_only_truthy_collections_are_kept(self):
+        """When only groups is truthy, publications and navigation are dropped."""
+        feed = Feed(
+            metadata=FeedMetadata(title="Feed"),
+            links=self._self_link(),
+            groups=[self._minimal_group()],
+            publications=[],
+            navigation=[],
+        )
+        data = feed.model_dump(mode="json", by_alias=True, exclude_none=True)
+
+        assert "groups" in data
+        assert "publications" not in data
+        assert "navigation" not in data
+
+    def test_serialization_multiple_truthy_collections_coexist(self):
+        """When both groups and publications are truthy, both are kept."""
+        feed = Feed(
+            metadata=FeedMetadata(title="Feed"),
+            links=self._self_link(),
+            groups=[self._minimal_group()],
+            publications=[self._minimal_publication()],
+        )
+        data = feed.model_dump(mode="json", by_alias=True, exclude_none=True)
+
+        assert "groups" in data
+        assert "publications" in data
+        assert len(data["groups"]) == 1
+        assert len(data["publications"]) == 1
+
+    def test_serialization_none_truthy_keeps_explicitly_set_field(self):
+        """When no collection is truthy, the explicitly set field is retained (empty)."""
+        feed = Feed(
+            metadata=FeedMetadata(title="Feed"),
+            links=self._self_link(),
+            groups=[],
+        )
+        data = feed.model_dump(mode="json", by_alias=True, exclude_none=True)
+
+        assert "groups" in data
+        assert data["groups"] == []
+        assert "navigation" not in data
+        assert "publications" not in data
+
+    def test_serialization_none_truthy_falls_back_to_priority(self):
+        """When no collection is truthy and multiple are set, priority determines which is kept."""
+        feed = Feed(
+            metadata=FeedMetadata(title="Feed"),
+            links=self._self_link(),
+            publications=[],
+            navigation=[],
+        )
+        data = feed.model_dump(mode="json", by_alias=True, exclude_none=True)
+
+        # publications has higher priority than navigation.
+        assert "publications" in data
+        assert "navigation" not in data

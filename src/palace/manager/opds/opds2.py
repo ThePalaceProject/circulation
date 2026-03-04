@@ -400,11 +400,18 @@ class Feed(BaseOpdsModel):
     def _serialize(self, serializer: SerializerFunctionWrapHandler) -> dict[str, Any]:
         data = cast(dict[str, Any], serializer(self))
 
-        # Always include at least one collection field, even if empty.
-        # Priority: publications > navigation > groups.
-        collection_fields = ("publications", "navigation", "groups")
-        primary = next(f for f in collection_fields if f in self.model_fields_set)
-        for f in collection_fields:
+        # Keep all truthy collection fields. If none are truthy, retain at
+        # least one based on priority: publications > navigation > groups.
+        required_collection_fields = ("publications", "navigation", "groups")
+        if any(getattr(self, f) for f in required_collection_fields):
+            primary = None
+        else:
+            primary = next(
+                (f for f in required_collection_fields if f in self.model_fields_set),
+                next(iter(required_collection_fields)),
+            )
+
+        for f in required_collection_fields:
             if f != primary:
                 drop_if_falsy(self, f, data)
 
