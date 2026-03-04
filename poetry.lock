@@ -5313,14 +5313,14 @@ tests = ["numpy", "pytest"]
 
 [[package]]
 name = "tox"
-version = "4.47.1"
+version = "4.47.3"
 description = "tox is a generic virtualenv management and test command line tool"
 optional = false
 python-versions = ">=3.10"
 groups = ["ci"]
 files = [
-    {file = "tox-4.47.1-py3-none-any.whl", hash = "sha256:b2de8fc90157f357754082784c2457c542d797d93b3e8889682d7406db98afc4"},
-    {file = "tox-4.47.1.tar.gz", hash = "sha256:80b3d9157cff65b6b514b01840d33cf72de0fc9117cf18ef86531407d11d24d8"},
+    {file = "tox-4.47.3-py3-none-any.whl", hash = "sha256:e447862a6821b421bbbfb8cbac071818c0a6884907a4c964d8322516d0b19b34"},
+    {file = "tox-4.47.3.tar.gz", hash = "sha256:57643508d4c218ad312457a3b0ce3135c50fa1f9f1e4d40867683d880cad1c37"},
 ]
 
 [package.dependencies]
