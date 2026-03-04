@@ -209,7 +209,7 @@ class Named:
     sipserver_patron_class = NamedField("PC")
     sipserver_internet_privileges = NamedField("PI")
     sipserver_internal_id = NamedField("XI")
-    sipserver_patron_birthdate("PB")
+    sipserver_patron_birthdate = NamedField("PB")
 
     # SIP extensions defined by Polaris.
     polaris_patron_birthdate = NamedField("BC")
