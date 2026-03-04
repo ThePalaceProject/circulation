@@ -637,6 +637,7 @@ class TestWorkController:
             ("default-foo-bar", OPDSFeed.ACQUISITION_FEED_TYPE + "; api-version=1"),
             (AtomFeed.ATOM_TYPE, OPDSFeed.ACQUISITION_FEED_TYPE + "; api-version=1"),
             (OPDS2Serializer.content_type(), OPDS2Serializer.content_type()),
+            (OPDS2Serializer.entry_content_type(), OPDS2Serializer.content_type()),
         ],
     )
     def test_recommendations_content_negotiation(

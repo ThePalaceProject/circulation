@@ -28,6 +28,7 @@ def get_serializer(
         "application/atom+xml": OPDS1Version1Serializer,
         "application/atom+xml; api-version=2": OPDS1Version2Serializer,
         "application/opds+json": OPDS2Serializer,
+        "application/opds-publication+json": OPDS2Serializer,
     }
     if mime_types:
         match = mime_types.best_match(
@@ -80,7 +81,7 @@ class BaseOPDSFeed(FeedInterface, LoggerMixin):
             return OPDSEntryResponse(
                 response=serializer.to_string(serializer.serialize_opds_message(entry)),
                 status=entry.status_code,
-                content_type=serializer.content_type(),
+                content_type=serializer.entry_content_type(),
                 **response_kwargs,
             )
 
@@ -88,16 +89,13 @@ class BaseOPDSFeed(FeedInterface, LoggerMixin):
         if not entry.computed:
             logging.getLogger().error(f"Entry data has not been generated for {entry}")
             raise ValueError(f"Entry data has not been generated")
-        response = OPDSEntryResponse(
+        return OPDSEntryResponse(
             response=serializer.to_string(
                 serializer.serialize_work_entry(entry.computed)
             ),
+            content_type=serializer.entry_content_type(),
             **response_kwargs,
         )
-        if isinstance(serializer, OPDS2Serializer):
-            # Only OPDS2 has the same content type for feed and entry
-            response.content_type = serializer.content_type()
-        return response
 
 
 class UnfulfillableWork(BasePalaceException):

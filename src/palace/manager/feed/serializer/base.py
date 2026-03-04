@@ -24,3 +24,6 @@ class SerializerInterface[T](
 
     @abstractmethod
     def content_type(self) -> str: ...
+
+    @abstractmethod
+    def entry_content_type(self) -> str: ...

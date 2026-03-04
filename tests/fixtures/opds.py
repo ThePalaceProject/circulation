@@ -7,14 +7,16 @@ from palace.manager.util.opds_writer import AtomFeed, OPDSFeed
 
 
 class OPDSSerializationTestHelper:
-    OPDS2_CONTENT_TYPE = OPDS2Serializer().content_type()
+    OPDS2_CONTENT_TYPE = OPDS2Serializer.content_type()
+    OPDS2_PUBLICATION_CONTENT_TYPE = OPDS2Serializer.entry_content_type()
     PARAMETRIZED_SINGLE_ENTRY_ACCEPT_HEADERS = (
         "accept_header,expected_content_type",
         [
             (None, OPDSFeed.ENTRY_TYPE),
             ("default-foo-bar", OPDSFeed.ENTRY_TYPE),
             (AtomFeed.ATOM_TYPE, OPDSFeed.ENTRY_TYPE),
-            (OPDS2_CONTENT_TYPE, OPDS2_CONTENT_TYPE),
+            (OPDS2_CONTENT_TYPE, OPDS2_PUBLICATION_CONTENT_TYPE),
+            (OPDS2_PUBLICATION_CONTENT_TYPE, OPDS2_PUBLICATION_CONTENT_TYPE),
         ],
     )
     PARAMETRIZED_NAVIGATION_ACCEPT_HEADERS = (
@@ -24,6 +26,7 @@ class OPDSSerializationTestHelper:
             ("default-foo-bar", OPDSFeed.NAVIGATION_FEED_TYPE),
             (AtomFeed.ATOM_TYPE, OPDSFeed.NAVIGATION_FEED_TYPE),
             (OPDS2_CONTENT_TYPE, OPDS2_CONTENT_TYPE),
+            (OPDS2_PUBLICATION_CONTENT_TYPE, OPDS2_CONTENT_TYPE),
         ],
     )
 
@@ -43,7 +46,7 @@ class OPDSSerializationTestHelper:
         if self.expected_content_type == OPDSFeed.ENTRY_TYPE:
             feed = feedparser.parse(response.get_data())
             [entry] = feed["entries"]
-        elif self.expected_content_type == self.OPDS2_CONTENT_TYPE:
+        elif self.expected_content_type == self.OPDS2_PUBLICATION_CONTENT_TYPE:
             entry = response.get_json()
         else:
             assert (
