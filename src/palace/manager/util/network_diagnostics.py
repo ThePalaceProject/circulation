@@ -31,8 +31,8 @@ def check_dns_resolution(hostname: str) -> str:
             debug_message=(
                 f"The hostname '{hostname}' could not be found in DNS.\n\n"
                 "Common causes:\n"
-                f"  1. The hostname is misspelled in the integration settings.\n"
-                f"  2. The DNS record does not exist.\n\n"
+                "  1. The hostname is misspelled in the integration settings.\n"
+                "  2. The DNS record does not exist.\n\n"
                 "Action: Double-check the hostname for typos. "
                 "Ask the ILS vendor to confirm the correct server hostname."
             ),
@@ -58,8 +58,10 @@ def check_tcp_connection(host: str, port: int, timeout: float = 4) -> str:
     DNS is resolved first so that the resolved IP can be included in
     any error messages, helping vendors verify the correct address.
 
-    No messages are returned from DNS resolution, since its assumed
-    check_dns_resolution was run first.
+    This function does not handle DNS failures itself — it's assumed
+    that :func:`check_dns_resolution` (or :func:`run_network_diagnostics`)
+    was called first. If DNS fails here, the raw ``socket.gaierror``
+    will propagate.
 
     :param host: Hostname or IP address.
     :param port: TCP port number.
@@ -89,7 +91,7 @@ def check_tcp_connection(host: str, port: int, timeout: float = 4) -> str:
             debug_message=(
                 f"The server at {resolved_ip} is reachable but actively refused the "
                 f"connection on port {port}. This means the host is up, but nothing is "
-                "listening on that port, or a firewall is actively rejecting connections. \n\n"
+                "listening on that port, or a firewall is actively rejecting connections.\n\n"
                 "Common causes:\n"
                 f"  1. The ILS service is not running or not listening on port {port}.\n"
                 f"  2. A firewall REJECT rule is blocking the connection.\n"

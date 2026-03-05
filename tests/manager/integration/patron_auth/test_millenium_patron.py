@@ -10,7 +10,6 @@ import pytest
 
 from palace.manager.api.authentication.base import PatronData
 from palace.manager.api.authentication.basic import Keyboards
-from palace.manager.core.selftest import SelfTestResult
 from palace.manager.integration.patron_auth.millenium_patron import (
     AuthenticationMode,
     MilleniumPatronAPI,
@@ -21,20 +20,7 @@ from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import FilesFixture
-
-
-def _mock_network_diagnostics_url(url):
-    """Yield two successful SelfTestResult objects to stand in for network diagnostics."""
-    dns = SelfTestResult("DNS Resolution (mock)")
-    dns.success = True
-    dns.result = "Resolved mock to: 1.2.3.4 (IPv4)"
-    dns.end = dns.start
-    yield dns
-    tcp = SelfTestResult("TCP Connection (mock:80)")
-    tcp.success = True
-    tcp.result = "Successfully connected to mock (1.2.3.4) on port 80 in 0.01s"
-    tcp.end = tcp.start
-    yield tcp
+from tests.manager.integration.patron_auth.conftest import mock_network_diagnostics_url
 
 
 class MilleniumFilesFixture(FilesFixture):
@@ -1025,7 +1011,7 @@ class TestMilleniumPatronAPI:
 
     @patch(
         "palace.manager.integration.patron_auth.millenium_patron.run_network_diagnostics_url",
-        _mock_network_diagnostics_url,
+        mock_network_diagnostics_url,
     )
     def test_run_self_tests(
         self,
