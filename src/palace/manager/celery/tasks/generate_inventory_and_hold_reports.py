@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import enum
 import logging
 import tempfile
 import uuid
@@ -11,6 +12,7 @@ from pathlib import Path
 from typing import IO, Any
 
 from celery import shared_task
+from openpyxl import Workbook
 from sqlalchemy import (
     bindparam,
     case,
@@ -144,6 +146,12 @@ def generate_report(
         "filtered_genres_enabled": bool(settings.filtered_genres),
     }
 
+    base_names = {
+        "inventory_activity": f"palace-inventory-activity-report-for-library-{file_name_modifier}",
+        "inventory": f"palace-inventory-report-for-library-{file_name_modifier}",
+        "holds": f"palace-holds-with-no-licenses-report-for-library-{file_name_modifier}",
+    }
+
     with tempfile.NamedTemporaryFile() as report_zip:
         zip_path = Path(report_zip.name)
 
@@ -151,6 +159,9 @@ def generate_report(
             create_temp_file() as inventory_report_file,
             create_temp_file() as inventory_activity_report_file,
             create_temp_file() as holds_with_no_licenses_report_file,
+            create_temp_excel_file() as inventory_report_excel_file,
+            create_temp_excel_file() as inventory_activity_report_excel_file,
+            create_temp_excel_file() as holds_with_no_licenses_report_excel_file,
         ):
             generate_csv_report(
                 session,
@@ -177,18 +188,55 @@ def generate_report(
                 columns_to_stringify={"identifier", "isbn"},
             )
 
+            generate_excel_report(
+                session,
+                excel_file=inventory_report_excel_file,
+                sql_params=sql_params,
+                query=inventory_report_query(),
+                row_transform=_inventory_report_row_transform,
+                columns_to_stringify={"identifier", "isbn", "target_age"},
+            )
+
+            generate_excel_report(
+                session,
+                excel_file=inventory_activity_report_excel_file,
+                sql_params=sql_params,
+                query=palace_inventory_activity_report_query(),
+                columns_to_stringify={"identifier", "isbn"},
+            )
+
+            generate_excel_report(
+                session,
+                excel_file=holds_with_no_licenses_report_excel_file,
+                sql_params=sql_params,
+                query=holds_with_no_licenses_report_query(),
+                columns_to_stringify={"identifier", "isbn"},
+            )
+
             with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as archive:
                 archive.write(
                     filename=inventory_activity_report_file.name,
-                    arcname=f"palace-inventory-activity-report-for-library-{file_name_modifier}.csv",
+                    arcname=f"{base_names['inventory_activity']}.csv",
                 )
                 archive.write(
                     filename=inventory_report_file.name,
-                    arcname=f"palace-inventory-report-for-library-{file_name_modifier}.csv",
+                    arcname=f"{base_names['inventory']}.csv",
                 )
                 archive.write(
                     filename=holds_with_no_licenses_report_file.name,
-                    arcname=f"palace-holds-with-no-licenses-report-for-library-{file_name_modifier}.csv",
+                    arcname=f"{base_names['holds']}.csv",
+                )
+                archive.write(
+                    filename=inventory_activity_report_excel_file.name,
+                    arcname=f"{base_names['inventory_activity']}.xlsx",
+                )
+                archive.write(
+                    filename=inventory_report_excel_file.name,
+                    arcname=f"{base_names['inventory']}.xlsx",
+                )
+                archive.write(
+                    filename=holds_with_no_licenses_report_excel_file.name,
+                    arcname=f"{base_names['holds']}.xlsx",
                 )
 
             uid = uuid_encode(uuid.uuid4())
@@ -220,6 +268,11 @@ def generate_report(
 
 def create_temp_file() -> IO[str]:
     return tempfile.NamedTemporaryFile("w", encoding="utf-8")
+
+
+def create_temp_excel_file() -> IO[bytes]:
+    """Create a temporary file for Excel output (binary mode)."""
+    return tempfile.NamedTemporaryFile("wb", suffix=".xlsx")
 
 
 def _to_csv_cell(value: Any) -> str:
@@ -276,6 +329,79 @@ def generate_csv_report(
                 )
         csv_file.flush()
         log.debug(f"report written to {csv_file.name}")
+
+
+# Excel number format code for text - prevents Excel from interpreting values as
+# numbers or dates (e.g. ISBNs, identifiers, target_age like "5-8").
+_EXCEL_TEXT_FORMAT = "@"
+
+
+def generate_excel_report(
+    db: Session,
+    excel_file: IO[bytes],
+    sql_params: dict[str, Any],
+    query: Select,
+    row_transform: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+    columns_to_stringify: Iterable[str] | None = None,
+) -> None:
+    """Generate an Excel report from a database query.
+
+    :param columns_to_stringify: Column names whose values must be stored as
+        text in Excel. Uses number_format='@' so Excel displays identifier,
+        isbn, and target_age as strings rather than converting to numbers or
+        dates.
+    """
+    stringify_cols = frozenset(columns_to_stringify or ())
+
+    def cell_value(key: str, value: Any) -> Any:
+        if key in stringify_cols:
+            return _to_csv_cell(value)
+        if value is None:
+            return ""
+        # Convert enums to strings for Excel compatibility
+        if isinstance(value, enum.Enum):
+            return str(value.value)
+        # Convert timezone-aware datetimes to strings (Excel doesn't support tzinfo)
+        if isinstance(value, datetime) and value.tzinfo is not None:
+            return value.strftime("%Y-%m-%d %H:%M:%S")
+        return value
+
+    with elapsed_time_logging(
+        log_method=log.debug,
+        message_prefix=f"generate_excel_report - {excel_file.name}",
+        skip_start=True,
+    ):
+        wb = Workbook()
+        ws = wb.active
+        assert ws is not None
+
+        rows = db.execute(query, sql_params)
+        keys = list(rows.keys())
+
+        # Write header row
+        for col_idx, key in enumerate(keys, start=1):
+            cell = ws.cell(row=1, column=col_idx, value=key)
+            cell.number_format = _EXCEL_TEXT_FORMAT
+
+        # Write data rows
+        for row_idx, row in enumerate(rows, start=2):
+            if row_transform is not None:
+                transformed_row = row_transform(dict(row._mapping))
+                values = [transformed_row.get(key, "") for key in keys]
+            else:
+                values = [row._mapping[key] for key in keys]
+
+            for col_idx, (key, value) in enumerate(
+                zip(keys, values, strict=True), start=1
+            ):
+                display_value = cell_value(key, value)
+                cell = ws.cell(row=row_idx, column=col_idx, value=display_value)
+                if key in stringify_cols:
+                    cell.number_format = _EXCEL_TEXT_FORMAT
+
+        wb.save(excel_file)
+        excel_file.flush()
+        log.debug(f"report written to {excel_file.name}")
 
 
 def _inventory_report_row_transform(row: dict[str, Any]) -> dict[str, Any]:
