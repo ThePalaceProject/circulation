@@ -25,6 +25,7 @@ from palace.manager.integration.settings import (
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.util.http.http import HTTP
+from palace.manager.util.network_diagnostics import run_network_diagnostics_url
 from palace.manager.util.pydantic import HttpUrl
 
 if TYPE_CHECKING:
@@ -386,6 +387,7 @@ class SirsiDynixHorizonAuthenticationProvider(
         """Verify the credentials of the test patron for this integration,
         and update its metadata.
         """
+        yield from run_network_diagnostics_url(self.server_url)
 
         test_username = self.test_username
         test_password = self.test_password or ""

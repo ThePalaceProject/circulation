@@ -3,12 +3,14 @@ from datetime import date, timedelta
 from decimal import Decimal
 from functools import partial
 from typing import Any
+from unittest.mock import MagicMock, patch
 from urllib import parse
 
 import pytest
 
 from palace.manager.api.authentication.base import PatronData
 from palace.manager.api.authentication.basic import Keyboards
+from palace.manager.core.selftest import SelfTestResult
 from palace.manager.integration.patron_auth.millenium_patron import (
     AuthenticationMode,
     MilleniumPatronAPI,
@@ -19,6 +21,20 @@ from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import FilesFixture
+
+
+def _mock_network_diagnostics_url(url):
+    """Yield two successful SelfTestResult objects to stand in for network diagnostics."""
+    dns = SelfTestResult("DNS Resolution (mock)")
+    dns.success = True
+    dns.result = "Resolved mock to: 1.2.3.4 (IPv4)"
+    dns.end = dns.start
+    yield dns
+    tcp = SelfTestResult("TCP Connection (mock:80)")
+    tcp.success = True
+    tcp.result = "Successfully connected to mock (1.2.3.4) on port 80 in 0.01s"
+    tcp.end = tcp.start
+    yield tcp
 
 
 class MilleniumFilesFixture(FilesFixture):
@@ -1006,3 +1022,26 @@ class TestMilleniumPatronAPI:
         assert family_result.success is True
         assert isinstance(family_result.details, dict)
         assert family_result.details["personal_name"] == "SHELDON, ALICE"
+
+    @patch(
+        "palace.manager.integration.patron_auth.millenium_patron.run_network_diagnostics_url",
+        _mock_network_diagnostics_url,
+    )
+    def test_run_self_tests(
+        self,
+        create_provider: Callable[..., MockAPI],
+    ):
+        """Network diagnostics are yielded before the inherited self-tests."""
+        api = create_provider()
+
+        mock_session = MagicMock()
+        results = list(api._run_self_tests(mock_session))
+
+        # First two results are network diagnostics.
+        assert results[0].name == "DNS Resolution (mock)"
+        assert results[0].success is True
+        assert results[1].name == "TCP Connection (mock:80)"
+        assert results[1].success is True
+
+        # Then the inherited self-tests from BasicAuthenticationProvider.
+        assert results[2].name == "Authenticating test patron"

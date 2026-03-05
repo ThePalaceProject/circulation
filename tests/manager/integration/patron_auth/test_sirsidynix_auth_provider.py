@@ -28,6 +28,20 @@ from tests.fixtures.database import DatabaseTransactionFixture
 from tests.mocks.mock import MockRequestsResponse
 
 
+def _mock_network_diagnostics_url(url):
+    """Yield two successful SelfTestResult objects to stand in for network diagnostics."""
+    dns = SelfTestResult(f"DNS Resolution (mock)")
+    dns.success = True
+    dns.result = "Resolved mock to: 1.2.3.4 (IPv4)"
+    dns.end = dns.start
+    yield dns
+    tcp = SelfTestResult(f"TCP Connection (mock:80)")
+    tcp.success = True
+    tcp.result = "Successfully connected to mock (1.2.3.4) on port 80 in 0.01s"
+    tcp.end = tcp.start
+    yield tcp
+
+
 @dataclass
 class MockedSirsiApi:
     provider: SirsiDynixHorizonAuthenticationProvider
@@ -70,6 +84,10 @@ class SirsiAuthFixture:
 
         self.mock_request = create_autospec(HTTP.request_with_timeout)
         monkeypatch.setattr(HTTP, "request_with_timeout", self.mock_request)
+        monkeypatch.setattr(
+            "palace.manager.integration.patron_auth.sirsidynix_authentication_provider.run_network_diagnostics_url",
+            _mock_network_diagnostics_url,
+        )
 
         self.mock_session = MagicMock()
 
@@ -819,52 +837,59 @@ class TestSirsiDynixAuthenticationProvider:
         mocked_provider.provider.testing_patron_or_bust = MagicMock(
             return_value=(MagicMock(), "test")
         )
-        [
-            login_result,
-            patron_data_result,
-            patron_status_result,
-            auth_result,
-            sync_result,
-        ] = sirsi_auth_fixture.run_self_tests(mocked_provider.provider)
+        results = sirsi_auth_fixture.run_self_tests(mocked_provider.provider)
+
+        # Network diagnostics (DNS + TCP) are yielded first.
+        N = 2
+        assert results[0].name == "DNS Resolution (mock)"
+        assert results[0].success is True
+        assert results[1].name == "TCP Connection (mock:80)"
+        assert results[1].success is True
 
         # We display a result for login
-        assert login_result.name == "Login Patron"
-        assert login_result.success is True
+        assert results[N].name == "Login Patron"
+        assert results[N].success is True
 
         # We display a result for patron data and return the patrons fields as json
-        assert patron_data_result.name == "Read Patron Data"
-        assert patron_data_result.success is True
+        assert results[N + 1].name == "Read Patron Data"
+        assert results[N + 1].success is True
         assert json.loads(
-            patron_data_result.result
+            results[N + 1].result
         ) == mocked_provider.api_read_patron_data.return_value.get("fields")
 
         # We display a result for patron status and return the patrons fields as json
-        assert patron_status_result.name == "Patron Status Info"
-        assert patron_status_result.success is True
+        assert results[N + 2].name == "Patron Status Info"
+        assert results[N + 2].success is True
         assert json.loads(
-            patron_status_result.result
+            results[N + 2].result
         ) == mocked_provider.api_patron_status_info.return_value.get("fields")
 
         # And we return the results from the super class as well
-        assert auth_result.name == "Authenticating test patron"
-        assert auth_result.success is True
+        assert results[N + 3].name == "Authenticating test patron"
+        assert results[N + 3].success is True
 
-        assert sync_result.name == "Syncing patron metadata"
-        assert sync_result.success is True
+        assert results[N + 4].name == "Syncing patron metadata"
+        assert results[N + 4].success is True
+
+        assert len(results) == N + 5
 
     def test__run_self_tests_no_barcode(self, sirsi_auth_fixture: SirsiAuthFixture):
         mocked_provider = sirsi_auth_fixture.provider_mocked_api()
         mocked_provider.provider.test_username = None
-        [test_result] = sirsi_auth_fixture.run_self_tests(mocked_provider.provider)
-        assert test_result.success is False
-        assert str(test_result.exception) == "No test patron username configured."
+        results = sirsi_auth_fixture.run_self_tests(mocked_provider.provider)
+        # 2 network diagnostics + 1 config failure
+        assert len(results) == 3
+        assert results[2].success is False
+        assert str(results[2].exception) == "No test patron username configured."
 
     def test__run_self_tests_patron_login(self, sirsi_auth_fixture: SirsiAuthFixture):
         mocked_provider = sirsi_auth_fixture.provider_mocked_api()
         mocked_provider.api_patron_login.return_value = False
-        [test_result] = sirsi_auth_fixture.run_self_tests(mocked_provider.provider)
-        assert test_result.success is False
-        assert str(test_result.exception) == "Could not authenticate test patron"
+        results = sirsi_auth_fixture.run_self_tests(mocked_provider.provider)
+        # 2 network diagnostics + 1 login failure
+        assert len(results) == 3
+        assert results[2].success is False
+        assert str(results[2].exception) == "Could not authenticate test patron"
 
     @pytest.mark.parametrize(
         "api_read_patron_data_resp, expected_exception",
@@ -882,12 +907,12 @@ class TestSirsiDynixAuthenticationProvider:
     ):
         mocked_provider = sirsi_auth_fixture.provider_mocked_api()
         mocked_provider.api_read_patron_data.return_value = api_read_patron_data_resp
-        [login_result, patron_data_result] = sirsi_auth_fixture.run_self_tests(
-            mocked_provider.provider
-        )
-        assert login_result.success is True
-        assert patron_data_result.success is False
-        assert str(patron_data_result.exception) == expected_exception
+        results = sirsi_auth_fixture.run_self_tests(mocked_provider.provider)
+        # 2 network diagnostics + login + patron_data
+        assert len(results) == 4
+        assert results[2].success is True  # login
+        assert results[3].success is False  # patron_data
+        assert str(results[3].exception) == expected_exception
 
     @pytest.mark.parametrize(
         "api_patron_status_info_resp, expected_exception",
@@ -907,12 +932,10 @@ class TestSirsiDynixAuthenticationProvider:
         mocked_provider.api_patron_status_info.return_value = (
             api_patron_status_info_resp
         )
-        [
-            login_result,
-            patron_data_result,
-            patron_status_result,
-        ] = sirsi_auth_fixture.run_self_tests(mocked_provider.provider)
-        assert login_result.success is True
-        assert patron_data_result.success is True
-        assert patron_status_result.success is False
-        assert str(patron_status_result.exception) == expected_exception
+        results = sirsi_auth_fixture.run_self_tests(mocked_provider.provider)
+        # 2 network diagnostics + login + patron_data + patron_status
+        assert len(results) == 5
+        assert results[2].success is True  # login
+        assert results[3].success is True  # patron_data
+        assert results[4].success is False  # patron_status
+        assert str(results[4].exception) == expected_exception
