@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
 import pytest
-import pytz
 from freezegun import freeze_time
 
 from palace.manager.scripts.playtime_entries import (
@@ -97,8 +96,8 @@ class TestPlaytimeEntriesReportScript:
             )
         assert expected_start == parsed.start
         assert expected_until == parsed.until
-        assert pytz.UTC == parsed.start.tzinfo
-        assert pytz.UTC == parsed.until.tzinfo
+        assert timezone.utc == parsed.start.tzinfo
+        assert timezone.utc == parsed.until.tzinfo
 
     @pytest.mark.parametrize(
         "current_utc_time, start_arg, expected_start, until_arg, expected_until",

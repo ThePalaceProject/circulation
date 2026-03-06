@@ -2,10 +2,9 @@ from __future__ import annotations
 
 import argparse
 from collections.abc import Sequence
-from datetime import datetime
+from datetime import datetime, timezone
 
 import dateutil.parser
-import pytz
 from sqlalchemy.orm import Session
 
 from palace.manager.celery.tasks.playtime_entries import (
@@ -61,8 +60,8 @@ class PlaytimeEntriesReportsScript(Script):
         cmd_args: Sequence[str | None] | None = None,
     ) -> argparse.Namespace:
         parsed = super().parse_command_line(_db, cmd_args)
-        utc_start = pytz.utc.localize(parsed.start)
-        utc_until = pytz.utc.localize(parsed.until)
+        utc_start = parsed.start.replace(tzinfo=timezone.utc)
+        utc_until = parsed.until.replace(tzinfo=timezone.utc)
         if utc_start >= utc_until:
             cls.arg_parser(_db).error(
                 f"start date ({utc_start.strftime(REPORT_DATE_FORMAT)}) must be before "

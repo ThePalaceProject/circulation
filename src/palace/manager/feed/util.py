@@ -1,7 +1,5 @@
 import datetime
 
-import pytz
-
 TIME_FORMAT_UTC = "%Y-%m-%dT%H:%M:%S+00:00"
 TIME_FORMAT_NAIVE = "%Y-%m-%dT%H:%M:%SZ"
 
@@ -19,7 +17,7 @@ def strftime(date: datetime.datetime | datetime.date) -> str:
     if isinstance(date, datetime.datetime) and date.tzinfo is not None:
         # Convert to UTC to make the formatting easier.
         fmt = TIME_FORMAT_UTC
-        date = date.astimezone(pytz.UTC)
+        date = date.astimezone(datetime.UTC)
     else:
         fmt = TIME_FORMAT_NAIVE
 

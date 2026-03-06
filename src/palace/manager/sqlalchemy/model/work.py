@@ -5,13 +5,12 @@ from __future__ import annotations
 import re
 from collections import Counter
 from collections.abc import Sequence
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from functools import cache
 from typing import TYPE_CHECKING, Any, Self, cast
 
 import opensearchpy
-import pytz
 from dependency_injector.wiring import Provide, inject
 from sqlalchemy import (
     Boolean,
@@ -1648,7 +1647,7 @@ class Work(Base, LoggerMixin):
                 try:
                     # If we do not have a timezone, force UTC
                     if value.tzinfo is None:
-                        value = value.replace(tzinfo=pytz.UTC)
+                        value = value.replace(tzinfo=timezone.utc)
                     return value.timestamp()
                 except (ValueError, OverflowError) as e:
                     cls.logger().error(
@@ -1658,7 +1657,7 @@ class Work(Base, LoggerMixin):
             elif isinstance(value, date):
                 try:
                     return datetime(
-                        value.year, value.month, value.day, tzinfo=pytz.UTC
+                        value.year, value.month, value.day, tzinfo=timezone.utc
                     ).timestamp()
                 except (ValueError, OverflowError) as e:
                     cls.logger().error(

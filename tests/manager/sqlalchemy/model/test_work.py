@@ -5,7 +5,6 @@ from unittest.mock import MagicMock, patch
 
 import opensearchpy
 import pytest
-import pytz
 from psycopg2.extras import NumericRange
 from pytest import LogCaptureFixture
 from sqlalchemy import select
@@ -1011,7 +1010,7 @@ class TestWork:
         assert (
             edition.published
             == datetime.datetime.fromtimestamp(
-                search_doc["published"], tz=pytz.UTC
+                search_doc["published"], tz=datetime.UTC
             ).date()
         )
         assert "nonfiction" == search_doc["fiction"]
@@ -1206,11 +1205,12 @@ class TestWork:
         doc = work.to_search_document()
         # This should no longer error out
         assert (
-            doc["published"] == datetime.datetime(1, 1, 1, tzinfo=pytz.UTC).timestamp()
+            doc["published"]
+            == datetime.datetime(1, 1, 1, tzinfo=datetime.UTC).timestamp()
         )
         assert (
             doc["licensepools"][0]["availability_time"]
-            == datetime.datetime(1, 1, 1, tzinfo=pytz.UTC).timestamp()
+            == datetime.datetime(1, 1, 1, tzinfo=datetime.UTC).timestamp()
         )
 
     def test_to_search_doc_no_id(self, db: DatabaseTransactionFixture):

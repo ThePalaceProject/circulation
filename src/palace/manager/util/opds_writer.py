@@ -1,7 +1,6 @@
 import datetime
 from typing import Any, cast
 
-import pytz
 from lxml import builder, etree
 from lxml.etree import _Element
 
@@ -89,7 +88,7 @@ class AtomFeed:
         if isinstance(date, datetime.datetime) and date.tzinfo is not None:
             # Convert to UTC to make the formatting easier.
             fmt = cls.TIME_FORMAT_UTC
-            date = date.astimezone(pytz.UTC)
+            date = date.astimezone(datetime.UTC)
         else:
             fmt = cls.TIME_FORMAT_NAIVE
 

@@ -6,11 +6,10 @@ import tempfile
 import uuid
 from collections import defaultdict
 from collections.abc import Iterable
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from io import TextIOWrapper
 from typing import Any, Protocol
 
-import pytz
 from celery import shared_task
 from sqlalchemy import and_, distinct, false, select, true, union
 from sqlalchemy.orm import Query, Session, joinedload
@@ -44,7 +43,7 @@ def sum_playtime_entries(task: Task) -> None:
     # Reap older processed entries
     older_than, _ = previous_months(number_of_months=1)
     older_than_ts = datetime(
-        older_than.year, older_than.month, older_than.day, tzinfo=pytz.UTC
+        older_than.year, older_than.month, older_than.day, tzinfo=timezone.utc
     )
 
     with task.transaction() as tx:
