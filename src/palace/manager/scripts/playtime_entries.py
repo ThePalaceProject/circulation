@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import argparse
 from collections.abc import Sequence
-from datetime import datetime, timezone
+from datetime import datetime
 
 import dateutil.parser
 from sqlalchemy.orm import Session
@@ -13,7 +13,7 @@ from palace.manager.celery.tasks.playtime_entries import (
     sum_playtime_entries,
 )
 from palace.manager.scripts.base import Script
-from palace.manager.util.datetime_helpers import previous_months
+from palace.manager.util.datetime_helpers import previous_months, to_utc
 
 
 class PlaytimeEntriesSummationScript(Script):
@@ -60,8 +60,8 @@ class PlaytimeEntriesReportsScript(Script):
         cmd_args: Sequence[str | None] | None = None,
     ) -> argparse.Namespace:
         parsed = super().parse_command_line(_db, cmd_args)
-        utc_start = parsed.start.replace(tzinfo=timezone.utc)
-        utc_until = parsed.until.replace(tzinfo=timezone.utc)
+        utc_start = to_utc(parsed.start)
+        utc_until = to_utc(parsed.until)
         if utc_start >= utc_until:
             cls.arg_parser(_db).error(
                 f"start date ({utc_start.strftime(REPORT_DATE_FORMAT)}) must be before "

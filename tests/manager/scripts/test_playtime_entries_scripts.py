@@ -74,6 +74,14 @@ class TestPlaytimeEntriesReportScript:
                 "4150-04-30",
                 datetime_utc(4150, 4, 30, 0, 0, 0),
             ],
+            # Timezone-aware datetime inputs should be converted to UTC.
+            [
+                datetime(2020, 1, 31, 0, 0, 0),
+                "2025-01-01T00:00:00-05:00",
+                datetime_utc(2025, 1, 1, 5, 0, 0),
+                "2025-01-02T00:00:00-05:00",
+                datetime_utc(2025, 1, 2, 5, 0, 0),
+            ],
         ],
     )
     def test_parse_command_line(
