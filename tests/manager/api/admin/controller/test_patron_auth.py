@@ -1211,3 +1211,323 @@ class TestLiveSIP2RuleValidation:
         assert isinstance(response, Response)
         assert response.status_code in (200, 201)
         mock_fetch.assert_not_called()
+
+
+class TestProcessValidatePatronBlockingRule:
+    """Tests for PatronAuthServicesController.process_validate_patron_blocking_rule.
+
+    Each test creates the necessary integrations via process_patron_auth_services()
+    (the standard admin POST) to ensure a realistic DB state, then calls the
+    validate endpoint directly.
+    """
+
+    _FETCH_PATCH = (
+        "palace.manager.api.admin.controller.patron_auth_services"
+        ".SIP2AuthenticationProvider.fetch_live_rule_validation_values"
+    )
+
+    _SIP2_BASE_ARGS = [
+        ("url", "sip.example.com"),
+        ("test_identifier", "patron1"),
+        ("test_password", "pass"),
+        ("identifier_keyboard", Keyboards.DEFAULT.value),
+        ("password_keyboard", Keyboards.DEFAULT.value),
+        ("identifier_barcode_format", BarcodeFormats.CODABAR.value),
+    ]
+
+    def _create_sip2_integration(
+        self,
+        controller_fixture: ControllerFixture,
+        flask_app_fixture: FlaskAppFixture,
+        db: DatabaseTransactionFixture,
+        service_name: str = "validate-test-sip2",
+    ) -> int:
+        """Create a SIP2 integration without patron blocking rules and return its ID.
+
+        No rules means library_integration_validation skips the live SIP2 call,
+        so no mock is needed during creation.
+        """
+        library_data = {
+            "short_name": db.default_library().short_name,
+            "library_identifier_restriction_type": LibraryIdentifierRestriction.NONE.value,
+            "library_identifier_field": "barcode",
+        }
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
+            flask.request.form = ImmutableMultiDict(
+                [
+                    ("name", service_name),
+                    (
+                        "protocol",
+                        controller_fixture.get_protocol(SIP2AuthenticationProvider),
+                    ),
+                    ("libraries", json.dumps([library_data])),
+                ]
+                + self._SIP2_BASE_ARGS
+            )
+            response = controller_fixture.controller.process_patron_auth_services()
+        assert isinstance(response, Response)
+        return int(response.get_data(as_text=True))
+
+    def _create_simple_integration(
+        self,
+        controller_fixture: ControllerFixture,
+        flask_app_fixture: FlaskAppFixture,
+        service_name: str = "validate-test-simple",
+    ) -> int:
+        """Create a SimpleAuthenticationProvider integration (no library) and return its ID."""
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
+            flask.request.form = ImmutableMultiDict(
+                [
+                    ("name", service_name),
+                    (
+                        "protocol",
+                        controller_fixture.get_protocol(SimpleAuthenticationProvider),
+                    ),
+                    ("test_identifier", "user"),
+                    ("test_password", "pass"),
+                    ("identifier_keyboard", Keyboards.DEFAULT.value),
+                    ("password_keyboard", Keyboards.DEFAULT.value),
+                    ("identifier_barcode_format", BarcodeFormats.CODABAR.value),
+                    ("libraries", json.dumps([])),
+                ]
+            )
+            response = controller_fixture.controller.process_patron_auth_services()
+        assert isinstance(response, Response)
+        return int(response.get_data(as_text=True))
+
+    def _post_validate(
+        self,
+        controller_fixture: ControllerFixture,
+        flask_app_fixture: FlaskAppFixture,
+        service_id: int | str,
+        rule: str = "{fines} > 10.0",
+    ) -> ProblemDetail | Response:
+        """Call process_validate_patron_blocking_rule with the given service_id and rule."""
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
+            flask.request.form = ImmutableMultiDict(
+                [
+                    ("service_id", str(service_id)),
+                    ("rule", rule),
+                ]
+            )
+            return controller_fixture.controller.process_validate_patron_blocking_rule()
+
+    def test_missing_service_id_returns_error(
+        self,
+        controller_fixture: ControllerFixture,
+        flask_app_fixture: FlaskAppFixture,
+    ) -> None:
+        """Omitting service_id returns INVALID_CONFIGURATION_OPTION."""
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
+            flask.request.form = ImmutableMultiDict([("rule", "{fines} > 0")])
+            response = (
+                controller_fixture.controller.process_validate_patron_blocking_rule()
+            )
+        assert isinstance(response, ProblemDetail)
+        assert response.uri == INVALID_CONFIGURATION_OPTION.uri
+
+    def test_service_not_found_returns_error(
+        self,
+        controller_fixture: ControllerFixture,
+        flask_app_fixture: FlaskAppFixture,
+    ) -> None:
+        """A nonexistent service_id returns an error that tells the user to save first."""
+        response = self._post_validate(
+            controller_fixture, flask_app_fixture, 999999, "{fines} > 0"
+        )
+        assert isinstance(response, ProblemDetail)
+        assert response.uri == INVALID_CONFIGURATION_OPTION.uri
+        assert response.detail is not None
+        assert "save" in response.detail.lower()
+
+    def test_non_sip2_service_returns_error(
+        self,
+        controller_fixture: ControllerFixture,
+        flask_app_fixture: FlaskAppFixture,
+    ) -> None:
+        """A non-SIP2 service returns an unsupported-protocol error."""
+        simple_id = self._create_simple_integration(
+            controller_fixture, flask_app_fixture
+        )
+        response = self._post_validate(
+            controller_fixture, flask_app_fixture, simple_id, "{fines} > 0"
+        )
+        assert isinstance(response, ProblemDetail)
+        assert response.uri == INVALID_CONFIGURATION_OPTION.uri
+        assert response.detail is not None
+        assert "SIP2" in response.detail
+
+    def test_valid_rule_returns_200(
+        self,
+        controller_fixture: ControllerFixture,
+        flask_app_fixture: FlaskAppFixture,
+        db: DatabaseTransactionFixture,
+        monkeypatch: MonkeyPatch,
+    ) -> None:
+        """A valid rule that evaluates to True against live values returns 200."""
+        monkeypatch.setattr(
+            self._FETCH_PATCH,
+            MagicMock(return_value={"fines": 2.50, "patron_type": "adult"}),
+        )
+        service_id = self._create_sip2_integration(
+            controller_fixture, flask_app_fixture, db
+        )
+        response = self._post_validate(
+            controller_fixture, flask_app_fixture, service_id, "{fines} > 1.0"
+        )
+        assert isinstance(response, Response)
+        assert response.status_code == 200
+
+    def test_rule_with_false_result_still_returns_200(
+        self,
+        controller_fixture: ControllerFixture,
+        flask_app_fixture: FlaskAppFixture,
+        db: DatabaseTransactionFixture,
+        monkeypatch: MonkeyPatch,
+    ) -> None:
+        """A valid rule that evaluates to False against live values still returns 200.
+
+        The boolean result (blocked vs. not blocked) is intentionally ignored —
+        only parse/eval success or failure is reported.
+        """
+        monkeypatch.setattr(
+            self._FETCH_PATCH,
+            MagicMock(return_value={"fines": 0.0, "patron_type": "adult"}),
+        )
+        service_id = self._create_sip2_integration(
+            controller_fixture, flask_app_fixture, db
+        )
+        response = self._post_validate(
+            controller_fixture, flask_app_fixture, service_id, "{fines} > 100.0"
+        )
+        assert isinstance(response, Response)
+        assert response.status_code == 200
+
+    def test_invalid_expression_returns_error(
+        self,
+        controller_fixture: ControllerFixture,
+        flask_app_fixture: FlaskAppFixture,
+        db: DatabaseTransactionFixture,
+        monkeypatch: MonkeyPatch,
+    ) -> None:
+        """An unparseable rule expression returns INVALID_CONFIGURATION_OPTION."""
+        monkeypatch.setattr(
+            self._FETCH_PATCH,
+            MagicMock(return_value={"fines": 0.0}),
+        )
+        service_id = self._create_sip2_integration(
+            controller_fixture, flask_app_fixture, db
+        )
+        response = self._post_validate(
+            controller_fixture,
+            flask_app_fixture,
+            service_id,
+            "not a valid python expression !!!",
+        )
+        assert isinstance(response, ProblemDetail)
+        assert response.uri == INVALID_CONFIGURATION_OPTION.uri
+
+    def test_missing_placeholder_returns_error(
+        self,
+        controller_fixture: ControllerFixture,
+        flask_app_fixture: FlaskAppFixture,
+        db: DatabaseTransactionFixture,
+        monkeypatch: MonkeyPatch,
+    ) -> None:
+        """A rule referencing a placeholder not in the live values returns an error
+        whose detail mentions the missing field name."""
+        monkeypatch.setattr(
+            self._FETCH_PATCH,
+            MagicMock(return_value={"fines": 0.0, "patron_type": "adult"}),
+        )
+        service_id = self._create_sip2_integration(
+            controller_fixture, flask_app_fixture, db
+        )
+        response = self._post_validate(
+            controller_fixture,
+            flask_app_fixture,
+            service_id,
+            "{unknown_field} == 'expected'",
+        )
+        assert isinstance(response, ProblemDetail)
+        assert response.uri == INVALID_CONFIGURATION_OPTION.uri
+        assert response.detail is not None
+        assert "unknown_field" in response.detail
+
+    def test_sip2_connection_error_propagates(
+        self,
+        controller_fixture: ControllerFixture,
+        flask_app_fixture: FlaskAppFixture,
+        db: DatabaseTransactionFixture,
+        monkeypatch: MonkeyPatch,
+    ) -> None:
+        """When fetch_live_rule_validation_values raises ProblemDetailException
+        (e.g. network error), that ProblemDetail is returned to the caller."""
+        from palace.manager.util.problem_detail import ProblemDetailException
+
+        monkeypatch.setattr(
+            self._FETCH_PATCH,
+            MagicMock(
+                side_effect=ProblemDetailException(
+                    INVALID_CONFIGURATION_OPTION.detailed(
+                        "Could not contact the SIP2 server: Connection refused"
+                    )
+                )
+            ),
+        )
+        service_id = self._create_sip2_integration(
+            controller_fixture, flask_app_fixture, db
+        )
+        response = self._post_validate(
+            controller_fixture, flask_app_fixture, service_id, "{fines} > 0"
+        )
+        assert isinstance(response, ProblemDetail)
+        assert response.uri == INVALID_CONFIGURATION_OPTION.uri
+        assert response.detail is not None
+        assert "SIP2" in response.detail
+
+    def test_missing_test_identifier_propagates(
+        self,
+        controller_fixture: ControllerFixture,
+        flask_app_fixture: FlaskAppFixture,
+        db: DatabaseTransactionFixture,
+        monkeypatch: MonkeyPatch,
+    ) -> None:
+        """When fetch_live_rule_validation_values raises because no test_identifier
+        is configured, the error is propagated as INVALID_CONFIGURATION_OPTION."""
+        from palace.manager.util.problem_detail import ProblemDetailException
+
+        monkeypatch.setattr(
+            self._FETCH_PATCH,
+            MagicMock(
+                side_effect=ProblemDetailException(
+                    INVALID_CONFIGURATION_OPTION.detailed(
+                        "A test identifier must be configured on this authentication "
+                        "service before patron blocking rules can be validated."
+                    )
+                )
+            ),
+        )
+        service_id = self._create_sip2_integration(
+            controller_fixture, flask_app_fixture, db
+        )
+        response = self._post_validate(
+            controller_fixture, flask_app_fixture, service_id, "{fines} > 0"
+        )
+        assert isinstance(response, ProblemDetail)
+        assert response.uri == INVALID_CONFIGURATION_OPTION.uri
+
+    def test_requires_system_admin(
+        self,
+        controller_fixture: ControllerFixture,
+        flask_app_fixture: FlaskAppFixture,
+    ) -> None:
+        """A request without system-admin privileges raises AdminNotAuthorized."""
+        from palace.manager.api.admin.exceptions import AdminNotAuthorized
+
+        with flask_app_fixture.test_request_context("/", method="POST"):
+            flask.request.form = ImmutableMultiDict(
+                [("service_id", "1"), ("rule", "{fines} > 0")]
+            )
+            with pytest.raises(AdminNotAuthorized):
+                controller_fixture.controller.process_validate_patron_blocking_rule()

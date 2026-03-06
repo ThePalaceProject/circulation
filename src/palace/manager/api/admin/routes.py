@@ -495,6 +495,16 @@ def patron_auth_self_tests(identifier):
     )
 
 
+@app.route("/admin/patron_auth_service_validate_patron_blocking_rule", methods=["POST"])
+@returns_json_or_response_or_problem_detail
+@requires_admin
+@requires_csrf_token
+def patron_auth_service_validate_patron_blocking_rule():
+    return (
+        app.manager.admin_patron_auth_services_controller.process_validate_patron_blocking_rule()
+    )
+
+
 @library_route("/admin/manage_patrons", methods=["POST"])
 @has_library
 @returns_json_or_response_or_problem_detail
