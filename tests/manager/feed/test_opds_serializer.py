@@ -419,6 +419,11 @@ class TestOPDSSerializer:
         assert (
             "{http://palaceproject.io/terms/properties/}default" not in sort_link.attrib
         )
+        # V1 does not emit facetGroupType for sort facets.
+        assert (
+            "{http://librarysimplified.org/terms/}facetGroupType"
+            not in sort_link.attrib
+        )
 
         facet_link = facet_links[1]
         assert facet_link.attrib["title"] == "text1"

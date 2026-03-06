@@ -541,6 +541,9 @@ class OPDS1Version1Serializer(BaseOPDS1Serializer):
     def _serialize_facet_links(self, feed: FeedData) -> list[etree._Element]:
         links: list[etree._Element] = []
         for facet_data in feed.facets:
+            # V1 serializes sort facets as regular facets without a group type.
+            if facet_data.type == AtomFeed.PALACE_REL_SORT:
+                facet_data = replace(facet_data, type=None)
             for link in facet_data.links:
                 links.append(self._serialize_facet_link(link, facet_data))
         return links
