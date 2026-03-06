@@ -7,11 +7,11 @@ from palace.manager.core.classifier import Classifier
 from palace.manager.feed.acquisition import OPDSAcquisitionFeed
 from palace.manager.feed.admin.suppressed import (
     AdminSuppressedFeed,
-    FacetGroup,
     SuppressedFacets,
     VisibilityFilter,
 )
 from palace.manager.feed.annotator.admin.suppressed import AdminSuppressedAnnotator
+from palace.manager.feed.facets.base import FacetGroup
 from palace.manager.feed.types import Category, FeedData, Link
 from palace.manager.search.pagination import Pagination
 from palace.manager.sqlalchemy.model.classification import Genre
@@ -721,6 +721,78 @@ class TestAdminSuppressedFeed:
         for name in expected_not_in:
             assert works[name].id not in work_ids, f"{name} should not be in results"
 
+    def test_facet_url(
+        self,
+        db: DatabaseTransactionFixture,
+        patch_url_for: PatchedUrlFor,
+    ):
+        """facet_url generates a suppressed feed URL with facet query params."""
+        library = db.default_library()
+        annotator = AdminSuppressedAnnotator(None, library)
+
+        # Default facets (visibility=ALL) produce no extra query params.
+        default_facets = SuppressedFacets()
+        url = annotator.facet_url(default_facets)
+        assert "visibility" not in url
+        assert "suppressed" in url
+
+        # Non-default facets include the visibility parameter.
+        filtered_facets = SuppressedFacets(
+            visibility=VisibilityFilter.MANUALLY_SUPPRESSED
+        )
+        url = annotator.facet_url(filtered_facets)
+        assert "visibility=manually-suppressed" in url
+
+    def test_facet_links(
+        self,
+        db: DatabaseTransactionFixture,
+        patch_url_for: PatchedUrlFor,
+    ):
+        """facet_links builds FacetData with correct titles and active states."""
+        library = db.default_library()
+        annotator = AdminSuppressedAnnotator(None, library)
+        facets = SuppressedFacets(visibility=VisibilityFilter.POLICY_FILTERED)
+
+        result = AdminSuppressedFeed.facet_links(annotator, facets)
+
+        assert len(result) == 1
+        facet_data = result[0]
+        assert facet_data.group == SuppressedFacets.VISIBILITY_FACET_GROUP_NAME
+
+        # One link per VisibilityFilter member.
+        assert len(facet_data.links) == len(VisibilityFilter)
+
+        titles = {link.title for link in facet_data.links}
+        assert titles == {"All", "Manually Hidden", "Policy Filtered"}
+
+        # Only the active filter should be marked active.
+        for link in facet_data.links:
+            if link.title == "Policy Filtered":
+                assert link.active_facet is True
+                assert link.default_facet is False
+            elif link.title == "All":
+                assert link.active_facet is False
+                assert link.default_facet is True
+            else:
+                assert link.active_facet is False
+                assert link.default_facet is False
+
+    def test_facet_links_skips_empty_urls(
+        self,
+        db: DatabaseTransactionFixture,
+        patch_url_for: PatchedUrlFor,
+    ):
+        """facet_links returns an empty list when facet_url returns empty strings."""
+        library = db.default_library()
+        annotator = AdminSuppressedAnnotator(None, library)
+        # Override facet_url to return an empty string for all facets.
+        annotator.facet_url = lambda facets: ""
+
+        facets = SuppressedFacets()
+        result = AdminSuppressedFeed.facet_links(annotator, facets)
+
+        assert result == []
+
     def test_suppressed_feed_facet_links(
         self,
         db: DatabaseTransactionFixture,
@@ -1144,7 +1216,7 @@ class TestSuppressedFacets:
         assert new_facets.visibility == VisibilityFilter.MANUALLY_SUPPRESSED
 
     def test_facet_groups(self):
-        """facet_groups yields FacetGroup objects."""
+        """facet_groups yields standard FacetGroup objects."""
         facets = SuppressedFacets(visibility=VisibilityFilter.MANUALLY_SUPPRESSED)
         groups = list(facets.facet_groups)
 
@@ -1153,19 +1225,17 @@ class TestSuppressedFacets:
 
         # Check 'all' facet
         all_group = groups[0]
-        assert all_group.group_name == "Visibility"
-        assert all_group.filter_value == VisibilityFilter.ALL
+        assert all_group.group == "Visibility"
+        assert all_group.value == VisibilityFilter.ALL
+        assert isinstance(all_group.facets, SuppressedFacets)
         assert all_group.facets.visibility == VisibilityFilter.ALL
         assert all_group.is_selected is False
         assert all_group.is_default is True
 
         # Check 'manually-suppressed' facet (should be selected)
         manually_suppressed_group = groups[1]
-        assert manually_suppressed_group.group_name == "Visibility"
-        assert (
-            manually_suppressed_group.filter_value
-            == VisibilityFilter.MANUALLY_SUPPRESSED
-        )
+        assert manually_suppressed_group.group == "Visibility"
+        assert manually_suppressed_group.value == VisibilityFilter.MANUALLY_SUPPRESSED
         assert (
             manually_suppressed_group.facets.visibility
             == VisibilityFilter.MANUALLY_SUPPRESSED
@@ -1175,8 +1245,8 @@ class TestSuppressedFacets:
 
         # Check 'policy-filtered' facet
         policy_filtered_group = groups[2]
-        assert policy_filtered_group.group_name == "Visibility"
-        assert policy_filtered_group.filter_value == VisibilityFilter.POLICY_FILTERED
+        assert policy_filtered_group.group == "Visibility"
+        assert policy_filtered_group.value == VisibilityFilter.POLICY_FILTERED
         assert (
             policy_filtered_group.facets.visibility == VisibilityFilter.POLICY_FILTERED
         )
