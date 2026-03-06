@@ -300,7 +300,6 @@ class TestOPDSSerializer:
     def test_serialize_sort_link_v2(self):
         sort_link_input = Link(
             href="test",
-            rel="test_rel",
             title="text1",
             active_facet=True,
             default_facet=True,
@@ -308,7 +307,6 @@ class TestOPDSSerializer:
 
         facet_link = Link(
             href="test",
-            rel="test_rel",
             title="text1",
             active_facet=True,
             default_facet=True,
@@ -341,7 +339,6 @@ class TestOPDSSerializer:
     def test_serialize_non_sort_facetgroup_link_v2(self):
         facet_link_data = Link(
             href="test",
-            rel="test_rel",
             title="text1",
             active_facet=True,
             default_facet=True,
@@ -349,7 +346,6 @@ class TestOPDSSerializer:
 
         sort_link = Link(
             href="test",
-            rel="test_rel",
             title="text1",
             active_facet=True,
             default_facet=True,
@@ -385,7 +381,6 @@ class TestOPDSSerializer:
     def test_serialize_facets_and_sort_links_v1(self):
         sort_link_input = Link(
             href="test",
-            rel="test_rel",
             title="text1",
             active_facet=True,
             default_facet=True,
@@ -393,7 +388,6 @@ class TestOPDSSerializer:
 
         facet_link_data = Link(
             href="test",
-            rel="test_rel",
             title="text1",
             active_facet=True,
             default_facet=True,

@@ -156,9 +156,6 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
         """
         # Use a dict to group links by facet group name while preserving order.
         groups: dict[str, FacetData] = {}
-        sort_group_name = str(
-            Facets.GROUP_DISPLAY_TITLES.get(FacetConstants.ORDER_FACET_GROUP_NAME, "")
-        )
 
         for facet_group in facets.facet_groups:
             url = annotator.facet_url(facet_group.facets)
@@ -182,7 +179,7 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
             str_group_title = str(group_title)
             if str_group_title not in groups:
                 facet_type: str | None = None
-                if str_group_title == sort_group_name:
+                if facet_group.group == FacetConstants.ORDER_FACET_GROUP_NAME:
                     facet_type = AtomFeed.PALACE_REL_SORT
                 groups[str_group_title] = FacetData(
                     group=str_group_title, type=facet_type

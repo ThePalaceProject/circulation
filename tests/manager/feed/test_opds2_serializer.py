@@ -390,14 +390,12 @@ class TestOPDS2Serializer:
             links=[
                 Link(
                     href="test",
-                    rel="test_rel",
                     title="text1",
                     active_facet=True,
                     default_facet=True,
                 ),
                 Link(
                     href="test_sort2",
-                    rel="test_rel2",
                     title="text_sort2",
                 ),
             ],
@@ -410,14 +408,12 @@ class TestOPDS2Serializer:
                 Link(
                     href="test2",
                     title="text2",
-                    rel="test_2_rel",
                     active_facet=True,
                     default_facet=True,
                 ),
                 Link(
                     href="test3",
                     title="text3",
-                    rel="test_3_rel",
                 ),
             ],
         )
