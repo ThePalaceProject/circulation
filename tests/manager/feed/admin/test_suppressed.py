@@ -786,7 +786,7 @@ class TestAdminSuppressedFeed:
         library = db.default_library()
         annotator = AdminSuppressedAnnotator(None, library)
         # Override facet_url to return an empty string for all facets.
-        annotator.facet_url = lambda facets: ""  # type: ignore[assignment]
+        annotator.facet_url = lambda facets: ""
 
         facets = SuppressedFacets()
         result = AdminSuppressedFeed.facet_links(annotator, facets)
