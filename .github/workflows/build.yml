@@ -109,7 +109,7 @@ jobs:
       # Build the base image, only if needed, and load it into the local registry.
       - name: Build base image
         id: build-baseimage
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: ./docker/Dockerfile.baseimage
@@ -147,7 +147,7 @@ jobs:
           echo tag="$tag" >> "$GITHUB_OUTPUT"
 
       - name: Build common image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: ./docker/Dockerfile
@@ -168,7 +168,7 @@ jobs:
 
       - name: Build circ-webapp image
         id: build-webapp
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: ./docker/Dockerfile
@@ -191,7 +191,7 @@ jobs:
 
       - name: Build circ-scripts image
         id: build-scripts
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: ./docker/Dockerfile
@@ -214,7 +214,7 @@ jobs:
 
       - name: Build circ-exec image
         id: build-exec
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: ./docker/Dockerfile
