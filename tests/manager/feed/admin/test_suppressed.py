@@ -721,6 +721,78 @@ class TestAdminSuppressedFeed:
         for name in expected_not_in:
             assert works[name].id not in work_ids, f"{name} should not be in results"
 
+    def test_facet_url(
+        self,
+        db: DatabaseTransactionFixture,
+        patch_url_for: PatchedUrlFor,
+    ):
+        """facet_url generates a suppressed feed URL with facet query params."""
+        library = db.default_library()
+        annotator = AdminSuppressedAnnotator(None, library)
+
+        # Default facets (visibility=ALL) produce no extra query params.
+        default_facets = SuppressedFacets()
+        url = annotator.facet_url(default_facets)
+        assert "visibility" not in url
+        assert "suppressed" in url
+
+        # Non-default facets include the visibility parameter.
+        filtered_facets = SuppressedFacets(
+            visibility=VisibilityFilter.MANUALLY_SUPPRESSED
+        )
+        url = annotator.facet_url(filtered_facets)
+        assert "visibility=manually-suppressed" in url
+
+    def test_facet_links(
+        self,
+        db: DatabaseTransactionFixture,
+        patch_url_for: PatchedUrlFor,
+    ):
+        """facet_links builds FacetData with correct titles and active states."""
+        library = db.default_library()
+        annotator = AdminSuppressedAnnotator(None, library)
+        facets = SuppressedFacets(visibility=VisibilityFilter.POLICY_FILTERED)
+
+        result = AdminSuppressedFeed.facet_links(annotator, facets)
+
+        assert len(result) == 1
+        facet_data = result[0]
+        assert facet_data.group == SuppressedFacets.VISIBILITY_FACET_GROUP_NAME
+
+        # One link per VisibilityFilter member.
+        assert len(facet_data.links) == len(VisibilityFilter)
+
+        titles = {link.title for link in facet_data.links}
+        assert titles == {"All", "Manually Hidden", "Policy Filtered"}
+
+        # Only the active filter should be marked active.
+        for link in facet_data.links:
+            if link.title == "Policy Filtered":
+                assert link.active_facet is True
+                assert link.default_facet is False
+            elif link.title == "All":
+                assert link.active_facet is False
+                assert link.default_facet is True
+            else:
+                assert link.active_facet is False
+                assert link.default_facet is False
+
+    def test_facet_links_skips_empty_urls(
+        self,
+        db: DatabaseTransactionFixture,
+        patch_url_for: PatchedUrlFor,
+    ):
+        """facet_links returns an empty list when facet_url returns empty strings."""
+        library = db.default_library()
+        annotator = AdminSuppressedAnnotator(None, library)
+        # Override facet_url to return an empty string for all facets.
+        annotator.facet_url = lambda facets: ""  # type: ignore[assignment]
+
+        facets = SuppressedFacets()
+        result = AdminSuppressedFeed.facet_links(annotator, facets)
+
+        assert result == []
+
     def test_suppressed_feed_facet_links(
         self,
         db: DatabaseTransactionFixture,
