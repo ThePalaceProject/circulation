@@ -8,6 +8,7 @@ from typing import IO, BinaryIO
 from unittest.mock import MagicMock, create_autospec
 
 import pytest
+from openpyxl import load_workbook
 from pytest import LogCaptureFixture
 from sqlalchemy import literal, select
 from sqlalchemy.sql import Select
@@ -15,6 +16,7 @@ from sqlalchemy.sql import Select
 from palace.manager.celery.tasks.generate_inventory_and_hold_reports import (
     _inventory_report_row_transform,
     generate_csv_report,
+    generate_excel_report,
     generate_inventory_and_hold_reports,
     generate_report,
     holds_with_no_licenses_report_query,
@@ -107,6 +109,121 @@ def test_generate_csv_report_quotes_numeric_identifiers(
     # The numeric identifier must be quoted to avoid scientific notation in Excel
     assert '"9780306406157"' in csv_content
     assert "9.78" not in csv_content  # No scientific notation
+
+
+def test_generate_excel_report(
+    db: DatabaseTransactionFixture,
+    caplog: LogCaptureFixture,
+):
+    """Verify Excel report generation produces valid xlsx with correct structure."""
+    caplog.set_level(LogLevel.debug)
+
+    library = db.library(short_name="test_library")
+    query = select(Library.id, Library.short_name)
+
+    excel_file = io.BytesIO()
+    excel_file.name = "test_report.xlsx"
+
+    generate_excel_report(
+        db=db.session,
+        excel_file=excel_file,
+        sql_params={},
+        query=query,
+    )
+
+    excel_file.seek(0)
+    wb = load_workbook(io.BytesIO(excel_file.getvalue()))
+    ws = wb.active
+    assert ws is not None
+    assert ws.cell(row=1, column=1).value == "id"
+    assert ws.cell(row=1, column=2).value == "short_name"
+    assert ws.cell(row=2, column=2).value == "test_library"
+
+    assert "generate_excel_report" in caplog.text
+
+
+def test_generate_excel_report_string_format_for_identifiers(
+    db: DatabaseTransactionFixture,
+):
+    """identifier and isbn columns use Excel text format (@) to prevent number conversion."""
+    query = select(
+        literal(9780306406157).label("identifier"),
+        literal("Title").label("title"),
+        literal(9780123456789).label("isbn"),
+    )
+
+    excel_file = io.BytesIO()
+    excel_file.name = "test_report.xlsx"
+
+    generate_excel_report(
+        db=db.session,
+        excel_file=excel_file,
+        sql_params={},
+        query=query,
+        columns_to_stringify={"identifier", "isbn"},
+    )
+
+    excel_file.seek(0)
+    wb = load_workbook(io.BytesIO(excel_file.getvalue()))
+    ws = wb.active
+    assert ws is not None
+    headers = [ws.cell(row=1, column=c).value for c in range(1, ws.max_column + 1)]
+    identifier_col = headers.index("identifier") + 1
+    isbn_col = headers.index("isbn") + 1
+    assert ws.cell(row=2, column=identifier_col).value == "9780306406157"
+    assert ws.cell(row=2, column=isbn_col).value == "9780123456789"
+    assert ws.cell(row=2, column=identifier_col).number_format == "@"
+    assert ws.cell(row=2, column=isbn_col).number_format == "@"
+
+
+def test_generate_excel_report_target_age_as_string(
+    db: DatabaseTransactionFixture,
+    services_fixture: ServicesFixture,
+):
+    """target_age is stored as text in Excel to prevent date interpretation."""
+    library = db.library(short_name="test_library")
+    collection = create_test_opds_collection(
+        "Target Age Collection", "TargetAgeSource", db, library
+    )
+    ds = collection.data_source
+    assert ds is not None
+
+    work = db.work(
+        data_source_name=ds.name, collection=collection, with_license_pool=True
+    )
+    work.target_age = tuple_to_numericrange((5, 8))
+
+    integration_ids = [collection.integration_configuration.id]
+    sql_params = {
+        "library_id": library.id,
+        "integration_ids": tuple(integration_ids),
+        "filtered_audiences": (),
+        "filtered_audiences_enabled": False,
+        "filtered_genres": (),
+        "filtered_genres_enabled": False,
+    }
+
+    excel_file = io.BytesIO()
+    excel_file.name = "test_target_age_report.xlsx"
+
+    generate_excel_report(
+        db=db.session,
+        excel_file=excel_file,
+        sql_params=sql_params,
+        query=inventory_report_query(),
+        row_transform=_inventory_report_row_transform,
+        columns_to_stringify={"identifier", "isbn", "target_age"},
+    )
+
+    excel_file.seek(0)
+    wb = load_workbook(io.BytesIO(excel_file.getvalue()))
+    ws = wb.active
+    assert ws is not None
+    headers = [ws.cell(row=1, column=c).value for c in range(1, ws.max_column + 1)]
+    target_age_col = headers.index("target_age") + 1
+    # target_age "5-8" must be text format so Excel doesn't interpret as date
+    assert ws.cell(row=2, column=target_age_col).value == "5-8"
+    assert ws.cell(row=2, column=target_age_col).number_format == "@"
 
 
 def test_generate_csv_report_quotes_target_age(
@@ -559,11 +676,38 @@ def test_generate_report(
     try:
         with zipfile.ZipFile(reports_zip, mode="r") as archive:
             entry_list = archive.namelist()
-            assert len(entry_list) == 3
+            assert len(entry_list) == 6  # 3 CSV + 3 Excel reports
+
+            def find_entry(contains: str, extension: str) -> str:
+                matches = [
+                    e for e in entry_list if contains in e and e.endswith(extension)
+                ]
+                assert (
+                    len(matches) == 1
+                ), f"Expected 1 entry containing '{contains}' with {extension}, got {matches}"
+                return matches[0]
+
+            inventory_activity_csv = find_entry(
+                "palace-inventory-activity-report-for-library", ".csv"
+            )
+            inventory_csv = find_entry("palace-inventory-report-for-library", ".csv")
+            holds_csv = find_entry(
+                "palace-holds-with-no-licenses-report-for-library", ".csv"
+            )
+            inventory_activity_xlsx = find_entry(
+                "palace-inventory-activity-report-for-library", ".xlsx"
+            )
+            inventory_xlsx = find_entry("palace-inventory-report-for-library", ".xlsx")
+            holds_xlsx = find_entry(
+                "palace-holds-with-no-licenses-report-for-library", ".xlsx"
+            )
+
             with (
-                archive.open(entry_list[0]) as inventory_activity_report_zip_entry,
-                archive.open(entry_list[1]) as inventory_report_zip_entry,
-                archive.open(entry_list[2]) as holds_with_no_licenses_report_zip_entry,
+                archive.open(
+                    inventory_activity_csv
+                ) as inventory_activity_report_zip_entry,
+                archive.open(inventory_csv) as inventory_report_zip_entry,
+                archive.open(holds_csv) as holds_with_no_licenses_report_zip_entry,
             ):
                 # >> Report: inventory report.
                 assert inventory_report_zip_entry
@@ -579,13 +723,13 @@ def test_generate_report(
                     r
                     for r in inventory_report_csv
                     if r["identifier"] == identifier_value
-                    and r["license_status"] == str(LicenseStatus.available)
+                    and r["license_status"] == LicenseStatus.available.value
                 )
                 book1_unavailable_row = next(
                     r
                     for r in inventory_report_csv
                     if r["identifier"] == identifier_value
-                    and r["license_status"] == str(LicenseStatus.unavailable)
+                    and r["license_status"] == LicenseStatus.unavailable.value
                 )
                 book2_row = next(
                     r
@@ -602,8 +746,9 @@ def test_generate_report(
                 assert book1_available_row["item_status"] == str(
                     LicensePoolStatus.ACTIVE
                 )
-                assert book1_available_row["license_status"] == str(
-                    LicenseStatus.available
+                assert (
+                    book1_available_row["license_status"]
+                    == LicenseStatus.available.value
                 )
                 assert book1_available_row["title"] == title
                 assert book1_available_row["author"] == author
@@ -644,8 +789,9 @@ def test_generate_report(
                 assert book1_unavailable_row["item_status"] == str(
                     LicensePoolStatus.ACTIVE
                 )
-                assert book1_unavailable_row["license_status"] == str(
-                    LicenseStatus.unavailable
+                assert (
+                    book1_unavailable_row["license_status"]
+                    == LicenseStatus.unavailable.value
                 )
                 assert book1_unavailable_row["title"] == title
                 assert book1_unavailable_row["author"] == author
@@ -669,7 +815,7 @@ def test_generate_report(
 
                 # >> Book 2 - No Licenses Owned (but has 1 available license)
                 assert book2_row["item_status"] == str(LicensePoolStatus.ACTIVE)
-                assert book2_row["license_status"] == str(LicenseStatus.available)
+                assert book2_row["license_status"] == LicenseStatus.available.value
                 assert book2_row["title"] == title2
                 assert book2_row["author"] == author2
                 assert book2_row["identifier"] == identifier2_value
@@ -836,6 +982,69 @@ def test_generate_report(
                 assert row["collection_name"] == collection_name
                 assert int(row["shared_active_hold_count"]) == 0
                 assert int(row["library_active_hold_count"]) == 1
+
+            # >> Verify Excel reports exist and have correct string formatting
+            with (
+                archive.open(inventory_xlsx) as inv_xlsx_stream,
+                archive.open(inventory_activity_xlsx) as act_xlsx_stream,
+                archive.open(holds_xlsx) as holds_xlsx_stream,
+            ):
+                inv_wb = load_workbook(io.BytesIO(inv_xlsx_stream.read()))
+                inv_ws = inv_wb.active
+                assert inv_ws is not None
+                headers = [
+                    inv_ws.cell(row=1, column=c).value
+                    for c in range(1, inv_ws.max_column + 1)
+                ]
+                identifier_col = headers.index("identifier") + 1
+                isbn_col = headers.index("isbn") + 1
+                target_age_col = headers.index("target_age") + 1
+                for row_idx in range(2, inv_ws.max_row + 1):
+                    for col in (identifier_col, isbn_col, target_age_col):
+                        cell = inv_ws.cell(row=row_idx, column=col)
+                        assert cell.number_format == "@", (
+                            f"Cell {inv_ws.cell(row=1, column=col).value} at row {row_idx} "
+                            f"should have text format (@), got {cell.number_format!r}"
+                        )
+                # Verify data matches CSV - find book 1 row by identifier
+                excel_identifiers = [
+                    inv_ws.cell(row=r, column=identifier_col).value
+                    for r in range(2, inv_ws.max_row + 1)
+                ]
+                assert identifier_value in excel_identifiers
+                book1_row = excel_identifiers.index(identifier_value) + 2
+                assert inv_ws.cell(row=book1_row, column=isbn_col).value == isbn
+                assert (
+                    inv_ws.cell(row=book1_row, column=target_age_col).value == "12-14"
+                )
+
+                act_wb = load_workbook(io.BytesIO(act_xlsx_stream.read()))
+                act_ws = act_wb.active
+                assert act_ws is not None
+                act_headers = [
+                    act_ws.cell(row=1, column=c).value
+                    for c in range(1, act_ws.max_column + 1)
+                ]
+                act_identifier_col = act_headers.index("identifier") + 1
+                act_isbn_col = act_headers.index("isbn") + 1
+                for row_idx in range(2, act_ws.max_row + 1):
+                    for col in (act_identifier_col, act_isbn_col):
+                        cell = act_ws.cell(row=row_idx, column=col)
+                        assert cell.number_format == "@"
+
+                holds_wb = load_workbook(io.BytesIO(holds_xlsx_stream.read()))
+                holds_ws = holds_wb.active
+                assert holds_ws is not None
+                holds_headers = [
+                    holds_ws.cell(row=1, column=c).value
+                    for c in range(1, holds_ws.max_column + 1)
+                ]
+                holds_identifier_col = holds_headers.index("identifier") + 1
+                holds_isbn_col = holds_headers.index("isbn") + 1
+                for row_idx in range(2, holds_ws.max_row + 1):
+                    for col in (holds_identifier_col, holds_isbn_col):
+                        cell = holds_ws.cell(row=row_idx, column=col)
+                        assert cell.number_format == "@"
     finally:
         os.remove(reports_zip)
 

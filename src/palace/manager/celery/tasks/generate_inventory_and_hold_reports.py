@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import enum
 import logging
 import tempfile
 import uuid
@@ -11,6 +12,9 @@ from pathlib import Path
 from typing import IO, Any
 
 from celery import shared_task
+from openpyxl import Workbook
+from openpyxl.cell import WriteOnlyCell
+from openpyxl.styles.numbers import FORMAT_TEXT
 from sqlalchemy import (
     bindparam,
     case,
@@ -133,7 +137,6 @@ def generate_report(
         )
     ]
 
-    # generate inventory report csv file
     settings = library.settings
     sql_params: dict[str, Any] = {
         "library_id": library.id,
@@ -144,6 +147,12 @@ def generate_report(
         "filtered_genres_enabled": bool(settings.filtered_genres),
     }
 
+    base_names = {
+        "inventory_activity": f"palace-inventory-activity-report-for-library-{file_name_modifier}",
+        "inventory": f"palace-inventory-report-for-library-{file_name_modifier}",
+        "holds": f"palace-holds-with-no-licenses-report-for-library-{file_name_modifier}",
+    }
+
     with tempfile.NamedTemporaryFile() as report_zip:
         zip_path = Path(report_zip.name)
 
@@ -151,27 +160,33 @@ def generate_report(
             create_temp_file() as inventory_report_file,
             create_temp_file() as inventory_activity_report_file,
             create_temp_file() as holds_with_no_licenses_report_file,
+            create_temp_excel_file() as inventory_report_excel_file,
+            create_temp_excel_file() as inventory_activity_report_excel_file,
+            create_temp_excel_file() as holds_with_no_licenses_report_excel_file,
         ):
-            generate_csv_report(
+            _write_reports(
                 session,
                 csv_file=inventory_report_file,
+                excel_file=inventory_report_excel_file,
                 sql_params=sql_params,
                 query=inventory_report_query(),
                 row_transform=_inventory_report_row_transform,
                 columns_to_stringify={"identifier", "isbn", "target_age"},
             )
 
-            generate_csv_report(
+            _write_reports(
                 session,
                 csv_file=inventory_activity_report_file,
+                excel_file=inventory_activity_report_excel_file,
                 sql_params=sql_params,
                 query=palace_inventory_activity_report_query(),
                 columns_to_stringify={"identifier", "isbn"},
             )
 
-            generate_csv_report(
+            _write_reports(
                 session,
                 csv_file=holds_with_no_licenses_report_file,
+                excel_file=holds_with_no_licenses_report_excel_file,
                 sql_params=sql_params,
                 query=holds_with_no_licenses_report_query(),
                 columns_to_stringify={"identifier", "isbn"},
@@ -180,15 +195,27 @@ def generate_report(
             with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as archive:
                 archive.write(
                     filename=inventory_activity_report_file.name,
-                    arcname=f"palace-inventory-activity-report-for-library-{file_name_modifier}.csv",
+                    arcname=f"{base_names['inventory_activity']}.csv",
                 )
                 archive.write(
                     filename=inventory_report_file.name,
-                    arcname=f"palace-inventory-report-for-library-{file_name_modifier}.csv",
+                    arcname=f"{base_names['inventory']}.csv",
                 )
                 archive.write(
                     filename=holds_with_no_licenses_report_file.name,
-                    arcname=f"palace-holds-with-no-licenses-report-for-library-{file_name_modifier}.csv",
+                    arcname=f"{base_names['holds']}.csv",
+                )
+                archive.write(
+                    filename=inventory_activity_report_excel_file.name,
+                    arcname=f"{base_names['inventory_activity']}.xlsx",
+                )
+                archive.write(
+                    filename=inventory_report_excel_file.name,
+                    arcname=f"{base_names['inventory']}.xlsx",
+                )
+                archive.write(
+                    filename=holds_with_no_licenses_report_excel_file.name,
+                    arcname=f"{base_names['holds']}.xlsx",
                 )
 
             uid = uuid_encode(uuid.uuid4())
@@ -222,17 +249,121 @@ def create_temp_file() -> IO[str]:
     return tempfile.NamedTemporaryFile("w", encoding="utf-8")
 
 
-def _to_csv_cell(value: Any) -> str:
-    """Convert a value to a string for CSV output.
+def create_temp_excel_file() -> IO[bytes]:
+    """Create a temporary file for Excel output (binary mode)."""
+    return tempfile.NamedTemporaryFile("wb", suffix=".xlsx")
 
-    Ensures numeric-looking values (e.g. ISBNs) are written as plain strings
-    so they get quoted and avoid scientific notation in spreadsheet apps.
+
+def _stringify_cell_value(value: Any) -> str:
+    """Force a value to a plain string for report output.
+
+    Collapses whole-number floats to int form (e.g. 9780306406157.0 → "9780306406157")
+    to avoid scientific notation in spreadsheet apps.
     """
     if value is None:
         return ""
     if isinstance(value, float) and value == int(value):
         return str(int(value))
     return str(value)
+
+
+def _cell_value(key: str, value: Any, stringify_cols: frozenset[str]) -> Any:
+    """Convert a cell value for report output (shared by CSV and Excel writers).
+
+    For columns in stringify_cols, forces the value to a plain string.
+    Enum values are converted using their .value attribute.
+    Timezone-aware datetimes are formatted as strings for Excel compatibility.
+    """
+    if key in stringify_cols:
+        return _stringify_cell_value(value)
+    if value is None:
+        return ""
+    if isinstance(value, enum.Enum):
+        return str(value.value)
+    if isinstance(value, datetime) and value.tzinfo is not None:
+        return value.strftime("%Y-%m-%d %H:%M:%S.%f")
+    return value
+
+
+def _write_csv_rows(
+    csv_file: IO[str],
+    keys: list[str],
+    rows: list[dict[str, Any]],
+    stringify_cols: frozenset[str],
+) -> None:
+    writer = csv.writer(csv_file, delimiter=",", quoting=csv.QUOTE_NONNUMERIC)
+    writer.writerow(keys)
+    for row in rows:
+        writer.writerow(
+            [_cell_value(key, row.get(key, ""), stringify_cols) for key in keys]
+        )
+    csv_file.flush()
+
+
+def _write_excel_rows(
+    excel_file: IO[bytes],
+    keys: list[str],
+    rows: list[dict[str, Any]],
+    stringify_cols: frozenset[str],
+) -> None:
+    wb = Workbook(write_only=True)
+    ws = wb.create_sheet()
+
+    header_row = []
+    for key in keys:
+        cell = WriteOnlyCell(ws, value=key)
+        cell.number_format = FORMAT_TEXT
+        header_row.append(cell)
+    ws.append(header_row)
+
+    for row in rows:
+        data_row = []
+        for key in keys:
+            value = _cell_value(key, row.get(key, ""), stringify_cols)
+            cell = WriteOnlyCell(ws, value=value)
+            if key in stringify_cols:
+                cell.number_format = FORMAT_TEXT
+            data_row.append(cell)
+        ws.append(data_row)
+
+    wb.save(excel_file)
+    excel_file.flush()
+
+
+def _fetch_report_rows(
+    db: Session,
+    query: Select,
+    sql_params: dict[str, Any],
+    row_transform: Callable[[dict[str, Any]], dict[str, Any]] | None,
+) -> tuple[list[str], list[dict[str, Any]]]:
+    """Execute a query and buffer all rows as dicts, applying an optional transform."""
+    result = db.execute(query, sql_params)
+    keys = list(result.keys())
+    if row_transform is None:
+        rows = [dict(row._mapping) for row in result]
+    else:
+        rows = [row_transform(dict(row._mapping)) for row in result]
+    return keys, rows
+
+
+def _write_reports(
+    db: Session,
+    csv_file: IO[str],
+    excel_file: IO[bytes],
+    sql_params: dict[str, Any],
+    query: Select,
+    row_transform: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+    columns_to_stringify: Iterable[str] | None = None,
+) -> None:
+    """Execute a query once and write both CSV and Excel from the buffered results.
+
+    This avoids running the same heavy query twice and guarantees that the CSV
+    and Excel files contain identical data from the same query execution.
+    """
+    stringify_cols = frozenset(columns_to_stringify or ())
+    keys, rows = _fetch_report_rows(db, query, sql_params, row_transform)
+    _write_csv_rows(csv_file, keys, rows, stringify_cols)
+    _write_excel_rows(excel_file, keys, rows, stringify_cols)
 
 
 def generate_csv_report(
@@ -250,32 +381,40 @@ def generate_csv_report(
         prevent spreadsheet apps from misinterpreting them.
     """
     stringify_cols = frozenset(columns_to_stringify or ())
-
-    def cell_value(key: str, value: Any) -> Any:
-        if key in stringify_cols:
-            return _to_csv_cell(value)
-        return value if value is not None else ""
-
     with elapsed_time_logging(
         log_method=log.debug,
         message_prefix=f"generate_csv_report - {csv_file.name}",
         skip_start=True,
     ):
-        writer = csv.writer(csv_file, delimiter=",", quoting=csv.QUOTE_NONNUMERIC)
-        rows = db.execute(query, sql_params)
-        keys = list(rows.keys())
-        writer.writerow(keys)
-        if row_transform is None:
-            for row in rows:
-                writer.writerow([cell_value(key, row._mapping[key]) for key in keys])
-        else:
-            for row in rows:
-                transformed_row = row_transform(dict(row._mapping))
-                writer.writerow(
-                    [cell_value(key, transformed_row.get(key, "")) for key in keys]
-                )
-        csv_file.flush()
+        keys, rows = _fetch_report_rows(db, query, sql_params, row_transform)
+        _write_csv_rows(csv_file, keys, rows, stringify_cols)
         log.debug(f"report written to {csv_file.name}")
+
+
+def generate_excel_report(
+    db: Session,
+    excel_file: IO[bytes],
+    sql_params: dict[str, Any],
+    query: Select,
+    row_transform: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+    columns_to_stringify: Iterable[str] | None = None,
+) -> None:
+    """Generate an Excel report from a database query.
+
+    :param columns_to_stringify: Column names whose values must be stored as
+        text in Excel. Uses number_format='@' so Excel displays identifier,
+        isbn, and target_age as strings rather than converting to numbers or
+        dates.
+    """
+    stringify_cols = frozenset(columns_to_stringify or ())
+    with elapsed_time_logging(
+        log_method=log.debug,
+        message_prefix=f"generate_excel_report - {excel_file.name}",
+        skip_start=True,
+    ):
+        keys, rows = _fetch_report_rows(db, query, sql_params, row_transform)
+        _write_excel_rows(excel_file, keys, rows, stringify_cols)
+        log.debug(f"report written to {excel_file.name}")
 
 
 def _inventory_report_row_transform(row: dict[str, Any]) -> dict[str, Any]:
