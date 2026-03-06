@@ -28,6 +28,7 @@ from palace.manager.integration.settings import (
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.util import MoneyUtility
+from palace.manager.util.network_diagnostics import run_network_diagnostics
 from palace.manager.util.problem_detail import ProblemDetail
 
 
@@ -455,6 +456,8 @@ class SIP2AuthenticationProvider(
         return results
 
     def _run_self_tests(self, _db: Session) -> Generator[SelfTestResult]:
+        yield from run_network_diagnostics(self.server, self.port)
+
         def makeConnection(sip: SIPClient) -> socket.socket | None:
             sip.connect()
             return sip.connection

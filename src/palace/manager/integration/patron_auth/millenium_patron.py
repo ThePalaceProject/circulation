@@ -1,5 +1,6 @@
 import datetime
 import re
+from collections.abc import Generator
 from enum import Enum
 from typing import Annotated
 from urllib import parse
@@ -7,6 +8,7 @@ from urllib import parse
 import dateutil
 from flask_babel import lazy_gettext as _
 from lxml import etree
+from sqlalchemy.orm import Session
 
 from palace.manager.api.authentication.base import PatronAuthResult, PatronData
 from palace.manager.api.authentication.basic import (
@@ -15,6 +17,7 @@ from palace.manager.api.authentication.basic import (
     BasicAuthProviderSettings,
 )
 from palace.manager.api.authentication.patron_debug import HasPatronDebug
+from palace.manager.core.selftest import SelfTestResult
 from palace.manager.integration.settings import (
     FormFieldType,
     FormMetadata,
@@ -24,6 +27,7 @@ from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.util import MoneyUtility
 from palace.manager.util.datetime_helpers import datetime_utc, utc_now
 from palace.manager.util.http.http import HTTP
+from palace.manager.util.network_diagnostics import run_network_diagnostics_url
 from palace.manager.util.pydantic import HttpUrl
 
 
@@ -200,6 +204,12 @@ class MilleniumPatronAPI(
         self.block_types = settings.block_types
         self.field_used_as_patron_identifier = settings.field_used_as_patron_identifier
         self.use_post = settings.use_post_requests
+
+    def _run_self_tests(self, _db: Session) -> Generator[SelfTestResult]:
+        """Run network diagnostics then delegate to inherited self-tests."""
+        yield from run_network_diagnostics_url(self.root)
+
+        yield from super()._run_self_tests(_db)
 
     # Begin implementation of BasicAuthenticationProvider abstract
     # methods.

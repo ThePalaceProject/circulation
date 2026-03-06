@@ -1,14 +1,16 @@
-from collections.abc import Callable
+from collections.abc import Callable, Generator
 from datetime import date, timedelta
 from decimal import Decimal
 from functools import partial
 from typing import Any
+from unittest.mock import MagicMock
 from urllib import parse
 
 import pytest
 
 from palace.manager.api.authentication.base import PatronData
 from palace.manager.api.authentication.basic import Keyboards
+from palace.manager.core.selftest import SelfTestResult
 from palace.manager.integration.patron_auth.millenium_patron import (
     AuthenticationMode,
     MilleniumPatronAPI,
@@ -1006,3 +1008,39 @@ class TestMilleniumPatronAPI:
         assert family_result.success is True
         assert isinstance(family_result.details, dict)
         assert family_result.details["personal_name"] == "SHELDON, ALICE"
+
+    def test_run_self_tests(
+        self,
+        create_provider: Callable[..., MockAPI],
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        """Network diagnostics are yielded before the inherited self-tests."""
+
+        def mock_diagnostics_url(url: str) -> Generator[SelfTestResult]:
+            dns = SelfTestResult("DNS Resolution (mock)")
+            dns.success = True
+            dns.end = dns.start
+            yield dns
+            tcp = SelfTestResult("TCP Connection (mock:80)")
+            tcp.success = True
+            tcp.end = tcp.start
+            yield tcp
+
+        monkeypatch.setattr(
+            "palace.manager.integration.patron_auth.millenium_patron.run_network_diagnostics_url",
+            mock_diagnostics_url,
+        )
+
+        api = create_provider()
+
+        mock_session = MagicMock()
+        results = list(api._run_self_tests(mock_session))
+
+        # First two results are network diagnostics.
+        assert results[0].name == "DNS Resolution (mock)"
+        assert results[0].success is True
+        assert results[1].name == "TCP Connection (mock:80)"
+        assert results[1].success is True
+
+        # Then the inherited self-tests from BasicAuthenticationProvider.
+        assert results[2].name == "Authenticating test patron"
