@@ -15,6 +15,7 @@ from sqlalchemy.sql import Select
 
 from palace.manager.celery.tasks.generate_inventory_and_hold_reports import (
     _inventory_report_row_transform,
+    _stringify_cell_value,
     generate_csv_report,
     generate_excel_report,
     generate_inventory_and_hold_reports,
@@ -109,6 +110,14 @@ def test_generate_csv_report_quotes_numeric_identifiers(
     # The numeric identifier must be quoted to avoid scientific notation in Excel
     assert '"9780306406157"' in csv_content
     assert "9.78" not in csv_content  # No scientific notation
+
+
+def test_stringify_cell_value():
+    """_stringify_cell_value handles None, whole-number floats, and plain strings."""
+    assert _stringify_cell_value(None) == ""
+    assert _stringify_cell_value(9780306406157.0) == "9780306406157"
+    assert _stringify_cell_value("hello") == "hello"
+    assert _stringify_cell_value(42) == "42"
 
 
 def test_generate_excel_report(
