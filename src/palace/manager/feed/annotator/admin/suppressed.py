@@ -4,6 +4,7 @@ from typing import Any
 from palace.manager.api.circulation.dispatcher import CirculationApiDispatcher
 from palace.manager.feed.annotator.circulation import LibraryAnnotator
 from palace.manager.feed.annotator.verbose import VerboseAnnotator
+from palace.manager.feed.facets.base import BaseFacets
 from palace.manager.feed.types import Category, FeedData, Link, WorkEntry
 from palace.manager.search.pagination import Pagination
 from palace.manager.sqlalchemy.model.datasource import DataSource
@@ -134,6 +135,10 @@ class AdminSuppressedAnnotator(LibraryAnnotator):
                 rel="edit",
             )
         )
+
+    def facet_url(self, facets: BaseFacets) -> str:
+        """Generate the suppressed feed URL for the given facet settings."""
+        return self.suppressed_url(**dict(facets.items()))
 
     def suppressed_url(self, **kwargs: str) -> str:
         return self.url_for(

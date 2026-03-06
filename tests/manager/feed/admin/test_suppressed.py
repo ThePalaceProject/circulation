@@ -7,11 +7,11 @@ from palace.manager.core.classifier import Classifier
 from palace.manager.feed.acquisition import OPDSAcquisitionFeed
 from palace.manager.feed.admin.suppressed import (
     AdminSuppressedFeed,
-    FacetGroup,
     SuppressedFacets,
     VisibilityFilter,
 )
 from palace.manager.feed.annotator.admin.suppressed import AdminSuppressedAnnotator
+from palace.manager.feed.facets.base import FacetGroup
 from palace.manager.feed.types import Category, FeedData, Link
 from palace.manager.search.pagination import Pagination
 from palace.manager.sqlalchemy.model.classification import Genre
@@ -1144,7 +1144,7 @@ class TestSuppressedFacets:
         assert new_facets.visibility == VisibilityFilter.MANUALLY_SUPPRESSED
 
     def test_facet_groups(self):
-        """facet_groups yields FacetGroup objects."""
+        """facet_groups yields standard FacetGroup objects."""
         facets = SuppressedFacets(visibility=VisibilityFilter.MANUALLY_SUPPRESSED)
         groups = list(facets.facet_groups)
 
@@ -1153,19 +1153,17 @@ class TestSuppressedFacets:
 
         # Check 'all' facet
         all_group = groups[0]
-        assert all_group.group_name == "Visibility"
-        assert all_group.filter_value == VisibilityFilter.ALL
+        assert all_group.group == "Visibility"
+        assert all_group.value == VisibilityFilter.ALL
+        assert isinstance(all_group.facets, SuppressedFacets)
         assert all_group.facets.visibility == VisibilityFilter.ALL
         assert all_group.is_selected is False
         assert all_group.is_default is True
 
         # Check 'manually-suppressed' facet (should be selected)
         manually_suppressed_group = groups[1]
-        assert manually_suppressed_group.group_name == "Visibility"
-        assert (
-            manually_suppressed_group.filter_value
-            == VisibilityFilter.MANUALLY_SUPPRESSED
-        )
+        assert manually_suppressed_group.group == "Visibility"
+        assert manually_suppressed_group.value == VisibilityFilter.MANUALLY_SUPPRESSED
         assert (
             manually_suppressed_group.facets.visibility
             == VisibilityFilter.MANUALLY_SUPPRESSED
@@ -1175,8 +1173,8 @@ class TestSuppressedFacets:
 
         # Check 'policy-filtered' facet
         policy_filtered_group = groups[2]
-        assert policy_filtered_group.group_name == "Visibility"
-        assert policy_filtered_group.filter_value == VisibilityFilter.POLICY_FILTERED
+        assert policy_filtered_group.group == "Visibility"
+        assert policy_filtered_group.value == VisibilityFilter.POLICY_FILTERED
         assert (
             policy_filtered_group.facets.visibility == VisibilityFilter.POLICY_FILTERED
         )
