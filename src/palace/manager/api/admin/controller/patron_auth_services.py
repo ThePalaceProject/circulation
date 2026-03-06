@@ -163,6 +163,59 @@ class PatronAuthServicesController(
         for integration, _ in libraries:
             self.library_integration_validation(integration)
 
+    def process_validate_patron_blocking_rule(self) -> Response | ProblemDetail:
+        """Validate a single patron blocking rule expression against live ILS data.
+
+        Loads the saved service by ID, makes a live patron_information() call
+        using the configured test_identifier/test_password via
+        fetch_live_rule_validation_values, then evaluates the rule expression
+        against the real values returned.  Only parse/eval success or failure
+        is reported — the boolean result (blocked vs. not blocked) is discarded.
+        """
+        self.require_system_admin()
+        try:
+            form_data = flask.request.form
+            service_id_str = form_data.get("service_id", "")
+            rule_expr = form_data.get("rule", "")
+
+            if not service_id_str:
+                return INVALID_CONFIGURATION_OPTION.detailed("service_id is required.")
+
+            try:
+                service_id = int(service_id_str)
+            except ValueError:
+                return INVALID_CONFIGURATION_OPTION.detailed(
+                    "service_id must be an integer."
+                )
+
+            integration = self._db.get(IntegrationConfiguration, service_id)
+            if integration is None:
+                return INVALID_CONFIGURATION_OPTION.detailed(
+                    "Patron auth service not found. Save the service before validating rules."
+                )
+
+            protocol_class = self.get_protocol_class(integration.protocol)
+            if not issubclass(protocol_class, SIP2AuthenticationProvider):
+                return INVALID_CONFIGURATION_OPTION.detailed(
+                    "Rule validation is only supported for SIP2 authentication services."
+                )
+
+            settings = protocol_class.settings_load(integration)
+            # fetch_live_rule_validation_values raises ProblemDetailException on
+            # missing test_identifier, network error, or SIP2 error response.
+            live_values = protocol_class.fetch_live_rule_validation_values(settings)
+
+            evaluator = make_evaluator()
+            try:
+                validate_rule_expression(rule_expr, live_values, evaluator)
+            except RuleValidationError as exc:
+                return INVALID_CONFIGURATION_OPTION.detailed(exc.message)
+
+        except ProblemDetailException as e:
+            return e.problem_detail
+
+        return Response(status=200)
+
     def process_delete(self, service_id: int) -> Response | ProblemDetail:
         self.require_system_admin()
         try:
