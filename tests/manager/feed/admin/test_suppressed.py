@@ -27,8 +27,11 @@ from tests.manager.feed.conftest import PatchedUrlFor
 class TestAdminSuppressedFeed:
     @classmethod
     def links(cls, feed: FeedData, rel: str) -> list[Link]:
-        all_links = feed.links + feed.facet_links + feed.breadcrumbs
-        links = sorted(all_links, key=lambda x: (x.rel, getattr(x, "title", None)))
+        facet_links = [link for facet_data in feed.facets for link in facet_data.links]
+        all_links = feed.links + facet_links + feed.breadcrumbs
+        links = sorted(
+            all_links, key=lambda x: (x.rel or "", getattr(x, "title", None) or "")
+        )
         return cls.links_for_rel(links, rel)
 
     @staticmethod
@@ -741,7 +744,8 @@ class TestAdminSuppressedFeed:
             annotator=annotator,
         )
 
-        facet_links = feed._feed.facet_links
+        assert len(feed._feed.facets) == 1
+        facet_links = feed._feed.facets[0].links
 
         # Should have 3 facet links (All, Manually Hidden, Policy Filtered)
         assert len(facet_links) == 3
@@ -763,7 +767,8 @@ class TestAdminSuppressedFeed:
             facets=facets,
         )
 
-        facet_links = feed._feed.facet_links
+        assert len(feed._feed.facets) == 1
+        facet_links = feed._feed.facets[0].links
 
         # 'Manually Hidden' should now be active
         manually_hidden_link = next(

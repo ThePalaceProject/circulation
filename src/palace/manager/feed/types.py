@@ -37,11 +37,6 @@ class LinkKwargs(TypedDict):
     type: NotRequired[LinkType]
     title: NotRequired[str]
     role: NotRequired[str]
-    facet_group: NotRequired[str]
-    facet_group_type: NotRequired[str]
-    active_facet: NotRequired[bool]
-    default_facet: NotRequired[bool]
-    active_sort: NotRequired[bool]
 
 
 @dataclass(slots=True)
@@ -64,12 +59,25 @@ class Link:
     role: str | None = None
     title: str | None = None
 
-    # Facet-related attributes
-    facet_group: str | None = None
-    facet_group_type: str | None = None
+    # Facet-related attributes (group context comes from FacetData)
     active_facet: bool = False
     default_facet: bool = False
-    active_sort: bool = False
+
+
+@dataclass(slots=True)
+class FacetData:
+    """A facet group containing multiple selectable options.
+
+    :param group: Display name of the facet group (e.g., "Sort by", "Availability").
+    :param type: Optional type URI that classifies this facet group. Used by OPDS2
+        to set ``@type`` on the facet metadata, allowing clients to distinguish
+        sort facets, entrypoint facets, and filter facets.
+    :param links: The individual facet option links within this group.
+    """
+
+    group: str
+    type: str | None = None
+    links: list[Link] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -264,7 +272,7 @@ class FeedData:
 
     links: list[Link] = field(default_factory=list)
     breadcrumbs: list[Link] = field(default_factory=list)
-    facet_links: list[Link] = field(default_factory=list)
+    facets: list[FacetData] = field(default_factory=list)
     entries: list[WorkEntry] = field(default_factory=list)
     entry_groups: list[FeedEntryGroup] = field(default_factory=list)
     data_entries: list[DataEntry] = field(default_factory=list)

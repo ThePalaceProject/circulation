@@ -66,6 +66,3 @@ class LinkProperties(BaseOpdsModel):
     palace_default: bool | None = Field(
         None, alias="http://palaceproject.io/terms/properties/default"
     )
-    palace_active_sort: bool | None = Field(
-        None, alias="http://palaceproject.io/terms/properties/active-sort"
-    )

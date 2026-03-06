@@ -180,7 +180,6 @@ class LinkProperties(rwpm.LinkProperties, palace.LinkProperties):
         drop_if_falsy(self, "actions", data)
         drop_if_falsy(self, "licensor", data)
         drop_if_falsy(self, "palace_default", data)
-        drop_if_falsy(self, "palace_active_sort", data)
 
         return data
 
