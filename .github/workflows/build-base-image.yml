@@ -70,7 +70,7 @@ jobs:
 
       - name: Generate tags for image
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ steps.ghcr-repo.outputs.baseimage }}
           # Generate tags for the image
