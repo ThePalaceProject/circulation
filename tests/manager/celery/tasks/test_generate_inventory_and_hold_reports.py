@@ -167,9 +167,9 @@ def test_generate_excel_report_string_format_for_identifiers(
     wb = load_workbook(io.BytesIO(excel_file.getvalue()))
     ws = wb.active
     assert ws is not None
-    # Headers at row 1
-    identifier_col = 1
-    isbn_col = 3
+    headers = [ws.cell(row=1, column=c).value for c in range(1, ws.max_column + 1)]
+    identifier_col = headers.index("identifier") + 1
+    isbn_col = headers.index("isbn") + 1
     assert ws.cell(row=2, column=identifier_col).value == "9780306406157"
     assert ws.cell(row=2, column=isbn_col).value == "9780123456789"
     assert ws.cell(row=2, column=identifier_col).number_format == "@"
@@ -723,13 +723,13 @@ def test_generate_report(
                     r
                     for r in inventory_report_csv
                     if r["identifier"] == identifier_value
-                    and r["license_status"] == str(LicenseStatus.available)
+                    and r["license_status"] == LicenseStatus.available.value
                 )
                 book1_unavailable_row = next(
                     r
                     for r in inventory_report_csv
                     if r["identifier"] == identifier_value
-                    and r["license_status"] == str(LicenseStatus.unavailable)
+                    and r["license_status"] == LicenseStatus.unavailable.value
                 )
                 book2_row = next(
                     r
@@ -746,8 +746,9 @@ def test_generate_report(
                 assert book1_available_row["item_status"] == str(
                     LicensePoolStatus.ACTIVE
                 )
-                assert book1_available_row["license_status"] == str(
-                    LicenseStatus.available
+                assert (
+                    book1_available_row["license_status"]
+                    == LicenseStatus.available.value
                 )
                 assert book1_available_row["title"] == title
                 assert book1_available_row["author"] == author
@@ -788,8 +789,9 @@ def test_generate_report(
                 assert book1_unavailable_row["item_status"] == str(
                     LicensePoolStatus.ACTIVE
                 )
-                assert book1_unavailable_row["license_status"] == str(
-                    LicenseStatus.unavailable
+                assert (
+                    book1_unavailable_row["license_status"]
+                    == LicenseStatus.unavailable.value
                 )
                 assert book1_unavailable_row["title"] == title
                 assert book1_unavailable_row["author"] == author
@@ -813,7 +815,7 @@ def test_generate_report(
 
                 # >> Book 2 - No Licenses Owned (but has 1 available license)
                 assert book2_row["item_status"] == str(LicensePoolStatus.ACTIVE)
-                assert book2_row["license_status"] == str(LicenseStatus.available)
+                assert book2_row["license_status"] == LicenseStatus.available.value
                 assert book2_row["title"] == title2
                 assert book2_row["author"] == author2
                 assert book2_row["identifier"] == identifier2_value
