@@ -1,5 +1,4 @@
 import datetime
-from unittest.mock import patch
 
 from lxml import etree
 
@@ -322,10 +321,11 @@ class TestOPDSSerializer:
             FacetData(group="non_sort_group", links=[facet_link]),
         ]
 
-        sort_links = serializer._serialize_sort_links(feed)
-        # we expect only the sort link to be returned.
-        assert len(sort_links) == 1
-        sort_link = sort_links[0]
+        facet_links = serializer._serialize_facet_links(feed)
+
+        # Sort link comes first, then the non-sort facet link.
+        assert len(facet_links) == 2
+        sort_link = facet_links[0]
         assert sort_link.attrib["title"] == "text1"
         assert sort_link.attrib["href"] == "test"
         assert sort_link.attrib["rel"] == PALACE_REL_SORT
@@ -337,11 +337,6 @@ class TestOPDSSerializer:
             sort_link.attrib["{http://palaceproject.io/terms/properties/}default"]
             == "true"
         )
-
-        with patch.object(serializer, "_serialize_sort_links") as serialize_sort_links:
-
-            serializer.serialize_feed(feed)
-            assert serialize_sort_links.call_count == 1
 
     def test_serialize_non_sort_facetgroup_link_v2(self):
         facet_link_data = Link(
@@ -367,8 +362,8 @@ class TestOPDSSerializer:
         ]
         facet_links = serializer._serialize_facet_links(feed)
 
-        # we expect only the non sort facet links to be returned.
-        assert len(facet_links) == 1
+        # Both the non-sort facet and the sort link are returned.
+        assert len(facet_links) == 2
         facet_link = facet_links[0]
         assert facet_link.attrib["title"] == "text1"
         assert facet_link.attrib["href"] == "test"
@@ -411,11 +406,7 @@ class TestOPDSSerializer:
             FacetData(group="non_sort_group", links=[facet_link_data]),
         ]
 
-        sort_links = serializer._serialize_sort_links(feed)
-        # we expect no sort links to be returned
-        assert len(sort_links) == 0
-
-        # and two facet links:
+        # V1 treats all facets uniformly -- two facet links:
         facet_links = serializer._serialize_facet_links(feed)
         assert len(facet_links) == 2
 

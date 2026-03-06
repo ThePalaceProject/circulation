@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import abc
 import datetime
+from dataclasses import replace
 from functools import partial
 from typing import Any, cast
 
@@ -58,9 +59,8 @@ V1_ATTRIBUTE_MAPPING = {
 V2_ATTRIBUTE_MAPPING = {
     **V1_ATTRIBUTE_MAPPING,
     "default_facet": f"{{{OPDSFeed.PALACE_PROPS_NS}}}default",
+    "active_sort": f"{{{OPDSFeed.PALACE_PROPS_NS}}}active-sort",
 }
-
-ACTIVE_SORT_ATTR = f"{{{OPDSFeed.PALACE_PROPS_NS}}}active-sort"
 
 AUTHOR_MAPPING = {
     "name": f"{{{OPDSFeed.ATOM_NS}}}name",
@@ -164,9 +164,6 @@ class BaseOPDS1Serializer(SerializerInterface[etree._Element], OPDSFeed, abc.ABC
             serialized.append(breadcrumbs)
 
         for link in self._serialize_facet_links(feed):
-            serialized.append(link)
-
-        for link in self._serialize_sort_links(feed):
             serialized.append(link)
 
         etree.indent(serialized)
@@ -401,15 +398,7 @@ class BaseOPDS1Serializer(SerializerInterface[etree._Element], OPDSFeed, abc.ABC
     ) -> etree._Element:
         """Serialize a facet link, adding group-level attributes from FacetData."""
         # Facet links carry the OPDS facet rel in their serialized form.
-        facet_link = Link(
-            href=link.href,
-            title=link.title,
-            type=link.type,
-            rel=LinkRelations.FACET_REL,
-            active_facet=link.active_facet,
-            default_facet=link.default_facet,
-        )
-        element = self._serialize_link(facet_link)
+        element = self._serialize_link(replace(link, rel=LinkRelations.FACET_REL))
         attr_mapping = self._get_attribute_mapping()
         element.set(
             self._attr_name("facet_group", mapping=attr_mapping),
@@ -542,10 +531,6 @@ class BaseOPDS1Serializer(SerializerInterface[etree._Element], OPDSFeed, abc.ABC
     def _serialize_facet_links(self, feed: FeedData) -> list[etree._Element]:
         """Serialize facet links from the feed data."""
 
-    @abc.abstractmethod
-    def _serialize_sort_links(self, feed: FeedData) -> list[etree._Element]:
-        """This method implements serialization of the sort links from the feed data."""
-
 
 class OPDS1Version1Serializer(BaseOPDS1Serializer):
     """An OPDS 1.2 Atom feed serializer.  This version of the feed implements sort links as
@@ -559,11 +544,6 @@ class OPDS1Version1Serializer(BaseOPDS1Serializer):
             for link in facet_data.links:
                 links.append(self._serialize_facet_link(link, facet_data))
         return links
-
-    def _serialize_sort_links(self, feed: FeedData) -> list[etree._Element]:
-        # Since this version of the serializer implements sort links as facets,
-        # we return an empty list of sort links.
-        return []
 
     def _get_attribute_mapping(self) -> dict[str, str]:
         return V1_ATTRIBUTE_MAPPING
@@ -584,32 +564,23 @@ class OPDS1Version2Serializer(BaseOPDS1Serializer):
         links: list[etree._Element] = []
         for facet_data in feed.facets:
             if facet_data.type == AtomFeed.PALACE_REL_SORT:
-                continue
-            for link in facet_data.links:
-                links.append(self._serialize_facet_link(link, facet_data))
-        return links
-
-    def _serialize_sort_links(self, feed: FeedData) -> list[etree._Element]:
-        # Serializes sort facet groups using palace extensions.
-        links: list[etree._Element] = []
-        for facet_data in feed.facets:
-            if facet_data.type == AtomFeed.PALACE_REL_SORT:
                 for link in facet_data.links:
-                    links.append(self._serialize_sort_link(link))
+                    # Clear active_facet so _serialize_link doesn't emit
+                    # the OPDS activeFacet attribute; sort links use the
+                    # Palace-specific active-sort attribute instead.
+                    sort_link = replace(
+                        link,
+                        rel=AtomFeed.PALACE_REL_SORT,
+                        active_facet=False,
+                    )
+                    element = self._serialize_link(sort_link)
+                    if link.active_facet:
+                        element.set(self._attr_name("active_sort"), "true")
+                    links.append(element)
+            else:
+                for link in facet_data.links:
+                    links.append(self._serialize_facet_link(link, facet_data))
         return links
-
-    def _serialize_sort_link(self, link: Link) -> etree._Element:
-        """Serialize a sort link using Palace extension attributes."""
-        sort_link = Link(
-            href=link.href,
-            title=link.title,
-            rel=AtomFeed.PALACE_REL_NS + "sort",
-            default_facet=link.default_facet,
-        )
-        element = self._serialize_link(sort_link)
-        if link.active_facet:
-            element.set(ACTIVE_SORT_ATTR, "true")
-        return element
 
     def _get_attribute_mapping(self) -> dict[str, str]:
         return V2_ATTRIBUTE_MAPPING

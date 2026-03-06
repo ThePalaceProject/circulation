@@ -281,7 +281,7 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
         is_default = True
         for entrypoint in entrypoints:
             link = cls._entrypoint_link(
-                url_generator, entrypoint, selected_entrypoint, is_default, group_name
+                url_generator, entrypoint, selected_entrypoint, is_default
             )
             if link is not None:
                 facet_data.links.append(link)
@@ -297,11 +297,8 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
         entrypoint: type[EntryPoint],
         selected_entrypoint: type[EntryPoint] | None,
         is_default: bool,
-        group_name: str,
     ) -> Link | None:
-        """Create arguments for add_link_to_feed for a link that navigates
-        between EntryPoints.
-        """
+        """Create a facet link for navigating between EntryPoints."""
         display_title = EntryPoint.DISPLAY_TITLES.get(entrypoint)
         if not display_title:
             # Shouldn't happen.

@@ -312,7 +312,6 @@ class TestOPDSAcquisitionFeed:
             AudiobooksEntryPoint,
             EbooksEntryPoint,
             True,
-            "Some entry points",
         )
         # The second one is selected.
         assert c2 == (
@@ -320,7 +319,6 @@ class TestOPDSAcquisitionFeed:
             EbooksEntryPoint,
             EbooksEntryPoint,
             False,
-            "Some entry points",
         )
 
         # Two links were added to a FacetData in feed.facets, one
@@ -352,10 +350,10 @@ class TestOPDSAcquisitionFeed:
             return "%s" % (entrypoint.INTERNAL_NAME)
 
         # If the entry point is not registered, None is returned.
-        assert None == m(g, object(), object(), True, "group")
+        assert None == m(g, object(), object(), True)
 
         # Now make a real set of link attributes.
-        l = m(g, AudiobooksEntryPoint, AudiobooksEntryPoint, False, "Grupe")
+        l = m(g, AudiobooksEntryPoint, AudiobooksEntryPoint, False)
 
         # The link is marked as active (rel is added by the serializer).
         assert l.active_facet is True
@@ -369,14 +367,14 @@ class TestOPDSAcquisitionFeed:
         # Now try some variants.
 
         # Here, the entry point is the default one.
-        l = m(g, AudiobooksEntryPoint, AudiobooksEntryPoint, True, "Grupe")
+        l = m(g, AudiobooksEntryPoint, AudiobooksEntryPoint, True)
 
         # This may affect the URL generated for the facet link.
         assert l.href == g(AudiobooksEntryPoint)
 
         # Here, the entry point for which we're generating the link is
         # not the selected one -- EbooksEntryPoint is.
-        l = m(g, AudiobooksEntryPoint, EbooksEntryPoint, True, "Grupe")
+        l = m(g, AudiobooksEntryPoint, EbooksEntryPoint, True)
 
         # This means the 'active_facet' attribute is not present.
         assert getattr(l, "active_facet", None) is False
