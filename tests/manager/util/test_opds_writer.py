@@ -1,7 +1,7 @@
 import datetime
+from zoneinfo import ZoneInfo
 
 import pytest
-import pytz
 from lxml import etree
 
 from palace.manager.util.opds_writer import AtomFeed, OPDSMessage
@@ -63,21 +63,17 @@ class TestAtomFeed:
                 id="naive",
             ),
             pytest.param(
-                datetime.datetime(2020, 1, 2, 3, 4, 5, tzinfo=pytz.UTC),
+                datetime.datetime(2020, 1, 2, 3, 4, 5, tzinfo=datetime.UTC),
                 "2020-01-02T03:04:05+00:00",
                 id="explicit_utc",
             ),
             pytest.param(
-                pytz.timezone("US/Eastern").localize(
-                    datetime.datetime(2020, 1, 2, 3, 4, 5)
-                ),
+                datetime.datetime(2020, 1, 2, 3, 4, 5, tzinfo=ZoneInfo("US/Eastern")),
                 "2020-01-02T08:04:05+00:00",
                 id="eastern",
             ),
             pytest.param(
-                pytz.timezone("US/Central").localize(
-                    datetime.datetime(2020, 1, 2, 3, 4, 5)
-                ),
+                datetime.datetime(2020, 1, 2, 3, 4, 5, tzinfo=ZoneInfo("US/Central")),
                 "2020-01-02T09:04:05+00:00",
                 id="central",
             ),

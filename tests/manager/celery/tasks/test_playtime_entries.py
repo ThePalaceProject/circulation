@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 import csv
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from io import IOBase, StringIO
 from typing import Any, Literal
 from unittest.mock import DEFAULT, create_autospec
 
 import pytest
-import pytz
 from sqlalchemy.sql.expression import and_, null
 
 from palace.manager.api.circulation.settings import BaseCirculationApiSettings
@@ -74,7 +73,7 @@ def create_playtime_entries(
 def date2k(h=0, m=0):
     """Quickly create a datetime object for testing"""
     return datetime(
-        year=2000, month=1, day=1, hour=12, minute=0, second=0, tzinfo=pytz.UTC
+        year=2000, month=1, day=1, hour=12, minute=0, second=0, tzinfo=timezone.utc
     ) + timedelta(minutes=m, hours=h)
 
 
@@ -533,7 +532,7 @@ def date1m(days) -> date:
 
 def dt1m(days) -> datetime:
     """Helper to get a `datetime` value for 1 month ago, adjusted by the given number of days."""
-    return datetime.combine(date1m(days), datetime.min.time(), tzinfo=pytz.UTC)
+    return datetime.combine(date1m(days), datetime.min.time(), tzinfo=timezone.utc)
 
 
 def playtime(

@@ -1,7 +1,6 @@
 import datetime
 from unittest.mock import patch
 
-import pytz
 from lxml import etree
 
 from palace.manager.core.user_profile import ProfileController
@@ -168,7 +167,7 @@ class TestOPDSSerializer:
             summary=RichText(text="summary"),
             language="language",
             publisher="publisher",
-            issued=datetime.datetime(2020, 2, 2, tzinfo=pytz.UTC),
+            issued=datetime.datetime(2020, 2, 2, tzinfo=datetime.UTC),
             published="published",
             updated="updated",
             title="title",

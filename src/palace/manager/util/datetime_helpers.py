@@ -3,14 +3,13 @@ from collections.abc import Callable
 from functools import wraps
 from typing import overload
 
-import pytz
 from dateutil.relativedelta import relativedelta
 
 
 def _wrapper[T, **P](func: Callable[P, T]) -> Callable[P, T]:
     @wraps(func)
     def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
-        kwargs["tzinfo"] = pytz.UTC
+        kwargs["tzinfo"] = datetime.UTC
         return func(*args, **kwargs)
 
     return wrapper
@@ -18,7 +17,7 @@ def _wrapper[T, **P](func: Callable[P, T]) -> Callable[P, T]:
 
 datetime_utc = _wrapper(datetime.datetime)
 """
-Return a datetime object but with UTC information from pytz.
+Return a datetime object but with UTC information.
 """
 
 
@@ -27,7 +26,7 @@ def from_timestamp(ts: float) -> datetime.datetime:
 
     :return: datetime object
     """
-    return datetime.datetime.fromtimestamp(ts, tz=pytz.UTC)
+    return datetime.datetime.fromtimestamp(ts, tz=datetime.UTC)
 
 
 def utc_now() -> datetime.datetime:
@@ -35,7 +34,7 @@ def utc_now() -> datetime.datetime:
 
     :return: datetime object
     """
-    return datetime.datetime.now(tz=pytz.UTC)
+    return datetime.datetime.now(tz=datetime.UTC)
 
 
 @overload
@@ -55,11 +54,11 @@ def to_utc(dt: datetime.datetime | None) -> datetime.datetime | None:
     if dt is None:
         return None
     if dt.tzinfo is None:
-        return dt.replace(tzinfo=pytz.UTC)
-    if dt.tzinfo == pytz.UTC:
+        return dt.replace(tzinfo=datetime.UTC)
+    if dt.tzinfo == datetime.UTC:
         # Already UTC.
         return dt
-    return dt.astimezone(pytz.UTC)
+    return dt.astimezone(datetime.UTC)
 
 
 def strptime_utc(date_string: str, format: str) -> datetime.datetime:

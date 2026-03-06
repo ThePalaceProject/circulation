@@ -8,7 +8,6 @@ from ssl import get_server_certificate
 from typing import Any, cast
 from urllib.parse import urlparse
 
-import pytz
 import yaml
 from OpenSSL.crypto import FILETYPE_PEM, X509, load_certificate
 from sqlalchemy.orm import Session
@@ -242,7 +241,7 @@ The config file format is a YML file of the form:
 
         # Parse the expiry and make it TZ aware
         expires = datetime.datetime.strptime(not_after.decode(), "%Y%m%d%H%M%SZ")
-        expires = expires.replace(tzinfo=pytz.UTC)
+        expires = expires.replace(tzinfo=datetime.UTC)
 
         # Validate the certificate
         if expires - utc_now() < datetime.timedelta(

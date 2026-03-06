@@ -1,8 +1,8 @@
 import datetime
 from unittest.mock import patch
+from zoneinfo import ZoneInfo
 
 import pytest
-import pytz
 
 from palace.manager.util.datetime_helpers import (
     datetime_utc,
@@ -34,14 +34,14 @@ class TestDatetimeUTC:
         includes UTC information when it is created.
         """
         time_format = "%Y-%m-%dT%H:%M:%S"
-        dt = datetime.datetime(*time, tzinfo=pytz.UTC)
+        dt = datetime.datetime(*time, tzinfo=datetime.UTC)
         util_dt = datetime_utc(*time)
 
         # The util function is the same as the datetime function with
-        # pytz UTC information.
+        # UTC information.
         assert dt == util_dt
         # A datetime object is returned and works like any datetime object.
-        assert util_dt.tzinfo == pytz.UTC
+        assert util_dt.tzinfo == datetime.UTC
         assert util_dt.strftime(time_format) == formatted
         assert util_dt.isoformat() == isoformat
         assert util_dt.year == time[0]
@@ -55,7 +55,7 @@ class TestFromTimestamp:
         that also includes UTC information.
         """
         ts = 0
-        datetime_from_ts = datetime.datetime.fromtimestamp(ts, tz=pytz.UTC)
+        datetime_from_ts = datetime.datetime.fromtimestamp(ts, tz=datetime.UTC)
         util_from_ts = from_timestamp(ts)
 
         # The util function returns the right datetime object from a timestamp.
@@ -63,9 +63,9 @@ class TestFromTimestamp:
         assert datetime_from_ts.strftime("%Y-%m-%d") == "1970-01-01"
         assert util_from_ts.strftime("%Y-%m-%d") == "1970-01-01"
 
-        # The UTC information for this datetime object is the pytz UTC value.
+        # The UTC information for this datetime object is the UTC value.
         assert util_from_ts.tzinfo is not None
-        assert util_from_ts.tzinfo == pytz.UTC
+        assert util_from_ts.tzinfo == datetime.UTC
 
 
 class TestUTCNow:
@@ -73,14 +73,14 @@ class TestUTCNow:
         """`utc_now` is a wrapper around `datetime.now` but it also includes
         UTC information.
         """
-        datetime_now = datetime.datetime.now(tz=pytz.UTC)
+        datetime_now = datetime.datetime.now(tz=datetime.UTC)
         util_now = utc_now()
 
         # Same time but it's going to be off by a few milliseconds.
         assert (datetime_now - util_now).total_seconds() < 2
 
-        # The UTC information for this datetime object is the pytz UTC value.
-        assert util_now.tzinfo == pytz.UTC
+        # The UTC information for this datetime object is the UTC value.
+        assert util_now.tzinfo == datetime.UTC
 
 
 class TestToUTC:
@@ -98,11 +98,11 @@ class TestToUTC:
 
         # The wrapper function is the same as the `replace` function,
         # just less verbose.
-        assert d1_utc == d1.replace(tzinfo=pytz.UTC)
-        assert d2_utc == d2.replace(tzinfo=pytz.UTC)
-        # The timezone information is from pytz UTC.
-        assert d1_utc.tzinfo == pytz.UTC
-        assert d2_utc.tzinfo == pytz.UTC
+        assert d1_utc == d1.replace(tzinfo=datetime.UTC)
+        assert d2_utc == d2.replace(tzinfo=datetime.UTC)
+        # The timezone information is UTC.
+        assert d1_utc.tzinfo == datetime.UTC
+        assert d2_utc.tzinfo == datetime.UTC
 
         # Passing in None gets you None.
         assert to_utc(None) == None
@@ -113,7 +113,7 @@ class TestToUTC:
         # Passing in a datetime from some other timezone converts to the
         # same time in UTC.
         d1 = datetime.datetime(2021, 1, 1)
-        d1_eastern = d1_utc.astimezone(pytz.timezone("US/Eastern"))
+        d1_eastern = d1_utc.astimezone(ZoneInfo("US/Eastern"))
         assert d1_utc == to_utc(d1_eastern)
 
     @pytest.mark.parametrize(

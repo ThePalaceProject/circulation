@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
 import pytest
-import pytz
 from freezegun import freeze_time
 
 from palace.manager.scripts.playtime_entries import (
@@ -75,6 +74,14 @@ class TestPlaytimeEntriesReportScript:
                 "4150-04-30",
                 datetime_utc(4150, 4, 30, 0, 0, 0),
             ],
+            # Timezone-aware datetime inputs should be converted to UTC.
+            [
+                datetime(2020, 1, 31, 0, 0, 0),
+                "2025-01-01T00:00:00-05:00",
+                datetime_utc(2025, 1, 1, 5, 0, 0),
+                "2025-01-02T00:00:00-05:00",
+                datetime_utc(2025, 1, 2, 5, 0, 0),
+            ],
         ],
     )
     def test_parse_command_line(
@@ -97,8 +104,8 @@ class TestPlaytimeEntriesReportScript:
             )
         assert expected_start == parsed.start
         assert expected_until == parsed.until
-        assert pytz.UTC == parsed.start.tzinfo
-        assert pytz.UTC == parsed.until.tzinfo
+        assert timezone.utc == parsed.start.tzinfo
+        assert timezone.utc == parsed.until.tzinfo
 
     @pytest.mark.parametrize(
         "current_utc_time, start_arg, expected_start, until_arg, expected_until",
