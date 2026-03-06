@@ -389,25 +389,32 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]], LoggerMixin):
     def _serialize_facet_links(self, feed: FeedData) -> list[opds2.Facet]:
         results: list[opds2.Facet] = []
         for facet_data in feed.facets:
-            if len(facet_data.links) < 2:
-                self.log.warning(
-                    f"Skipping facet group '{facet_data.group}' with < 2 links"
-                )
-                continue
             facet_link_models: list[opds2.TitleLink] = []
             for link in facet_data.links:
-                title = link.title or link.href
+                if not link.title:
+                    self.log.error(
+                        f"Facet link in group '{facet_data.group}' has no "
+                        f"title (href={link.href}). This is a programming "
+                        f"error: all facet links should have a title."
+                    )
+                    continue
                 rel = "self" if link.active_facet else None
                 props = self._facet_properties(link)
                 facet_link_models.append(
                     self._title_link(
                         href=link.href,
-                        title=title,
+                        title=link.title,
                         rel=rel,
                         type=self._resolve_type(link.type),
                         properties=props,
                     )
                 )
+
+            if len(facet_link_models) < 2:
+                self.log.warning(
+                    f"Skipping facet group '{facet_data.group}' with < 2 links"
+                )
+                continue
 
             results.append(
                 opds2.Facet(

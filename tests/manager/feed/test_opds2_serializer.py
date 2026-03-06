@@ -871,8 +871,8 @@ class TestOPDS2Serializer:
         assert "http://bad-acq" not in link_hrefs
         assert "http://good-acq" in link_hrefs
 
-    def test_facet_link_title_fallback(self):
-        """Facet links fall back to href for title when title is None."""
+    def test_facet_link_without_title_is_skipped(self):
+        """Facet links without a title are skipped and an error is logged."""
         feed = FeedData(
             metadata=FeedMetadata(title="Feed", id="http://feed"),
         )
@@ -881,15 +881,9 @@ class TestOPDS2Serializer:
             FacetData(
                 group="Group",
                 links=[
-                    Link(
-                        href="http://facet1",
-                        title=None,
-                    ),
-                    Link(
-                        href="http://facet2",
-                        rel=None,
-                        title=None,
-                    ),
+                    Link(href="http://facet1", title="Good Link"),
+                    Link(href="http://facet2", title=None),
+                    Link(href="http://facet3", title="Another Good Link"),
                 ],
             )
         ]
@@ -897,10 +891,10 @@ class TestOPDS2Serializer:
         serialized = OPDS2Serializer().serialize_feed(feed)
         result = json.loads(serialized)
         facet_links = result["facets"][0]["links"]
-        # First facet falls back to href (title is None)
-        assert facet_links[0]["title"] == "http://facet1"
-        # Second facet falls back to href
-        assert facet_links[1]["title"] == "http://facet2"
+        # The link without a title should be skipped
+        assert len(facet_links) == 2
+        assert facet_links[0]["title"] == "Good Link"
+        assert facet_links[1]["title"] == "Another Good Link"
 
     def test_holds_and_copies_with_values(self):
         """Holds and copies numeric values are serialized correctly."""
