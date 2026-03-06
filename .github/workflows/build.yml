@@ -157,7 +157,7 @@ jobs:
 
       - name: Generate tags for circ-webapp
         id: meta-webapp
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ steps.ghcr-repo.outputs.webapp }}
           tags: |
@@ -180,7 +180,7 @@ jobs:
 
       - name: Generate tags for circ-scripts
         id: meta-scripts
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ steps.ghcr-repo.outputs.scripts }}
           tags: |
@@ -203,7 +203,7 @@ jobs:
 
       - name: Generate tags for circ-exec
         id: meta-exec
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ steps.ghcr-repo.outputs.exec }}
           tags: |
