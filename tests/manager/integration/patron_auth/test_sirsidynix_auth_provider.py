@@ -1,4 +1,5 @@
 import json
+from collections.abc import Generator
 from contextlib import nullcontext
 from copy import deepcopy
 from dataclasses import dataclass
@@ -25,7 +26,6 @@ from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.util.http.http import HTTP
 from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
 from tests.fixtures.database import DatabaseTransactionFixture
-from tests.manager.integration.patron_auth.conftest import mock_network_diagnostics_url
 from tests.mocks.mock import MockRequestsResponse
 
 
@@ -71,9 +71,20 @@ class SirsiAuthFixture:
 
         self.mock_request = create_autospec(HTTP.request_with_timeout)
         monkeypatch.setattr(HTTP, "request_with_timeout", self.mock_request)
+
+        def mock_diagnostics_url(url: str) -> Generator[SelfTestResult]:
+            dns = SelfTestResult("DNS Resolution (mock)")
+            dns.success = True
+            dns.end = dns.start
+            yield dns
+            tcp = SelfTestResult("TCP Connection (mock:80)")
+            tcp.success = True
+            tcp.end = tcp.start
+            yield tcp
+
         monkeypatch.setattr(
             "palace.manager.integration.patron_auth.sirsidynix_authentication_provider.run_network_diagnostics_url",
-            mock_network_diagnostics_url,
+            mock_diagnostics_url,
         )
 
         self.mock_session = MagicMock()

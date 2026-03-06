@@ -1,10 +1,9 @@
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Generator
 from datetime import datetime
 from decimal import Decimal
 from functools import partial
 from typing import cast
-from unittest.mock import patch
 
 import pytest
 
@@ -20,6 +19,7 @@ from palace.manager.api.problem_details import (
     PATRON_OF_ANOTHER_LIBRARY,
 )
 from palace.manager.core.config import CannotLoadConfiguration
+from palace.manager.core.selftest import SelfTestResult
 from palace.manager.integration.patron_auth.sip2.client import Sip2Encoding
 from palace.manager.integration.patron_auth.sip2.dialect import Dialect
 from palace.manager.integration.patron_auth.sip2.provider import (
@@ -29,7 +29,6 @@ from palace.manager.integration.patron_auth.sip2.provider import (
 )
 from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
 from tests.fixtures.database import DatabaseTransactionFixture
-from tests.manager.integration.patron_auth.conftest import mock_network_diagnostics
 from tests.mocks.sip import MockSIPClient
 
 
@@ -708,16 +707,28 @@ class TestSIP2AuthenticationProvider:
         assert datetime(2019, 10, 4) == patron.authorization_expires
         assert expected_block_reason == patron.block_reason
 
-    @patch(
-        "palace.manager.integration.patron_auth.sip2.provider.run_network_diagnostics",
-        mock_network_diagnostics,
-    )
     def test_run_self_tests(
         self,
         create_provider: Callable[..., SIP2AuthenticationProvider],
         create_settings: Callable[..., SIP2Settings],
         db: DatabaseTransactionFixture,
+        monkeypatch: pytest.MonkeyPatch,
     ):
+        def mock_diagnostics(host: str, port: int) -> Generator[SelfTestResult]:
+            dns = SelfTestResult(f"DNS Resolution ({host})")
+            dns.success = True
+            dns.end = dns.start
+            yield dns
+            tcp = SelfTestResult(f"TCP Connection ({host}:{port})")
+            tcp.success = True
+            tcp.end = tcp.start
+            yield tcp
+
+        monkeypatch.setattr(
+            "palace.manager.integration.patron_auth.sip2.provider.run_network_diagnostics",
+            mock_diagnostics,
+        )
+
         settings = create_settings(
             url="server.com",
         )

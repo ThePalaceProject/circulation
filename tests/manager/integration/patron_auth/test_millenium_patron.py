@@ -1,15 +1,16 @@
-from collections.abc import Callable
+from collections.abc import Callable, Generator
 from datetime import date, timedelta
 from decimal import Decimal
 from functools import partial
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 from urllib import parse
 
 import pytest
 
 from palace.manager.api.authentication.base import PatronData
 from palace.manager.api.authentication.basic import Keyboards
+from palace.manager.core.selftest import SelfTestResult
 from palace.manager.integration.patron_auth.millenium_patron import (
     AuthenticationMode,
     MilleniumPatronAPI,
@@ -20,7 +21,6 @@ from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import FilesFixture
-from tests.manager.integration.patron_auth.conftest import mock_network_diagnostics_url
 
 
 class MilleniumFilesFixture(FilesFixture):
@@ -1009,15 +1009,28 @@ class TestMilleniumPatronAPI:
         assert isinstance(family_result.details, dict)
         assert family_result.details["personal_name"] == "SHELDON, ALICE"
 
-    @patch(
-        "palace.manager.integration.patron_auth.millenium_patron.run_network_diagnostics_url",
-        mock_network_diagnostics_url,
-    )
     def test_run_self_tests(
         self,
         create_provider: Callable[..., MockAPI],
+        monkeypatch: pytest.MonkeyPatch,
     ):
         """Network diagnostics are yielded before the inherited self-tests."""
+
+        def mock_diagnostics_url(url: str) -> Generator[SelfTestResult]:
+            dns = SelfTestResult("DNS Resolution (mock)")
+            dns.success = True
+            dns.end = dns.start
+            yield dns
+            tcp = SelfTestResult("TCP Connection (mock:80)")
+            tcp.success = True
+            tcp.end = tcp.start
+            yield tcp
+
+        monkeypatch.setattr(
+            "palace.manager.integration.patron_auth.millenium_patron.run_network_diagnostics_url",
+            mock_diagnostics_url,
+        )
+
         api = create_provider()
 
         mock_session = MagicMock()
