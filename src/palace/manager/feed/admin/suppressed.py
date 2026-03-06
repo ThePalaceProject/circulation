@@ -22,7 +22,6 @@ from palace.manager.sqlalchemy.model.work import Work, WorkGenre
 
 if TYPE_CHECKING:
     from palace.manager.feed.annotator.circulation import CirculationManagerAnnotator
-    from palace.manager.feed.facets.base import FacetsWithEntryPoint
     from palace.manager.search.external_search import ExternalSearchIndex
 
 
@@ -93,7 +92,7 @@ class AdminSuppressedFeed(OPDSAcquisitionFeed):
     def facet_links(
         cls,
         annotator: CirculationManagerAnnotator,
-        facets: FacetsWithEntryPoint,
+        facets: BaseFacets,
     ) -> list[FacetData]:
         """Build facet data for the suppressed feed's visibility filter.
 
