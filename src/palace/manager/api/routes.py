@@ -1,4 +1,6 @@
+from collections.abc import Callable
 from functools import update_wrapper, wraps
+from typing import Any, ParamSpec, TypeVar
 
 import flask
 from flask import Response, make_response, request
@@ -13,6 +15,10 @@ from palace.manager.core.app_server import (
 )
 from palace.manager.sqlalchemy.hassessioncache import HasSessionCache
 from palace.manager.util.problem_detail import ProblemDetail
+
+_P = ParamSpec("_P")
+_T = TypeVar("_T")
+_F = TypeVar("_F", bound=Callable[..., Any])
 
 
 @app.before_request
@@ -105,13 +111,17 @@ def allows_patron_web(f):
     return update_wrapper(wrapped_function, f)
 
 
-def has_library(f):
+def has_library(
+    f: Callable[_P, _T],
+) -> Callable[_P, _T | tuple[str, int, dict[str, str]]]:
     """Decorator to extract the library short name from the arguments."""
 
     @wraps(f)
-    def decorated(*args, **kwargs):
+    def decorated(
+        *args: _P.args, **kwargs: _P.kwargs
+    ) -> _T | tuple[str, int, dict[str, str]]:
         if "library_short_name" in kwargs:
-            library_short_name = kwargs.pop("library_short_name")
+            library_short_name: str | None = kwargs.pop("library_short_name")  # type: ignore[assignment]
         else:
             library_short_name = None
         library = app.manager.index_controller.library_for_request(library_short_name)
@@ -123,15 +133,19 @@ def has_library(f):
     return decorated
 
 
-def allows_library(f):
+def allows_library(
+    f: Callable[_P, _T],
+) -> Callable[_P, _T | tuple[str, int, dict[str, str]]]:
     """Decorator similar to @has_library but if there is no library short name,
     then don't set the request library.
     """
 
     @wraps(f)
-    def decorated(*args, **kwargs):
+    def decorated(
+        *args: _P.args, **kwargs: _P.kwargs
+    ) -> _T | tuple[str, int, dict[str, str]]:
         if "library_short_name" in kwargs:
-            library_short_name = kwargs.pop("library_short_name")
+            library_short_name: str | None = kwargs.pop("library_short_name")  # type: ignore[assignment]
             library = app.manager.index_controller.library_for_request(
                 library_short_name
             )
@@ -145,13 +159,13 @@ def allows_library(f):
     return decorated
 
 
-def library_route(path, *args, **kwargs):
+def library_route(path: str, *args: Any, **kwargs: Any) -> Callable[[_F], _F]:
     """Decorator to creates routes that have a library short name in either
     a subdomain or a url path prefix. If not used with @has_library, the view function
     must have a library_short_name argument.
     """
 
-    def decorator(f):
+    def decorator(f: _F) -> _F:
         # This sets up routes for both the subdomain and the url path prefix.
         # The order of these determines which one will be used by url_for -
         # in this case it's the prefix route.
