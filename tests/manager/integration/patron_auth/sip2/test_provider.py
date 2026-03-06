@@ -4,6 +4,7 @@ from datetime import datetime
 from decimal import Decimal
 from functools import partial
 from typing import cast
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -27,6 +28,7 @@ from palace.manager.integration.patron_auth.sip2.provider import (
     SIP2LibrarySettings,
     SIP2Settings,
 )
+from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.mocks.sip import MockSIPClient
@@ -997,3 +999,516 @@ class TestSIP2AuthenticationProvider:
         labels = [r.label for r in results]
         assert "Library Identifier Restriction" not in labels
         assert "Parsed Patron Data" not in labels
+
+
+class TestSIP2AuthenticateWithBlockingRules:
+    """Tests that the blocking-rules hook fires correctly through a concrete
+    SIP2 provider instance.
+
+    Rules must be valid simpleeval boolean expressions, e.g. ``True``,
+    ``False``, or expressions such as ``{fines} > 10``.
+
+    **Test isolation**: the tests that patch ``_do_authenticate`` bypass
+    ``remote_authenticate``, so the SIP2 thread-local cache is never populated
+    by a real SIP2 call.  In those tests the provider falls back to
+    ``build_runtime_values_from_patron``.  Tests that want to exercise the
+    full SIP2-response path set ``_sip2_thread_local.last_info`` directly
+    (or patch ``remote_authenticate``).
+    """
+
+    _PATCH_TARGET = (
+        "palace.manager.api.authentication.basic."
+        "BasicAuthenticationProvider._do_authenticate"
+    )
+
+    @pytest.fixture(autouse=True)
+    def _clear_sip2_thread_local(self):
+        """Ensure the SIP2 thread-local cache is clean before and after every
+        test so stale data from a previous test cannot affect results."""
+        from palace.manager.integration.patron_auth.sip2.provider import (
+            _sip2_thread_local,
+        )
+
+        _sip2_thread_local.last_info = None
+        yield
+        _sip2_thread_local.last_info = None
+
+    def test_authenticate_blocked_when_rule_is_true(
+        self,
+        create_provider: Callable[..., SIP2AuthenticationProvider],
+        create_library_settings: Callable[..., SIP2LibrarySettings],
+    ) -> None:
+        """When the ILS authenticates the patron and a rule evaluates True,
+        authenticate returns a ProblemDetail (HTTP 403) instead of the Patron."""
+        library_settings = create_library_settings(
+            patron_blocking_rules=[
+                {"name": "block-all", "rule": "True", "message": "Library A blocks."}
+            ]
+        )
+        provider = create_provider(library_settings=library_settings)
+
+        mock_patron = MagicMock(spec=Patron)
+        with patch(self._PATCH_TARGET, return_value=mock_patron):
+            result = provider.authenticate(
+                MagicMock(), {"username": "u", "password": "p"}
+            )
+
+        assert isinstance(result, ProblemDetail)
+        assert result.status_code == 403
+        assert result.detail == "Library A blocks."
+
+    def test_authenticate_not_blocked_when_rule_is_false(
+        self,
+        create_provider: Callable[..., SIP2AuthenticationProvider],
+        create_library_settings: Callable[..., SIP2LibrarySettings],
+    ) -> None:
+        """When a rule evaluates False, authenticate returns the Patron unchanged."""
+        library_settings = create_library_settings(
+            patron_blocking_rules=[{"name": "never-block", "rule": "False"}]
+        )
+        provider = create_provider(library_settings=library_settings)
+
+        mock_patron = MagicMock(spec=Patron)
+        with patch(self._PATCH_TARGET, return_value=mock_patron):
+            result = provider.authenticate(
+                MagicMock(), {"username": "u", "password": "p"}
+            )
+
+        assert result is mock_patron
+
+    def test_authenticate_no_rules_returns_patron(
+        self,
+        create_provider: Callable[..., SIP2AuthenticationProvider],
+    ) -> None:
+        """With no blocking rules configured, authenticate returns the Patron normally."""
+        provider = create_provider()
+        assert provider.patron_blocking_rules == []
+
+        mock_patron = MagicMock(spec=Patron)
+        with patch(self._PATCH_TARGET, return_value=mock_patron):
+            result = provider.authenticate(
+                MagicMock(), {"username": "u", "password": "p"}
+            )
+
+        assert result is mock_patron
+
+    def test_authenticate_passes_through_none(
+        self,
+        create_provider: Callable[..., SIP2AuthenticationProvider],
+        create_library_settings: Callable[..., SIP2LibrarySettings],
+    ) -> None:
+        """If the ILS rejects credentials (None), blocking rules are skipped."""
+        library_settings = create_library_settings(
+            patron_blocking_rules=[{"name": "block-all", "rule": "True"}]
+        )
+        provider = create_provider(library_settings=library_settings)
+
+        with patch(self._PATCH_TARGET, return_value=None):
+            result = provider.authenticate(
+                MagicMock(), {"username": "u", "password": "p"}
+            )
+
+        assert result is None
+
+    def test_authenticate_passes_through_problem_detail(
+        self,
+        create_provider: Callable[..., SIP2AuthenticationProvider],
+        create_library_settings: Callable[..., SIP2LibrarySettings],
+    ) -> None:
+        """If the ILS returns a ProblemDetail (e.g. server error),
+        blocking rules are skipped and the original ProblemDetail is returned."""
+        library_settings = create_library_settings(
+            patron_blocking_rules=[{"name": "block-all", "rule": "True"}]
+        )
+        provider = create_provider(library_settings=library_settings)
+
+        base_problem = INVALID_CREDENTIALS.detailed("Server error.")
+        with patch(self._PATCH_TARGET, return_value=base_problem):
+            result = provider.authenticate(
+                MagicMock(), {"username": "u", "password": "p"}
+            )
+
+        assert result is base_problem
+
+    def test_patron_blocking_rules_stored_on_provider(
+        self,
+        create_provider: Callable[..., SIP2AuthenticationProvider],
+        create_library_settings: Callable[..., SIP2LibrarySettings],
+    ) -> None:
+        """patron_blocking_rules attribute is populated from library_settings."""
+        rules = [
+            {"name": "r1", "rule": "True", "message": "Msg"},
+            {"name": "r2", "rule": "False"},
+        ]
+        library_settings = create_library_settings(patron_blocking_rules=rules)
+        provider = create_provider(library_settings=library_settings)
+
+        assert len(provider.patron_blocking_rules) == 2
+        assert provider.patron_blocking_rules[0].name == "r1"
+        assert provider.patron_blocking_rules[0].rule == "True"
+        assert provider.patron_blocking_rules[1].name == "r2"
+
+    # ------------------------------------------------------------------
+    # simpleeval runtime evaluation tests
+    # ------------------------------------------------------------------
+
+    def test_rule_true_with_message_returns_that_message(
+        self,
+        create_provider: Callable[..., SIP2AuthenticationProvider],
+        create_library_settings: Callable[..., SIP2LibrarySettings],
+    ) -> None:
+        """Library A rule evaluates True → ProblemDetail carries the rule's message."""
+        library_settings = create_library_settings(
+            patron_blocking_rules=[
+                {
+                    "name": "always-block",
+                    "rule": "True",
+                    "message": "You are not permitted to borrow at this branch.",
+                }
+            ]
+        )
+        provider = create_provider(library_settings=library_settings)
+
+        mock_patron = MagicMock(spec=Patron)
+        mock_patron.fines = None
+        mock_patron.external_type = None
+        with patch(self._PATCH_TARGET, return_value=mock_patron):
+            result = provider.authenticate(
+                MagicMock(), {"username": "u", "password": "p"}
+            )
+
+        assert isinstance(result, ProblemDetail)
+        assert result.status_code == 403
+        assert result.detail == "You are not permitted to borrow at this branch."
+
+    def test_rule_true_without_message_uses_default(
+        self,
+        create_provider: Callable[..., SIP2AuthenticationProvider],
+        create_library_settings: Callable[..., SIP2LibrarySettings],
+    ) -> None:
+        """When the blocking rule has no message, the default message is used."""
+        library_settings = create_library_settings(
+            patron_blocking_rules=[{"name": "always-block", "rule": "True"}]
+        )
+        provider = create_provider(library_settings=library_settings)
+
+        mock_patron = MagicMock(spec=Patron)
+        mock_patron.fines = None
+        mock_patron.external_type = None
+        with patch(self._PATCH_TARGET, return_value=mock_patron):
+            result = provider.authenticate(
+                MagicMock(), {"username": "u", "password": "p"}
+            )
+
+        assert isinstance(result, ProblemDetail)
+        assert result.detail == "Patron is blocked by library policy."
+
+    def test_missing_placeholder_fails_closed(
+        self,
+        create_provider: Callable[..., SIP2AuthenticationProvider],
+        create_library_settings: Callable[..., SIP2LibrarySettings],
+    ) -> None:
+        """A rule referencing a placeholder absent from the values dict blocks
+        the patron (fail closed) with the generic message.
+
+        When ``_do_authenticate`` is patched, ``remote_authenticate`` is never
+        called so the SIP2 thread-local cache stays ``None``; the provider
+        falls back to ``build_runtime_values_from_patron``, which only has
+        ``fines`` and ``patron_type``.  A rule referencing ``{custom_field}``
+        therefore fails with a missing-placeholder error → fail closed.
+        """
+        library_settings = create_library_settings(
+            patron_blocking_rules=[
+                {
+                    "name": "custom-check",
+                    "rule": "{custom_field} == 'expected'",
+                    "message": "This message should not appear on error.",
+                }
+            ]
+        )
+        provider = create_provider(library_settings=library_settings)
+
+        mock_patron = MagicMock(spec=Patron)
+        mock_patron.fines = None
+        mock_patron.external_type = None
+        with patch(self._PATCH_TARGET, return_value=mock_patron):
+            result = provider.authenticate(
+                MagicMock(), {"username": "u", "password": "p"}
+            )
+
+        # Fail closed → block, but with generic message (not the rule's message)
+        assert isinstance(result, ProblemDetail)
+        assert result.status_code == 403
+        assert result.detail == "Patron is blocked by library policy."
+
+    def test_library_with_no_rules_does_not_block(
+        self,
+        create_provider: Callable[..., SIP2AuthenticationProvider],
+    ) -> None:
+        """Library B configured with no rules: patron passes through unchanged."""
+        provider_b = create_provider()
+        assert provider_b.patron_blocking_rules == []
+
+        mock_patron = MagicMock(spec=Patron)
+        mock_patron.fines = None
+        mock_patron.external_type = None
+        with patch(self._PATCH_TARGET, return_value=mock_patron):
+            result = provider_b.authenticate(
+                MagicMock(), {"username": "u", "password": "p"}
+            )
+
+        assert result is mock_patron
+
+    def test_per_library_isolation(
+        self,
+        create_provider: Callable[..., SIP2AuthenticationProvider],
+        create_library_settings: Callable[..., SIP2LibrarySettings],
+    ) -> None:
+        """Rules from Library A do not affect Library B (separate provider instances)."""
+        # Library A: has a blocking rule
+        settings_a = create_library_settings(
+            patron_blocking_rules=[
+                {"name": "block-all", "rule": "True", "message": "Library A blocks."}
+            ]
+        )
+        provider_a = create_provider(library_settings=settings_a)
+
+        # Library B: no rules
+        provider_b = create_provider()
+
+        mock_patron = MagicMock(spec=Patron)
+        mock_patron.fines = None
+        mock_patron.external_type = None
+
+        with patch(self._PATCH_TARGET, return_value=mock_patron):
+            result_a = provider_a.authenticate(
+                MagicMock(), {"username": "u", "password": "p"}
+            )
+            result_b = provider_b.authenticate(
+                MagicMock(), {"username": "u", "password": "p"}
+            )
+
+        assert isinstance(result_a, ProblemDetail)
+        assert result_a.detail == "Library A blocks."
+        assert result_b is mock_patron
+
+    def test_fines_placeholder_blocks_high_fines(
+        self,
+        create_provider: Callable[..., SIP2AuthenticationProvider],
+        create_library_settings: Callable[..., SIP2LibrarySettings],
+    ) -> None:
+        """A rule using {fines} blocks a patron with high fines (patron-fallback path).
+
+        ``_do_authenticate`` is patched so the SIP2 thread-local is empty;
+        ``fines`` is resolved via ``build_runtime_values_from_patron`` from the
+        Patron model's ``fines`` attribute.
+        """
+        library_settings = create_library_settings(
+            patron_blocking_rules=[
+                {
+                    "name": "fines-check",
+                    "rule": "{fines} > 10.0",
+                    "message": "Outstanding fines too high.",
+                }
+            ]
+        )
+        provider = create_provider(library_settings=library_settings)
+
+        mock_patron = MagicMock(spec=Patron)
+        mock_patron.fines = "25.00"
+        mock_patron.external_type = None
+        with patch(self._PATCH_TARGET, return_value=mock_patron):
+            result = provider.authenticate(
+                MagicMock(), {"username": "u", "password": "p"}
+            )
+
+        assert isinstance(result, ProblemDetail)
+        assert result.detail == "Outstanding fines too high."
+
+    def test_fines_placeholder_allows_low_fines(
+        self,
+        create_provider: Callable[..., SIP2AuthenticationProvider],
+        create_library_settings: Callable[..., SIP2LibrarySettings],
+    ) -> None:
+        """A rule using {fines} allows a patron with low fines (patron-fallback path)."""
+        library_settings = create_library_settings(
+            patron_blocking_rules=[
+                {
+                    "name": "fines-check",
+                    "rule": "{fines} > 10.0",
+                }
+            ]
+        )
+        provider = create_provider(library_settings=library_settings)
+
+        mock_patron = MagicMock(spec=Patron)
+        mock_patron.fines = "3.50"
+        mock_patron.external_type = None
+        with patch(self._PATCH_TARGET, return_value=mock_patron):
+            result = provider.authenticate(
+                MagicMock(), {"username": "u", "password": "p"}
+            )
+
+        assert result is mock_patron
+
+    # ------------------------------------------------------------------
+    # Raw SIP2 response fields accessible in rules
+    # ------------------------------------------------------------------
+
+    def test_raw_sip2_field_blocks_when_rule_matches(
+        self,
+        create_provider: Callable[..., SIP2AuthenticationProvider],
+        create_library_settings: Callable[..., SIP2LibrarySettings],
+    ) -> None:
+        """When the SIP2 thread-local carries the full response dict, any raw
+        SIP2 field can be referenced in a blocking rule.
+
+        This simulates what happens at runtime when ``remote_authenticate``
+        has already been called and cached the info dict: the rule engine
+        receives every field returned by the ILS, not just the subset that
+        exists on the Patron DB model.
+        """
+        from palace.manager.integration.patron_auth.sip2.provider import (
+            _sip2_thread_local,
+        )
+
+        library_settings = create_library_settings(
+            patron_blocking_rules=[
+                {
+                    "name": "patron-class-check",
+                    "rule": "{sipserver_patron_class} == 'restricted'",
+                    "message": "Restricted patrons may not borrow.",
+                }
+            ]
+        )
+        provider = create_provider(library_settings=library_settings)
+        mock_patron = MagicMock(spec=Patron)
+
+        # Simulate the SIP2 info that remote_authenticate would have cached.
+        _sip2_thread_local.last_info = {
+            "sipserver_patron_class": "restricted",
+            "fee_amount": "0.00",
+        }
+
+        with patch(self._PATCH_TARGET, return_value=mock_patron):
+            result = provider.authenticate(
+                MagicMock(), {"username": "u", "password": "p"}
+            )
+
+        assert isinstance(result, ProblemDetail)
+        assert result.status_code == 403
+        assert result.detail == "Restricted patrons may not borrow."
+
+    def test_raw_sip2_field_allows_when_rule_does_not_match(
+        self,
+        create_provider: Callable[..., SIP2AuthenticationProvider],
+        create_library_settings: Callable[..., SIP2LibrarySettings],
+    ) -> None:
+        """When the SIP2 thread-local is populated and the rule evaluates False,
+        the patron is allowed through unchanged."""
+        from palace.manager.integration.patron_auth.sip2.provider import (
+            _sip2_thread_local,
+        )
+
+        library_settings = create_library_settings(
+            patron_blocking_rules=[
+                {
+                    "name": "patron-class-check",
+                    "rule": "{sipserver_patron_class} == 'restricted'",
+                    "message": "Restricted patrons may not borrow.",
+                }
+            ]
+        )
+        provider = create_provider(library_settings=library_settings)
+        mock_patron = MagicMock(spec=Patron)
+
+        _sip2_thread_local.last_info = {
+            "sipserver_patron_class": "adult",
+            "fee_amount": "0.00",
+        }
+
+        with patch(self._PATCH_TARGET, return_value=mock_patron):
+            result = provider.authenticate(
+                MagicMock(), {"username": "u", "password": "p"}
+            )
+
+        assert result is mock_patron
+
+    def test_fines_normalised_from_sip2_fee_amount(
+        self,
+        create_provider: Callable[..., SIP2AuthenticationProvider],
+        create_library_settings: Callable[..., SIP2LibrarySettings],
+    ) -> None:
+        """When the SIP2 thread-local is populated, {fines} is derived from the
+        ``fee_amount`` field of the SIP2 response via ``build_values_from_sip2_info``
+        rather than from the Patron DB model.
+
+        This verifies that the normalised ``fines`` float takes precedence over
+        whatever might be stored on the Patron record.
+        """
+        from palace.manager.integration.patron_auth.sip2.provider import (
+            _sip2_thread_local,
+        )
+
+        library_settings = create_library_settings(
+            patron_blocking_rules=[
+                {
+                    "name": "fines-check",
+                    "rule": "{fines} > 10.0",
+                    "message": "Fines too high (SIP2 path).",
+                }
+            ]
+        )
+        provider = create_provider(library_settings=library_settings)
+        mock_patron = MagicMock(spec=Patron)
+        # The patron model has no fines — only the SIP2 response carries them.
+        mock_patron.fines = None
+        mock_patron.external_type = None
+
+        # SIP2 server returns "$25.00".
+        _sip2_thread_local.last_info = {"fee_amount": "$25.00"}
+
+        with patch(self._PATCH_TARGET, return_value=mock_patron):
+            result = provider.authenticate(
+                MagicMock(), {"username": "u", "password": "p"}
+            )
+
+        assert isinstance(result, ProblemDetail)
+        assert result.detail == "Fines too high (SIP2 path)."
+
+    def test_sip2_info_takes_precedence_over_patron_model(
+        self,
+        create_provider: Callable[..., SIP2AuthenticationProvider],
+        create_library_settings: Callable[..., SIP2LibrarySettings],
+    ) -> None:
+        """When the SIP2 thread-local is populated, its ``fee_amount`` is used
+        to compute ``{fines}`` even when the Patron model has a different value."""
+        from palace.manager.integration.patron_auth.sip2.provider import (
+            _sip2_thread_local,
+        )
+
+        library_settings = create_library_settings(
+            patron_blocking_rules=[
+                {
+                    "name": "fines-check",
+                    "rule": "{fines} > 10.0",
+                    "message": "High fines.",
+                }
+            ]
+        )
+        provider = create_provider(library_settings=library_settings)
+        mock_patron = MagicMock(spec=Patron)
+        # Patron model says 50 — well above the threshold.
+        mock_patron.fines = "50.00"
+        mock_patron.external_type = None
+
+        # SIP2 response says only $3.00 — below the threshold.
+        _sip2_thread_local.last_info = {"fee_amount": "$3.00"}
+
+        with patch(self._PATCH_TARGET, return_value=mock_patron):
+            result = provider.authenticate(
+                MagicMock(), {"username": "u", "password": "p"}
+            )
+
+        # SIP2 data wins; rule evaluates False → patron allowed.
+        assert result is mock_patron
