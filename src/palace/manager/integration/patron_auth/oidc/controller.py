@@ -55,13 +55,6 @@ OIDC_LOGOUT_NOT_SUPPORTED = pd(
     detail=_("The OIDC provider does not support RP-Initiated Logout."),
 )
 
-OIDC_INVALID_ID_TOKEN_HINT = pd(
-    "http://palaceproject.io/terms/problem/auth/unrecoverable/oidc/invalid-id-token-hint",
-    status_code=400,
-    title=_("Invalid ID token hint."),
-    detail=_("The ID token hint is missing or invalid."),
-)
-
 OIDC_INVALID_LOGOUT_TOKEN = pd(
     "http://palaceproject.io/terms/problem/auth/unrecoverable/oidc/invalid-logout-token",
     status_code=400,
@@ -87,7 +80,6 @@ class OIDCController(LoggerMixin):
     CODE = "code"
     ACCESS_TOKEN = "access_token"
     PATRON_INFO = "patron_info"
-    ID_TOKEN_HINT = "id_token_hint"
     POST_LOGOUT_REDIRECT_URI = "post_logout_redirect_uri"
     LOGOUT_STATUS = "logout_status"
     LOGOUT_TOKEN = "logout_token"
@@ -400,22 +392,17 @@ class OIDCController(LoggerMixin):
         if isinstance(provider, ProblemDetail):
             return provider
 
-        oidc_credential = provider._credential_manager.lookup_oidc_token_by_value(  # type: ignore[attr-defined]
-            db, provider_token, library.id
-        )
-        if not oidc_credential:
-            return OIDC_INVALID_REQUEST.detailed(
-                _("Bearer token is expired or not found")
-            )
-
         auth_manager = provider.get_authentication_manager()  # type: ignore[attr-defined]
 
-        # Extract the stored token data from the credential rather than requiring
-        # the client to re-supply the raw id_token_hint as a separate parameter.
+        # The bearer token's payload IS the credential JSON — parse it directly.
+        # This avoids a DB lookup that would fail after token refresh (the credential
+        # value changes on refresh but the patron's bearer token still has the old value).
         try:
-            token_data = provider._credential_manager.extract_token_data(oidc_credential)  # type: ignore[attr-defined]
-        except Exception as e:
-            self.log.exception("Failed to extract token data from credential")
+            token_data = json.loads(provider_token)
+            if "id_token_claims" not in token_data or "access_token" not in token_data:
+                raise ValueError("Missing required fields in token data")
+        except Exception:
+            self.log.exception("Failed to parse token data from bearer token")
             return OIDC_INVALID_REQUEST.detailed(_("Invalid credential data"))
 
         id_token_claims = token_data.get("id_token_claims", {})
@@ -477,7 +464,11 @@ class OIDCController(LoggerMixin):
         )
 
         utility = OIDCUtility(self._circulation_manager.services.redis.client())
-        utility.store_logout_state(logout_state, post_logout_redirect_uri)
+        utility.store_logout_state(
+            logout_state,
+            post_logout_redirect_uri,
+            metadata={"library_short_name": library.short_name},
+        )
 
         try:
             logout_url = auth_manager.build_logout_url(

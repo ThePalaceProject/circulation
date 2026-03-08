@@ -1,5 +1,6 @@
 """Tests for OIDC controller."""
 
+import json
 from unittest.mock import MagicMock, Mock, patch
 
 import jwt
@@ -731,18 +732,15 @@ class TestOIDCControllerLogout:
         mock_library_auth.oidc_provider_lookup.return_value = mock_provider
         mock_library_auth.decode_bearer_token.return_value = (
             "Test OIDC",
-            "provider-token",
+            json.dumps(
+                {
+                    "id_token_claims": {"sub": "user123@example.com"},
+                    "access_token": "access-token",
+                    "refresh_token": "refresh-token",
+                    "id_token": "raw.id.token.jwt",
+                }
+            ),
         )
-        mock_oidc_credential = Mock()
-        mock_provider._credential_manager.lookup_oidc_token_by_value.return_value = (
-            mock_oidc_credential
-        )
-        mock_provider._credential_manager.extract_token_data.return_value = {
-            "id_token_claims": {"sub": "user123@example.com"},
-            "access_token": "access-token",
-            "refresh_token": "refresh-token",
-            "id_token": "raw.id.token.jwt",
-        }
 
         # Set up library_authenticators dict
         controller._authenticator.library_authenticators[library.short_name] = (
@@ -816,19 +814,17 @@ class TestOIDCControllerLogout:
             mock_patron
         )
         mock_provider._credential_manager.invalidate_patron_credentials.return_value = 1
-        mock_provider._credential_manager.extract_token_data.return_value = {
-            "id_token_claims": {"sub": "user123@example.com"},
-            "access_token": "access-token",
-            "refresh_token": "refresh-token",
-        }
 
         mock_library_auth.oidc_provider_lookup.return_value = mock_provider
         mock_library_auth.decode_bearer_token.return_value = (
             "Test OIDC",
-            "provider-token",
-        )
-        mock_provider._credential_manager.lookup_oidc_token_by_value.return_value = (
-            Mock()
+            json.dumps(
+                {
+                    "id_token_claims": {"sub": "user123@example.com"},
+                    "access_token": "access-token",
+                    "refresh_token": "refresh-token",
+                }
+            ),
         )
 
         controller._authenticator.library_authenticators[library.short_name] = (
@@ -925,18 +921,16 @@ class TestOIDCControllerLogout:
             mock_provider._credential_manager.invalidate_patron_credentials.return_value = (
                 1
             )
-            mock_provider._credential_manager.lookup_oidc_token_by_value.return_value = (
-                Mock()
-            )
-            mock_provider._credential_manager.extract_token_data.return_value = {
-                "id_token_claims": {"sub": patron.authorization_identifier},
-                "access_token": "access-token",
-                "refresh_token": "refresh-token",
-                "id_token": f"raw.id.token.{i+1}",
-            }
             mock_library_auth.decode_bearer_token.return_value = (
                 "Test OIDC",
-                "provider-token",
+                json.dumps(
+                    {
+                        "id_token_claims": {"sub": patron.authorization_identifier},
+                        "access_token": "access-token",
+                        "refresh_token": "refresh-token",
+                        "id_token": f"raw.id.token.{i+1}",
+                    }
+                ),
             )
             mock_library_auth.oidc_provider_lookup.return_value = mock_provider
             mock_library_auths.append(mock_library_auth)
@@ -985,14 +979,6 @@ class TestOIDCControllerLogout:
             # Verify correct provider's logout URL
             assert result.status_code == 302
             assert logout_url in result.location
-
-            # Verify correct provider's credential data was used
-            mock_providers[
-                library_index
-            ]._credential_manager.extract_token_data.assert_called_once()
-            for i, provider in enumerate(mock_providers):
-                if i != library_index:
-                    provider._credential_manager.extract_token_data.assert_not_called()
 
     @pytest.mark.parametrize(
         "params,expected_message",
@@ -1065,8 +1051,8 @@ class TestOIDCControllerLogout:
             pytest.param(
                 "Bearer valid.jwt",
                 None,
-                "Bearer token is expired or not found",
-                id="credential-not-found",
+                "Invalid credential data",
+                id="invalid-token-json",
             ),
         ],
     )
@@ -1083,18 +1069,16 @@ class TestOIDCControllerLogout:
 
         mock_library_auth = Mock()
         mock_provider = Mock()
-        mock_provider._credential_manager = Mock()
 
         if decode_side_effect:
             mock_library_auth.decode_bearer_token.side_effect = decode_side_effect
         else:
+            # Return non-JSON so the token data parsing fails for the invalid-token-json case
             mock_library_auth.decode_bearer_token.return_value = (
                 "Test OIDC",
-                "provider-token",
+                "not-valid-json",
             )
 
-        # Credential not found for the last test case
-        mock_provider._credential_manager.lookup_oidc_token_by_value.return_value = None
         mock_library_auth.oidc_provider_lookup.return_value = mock_provider
 
         logout_controller._authenticator.library_authenticators[library.short_name] = (
@@ -1147,17 +1131,17 @@ class TestOIDCControllerLogout:
             assert result == UNKNOWN_OIDC_PROVIDER
 
     @pytest.mark.parametrize(
-        "extract_side_effect,token_data,expected_message",
+        "provider_token,expected_message",
         [
             pytest.param(
-                ValueError("Corrupt credential"),
-                None,
+                "not-valid-json",
                 "Invalid credential data",
-                id="extract-token-data-exception",
+                id="invalid-json-in-token",
             ),
             pytest.param(
-                None,
-                {"id_token_claims": {"iss": "issuer"}, "access_token": "tok"},
+                json.dumps(
+                    {"id_token_claims": {"iss": "issuer"}, "access_token": "tok"}
+                ),
                 "Credential missing patron identifier claim",
                 id="missing-patron-claim",
             ),
@@ -1167,34 +1151,21 @@ class TestOIDCControllerLogout:
         self,
         logout_controller,
         db,
-        extract_side_effect,
-        token_data,
+        provider_token,
         expected_message,
     ):
-        """Test logout initiate errors when stored credential data is invalid."""
+        """Test logout initiate errors when token data in bearer token is invalid."""
         library = db.default_library()
 
         mock_library_auth = Mock()
         mock_library_auth.decode_bearer_token.return_value = (
             "Test OIDC",
-            "provider-token",
+            provider_token,
         )
         mock_provider = Mock()
         mock_provider._settings = Mock()
         mock_provider._settings.patron_id_claim = "sub"
         mock_provider._credential_manager = Mock()
-        mock_provider._credential_manager.lookup_oidc_token_by_value.return_value = (
-            Mock()
-        )
-
-        if extract_side_effect:
-            mock_provider._credential_manager.extract_token_data.side_effect = (
-                extract_side_effect
-            )
-        else:
-            mock_provider._credential_manager.extract_token_data.return_value = (
-                token_data
-            )
 
         mock_auth_manager = Mock()
         mock_provider.get_authentication_manager.return_value = mock_auth_manager
@@ -1262,19 +1233,24 @@ class TestOIDCControllerLogout:
         library = db.default_library()
         patron = db.patron()
 
+        token_data: dict = {
+            "id_token_claims": {"sub": "user@test.com"},
+            "access_token": "access-token",
+        }
+        if build_url_error:
+            # RP-Initiated Logout path — needs id_token and the method to return True
+            token_data["id_token"] = "test.id.token"
+
         mock_library_auth = Mock()
         mock_library_auth.bearer_token_signing_secret = "test-secret"
         mock_library_auth.decode_bearer_token.return_value = (
             "Test OIDC",
-            "provider-token",
+            json.dumps(token_data),
         )
         mock_provider = Mock()
         mock_provider._settings = Mock()
         mock_provider._settings.patron_id_claim = "sub"
         mock_provider._credential_manager = Mock()
-        mock_provider._credential_manager.lookup_oidc_token_by_value.return_value = (
-            Mock()
-        )
 
         if patron_found:
             mock_provider._credential_manager.lookup_patron_by_identifier.return_value = Mock(
@@ -1292,16 +1268,6 @@ class TestOIDCControllerLogout:
             mock_provider._credential_manager.lookup_patron_by_identifier.return_value = (
                 None
             )
-
-        token_data: dict = {
-            "id_token_claims": {"sub": "user@test.com"},
-            "access_token": "access-token",
-        }
-        if build_url_error:
-            # RP-Initiated Logout path — needs id_token and the method to return True
-            token_data["id_token"] = "test.id.token"
-
-        mock_provider._credential_manager.extract_token_data.return_value = token_data
 
         mock_auth_manager = Mock()
         mock_auth_manager.supports_rp_initiated_logout.return_value = bool(
