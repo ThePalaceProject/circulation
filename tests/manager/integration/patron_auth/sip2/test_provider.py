@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from palace.manager.api.admin.problem_details import INVALID_CONFIGURATION_OPTION
 from palace.manager.api.authentication.base import PatronData
 from palace.manager.api.authentication.basic import (
     BasicAuthProviderLibrarySettings,
@@ -1544,10 +1545,6 @@ class TestFetchLiveRuleValidationValues:
     ) -> None:
         """When test_identifier is absent, ProblemDetailException is raised before
         any network call is made."""
-        from palace.manager.api.admin.problem_details import (
-            INVALID_CONFIGURATION_OPTION,
-        )
-
         with pytest.raises(ProblemDetailException) as exc_info:
             SIP2AuthenticationProvider.fetch_live_rule_validation_values(
                 settings_without_identifier
@@ -1563,10 +1560,6 @@ class TestFetchLiveRuleValidationValues:
     ) -> None:
         """When patron_information raises any exception (e.g. network error),
         it is wrapped in a ProblemDetailException."""
-        from palace.manager.api.admin.problem_details import (
-            INVALID_CONFIGURATION_OPTION,
-        )
-
         with patch(
             self._PATRON_INFO_PATCH,
             side_effect=OSError("Connection refused"),
@@ -1586,11 +1579,6 @@ class TestFetchLiveRuleValidationValues:
     ) -> None:
         """When patron_information returns a ProblemDetail (e.g. bad credentials),
         it is raised as a ProblemDetailException with a descriptive message."""
-        from palace.manager.api.admin.problem_details import (
-            INVALID_CONFIGURATION_OPTION,
-        )
-        from palace.manager.api.problem_details import INVALID_CREDENTIALS
-
         sip2_error = INVALID_CREDENTIALS.detailed("Patron not found")
         with patch(self._PATRON_INFO_PATCH, return_value=sip2_error):
             with pytest.raises(ProblemDetailException) as exc_info:
