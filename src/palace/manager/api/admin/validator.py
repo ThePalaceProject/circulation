@@ -35,7 +35,7 @@ class Validator:
         self,
         settings: list[dict[str, Any]],
         value: str,
-        form: dict[str, Any] | None,
+        form: dict[str, Any],
         key: str = "format",
         is_list: bool = False,
         should_zip: bool = False,
@@ -98,7 +98,7 @@ class Validator:
             return None
         # Find the fields that have to do with URLs and are not blank.
         url_inputs = self._extract_inputs(
-            settings, "url", content.get("form"), should_zip=True
+            settings, "url", content["form"], should_zip=True
         )
 
         for field, urls in url_inputs:
@@ -132,7 +132,7 @@ class Validator:
             return None
         # Find the fields that should have numeric input and are not blank.
         number_inputs = self._extract_inputs(
-            settings, "number", content.get("form"), key="type", should_zip=True
+            settings, "number", content["form"], key="type", should_zip=True
         )
         for field, number in number_inputs:
             error = self._number_error(field, number)
