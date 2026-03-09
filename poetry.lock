@@ -1838,14 +1838,14 @@ uritemplate = ">=3.0.1,<5"
 
 [[package]]
 name = "google-api-python-client-stubs"
-version = "1.32.0"
+version = "1.33.0"
 description = "Type stubs for google-api-python-client"
 optional = false
 python-versions = ">=3.7"
 groups = ["dev"]
 files = [
-    {file = "google_api_python_client_stubs-1.32.0-py3-none-any.whl", hash = "sha256:d7024eb0fa3a66ee57f5949cd84b01b8138085e4f186b99747dc7b6c740d5e8f"},
-    {file = "google_api_python_client_stubs-1.32.0.tar.gz", hash = "sha256:1c1840b12ec110019340a404558e270fc812a6365ad6888f632e16bb5e420a71"},
+    {file = "google_api_python_client_stubs-1.33.0-py3-none-any.whl", hash = "sha256:08e0d16236b364a270ef467142e362ba5e7cd260a8cb6d9f6568c8a129a5d29d"},
+    {file = "google_api_python_client_stubs-1.33.0.tar.gz", hash = "sha256:b0e592422ac4cada95f1cdc661346952db2909fdafd348d124f4bfbf8d65161f"},
 ]
 
 [package.dependencies]
