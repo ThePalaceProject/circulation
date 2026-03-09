@@ -447,3 +447,19 @@ class TestOIDCAuthenticationProvider:
 
         assert manager is not None
         assert manager._settings == oidc_provider._settings
+
+        # Same instance returned on repeated calls — avoids re-fetching OIDC discovery doc.
+        assert oidc_provider.get_authentication_manager() is manager
+
+        # A new provider instance (simulating a config reload) produces a new manager.
+        new_provider = OIDCAuthenticationProvider(
+            library_id=oidc_provider.library_id,
+            integration_id=oidc_provider.integration_id,
+            settings=OIDCAuthSettings(
+                issuer_url="https://new-idp.example.com",
+                client_id="new-client-id",
+                client_secret="new-client-secret",
+            ),
+            library_settings=OIDCAuthLibrarySettings(),
+        )
+        assert new_provider.get_authentication_manager() is not manager
