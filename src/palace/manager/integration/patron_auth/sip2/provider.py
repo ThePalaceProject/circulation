@@ -11,6 +11,7 @@ from annotated_types import Ge, Le
 from pydantic import PositiveInt
 from sqlalchemy.orm import Session
 
+from palace.manager.api.admin.problem_details import INVALID_CONFIGURATION_OPTION
 from palace.manager.api.authentication.base import PatronAuthResult, PatronData
 from palace.manager.api.authentication.basic import (
     BasicAuthenticationProvider,
@@ -20,6 +21,9 @@ from palace.manager.api.authentication.basic import (
 from palace.manager.api.authentication.patron_debug import HasPatronDebug
 from palace.manager.api.problem_details import INVALID_CREDENTIALS
 from palace.manager.core.selftest import SelfTestResult
+from palace.manager.integration.patron_auth.patron_blocking import (
+    build_values_from_sip2_info,
+)
 from palace.manager.integration.patron_auth.sip2.client import Sip2Encoding, SIPClient
 from palace.manager.integration.patron_auth.sip2.dialect import Dialect as Sip2Dialect
 from palace.manager.integration.settings import (
@@ -30,7 +34,7 @@ from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.util import MoneyUtility
 from palace.manager.util.network_diagnostics import run_network_diagnostics
-from palace.manager.util.problem_detail import ProblemDetail
+from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
 
 # Thread-local storage for the most-recent SIP2 patron_information response dict.
 # remote_authenticate() stores the raw info here so that _build_blocking_rule_values()
@@ -348,14 +352,6 @@ class SIP2AuthenticationProvider(
                 If ``test_identifier`` is not configured, the SIP2 server cannot
                 be reached, or the server returns an error response.
         """
-        from palace.manager.api.admin.problem_details import (
-            INVALID_CONFIGURATION_OPTION,
-        )
-        from palace.manager.integration.patron_auth.patron_blocking import (
-            build_values_from_sip2_info,
-        )
-        from palace.manager.util.problem_detail import ProblemDetailException
-
         if not settings.test_identifier:
             raise ProblemDetailException(
                 INVALID_CONFIGURATION_OPTION.detailed(

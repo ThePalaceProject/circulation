@@ -1512,3 +1512,136 @@ class TestSIP2AuthenticateWithBlockingRules:
 
         # SIP2 data wins; rule evaluates False → patron allowed.
         assert result is mock_patron
+
+
+class TestFetchLiveRuleValidationValues:
+    """Unit tests for SIP2AuthenticationProvider.fetch_live_rule_validation_values.
+
+    Each test uses a real (non-mocked) SIP2Settings instance and patches only
+    ``patron_information`` on the class to avoid any real network calls.
+    """
+
+    _PATRON_INFO_PATCH = (
+        "palace.manager.integration.patron_auth.sip2.provider"
+        ".SIP2AuthenticationProvider.patron_information"
+    )
+
+    @pytest.fixture
+    def settings_with_identifier(
+        self, create_settings: Callable[..., SIP2Settings]
+    ) -> SIP2Settings:
+        return create_settings(test_identifier="patron1", test_password="secret")
+
+    @pytest.fixture
+    def settings_without_identifier(
+        self, create_settings: Callable[..., SIP2Settings]
+    ) -> SIP2Settings:
+        return create_settings(test_identifier=None)
+
+    def test_raises_when_test_identifier_not_configured(
+        self,
+        settings_without_identifier: SIP2Settings,
+    ) -> None:
+        """When test_identifier is absent, ProblemDetailException is raised before
+        any network call is made."""
+        from palace.manager.api.admin.problem_details import (
+            INVALID_CONFIGURATION_OPTION,
+        )
+
+        with pytest.raises(ProblemDetailException) as exc_info:
+            SIP2AuthenticationProvider.fetch_live_rule_validation_values(
+                settings_without_identifier
+            )
+
+        problem = exc_info.value.problem_detail
+        assert problem.uri == INVALID_CONFIGURATION_OPTION.uri
+        assert "test identifier" in (problem.detail or "").lower()
+
+    def test_raises_when_patron_information_raises(
+        self,
+        settings_with_identifier: SIP2Settings,
+    ) -> None:
+        """When patron_information raises any exception (e.g. network error),
+        it is wrapped in a ProblemDetailException."""
+        from palace.manager.api.admin.problem_details import (
+            INVALID_CONFIGURATION_OPTION,
+        )
+
+        with patch(
+            self._PATRON_INFO_PATCH,
+            side_effect=OSError("Connection refused"),
+        ):
+            with pytest.raises(ProblemDetailException) as exc_info:
+                SIP2AuthenticationProvider.fetch_live_rule_validation_values(
+                    settings_with_identifier
+                )
+
+        problem = exc_info.value.problem_detail
+        assert problem.uri == INVALID_CONFIGURATION_OPTION.uri
+        assert "Connection refused" in (problem.detail or "")
+
+    def test_raises_when_patron_information_returns_problem_detail(
+        self,
+        settings_with_identifier: SIP2Settings,
+    ) -> None:
+        """When patron_information returns a ProblemDetail (e.g. bad credentials),
+        it is raised as a ProblemDetailException with a descriptive message."""
+        from palace.manager.api.admin.problem_details import (
+            INVALID_CONFIGURATION_OPTION,
+        )
+        from palace.manager.api.problem_details import INVALID_CREDENTIALS
+
+        sip2_error = INVALID_CREDENTIALS.detailed("Patron not found")
+        with patch(self._PATRON_INFO_PATCH, return_value=sip2_error):
+            with pytest.raises(ProblemDetailException) as exc_info:
+                SIP2AuthenticationProvider.fetch_live_rule_validation_values(
+                    settings_with_identifier
+                )
+
+        problem = exc_info.value.problem_detail
+        assert problem.uri == INVALID_CONFIGURATION_OPTION.uri
+        assert "patron1" in (problem.detail or "")
+        assert "Patron not found" in (problem.detail or "")
+
+    def test_returns_values_dict_on_success(
+        self,
+        settings_with_identifier: SIP2Settings,
+    ) -> None:
+        """When patron_information succeeds, the raw SIP2 info dict is passed through
+        build_values_from_sip2_info and returned."""
+        sip2_info = {"fee_amount": "$5.00", "sipserver_patron_class": "adult"}
+        with patch(self._PATRON_INFO_PATCH, return_value=sip2_info):
+            result = SIP2AuthenticationProvider.fetch_live_rule_validation_values(
+                settings_with_identifier
+            )
+
+        assert result["fee_amount"] == "$5.00"
+        assert result["sipserver_patron_class"] == "adult"
+        assert result["fines"] == pytest.approx(5.0)
+
+    def test_uses_test_password_when_present(
+        self,
+        create_settings: Callable[..., SIP2Settings],
+    ) -> None:
+        """patron_information is called with test_identifier and test_password."""
+        settings = create_settings(test_identifier="user1", test_password="mypass")
+        sip2_info = {"fee_amount": "0.00"}
+
+        with patch(self._PATRON_INFO_PATCH, return_value=sip2_info) as mock_pi:
+            SIP2AuthenticationProvider.fetch_live_rule_validation_values(settings)
+
+        mock_pi.assert_called_once_with("user1", "mypass")
+
+    def test_uses_empty_string_when_no_test_password(
+        self,
+        create_settings: Callable[..., SIP2Settings],
+    ) -> None:
+        """When test_password is not set, patron_information is called with an
+        empty string rather than None."""
+        settings = create_settings(test_identifier="user1", test_password=None)
+        sip2_info = {"fee_amount": "0.00"}
+
+        with patch(self._PATRON_INFO_PATCH, return_value=sip2_info) as mock_pi:
+            SIP2AuthenticationProvider.fetch_live_rule_validation_values(settings)
+
+        mock_pi.assert_called_once_with("user1", "")
