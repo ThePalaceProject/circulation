@@ -80,6 +80,7 @@ class OIDCAuthenticationProvider(
 
         self._credential_manager = OIDCCredentialManager()
         self._settings = settings
+        self._auth_manager: OIDCAuthenticationManager | None = None
 
     @classmethod
     def label(cls) -> str:
@@ -232,9 +233,16 @@ class OIDCAuthenticationProvider(
     def get_authentication_manager(self) -> OIDCAuthenticationManager:
         """Return OIDC authentication manager for this provider.
 
+        The manager is cached for the lifetime of the provider instance, which
+        matches the configuration epoch — the provider is recreated whenever
+        settings change. This prevents repeated fetches of the OIDC discovery
+        document on every authenticated request.
+
         :return: OIDC authentication manager
         """
-        return OIDCAuthenticationManager(self._settings)
+        if self._auth_manager is None:
+            self._auth_manager = OIDCAuthenticationManager(self._settings)
+        return self._auth_manager
 
     def remote_patron_lookup_from_oidc_claims(
         self, id_token_claims: dict[str, str]
