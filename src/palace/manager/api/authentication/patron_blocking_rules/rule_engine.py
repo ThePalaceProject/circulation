@@ -57,6 +57,8 @@ def _format_allowed_functions(functions: Mapping[str, Callable[..., Any]]) -> st
 class RuleValidationError(BasePalaceException):
     """Raised when a patron blocking rule fails admin-save validation."""
 
+    message: str
+
     def __init__(self, message: str) -> None:
         super().__init__(message)
 
