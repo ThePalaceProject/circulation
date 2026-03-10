@@ -23,14 +23,8 @@ from palace.manager.api.routes import allows_library, has_library, library_route
 from palace.manager.core.app_server import returns_problem_detail
 from palace.manager.core.problem_details import INVALID_INPUT
 from palace.manager.sqlalchemy.model.admin import Admin
+from palace.manager.sqlalchemy.model.contributor import Contributor
 from palace.manager.util.problem_detail import BaseProblemDetailException, ProblemDetail
-
-# Type aliases for route return values (before decorator transformation).
-# Use WerkzeugResponse as base since controllers may return redirect() etc.
-ProblemDetailOrResponse = WerkzeugResponse | ProblemDetail
-JsonOrProblemDetailOrResponse = (
-    dict[str, Any] | Mapping[str, Any] | WerkzeugResponse | ProblemDetail | None
-)
 
 # An admin's session will expire after this amount of time and
 # the admin will have to log in again.
@@ -138,45 +132,45 @@ def returns_json_or_response_or_problem_detail[**P, T](
     return decorated
 
 
-@app.route("/admin/sign_in_with_password", methods=["POST"])  # type: ignore[type-var]
-@returns_problem_detail
-def password_auth() -> ProblemDetailOrResponse:
+@app.route("/admin/sign_in_with_password", methods=["POST"])
+@returns_json_or_response_or_problem_detail
+def password_auth() -> WerkzeugResponse | ProblemDetail:
     return app.manager.admin_sign_in_controller.password_sign_in()
 
 
-@app.route("/admin/sign_in")  # type: ignore[type-var]
-@returns_problem_detail
-def admin_sign_in() -> ProblemDetailOrResponse:
+@app.route("/admin/sign_in")
+@returns_json_or_response_or_problem_detail
+def admin_sign_in() -> WerkzeugResponse | ProblemDetail:
     return app.manager.admin_sign_in_controller.sign_in()
 
 
-@app.route("/admin/sign_out")  # type: ignore[type-var]
-@returns_problem_detail
+@app.route("/admin/sign_out")
+@returns_json_or_response_or_problem_detail
 @requires_admin
-def admin_sign_out() -> ProblemDetailOrResponse:
+def admin_sign_out() -> WerkzeugResponse:
     return app.manager.admin_sign_in_controller.sign_out()
 
 
-@app.route("/admin/change_password", methods=["POST"])  # type: ignore[type-var]
-@returns_problem_detail
+@app.route("/admin/change_password", methods=["POST"])
+@returns_json_or_response_or_problem_detail
 @requires_admin
-def admin_change_password() -> ProblemDetailOrResponse:
+def admin_change_password() -> Response:
     return app.manager.admin_sign_in_controller.change_password()
 
 
-@app.route("/admin/forgot_password", methods=["GET", "POST"])  # type: ignore[type-var]
-@returns_problem_detail
-def admin_forgot_password() -> ProblemDetailOrResponse:
+@app.route("/admin/forgot_password", methods=["GET", "POST"])
+@returns_json_or_response_or_problem_detail
+def admin_forgot_password() -> WerkzeugResponse | ProblemDetail:
     return app.manager.admin_reset_password_controller.forgot_password()
 
 
-@app.route(  # type: ignore[type-var]
+@app.route(
     "/admin/reset_password/<reset_password_token>/<admin_id>", methods=["GET", "POST"]
 )
-@returns_problem_detail
+@returns_json_or_response_or_problem_detail
 def admin_reset_password(
     reset_password_token: str, admin_id: str
-) -> ProblemDetailOrResponse | None:
+) -> WerkzeugResponse | None:
     return app.manager.admin_reset_password_controller.reset_password(
         reset_password_token, int(admin_id) if admin_id.isdigit() else 0
     )
@@ -186,7 +180,7 @@ def admin_reset_password(
 @has_library
 @returns_problem_detail
 @requires_admin
-def work_details(identifier_type: str, identifier: str) -> ProblemDetailOrResponse:
+def work_details(identifier_type: str, identifier: str) -> Response | ProblemDetail:
     return app.manager.admin_work_controller.details(identifier_type, identifier)
 
 
@@ -198,7 +192,7 @@ def work_details(identifier_type: str, identifier: str) -> ProblemDetailOrRespon
 @requires_admin
 def work_classifications(
     identifier_type: str, identifier: str
-) -> JsonOrProblemDetailOrResponse:
+) -> dict[str, Any] | ProblemDetail:
     return app.manager.admin_work_controller.classifications(
         identifier_type, identifier
     )
@@ -213,7 +207,7 @@ def work_classifications(
 @requires_csrf_token
 def work_custom_lists(
     identifier_type: str, identifier: str
-) -> JsonOrProblemDetailOrResponse:
+) -> Mapping[str, Any] | Response:
     return app.manager.admin_work_controller.custom_lists(identifier_type, identifier)
 
 
@@ -224,7 +218,7 @@ def work_custom_lists(
 @returns_problem_detail
 @requires_admin
 @requires_csrf_token
-def edit(identifier_type: str, identifier: str) -> ProblemDetailOrResponse:
+def edit(identifier_type: str, identifier: str) -> Response | ProblemDetail:
     return app.manager.admin_work_controller.edit(identifier_type, identifier)
 
 
@@ -237,7 +231,7 @@ def edit(identifier_type: str, identifier: str) -> ProblemDetailOrResponse:
 @requires_csrf_token
 def suppress_for_library(
     identifier_type: str, identifier: str
-) -> ProblemDetailOrResponse:
+) -> Response | ProblemDetail:
     return app.manager.admin_work_controller.suppress(identifier_type, identifier)
 
 
@@ -250,7 +244,7 @@ def suppress_for_library(
 @requires_csrf_token
 def unsuppress_for_library(
     identifier_type: str, identifier: str
-) -> ProblemDetailOrResponse:
+) -> Response | ProblemDetail:
     return app.manager.admin_work_controller.unsuppress(identifier_type, identifier)
 
 
@@ -264,7 +258,7 @@ def unsuppress_for_library(
 @requires_csrf_token
 def suppress_deprecated(
     identifier_type: str, identifier: str
-) -> ProblemDetailOrResponse:
+) -> Response | ProblemDetail:
     return app.manager.admin_work_controller.suppress(identifier_type, identifier)
 
 
@@ -278,7 +272,7 @@ def suppress_deprecated(
 @requires_csrf_token
 def unsuppress_deprecated(
     identifier_type: str, identifier: str
-) -> ProblemDetailOrResponse:
+) -> Response | ProblemDetail:
     return app.manager.admin_work_controller.unsuppress(identifier_type, identifier)
 
 
@@ -287,7 +281,7 @@ def unsuppress_deprecated(
 @returns_problem_detail
 @requires_admin
 @requires_csrf_token
-def refresh(identifier_type: str, identifier: str) -> ProblemDetailOrResponse:
+def refresh(identifier_type: str, identifier: str) -> Response | ProblemDetail:
     return app.manager.admin_work_controller.refresh_metadata(
         identifier_type, identifier
     )
@@ -303,7 +297,7 @@ def refresh(identifier_type: str, identifier: str) -> ProblemDetailOrResponse:
 @requires_csrf_token
 def edit_classifications(
     identifier_type: str, identifier: str
-) -> ProblemDetailOrResponse:
+) -> Response | ProblemDetail:
     return app.manager.admin_work_controller.edit_classifications(
         identifier_type, identifier
     )
@@ -311,25 +305,25 @@ def edit_classifications(
 
 @app.route("/admin/roles")
 @returns_json_or_response_or_problem_detail
-def roles() -> JsonOrProblemDetailOrResponse:
+def roles() -> dict[str, Contributor.Role]:
     return app.manager.admin_work_controller.roles()
 
 
 @app.route("/admin/languages")
 @returns_json_or_response_or_problem_detail
-def languages() -> JsonOrProblemDetailOrResponse:
+def languages() -> dict[str, list[str]]:
     return app.manager.admin_work_controller.languages()
 
 
 @app.route("/admin/media")
 @returns_json_or_response_or_problem_detail
-def media() -> JsonOrProblemDetailOrResponse:
+def media() -> dict[str, str]:
     return app.manager.admin_work_controller.media()
 
 
 @app.route("/admin/rights_status")
 @returns_json_or_response_or_problem_detail
-def rights_status() -> JsonOrProblemDetailOrResponse:
+def rights_status() -> dict[str, dict[str, str | bool]]:
     return app.manager.admin_work_controller.rights_status()
 
 
@@ -337,7 +331,7 @@ def rights_status() -> JsonOrProblemDetailOrResponse:
 @has_library
 @returns_problem_detail
 @requires_admin
-def suppressed() -> ProblemDetailOrResponse:
+def suppressed() -> Response | ProblemDetail:
     """Returns a feed of suppressed works."""
     return app.manager.admin_feed_controller.suppressed()
 
@@ -346,7 +340,7 @@ def suppressed() -> ProblemDetailOrResponse:
 @has_library
 @returns_json_or_response_or_problem_detail
 @requires_admin
-def suppressed_search() -> JsonOrProblemDetailOrResponse:
+def suppressed_search() -> Response | ProblemDetail:
     """Search within suppressed/hidden works."""
     return app.manager.admin_feed_controller.suppressed_search()
 
@@ -354,7 +348,7 @@ def suppressed_search() -> JsonOrProblemDetailOrResponse:
 @app.route("/admin/genres")
 @returns_json_or_response_or_problem_detail
 @requires_admin
-def genres() -> JsonOrProblemDetailOrResponse:
+def genres() -> dict[str, dict[str, dict[str, str | list[str]]]]:
     """Returns a JSON representation of complete genre tree."""
     return app.manager.admin_feed_controller.genres()
 
@@ -363,7 +357,7 @@ def genres() -> JsonOrProblemDetailOrResponse:
 @returns_problem_detail
 @allows_library
 @requires_admin
-def bulk_circulation_events() -> ProblemDetailOrResponse:
+def bulk_circulation_events() -> Response | ProblemDetail:
     """Returns a CSV representation of all circulation events with optional
     start and end times."""
     (
@@ -391,7 +385,7 @@ def bulk_circulation_events() -> ProblemDetailOrResponse:
 @app.route("/admin/stats")
 @returns_json_or_response_or_problem_detail
 @requires_admin
-def stats() -> dict[str, Any] | Mapping[str, Any]:
+def stats() -> dict[str, Any]:
     statistics_response: StatisticsResponse = (
         app.manager.admin_dashboard_controller.stats(stats_function=generate_statistics)
     )
@@ -401,7 +395,7 @@ def stats() -> dict[str, Any] | Mapping[str, Any]:
 @app.route("/admin/quicksight_embed/<dashboard_name>")
 @returns_json_or_response_or_problem_detail
 @requires_admin
-def generate_quicksight_url(dashboard_name: str) -> JsonOrProblemDetailOrResponse:
+def generate_quicksight_url(dashboard_name: str) -> dict[str, str]:
     return app.manager.admin_quicksight_controller.generate_quicksight_url(
         dashboard_name
     )
@@ -410,7 +404,7 @@ def generate_quicksight_url(dashboard_name: str) -> JsonOrProblemDetailOrRespons
 @app.route("/admin/quicksight_embed/names")
 @returns_json_or_response_or_problem_detail
 @requires_admin
-def get_quicksight_names() -> JsonOrProblemDetailOrResponse:
+def get_quicksight_names() -> dict[str, list[str]]:
     return app.manager.admin_quicksight_controller.get_dashboard_names()
 
 
@@ -418,7 +412,7 @@ def get_quicksight_names() -> JsonOrProblemDetailOrResponse:
 @returns_json_or_response_or_problem_detail
 @requires_admin
 @requires_csrf_token
-def libraries() -> JsonOrProblemDetailOrResponse:
+def libraries() -> Response | ProblemDetail:
     return app.manager.admin_library_settings_controller.process_libraries()
 
 
@@ -426,7 +420,7 @@ def libraries() -> JsonOrProblemDetailOrResponse:
 @returns_json_or_response_or_problem_detail
 @requires_admin
 @requires_csrf_token
-def library(library_uuid: str) -> JsonOrProblemDetailOrResponse:
+def library(library_uuid: str) -> Response:
     return app.manager.admin_library_settings_controller.process_delete(library_uuid)
 
 
@@ -434,7 +428,7 @@ def library(library_uuid: str) -> JsonOrProblemDetailOrResponse:
 @returns_json_or_response_or_problem_detail
 @requires_admin
 @requires_csrf_token
-def collections() -> JsonOrProblemDetailOrResponse:
+def collections() -> Response | ProblemDetail:
     return app.manager.admin_collection_settings_controller.process_collections()
 
 
@@ -442,7 +436,7 @@ def collections() -> JsonOrProblemDetailOrResponse:
 @returns_json_or_response_or_problem_detail
 @requires_admin
 @requires_csrf_token
-def collection(collection_id: str) -> JsonOrProblemDetailOrResponse:
+def collection(collection_id: str) -> Response | ProblemDetail:
     return app.manager.admin_collection_settings_controller.process_delete(
         collection_id
     )
@@ -452,7 +446,7 @@ def collection(collection_id: str) -> JsonOrProblemDetailOrResponse:
 @returns_json_or_response_or_problem_detail
 @requires_admin
 @requires_csrf_token
-def collection_import(collection_id: str) -> ProblemDetailOrResponse:
+def collection_import(collection_id: str) -> Response | ProblemDetail:
     try:
         integration_id = int(collection_id)
     except ValueError:
@@ -467,7 +461,7 @@ def collection_import(collection_id: str) -> ProblemDetailOrResponse:
 @returns_json_or_response_or_problem_detail
 @requires_admin
 @requires_csrf_token
-def collection_self_tests(identifier: str) -> JsonOrProblemDetailOrResponse:
+def collection_self_tests(identifier: str) -> Response | ProblemDetail:
     return (
         app.manager.admin_collection_settings_controller.process_collection_self_tests(
             identifier
@@ -480,7 +474,7 @@ def collection_self_tests(identifier: str) -> JsonOrProblemDetailOrResponse:
 @allows_admin_auth_setup
 @requires_admin
 @requires_csrf_token
-def individual_admins() -> JsonOrProblemDetailOrResponse:
+def individual_admins() -> dict[str, list[dict[str, Any]]] | Response | ProblemDetail:
     return (
         app.manager.admin_individual_admin_settings_controller.process_individual_admins()
     )
@@ -490,7 +484,7 @@ def individual_admins() -> JsonOrProblemDetailOrResponse:
 @returns_json_or_response_or_problem_detail
 @requires_admin
 @requires_csrf_token
-def individual_admin(email: str) -> JsonOrProblemDetailOrResponse:
+def individual_admin(email: str) -> Response | ProblemDetail:
     return app.manager.admin_individual_admin_settings_controller.process_delete(email)
 
 
@@ -498,7 +492,7 @@ def individual_admin(email: str) -> JsonOrProblemDetailOrResponse:
 @returns_json_or_response_or_problem_detail
 @requires_admin
 @requires_csrf_token
-def patron_auth_services() -> JsonOrProblemDetailOrResponse:
+def patron_auth_services() -> Response | ProblemDetail:
     return (
         app.manager.admin_patron_auth_services_controller.process_patron_auth_services()
     )
@@ -508,7 +502,7 @@ def patron_auth_services() -> JsonOrProblemDetailOrResponse:
 @returns_json_or_response_or_problem_detail
 @requires_admin
 @requires_csrf_token
-def patron_auth_service(service_id: str) -> JsonOrProblemDetailOrResponse:
+def patron_auth_service(service_id: str) -> Response | ProblemDetail:
     return app.manager.admin_patron_auth_services_controller.process_delete(service_id)
 
 
@@ -518,7 +512,7 @@ def patron_auth_service(service_id: str) -> JsonOrProblemDetailOrResponse:
 @returns_json_or_response_or_problem_detail
 @requires_admin
 @requires_csrf_token
-def patron_auth_self_tests(identifier: str) -> JsonOrProblemDetailOrResponse:
+def patron_auth_self_tests(identifier: str) -> Response | ProblemDetail:
     return app.manager.admin_patron_auth_services_controller.process_patron_auth_service_self_tests(
         identifier
     )
@@ -539,7 +533,7 @@ def patron_auth_service_validate_patron_blocking_rule():
 @returns_json_or_response_or_problem_detail
 @requires_admin
 @requires_csrf_token
-def lookup_patron() -> JsonOrProblemDetailOrResponse:
+def lookup_patron() -> dict[str, Any] | ProblemDetail:
     return app.manager.admin_patron_controller.lookup_patron()
 
 
@@ -548,7 +542,7 @@ def lookup_patron() -> JsonOrProblemDetailOrResponse:
 @returns_json_or_response_or_problem_detail
 @requires_admin
 @requires_csrf_token
-def reset_adobe_id() -> JsonOrProblemDetailOrResponse:
+def reset_adobe_id() -> Response | ProblemDetail:
     return app.manager.admin_patron_controller.reset_adobe_id()
 
 
@@ -556,7 +550,7 @@ def reset_adobe_id() -> JsonOrProblemDetailOrResponse:
 @has_library
 @returns_json_or_response_or_problem_detail
 @requires_admin
-def patron_auth_methods() -> JsonOrProblemDetailOrResponse:
+def patron_auth_methods() -> dict[str, Any] | ProblemDetail:
     return app.manager.admin_patron_controller.get_auth_methods()
 
 
@@ -565,7 +559,7 @@ def patron_auth_methods() -> JsonOrProblemDetailOrResponse:
 @returns_json_or_response_or_problem_detail
 @requires_admin
 @requires_csrf_token
-def patron_debug_auth() -> JsonOrProblemDetailOrResponse:
+def patron_debug_auth() -> dict[str, Any] | ProblemDetail:
     return app.manager.admin_patron_controller.debug_auth()
 
 
@@ -573,7 +567,7 @@ def patron_debug_auth() -> JsonOrProblemDetailOrResponse:
 @returns_json_or_response_or_problem_detail
 @requires_admin
 @requires_csrf_token
-def metadata_services() -> JsonOrProblemDetailOrResponse:
+def metadata_services() -> Response | ProblemDetail:
     return app.manager.admin_metadata_services_controller.process_metadata_services()
 
 
@@ -581,7 +575,7 @@ def metadata_services() -> JsonOrProblemDetailOrResponse:
 @returns_json_or_response_or_problem_detail
 @requires_admin
 @requires_csrf_token
-def metadata_service(service_id: str) -> JsonOrProblemDetailOrResponse:
+def metadata_service(service_id: str) -> Response | ProblemDetail:
     return app.manager.admin_metadata_services_controller.process_delete(service_id)
 
 
@@ -589,7 +583,7 @@ def metadata_service(service_id: str) -> JsonOrProblemDetailOrResponse:
 @returns_json_or_response_or_problem_detail
 @requires_admin
 @requires_csrf_token
-def metadata_service_self_tests(identifier: str) -> JsonOrProblemDetailOrResponse:
+def metadata_service_self_tests(identifier: str) -> Response | ProblemDetail:
     return app.manager.admin_metadata_services_controller.process_metadata_service_self_tests(
         identifier
     )
@@ -599,7 +593,7 @@ def metadata_service_self_tests(identifier: str) -> JsonOrProblemDetailOrRespons
 @returns_json_or_response_or_problem_detail
 @requires_admin
 @requires_csrf_token
-def catalog_services() -> JsonOrProblemDetailOrResponse:
+def catalog_services() -> Response | ProblemDetail:
     return app.manager.admin_catalog_services_controller.process_catalog_services()
 
 
@@ -607,7 +601,7 @@ def catalog_services() -> JsonOrProblemDetailOrResponse:
 @returns_json_or_response_or_problem_detail
 @requires_admin
 @requires_csrf_token
-def catalog_service(service_id: str) -> JsonOrProblemDetailOrResponse:
+def catalog_service(service_id: str) -> Response | ProblemDetail:
     return app.manager.admin_catalog_services_controller.process_delete(service_id)
 
 
@@ -615,7 +609,7 @@ def catalog_service(service_id: str) -> JsonOrProblemDetailOrResponse:
 @returns_json_or_response_or_problem_detail
 @requires_admin
 @requires_csrf_token
-def discovery_services() -> JsonOrProblemDetailOrResponse:
+def discovery_services() -> Response | ProblemDetail:
     return app.manager.admin_discovery_services_controller.process_discovery_services()
 
 
@@ -623,7 +617,7 @@ def discovery_services() -> JsonOrProblemDetailOrResponse:
 @returns_json_or_response_or_problem_detail
 @requires_admin
 @requires_csrf_token
-def discovery_service(service_id: str) -> JsonOrProblemDetailOrResponse:
+def discovery_service(service_id: str) -> Response | ProblemDetail:
     return app.manager.admin_discovery_services_controller.process_delete(service_id)
 
 
@@ -631,7 +625,7 @@ def discovery_service(service_id: str) -> JsonOrProblemDetailOrResponse:
 @returns_json_or_response_or_problem_detail
 @requires_admin
 @requires_csrf_token
-def announcements_for_all() -> JsonOrProblemDetailOrResponse:
+def announcements_for_all() -> dict[str, Any] | ProblemDetail:
     return app.manager.admin_announcement_service.process_many()
 
 
@@ -639,7 +633,9 @@ def announcements_for_all() -> JsonOrProblemDetailOrResponse:
 @returns_json_or_response_or_problem_detail
 @requires_admin
 @requires_csrf_token
-def discovery_service_library_registrations() -> JsonOrProblemDetailOrResponse:
+def discovery_service_library_registrations() -> (
+    Response | dict[str, Any] | ProblemDetail
+):
     return (
         app.manager.admin_discovery_service_library_registrations_controller.process_discovery_service_library_registrations()
     )
@@ -650,7 +646,7 @@ def discovery_service_library_registrations() -> JsonOrProblemDetailOrResponse:
 @returns_json_or_response_or_problem_detail
 @requires_admin
 @requires_csrf_token
-def custom_lists_post() -> JsonOrProblemDetailOrResponse:
+def custom_lists_post() -> dict[str, Any] | ProblemDetail | Response | None:
     return app.manager.admin_custom_lists_controller.custom_lists()
 
 
@@ -659,7 +655,7 @@ def custom_lists_post() -> JsonOrProblemDetailOrResponse:
 @returns_json_or_response_or_problem_detail
 @requires_admin
 @requires_csrf_token
-def custom_lists_get() -> JsonOrProblemDetailOrResponse:
+def custom_lists_get() -> dict[str, Any] | ProblemDetail | Response | None:
     return app.manager.admin_custom_lists_controller.custom_lists()
 
 
@@ -668,7 +664,7 @@ def custom_lists_get() -> JsonOrProblemDetailOrResponse:
 @returns_json_or_response_or_problem_detail
 @requires_admin
 @requires_csrf_token
-def custom_list_get(list_id: str) -> JsonOrProblemDetailOrResponse:
+def custom_list_get(list_id: str) -> Response | dict[str, Any] | ProblemDetail | None:
     return app.manager.admin_custom_lists_controller.custom_list(list_id)
 
 
@@ -677,7 +673,7 @@ def custom_list_get(list_id: str) -> JsonOrProblemDetailOrResponse:
 @returns_json_or_response_or_problem_detail
 @requires_admin
 @requires_csrf_token
-def custom_list_post(list_id: str) -> JsonOrProblemDetailOrResponse:
+def custom_list_post(list_id: str) -> Response | dict[str, Any] | ProblemDetail | None:
     return app.manager.admin_custom_lists_controller.custom_list(list_id)
 
 
@@ -686,7 +682,9 @@ def custom_list_post(list_id: str) -> JsonOrProblemDetailOrResponse:
 @returns_json_or_response_or_problem_detail
 @requires_admin
 @requires_csrf_token
-def custom_list_delete(list_id: str) -> JsonOrProblemDetailOrResponse:
+def custom_list_delete(
+    list_id: str,
+) -> Response | dict[str, Any] | ProblemDetail | None:
     return app.manager.admin_custom_lists_controller.custom_list(list_id)
 
 
@@ -695,7 +693,7 @@ def custom_list_delete(list_id: str) -> JsonOrProblemDetailOrResponse:
 @returns_json_or_response_or_problem_detail
 @requires_admin
 @requires_csrf_token
-def custom_list_share(list_id: str) -> JsonOrProblemDetailOrResponse:
+def custom_list_share(list_id: str) -> ProblemDetail | dict[str, int] | Response:
     """Share a custom list with all libraries in the CM that share the collections of this library and works of this list"""
     return app.manager.admin_custom_lists_controller.share_locally(list_id)
 
@@ -705,7 +703,7 @@ def custom_list_share(list_id: str) -> JsonOrProblemDetailOrResponse:
 @returns_json_or_response_or_problem_detail
 @requires_admin
 @requires_csrf_token
-def custom_list_unshare(list_id: str) -> JsonOrProblemDetailOrResponse:
+def custom_list_unshare(list_id: str) -> ProblemDetail | dict[str, int] | Response:
     """Unshare the list from all libraries, as long as no other library is using the list in its lanes"""
     return app.manager.admin_custom_lists_controller.share_locally(list_id)
 
@@ -715,7 +713,7 @@ def custom_list_unshare(list_id: str) -> JsonOrProblemDetailOrResponse:
 @returns_json_or_response_or_problem_detail
 @requires_admin
 @requires_csrf_token
-def lanes() -> JsonOrProblemDetailOrResponse:
+def lanes() -> dict[str, list[dict[str, Any]]] | Response | ProblemDetail:
     return app.manager.admin_lanes_controller.lanes()
 
 
@@ -724,7 +722,7 @@ def lanes() -> JsonOrProblemDetailOrResponse:
 @returns_json_or_response_or_problem_detail
 @requires_admin
 @requires_csrf_token
-def lane(lane_identifier: str) -> JsonOrProblemDetailOrResponse:
+def lane(lane_identifier: str) -> Response | ProblemDetail:
     return app.manager.admin_lanes_controller.lane(lane_identifier)
 
 
@@ -733,7 +731,7 @@ def lane(lane_identifier: str) -> JsonOrProblemDetailOrResponse:
 @returns_json_or_response_or_problem_detail
 @requires_admin
 @requires_csrf_token
-def lane_show(lane_identifier: str) -> JsonOrProblemDetailOrResponse:
+def lane_show(lane_identifier: str) -> Response | ProblemDetail:
     return app.manager.admin_lanes_controller.show_lane(lane_identifier)
 
 
@@ -742,7 +740,7 @@ def lane_show(lane_identifier: str) -> JsonOrProblemDetailOrResponse:
 @returns_json_or_response_or_problem_detail
 @requires_admin
 @requires_csrf_token
-def lane_hide(lane_identifier: str) -> JsonOrProblemDetailOrResponse:
+def lane_hide(lane_identifier: str) -> Response | ProblemDetail:
     return app.manager.admin_lanes_controller.hide_lane(lane_identifier)
 
 
@@ -751,7 +749,7 @@ def lane_hide(lane_identifier: str) -> JsonOrProblemDetailOrResponse:
 @returns_json_or_response_or_problem_detail
 @requires_admin
 @requires_csrf_token
-def reset_lanes() -> JsonOrProblemDetailOrResponse:
+def reset_lanes() -> Response:
     return app.manager.admin_lanes_controller.reset()
 
 
@@ -760,7 +758,7 @@ def reset_lanes() -> JsonOrProblemDetailOrResponse:
 @returns_json_or_response_or_problem_detail
 @requires_admin
 @requires_csrf_token
-def change_lane_order() -> JsonOrProblemDetailOrResponse:
+def change_lane_order() -> Response:
     return app.manager.admin_lanes_controller.change_order()
 
 
@@ -768,14 +766,14 @@ def change_lane_order() -> JsonOrProblemDetailOrResponse:
 @has_library
 @returns_json_or_response_or_problem_detail
 @requires_admin
-def search_field_values() -> JsonOrProblemDetailOrResponse:
+def search_field_values() -> dict[str, dict[str, int]]:
     return app.manager.admin_search_controller.search_field_values()
 
 
 @app.route("/admin/diagnostics")
 @requires_admin
 @returns_json_or_response_or_problem_detail
-def diagnostics() -> JsonOrProblemDetailOrResponse:
+def diagnostics() -> dict[str, dict[str, dict[str, list[dict[str, Any]]]]]:
     return app.manager.timestamps_controller.diagnostics()
 
 
@@ -786,7 +784,7 @@ def diagnostics() -> JsonOrProblemDetailOrResponse:
 @allows_library
 @returns_json_or_response_or_problem_detail
 @requires_admin
-def inventory_report_info() -> JsonOrProblemDetailOrResponse:
+def inventory_report_info() -> Response:
     return app.manager.admin_report_controller.inventory_report_info()
 
 
@@ -797,7 +795,7 @@ def inventory_report_info() -> JsonOrProblemDetailOrResponse:
 @allows_library
 @returns_json_or_response_or_problem_detail
 @requires_admin
-def generate_inventory_report() -> JsonOrProblemDetailOrResponse:
+def generate_inventory_report() -> Response | ProblemDetail:
     return app.manager.admin_report_controller.generate_inventory_report()
 
 
@@ -805,7 +803,7 @@ def generate_inventory_report() -> JsonOrProblemDetailOrResponse:
 @has_library
 @returns_json_or_response_or_problem_detail
 @requires_admin
-def generate_report(report_key: str) -> JsonOrProblemDetailOrResponse:
+def generate_report(report_key: str) -> Response:
     return app.manager.admin_report_controller.generate_report(report_key=report_key)
 
 
@@ -838,20 +836,20 @@ def admin_view(
     collection: str | None = None,
     book: str | None = None,
     etc: str | None = None,
-    **kwargs: Any,
+    **kwargs: str,
 ) -> WerkzeugResponse:
     return app.manager.admin_view_controller(collection, book, path=etc)
 
 
 @app.route("/admin/", strict_slashes=False)
-def admin_base(**kwargs: Any) -> WerkzeugResponse:
+def admin_base(**kwargs: str) -> WerkzeugResponse:
     return redirect(url_for("admin_view", _external=True))
 
 
 @app.route("/admin/libraries/import", strict_slashes=False, methods=["POST"])
 @returns_json_or_response_or_problem_detail
 @requires_basic_auth
-def import_libraries() -> JsonOrProblemDetailOrResponse:
+def import_libraries() -> Response | ProblemDetail:
     """Import multiple libraries from a list of library configurations."""
     return app.manager.admin_library_settings_controller.import_libraries()
 
@@ -859,9 +857,9 @@ def import_libraries() -> JsonOrProblemDetailOrResponse:
 # This path is used only in debug mode to serve frontend assets.
 if AdminClientConfig.operational_mode() == OperationalMode.development:
 
-    @app.route("/admin/static/<filename>")  # type: ignore[type-var]
+    @app.route("/admin/static/<filename>")
     @returns_problem_detail
-    def admin_static_file(filename: str) -> ProblemDetailOrResponse:
+    def admin_static_file(filename: str) -> Response:
         return StaticFileController.static_file(
             AdminClientConfig.static_files_directory(), filename
         )
