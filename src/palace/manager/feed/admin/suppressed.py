@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable
-from dataclasses import dataclass
+from collections.abc import Callable, Generator
 from enum import StrEnum
 from typing import TYPE_CHECKING, Self
 
@@ -11,6 +10,7 @@ from sqlalchemy.sql import ColumnElement
 
 from palace.manager.feed.acquisition import OPDSAcquisitionFeed
 from palace.manager.feed.annotator.admin.suppressed import AdminSuppressedAnnotator
+from palace.manager.feed.facets.base import BaseFacets, FacetGroup
 from palace.manager.feed.types import FacetData
 from palace.manager.search.filter import SuppressedWorkFilter
 from palace.manager.search.pagination import Pagination
@@ -21,6 +21,7 @@ from palace.manager.sqlalchemy.model.licensing import LicensePool
 from palace.manager.sqlalchemy.model.work import Work, WorkGenre
 
 if TYPE_CHECKING:
+    from palace.manager.feed.annotator.circulation import CirculationManagerAnnotator
     from palace.manager.search.external_search import ExternalSearchIndex
 
 
@@ -42,25 +43,7 @@ class VisibilityFilter(StrEnum):
         return titles[self]
 
 
-@dataclass(frozen=True)
-class FacetGroup:
-    """Represents a single facet option for OPDS facet links.
-
-    :param group_name: Name of the facet group (e.g., "Visibility").
-    :param filter_value: The VisibilityFilter value this facet represents.
-    :param facets: SuppressedFacets instance with this filter applied.
-    :param is_selected: Whether this facet is currently selected.
-    :param is_default: Whether this is the default facet value.
-    """
-
-    group_name: str
-    filter_value: VisibilityFilter
-    facets: SuppressedFacets
-    is_selected: bool
-    is_default: bool
-
-
-class SuppressedFacets:
+class SuppressedFacets(BaseFacets):
     """Facets for filtering the suppressed works feed by visibility status."""
 
     VISIBILITY_FACET_GROUP_NAME = "Visibility"
@@ -69,7 +52,7 @@ class SuppressedFacets:
         self.visibility: VisibilityFilter = visibility or VisibilityFilter.ALL
 
     @classmethod
-    def from_request(cls, get_argument: Callable[[str, str], str]) -> SuppressedFacets:
+    def from_request(cls, get_argument: Callable[[str, str], str]) -> Self:
         """Load visibility filter from request args.
 
         :param get_argument: A function that retrieves request arguments.
@@ -82,22 +65,22 @@ class SuppressedFacets:
             visibility = VisibilityFilter.ALL
         return cls(visibility=visibility)
 
-    def items(self) -> Iterable[tuple[str, str]]:
+    def items(self) -> Generator[tuple[str, str]]:
         """Yield (key, value) tuples for query string parameters."""
         if self.visibility != VisibilityFilter.ALL:
             yield ("visibility", self.visibility.value)
 
-    def navigate(self, visibility: VisibilityFilter | None = None) -> SuppressedFacets:
+    def navigate(self, visibility: VisibilityFilter | None = None) -> Self:
         """Create a new SuppressedFacets with a different visibility filter."""
-        return SuppressedFacets(visibility=visibility or self.visibility)
+        return self.__class__(visibility=visibility or self.visibility)
 
     @property
-    def facet_groups(self) -> Iterable[FacetGroup]:
+    def facet_groups(self) -> Generator[FacetGroup]:
         """Yield FacetGroup objects for OPDS facet links."""
         for filter_value in VisibilityFilter:
             yield FacetGroup(
-                group_name=self.VISIBILITY_FACET_GROUP_NAME,
-                filter_value=filter_value,
+                group=self.VISIBILITY_FACET_GROUP_NAME,
+                value=filter_value,
                 facets=self.navigate(visibility=filter_value),
                 is_selected=self.visibility == filter_value,
                 is_default=filter_value == VisibilityFilter.ALL,
@@ -105,6 +88,33 @@ class SuppressedFacets:
 
 
 class AdminSuppressedFeed(OPDSAcquisitionFeed):
+    @classmethod
+    def facet_links(
+        cls,
+        annotator: CirculationManagerAnnotator,
+        facets: BaseFacets,
+    ) -> list[FacetData]:
+        """Build facet data for the suppressed feed's visibility filter.
+
+        Overrides the base implementation because the visibility facet display
+        titles live on :class:`VisibilityFilter`, not in
+        :data:`FacetConstants.FACET_DISPLAY_TITLES`.
+        """
+        facet_data = FacetData(group=SuppressedFacets.VISIBILITY_FACET_GROUP_NAME)
+        for facet_group in facets.facet_groups:
+            url = annotator.facet_url(facet_group.facets)
+            if not url:
+                continue
+            facet_data.links.append(
+                cls.facet_link(
+                    href=url,
+                    title=VisibilityFilter(facet_group.value).display_title,
+                    is_active=facet_group.is_selected,
+                    is_default=facet_group.is_default,
+                )
+            )
+        return [facet_data] if facet_data.links else []
+
     @classmethod
     def suppressed_query(
         cls,
@@ -208,17 +218,7 @@ class AdminSuppressedFeed(OPDSAcquisitionFeed):
         feed.add_link(start_url, rel="start", title=top_level_title)
 
         # Add facet links for visibility filtering
-        facet_group_data = FacetData(group=SuppressedFacets.VISIBILITY_FACET_GROUP_NAME)
-        for facet_group in facets.facet_groups:
-            facet_url = annotator.suppressed_url(**dict(facet_group.facets.items()))
-            facet_link = cls.facet_link(
-                href=facet_url,
-                title=facet_group.filter_value.display_title,
-                is_active=facet_group.is_selected,
-                is_default=facet_group.is_default,
-            )
-            facet_group_data.links.append(facet_link)
-        feed._feed.facets.append(facet_group_data)
+        feed._feed.facets.extend(cls.facet_links(annotator, facets))
 
         # Link to next page only if there are more entries than current page size.
         if next_page_item_count > 0:
