@@ -21,7 +21,7 @@ from palace.manager.api.authentication.basic import (
     BasicAuthenticationProvider,
     BasicAuthProviderLibrarySettings,
 )
-from palace.manager.api.problem_details import BLOCKED_CREDENTIALS
+from palace.manager.api.problem_details import BLOCKED_CREDENTIALS, INVALID_CREDENTIALS
 from palace.manager.integration.patron_auth.patron_blocking import (
     PatronBlockingRule,
     build_runtime_values_from_patron,
@@ -461,8 +461,6 @@ class TestSupportsPatronBlockingRulesFlag:
     ) -> None:
         """When _do_authenticate itself returns a ProblemDetail (e.g. connection
         failure), blocking rules are not evaluated — the original error is returned."""
-        from palace.manager.api.problem_details import INVALID_CREDENTIALS
-
         provider = MagicMock(spec=BasicAuthenticationProvider)
         provider.supports_patron_blocking_rules = True
         provider.patron_blocking_rules = [

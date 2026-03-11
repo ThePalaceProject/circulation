@@ -22,6 +22,7 @@ from palace.manager.api.authentication.patron_debug import HasPatronDebug
 from palace.manager.api.problem_details import INVALID_CREDENTIALS
 from palace.manager.core.selftest import SelfTestResult
 from palace.manager.integration.patron_auth.patron_blocking import (
+    build_runtime_values_from_patron,
     build_values_from_sip2_info,
 )
 from palace.manager.integration.patron_auth.sip2.client import Sip2Encoding, SIPClient
@@ -462,11 +463,6 @@ class SIP2AuthenticationProvider(
         reference any SIP2 field by name (e.g. ``{sipserver_patron_class}``,
         ``{fee_amount}``, ``{polaris_patron_birthdate}``).
         """
-        from palace.manager.integration.patron_auth.patron_blocking import (
-            build_runtime_values_from_patron,
-            build_values_from_sip2_info,
-        )
-
         info = getattr(_sip2_thread_local, "last_info", None)
         if isinstance(info, dict):
             return build_values_from_sip2_info(info)
