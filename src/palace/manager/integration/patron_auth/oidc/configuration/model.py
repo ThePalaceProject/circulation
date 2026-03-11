@@ -157,7 +157,7 @@ class OIDCAuthSettings(AuthProviderSettings, LoggerMixin):
     end_session_endpoint: Annotated[
         HttpUrl | None,
         FormMetadata(
-            label=_("End Session Endpoint (Optional)"),
+            label=_("End Session Endpoint (Manual Mode - Optional)"),
             description=_(
                 "OIDC provider's end session endpoint URL for RP-Initiated Logout. "
                 "Optional - enables logout functionality if supported by provider. "

@@ -534,7 +534,7 @@ class TestOIDCRoutes:
             for key, value in expected_params.items():
                 assert call_args[0][0][key] == value
             if passes_headers:
-                assert isinstance(call_args[0][1], dict)
+                assert isinstance(call_args.kwargs.get("auth_header"), str)
 
     def test_oidc_backchannel_logout_route(self, controller_fixture: ControllerFixture):
         """Test the /oidc/backchannel_logout route controller logic."""

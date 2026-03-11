@@ -235,6 +235,26 @@ class OIDCUtility(LoggerMixin):
         # Combine: {signature}.{data}
         return f"{encoded_signature}.{encoded_data}"
 
+    @staticmethod
+    def decode_state_payload(state: str) -> dict[str, Any]:
+        """Decode a state token payload without verifying the signature.
+
+        Useful for extracting fields (e.g. `library_short_name`) needed to
+        look up the signing secret before full validation via `validate_state`.
+
+        :param state: Signed state token
+        :raises OIDCStateValidationError: If the token is malformed
+        :return: Decoded payload
+        """
+        try:
+            _, encoded_data = state.split(".", 1)
+            json_data = base64.urlsafe_b64decode(encoded_data).decode("utf-8")
+            return cast(dict[str, Any], json.loads(json_data))
+        except (ValueError, UnicodeDecodeError, json.JSONDecodeError) as e:
+            raise OIDCStateValidationError(
+                f"Invalid state parameter format: {str(e)}"
+            ) from e
+
     @classmethod
     def validate_state(
         cls, state: str, secret: str, max_age: int | None = None

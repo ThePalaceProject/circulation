@@ -580,8 +580,9 @@ def oidc_callback():
 @has_library
 @returns_problem_detail
 def oidc_logout():
+    auth_header = flask.request.headers.get("Authorization", "")
     return app.manager.oidc_controller.oidc_logout_initiate(
-        flask.request.args, dict(flask.request.headers), app.manager._db
+        flask.request.args, app.manager._db, auth_header=auth_header
     )
 
 

@@ -14,7 +14,10 @@ from werkzeug.wrappers import Response as BaseResponse
 
 from palace.manager.api.authenticator import BaseOIDCAuthenticationProvider
 from palace.manager.api.util.flask import get_request_library
-from palace.manager.integration.patron_auth.oidc.util import OIDCUtility
+from palace.manager.integration.patron_auth.oidc.util import (
+    OIDCStateValidationError,
+    OIDCUtility,
+)
 from palace.manager.util.log import LoggerMixin
 from palace.manager.util.problem_detail import (
     ProblemDetail,
@@ -341,14 +344,15 @@ class OIDCController(LoggerMixin):
     def oidc_logout_initiate(
         self,
         request_args: dict[str, str],
-        request_headers: dict[str, str],
         db: Session,
+        *,
+        auth_header: str,
     ) -> BaseResponse | ProblemDetail:
         """Initiate OIDC RP-Initiated Logout flow.
 
         :param request_args: Request arguments from Flask
-        :param request_headers: Request headers from Flask
         :param db: Database session
+        :param auth_header: "Authorization" header from Flask or empty string
         :return: Redirect to provider logout endpoint or error
         """
         provider_name = request_args.get(self.PROVIDER_NAME)
@@ -374,7 +378,6 @@ class OIDCController(LoggerMixin):
             )
 
         # Validate CM bearer token — ensures patron has an active CM session.
-        auth_header = request_headers.get("Authorization", "")
         if not auth_header.startswith("Bearer "):
             return OIDC_INVALID_REQUEST.detailed(
                 _("Missing or invalid Authorization header")
@@ -396,7 +399,7 @@ class OIDCController(LoggerMixin):
 
         # The bearer token's payload IS the credential JSON — parse it directly.
         # This avoids a DB lookup that would fail after token refresh (the credential
-        # value changes on refresh but the patron's bearer token still has the old value).
+        # value changes on refresh, but the patron's bearer token still has the old value).
         try:
             token_data = json.loads(provider_token)
             if "id_token_claims" not in token_data or "access_token" not in token_data:
@@ -413,8 +416,7 @@ class OIDCController(LoggerMixin):
             )
 
         # The raw id_token JWT stored at authentication time; used as id_token_hint
-        # for RP-Initiated Logout. May be absent for credentials created before this
-        # feature was introduced — in that case RP-Initiated Logout is skipped.
+        # for RP-Initiated Logout.
         stored_id_token = token_data.get("id_token")
 
         try:
@@ -464,11 +466,7 @@ class OIDCController(LoggerMixin):
         )
 
         utility = OIDCUtility(self._circulation_manager.services.redis.client())
-        utility.store_logout_state(
-            logout_state,
-            post_logout_redirect_uri,
-            metadata={"library_short_name": library.short_name},
-        )
+        utility.store_logout_state(logout_state, post_logout_redirect_uri)
 
         try:
             logout_url = auth_manager.build_logout_url(
@@ -510,7 +508,15 @@ class OIDCController(LoggerMixin):
                 _("Missing redirect_uri in logout state")
             )
 
-        library_short_name = logout_data.get("library_short_name")
+        # Decode the (unverified) state payload to get library_short_name, which
+        # is needed to look up the signing secret before full validation.
+        try:
+            state_payload = OIDCUtility.decode_state_payload(state)
+        except OIDCStateValidationError:
+            self.log.exception("Failed to decode logout state payload")
+            return OIDC_INVALID_STATE
+
+        library_short_name = state_payload.get("library_short_name")
         if not library_short_name:
             return OIDC_INVALID_STATE.detailed(_("Missing library in logout state"))
 
@@ -526,7 +532,7 @@ class OIDCController(LoggerMixin):
             state_data = OIDCUtility.validate_state(
                 state, library_authenticator.bearer_token_signing_secret
             )
-        except Exception as e:
+        except OIDCStateValidationError as e:
             self.log.exception("Logout state validation failed")
             return OIDC_INVALID_STATE.detailed(_(f"State validation failed: {str(e)}"))
 
