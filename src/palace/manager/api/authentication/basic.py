@@ -26,6 +26,10 @@ from palace.manager.api.authentication.base import (
     PatronData,
     PatronLookupNotSupported,
 )
+from palace.manager.api.authentication.patron_blocking_rules.rule_engine import (
+    MAX_MESSAGE_LENGTH,
+    MAX_RULE_LENGTH,
+)
 from palace.manager.api.problem_details import (
     PATRON_OF_ANOTHER_LIBRARY,
     UNSUPPORTED_AUTHENTICATION_MECHANISM,
@@ -301,11 +305,6 @@ class BasicAuthProviderLibrarySettings(AuthProviderLibrarySettings):
         ``PatronAuthServicesController.library_integration_validation``, where
         real patron values are available.
         """
-        from palace.manager.api.authentication.patron_blocking_rules.rule_engine import (
-            MAX_MESSAGE_LENGTH,
-            MAX_RULE_LENGTH,
-        )
-
         names_seen: set[str] = set()
         for i, rule in enumerate(rules):
             if not rule.name:
