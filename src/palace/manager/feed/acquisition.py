@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Generator, Iterable
+from collections.abc import Callable, Iterable
 from typing import TYPE_CHECKING, Any
 
 from dependency_injector.wiring import Provide, inject
@@ -23,14 +23,19 @@ from palace.manager.feed.facets.constants import FacetConstants
 from palace.manager.feed.facets.feed import Facets
 from palace.manager.feed.facets.search import SearchFacets
 from palace.manager.feed.opds import BaseOPDSFeed, UnfulfillableWork
-from palace.manager.feed.types import FeedData, FeedEntryGroup, Link, WorkEntry
+from palace.manager.feed.types import (
+    FacetData,
+    FeedData,
+    FeedEntryGroup,
+    Link,
+    WorkEntry,
+)
 from palace.manager.feed.util import strftime
 from palace.manager.search.external_search import (
     ExternalSearchIndex,
 )
 from palace.manager.search.pagination import Pagination
 from palace.manager.search.query import QueryParseException
-from palace.manager.sqlalchemy.constants import LinkRelations
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.lane import (
@@ -41,7 +46,7 @@ from palace.manager.sqlalchemy.model.patron import Hold, Loan, Patron
 from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.flask_util import OPDSEntryResponse, OPDSFeedResponse
-from palace.manager.util.opds_writer import OPDSMessage
+from palace.manager.util.opds_writer import AtomFeed, OPDSMessage
 from palace.manager.util.problem_detail import ProblemDetail
 
 if TYPE_CHECKING:
@@ -135,15 +140,13 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
             )
 
         # Facet links
-        facet_links = self.facet_links(self.annotator, self._facets)
-        for linkdata in facet_links:
-            self._feed.facet_links.append(linkdata)
+        self._feed.facets.extend(self.facet_links(self.annotator, self._facets))
 
     @classmethod
     def facet_links(
         cls, annotator: CirculationManagerAnnotator, facets: FacetsWithEntryPoint
-    ) -> Generator[Link]:
-        """Create links for this feed's navigational facet groups.
+    ) -> list[FacetData]:
+        """Create facet data groups for this feed's navigational facet groups.
 
         This does not create links for the entry point facet group,
         because those links should only be present in certain
@@ -151,6 +154,9 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
         circumstances apply. You need to decide whether to call
         add_entrypoint_links in addition to calling this method.
         """
+        # Use a dict to group links by facet group name while preserving order.
+        groups: dict[str, FacetData] = {}
+
         for facet_group in facets.facet_groups:
             url = annotator.facet_url(facet_group.facets)
             if not url:
@@ -169,40 +175,46 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
                 # system. It may be left over from an earlier version,
                 # or just weird junk data.
                 continue
-            yield cls.facet_link(
-                url,
-                str(facet_title),
-                str(group_title),
-                facet_group.is_selected,
-                facet_group.is_default,
+
+            str_group_title = str(group_title)
+            if str_group_title not in groups:
+                facet_type: str | None = None
+                if facet_group.group == FacetConstants.ORDER_FACET_GROUP_NAME:
+                    facet_type = AtomFeed.PALACE_REL_SORT
+                groups[str_group_title] = FacetData(
+                    group=str_group_title, type=facet_type
+                )
+
+            groups[str_group_title].links.append(
+                cls.facet_link(
+                    url,
+                    str(facet_title),
+                    facet_group.is_selected,
+                    facet_group.is_default,
+                )
             )
+
+        return list(groups.values())
 
     @classmethod
     def facet_link(
         cls,
         href: str,
         title: str,
-        facet_group_name: str,
         is_active: bool,
         is_default: bool,
     ) -> Link:
-        """Build a set of attributes for a facet link.
+        """Build a facet link.
 
         :param href: Destination of the link.
         :param title: Human-readable description of the facet.
-        :param facet_group_name: The facet group to which the facet belongs,
-           e.g. "Sort By".
         :param is_active: True if this is the client's currently
            selected facet.
-        :param is_default: True if this is the default facet
-        :return: A dictionary of attributes, suitable for passing as
-            keyword arguments into OPDSFeed.add_link_to_feed.
+        :param is_default: True if this is the default facet.
         """
         return Link(
             href=href,
             title=title,
-            rel=LinkRelations.FACET_REL,
-            facet_group=facet_group_name,
             active_facet=is_active,
             default_facet=is_default,
         )
@@ -262,14 +274,18 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
             # one one facet might as well not be there.
             return
 
+        facet_data = FacetData(group=group_name, type=FacetConstants.ENTRY_POINT_REL)
         is_default = True
         for entrypoint in entrypoints:
             link = cls._entrypoint_link(
-                url_generator, entrypoint, selected_entrypoint, is_default, group_name
+                url_generator, entrypoint, selected_entrypoint, is_default
             )
             if link is not None:
-                feed.links.append(link)
+                facet_data.links.append(link)
                 is_default = False
+
+        if facet_data.links:
+            feed.facets.append(facet_data)
 
     @classmethod
     def _entrypoint_link(
@@ -278,11 +294,8 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
         entrypoint: type[EntryPoint],
         selected_entrypoint: type[EntryPoint] | None,
         is_default: bool,
-        group_name: str,
     ) -> Link | None:
-        """Create arguments for add_link_to_feed for a link that navigates
-        between EntryPoints.
-        """
+        """Create a facet link for navigating between EntryPoints."""
         display_title = EntryPoint.DISPLAY_TITLES.get(entrypoint)
         if not display_title:
             # Shouldn't happen.
@@ -290,16 +303,7 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
 
         url = url_generator(entrypoint)
         is_selected = entrypoint is selected_entrypoint
-        link = cls.facet_link(url, display_title, group_name, is_selected, is_default)
-
-        # Unlike a normal facet group, every link in this facet
-        # group has an additional attribute marking it as an entry
-        # point.
-        #
-        # In OPDS 2 this can become an additional rel value,
-        # removing the need for a custom attribute.
-        link.facet_group_type = FacetConstants.ENTRY_POINT_REL
-        return link
+        return cls.facet_link(url, display_title, is_selected, is_default)
 
     def add_breadcrumb_links(
         self, lane: WorkList, entrypoint: type[EntryPoint] | None = None

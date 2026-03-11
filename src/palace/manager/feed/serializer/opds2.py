@@ -1,5 +1,4 @@
 import json
-from collections import defaultdict
 from collections.abc import Iterable
 from typing import Any
 
@@ -7,7 +6,6 @@ from frozendict import frozendict
 from pydantic import ValidationError
 
 from palace.manager.feed.serializer.base import SerializerInterface
-from palace.manager.feed.serializer.opds import is_sort_facet
 from palace.manager.feed.types import (
     Acquisition,
     Author,
@@ -47,7 +45,6 @@ MARC_CODE_TO_ROLES = {
 }
 
 PALACE_REL_SORT = AtomFeed.PALACE_REL_SORT
-PALACE_PROPERTIES_ACTIVE_SORT = AtomFeed.PALACE_PROPS_NS + "active-sort"
 PALACE_PROPERTIES_DEFAULT = AtomFeed.PALACE_PROPERTIES_DEFAULT
 
 
@@ -77,7 +74,6 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]], LoggerMixin):
         self, feed: FeedData, precomposed_entries: list[Any] | None = None
     ) -> str:
         feed_links = self._serialize_feed_links(feed)
-        feed_links.extend(self._serialize_sort_links(feed))
 
         metadata = self._serialize_metadata(feed)
         navigation = self._serialize_navigation(feed)
@@ -392,34 +388,39 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]], LoggerMixin):
 
     def _serialize_facet_links(self, feed: FeedData) -> list[opds2.Facet]:
         results: list[opds2.Facet] = []
-        facet_links: dict[str, list[Link]] = defaultdict(list)
-        for link in feed.facet_links:
-            if not is_sort_facet(link):
-                if link.facet_group:
-                    facet_links[link.facet_group].append(link)
-
-        for group, links in facet_links.items():
-            if len(links) < 2:
-                self.log.warning(f"Skipping facet group '{group}' with < 2 links")
-                continue
+        for facet_data in feed.facets:
             facet_link_models: list[opds2.TitleLink] = []
-            for link in links:
-                title = link.title or link.rel or link.href
-                rel = "self" if link.active_facet else link.rel
+            for link in facet_data.links:
+                if not link.title:
+                    self.log.error(
+                        f"Facet link in group '{facet_data.group}' has no "
+                        f"title (href={link.href}). This is a programming "
+                        f"error: all facet links should have a title."
+                    )
+                    continue
+                rel = "self" if link.active_facet else None
                 props = self._facet_properties(link)
                 facet_link_models.append(
                     self._title_link(
                         href=link.href,
-                        title=title,
+                        title=link.title,
                         rel=rel,
                         type=self._resolve_type(link.type),
                         properties=props,
                     )
                 )
 
+            if len(facet_link_models) < 2:
+                self.log.warning(
+                    f"Skipping facet group '{facet_data.group}' with < 2 links"
+                )
+                continue
+
             results.append(
                 opds2.Facet(
-                    metadata=opds2.FeedMetadata(title=group),
+                    metadata=opds2.FeedMetadata(
+                        title=facet_data.group, type=facet_data.type
+                    ),
                     links=facet_link_models,
                 )
             )
@@ -428,25 +429,6 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]], LoggerMixin):
 
     def _facet_properties(self, link: Link) -> opds2.LinkProperties:
         return self._link_properties(palace_default=link.default_facet or None)
-
-    def _serialize_sort_links(self, feed: FeedData) -> list[opds2.StrictLink]:
-        sort_links: list[opds2.StrictLink] = []
-        for link in feed.facet_links:
-            if is_sort_facet(link):
-                sort_links.append(self._serialize_sort_link(link))
-        return sort_links
-
-    def _serialize_sort_link(self, link: Link) -> opds2.StrictLink:
-        return self._strict_link(
-            href=link.href,
-            rel=PALACE_REL_SORT,
-            type=self._resolve_type(link.type) or self.content_type(),
-            title=link.title,
-            properties=self._link_properties(
-                palace_active_sort=link.active_facet or None,
-                palace_default=link.default_facet or None,
-            ),
-        )
 
     def _serialize_navigation(self, feed: FeedData) -> list[opds2.TitleLink]:
         navigation: list[opds2.TitleLink] = []
@@ -555,7 +537,6 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]], LoggerMixin):
         licensor: DrmMetadata | None = None,
         lcp_hashed_passphrase: str | None = None,
         palace_default: bool | None = None,
-        palace_active_sort: bool | None = None,
     ) -> opds2.LinkProperties:
         return opds2.LinkProperties(
             availability=availability or opds2.Availability(),
@@ -566,7 +547,6 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]], LoggerMixin):
             licensor=licensor,
             lcp_hashed_passphrase=lcp_hashed_passphrase,
             palace_default=palace_default,
-            palace_active_sort=palace_active_sort,
         )
 
     def _strict_link(

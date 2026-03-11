@@ -27,7 +27,6 @@ from palace.manager.feed.annotator.circulation import (
 )
 from palace.manager.feed.annotator.verbose import VerboseAnnotator
 from palace.manager.feed.facets.base import FacetGroup
-from palace.manager.feed.facets.constants import FacetConstants
 from palace.manager.feed.facets.feed import Facets, FeaturedFacets
 from palace.manager.feed.facets.search import SearchFacets
 from palace.manager.feed.navigation import NavigationFeed
@@ -42,7 +41,6 @@ from palace.manager.feed.types import (
 )
 from palace.manager.feed.worklist.base import WorkList
 from palace.manager.search.pagination import Pagination
-from palace.manager.sqlalchemy.constants import LinkRelations
 from palace.manager.sqlalchemy.model.lane import (
     Lane,
 )
@@ -314,7 +312,6 @@ class TestOPDSAcquisitionFeed:
             AudiobooksEntryPoint,
             EbooksEntryPoint,
             True,
-            "Some entry points",
         )
         # The second one is selected.
         assert c2 == (
@@ -322,12 +319,12 @@ class TestOPDSAcquisitionFeed:
             EbooksEntryPoint,
             EbooksEntryPoint,
             False,
-            "Some entry points",
         )
 
-        # Two identical <link> tags were added to the <feed> tag, one
+        # Two links were added to a FacetData in feed.facets, one
         # for each call to the mock method.
-        l1, l2 = feed.links
+        assert len(feed.facets) == 1
+        l1, l2 = feed.facets[0].links
         for l in l1, l2:
             assert l.href == mock.attrs["href"]
         OPDSAcquisitionFeed._entrypoint_link = old_entrypoint_link
@@ -353,19 +350,13 @@ class TestOPDSAcquisitionFeed:
             return "%s" % (entrypoint.INTERNAL_NAME)
 
         # If the entry point is not registered, None is returned.
-        assert None == m(g, object(), object(), True, "group")
+        assert None == m(g, object(), object(), True)
 
         # Now make a real set of link attributes.
-        l = m(g, AudiobooksEntryPoint, AudiobooksEntryPoint, False, "Grupe")
+        l = m(g, AudiobooksEntryPoint, AudiobooksEntryPoint, False)
 
-        # The link is identified as belonging to an entry point-type
-        # facet group.
-        assert l.rel == LinkRelations.FACET_REL
-        assert getattr(l, "facet_group_type") == FacetConstants.ENTRY_POINT_REL
-        assert "Grupe" == getattr(l, "facet_group")
-
-        # This facet is the active one in the group.
-        assert getattr(l, "active_facet") is True
+        # The link is marked as active (rel is added by the serializer).
+        assert l.active_facet is True
 
         # The URL generator was invoked to create the href.
         assert l.href == g(AudiobooksEntryPoint)
@@ -376,14 +367,14 @@ class TestOPDSAcquisitionFeed:
         # Now try some variants.
 
         # Here, the entry point is the default one.
-        l = m(g, AudiobooksEntryPoint, AudiobooksEntryPoint, True, "Grupe")
+        l = m(g, AudiobooksEntryPoint, AudiobooksEntryPoint, True)
 
         # This may affect the URL generated for the facet link.
         assert l.href == g(AudiobooksEntryPoint)
 
         # Here, the entry point for which we're generating the link is
         # not the selected one -- EbooksEntryPoint is.
-        l = m(g, AudiobooksEntryPoint, EbooksEntryPoint, True, "Grupe")
+        l = m(g, AudiobooksEntryPoint, EbooksEntryPoint, True)
 
         # This means the 'active_facet' attribute is not present.
         assert getattr(l, "active_facet", None) is False
@@ -893,11 +884,11 @@ class TestOPDSAcquisitionFeed:
         annotator = MockAnnotator()
         facets = MockFacets()
 
-        # The 5-tuples were ignored since we don't know
+        # The unrecognized facets were ignored since we don't know
         # how to generate human-readable titles for them.
-        links = MockFeed.facet_links(annotator, facets)
+        facet_data_list = MockFeed.facet_links(annotator, facets)
 
-        assert len([x for x in links]) == 0
+        assert len(facet_data_list) == 0
 
     def test_active_loans_for_with_holds(
         self,
