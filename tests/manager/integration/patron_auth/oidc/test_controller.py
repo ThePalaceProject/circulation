@@ -762,9 +762,9 @@ class TestOIDCControllerLogout:
                 "provider": "Test OIDC",
                 "post_logout_redirect_uri": "https://app.example.com/logout/callback",
             }
-            headers = {"Authorization": "Bearer valid.jwt.token"}
-
-            result = controller.oidc_logout_initiate(params, headers, db.session)
+            result = controller.oidc_logout_initiate(
+                params, db.session, auth_header="Bearer valid.jwt.token"
+            )
 
             assert result.status_code == 302
             assert "https://oidc.provider.test/logout" in result.location
@@ -840,9 +840,9 @@ class TestOIDCControllerLogout:
                 "id_token_hint": "test.id.token",
                 "post_logout_redirect_uri": "https://app.example.com/logout/callback",
             }
-            headers = {"Authorization": "Bearer valid.jwt.token"}
-
-            result = controller.oidc_logout_initiate(params, headers, db.session)
+            result = controller.oidc_logout_initiate(
+                params, db.session, auth_header="Bearer valid.jwt.token"
+            )
 
             # Should redirect directly, not to the IdP
             assert result.status_code == 302
@@ -964,9 +964,9 @@ class TestOIDCControllerLogout:
                 "id_token_hint": "test.id.token",
                 "post_logout_redirect_uri": "https://app.example.com/logout/callback",
             }
-            headers = {"Authorization": "Bearer valid.jwt.token"}
-
-            result = controller.oidc_logout_initiate(params, headers, db.session)
+            result = controller.oidc_logout_initiate(
+                params, db.session, auth_header="Bearer valid.jwt.token"
+            )
 
             # Verify correct library's authenticator was used
             target_auth.oidc_provider_lookup.assert_called_once_with("Test OIDC")
@@ -1003,7 +1003,9 @@ class TestOIDCControllerLogout:
         self, logout_controller, db, params, expected_message
     ):
         """Test OIDC logout initiate with missing required parameters."""
-        result = logout_controller.oidc_logout_initiate(params, {}, db.session)
+        result = logout_controller.oidc_logout_initiate(
+            params, db.session, auth_header=""
+        )
 
         assert result == OIDC_INVALID_REQUEST.detailed(expected_message)
 
@@ -1022,7 +1024,9 @@ class TestOIDCControllerLogout:
                 "post_logout_redirect_uri": "https://app.example.com/logout/callback",
             }
 
-            result = logout_controller.oidc_logout_initiate(params, {}, db.session)
+            result = logout_controller.oidc_logout_initiate(
+                params, db.session, auth_header=""
+            )
 
             assert result.uri == OIDC_INVALID_REQUEST.uri
             assert "No authenticator found for library" in result.detail
@@ -1085,7 +1089,6 @@ class TestOIDCControllerLogout:
             mock_library_auth
         )
 
-        request_headers = {} if auth_header is None else {"Authorization": auth_header}
         params = {
             "provider": "Test OIDC",
             "post_logout_redirect_uri": "https://app.example.com/logout/callback",
@@ -1096,7 +1099,9 @@ class TestOIDCControllerLogout:
             return_value=library,
         ):
             result = logout_controller.oidc_logout_initiate(
-                params, request_headers, db.session
+                params,
+                db.session,
+                auth_header="" if auth_header is None else auth_header,
             )
 
         assert result.uri == OIDC_INVALID_REQUEST.uri
@@ -1124,9 +1129,9 @@ class TestOIDCControllerLogout:
                 "provider": "Unknown",
                 "post_logout_redirect_uri": "https://app.example.com/logout/callback",
             }
-            headers = {"Authorization": "Bearer valid.jwt.token"}
-
-            result = logout_controller.oidc_logout_initiate(params, headers, db.session)
+            result = logout_controller.oidc_logout_initiate(
+                params, db.session, auth_header="Bearer valid.jwt.token"
+            )
 
             assert result == UNKNOWN_OIDC_PROVIDER
 
@@ -1183,9 +1188,9 @@ class TestOIDCControllerLogout:
                 "provider": "Test OIDC",
                 "post_logout_redirect_uri": "https://app.example.com/logout/callback",
             }
-            headers = {"Authorization": "Bearer valid.jwt.token"}
-
-            result = logout_controller.oidc_logout_initiate(params, headers, db.session)
+            result = logout_controller.oidc_logout_initiate(
+                params, db.session, auth_header="Bearer valid.jwt.token"
+            )
 
             assert result.uri == OIDC_INVALID_REQUEST.uri
             assert expected_message in result.detail
@@ -1301,9 +1306,9 @@ class TestOIDCControllerLogout:
                 "provider": "Test OIDC",
                 "post_logout_redirect_uri": "https://app.example.com/logout/callback",
             }
-            headers = {"Authorization": "Bearer valid.jwt.token"}
-
-            result = logout_controller.oidc_logout_initiate(params, headers, db.session)
+            result = logout_controller.oidc_logout_initiate(
+                params, db.session, auth_header="Bearer valid.jwt.token"
+            )
 
             if expected_status:
                 assert result.status_code == expected_status
@@ -1337,7 +1342,6 @@ class TestOIDCControllerLogout:
         utility.store_logout_state(
             state_token,
             "https://app.example.com/logout/callback",
-            metadata={"library_short_name": library.short_name},
         )
 
         params = {"state": state_token}
@@ -1425,7 +1429,6 @@ class TestOIDCControllerLogout:
         utility.store_logout_state(
             state_token,
             "https://app.example.com/logout/callback",
-            metadata={"library_short_name": library.short_name},
         )
 
         params = {"state": state_token}
@@ -1438,13 +1441,20 @@ class TestOIDCControllerLogout:
     def test_oidc_logout_callback_state_validation_exception(
         self, logout_controller, db
     ):
-        """Test logout callback when state validation raises exception."""
+        """Test logout callback when state signature validation fails."""
         library = db.default_library()
 
-        state_token = "invalid-state-token"
+        # Generate a structurally valid state token signed with the wrong secret
+        # so that decode_state_payload succeeds but validate_state fails.
+        logout_state_data = {
+            "provider_name": "Test OIDC",
+            "library_short_name": library.short_name,
+            "redirect_uri": "https://app.example.com/logout/callback",
+        }
+        state_token = OIDCUtility.generate_state(logout_state_data, "wrong-secret")
 
         mock_library_auth = Mock()
-        mock_library_auth.bearer_token_signing_secret = "test-secret"
+        mock_library_auth.bearer_token_signing_secret = "correct-secret"
 
         logout_controller._authenticator.library_authenticators[library.short_name] = (
             mock_library_auth
@@ -1455,7 +1465,6 @@ class TestOIDCControllerLogout:
         utility.store_logout_state(
             state_token,
             "https://app.example.com/logout/callback",
-            metadata={"library_short_name": library.short_name},
         )
 
         params = {"state": state_token}

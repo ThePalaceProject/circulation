@@ -191,6 +191,30 @@ class TestOIDCUtilityState:
         )
         assert decoded["library_short_name"] == "TESTLIB"
 
+    def test_decode_state_payload_success(self):
+        data = {"library_short_name": "TESTLIB", "provider": "Test OIDC"}
+        state = OIDCUtility.generate_state(data, TEST_SECRET_KEY)
+
+        payload = OIDCUtility.decode_state_payload(state)
+
+        assert payload["library_short_name"] == "TESTLIB"
+        assert payload["provider"] == "Test OIDC"
+        assert "timestamp" in payload
+
+    @pytest.mark.parametrize(
+        "invalid_state",
+        [
+            pytest.param("nodothere", id="no-separator"),
+            pytest.param("sig.!!!invalid-base64!!!", id="bad-base64"),
+            pytest.param(
+                "sig." + urlsafe_b64encode(b"not-json").decode(), id="bad-json"
+            ),
+        ],
+    )
+    def test_decode_state_payload_invalid(self, invalid_state):
+        with pytest.raises(OIDCStateValidationError):
+            OIDCUtility.decode_state_payload(invalid_state)
+
 
 class TestOIDCUtilityDiscovery:
     """Tests for OIDC discovery document fetching."""
