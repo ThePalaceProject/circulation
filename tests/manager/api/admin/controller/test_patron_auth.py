@@ -58,7 +58,7 @@ from palace.manager.integration.patron_auth.sip2.provider import (
 from palace.manager.sqlalchemy.model.integration import IntegrationConfiguration
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.util import get_one
-from palace.manager.util.problem_detail import ProblemDetail
+from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
 from tests.fixtures.flask import FlaskAppFixture
 from tests.fixtures.services import ServicesFixture
 from tests.mocks.saml_strings import CORRECT_XML_WITH_ONE_SP
@@ -1016,8 +1016,6 @@ class TestLiveSIP2RuleValidation:
     ) -> None:
         """When patron blocking rules are configured but test_identifier is absent,
         the save must be blocked with INVALID_CONFIGURATION_OPTION."""
-        from palace.manager.util.problem_detail import ProblemDetailException
-
         monkeypatch.setattr(
             self._FETCH_PATCH,
             MagicMock(
@@ -1048,8 +1046,6 @@ class TestLiveSIP2RuleValidation:
     ) -> None:
         """When the SIP2 server returns a ProblemDetail (auth error, server error,
         etc.) the save must be blocked."""
-        from palace.manager.util.problem_detail import ProblemDetailException
-
         monkeypatch.setattr(
             self._FETCH_PATCH,
             MagicMock(
@@ -1080,8 +1076,6 @@ class TestLiveSIP2RuleValidation:
     ) -> None:
         """When the SIP2 server cannot be reached (OSError) the save must be
         blocked (hard fail)."""
-        from palace.manager.util.problem_detail import ProblemDetailException
-
         monkeypatch.setattr(
             self._FETCH_PATCH,
             MagicMock(
@@ -1463,8 +1457,6 @@ class TestProcessValidatePatronBlockingRule:
     ) -> None:
         """When fetch_live_rule_validation_values raises ProblemDetailException
         (e.g. network error), that ProblemDetail is returned to the caller."""
-        from palace.manager.util.problem_detail import ProblemDetailException
-
         monkeypatch.setattr(
             self._FETCH_PATCH,
             MagicMock(
@@ -1495,8 +1487,6 @@ class TestProcessValidatePatronBlockingRule:
     ) -> None:
         """When fetch_live_rule_validation_values raises because no test_identifier
         is configured, the error is propagated as INVALID_CONFIGURATION_OPTION."""
-        from palace.manager.util.problem_detail import ProblemDetailException
-
         monkeypatch.setattr(
             self._FETCH_PATCH,
             MagicMock(
@@ -1523,8 +1513,6 @@ class TestProcessValidatePatronBlockingRule:
         flask_app_fixture: FlaskAppFixture,
     ) -> None:
         """A request without system-admin privileges raises AdminNotAuthorized."""
-        from palace.manager.api.admin.exceptions import AdminNotAuthorized
-
         with flask_app_fixture.test_request_context("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [("service_id", "1"), ("rule", "{fines} > 0")]

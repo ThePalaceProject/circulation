@@ -17,7 +17,13 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict
 
+from palace.manager.api.authentication.patron_blocking_rules.rule_engine import (
+    RuleEvaluationError,
+    evaluate_rule_expression_strict_bool,
+    make_evaluator,
+)
 from palace.manager.api.problem_details import BLOCKED_CREDENTIALS
+from palace.manager.util import MoneyUtility
 from palace.manager.util.problem_detail import ProblemDetail
 
 if TYPE_CHECKING:
@@ -120,8 +126,6 @@ def build_values_from_sip2_info(info: dict[str, Any]) -> dict[str, Any]:
         are included verbatim; the additional ``fines`` key is a parsed
         :class:`float` derived from ``fee_amount``.
     """
-    from palace.manager.util import MoneyUtility
-
     # Include every raw SIP2 field so rules can reference any server-returned key.
     values: dict[str, Any] = dict(info)
 
@@ -167,12 +171,6 @@ def check_patron_blocking_rules_with_evaluator(
         if the patron should be blocked, or ``None`` if authentication should
         proceed normally.
     """
-    from palace.manager.api.authentication.patron_blocking_rules.rule_engine import (
-        RuleEvaluationError,
-        evaluate_rule_expression_strict_bool,
-        make_evaluator,
-    )
-
     evaluator = make_evaluator()
 
     for rule in rules:
