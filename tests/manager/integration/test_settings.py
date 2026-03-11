@@ -130,6 +130,20 @@ class TestBaseSettings:
         settings = base_settings_fixture.settings(test=" foo ")
         assert settings.model_dump() == {"test": "foo", "number": 1}
 
+    def test_whitespace_only_required_field_treated_as_missing(self) -> None:
+        # A whitespace-only string submitted for a required field should be
+        # treated the same as an empty string (i.e. missing), because the admin
+        # UI strips whitespace before storage, leaving an empty string that then
+        # triggers INCOMPLETE_CONFIGURATION on the next load.
+        class RequiredStrSettings(BaseSettings):
+            username: Annotated[
+                str,
+                FormMetadata(label="Username", required=True),
+            ]
+
+        with raises_problem_detail(detail="Required field 'Username' is missing."):
+            RequiredStrSettings(username=" ")
+
     def test_field_validator_return_pd_exception(
         self, base_settings_fixture: BaseSettingsFixture
     ) -> None:
