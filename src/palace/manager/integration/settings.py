@@ -179,7 +179,7 @@ class BaseSettings(BaseModel, LoggerMixin):
     @classmethod
     def extra_args(cls, values: dict[str, Any]) -> dict[str, Any]:
         # We log any extra arguments that are passed to the model, but
-        # we don't raise an error, these arguments may be old configuration
+        # we don't raise an error. These arguments may be old configuration
         # settings that have not been cleaned up by a migration yet.
         model_names_and_aliases = set()
         for field_name, field_info in cls.model_fields.items():
@@ -191,11 +191,12 @@ class BaseSettings(BaseModel, LoggerMixin):
             msg = f"Unexpected extra argument '{field}' for model {cls.__name__}"
             cls.logger().info(msg)
 
-        # Because the admin interface sends empty strings for all fields
+        # Because the admin interface sends empty strings for all fields,
         # we need to convert them to None so that the validators will
-        # work correctly.
+        # work correctly. To avoid unexpected errors, we treat strings
+        # that are all whitespace just as we do empty strings.
         for key, value in values.items():
-            if isinstance(value, str) and value == "":
+            if isinstance(value, str) and value.strip() == "":
                 values[key] = None
 
         return values
