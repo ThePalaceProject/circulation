@@ -28,6 +28,7 @@ from palace.manager.integration.patron_auth.sip2.provider import (
     SIP2AuthenticationProvider,
     SIP2LibrarySettings,
     SIP2Settings,
+    _sip2_thread_local,
 )
 from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
@@ -1026,10 +1027,6 @@ class TestSIP2AuthenticateWithBlockingRules:
     def _clear_sip2_thread_local(self):
         """Ensure the SIP2 thread-local cache is clean before and after every
         test so stale data from a previous test cannot affect results."""
-        from palace.manager.integration.patron_auth.sip2.provider import (
-            _sip2_thread_local,
-        )
-
         _sip2_thread_local.last_info = None
         yield
         _sip2_thread_local.last_info = None
@@ -1369,10 +1366,6 @@ class TestSIP2AuthenticateWithBlockingRules:
         receives every field returned by the ILS, not just the subset that
         exists on the Patron DB model.
         """
-        from palace.manager.integration.patron_auth.sip2.provider import (
-            _sip2_thread_local,
-        )
-
         library_settings = create_library_settings(
             patron_blocking_rules=[
                 {
@@ -1407,10 +1400,6 @@ class TestSIP2AuthenticateWithBlockingRules:
     ) -> None:
         """When the SIP2 thread-local is populated and the rule evaluates False,
         the patron is allowed through unchanged."""
-        from palace.manager.integration.patron_auth.sip2.provider import (
-            _sip2_thread_local,
-        )
-
         library_settings = create_library_settings(
             patron_blocking_rules=[
                 {
@@ -1447,10 +1436,6 @@ class TestSIP2AuthenticateWithBlockingRules:
         This verifies that the normalised ``fines`` float takes precedence over
         whatever might be stored on the Patron record.
         """
-        from palace.manager.integration.patron_auth.sip2.provider import (
-            _sip2_thread_local,
-        )
-
         library_settings = create_library_settings(
             patron_blocking_rules=[
                 {
@@ -1484,10 +1469,6 @@ class TestSIP2AuthenticateWithBlockingRules:
     ) -> None:
         """When the SIP2 thread-local is populated, its ``fee_amount`` is used
         to compute ``{fines}`` even when the Patron model has a different value."""
-        from palace.manager.integration.patron_auth.sip2.provider import (
-            _sip2_thread_local,
-        )
-
         library_settings = create_library_settings(
             patron_blocking_rules=[
                 {
