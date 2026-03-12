@@ -336,6 +336,31 @@ class TestFeed:
             StrictLink(href="http://feed", rel="self", type="application/opds+json")
         ]
 
+    def test_links_validates_self_link(self):
+        """Feed.links must contain a self link."""
+        with pytest.raises(ValidationError, match="No links found with rel='self'"):
+            Feed(
+                metadata=FeedMetadata(title="Feed"),
+                links=[
+                    StrictLink(
+                        href="http://feed",
+                        rel="other",
+                        type="application/opds+json",
+                    )
+                ],
+                publications=[self._minimal_publication()],
+            )
+
+    def test_links_validates_unique(self):
+        """Feed.links must not contain duplicate links."""
+        other_link = StrictLink(href="http://other", rel="other", type="text/html")
+        with pytest.raises(ValidationError, match="Duplicate link"):
+            Feed(
+                metadata=FeedMetadata(title="Feed"),
+                links=self._self_link() + [other_link, other_link],
+                publications=[self._minimal_publication()],
+            )
+
     def test_serialization_only_truthy_collections_are_kept(self):
         """When only groups is truthy, publications and navigation are dropped."""
         feed = Feed(
