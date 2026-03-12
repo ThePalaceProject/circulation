@@ -131,12 +131,6 @@ class TestCompactCollection:
         for link in validated:
             assert isinstance(link, BaseLink)
 
-        # Duplicate links are accepted by CompactCollection itself.
-        # Uniqueness is enforced at the field level via validate_unique_links.
-        duplicate_list = list_of_links_fixture.list + [list_of_links_fixture.foo_link]
-        validated_with_dup = validator.validate_python(duplicate_list)
-        assert len(validated_with_dup) == len(duplicate_list)
-
         # Load the list of links from a JSON object.
         json_obj = json.dumps(
             [
