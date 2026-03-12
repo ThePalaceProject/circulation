@@ -52,11 +52,10 @@ class RuleValidationError(BasePalaceException):
 class MissingPlaceholderError(BasePalaceException):
     """Raised when a required placeholder key is absent from the values dict.
 
-    Attributes:
-        key: The name of the missing placeholder (without braces).
-        available: The keys (and their values) that *were* available at the
-            time the error was raised.  Included in the error message so that
-            operators can identify the correct field name to use.
+    :ivar key: The name of the missing placeholder (without braces).
+    :ivar available: The keys (and their values) that *were* available at the
+        time the error was raised.  Included in the error message so that
+        operators can identify the correct field name to use.
     """
 
     def __init__(self, key: str, available: Mapping[str, Any] | None = None) -> None:
@@ -86,11 +85,10 @@ class RuleEvaluationError(BasePalaceException):
 class CompiledRule:
     """The result of compiling a rule expression.
 
-    Attributes:
-        original: The original rule expression string (with {key} placeholders).
-        compiled: The expression with placeholders replaced by safe variable
-            names (e.g. ``__v_key``), ready for simpleeval.
-        var_map: Mapping from original placeholder key to its safe variable name.
+    :ivar original: The original rule expression string (with {key} placeholders).
+    :ivar compiled: The expression with placeholders replaced by safe variable
+        names (e.g. ``__v_key``), ready for simpleeval.
+    :ivar var_map: Mapping from original placeholder key to its safe variable name.
     """
 
     original: str
@@ -106,11 +104,8 @@ def compile_rule_expression(expr: str) -> CompiledRule:
     Placeholder values are injected via the ``names`` dict (see
     :func:`build_names`).
 
-    Args:
-        expr: The raw rule expression, e.g. ``"fines > 10.0"``.
-
-    Returns:
-        A :class:`CompiledRule` instance.
+    :param expr: The raw rule expression, e.g. ``"fines > 10.0"``.
+    :returns: A :class:`CompiledRule` instance.
     """
     var_map: dict[str, str] = {}
 
@@ -131,18 +126,13 @@ def build_names(compiled: CompiledRule, values: Mapping[str, Any]) -> dict[str, 
     *compiled* is absent from *values*.  The error message includes a listing
     of all available keys and their values to help operators fix the rule.
 
-    Args:
-        compiled: A :class:`CompiledRule` produced by
-            :func:`compile_rule_expression`.
-        values: Mapping of placeholder key to concrete value, e.g.
-            ``{"fines": 5.0, "sipserver_patron_class": "adult"}``.
-
-    Returns:
-        Dict mapping safe variable names to their values, ready to pass as
-        ``evaluator.names``.
-
-    Raises:
-        MissingPlaceholderError: If a required key is absent from *values*.
+    :param compiled: A :class:`CompiledRule` produced by
+        :func:`compile_rule_expression`.
+    :param values: Mapping of placeholder key to concrete value, e.g.
+        ``{"fines": 5.0, "sipserver_patron_class": "adult"}``.
+    :returns: Dict mapping safe variable names to their values, ready to pass
+        as ``evaluator.names``.
+    :raises MissingPlaceholderError: If a required key is absent from *values*.
     """
     names: dict[str, Any] = {}
     for key, var_name in compiled.var_map.items():
@@ -160,19 +150,14 @@ def age_in_years(
 ) -> int:
     """Return the age in whole years relative to *today*.
 
-    Args:
-        date_str: A date string to parse.
-        fmt: Optional :func:`~datetime.datetime.strptime` format string.  When
-            omitted the function attempts ISO 8601 parsing first, then falls
-            back to ``dateutil.parser`` if available.
-        today: Keyword-only override for the reference date; defaults to
-            :func:`datetime.date.today`.  Intended for deterministic tests.
-
-    Returns:
-        Age in whole years (floor).
-
-    Raises:
-        ValueError: If *date_str* cannot be parsed.
+    :param date_str: A date string to parse.
+    :param fmt: Optional :func:`~datetime.datetime.strptime` format string.  When
+        omitted the function attempts ISO 8601 parsing first, then falls back to
+        ``dateutil.parser`` if available.
+    :param today: Keyword-only override for the reference date; defaults to
+        :func:`datetime.date.today`.  Intended for deterministic tests.
+    :returns: Age in whole years (floor).
+    :raises ValueError: If *date_str* cannot be parsed.
     """
     from datetime import datetime
 
@@ -216,12 +201,9 @@ def make_evaluator(
     :data:`DEFAULT_ALLOWED_FUNCTIONS`) are available in expressions.  No
     additional names or builtins are accessible.
 
-    Args:
-        allowed_functions: Override the function whitelist.  Pass an empty dict
-            to disallow all functions.
-
-    Returns:
-        A configured :class:`~simpleeval.EvalWithCompoundTypes`.
+    :param allowed_functions: Override the function whitelist.  Pass an empty
+        dict to disallow all functions.
+    :returns: A configured :class:`~simpleeval.EvalWithCompoundTypes`.
     """
     functions = (
         allowed_functions
@@ -234,12 +216,9 @@ def make_evaluator(
 def validate_message(message: str) -> None:
     """Validate a patron blocking rule *message* string.
 
-    Args:
-        message: The human-readable message shown when a patron is blocked.
-
-    Raises:
-        RuleValidationError: If the message is empty/whitespace or exceeds
-            :data:`MAX_MESSAGE_LENGTH` characters.
+    :param message: The human-readable message shown when a patron is blocked.
+    :raises RuleValidationError: If the message is empty/whitespace or exceeds
+        :data:`MAX_MESSAGE_LENGTH` characters.
     """
     if not message or not message.strip():
         raise RuleValidationError("Message must not be empty or whitespace.")
@@ -268,16 +247,13 @@ def validate_rule_expression(
     error message includes a listing of all available keys/functions so
     operators can correct the rule without guessing.
 
-    Args:
-        expr: The raw rule expression string.
-        test_values: Mapping of placeholder key → test value used for the
-            trial evaluation.  For live validation this is the dict returned by
-            ``fetch_live_rule_validation_values``; it contains all raw SIP2
-            response fields plus the normalised ``fines`` key.
-        evaluator: A locked-down evaluator from :func:`make_evaluator`.
-
-    Raises:
-        RuleValidationError: On any validation failure.
+    :param expr: The raw rule expression string.
+    :param test_values: Mapping of placeholder key → test value used for the
+        trial evaluation.  For live validation this is the dict returned by
+        ``fetch_live_rule_validation_values``; it contains all raw SIP2
+        response fields plus the normalised ``fines`` key.
+    :param evaluator: A locked-down evaluator from :func:`make_evaluator`.
+    :raises RuleValidationError: On any validation failure.
     """
     if not expr or not expr.strip():
         raise RuleValidationError("Rule expression must not be empty or whitespace.")
@@ -331,18 +307,13 @@ def evaluate_rule_expression_strict_bool(
     server-side (never exposed to patrons) so operators can diagnose and fix
     the rule.
 
-    Args:
-        expr: The raw rule expression string (same as stored).
-        values: Mapping of placeholder key → runtime value.
-        evaluator: A locked-down evaluator from :func:`make_evaluator`.
-        rule_name: Optional identifier for the rule, included in error messages.
-
-    Returns:
-        ``True`` if the patron should be *blocked*, ``False`` otherwise.
-
-    Raises:
-        RuleEvaluationError: On missing placeholders, parse/eval errors, or
-            non-boolean result.
+    :param expr: The raw rule expression string (same as stored).
+    :param values: Mapping of placeholder key → runtime value.
+    :param evaluator: A locked-down evaluator from :func:`make_evaluator`.
+    :param rule_name: Optional identifier for the rule, included in error messages.
+    :returns: ``True`` if the patron should be *blocked*, ``False`` otherwise.
+    :raises RuleEvaluationError: On missing placeholders, parse/eval errors, or
+        non-boolean result.
     """
     compiled = compile_rule_expression(expr)
 
