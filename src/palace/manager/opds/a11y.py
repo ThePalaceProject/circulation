@@ -79,7 +79,11 @@ class AccessibilityFeature(StrEnum):
     # Alternative representations
     alternative_text = "alternativeText"
     audio_description = "audioDescription"
-    close_captions = "closeCaptions"
+    # The Readium JSON schema defines this as "closeCaptions", but the W3C source vocabulary
+    # uses "closedCaptions". We follow the W3C definition.
+    # https://www.w3.org/community/reports/a11y-discov-vocab/CG-FINAL-vocabulary-20260128/#closedCaptions
+    # Schema fix PR: https://github.com/readium/webpub-manifest/pull/131
+    closed_captions = "closedCaptions"
     captions = auto()
     described_math = "describedMath"
     long_description = "longDescription"
