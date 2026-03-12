@@ -212,6 +212,7 @@ module = [
     # contains a couple version strings it can be safely ignored
     "palace.manager._version",
     "pyld",
+    "simpleeval",
     "textblob.*",
     "unicodecsv",
     "uwsgi",

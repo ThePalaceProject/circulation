@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Any
 
-from simpleeval import (  # type: ignore[import-untyped]
+from simpleeval import (
     EvalWithCompoundTypes,
     FunctionNotDefined,
     NameNotDefined,
