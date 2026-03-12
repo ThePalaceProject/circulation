@@ -258,6 +258,7 @@ class PublicationMetadata(
     def _serialize(self, serializer: SerializerFunctionWrapHandler) -> dict[str, Any]:
         data = cast(dict[str, Any], serializer(self))
 
+        drop_if_falsy(self, "accessibility", data)
         drop_if_falsy(self, "contributor", data)
         drop_if_falsy(self, "subject", data)
         drop_if_falsy(self, "belongs_to", data)

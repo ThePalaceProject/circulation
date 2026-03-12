@@ -8,6 +8,7 @@ from typing import Any, Literal, cast
 from pydantic import Field, NonNegativeInt, PositiveFloat, PositiveInt, model_serializer
 from pydantic_core.core_schema import SerializerFunctionWrapHandler
 
+from palace.manager.opds.a11y import Accessibility
 from palace.manager.opds.base import BaseOpdsModel
 from palace.manager.opds.types.date import (
     Iso8601AwareDatetime,
@@ -384,6 +385,8 @@ class Metadata(BaseOpdsModel):
     abridged: bool | None = None
 
     belongs_to: BelongsTo = Field(default_factory=BelongsTo, alias="belongsTo")
+
+    accessibility: Accessibility = Field(default_factory=Accessibility)
 
     presentation: PresentationProperties = Field(default_factory=PresentationProperties)
 
