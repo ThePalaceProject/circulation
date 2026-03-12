@@ -76,7 +76,7 @@ class AcquisitionObject(BaseOpdsModel):
     """
 
     type: str
-    child: list[AcquisitionObject] | None = None
+    child: tuple[AcquisitionObject, ...] | None = None
 
     @cached_property
     def children(self) -> Sequence[AcquisitionObject]:
@@ -162,8 +162,8 @@ class LinkProperties(rwpm.LinkProperties, palace.LinkProperties):
 
     number_of_items: NonNegativeInt | None = Field(None, alias="numberOfItems")
     price: Price | None = None
-    indirect_acquisition: list[AcquisitionObject] = Field(
-        default_factory=list, alias="indirectAcquisition"
+    indirect_acquisition: tuple[AcquisitionObject, ...] = Field(
+        default=(), alias="indirectAcquisition"
     )
     holds: Holds = Field(default_factory=Holds)
     copies: Copies = Field(default_factory=Copies)

@@ -118,13 +118,11 @@ class CompactCollection(Sequence[LinkT]):
 
     @classmethod
     def _validate(cls, links: Iterable[LinkT]) -> CompactCollection[LinkT]:
-        link_set = set()
+        seen: set[LinkT] = set()
         for link in links:
-            if (link.rels, link.href, link.type) in link_set:
-                raise PalaceValueError(
-                    f"Duplicate link with relation '{link.rel}', type '{link.type}' and href '{link.href}'"
-                )
-            link_set.add((link.rels, link.href, link.type))
+            if link in seen:
+                raise PalaceValueError(f"Duplicate link: {link!r}")
+            seen.add(link)
         return cls(links)
 
     @overload
@@ -146,6 +144,9 @@ class CompactCollection(Sequence[LinkT]):
         if not isinstance(other, CompactCollection):
             return False
         return self._links == other._links
+
+    def __hash__(self) -> int:
+        return hash(self._links)
 
     def __str__(self) -> str:
         return str(self._links)
