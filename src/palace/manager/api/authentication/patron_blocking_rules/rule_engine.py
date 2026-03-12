@@ -14,10 +14,6 @@ from simpleeval import (
 
 from palace.manager.core.exceptions import BasePalaceException
 
-# ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
-
 MAX_RULE_LENGTH = 1000
 MAX_MESSAGE_LENGTH = 1000
 
@@ -26,11 +22,6 @@ _PLACEHOLDER_RE = re.compile(r"\{([A-Za-z0-9_]+)\}")
 
 # Variable name prefix used when compiling placeholders to safe identifiers.
 _VAR_PREFIX = "__v_"
-
-
-# ---------------------------------------------------------------------------
-# Internal helpers for building rich error messages
-# ---------------------------------------------------------------------------
 
 
 def _format_available_keys(available: Mapping[str, Any]) -> str:
@@ -47,11 +38,6 @@ def _format_allowed_functions(functions: Mapping[str, Callable[..., Any]]) -> st
     if not functions:
         return "(none)"
     return ", ".join(sorted(functions.keys()))
-
-
-# ---------------------------------------------------------------------------
-# Exceptions
-# ---------------------------------------------------------------------------
 
 
 class RuleValidationError(BasePalaceException):
@@ -96,11 +82,6 @@ class RuleEvaluationError(BasePalaceException):
         self.rule_name = rule_name
 
 
-# ---------------------------------------------------------------------------
-# Compiled rule dataclass
-# ---------------------------------------------------------------------------
-
-
 @dataclass(frozen=True)
 class CompiledRule:
     """The result of compiling a rule expression.
@@ -115,11 +96,6 @@ class CompiledRule:
     original: str
     compiled: str
     var_map: dict[str, str] = field(default_factory=dict)
-
-
-# ---------------------------------------------------------------------------
-# Compilation helpers
-# ---------------------------------------------------------------------------
 
 
 def compile_rule_expression(expr: str) -> CompiledRule:
@@ -148,11 +124,6 @@ def compile_rule_expression(expr: str) -> CompiledRule:
     return CompiledRule(original=expr, compiled=compiled, var_map=var_map)
 
 
-# ---------------------------------------------------------------------------
-# Names / values helpers
-# ---------------------------------------------------------------------------
-
-
 def build_names(compiled: CompiledRule, values: Mapping[str, Any]) -> dict[str, Any]:
     """Build the simpleeval ``names`` dict for a compiled rule.
 
@@ -179,11 +150,6 @@ def build_names(compiled: CompiledRule, values: Mapping[str, Any]) -> dict[str, 
             raise MissingPlaceholderError(key, available=values)
         names[var_name] = values[key]
     return names
-
-
-# ---------------------------------------------------------------------------
-# Allowed functions
-# ---------------------------------------------------------------------------
 
 
 def age_in_years(
@@ -241,11 +207,6 @@ DEFAULT_ALLOWED_FUNCTIONS: dict[str, Callable[..., Any]] = {
 }
 
 
-# ---------------------------------------------------------------------------
-# Evaluator factory
-# ---------------------------------------------------------------------------
-
-
 def make_evaluator(
     allowed_functions: dict[str, Callable[..., Any]] | None = None,
 ) -> EvalWithCompoundTypes:
@@ -268,11 +229,6 @@ def make_evaluator(
         else DEFAULT_ALLOWED_FUNCTIONS
     )
     return EvalWithCompoundTypes(functions=functions, names={})
-
-
-# ---------------------------------------------------------------------------
-# Validation
-# ---------------------------------------------------------------------------
 
 
 def validate_message(message: str) -> None:
@@ -356,11 +312,6 @@ def validate_rule_expression(
         raise RuleValidationError(
             f"Rule expression must evaluate to a boolean, got {type(result).__name__!r}."
         )
-
-
-# ---------------------------------------------------------------------------
-# Runtime evaluation
-# ---------------------------------------------------------------------------
 
 
 def evaluate_rule_expression_strict_bool(
