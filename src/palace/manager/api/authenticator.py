@@ -204,7 +204,13 @@ class LibraryAuthenticator(LoggerMixin):
         for integration in integrations:
             try:
                 authenticator.register_provider(integration, analytics)
-            except CannotLoadConfiguration as e:
+            except (CannotLoadConfiguration, ProblemDetailException) as e:
+                # TODO: Handling the `ProblemDetailException` like this is a
+                #  short-term fix for a problem that can keep the web app from
+                #  fully initializing due to `INCOMPLETE_CONFIGURATION` errors
+                #  when loading settings. We should either turn that exception
+                #  into a more specific exception type during loading (elsewhere)
+                #  or re-raise it here if it's not for `INCOMPLETE_CONFIGURATION`.
                 # CannotLoadConfiguration is caused by misconfiguration, as opposed to bad code.
                 logging.error(
                     f"Error registering authentication provider {integration.parent.name} "
