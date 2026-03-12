@@ -1,10 +1,14 @@
 import json
 
 import pytest
-from pydantic import TypeAdapter, ValidationError
+from pydantic import TypeAdapter
 
 from palace.manager.core.exceptions import PalaceValueError
-from palace.manager.opds.types.link import BaseLink, CompactCollection
+from palace.manager.opds.types.link import (
+    BaseLink,
+    CompactCollection,
+    validate_unique_links,
+)
 
 
 class TestBaseLink:
@@ -127,23 +131,11 @@ class TestCompactCollection:
         for link in validated:
             assert isinstance(link, BaseLink)
 
-        # An exact duplicate link (all fields identical) is rejected.
-        invalid_list = list_of_links_fixture.list + [list_of_links_fixture.foo_link]
-        with pytest.raises(ValidationError, match="Duplicate link"):
-            validator.validate_python(invalid_list)
-
-        # Links sharing (rel, type, href) but differing in other fields are
-        # accepted, since uniqueness uses deep object equality (matching
-        # JSON Schema uniqueItems semantics).
-        similar_link = BaseLink(
-            href="http://example.com/foo",
-            rel="foo",
-            type="application/xyz",
-            templated=True,
-        )
-        valid_list = list_of_links_fixture.list + [similar_link]
-        validated_with_similar = validator.validate_python(valid_list)
-        assert len(validated_with_similar) == len(valid_list)
+        # Duplicate links are accepted by CompactCollection itself.
+        # Uniqueness is enforced at the field level via validate_unique_links.
+        duplicate_list = list_of_links_fixture.list + [list_of_links_fixture.foo_link]
+        validated_with_dup = validator.validate_python(duplicate_list)
+        assert len(validated_with_dup) == len(duplicate_list)
 
         # Load the list of links from a JSON object.
         json_obj = json.dumps(
@@ -215,3 +207,30 @@ class TestCompactCollection:
         # Single-match queries still work.
         assert links.get(rel="bar") == link_c
         assert links.get(rel="bar", raising=True) == link_c
+
+
+class TestValidateUniqueLinks:
+    def test_accepts_unique_links(self) -> None:
+        links = CompactCollection(
+            [
+                BaseLink(href="http://example.com/a", rel="foo"),
+                BaseLink(href="http://example.com/b", rel="bar"),
+            ]
+        )
+        assert validate_unique_links(links) is links
+
+    def test_rejects_exact_duplicates(self) -> None:
+        link = BaseLink(href="http://example.com/a", rel="foo", type="text/html")
+        links = CompactCollection([link, link])
+        with pytest.raises(PalaceValueError, match="Duplicate link"):
+            validate_unique_links(links)
+
+    def test_accepts_links_sharing_rel_type_href(self) -> None:
+        """Links with same (rel, type, href) but differing in other fields
+        are not duplicates under full object equality."""
+        link_a = BaseLink(href="http://example.com/a", rel="foo", type="text/html")
+        link_b = BaseLink(
+            href="http://example.com/a", rel="foo", type="text/html", templated=True
+        )
+        links = CompactCollection([link_a, link_b])
+        assert validate_unique_links(links) is links

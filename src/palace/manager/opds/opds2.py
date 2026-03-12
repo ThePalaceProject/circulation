@@ -23,7 +23,11 @@ from palace.manager.opds.base import BaseOpdsModel
 from palace.manager.opds.types.currency import CurrencyCode
 from palace.manager.opds.types.date import Iso8601AwareDatetime
 from palace.manager.opds.types.language import LanguageMap
-from palace.manager.opds.types.link import BaseLink, CompactCollection
+from palace.manager.opds.types.link import (
+    BaseLink,
+    CompactCollection,
+    validate_unique_links,
+)
 from palace.manager.opds.util import StrOrTuple, drop_if_falsy, obj_or_tuple_to_tuple
 from palace.manager.util.datetime_helpers import utc_now
 
@@ -336,6 +340,8 @@ class Facet(BaseOpdsModel):
     metadata: FeedMetadata
     links: CompactCollection[TitleLink]
 
+    _validate_unique_links = field_validator("links")(validate_unique_links)
+
     @field_validator("links")
     @classmethod
     def validate_links(
@@ -361,6 +367,8 @@ class PublicationsGroup(BaseOpdsModel):
     links: CompactCollection[StrictLink] = Field(default_factory=CompactCollection)
     publications: Annotated[list[Publication], Field(min_length=1)]
 
+    _validate_unique_links = field_validator("links")(validate_unique_links)
+
 
 class NavigationGroup(BaseOpdsModel):
     """
@@ -373,6 +381,9 @@ class NavigationGroup(BaseOpdsModel):
     metadata: FeedMetadata
     links: CompactCollection[StrictLink] = Field(default_factory=CompactCollection)
     navigation: CompactCollection[TitleLink] = Field(..., min_length=1)
+
+    _validate_unique_links = field_validator("links")(validate_unique_links)
+    _validate_unique_nav = field_validator("navigation")(validate_unique_links)
 
 
 class Feed(BaseOpdsModel):
@@ -395,6 +406,8 @@ class Feed(BaseOpdsModel):
     groups: list[PublicationsGroup | NavigationGroup] = Field(default_factory=list)
 
     _validate_links = field_validator("links")(validate_self_link)
+    _validate_unique_links = field_validator("links")(validate_unique_links)
+    _validate_unique_nav = field_validator("navigation")(validate_unique_links)
 
     @model_serializer(mode="wrap")
     def _serialize(self, serializer: SerializerFunctionWrapHandler) -> dict[str, Any]:
@@ -447,6 +460,7 @@ class BasePublicationFeed[T](
     publications: list[T]
 
     _validate_links = field_validator("links")(validate_self_link)
+    _validate_unique_links = field_validator("links")(validate_unique_links)
 
 
 class PublicationFeedNoValidation(BasePublicationFeed[dict[str, Any]]):
