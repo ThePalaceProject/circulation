@@ -107,8 +107,10 @@ class AccessibilityFeature(StrEnum):
     # Text-to-speech
     tts_markup = "ttsMarkup"
 
-    # Visual adjustments
+    # Audio adjustments
     high_contrast_audio = "highContrastAudio"
+
+    # Visual adjustments
     high_contrast_display = "highContrastDisplay"
     large_print = "largePrint"
 
