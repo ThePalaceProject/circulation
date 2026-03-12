@@ -30,27 +30,17 @@ if TYPE_CHECKING:
     from palace.manager.sqlalchemy.model.patron import Patron
 
 
-# ---------------------------------------------------------------------------
-# Data model
-# ---------------------------------------------------------------------------
-
-
 class PatronBlockingRule(BaseModel):
     """A single patron blocking rule stored in a library's per-protocol settings.
 
-    Fields
-    ------
-    name:
-        A human-readable identifier for the rule; must be non-empty and
+    :ivar name: A human-readable identifier for the rule; must be non-empty and
         unique within a library's rule list.
-    rule:
-        A simpleeval rule expression evaluated at authentication time.
-        The expression must evaluate to a strict bool.  Placeholder
-        values may be embedded as ``{key}`` and are resolved at runtime
-        from the patron's profile (see :func:`build_runtime_values_from_patron`).
-    message:
-        Optional text shown to the patron when this rule blocks access.
-        If omitted a generic default is used.
+    :ivar rule: A simpleeval rule expression evaluated at authentication time.
+        The expression must evaluate to a strict bool.  Placeholder values may
+        be embedded as ``{key}`` and are resolved at runtime from the patron's
+        profile (see :func:`build_runtime_values_from_patron`).
+    :ivar message: Optional text shown to the patron when this rule blocks
+        access.  If omitted a generic default is used.
     """
 
     model_config = ConfigDict(frozen=True, str_strip_whitespace=True)
@@ -58,11 +48,6 @@ class PatronBlockingRule(BaseModel):
     name: str
     rule: str
     message: str | None = None
-
-
-# ---------------------------------------------------------------------------
-# Runtime values builder
-# ---------------------------------------------------------------------------
 
 
 def build_runtime_values_from_patron(patron: Patron) -> dict[str, Any]:
@@ -73,11 +58,9 @@ def build_runtime_values_from_patron(patron: Patron) -> dict[str, Any]:
     cause :func:`check_patron_blocking_rules_with_evaluator` to fail closed
     (block the patron) if a rule references it.
 
-    Args:
-        patron: The authenticated :class:`~palace.manager.sqlalchemy.model.patron.Patron`.
-
-    Returns:
-        Dict mapping placeholder key to resolved value.
+    :param patron: The authenticated
+        :class:`~palace.manager.sqlalchemy.model.patron.Patron`.
+    :returns: Dict mapping placeholder key to resolved value.
     """
     values: dict[str, Any] = {}
 
@@ -102,11 +85,6 @@ def build_runtime_values_from_patron(patron: Patron) -> dict[str, Any]:
     return values
 
 
-# ---------------------------------------------------------------------------
-# SIP2 live-response values builder
-# ---------------------------------------------------------------------------
-
-
 def build_values_from_sip2_info(info: dict[str, Any]) -> dict[str, Any]:
     """Build a simpleeval values dict from a raw SIP2 ``patron_information`` dict.
 
@@ -117,13 +95,10 @@ def build_values_from_sip2_info(info: dict[str, Any]) -> dict[str, Any]:
     This is used at admin-save validation time (live SIP2 call) and may also
     be used at runtime once richer SIP2 data is available in the auth flow.
 
-    Args:
-        info: The dict returned by
-            :meth:`~palace.manager.integration.patron_auth.sip2.client.SIPClient.patron_information`.
-
-    Returns:
-        Dict mapping placeholder key to resolved value.  All raw SIP2 fields
-        are included verbatim; the additional ``fines`` key is a parsed
+    :param info: The dict returned by
+        :meth:`~palace.manager.integration.patron_auth.sip2.client.SIPClient.patron_information`.
+    :returns: Dict mapping placeholder key to resolved value.  All raw SIP2
+        fields are included verbatim; the additional ``fines`` key is a parsed
         :class:`float` derived from ``fee_amount``.
     """
     # Include every raw SIP2 field so rules can reference any server-returned key.
@@ -137,10 +112,6 @@ def build_values_from_sip2_info(info: dict[str, Any]) -> dict[str, Any]:
 
     return values
 
-
-# ---------------------------------------------------------------------------
-# simpleeval-based runtime evaluator
-# ---------------------------------------------------------------------------
 
 _DEFAULT_BLOCK_MESSAGE = "Patron is blocked by library policy."
 
@@ -160,16 +131,13 @@ def check_patron_blocking_rules_with_evaluator(
     A fresh :class:`~simpleeval.EvalWithCompoundTypes` is created for each
     call so the function is safe to call from concurrent requests.
 
-    Args:
-        rules: The list of :class:`PatronBlockingRule` objects for the library.
-        values: Runtime placeholder values; for SIP2 providers this is the full
-            raw SIP2 response dict (see :func:`build_values_from_sip2_info`).
-        log: Optional logger for server-side error diagnostics.
-
-    Returns:
-        A :class:`~palace.manager.util.problem_detail.ProblemDetail` (HTTP 403)
-        if the patron should be blocked, or ``None`` if authentication should
-        proceed normally.
+    :param rules: The list of :class:`PatronBlockingRule` objects for the library.
+    :param values: Runtime placeholder values; for SIP2 providers this is the
+        full raw SIP2 response dict (see :func:`build_values_from_sip2_info`).
+    :param log: Optional logger for server-side error diagnostics.
+    :returns: A :class:`~palace.manager.util.problem_detail.ProblemDetail`
+        (HTTP 403) if the patron should be blocked, or ``None`` if
+        authentication should proceed normally.
     """
     evaluator = make_evaluator()
 
