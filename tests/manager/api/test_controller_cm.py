@@ -2,6 +2,7 @@ from unittest.mock import MagicMock, create_autospec, patch
 
 from pytest import LogCaptureFixture, MonkeyPatch
 
+from palace.manager.api.admin.problem_details import INCOMPLETE_CONFIGURATION
 from palace.manager.api.authenticator import LibraryAuthenticator
 from palace.manager.api.circulation_manager import CirculationManager
 from palace.manager.api.problem_details import NO_SUCH_LANE
@@ -17,7 +18,7 @@ from palace.manager.sqlalchemy.model.discovery_service_registration import (
     DiscoveryServiceRegistration,
 )
 from palace.manager.sqlalchemy.util import create
-from palace.manager.util.problem_detail import ProblemDetail
+from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
 
 # TODO: we can drop this when we drop support for Python 3.6 and 3.7
 from tests.fixtures.api_controller import CirculationControllerFixture
@@ -279,6 +280,29 @@ class TestCirculationManager:
             # respond that the lane doesn't exist rather than saying
             # they've been denied access to age-inappropriate content.
             assert NO_SUCH_LANE.uri == facets.uri
+
+    def test_load_settings_does_not_raise_on_problem_detail_exception(
+        self,
+        circulation_fixture: CirculationControllerFixture,
+        caplog: LogCaptureFixture,
+    ):
+        """
+        A `ProblemDetailException` raised while loading a collection's API is
+        caught, logged, and does not prevent the rest of the app from loading.
+        """
+        caplog.set_level(LogLevel.error)
+
+        library = circulation_fixture.db.library()
+        collection = circulation_fixture.db.collection(name="Broken Collection")
+        collection.associated_libraries.append(library)
+
+        with patch(
+            "palace.manager.service.integration_registry.license_providers.LicenseProvidersRegistry.from_collection",
+            side_effect=ProblemDetailException(INCOMPLETE_CONFIGURATION),
+        ):
+            circulation_fixture.manager.load_settings()
+
+        assert f"Error loading configuration for {collection.name}" in caplog.text
 
     def test_load_settings_logs_warning_for_unknown_protocol(
         self,

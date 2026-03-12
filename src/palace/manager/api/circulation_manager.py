@@ -59,6 +59,7 @@ from palace.manager.sqlalchemy.model.discovery_service_registration import (
 from palace.manager.sqlalchemy.model.lane import Lane
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.util.log import LoggerMixin, elapsed_time_logging, log_elapsed_time
+from palace.manager.util.problem_detail import ProblemDetailException
 
 if TYPE_CHECKING:
     from palace.manager.api.admin.controller.admin_search import AdminSearchController
@@ -286,7 +287,13 @@ class CirculationManager(LoggerMixin):
                 try:
                     api = registry.from_collection(self._db, collection)
                     collection_apis[collection.id] = api
-                except CannotLoadConfiguration as exception:
+                except (CannotLoadConfiguration, ProblemDetailException) as exception:
+                    # TODO: Handling the `ProblemDetailException` like this is a
+                    #  short-term fix for a problem that can keep the web app from
+                    #  fully initializing due to `INCOMPLETE_CONFIGURATION` errors
+                    #  when loading settings. We should either turn that exception
+                    #  into a more specific exception type during loading (elsewhere)
+                    #  or re-raise it here if it's not for `INCOMPLETE_CONFIGURATION`.
                     self.log.exception(
                         "Error loading configuration for {}: {}".format(
                             collection.name, str(exception)

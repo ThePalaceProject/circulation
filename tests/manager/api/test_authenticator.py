@@ -21,6 +21,7 @@ from freezegun import freeze_time
 from sqlalchemy.orm import Session
 from werkzeug.datastructures import Authorization
 
+from palace.manager.api.admin.problem_details import INCOMPLETE_CONFIGURATION
 from palace.manager.api.annotations import AnnotationWriter
 from palace.manager.api.authentication.access_token import PatronJWEAccessTokenProvider
 from palace.manager.api.authentication.base import PatronData
@@ -78,6 +79,7 @@ from palace.manager.integration.patron_auth.sip2.provider import (
 )
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.service.integration_registry.base import IntegrationRegistry
+from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.sqlalchemy.constants import LinkRelations
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.integration import (
@@ -683,6 +685,35 @@ class TestLibraryAuthenticator:
         assert "Unable to load implementation for external integration" in str(
             not_found
         )
+
+    def test_problem_detail_exception_during_from_config_stored(
+        self,
+        db: DatabaseTransactionFixture,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        """
+        If `register_provider` raises a `ProblemDetailException` directly,
+        `from_config` catches it, logs it, and stores it in
+        `initialization_exceptions` rather than propagating it.
+        """
+        caplog.set_level(LogLevel.error)
+
+        library = db.default_library()
+        integration = db.integration_configuration(
+            "some protocol", goal=Goals.PATRON_AUTH_GOAL, libraries=[library]
+        )
+
+        with patch.object(
+            LibraryAuthenticator,
+            "register_provider",
+            side_effect=ProblemDetailException(INCOMPLETE_CONFIGURATION),
+        ):
+            auth = LibraryAuthenticator.from_config(db.session, library)
+
+        assert auth.basic_auth_provider is None
+        stored = auth.initialization_exceptions[(integration.id, library.id)]
+        assert isinstance(stored, ProblemDetailException)
+        assert "Error registering authentication provider" in caplog.text
 
     def test_register_fails_when_integration_has_wrong_goal(
         self, db: DatabaseTransactionFixture
