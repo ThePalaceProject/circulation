@@ -34,13 +34,21 @@ def test_feed_opds(filename: str, opds2_files_fixture: OPDS2FilesFixture) -> Non
     Feed.model_validate_json(opds2_files_fixture.sample_data(filename))
 
 
+@pytest.mark.parametrize(
+    "filename",
+    [
+        "feed2.json",
+        "a11y.json",
+    ],
+)
 def test_feed_odl_success(
+    filename: str,
     opds2_with_odl_files_fixture: OPDS2WithODLFilesFixture,
 ) -> None:
     """
     Parse and validate a basic OPDS2 + ODL feed.
     """
-    Feed.model_validate_json(opds2_with_odl_files_fixture.sample_data("feed2.json"))
+    Feed.model_validate_json(opds2_with_odl_files_fixture.sample_data(filename))
 
 
 def test_feed_odl_failure(
