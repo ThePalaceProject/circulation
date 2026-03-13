@@ -305,6 +305,28 @@ class TestPublicationMetadata:
         assert data["accessibility"]["summary"] == "Fully accessible."
 
 
+class TestPublication:
+    def test_link_without_rel_or_type(self) -> None:
+        """A publication can contain a link with only href."""
+        pub = Publication(
+            metadata=PublicationMetadata(
+                title="Test",
+                identifier="urn:uuid:00000000-0000-0000-0000-000000000001",
+                type="http://schema.org/Book",
+            ),
+            images=[Link(href="http://img", type="image/png")],
+            links=[
+                Link(
+                    href="http://acq",
+                    rel="http://opds-spec.org/acquisition/open-access",
+                    type="application/epub+zip",
+                ),
+                Link(href="http://example.com/extra"),
+            ],
+        )
+        assert len(pub.links) == 2
+
+
 class TestFeed:
     @classmethod
     def _minimal_publication(cls) -> Publication:
@@ -360,6 +382,15 @@ class TestFeed:
                 links=self._self_link() + [other_link, other_link],
                 publications=[self._minimal_publication()],
             )
+
+    def test_link_without_type(self) -> None:
+        """A feed can contain links that only have href and rel."""
+        feed = Feed(
+            metadata=FeedMetadata(title="Feed"),
+            links=[Link(href="http://feed", rel="self")],
+            publications=[],
+        )
+        assert len(feed.links) == 1
 
     def test_serialization_only_truthy_collections_are_kept(self):
         """When only groups is truthy, publications and navigation are dropped."""
@@ -548,40 +579,7 @@ class TestBasePublicationFeed:
         )
         assert len(feed.links) == 3
 
-
-class TestLinkRelaxedValidation:
-    """Links without rel or type are accepted, matching the OPDS 2.0 spec."""
-
-    def test_publication_link_without_rel_or_type(self) -> None:
-        """A publication can contain a link with only href."""
-        pub = Publication(
-            metadata=PublicationMetadata(
-                title="Test",
-                identifier="urn:uuid:00000000-0000-0000-0000-000000000001",
-                type="http://schema.org/Book",
-            ),
-            images=[Link(href="http://img", type="image/png")],
-            links=[
-                Link(
-                    href="http://acq",
-                    rel="http://opds-spec.org/acquisition/open-access",
-                    type="application/epub+zip",
-                ),
-                Link(href="http://example.com/extra"),
-            ],
-        )
-        assert len(pub.links) == 2
-
-    def test_feed_link_without_type(self) -> None:
-        """A feed can contain links that only have href and rel."""
-        feed = Feed(
-            metadata=FeedMetadata(title="Feed"),
-            links=[Link(href="http://feed", rel="self")],
-            publications=[],
-        )
-        assert len(feed.links) == 1
-
-    def test_publication_feed_link_without_type(self) -> None:
+    def test_link_without_type(self) -> None:
         """A publication feed can contain links that only have href and rel."""
         feed = PublicationFeed(
             metadata=FeedMetadata(title="Feed"),
