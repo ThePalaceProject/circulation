@@ -7,15 +7,18 @@ from pydantic import ValidationError
 
 from palace.manager.opds.opds2 import (
     Availability,
+    Facet,
     Feed,
     FeedMetadata,
     Link,
+    NavigationGroup,
     Publication,
     PublicationFeed,
     PublicationFeedNoValidation,
     PublicationMetadata,
     PublicationsGroup,
     StrictLink,
+    TitleLink,
 )
 from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.files import OPDS2FilesFixture
@@ -418,3 +421,134 @@ class TestFeed:
         # publications has higher priority than navigation.
         assert "publications" in data
         assert "navigation" not in data
+
+
+class TestFacet:
+    """Test that the Facet model enforces unique links."""
+
+    def test_rejects_duplicate_links(self) -> None:
+        link = TitleLink(href="http://a", title="A", type="text/html")
+        with pytest.raises(ValidationError, match="Duplicate link"):
+            Facet(
+                metadata=FeedMetadata(title="Facet"),
+                links=[link, link],
+            )
+
+    def test_accepts_distinct_links(self) -> None:
+        facet = Facet(
+            metadata=FeedMetadata(title="Facet"),
+            links=[
+                TitleLink(href="http://a", title="A", type="text/html"),
+                TitleLink(href="http://b", title="B", type="text/html"),
+            ],
+        )
+        assert len(facet.links) == 2
+
+
+class TestPublicationsGroup:
+    """Test that PublicationsGroup.links enforces unique links."""
+
+    @classmethod
+    def _minimal_publication(cls) -> Publication:
+        return Publication(
+            metadata=PublicationMetadata(
+                title="Test",
+                identifier=f"urn:uuid:{uuid.uuid4()}",
+                type="http://schema.org/Book",
+            ),
+            images=[Link(href="http://img", type="image/png")],
+            links=[
+                StrictLink(
+                    href="http://acq",
+                    rel="http://opds-spec.org/acquisition/open-access",
+                    type="application/epub+zip",
+                )
+            ],
+        )
+
+    def test_rejects_duplicate_links(self) -> None:
+        link = StrictLink(href="http://a", rel="other", type="text/html")
+        with pytest.raises(ValidationError, match="Duplicate link"):
+            PublicationsGroup(
+                metadata=FeedMetadata(title="Group"),
+                links=[link, link],
+                publications=[self._minimal_publication()],
+            )
+
+    def test_accepts_distinct_links(self) -> None:
+        group = PublicationsGroup(
+            metadata=FeedMetadata(title="Group"),
+            links=[
+                StrictLink(href="http://a", rel="other", type="text/html"),
+                StrictLink(href="http://b", rel="other", type="text/html"),
+            ],
+            publications=[self._minimal_publication()],
+        )
+        assert len(group.links) == 2
+
+
+class TestNavigationGroup:
+    """Test that NavigationGroup enforces unique links and navigation."""
+
+    def test_links_rejects_duplicate(self) -> None:
+        link = StrictLink(href="http://a", rel="other", type="text/html")
+        with pytest.raises(ValidationError, match="Duplicate link"):
+            NavigationGroup(
+                metadata=FeedMetadata(title="Nav"),
+                links=[link, link],
+                navigation=[TitleLink(href="http://n", title="N", type="text/html")],
+            )
+
+    def test_navigation_rejects_duplicate(self) -> None:
+        nav_link = TitleLink(href="http://n", title="N", type="text/html")
+        with pytest.raises(ValidationError, match="Duplicate link"):
+            NavigationGroup(
+                metadata=FeedMetadata(title="Nav"),
+                navigation=[nav_link, nav_link],
+            )
+
+    def test_accepts_distinct(self) -> None:
+        group = NavigationGroup(
+            metadata=FeedMetadata(title="Nav"),
+            links=[
+                StrictLink(href="http://a", rel="other", type="text/html"),
+                StrictLink(href="http://b", rel="other", type="text/html"),
+            ],
+            navigation=[
+                TitleLink(href="http://n1", title="N1", type="text/html"),
+                TitleLink(href="http://n2", title="N2", type="text/html"),
+            ],
+        )
+        assert len(group.links) == 2
+        assert len(group.navigation) == 2
+
+
+class TestBasePublicationFeed:
+    """Test that BasePublicationFeed.links (via PublicationFeed) enforces unique links."""
+
+    @classmethod
+    def _self_link(cls) -> list[StrictLink]:
+        return [
+            StrictLink(href="http://feed", rel="self", type="application/opds+json")
+        ]
+
+    def test_rejects_duplicate_links(self) -> None:
+        other_link = StrictLink(href="http://other", rel="other", type="text/html")
+        with pytest.raises(ValidationError, match="Duplicate link"):
+            PublicationFeed(
+                metadata=FeedMetadata(title="Feed"),
+                links=self._self_link() + [other_link, other_link],
+                publications=[],
+            )
+
+    def test_accepts_distinct_links(self) -> None:
+        feed = PublicationFeed(
+            metadata=FeedMetadata(title="Feed"),
+            links=self._self_link()
+            + [
+                StrictLink(href="http://a", rel="other", type="text/html"),
+                StrictLink(href="http://b", rel="other", type="text/html"),
+            ],
+            publications=[],
+        )
+        assert len(feed.links) == 3

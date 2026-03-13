@@ -405,6 +405,8 @@ class Feed(BaseOpdsModel):
     facets: list[Facet] = Field(default_factory=list)
     groups: list[PublicationsGroup | NavigationGroup] = Field(default_factory=list)
 
+    # Pydantic runs field validators in definition order. validate_self_link
+    # runs first so a missing self link is reported before duplicate checking.
     _validate_links = field_validator("links")(validate_self_link)
     _validate_unique_links = field_validator("links")(validate_unique_links)
     _validate_unique_nav = field_validator("navigation")(validate_unique_links)
