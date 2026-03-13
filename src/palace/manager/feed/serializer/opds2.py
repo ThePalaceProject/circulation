@@ -19,7 +19,6 @@ from palace.manager.feed.types import (
     WorkEntryData,
 )
 from palace.manager.opds import opds2, rwpm, schema_org
-from palace.manager.opds.base import BaseOpdsModel
 from palace.manager.opds.palace import DrmMetadata, LinkActions
 from palace.manager.opds.util import StrModelOrTuple
 from palace.manager.sqlalchemy.constants import EditionConstants
@@ -106,7 +105,7 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]], LoggerMixin):
             publications=publications,
         )
 
-        return self.to_string(self._dump_model(feed_model))
+        return self.to_string(feed_model.serialize())
 
     def _serialize_metadata(self, feed: FeedData) -> opds2.FeedMetadata:
         feed_metadata = feed.metadata
@@ -125,7 +124,7 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]], LoggerMixin):
 
     def serialize_work_entry(self, data: WorkEntryData) -> dict[str, Any]:
         publication = self._publication(data)
-        return self._dump_model(publication)
+        return publication.serialize()
 
     def _publication(self, data: WorkEntryData) -> opds2.Publication:
         metadata = self._serialize_publication_metadata(data)
@@ -516,15 +515,6 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]], LoggerMixin):
         except ValueError:
             self.log.warning(f"Expected numeric value, got '{value}'")
             return None
-
-    @staticmethod
-    def _dump_model(model: BaseOpdsModel) -> dict[str, Any]:
-        return model.model_dump(
-            mode="json",
-            by_alias=True,
-            exclude_unset=True,
-            exclude_none=True,
-        )
 
     @staticmethod
     def _link_properties(

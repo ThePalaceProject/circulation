@@ -47,7 +47,7 @@ class TestOpdsImporter:
                 checkouts=Checkouts(
                     available=10,
                 ),
-            ).model_dump(mode="json", exclude_none=True)
+            ).serialize()
 
         collection = db.collection(
             protocol=OPDS2WithODLApi,
