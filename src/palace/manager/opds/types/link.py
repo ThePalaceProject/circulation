@@ -5,9 +5,12 @@ from collections.abc import Iterable, Sequence
 from functools import cached_property
 from typing import Any, Literal, Self, TypeVar, cast, get_args, overload
 
-from pydantic import GetCoreSchemaHandler, model_serializer
+from pydantic import (
+    GetCoreSchemaHandler,
+    SerializerFunctionWrapHandler,
+    model_serializer,
+)
 from pydantic_core import core_schema
-from pydantic_core.core_schema import SerializerFunctionWrapHandler
 from uritemplate import URITemplate, variable
 
 from palace.manager.core.exceptions import PalaceValueError

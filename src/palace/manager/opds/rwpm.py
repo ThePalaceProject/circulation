@@ -5,8 +5,14 @@ from enum import StrEnum, auto
 from functools import cached_property
 from typing import Any, Literal, cast
 
-from pydantic import Field, NonNegativeInt, PositiveFloat, PositiveInt, model_serializer
-from pydantic_core.core_schema import SerializerFunctionWrapHandler
+from pydantic import (
+    Field,
+    NonNegativeInt,
+    PositiveFloat,
+    PositiveInt,
+    SerializerFunctionWrapHandler,
+    model_serializer,
+)
 
 from palace.manager.opds.a11y import Accessibility
 from palace.manager.opds.base import BaseOpdsModel
