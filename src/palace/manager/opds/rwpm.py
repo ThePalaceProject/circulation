@@ -68,7 +68,8 @@ class EPubProperties(BaseOpdsModel):
     """
 
     contains: (
-        set[Literal["mathml", "onix", "remote-resources", "js", "svg", "xmp"]] | None
+        frozenset[Literal["mathml", "onix", "remote-resources", "js", "svg", "xmp"]]
+        | None
     ) = None
     layout: Literal["fixed", "reflowable"] | None = None
 

@@ -1,10 +1,14 @@
 import json
 
 import pytest
-from pydantic import TypeAdapter, ValidationError
+from pydantic import TypeAdapter
 
 from palace.manager.core.exceptions import PalaceValueError
-from palace.manager.opds.types.link import BaseLink, CompactCollection
+from palace.manager.opds.types.link import (
+    BaseLink,
+    CompactCollection,
+    validate_unique_links,
+)
 
 
 class TestBaseLink:
@@ -127,14 +131,6 @@ class TestCompactCollection:
         for link in validated:
             assert isinstance(link, BaseLink)
 
-        # The list of links is invalid if there are multiple links with the same relation and type.
-        invalid_list = list_of_links_fixture.list + [list_of_links_fixture.foo_link]
-        with pytest.raises(
-            ValidationError,
-            match="Duplicate link with relation 'foo', type 'application/xyz' and href 'http://example.com/foo'",
-        ):
-            validator.validate_python(invalid_list)
-
         # Load the list of links from a JSON object.
         json_obj = json.dumps(
             [
@@ -164,3 +160,71 @@ class TestCompactCollection:
 
         assert validator.dump_json(validated, exclude_unset=True) == json_obj.encode()
         assert validator.dump_python(validated, exclude_unset=True) == validated
+
+    def test_queries_with_shared_rel_type_href(self) -> None:
+        """Query methods work correctly when links share (rel, type, href)
+        but differ in other fields (e.g., templated)."""
+        link_a = BaseLink(href="http://example.com/foo", rel="foo", type="text/html")
+        link_b = BaseLink(
+            href="http://example.com/foo",
+            rel="foo",
+            type="text/html",
+            templated=True,
+        )
+        link_c = BaseLink(href="http://example.com/bar", rel="bar")
+        links = CompactCollection([link_a, link_b, link_c])
+
+        # get_collection returns both links matching the rel and type.
+        by_rel = links.get_collection(rel="foo")
+        assert len(by_rel) == 2
+        assert by_rel == CompactCollection([link_a, link_b])
+
+        by_type = links.get_collection(type="text/html")
+        assert len(by_type) == 2
+        assert by_type == CompactCollection([link_a, link_b])
+
+        by_rel_type = links.get_collection(rel="foo", type="text/html")
+        assert len(by_rel_type) == 2
+        assert by_rel_type == CompactCollection([link_a, link_b])
+
+        # get returns the first match when multiple exist.
+        assert links.get(rel="foo") == link_a
+        assert links.get(type="text/html") == link_a
+
+        # get with raising=True raises when multiple links match.
+        with pytest.raises(
+            PalaceValueError,
+            match="^Multiple links found with rel='foo' and type='text/html'$",
+        ):
+            links.get(rel="foo", type="text/html", raising=True)
+
+        # Single-match queries still work.
+        assert links.get(rel="bar") == link_c
+        assert links.get(rel="bar", raising=True) == link_c
+
+
+class TestValidateUniqueLinks:
+    def test_accepts_unique_links(self) -> None:
+        links = CompactCollection(
+            [
+                BaseLink(href="http://example.com/a", rel="foo"),
+                BaseLink(href="http://example.com/b", rel="bar"),
+            ]
+        )
+        assert validate_unique_links(links) is links
+
+    def test_rejects_exact_duplicates(self) -> None:
+        link = BaseLink(href="http://example.com/a", rel="foo", type="text/html")
+        links = CompactCollection([link, link])
+        with pytest.raises(PalaceValueError, match="Duplicate link"):
+            validate_unique_links(links)
+
+    def test_accepts_links_sharing_rel_type_href(self) -> None:
+        """Links with same (rel, type, href) but differing in other fields
+        are not duplicates under full object equality."""
+        link_a = BaseLink(href="http://example.com/a", rel="foo", type="text/html")
+        link_b = BaseLink(
+            href="http://example.com/a", rel="foo", type="text/html", templated=True
+        )
+        links = CompactCollection([link_a, link_b])
+        assert validate_unique_links(links) is links
