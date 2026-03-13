@@ -271,6 +271,38 @@ class TestAvailability:
             Availability.model_validate({"since": invalid_since})
 
 
+class TestPublicationMetadata:
+    def test_model_serializer_empty_accessibility_not_serialized(self) -> None:
+        """An empty accessibility object should be excluded from serialized output."""
+        metadata = PublicationMetadata(
+            title="Test",
+            identifier="urn:isbn:123",
+            type="http://schema.org/Book",
+        )
+        data = metadata.model_dump(mode="json", by_alias=True)
+        assert "accessibility" not in data
+
+    def test_model_serializer_populated_accessibility_serialized(self) -> None:
+        """A populated accessibility object should be included in serialized output."""
+        metadata = PublicationMetadata.model_validate(
+            {
+                "title": "Test",
+                "identifier": "urn:isbn:123",
+                "@type": "http://schema.org/Book",
+                "accessibility": {
+                    "accessMode": ["textual", "visual"],
+                    "feature": ["tableOfContents"],
+                    "summary": "Fully accessible.",
+                },
+            }
+        )
+        data = metadata.model_dump(mode="json", by_alias=True)
+        assert "accessibility" in data
+        assert data["accessibility"]["accessMode"] == ["textual", "visual"]
+        assert data["accessibility"]["feature"] == ["tableOfContents"]
+        assert data["accessibility"]["summary"] == "Fully accessible."
+
+
 class TestFeed:
     @classmethod
     def _minimal_publication(cls) -> Publication:

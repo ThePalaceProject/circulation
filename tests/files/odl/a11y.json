@@ -1,0 +1,1348 @@
+{
+  "metadata": {
+    "title": "Market"
+  },
+  "links": [
+    {
+      "type": "application/opds+json",
+      "rel": "self",
+      "href": "https://market.vendor.com/api/libraries/harvest.json"
+    },
+    {
+      "type": "application/opds+json",
+      "rel": "next",
+      "href": "https://market.vendor.com/api/libraries/harvest.json?page=2&token=6p062a6opuu0m4mx56ef"
+    },
+    {
+      "type": "application/opds+json",
+      "rel": "last",
+      "href": "https://market.vendor.com/api/libraries/harvest.json?page=82&token=6p062a6opuu0m4mx56ef"
+    }
+  ],
+  "publications": [
+    {
+      "metadata": {
+        "@type": "http://schema.org/Book",
+        "title": "Water",
+        "subtitle": "A thriller featuring a frighteningly intelligent serial killer. Nothing like it so far.",
+        "abridged": "false",
+        "accessibility": {
+          "feature": [
+            "tableOfContents"
+          ],
+          "hazard": [
+            "none"
+          ]
+        },
+        "language": "en",
+        "modified": "2025-12-11T10:30:32+01:00",
+        "published": "2021-06-20T00:00:00+02:00",
+        "numberOfPages": 138,
+        "identifier": "urn:ISBN:9781667404769",
+        "schema:encodingFormat": "application/epub+zip",
+        "presentation": {
+          "layout": "reflowable"
+        },
+        "author": [
+          {
+            "name": "Claudio Hernandez",
+            "links": [
+              {
+                "type": "application/opds+json",
+                "href": "https://market.vendor.com/browse/recent.json?author_ids=882262&languages=en"
+              }
+            ]
+          }
+        ],
+        "translator": [
+          {
+            "name": "Alexander Sánchez",
+            "links": [
+              {
+                "type": "application/opds+json",
+                "href": "https://market.vendor.com/browse/recent.json?contributor_ids=1314576&languages=en"
+              }
+            ]
+          }
+        ],
+        "publisher": {
+          "name": "Babelcube Inc.",
+          "links": [
+            {
+              "type": "application/opds+json",
+              "href": "https://market.vendor.com/browse/recent.json?imprint_ids=29866&languages=en"
+            }
+          ]
+        },
+        "description": "Synopsis \"WATER\":\n  \n                    <br>\n   He was called \"Co&#xF1;ingan\" for his peculiar way of solving serial killer cases. Detective Sean Rickman had no powers or a gift with which to see the killer's face, but he had a good intuition and an intelligence far superior to others. However, in the fall of 2020, in the midst of a pandemic and great storms, there was a killer ahead of him. So much so, that the detective was unable to pursue any theory or hypothesis as bodies appeared drowned in streams, near the lush Maine woods. A killer, with a mental power and a dark way of thinking that no one had ever shown before, knew Rickman's every step, ahead of the detective who never caught a cold. Who was capable of killing young women without leaving any trace, despite his rampage against them? What mental power did the killer have that surpassed all human intelligence? Serial killers are always more intelligent than we all think. The killer had been nicknamed \"WATER\".",
+        "subject": [
+          {
+            "code": "FBFIC000000",
+            "name": "Fiction",
+            "scheme": "http://www.vendor.com/categories",
+            "links": [
+              {
+                "type": "application/opds+json",
+                "href": "https://market.vendor.com/category/FBFIC000000.json?languages=en"
+              }
+            ]
+          },
+          {
+            "code": "FBFIC022000",
+            "name": "Mystery & detective",
+            "scheme": "http://www.vendor.com/categories",
+            "links": [
+              {
+                "type": "application/opds+json",
+                "href": "https://market.vendor.com/category/FBFIC022000.json?languages=en"
+              }
+            ]
+          },
+          {
+            "code": "READ0000",
+            "scheme": "http://schema.org/Audience",
+            "name": "General",
+            "links": [
+              {
+                "type": "application/opds+json",
+                "href": "https://market.vendor.com/top/top.json?audiences=READ0000&languages=en"
+              }
+            ]
+          }
+        ]
+      },
+      "images": [
+        {
+          "href": "https://covers.vendor.com/item/4569040.jpg?size=large&t=1746911441",
+          "type": "image/jpeg",
+          "width": 260,
+          "height": 420
+        },
+        {
+          "href": "https://covers.vendor.com/item/4569040.jpg?t=1746911441",
+          "type": "image/jpeg",
+          "width": 100,
+          "height": 180
+        }
+      ],
+      "licenses": [
+        {
+          "metadata": {
+            "identifier": "urn:uuid:00000000-0000-0000-0000-000000000000",
+            "format": [
+              "application/epub+zip",
+              "text/html"
+            ],
+            "accessibility": {
+              "feature": [
+                "tableOfContents"
+              ]
+            },
+            "created": "2021-12-21T17:04:15+01:00",
+            "price": {
+              "currency": "USD",
+              "value": "5.98"
+            },
+            "terms": {
+              "checkouts": 40,
+              "concurrency": 10,
+              "length": 5097600
+            },
+            "markets": [
+              "public_library"
+            ],
+            "cap_loan_expiration_to_license": false,
+            "protection": {
+              "format": [
+                "application/vnd.adobe.adept+xml",
+                "application/vnd.readium.lcp.license.v1.0+json"
+              ],
+              "devices": 6,
+              "copy": true,
+              "print": false,
+              "tts": false
+            }
+          },
+          "links": [
+            {
+              "rel": "http://opds-spec.org/acquisition/borrow",
+              "href": "https://example.vendor.com/loan/status/{?id,checkout_id,expires,patron_id,notification_url,passphrase,hint,hint_url}",
+              "type": "application/vnd.readium.license.status.v1.0+json",
+              "templated": true
+            },
+            {
+              "rel": "self",
+              "href": "https://example.vendor.com/copy/status/identifier",
+              "type": "application/vnd.odl.info+json"
+            }
+          ]
+        }
+      ],
+      "links": [
+        {
+          "rel": "http://opds-spec.org/acquisition/sample",
+          "href": "https://market.vendor.com/item/4569040/preview",
+          "type": "application/epub+zip"
+        },
+        {
+          "rel": "http://opds-spec.org/acquisition/sample",
+          "href": "https://market.vendor.com/item/4569040/preview.html",
+          "type": "text/html"
+        }
+      ]
+    },
+    {
+      "metadata": {
+        "@type": "http://schema.org/Book",
+        "title": "The Mystery of Mrs. Christie",
+        "subtitle": "A Novel",
+        "duration": 26531,
+        "abridged": "false",
+        "accessibility": {
+          "accessMode": [
+            "auditory"
+          ]
+        },
+        "language": "en",
+        "modified": "2026-02-18T01:39:26+01:00",
+        "published": "2020-12-29T00:00:00+01:00",
+        "identifier": "urn:ISBN:9781603935517",
+        "schema:encodingFormat": "application/audiobook+json",
+        "schema:typicalAgeRange": "0-99",
+        "schema:audience": {
+          "@type": "schema:PeopleAudience",
+          "schema:suggestedMinAge": 0,
+          "schema:suggestedMaxAge": 99
+        },
+        "author": [
+          {
+            "name": "Marie Benedict",
+            "links": [
+              {
+                "type": "application/opds+json",
+                "href": "https://market.vendor.com/browse/recent.json?author_ids=711147&languages=en"
+              }
+            ]
+          }
+        ],
+        "narrator": [
+          {
+            "name": "Nicola Barber",
+            "links": [
+              {
+                "type": "application/opds+json",
+                "href": "https://market.vendor.com/browse/recent.json?contributor_ids=1234077&languages=en"
+              }
+            ]
+          }
+        ],
+        "publisher": {
+          "name": "Audible Studios",
+          "links": [
+            {
+              "type": "application/opds+json",
+              "href": "https://market.vendor.com/browse/recent.json?imprint_ids=74640&languages=en"
+            }
+          ]
+        },
+        "description": "<p>&#xA0;<b>An instant </b><b><i>New York Times</i></b><b> and </b><b><i>USA Today</i></b><b> best seller!&#xA0;</b></p>\n<p>\"A deft, fascinating page-turner replete with richly drawn characters and plot twists that would stump Hercule Poirot.\" (Kate Quinn, <i>New York Times</i> best-selling author of <i>The Alice Network</i>, <i>The Huntress</i>, and <i>The Rose Code</i>)</p>\n<p>The <i>New York Times</i> and <i>USA Today</i> best-selling author of <i>The Only Woman in the Room</i> returns with a thrilling reconstruction of one of the most notorious events in literary history: Agatha Christie's mysterious 11-day disappearance in 1926.</p>\n<p>In December 1926, Agatha Christie goes missing. Investigators find her empty car on the edge of a deep, gloomy pond, the only clues some tire tracks nearby and a fur coat left in the car - strange for a frigid night. Her World War I veteran husband and her daughter have no knowledge of her whereabouts, and England unleashes an unprecedented manhunt to find the up-and-coming mystery author. Eleven days later, she reappears, just as mysteriously as she disappeared, claiming amnesia and providing no explanations for her time away.</p>\n<p>The puzzle of those missing 11 days has persisted. With her trademark historical fiction exploration into the shadows of the past, acclaimed author Marie Benedict brings us into the world of Agatha Christie, imagining why such a brilliant woman would find herself at the center of such murky historical mysteries.</p>\n<p>What is real, and what is mystery? What role did her unfaithful husband play, and what was he not telling investigators?</p>\n<p>Agatha Christie novels have withstood the test of time, due in no small part to Christie's masterful storytelling and clever mind that may never be matched, but Agatha Christie's untold history offers perhaps her greatest mystery of all.</p>",
+        "subject": [
+          {
+            "code": "FBFIC000000",
+            "name": "Fiction",
+            "scheme": "http://www.vendor.com/categories",
+            "links": [
+              {
+                "type": "application/opds+json",
+                "href": "https://market.vendor.com/category/FBFIC000000.json?languages=en"
+              }
+            ]
+          },
+          {
+            "code": "FBFIC014000",
+            "name": "Historical",
+            "scheme": "http://www.vendor.com/categories",
+            "links": [
+              {
+                "type": "application/opds+json",
+                "href": "https://market.vendor.com/category/FBFIC014000.json?languages=en"
+              }
+            ]
+          },
+          {
+            "code": "READ0000",
+            "scheme": "http://schema.org/Audience",
+            "name": "General",
+            "links": [
+              {
+                "type": "application/opds+json",
+                "href": "https://market.vendor.com/top/top.json?audiences=READ0000&languages=en"
+              }
+            ]
+          }
+        ]
+      },
+      "images": [
+        {
+          "href": "https://covers.vendor.com/item/4584066.jpg?size=large&t=1771349587",
+          "type": "image/jpeg",
+          "width": 260,
+          "height": 420
+        },
+        {
+          "href": "https://covers.vendor.com/item/4584066.jpg?t=1771349587",
+          "type": "image/jpeg",
+          "width": 100,
+          "height": 180
+        }
+      ],
+      "licenses": [
+        {
+          "metadata": {
+            "identifier": "urn:uuid:00000000-0000-0000-0000-000000000001",
+            "format": [
+              "application/audiobook+lcp"
+            ],
+            "accessibility": {
+              "accessMode": [
+                "auditory"
+              ]
+            },
+            "created": "2022-07-25T18:20:59+02:00",
+            "price": {
+              "currency": "USD",
+              "value": "90.0"
+            },
+            "terms": {
+              "expires": "2024-07-24",
+              "concurrency": 1,
+              "length": 5097600
+            },
+            "markets": [
+              "public_library"
+            ],
+            "cap_loan_expiration_to_license": false,
+            "protection": {
+              "format": [
+                "application/vnd.readium.lcp.license.v1.0+json"
+              ],
+              "devices": 6
+            }
+          },
+          "links": [
+            {
+              "rel": "http://opds-spec.org/acquisition/borrow",
+              "href": "https://example.vendor.com/loan/status/{?id,checkout_id,expires,patron_id,notification_url,passphrase,hint,hint_url}",
+              "type": "application/vnd.readium.license.status.v1.0+json",
+              "templated": true
+            },
+            {
+              "rel": "self",
+              "href": "https://example.vendor.com/copy/status/identifier",
+              "type": "application/vnd.odl.info+json"
+            }
+          ]
+        },
+        {
+          "metadata": {
+            "identifier": "urn:uuid:00000000-0000-0000-0000-000000000001",
+            "format": [
+              "application/audiobook+lcp"
+            ],
+            "accessibility": {
+              "accessMode": [
+                "auditory"
+              ]
+            },
+            "created": "2023-02-24T15:21:42+01:00",
+            "price": {
+              "currency": "USD",
+              "value": "125.0"
+            },
+            "terms": {
+              "checkouts": 40,
+              "concurrency": 10,
+              "length": 5097600
+            },
+            "markets": [
+              "public_library"
+            ],
+            "cap_loan_expiration_to_license": false,
+            "protection": {
+              "format": [
+                "application/vnd.readium.lcp.license.v1.0+json"
+              ],
+              "devices": 6
+            }
+          },
+          "links": [
+            {
+              "rel": "http://opds-spec.org/acquisition/borrow",
+              "href": "https://example.vendor.com/loan/status/{?id,checkout_id,expires,patron_id,notification_url,passphrase,hint,hint_url}",
+              "type": "application/vnd.readium.license.status.v1.0+json",
+              "templated": true
+            },
+            {
+              "rel": "self",
+              "href": "https://example.vendor.com/copy/status/identifier",
+              "type": "application/vnd.odl.info+json"
+            }
+          ]
+        },
+        {
+          "metadata": {
+            "identifier": "urn:uuid:00000000-0000-0000-0000-000000000001",
+            "format": [
+              "application/audiobook+lcp",
+              "text/html",
+              "application/audiobook+json; protection=http://www.vendor.com/audiobooks/access-restriction"
+            ],
+            "accessibility": {
+              "accessMode": [
+                "auditory"
+              ]
+            },
+            "created": "2023-11-29T20:23:58+01:00",
+            "price": {
+              "currency": "USD",
+              "value": "72.0"
+            },
+            "terms": {
+              "expires": "2025-11-28",
+              "concurrency": 1,
+              "length": 5097600
+            },
+            "markets": [
+              "public_library"
+            ],
+            "cap_loan_expiration_to_license": false,
+            "protection": {
+              "format": [
+                "application/vnd.readium.lcp.license.v1.0+json"
+              ],
+              "devices": 6
+            }
+          },
+          "links": [
+            {
+              "rel": "http://opds-spec.org/acquisition/borrow",
+              "href": "https://example.vendor.com/loan/status/{?id,checkout_id,expires,patron_id,notification_url,passphrase,hint,hint_url}",
+              "type": "application/vnd.readium.license.status.v1.0+json",
+              "templated": true
+            },
+            {
+              "rel": "self",
+              "href": "https://example.vendor.com/copy/status/identifier",
+              "type": "application/vnd.odl.info+json"
+            }
+          ]
+        },
+        {
+          "metadata": {
+            "identifier": "urn:uuid:00000000-0000-0000-0000-000000000001",
+            "format": [
+              "application/audiobook+lcp",
+              "text/html",
+              "application/audiobook+json; protection=http://www.vendor.com/audiobooks/access-restriction"
+            ],
+            "accessibility": {
+              "accessMode": [
+                "auditory"
+              ]
+            },
+            "created": "2023-11-29T20:24:00+01:00",
+            "price": {
+              "currency": "USD",
+              "value": "72.0"
+            },
+            "terms": {
+              "expires": "2025-11-28",
+              "concurrency": 1,
+              "length": 5097600
+            },
+            "markets": [
+              "public_library"
+            ],
+            "cap_loan_expiration_to_license": false,
+            "protection": {
+              "format": [
+                "application/vnd.readium.lcp.license.v1.0+json"
+              ],
+              "devices": 6
+            }
+          },
+          "links": [
+            {
+              "rel": "http://opds-spec.org/acquisition/borrow",
+              "href": "https://example.vendor.com/loan/status/{?id,checkout_id,expires,patron_id,notification_url,passphrase,hint,hint_url}",
+              "type": "application/vnd.readium.license.status.v1.0+json",
+              "templated": true
+            },
+            {
+              "rel": "self",
+              "href": "https://example.vendor.com/copy/status/identifier",
+              "type": "application/vnd.odl.info+json"
+            }
+          ]
+        },
+        {
+          "metadata": {
+            "identifier": "urn:uuid:00000000-0000-0000-0000-000000000001",
+            "format": [
+              "application/audiobook+lcp",
+              "text/html",
+              "application/audiobook+json; protection=http://www.vendor.com/audiobooks/access-restriction"
+            ],
+            "accessibility": {
+              "accessMode": [
+                "auditory"
+              ]
+            },
+            "created": "2023-11-29T20:24:00+01:00",
+            "price": {
+              "currency": "USD",
+              "value": "72.0"
+            },
+            "terms": {
+              "expires": "2025-11-28",
+              "concurrency": 1,
+              "length": 5097600
+            },
+            "markets": [
+              "public_library"
+            ],
+            "cap_loan_expiration_to_license": false,
+            "protection": {
+              "format": [
+                "application/vnd.readium.lcp.license.v1.0+json"
+              ],
+              "devices": 6
+            }
+          },
+          "links": [
+            {
+              "rel": "http://opds-spec.org/acquisition/borrow",
+              "href": "https://example.vendor.com/loan/status/{?id,checkout_id,expires,patron_id,notification_url,passphrase,hint,hint_url}",
+              "type": "application/vnd.readium.license.status.v1.0+json",
+              "templated": true
+            },
+            {
+              "rel": "self",
+              "href": "https://example.vendor.com/copy/status/identifier",
+              "type": "application/vnd.odl.info+json"
+            }
+          ]
+        },
+        {
+          "metadata": {
+            "identifier": "urn:uuid:00000000-0000-0000-0000-000000000001",
+            "format": [
+              "application/audiobook+lcp",
+              "text/html",
+              "application/audiobook+json; protection=http://www.vendor.com/audiobooks/access-restriction"
+            ],
+            "accessibility": {
+              "accessMode": [
+                "auditory"
+              ]
+            },
+            "created": "2023-11-29T20:24:01+01:00",
+            "price": {
+              "currency": "USD",
+              "value": "72.0"
+            },
+            "terms": {
+              "expires": "2025-11-28",
+              "concurrency": 1,
+              "length": 5097600
+            },
+            "markets": [
+              "public_library"
+            ],
+            "cap_loan_expiration_to_license": false,
+            "protection": {
+              "format": [
+                "application/vnd.readium.lcp.license.v1.0+json"
+              ],
+              "devices": 6
+            }
+          },
+          "links": [
+            {
+              "rel": "http://opds-spec.org/acquisition/borrow",
+              "href": "https://example.vendor.com/loan/status/{?id,checkout_id,expires,patron_id,notification_url,passphrase,hint,hint_url}",
+              "type": "application/vnd.readium.license.status.v1.0+json",
+              "templated": true
+            },
+            {
+              "rel": "self",
+              "href": "https://example.vendor.com/copy/status/identifier",
+              "type": "application/vnd.odl.info+json"
+            }
+          ]
+        },
+        {
+          "metadata": {
+            "identifier": "urn:uuid:00000000-0000-0000-0000-000000000001",
+            "format": [
+              "application/audiobook+lcp",
+              "text/html",
+              "application/audiobook+json; protection=http://www.vendor.com/audiobooks/access-restriction"
+            ],
+            "accessibility": {
+              "accessMode": [
+                "auditory"
+              ]
+            },
+            "created": "2023-11-29T20:24:01+01:00",
+            "price": {
+              "currency": "USD",
+              "value": "72.0"
+            },
+            "terms": {
+              "expires": "2025-11-28",
+              "concurrency": 1,
+              "length": 5097600
+            },
+            "markets": [
+              "public_library"
+            ],
+            "cap_loan_expiration_to_license": false,
+            "protection": {
+              "format": [
+                "application/vnd.readium.lcp.license.v1.0+json"
+              ],
+              "devices": 6
+            }
+          },
+          "links": [
+            {
+              "rel": "http://opds-spec.org/acquisition/borrow",
+              "href": "https://example.vendor.com/loan/status/{?id,checkout_id,expires,patron_id,notification_url,passphrase,hint,hint_url}",
+              "type": "application/vnd.readium.license.status.v1.0+json",
+              "templated": true
+            },
+            {
+              "rel": "self",
+              "href": "https://example.vendor.com/copy/status/identifier",
+              "type": "application/vnd.odl.info+json"
+            }
+          ]
+        }
+      ],
+      "links": [
+        {
+          "rel": "http://opds-spec.org/acquisition/sample",
+          "href": "https://market.vendor.com/item/4584066/preview.mp3",
+          "type": "audio/mpeg"
+        },
+        {
+          "rel": "http://opds-spec.org/acquisition/sample",
+          "href": "https://market.vendor.com/item/4584066/preview.html",
+          "type": "text/html"
+        }
+      ]
+    },
+    {
+      "metadata": {
+        "@type": "http://schema.org/Book",
+        "title": "The Gene",
+        "subtitle": "An Intimate History",
+        "abridged": "false",
+        "accessibility": {
+          "summary": "A moderate complexity publication with images and logos, converted to meet EPUB Accessibility specifications of WCAG-AA level. This book contains various accessibility features such as alternative text for images and logos, long descriptions, table of contents, page-list, landmark, reading order, structural navigation, index, and semantic structure. Blank pages from print have been removed in this ebook, with related page number spans set on the first following in-spine page. Certain front and back matter pages have been adjusted in the reading order sequence from print, with related page references reordered in the page-list order.",
+          "conformsTo": "http://www.idpf.org/epub/a11y/accessibility-20170105.html#wcag-aa",
+          "feature": [
+            "alternativeText",
+            "readingOrder",
+            "structuralNavigation",
+            "tableOfContents",
+            "index",
+            "longDescription",
+            "printPageNumbers",
+            "displayTransformability",
+            "displayTransformability"
+          ],
+          "accessModeSufficient": [
+            "textual"
+          ],
+          "hazard": [
+            "noFlashingHazard",
+            "noMotionSimulationHazard",
+            "noSoundHazard"
+          ],
+          "certification": {
+            "certifiedBy": "Benetech",
+            "credential": "GCA Certified",
+            "report": "https://example.com/a11y-report/9781476733531"
+          }
+        },
+        "language": "en",
+        "modified": "2026-02-21T21:16:17+01:00",
+        "published": "2016-05-17T00:00:00+02:00",
+        "numberOfPages": 608,
+        "identifier": "urn:ISBN:9781476733531",
+        "schema:encodingFormat": "application/epub+zip",
+        "presentation": {
+          "layout": "reflowable"
+        },
+        "schema:workExample": [
+          {
+            "@type": "http://schema.org/Book",
+            "schema:bookFormat": "http://schema.org/Hardcover",
+            "schema:isbn": "urn:ISBN:9781476733524"
+          }
+        ],
+        "author": [
+          {
+            "name": "Siddhartha Mukherjee",
+            "links": [
+              {
+                "type": "application/opds+json",
+                "href": "https://market.vendor.com/browse/recent.json?author_ids=38663&languages=en"
+              }
+            ]
+          }
+        ],
+        "publisher": {
+          "name": "Scribner",
+          "links": [
+            {
+              "type": "application/opds+json",
+              "href": "https://market.vendor.com/browse/recent.json?imprint_ids=1031&languages=en"
+            }
+          ]
+        },
+        "description": "<b>The #1 <i>NEW YORK TIMES</i> Bestseller </b><BR> <b>The basis for the PBS Ken Burns Documentary <i>The Gene: An Intimate History</i></b><BR> <b><b>Now includes an excerpt from Siddhartha Mukherjee</b></b><B>&rsquo;</B><b><b>s new book </b><i>Song of the Cell</i>!</b><BR> <BR> <b>From the Pulitzer Prize–winning author of <i>The Emperor of All Maladies</i>—a fascinating history of the gene and &ldquo;a magisterial account of how human minds have laboriously, ingeniously picked apart what makes us tick&rdquo; (<i>Elle</i>).</b><BR> <BR> <b>&ldquo;Sid Mukherjee has the uncanny ability to bring together science, history, and the future in a way that is understandable and riveting, guiding us through both time and the mystery of life itself.&rdquo; —Ken Burns</b><BR><BR>“Dr. Siddhartha Mukherjee dazzled readers with his Pulitzer Prize-winning <i>The Emperor of All Maladies</i> in 2010. That achievement was evidently just a warm-up for his virtuoso performance in <i>The Gene: An Intimate History</i>, in which he braids science, history, and memoir into an epic with all the range and biblical thunder of <i>Paradise Lost</i>” (<i>The New York Times</i>). In this biography Mukherjee brings to life the quest to understand human heredity and its surprising influence on our lives, personalities, identities, fates, and choices.<BR> <BR>“Mukherjee expresses abstract intellectual ideas through emotional stories…[and] swaddles his medical rigor with rhapsodic tenderness, surprising vulnerability, and occasional flashes of pure poetry” (<i>The Washington Post</i>). Throughout, the story of Mukherjee’s own family—with its tragic and bewildering history of mental illness—reminds us of the questions that hang over our ability to translate the science of genetics from the laboratory to the real world. In riveting and dramatic prose, he describes the centuries of research and experimentation—from Aristotle and Pythagoras to Mendel and Darwin, from Boveri and Morgan to Crick, Watson and Franklin, all the way through the revolutionary twenty-first century innovators who mapped the human genome.<BR> <BR>“A fascinating and often sobering history of how humans came to understand the roles of genes in making us who we are—and what our manipulation of those genes might mean for our future” (<i>Milwaukee Journal-Sentinel</i>), <i>The Gene</i> is the revelatory and magisterial history of a scientific idea coming to life, the most crucial science of our time, intimately explained by a master. “<i>The Gene</i> is a book we all should read” (<i>USA TODAY</i>).",
+        "subject": [
+          {
+            "code": "FBNFC000000",
+            "name": "Nonfiction",
+            "scheme": "http://www.vendor.com/categories",
+            "links": [
+              {
+                "type": "application/opds+json",
+                "href": "https://market.vendor.com/category/FBNFC000000.json?languages=en"
+              }
+            ]
+          },
+          {
+            "code": "FBMED000000",
+            "name": "Medical",
+            "scheme": "http://www.vendor.com/categories",
+            "links": [
+              {
+                "type": "application/opds+json",
+                "href": "https://market.vendor.com/category/FBMED000000.json?languages=en"
+              }
+            ]
+          },
+          {
+            "code": "FBMED039000",
+            "name": "History",
+            "scheme": "http://www.vendor.com/categories",
+            "links": [
+              {
+                "type": "application/opds+json",
+                "href": "https://market.vendor.com/category/FBMED039000.json?languages=en"
+              }
+            ]
+          },
+          {
+            "code": "FBHIS000000",
+            "name": "History",
+            "scheme": "http://www.vendor.com/categories",
+            "links": [
+              {
+                "type": "application/opds+json",
+                "href": "https://market.vendor.com/category/FBHIS000000.json?languages=en"
+              }
+            ]
+          },
+          {
+            "code": "FBHIS001000N",
+            "name": "Other",
+            "scheme": "http://www.vendor.com/categories",
+            "links": [
+              {
+                "type": "application/opds+json",
+                "href": "https://market.vendor.com/category/FBHIS001000N.json?languages=en"
+              }
+            ]
+          },
+          {
+            "code": "FBSOC000000",
+            "name": "Social science",
+            "scheme": "http://www.vendor.com/categories",
+            "links": [
+              {
+                "type": "application/opds+json",
+                "href": "https://market.vendor.com/category/FBSOC000000.json?languages=en"
+              }
+            ]
+          },
+          {
+            "code": "READ0000",
+            "scheme": "http://schema.org/Audience",
+            "name": "General",
+            "links": [
+              {
+                "type": "application/opds+json",
+                "href": "https://market.vendor.com/top/top.json?audiences=READ0000&languages=en"
+              }
+            ]
+          }
+        ]
+      },
+      "images": [
+        {
+          "href": "https://covers.vendor.com/item/1543892.jpg?size=large&t=1766151505",
+          "type": "image/jpeg",
+          "width": 260,
+          "height": 420
+        },
+        {
+          "href": "https://covers.vendor.com/item/1543892.jpg?t=1766151505",
+          "type": "image/jpeg",
+          "width": 100,
+          "height": 180
+        }
+      ],
+      "licenses": [
+        {
+          "metadata": {
+            "identifier": "urn:uuid:00000000-0000-0000-0000-000000000002",
+            "format": [
+              "application/epub+zip",
+              "text/html"
+            ],
+            "accessibility": {
+              "summary": "A moderate complexity publication with images and logos, converted to meet EPUB Accessibility specifications of WCAG-AA level. This book contains various accessibility features such as alternative text for images and logos, long descriptions, table of contents, page-list, landmark, reading order, structural navigation, index, and semantic structure. Blank pages from print have been removed in this ebook, with related page number spans set on the first following in-spine page. Certain front and back matter pages have been adjusted in the reading order sequence from print, with related page references reordered in the page-list order.",
+              "conformsTo": [
+                "http://www.idpf.org/epub/a11y/accessibility-20170105.html#wcag-aa"
+              ],
+              "feature": [
+                "alternativeText",
+                "readingOrder",
+                "structuralNavigation",
+                "tableOfContents",
+                "index",
+                "longDescription",
+                "printPageNumbers",
+                "displayTransformability",
+                "displayTransformability"
+              ],
+              "accessModeSufficient": [
+                "textual"
+              ]
+            },
+            "created": "2023-07-13T06:22:07+02:00",
+            "price": {
+              "currency": "USD",
+              "value": "59.99"
+            },
+            "terms": {
+              "expires": "2025-07-12",
+              "concurrency": 1,
+              "length": 5097600
+            },
+            "markets": [
+              "public_library",
+              "academic_library",
+              "corporate"
+            ],
+            "cap_loan_expiration_to_license": false,
+            "protection": {
+              "format": [
+                "application/vnd.adobe.adept+xml",
+                "application/vnd.readium.lcp.license.v1.0+json"
+              ],
+              "devices": 6,
+              "copy": false,
+              "print": false,
+              "tts": false
+            }
+          },
+          "links": [
+            {
+              "rel": "http://opds-spec.org/acquisition/borrow",
+              "href": "https://example.vendor.com/loan/status/{?id,checkout_id,expires,patron_id,notification_url,passphrase,hint,hint_url}",
+              "type": "application/vnd.readium.license.status.v1.0+json",
+              "templated": true
+            },
+            {
+              "rel": "self",
+              "href": "https://example.vendor.com/copy/status/identifier",
+              "type": "application/vnd.odl.info+json"
+            }
+          ]
+        }
+      ],
+      "links": [
+        {
+          "rel": "http://opds-spec.org/acquisition/sample",
+          "href": "https://market.vendor.com/item/1543892/preview",
+          "type": "application/epub+zip"
+        },
+        {
+          "rel": "http://opds-spec.org/acquisition/sample",
+          "href": "https://market.vendor.com/item/1543892/preview.html",
+          "type": "text/html"
+        }
+      ]
+    },
+    {
+      "metadata": {
+        "@type": "http://schema.org/Book",
+        "title": "The Bridgertons: Happily Ever After",
+        "subtitle": "Includes Violet's Story",
+        "abridged": "false",
+        "accessibility": {
+          "feature": [
+            "tableOfContents",
+            "printPageNumbers",
+            "readingOrder"
+          ]
+        },
+        "language": "en",
+        "modified": "2026-03-08T17:55:32+01:00",
+        "published": "2013-04-02T00:00:00+02:00",
+        "numberOfPages": 400,
+        "identifier": "urn:ISBN:9780062096531",
+        "schema:encodingFormat": "application/epub+zip",
+        "presentation": {
+          "layout": "reflowable"
+        },
+        "schema:workExample": [
+          {
+            "@type": "http://schema.org/Book",
+            "schema:bookFormat": "http://schema.org/Hardcover",
+            "schema:isbn": "urn:ISBN:9780061233005"
+          }
+        ],
+        "author": [
+          {
+            "name": "Julia Quinn",
+            "links": [
+              {
+                "type": "application/opds+json",
+                "href": "https://market.vendor.com/browse/recent.json?author_ids=30482&languages=en"
+              }
+            ]
+          }
+        ],
+        "publisher": {
+          "name": "Avon",
+          "links": [
+            {
+              "type": "application/opds+json",
+              "href": "https://market.vendor.com/browse/recent.json?imprint_ids=982&languages=en"
+            }
+          ]
+        },
+        "description": "<p>#1 <i>New York Times</i> bestselling author Julia Quinn presents a novella featuring Violet Bridgerton along with a collection of \"second epilogues\" to her Bridgerton series—her beloved Regency-set novels featuring her charming, powerful Bridgerton family—now a series created by Shondaland for Netflix.</p><p>Ever wonder what happens <i>after</i> the Happily Ever After?</p><p>Julia Quinn’s Bridgerton series remains one of the most beloved among Regency romance readers, and this collection of \"second epilogues\"—stories that take place after the original books end—offers fans more from their favorite characters.</p><p>Also unique to this volume is a heartwarming romance novella featuring Violet Bridgerton, beloved mother of the eight Bridgerton siblings, in addition to second epilogues for <i>The Duke and I; The Viscount Who Loved Me; An Offer from a Gentleman; Romancing Mister Bridgerton; To Sir Phillip, With Love; When He Was Wicked, It’s in His Kiss;</i> and <i>On the Way to the Wedding</i> sure to satisfy the legions of Julia Quinn fans.</p>",
+        "belongsTo": {
+          "collection": "Bridgertons",
+          "series": [
+            {
+              "name": "Bridgertons",
+              "position": "9",
+              "links": [
+                {
+                  "type": "application/opds+json",
+                  "href": "https://market.vendor.com/series/4118.json?languages=en"
+                }
+              ]
+            }
+          ]
+        },
+        "subject": [
+          {
+            "code": "FBFIC000000",
+            "name": "Fiction",
+            "scheme": "http://www.vendor.com/categories",
+            "links": [
+              {
+                "type": "application/opds+json",
+                "href": "https://market.vendor.com/category/FBFIC000000.json?languages=en"
+              }
+            ]
+          },
+          {
+            "code": "FBFIC044000",
+            "name": "Contemporary women",
+            "scheme": "http://www.vendor.com/categories",
+            "links": [
+              {
+                "type": "application/opds+json",
+                "href": "https://market.vendor.com/category/FBFIC044000.json?languages=en"
+              }
+            ]
+          },
+          {
+            "code": "FBFIC027000",
+            "name": "Romance",
+            "scheme": "http://www.vendor.com/categories",
+            "links": [
+              {
+                "type": "application/opds+json",
+                "href": "https://market.vendor.com/category/FBFIC027000.json?languages=en"
+              }
+            ]
+          },
+          {
+            "code": "FBFIC027050",
+            "name": "Historical",
+            "scheme": "http://www.vendor.com/categories",
+            "links": [
+              {
+                "type": "application/opds+json",
+                "href": "https://market.vendor.com/category/FBFIC027050.json?languages=en"
+              }
+            ]
+          },
+          {
+            "code": "FBFIC021000",
+            "name": "Media tie-in",
+            "scheme": "http://www.vendor.com/categories",
+            "links": [
+              {
+                "type": "application/opds+json",
+                "href": "https://market.vendor.com/category/FBFIC021000.json?languages=en"
+              }
+            ]
+          },
+          {
+            "code": "FBFIC027070",
+            "name": "Regency",
+            "scheme": "http://www.vendor.com/categories",
+            "links": [
+              {
+                "type": "application/opds+json",
+                "href": "https://market.vendor.com/category/FBFIC027070.json?languages=en"
+              }
+            ]
+          },
+          {
+            "code": "FBFIC027080",
+            "name": "Short stories",
+            "scheme": "http://www.vendor.com/categories",
+            "links": [
+              {
+                "type": "application/opds+json",
+                "href": "https://market.vendor.com/category/FBFIC027080.json?languages=en"
+              }
+            ]
+          },
+          {
+            "code": "READ0000",
+            "scheme": "http://schema.org/Audience",
+            "name": "General",
+            "links": [
+              {
+                "type": "application/opds+json",
+                "href": "https://market.vendor.com/top/top.json?audiences=READ0000&languages=en"
+              }
+            ]
+          }
+        ]
+      },
+      "images": [
+        {
+          "href": "https://covers.vendor.com/item/4534007.jpg?size=large&t=1771932761",
+          "type": "image/jpeg",
+          "width": 260,
+          "height": 420
+        },
+        {
+          "href": "https://covers.vendor.com/item/4534007.jpg?t=1771932761",
+          "type": "image/jpeg",
+          "width": 100,
+          "height": 180
+        }
+      ],
+      "licenses": [
+        {
+          "metadata": {
+            "identifier": "urn:uuid:00000000-0000-0000-0000-000000000003",
+            "format": [
+              "application/epub+zip",
+              "text/html"
+            ],
+            "accessibility": {
+              "feature": [
+                "tableOfContents",
+                "printPageNumbers",
+                "readingOrder"
+              ]
+            },
+            "created": "2022-04-05T00:29:16+02:00",
+            "price": {
+              "currency": "USD",
+              "value": "19.54"
+            },
+            "terms": {
+              "checkouts": 26,
+              "concurrency": 1,
+              "length": 5097600
+            },
+            "markets": [
+              "public_library"
+            ],
+            "cap_loan_expiration_to_license": false,
+            "protection": {
+              "format": [
+                "application/vnd.adobe.adept+xml",
+                "application/vnd.readium.lcp.license.v1.0+json"
+              ],
+              "devices": 6,
+              "copy": false,
+              "print": false,
+              "tts": false
+            }
+          },
+          "links": [
+            {
+              "rel": "http://opds-spec.org/acquisition/borrow",
+              "href": "https://example.vendor.com/loan/status/{?id,checkout_id,expires,patron_id,notification_url,passphrase,hint,hint_url}",
+              "type": "application/vnd.readium.license.status.v1.0+json",
+              "templated": true
+            },
+            {
+              "rel": "self",
+              "href": "https://example.vendor.com/copy/status/identifier",
+              "type": "application/vnd.odl.info+json"
+            }
+          ]
+        }
+      ],
+      "links": [
+        {
+          "rel": "http://opds-spec.org/acquisition/sample",
+          "href": "https://market.vendor.com/item/4534007/preview",
+          "type": "application/epub+zip"
+        },
+        {
+          "rel": "http://opds-spec.org/acquisition/sample",
+          "href": "https://market.vendor.com/item/4534007/preview.html",
+          "type": "text/html"
+        }
+      ]
+    },
+    {
+      "metadata": {
+        "@type": "http://schema.org/Book",
+        "title": "Squeeze Me",
+        "subtitle": "A novel",
+        "abridged": "false",
+        "accessibility": {
+          "summary": "This ebook features mark-up that supports accessibility and enables compatibility with assistive technology. It has been designed to allow display properties to be modified by the reader. The file includes a table of contents, a defined reading order, and ARIA roles to identify key sections and improve the reading experience.  A page list and page break locations help readers coordinate with the print edition. Headings allow readers to navigate the ebook quickly by level. Images are well described in conformance with WCAG 2.1 Level AA. Colors meet WCAG 2.1 Level AA contrast standards. There are no hazards.",
+          "feature": [
+            "tableOfContents",
+            "readingOrder",
+            "structuralNavigation",
+            "alternativeText",
+            "printPageNumbers"
+          ],
+          "accessModeSufficient": [
+            "textual"
+          ]
+        },
+        "language": "en",
+        "modified": "2026-03-09T17:39:25+01:00",
+        "published": "2020-08-25T00:00:00+02:00",
+        "identifier": "urn:ISBN:9781524733469",
+        "schema:encodingFormat": "application/epub+zip",
+        "presentation": {
+          "layout": "reflowable"
+        },
+        "schema:workExample": [
+          {
+            "@type": "http://schema.org/Book",
+            "schema:bookFormat": "http://schema.org/Hardcover",
+            "schema:isbn": "urn:ISBN:9780525435280"
+          }
+        ],
+        "author": [
+          {
+            "name": "Carl Hiaasen",
+            "links": [
+              {
+                "type": "application/opds+json",
+                "href": "https://market.vendor.com/browse/recent.json?author_ids=7018&languages=en"
+              }
+            ]
+          }
+        ],
+        "publisher": {
+          "name": "Vintage Crime/Black Lizard",
+          "links": [
+            {
+              "type": "application/opds+json",
+              "href": "https://market.vendor.com/browse/recent.json?imprint_ids=162&languages=en"
+            }
+          ]
+        },
+        "description": "<b><b><i>NEW YORK TIMES</i> BEST SELLER </b>&bull; A hilarious&#160;novel of social and political intrigue, set against the glittering backdrop of Florida&rsquo;s gold coast, f<b>rom the author of <i>Skinny Dip</i> and <i>Razor Girl</i></b></b><br><br><b>&ldquo;If you could use some wild escapism right now, Hiaasen is your guy.&rdquo; &mdash;<i>The New York Times</i><br></b> <br><b>WITH A NEW EPILOGUE</b><br><br>At the height of Palm Beach&rsquo;s charity ball season, Kiki Pew Fitzsimmons, a prominent member of geriatric high society, suddenly vanishes during a swank gala. Kiki Pew was a founding member of the Potussies, a group of women dedicated to supporting the President, who spends half the year at the &ldquo;Winter White House&rdquo; just down the road. Meanwhile, Angie Armstrong, wildlife wrangler extraordinaire, is called to the island to deal with a monster-sized&#160;Burmese python that has taken residency in a tree. But the President is focused on the disappearance of Kiki Pew. Never one to miss an opportunity to play to his base, he immediately declares her a victim of rampaging immigrant hordes. This, it turns out, is far from the truth, which now lies in the middle of the road, where a bizarre discovery brings the First Lady&rsquo;s motorcade to a grinding halt. Irreverent, ingenious, and uproariously entertaining, <i>Squeeze Me</i> perfectly captures the absurdity of our times.",
+        "belongsTo": {
+          "collection": "Skink Series",
+          "series": [
+            {
+              "name": "Skink Series",
+              "links": [
+                {
+                  "type": "application/opds+json",
+                  "href": "https://market.vendor.com/series/25685.json?languages=en"
+                }
+              ]
+            }
+          ]
+        },
+        "subject": [
+          {
+            "code": "FBFIC000000",
+            "name": "Fiction",
+            "scheme": "http://www.vendor.com/categories",
+            "links": [
+              {
+                "type": "application/opds+json",
+                "href": "https://market.vendor.com/category/FBFIC000000.json?languages=en"
+              }
+            ]
+          },
+          {
+            "code": "FBFIC016000",
+            "name": "Humorous",
+            "scheme": "http://www.vendor.com/categories",
+            "links": [
+              {
+                "type": "application/opds+json",
+                "href": "https://market.vendor.com/category/FBFIC016000.json?languages=en"
+              }
+            ]
+          },
+          {
+            "code": "FBFIC022000",
+            "name": "Mystery & detective",
+            "scheme": "http://www.vendor.com/categories",
+            "links": [
+              {
+                "type": "application/opds+json",
+                "href": "https://market.vendor.com/category/FBFIC022000.json?languages=en"
+              }
+            ]
+          },
+          {
+            "code": "FBFIC030000",
+            "name": "Suspense",
+            "scheme": "http://www.vendor.com/categories",
+            "links": [
+              {
+                "type": "application/opds+json",
+                "href": "https://market.vendor.com/category/FBFIC030000.json?languages=en"
+              }
+            ]
+          },
+          {
+            "code": "READ0000",
+            "scheme": "http://schema.org/Audience",
+            "name": "General",
+            "links": [
+              {
+                "type": "application/opds+json",
+                "href": "https://market.vendor.com/top/top.json?audiences=READ0000&languages=en"
+              }
+            ]
+          }
+        ]
+      },
+      "images": [
+        {
+          "href": "https://covers.vendor.com/item/4260513.jpg?size=large&t=1699598338",
+          "type": "image/jpeg",
+          "width": 260,
+          "height": 420
+        },
+        {
+          "href": "https://covers.vendor.com/item/4260513.jpg?t=1699598338",
+          "type": "image/jpeg",
+          "width": 100,
+          "height": 180
+        }
+      ],
+      "licenses": [
+        {
+          "metadata": {
+            "identifier": "urn:uuid:00000000-0000-0000-0000-000000000004",
+            "format": [
+              "application/epub+zip",
+              "text/html"
+            ],
+            "accessibility": {
+              "summary": "This ebook features mark-up that supports accessibility and enables compatibility with assistive technology. It has been designed to allow display properties to be modified by the reader. The file includes a table of contents, a defined reading order, and ARIA roles to identify key sections and improve the reading experience.  A page list and page break locations help readers coordinate with the print edition. Headings allow readers to navigate the ebook quickly by level. Images are well described in conformance with WCAG 2.1 Level AA. Colors meet WCAG 2.1 Level AA contrast standards. There are no hazards.",
+              "feature": [
+                "tableOfContents",
+                "readingOrder",
+                "structuralNavigation",
+                "alternativeText",
+                "printPageNumbers"
+              ],
+              "accessModeSufficient": [
+                "textual"
+              ]
+            },
+            "created": "2023-07-13T06:22:08+02:00",
+            "price": {
+              "currency": "USD",
+              "value": "55.0"
+            },
+            "terms": {
+              "expires": "2025-07-12",
+              "concurrency": 1,
+              "length": 5097600
+            },
+            "markets": [
+              "public_library"
+            ],
+            "cap_loan_expiration_to_license": false,
+            "protection": {
+              "format": [
+                "application/vnd.adobe.adept+xml",
+                "application/vnd.readium.lcp.license.v1.0+json"
+              ],
+              "devices": 6,
+              "copy": true,
+              "print": false,
+              "tts": false
+            }
+          },
+          "links": [
+            {
+              "rel": "http://opds-spec.org/acquisition/borrow",
+              "href": "https://example.vendor.com/loan/status/{?id,checkout_id,expires,patron_id,notification_url,passphrase,hint,hint_url}",
+              "type": "application/vnd.readium.license.status.v1.0+json",
+              "templated": true
+            },
+            {
+              "rel": "self",
+              "href": "https://example.vendor.com/copy/status/identifier",
+              "type": "application/vnd.odl.info+json"
+            }
+          ]
+        }
+      ],
+      "links": [
+        {
+          "rel": "http://opds-spec.org/acquisition/sample",
+          "href": "https://market.vendor.com/item/4260513/preview",
+          "type": "application/epub+zip"
+        },
+        {
+          "rel": "http://opds-spec.org/acquisition/sample",
+          "href": "https://market.vendor.com/item/4260513/preview.html",
+          "type": "text/html"
+        }
+      ]
+    }
+  ]
+}
