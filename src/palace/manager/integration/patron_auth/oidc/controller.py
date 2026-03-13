@@ -6,6 +6,7 @@ import json
 from typing import TYPE_CHECKING
 from urllib.parse import SplitResult, parse_qs, urlencode, urlsplit
 
+import jwt
 from flask import redirect, url_for
 from flask_babel import lazy_gettext as _
 from sqlalchemy.orm import Session
@@ -13,7 +14,10 @@ from werkzeug.wrappers import Response as BaseResponse
 
 from palace.manager.api.authenticator import BaseOIDCAuthenticationProvider
 from palace.manager.api.util.flask import get_request_library
-from palace.manager.integration.patron_auth.oidc.util import OIDCUtility
+from palace.manager.integration.patron_auth.oidc.util import (
+    OIDCStateValidationError,
+    OIDCUtility,
+)
 from palace.manager.util.log import LoggerMixin
 from palace.manager.util.problem_detail import (
     ProblemDetail,
@@ -54,13 +58,6 @@ OIDC_LOGOUT_NOT_SUPPORTED = pd(
     detail=_("The OIDC provider does not support RP-Initiated Logout."),
 )
 
-OIDC_INVALID_ID_TOKEN_HINT = pd(
-    "http://palaceproject.io/terms/problem/auth/unrecoverable/oidc/invalid-id-token-hint",
-    status_code=400,
-    title=_("Invalid ID token hint."),
-    detail=_("The ID token hint is missing or invalid."),
-)
-
 OIDC_INVALID_LOGOUT_TOKEN = pd(
     "http://palaceproject.io/terms/problem/auth/unrecoverable/oidc/invalid-logout-token",
     status_code=400,
@@ -86,7 +83,6 @@ class OIDCController(LoggerMixin):
     CODE = "code"
     ACCESS_TOKEN = "access_token"
     PATRON_INFO = "patron_info"
-    ID_TOKEN_HINT = "id_token_hint"
     POST_LOGOUT_REDIRECT_URI = "post_logout_redirect_uri"
     LOGOUT_STATUS = "logout_status"
     LOGOUT_TOKEN = "logout_token"
@@ -326,6 +322,7 @@ class OIDCController(LoggerMixin):
                 tokens.get("access_token"),
                 tokens.get("refresh_token"),
                 tokens.get("expires_in"),
+                id_token,
             )
         except ProblemDetailException as e:
             return self._redirect_with_error(redirect_uri, e.problem_detail)
@@ -345,26 +342,25 @@ class OIDCController(LoggerMixin):
         return redirect(final_redirect_uri)
 
     def oidc_logout_initiate(
-        self, request_args: dict[str, str], db: Session
+        self,
+        request_args: dict[str, str],
+        db: Session,
+        *,
+        auth_header: str,
     ) -> BaseResponse | ProblemDetail:
         """Initiate OIDC RP-Initiated Logout flow.
 
         :param request_args: Request arguments from Flask
         :param db: Database session
+        :param auth_header: "Authorization" header from Flask or empty string
         :return: Redirect to provider logout endpoint or error
         """
         provider_name = request_args.get(self.PROVIDER_NAME)
-        id_token_hint = request_args.get(self.ID_TOKEN_HINT)
         post_logout_redirect_uri = request_args.get(self.POST_LOGOUT_REDIRECT_URI)
 
         if not provider_name:
             return OIDC_INVALID_REQUEST.detailed(
                 _("Missing 'provider' parameter in logout request")
-            )
-
-        if not id_token_hint:
-            return OIDC_INVALID_ID_TOKEN_HINT.detailed(
-                _("Missing 'id_token_hint' parameter in logout request")
             )
 
         if not post_logout_redirect_uri:
@@ -381,24 +377,47 @@ class OIDCController(LoggerMixin):
                 _("No authenticator found for library")
             )
 
+        # Validate CM bearer token — ensures patron has an active CM session.
+        if not auth_header.startswith("Bearer "):
+            return OIDC_INVALID_REQUEST.detailed(
+                _("Missing or invalid Authorization header")
+            )
+
+        cm_jwt = auth_header.removeprefix("Bearer ")
+        try:
+            _provider_name, provider_token = library_authenticator.decode_bearer_token(
+                cm_jwt
+            )
+        except jwt.exceptions.InvalidTokenError:
+            return OIDC_INVALID_REQUEST.detailed(_("Invalid bearer token"))
+
         provider = library_authenticator.oidc_provider_lookup(provider_name)
         if isinstance(provider, ProblemDetail):
             return provider
 
+        auth_manager = provider.get_authentication_manager()  # type: ignore[attr-defined]
+
+        # The bearer token's payload IS the credential JSON — parse it directly.
+        # This avoids a DB lookup that would fail after token refresh (the credential
+        # value changes on refresh, but the patron's bearer token still has the old value).
         try:
-            auth_manager = provider.get_authentication_manager()  # type: ignore[attr-defined]
-            claims = auth_manager.validate_id_token_hint(id_token_hint)
-        except Exception as e:
-            self.log.exception("ID token hint validation failed")
-            return OIDC_INVALID_ID_TOKEN_HINT.detailed(
-                _(f"ID token hint validation failed: {str(e)}")
+            token_data = json.loads(provider_token)
+            if "id_token_claims" not in token_data or "access_token" not in token_data:
+                raise ValueError("Missing required fields in token data")
+        except Exception:
+            self.log.exception("Failed to parse token data from bearer token")
+            return OIDC_INVALID_REQUEST.detailed(_("Invalid credential data"))
+
+        id_token_claims = token_data.get("id_token_claims", {})
+        patron_identifier = id_token_claims.get(provider._settings.patron_id_claim)  # type: ignore[attr-defined]
+        if not patron_identifier:
+            return OIDC_INVALID_REQUEST.detailed(
+                _("Credential missing patron identifier claim")
             )
 
-        patron_identifier = claims.get(provider._settings.patron_id_claim)  # type: ignore[attr-defined]
-        if not patron_identifier:
-            return OIDC_INVALID_ID_TOKEN_HINT.detailed(
-                _("ID token hint missing patron identifier claim")
-            )
+        # The raw id_token JWT stored at authentication time; used as id_token_hint
+        # for RP-Initiated Logout.
+        stored_id_token = token_data.get("id_token")
 
         try:
             credential_manager = provider._credential_manager  # type: ignore[attr-defined]
@@ -414,6 +433,26 @@ class OIDCController(LoggerMixin):
 
         except Exception as e:
             self.log.exception("Failed to invalidate credentials")
+
+        # Best-effort: revoke the OAuth refresh token to prevent silent re-authentication
+        # at the IdP after local CM logout. Errors are non-fatal.
+        refresh_token = token_data.get("refresh_token")
+        if refresh_token:
+            try:
+                auth_manager.revoke_token(refresh_token)
+            except Exception:
+                self.log.warning(
+                    "Failed to revoke refresh token (non-critical)", exc_info=True
+                )
+
+        # If the provider does not support RP-Initiated Logout (only token revocation),
+        # or if no id_token was stored (credentials pre-dating this feature), redirect
+        # directly — local invalidation and token revocation are already done.
+        if not auth_manager.supports_rp_initiated_logout() or not stored_id_token:
+            final_redirect_uri = self._add_params_to_url(
+                post_logout_redirect_uri, {self.LOGOUT_STATUS: "success"}
+            )
+            return redirect(final_redirect_uri)
 
         callback_url = url_for("oidc_logout_callback", _external=True)
 
@@ -431,7 +470,7 @@ class OIDCController(LoggerMixin):
 
         try:
             logout_url = auth_manager.build_logout_url(
-                id_token_hint, callback_url, logout_state
+                stored_id_token, callback_url, logout_state
             )
         except Exception as e:
             self.log.exception("Failed to build logout URL")
@@ -469,7 +508,15 @@ class OIDCController(LoggerMixin):
                 _("Missing redirect_uri in logout state")
             )
 
-        library_short_name = logout_data.get("library_short_name")
+        # Decode the (unverified) state payload to get library_short_name, which
+        # is needed to look up the signing secret before full validation.
+        try:
+            state_payload = OIDCUtility.decode_state_payload(state)
+        except OIDCStateValidationError:
+            self.log.exception("Failed to decode logout state payload")
+            return OIDC_INVALID_STATE
+
+        library_short_name = state_payload.get("library_short_name")
         if not library_short_name:
             return OIDC_INVALID_STATE.detailed(_("Missing library in logout state"))
 
@@ -485,7 +532,7 @@ class OIDCController(LoggerMixin):
             state_data = OIDCUtility.validate_state(
                 state, library_authenticator.bearer_token_signing_secret
             )
-        except Exception as e:
+        except OIDCStateValidationError as e:
             self.log.exception("Logout state validation failed")
             return OIDC_INVALID_STATE.detailed(_(f"State validation failed: {str(e)}"))
 

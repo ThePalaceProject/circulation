@@ -8,6 +8,7 @@ from unittest.mock import Mock, patch
 from urllib.parse import quote
 
 import pytest
+from pydantic import HttpUrl
 from requests import RequestException
 
 from palace.manager.integration.patron_auth.oidc.auth import (
@@ -19,6 +20,7 @@ from palace.manager.integration.patron_auth.oidc.auth import (
 from palace.manager.integration.patron_auth.oidc.configuration.model import (
     OIDCAuthSettings,
 )
+from palace.manager.integration.patron_auth.oidc.util import OIDCDiscoveryError
 from palace.manager.util.http.exception import (
     RequestNetworkException,
 )
@@ -119,6 +121,54 @@ class TestOIDCAuthenticationManagerMetadata:
         assert str(metadata["jwks_uri"]) == f"{TEST_ISSUER_URL}/.well-known/jwks.json"
         assert str(metadata["userinfo_endpoint"]) == f"{TEST_ISSUER_URL}/userinfo"
         assert metadata["issuer"] == TEST_ISSUER_URL
+        assert "end_session_endpoint" not in metadata
+        assert "revocation_endpoint" not in metadata
+
+    def test_get_provider_metadata_with_manual_config_and_end_session_endpoint(
+        self, redis_fixture
+    ):
+        """Test that end_session_endpoint from settings is included in manual mode metadata."""
+        end_session_url = f"{TEST_ISSUER_URL}/logout"
+        settings = OIDCAuthSettings(
+            client_id=TEST_CLIENT_ID,
+            client_secret=TEST_CLIENT_SECRET,
+            issuer=TEST_ISSUER_URL,
+            authorization_endpoint=HttpUrl(f"{TEST_ISSUER_URL}/authorize"),
+            token_endpoint=HttpUrl(f"{TEST_ISSUER_URL}/token"),
+            jwks_uri=HttpUrl(f"{TEST_ISSUER_URL}/.well-known/jwks.json"),
+            end_session_endpoint=HttpUrl(end_session_url),
+        )
+        manager = OIDCAuthenticationManager(
+            settings=settings,
+            redis_client=redis_fixture.client,
+        )
+
+        metadata = manager.get_provider_metadata()
+
+        assert metadata["end_session_endpoint"] == end_session_url
+
+    def test_get_provider_metadata_with_manual_config_and_revocation_endpoint(
+        self, redis_fixture
+    ):
+        """Test that revocation_endpoint from settings is included in manual mode metadata."""
+        revocation_url = f"{TEST_ISSUER_URL}/revoke"
+        settings = OIDCAuthSettings(
+            client_id=TEST_CLIENT_ID,
+            client_secret=TEST_CLIENT_SECRET,
+            issuer=TEST_ISSUER_URL,
+            authorization_endpoint=HttpUrl(f"{TEST_ISSUER_URL}/authorize"),
+            token_endpoint=HttpUrl(f"{TEST_ISSUER_URL}/token"),
+            jwks_uri=HttpUrl(f"{TEST_ISSUER_URL}/.well-known/jwks.json"),
+            revocation_endpoint=HttpUrl(revocation_url),
+        )
+        manager = OIDCAuthenticationManager(
+            settings=settings,
+            redis_client=redis_fixture.client,
+        )
+
+        metadata = manager.get_provider_metadata()
+
+        assert metadata["revocation_endpoint"] == revocation_url
 
     def test_get_provider_metadata_caching(
         self, oidc_settings_with_discovery, redis_fixture, mock_discovery_document
@@ -1507,3 +1557,273 @@ class TestOIDCAuthenticationManagerBackChannelLogout:
 
             with pytest.raises(OIDCAuthenticationError, match=error_match):
                 manager.validate_logout_token(token)
+
+
+class TestOIDCAuthManagerSupportsRpInitiatedLogout:
+    """Tests for OIDCAuthenticationManager.supports_rp_initiated_logout()."""
+
+    @pytest.mark.parametrize(
+        "metadata,settings_kwargs,expected",
+        [
+            pytest.param(
+                {"end_session_endpoint": "https://idp.example.com/logout"},
+                {},
+                True,
+                id="discovered-end-session-endpoint",
+            ),
+            pytest.param(
+                {"revocation_endpoint": "https://idp.example.com/revoke"},
+                {},
+                False,
+                id="revocation-endpoint-only-not-rp-initiated",
+            ),
+            pytest.param(
+                {},
+                {"end_session_endpoint": HttpUrl("https://idp.example.com/logout")},
+                True,
+                id="manual-end-session-endpoint",
+            ),
+            pytest.param(
+                {},
+                {"revocation_endpoint": HttpUrl("https://idp.example.com/revoke")},
+                False,
+                id="manual-revocation-only-not-rp-initiated",
+            ),
+            pytest.param(
+                {},
+                {},
+                False,
+                id="neither",
+            ),
+        ],
+    )
+    def test_supports_rp_initiated_logout(
+        self,
+        oidc_settings_with_discovery,
+        metadata,
+        settings_kwargs,
+        expected,
+    ):
+        """Test supports_rp_initiated_logout only returns True for end_session_endpoint."""
+        if settings_kwargs:
+            oidc_settings_with_discovery = OIDCAuthSettings(
+                client_id=TEST_CLIENT_ID,
+                client_secret=TEST_CLIENT_SECRET,
+                issuer_url=TEST_ISSUER_URL,
+                **settings_kwargs,
+            )
+
+        manager = OIDCAuthenticationManager(settings=oidc_settings_with_discovery)
+
+        with patch.object(manager, "get_provider_metadata", return_value=metadata):
+            result = manager.supports_rp_initiated_logout()
+
+        assert result is expected
+
+
+class TestOIDCAuthManagerSupportsLogout:
+    """Tests for OIDCAuthenticationManager.supports_logout()."""
+
+    @pytest.mark.parametrize(
+        "metadata,settings_kwargs,expected",
+        [
+            pytest.param(
+                {"end_session_endpoint": "https://idp.example.com/logout"},
+                {},
+                True,
+                id="discovered-end-session-endpoint",
+            ),
+            pytest.param(
+                {"revocation_endpoint": "https://idp.example.com/revoke"},
+                {},
+                True,
+                id="discovered-revocation-endpoint-only",
+            ),
+            pytest.param(
+                {
+                    "end_session_endpoint": "https://idp.example.com/logout",
+                    "revocation_endpoint": "https://idp.example.com/revoke",
+                },
+                {},
+                True,
+                id="discovered-both-endpoints",
+            ),
+            pytest.param(
+                {},
+                {"end_session_endpoint": HttpUrl("https://idp.example.com/logout")},
+                True,
+                id="no-discovered-endpoint-manual-end-session-present",
+            ),
+            pytest.param(
+                {},
+                {"revocation_endpoint": HttpUrl("https://idp.example.com/revoke")},
+                True,
+                id="no-discovered-endpoint-manual-revocation-present",
+            ),
+            pytest.param(
+                {},
+                {},
+                False,
+                id="neither-discovered-nor-manual",
+            ),
+        ],
+    )
+    def test_supports_logout(
+        self,
+        oidc_settings_with_discovery,
+        metadata,
+        settings_kwargs,
+        expected,
+    ):
+        """Test supports_logout with various discovery and manual config combinations."""
+        if settings_kwargs:
+            oidc_settings_with_discovery = OIDCAuthSettings(
+                client_id=TEST_CLIENT_ID,
+                client_secret=TEST_CLIENT_SECRET,
+                issuer_url=TEST_ISSUER_URL,
+                **settings_kwargs,
+            )
+
+        manager = OIDCAuthenticationManager(settings=oidc_settings_with_discovery)
+
+        with patch.object(manager, "get_provider_metadata", return_value=metadata):
+            result = manager.supports_logout()
+
+        assert result is expected
+
+    @pytest.mark.parametrize(
+        "settings_kwargs,expected",
+        [
+            pytest.param(
+                {"end_session_endpoint": HttpUrl("https://idp.example.com/logout")},
+                True,
+                id="discovery-error-manual-end-session-present",
+            ),
+            pytest.param(
+                {"revocation_endpoint": HttpUrl("https://idp.example.com/revoke")},
+                True,
+                id="discovery-error-manual-revocation-present",
+            ),
+            pytest.param(
+                {},
+                False,
+                id="discovery-error-no-manual-setting",
+            ),
+        ],
+    )
+    def test_supports_logout_discovery_error(
+        self,
+        oidc_settings_with_discovery,
+        settings_kwargs,
+        expected,
+    ):
+        """Test supports_logout falls back to manual settings on OIDCDiscoveryError."""
+        if settings_kwargs:
+            oidc_settings_with_discovery = OIDCAuthSettings(
+                client_id=TEST_CLIENT_ID,
+                client_secret=TEST_CLIENT_SECRET,
+                issuer_url=TEST_ISSUER_URL,
+                **settings_kwargs,
+            )
+
+        manager = OIDCAuthenticationManager(settings=oidc_settings_with_discovery)
+
+        with patch.object(
+            manager,
+            "get_provider_metadata",
+            side_effect=OIDCDiscoveryError("Discovery failed"),
+        ):
+            result = manager.supports_logout()
+
+        assert result is expected
+
+
+class TestOIDCAuthManagerRevokeToken:
+    """Tests for OIDCAuthenticationManager.revoke_token()."""
+
+    @pytest.mark.parametrize(
+        "metadata,token_type_hint,expect_http_call",
+        [
+            pytest.param(
+                {"revocation_endpoint": "https://idp.example.com/revoke"},
+                "refresh_token",
+                True,
+                id="revocation-endpoint-present-refresh-token",
+            ),
+            pytest.param(
+                {"revocation_endpoint": "https://idp.example.com/revoke"},
+                "access_token",
+                True,
+                id="revocation-endpoint-present-access-token",
+            ),
+            pytest.param(
+                {},
+                "refresh_token",
+                False,
+                id="no-revocation-endpoint",
+            ),
+        ],
+    )
+    def test_revoke_token(
+        self,
+        oidc_settings_with_discovery,
+        metadata,
+        token_type_hint,
+        expect_http_call,
+    ):
+        """Test revoke_token with various metadata configurations."""
+        manager = OIDCAuthenticationManager(settings=oidc_settings_with_discovery)
+
+        with (
+            patch.object(manager, "get_provider_metadata", return_value=metadata),
+            patch(
+                "palace.manager.integration.patron_auth.oidc.auth.HTTP.post_with_timeout"
+            ) as mock_post,
+        ):
+            manager.revoke_token("test-token", token_type_hint)
+
+            if expect_http_call:
+                mock_post.assert_called_once()
+                call_kwargs = mock_post.call_args
+                assert call_kwargs[0][0] == "https://idp.example.com/revoke"
+                posted_data = call_kwargs[1]["data"]
+                assert posted_data["token"] == "test-token"
+                assert posted_data["token_type_hint"] == token_type_hint
+            else:
+                mock_post.assert_not_called()
+
+    def test_revoke_token_http_failure_is_non_fatal(self, oidc_settings_with_discovery):
+        """Test that HTTP failure during revocation is logged but not raised."""
+        manager = OIDCAuthenticationManager(settings=oidc_settings_with_discovery)
+        metadata = {"revocation_endpoint": "https://idp.example.com/revoke"}
+
+        with (
+            patch.object(manager, "get_provider_metadata", return_value=metadata),
+            patch(
+                "palace.manager.integration.patron_auth.oidc.auth.HTTP.post_with_timeout",
+                side_effect=RequestNetworkException(
+                    "https://idp.example.com/revoke", "Connection refused"
+                ),
+            ),
+        ):
+            # Should not raise
+            manager.revoke_token("test-token")
+
+    def test_revoke_token_discovery_error_is_non_fatal(
+        self, oidc_settings_with_discovery
+    ):
+        """Test that OIDCDiscoveryError during metadata fetch is swallowed."""
+        manager = OIDCAuthenticationManager(settings=oidc_settings_with_discovery)
+
+        with (
+            patch.object(
+                manager,
+                "get_provider_metadata",
+                side_effect=OIDCDiscoveryError("Discovery failed"),
+            ),
+            patch(
+                "palace.manager.integration.patron_auth.oidc.auth.HTTP.post_with_timeout"
+            ) as mock_post,
+        ):
+            manager.revoke_token("test-token")
+            mock_post.assert_not_called()

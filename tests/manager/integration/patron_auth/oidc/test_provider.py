@@ -7,6 +7,7 @@ import pytest
 from freezegun import freeze_time
 
 from palace.manager.api.authentication.base import PatronData, PatronLookupNotSupported
+from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.integration.patron_auth.oidc.configuration.model import (
     OIDCAuthLibrarySettings,
     OIDCAuthSettings,
@@ -73,10 +74,19 @@ class TestOIDCAuthenticationProvider:
         self, db: DatabaseTransactionFixture, oidc_provider
     ):
         library = db.default_library()
+        mock_auth_manager = MagicMock()
+        mock_auth_manager.supports_logout.return_value = False
 
-        with patch(
-            "palace.manager.integration.patron_auth.oidc.provider.url_for"
-        ) as mock_url_for:
+        with (
+            patch(
+                "palace.manager.integration.patron_auth.oidc.provider.url_for"
+            ) as mock_url_for,
+            patch.object(
+                oidc_provider,
+                "get_authentication_manager",
+                return_value=mock_auth_manager,
+            ),
+        ):
             mock_url_for.return_value = (
                 f"https://example.com/{library.short_name}/oidc_authenticate"
             )
@@ -132,10 +142,19 @@ class TestOIDCAuthenticationProvider:
             settings=settings,
             library_settings=library_settings,
         )
+        mock_auth_manager = MagicMock()
+        mock_auth_manager.supports_logout.return_value = False
 
-        with patch(
-            "palace.manager.integration.patron_auth.oidc.provider.url_for"
-        ) as mock_url_for:
+        with (
+            patch(
+                "palace.manager.integration.patron_auth.oidc.provider.url_for"
+            ) as mock_url_for,
+            patch.object(
+                provider,
+                "get_authentication_manager",
+                return_value=mock_auth_manager,
+            ),
+        ):
             mock_url_for.return_value = (
                 f"https://example.com/{library.short_name}/oidc/authenticate"
             )
@@ -169,8 +188,67 @@ class TestOIDCAuthenticationProvider:
     ):
         oidc_provider.library_id = 999999
 
-        with pytest.raises(ValueError, match="Library not found"):
+        with pytest.raises(PalaceValueError, match="Library not found"):
             oidc_provider._authentication_flow_document(db.session)
+
+    def test_authentication_flow_document_with_logout_link(
+        self, db: DatabaseTransactionFixture, oidc_provider
+    ):
+        """Test that logout link is included when provider supports logout."""
+        library = db.default_library()
+        mock_auth_manager = MagicMock()
+        mock_auth_manager.supports_logout.return_value = True
+
+        with (
+            patch(
+                "palace.manager.integration.patron_auth.oidc.provider.url_for"
+            ) as mock_url_for,
+            patch.object(
+                oidc_provider,
+                "get_authentication_manager",
+                return_value=mock_auth_manager,
+            ),
+        ):
+            mock_url_for.side_effect = [
+                f"https://example.com/{library.short_name}/oidc_authenticate",
+                f"https://example.com/{library.short_name}/oidc/logout",
+            ]
+
+            result = oidc_provider._authentication_flow_document(db.session)
+
+            assert len(result["links"]) == 2
+            auth_link = result["links"][0]
+            assert auth_link["rel"] == "authenticate"
+            logout_link = result["links"][1]
+            assert logout_link["rel"] == "logout"
+            assert library.short_name in logout_link["href"]
+
+    def test_authentication_flow_document_without_logout_link(
+        self, db: DatabaseTransactionFixture, oidc_provider
+    ):
+        """Test that logout link is omitted when provider does not support logout."""
+        library = db.default_library()
+        mock_auth_manager = MagicMock()
+        mock_auth_manager.supports_logout.return_value = False
+
+        with (
+            patch(
+                "palace.manager.integration.patron_auth.oidc.provider.url_for"
+            ) as mock_url_for,
+            patch.object(
+                oidc_provider,
+                "get_authentication_manager",
+                return_value=mock_auth_manager,
+            ),
+        ):
+            mock_url_for.return_value = (
+                f"https://example.com/{library.short_name}/oidc_authenticate"
+            )
+
+            result = oidc_provider._authentication_flow_document(db.session)
+
+            assert len(result["links"]) == 1
+            assert result["links"][0]["rel"] == "authenticate"
 
     def test_run_self_tests(self, db: DatabaseTransactionFixture, oidc_provider):
         results = list(oidc_provider._run_self_tests(db.session))
@@ -369,3 +447,19 @@ class TestOIDCAuthenticationProvider:
 
         assert manager is not None
         assert manager._settings == oidc_provider._settings
+
+        # Same instance returned on repeated calls — avoids re-fetching OIDC discovery doc.
+        assert oidc_provider.get_authentication_manager() is manager
+
+        # A new provider instance (simulating a config reload) produces a new manager.
+        new_provider = OIDCAuthenticationProvider(
+            library_id=oidc_provider.library_id,
+            integration_id=oidc_provider.integration_id,
+            settings=OIDCAuthSettings(
+                issuer_url="https://new-idp.example.com",
+                client_id="new-client-id",
+                client_secret="new-client-secret",
+            ),
+            library_settings=OIDCAuthLibrarySettings(),
+        )
+        assert new_provider.get_authentication_manager() is not manager

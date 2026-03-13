@@ -15,6 +15,7 @@ from werkzeug.datastructures import Authorization
 
 from palace.manager.api.authentication.base import PatronData, PatronLookupNotSupported
 from palace.manager.api.authenticator import BaseOIDCAuthenticationProvider
+from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.integration.patron_auth.oidc.auth import OIDCAuthenticationManager
 from palace.manager.integration.patron_auth.oidc.configuration.model import (
     OIDCAuthLibrarySettings,
@@ -79,6 +80,7 @@ class OIDCAuthenticationProvider(
 
         self._credential_manager = OIDCCredentialManager()
         self._settings = settings
+        self._auth_manager: OIDCAuthenticationManager | None = None
 
     @classmethod
     def label(cls) -> str:
@@ -166,7 +168,7 @@ class OIDCAuthenticationProvider(
         """
         library = self.library(db)
         if not library:
-            raise ValueError("Library not found")
+            raise PalaceValueError("Library not found")
 
         authenticate_url = url_for(
             "oidc_authenticate",
@@ -174,12 +176,24 @@ class OIDCAuthenticationProvider(
             library_short_name=library.short_name,
             provider=self.label(),
         )
-        link = self._create_authentication_link(authenticate_url)
+        links: list[dict[str, Any]] = [
+            self._create_authentication_link(authenticate_url)
+        ]
+
+        auth_manager = self.get_authentication_manager()
+        if auth_manager.supports_logout():
+            logout_url = url_for(
+                "oidc_logout",
+                _external=True,
+                library_short_name=library.short_name,
+                provider=self.label(),
+            )
+            links.append({"rel": "logout", "href": logout_url})
 
         return {
             "type": self.flow_type,
             "description": self.label(),
-            "links": [link],
+            "links": links,
         }
 
     def _run_self_tests(self, db: Session) -> Generator[SelfTestResult]:
@@ -219,9 +233,16 @@ class OIDCAuthenticationProvider(
     def get_authentication_manager(self) -> OIDCAuthenticationManager:
         """Return OIDC authentication manager for this provider.
 
+        The manager is cached for the lifetime of the provider instance, which
+        matches the configuration epoch — the provider is recreated whenever
+        settings change. This prevents repeated fetches of the OIDC discovery
+        document on every authenticated request.
+
         :return: OIDC authentication manager
         """
-        return OIDCAuthenticationManager(self._settings)
+        if self._auth_manager is None:
+            self._auth_manager = OIDCAuthenticationManager(self._settings)
+        return self._auth_manager
 
     def remote_patron_lookup_from_oidc_claims(
         self, id_token_claims: dict[str, str]
@@ -278,6 +299,7 @@ class OIDCAuthenticationProvider(
         access_token: str,
         refresh_token: str | None = None,
         expires_in: int | None = None,
+        id_token: str | None = None,
     ) -> tuple[Credential, Patron, PatronData]:
         """Handle OIDC callback after successful authentication.
 
@@ -286,6 +308,7 @@ class OIDCAuthenticationProvider(
         :param access_token: Access token from token exchange
         :param refresh_token: Optional refresh token
         :param expires_in: Token expiry in seconds
+        :param id_token: Raw ID token JWT (stored for use as id_token_hint on logout)
         :return: 3-tuple (Credential, Patron, PatronData)
         """
         patron_data = self.remote_patron_lookup_from_oidc_claims(id_token_claims)
@@ -302,6 +325,7 @@ class OIDCAuthenticationProvider(
             refresh_token,
             expires_in,
             self._settings.session_lifetime,
+            id_token,
         )
 
         return credential, patron, patron_data
