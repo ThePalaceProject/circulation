@@ -424,7 +424,7 @@ class TestFeed:
 
 
 class TestFacet:
-    """Test that the Facet model enforces unique links."""
+    """Test the Facet model."""
 
     def test_rejects_duplicate_links(self) -> None:
         link = TitleLink(href="http://a", title="A", type="text/html")
@@ -446,7 +446,7 @@ class TestFacet:
 
 
 class TestPublicationsGroup:
-    """Test that PublicationsGroup.links enforces unique links."""
+    """Test the PublicationsGroup model."""
 
     @classmethod
     def _minimal_publication(cls) -> Publication:
@@ -488,7 +488,7 @@ class TestPublicationsGroup:
 
 
 class TestNavigationGroup:
-    """Test that NavigationGroup enforces unique links and navigation."""
+    """Test the NavigationGroup model."""
 
     def test_links_rejects_duplicate(self) -> None:
         link = StrictLink(href="http://a", rel="other", type="text/html")
@@ -524,7 +524,7 @@ class TestNavigationGroup:
 
 
 class TestBasePublicationFeed:
-    """Test that BasePublicationFeed.links (via PublicationFeed) enforces unique links."""
+    """Test the BasePublicationFeed model (via PublicationFeed)."""
 
     @classmethod
     def _self_link(cls) -> list[StrictLink]:
