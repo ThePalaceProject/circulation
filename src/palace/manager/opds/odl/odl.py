@@ -44,13 +44,13 @@ class License(BaseOpdsModel):
     """
 
     metadata: LicenseMetadata
-    links: Annotated[CompactCollection[opds2.StrictLink], Field(min_length=1)]
+    links: Annotated[CompactCollection[opds2.Link], Field(min_length=1)]
 
     @field_validator("links")
     @classmethod
     def validate_links(
-        cls, value: CompactCollection[opds2.StrictLink]
-    ) -> CompactCollection[opds2.StrictLink]:
+        cls, value: CompactCollection[opds2.Link]
+    ) -> CompactCollection[opds2.Link]:
         """
         Must have a self link and at least one acquisition link.
 

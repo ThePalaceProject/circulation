@@ -17,7 +17,6 @@ from palace.manager.opds.opds2 import (
     PublicationFeedNoValidation,
     PublicationMetadata,
     PublicationsGroup,
-    StrictLink,
     TitleLink,
 )
 from palace.manager.util.datetime_helpers import utc_now
@@ -306,6 +305,28 @@ class TestPublicationMetadata:
         assert data["accessibility"]["summary"] == "Fully accessible."
 
 
+class TestPublication:
+    def test_link_without_rel_or_type(self) -> None:
+        """A publication can contain a link with only href."""
+        pub = Publication(
+            metadata=PublicationMetadata(
+                title="Test",
+                identifier="urn:uuid:00000000-0000-0000-0000-000000000001",
+                type="http://schema.org/Book",
+            ),
+            images=[Link(href="http://img", type="image/png")],
+            links=[
+                Link(
+                    href="http://acq",
+                    rel="http://opds-spec.org/acquisition/open-access",
+                    type="application/epub+zip",
+                ),
+                Link(href="http://example.com/extra"),
+            ],
+        )
+        assert len(pub.links) == 2
+
+
 class TestFeed:
     @classmethod
     def _minimal_publication(cls) -> Publication:
@@ -317,7 +338,7 @@ class TestFeed:
             ),
             images=[Link(href="http://img", type="image/png")],
             links=[
-                StrictLink(
+                Link(
                     href="http://acq",
                     rel="http://opds-spec.org/acquisition/open-access",
                     type="application/epub+zip",
@@ -334,10 +355,8 @@ class TestFeed:
         )
 
     @classmethod
-    def _self_link(cls) -> list[StrictLink]:
-        return [
-            StrictLink(href="http://feed", rel="self", type="application/opds+json")
-        ]
+    def _self_link(cls) -> list[Link]:
+        return [Link(href="http://feed", rel="self", type="application/opds+json")]
 
     def test_links_validates_self_link(self):
         """Feed.links must contain a self link."""
@@ -345,7 +364,7 @@ class TestFeed:
             Feed(
                 metadata=FeedMetadata(title="Feed"),
                 links=[
-                    StrictLink(
+                    Link(
                         href="http://feed",
                         rel="other",
                         type="application/opds+json",
@@ -356,13 +375,22 @@ class TestFeed:
 
     def test_links_validates_unique(self):
         """Feed.links must not contain duplicate links."""
-        other_link = StrictLink(href="http://other", rel="other", type="text/html")
+        other_link = Link(href="http://other", rel="other", type="text/html")
         with pytest.raises(ValidationError, match="Duplicate link"):
             Feed(
                 metadata=FeedMetadata(title="Feed"),
                 links=self._self_link() + [other_link, other_link],
                 publications=[self._minimal_publication()],
             )
+
+    def test_link_without_type(self) -> None:
+        """A feed can contain links that only have href and rel."""
+        feed = Feed(
+            metadata=FeedMetadata(title="Feed"),
+            links=[Link(href="http://feed", rel="self")],
+            publications=[],
+        )
+        assert len(feed.links) == 1
 
     def test_serialization_only_truthy_collections_are_kept(self):
         """When only groups is truthy, publications and navigation are dropped."""
@@ -458,7 +486,7 @@ class TestPublicationsGroup:
             ),
             images=[Link(href="http://img", type="image/png")],
             links=[
-                StrictLink(
+                Link(
                     href="http://acq",
                     rel="http://opds-spec.org/acquisition/open-access",
                     type="application/epub+zip",
@@ -467,7 +495,7 @@ class TestPublicationsGroup:
         )
 
     def test_rejects_duplicate_links(self) -> None:
-        link = StrictLink(href="http://a", rel="other", type="text/html")
+        link = Link(href="http://a", rel="other", type="text/html")
         with pytest.raises(ValidationError, match="Duplicate link"):
             PublicationsGroup(
                 metadata=FeedMetadata(title="Group"),
@@ -479,8 +507,8 @@ class TestPublicationsGroup:
         group = PublicationsGroup(
             metadata=FeedMetadata(title="Group"),
             links=[
-                StrictLink(href="http://a", rel="other", type="text/html"),
-                StrictLink(href="http://b", rel="other", type="text/html"),
+                Link(href="http://a", rel="other", type="text/html"),
+                Link(href="http://b", rel="other", type="text/html"),
             ],
             publications=[self._minimal_publication()],
         )
@@ -491,7 +519,7 @@ class TestNavigationGroup:
     """Test the NavigationGroup model."""
 
     def test_links_rejects_duplicate(self) -> None:
-        link = StrictLink(href="http://a", rel="other", type="text/html")
+        link = Link(href="http://a", rel="other", type="text/html")
         with pytest.raises(ValidationError, match="Duplicate link"):
             NavigationGroup(
                 metadata=FeedMetadata(title="Nav"),
@@ -511,8 +539,8 @@ class TestNavigationGroup:
         group = NavigationGroup(
             metadata=FeedMetadata(title="Nav"),
             links=[
-                StrictLink(href="http://a", rel="other", type="text/html"),
-                StrictLink(href="http://b", rel="other", type="text/html"),
+                Link(href="http://a", rel="other", type="text/html"),
+                Link(href="http://b", rel="other", type="text/html"),
             ],
             navigation=[
                 TitleLink(href="http://n1", title="N1", type="text/html"),
@@ -527,13 +555,11 @@ class TestBasePublicationFeed:
     """Test the BasePublicationFeed model (via PublicationFeed)."""
 
     @classmethod
-    def _self_link(cls) -> list[StrictLink]:
-        return [
-            StrictLink(href="http://feed", rel="self", type="application/opds+json")
-        ]
+    def _self_link(cls) -> list[Link]:
+        return [Link(href="http://feed", rel="self", type="application/opds+json")]
 
     def test_rejects_duplicate_links(self) -> None:
-        other_link = StrictLink(href="http://other", rel="other", type="text/html")
+        other_link = Link(href="http://other", rel="other", type="text/html")
         with pytest.raises(ValidationError, match="Duplicate link"):
             PublicationFeed(
                 metadata=FeedMetadata(title="Feed"),
@@ -546,9 +572,18 @@ class TestBasePublicationFeed:
             metadata=FeedMetadata(title="Feed"),
             links=self._self_link()
             + [
-                StrictLink(href="http://a", rel="other", type="text/html"),
-                StrictLink(href="http://b", rel="other", type="text/html"),
+                Link(href="http://a", rel="other", type="text/html"),
+                Link(href="http://b", rel="other", type="text/html"),
             ],
             publications=[],
         )
         assert len(feed.links) == 3
+
+    def test_link_without_type(self) -> None:
+        """A publication feed can contain links that only have href and rel."""
+        feed = PublicationFeed(
+            metadata=FeedMetadata(title="Feed"),
+            links=[Link(href="http://feed", rel="self")],
+            publications=[],
+        )
+        assert len(feed.links) == 1
