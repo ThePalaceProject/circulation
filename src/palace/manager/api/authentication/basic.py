@@ -6,7 +6,7 @@ from collections.abc import Generator
 from enum import Enum
 from functools import partial
 from re import Pattern
-from typing import Annotated, Any, cast
+from typing import Annotated, Any, ClassVar, cast
 
 from flask import url_for
 from pydantic import PositiveInt, field_validator
@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from werkzeug.datastructures import Authorization
 
 from palace.manager.api.admin.problem_details import (
+    INVALID_CONFIGURATION_OPTION,
     INVALID_LIBRARY_IDENTIFIER_RESTRICTION_REGULAR_EXPRESSION,
 )
 from palace.manager.api.authentication.base import (
@@ -25,6 +26,10 @@ from palace.manager.api.authentication.base import (
     PatronData,
     PatronLookupNotSupported,
 )
+from palace.manager.api.authentication.patron_blocking_rules.rule_engine import (
+    MAX_MESSAGE_LENGTH,
+    MAX_RULE_LENGTH,
+)
 from palace.manager.api.problem_details import (
     PATRON_OF_ANOTHER_LIBRARY,
     UNSUPPORTED_AUTHENTICATION_MECHANISM,
@@ -33,6 +38,11 @@ from palace.manager.api.util.patron import PatronUtility
 from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.core.exceptions import IntegrationException
 from palace.manager.core.selftest import SelfTestResult
+from palace.manager.integration.patron_auth.patron_blocking import (
+    PatronBlockingRule,
+    build_runtime_values_from_patron,
+    check_patron_blocking_rules_with_evaluator,
+)
 from palace.manager.integration.settings import (
     FormFieldType,
     FormMetadata,
@@ -250,6 +260,19 @@ class BasicAuthProviderLibrarySettings(AuthProviderLibrarySettings):
         ),
     ] = None
 
+    patron_blocking_rules: Annotated[
+        list[PatronBlockingRule],
+        FormMetadata(
+            label="Patron Blocking Rules",
+            description=(
+                "A list of rules that can block patron access after successful ILS "
+                "authentication. Each rule has a name, a rule expression, and an "
+                "optional message shown to the patron when blocked."
+            ),
+            hidden=True,
+        ),
+    ] = []
+
     @field_validator("library_identifier_restriction_criteria")
     @classmethod
     def validate_restriction_criteria(
@@ -269,6 +292,61 @@ class BasicAuthProviderLibrarySettings(AuthProviderLibrarySettings):
                 )
         return restriction_criteria
 
+    @field_validator("patron_blocking_rules")
+    @classmethod
+    def validate_patron_blocking_rules(
+        cls, rules: list[PatronBlockingRule]
+    ) -> list[PatronBlockingRule]:
+        """Validate patron blocking rules: non-empty name/rule, no duplicate names,
+        rule length <= 1000, and message length <= 1000.
+
+        Full expression validation (syntax, placeholder resolution, bool result)
+        is deferred to admin-save time via a live SIP2 call in
+        ``PatronAuthServicesController.library_integration_validation``, where
+        real patron values are available.
+        """
+        names_seen: set[str] = set()
+        for i, rule in enumerate(rules):
+            if not rule.name:
+                raise SettingsValidationError(
+                    INVALID_CONFIGURATION_OPTION.detailed(
+                        f"Rule at index {i}: 'name' must not be empty"
+                    )
+                )
+            if not rule.rule:
+                raise SettingsValidationError(
+                    INVALID_CONFIGURATION_OPTION.detailed(
+                        f"Rule at index {i}: 'rule' expression must not be empty"
+                    )
+                )
+            if rule.name in names_seen:
+                raise SettingsValidationError(
+                    INVALID_CONFIGURATION_OPTION.detailed(
+                        f"Rule at index {i}: duplicate rule name '{rule.name}'"
+                    )
+                )
+            names_seen.add(rule.name)
+
+            # Enforce rule length limit.
+            if len(rule.rule) > MAX_RULE_LENGTH:
+                raise SettingsValidationError(
+                    INVALID_CONFIGURATION_OPTION.detailed(
+                        f"Rule at index {i} ('{rule.name}'): rule expression must not "
+                        f"exceed {MAX_RULE_LENGTH} characters."
+                    )
+                )
+
+            # Validate optional message length.
+            if rule.message is not None and len(rule.message) > MAX_MESSAGE_LENGTH:
+                raise SettingsValidationError(
+                    INVALID_CONFIGURATION_OPTION.detailed(
+                        f"Rule at index {i} ('{rule.name}'): message must not exceed "
+                        f"{MAX_MESSAGE_LENGTH} characters."
+                    )
+                )
+
+        return rules
+
 
 class BasicAuthenticationProvider[
     SettingsType: BasicAuthProviderSettings,
@@ -277,6 +355,12 @@ class BasicAuthenticationProvider[
     """Verify a username/password, obtained through HTTP Basic Auth, with
     a remote source of truth.
     """
+
+    # Subclasses that connect to an ILS and wish to honour patron blocking rules
+    # should override this to True.  Non-ILS providers (e.g. SimpleAuthentication,
+    # MinimalAuthentication) leave it as False so that the blocking-rules check
+    # in authenticate() is skipped entirely for those providers.
+    supports_patron_blocking_rules: ClassVar[bool] = False
 
     def __init__(
         self,
@@ -315,6 +399,7 @@ class BasicAuthenticationProvider[
                 library_settings.library_identifier_restriction_criteria
             )
         )
+        self.patron_blocking_rules = library_settings.patron_blocking_rules
 
     def process_library_identifier_restriction_criteria(
         self, criteria: str | None
@@ -494,15 +579,67 @@ class BasicAuthenticationProvider[
             return value
         return value.strip()
 
+    def _build_blocking_rule_values(
+        self, patron: Patron, credentials: dict
+    ) -> dict[str, Any]:
+        """Build the values dict used when evaluating patron blocking rules.
+
+        The base implementation extracts the small set of values available on
+        the :class:`~palace.manager.sqlalchemy.model.patron.Patron` DB model
+        (``fines``, ``patron_type``).
+
+        Provider subclasses that have access to richer upstream data (e.g. the
+        full SIP2 response dict) should override this to return a more complete
+        mapping.
+
+        Args:
+            patron: The successfully authenticated patron.
+            credentials: The raw credentials dict passed to :meth:`authenticate`.
+
+        Returns:
+            Dict mapping placeholder key to resolved value for
+            :func:`~palace.manager.integration.patron_auth.patron_blocking
+            .check_patron_blocking_rules_with_evaluator`.
+        """
+        return build_runtime_values_from_patron(patron)
+
     def authenticate(
         self, _db: Session, credentials: dict
     ) -> Patron | ProblemDetail | None:
         """Turn a set of credentials into a Patron object.
 
+        After the ILS successfully authenticates the patron, any configured
+        patron_blocking_rules are evaluated.  If a rule triggers a block,
+        a ProblemDetail is returned instead of the Patron object.
+
         :param credentials: A dictionary with keys `username` and `password`.
 
         :return: A Patron if one can be authenticated; a ProblemDetail
-            if an error occurs; None if the credentials are missing or wrong.
+            if an error occurs or a blocking rule fires; None if the
+            credentials are missing or wrong.
+        """
+        result = self._do_authenticate(_db, credentials)
+        if (
+            self.supports_patron_blocking_rules
+            and self.patron_blocking_rules
+            and isinstance(result, Patron)
+        ):
+            values = self._build_blocking_rule_values(result, credentials)
+            blocked = check_patron_blocking_rules_with_evaluator(
+                self.patron_blocking_rules, values, log=self.log
+            )
+            if blocked is not None:
+                return blocked
+        return result
+
+    def _do_authenticate(
+        self, _db: Session, credentials: dict
+    ) -> Patron | ProblemDetail | None:
+        """Core authentication logic (ILS round-trip + local patron lookup/create).
+
+        Separated from :meth:`authenticate` so that the blocking-rules hook
+        in that method has a single, clean intercept point regardless of
+        which code path inside this method resolves the patron.
         """
         username = self.scrub_credential(credentials.get("username")) or ""
         password = self.scrub_credential(credentials.get("password"))
