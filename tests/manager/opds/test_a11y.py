@@ -29,7 +29,7 @@ class TestCertification:
             credential="GCA Certified",
             report="https://example.com/report",
         )
-        data = cert.model_dump(mode="json", by_alias=True)
+        data = cert.serialize()
         assert data == {
             "certifiedBy": "Benetech",
             "credential": "GCA Certified",
@@ -56,7 +56,7 @@ class TestAccessibility:
             AccessibilityHazard.no_flashing_hazard,
             AccessibilityHazard.no_sound_hazard,
         ]
-        data = a11y.model_dump(mode="json", by_alias=True)
+        data = a11y.serialize()
         assert data["hazard"] == ["noFlashingHazard", "noSoundHazard"]
 
     def test_exemption_round_trip(self) -> None:
@@ -64,7 +64,7 @@ class TestAccessibility:
         for exemption in Exemption:
             a11y = Accessibility.model_validate({"exemption": exemption.value})
             assert a11y.exemption == exemption
-            data = a11y.model_dump(mode="json", by_alias=True)
+            data = a11y.serialize()
             assert data["exemption"] == exemption.value
 
     def test_certification_round_trip(self) -> None:
@@ -82,7 +82,7 @@ class TestAccessibility:
         assert a11y.certification.certified_by == "Benetech"
         assert a11y.certification.credential == "GCA Certified"
         assert a11y.certification.report == "https://example.com/report"
-        data = a11y.model_dump(mode="json", by_alias=True)
+        data = a11y.serialize()
         assert data["certification"] == {
             "certifiedBy": "Benetech",
             "credential": "GCA Certified",
@@ -92,17 +92,17 @@ class TestAccessibility:
     def test_certification_none_dropped(self) -> None:
         """Certification is omitted from serialized output when None."""
         a11y = Accessibility()
-        data = a11y.model_dump(mode="json", by_alias=True)
+        data = a11y.serialize()
         assert "certification" not in data
 
     def test_hazard_empty_dropped(self) -> None:
         """Empty hazard list is omitted from serialized output."""
         a11y = Accessibility()
-        data = a11y.model_dump(mode="json", by_alias=True)
+        data = a11y.serialize()
         assert "hazard" not in data
 
     def test_exemption_none_dropped(self) -> None:
         """Exemption is omitted from serialized output when None."""
         a11y = Accessibility()
-        data = a11y.model_dump(mode="json", by_alias=True)
+        data = a11y.serialize()
         assert "exemption" not in data

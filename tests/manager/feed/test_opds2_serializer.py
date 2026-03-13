@@ -282,9 +282,7 @@ class TestOPDS2Serializer:
             drm_licensor=drm_licensor,
         )
 
-        result = serializer._dump_model(
-            serializer._serialize_acquisition_link(acquisition)
-        )
+        result = serializer._serialize_acquisition_link(acquisition).serialize()
 
         assert result["href"] == acquisition.href
         assert result["rel"] == acquisition.rel
@@ -313,9 +311,7 @@ class TestOPDS2Serializer:
             availability_status="available",
             type="application/epub+zip",
         )
-        result = serializer._dump_model(
-            serializer._serialize_acquisition_link(acquisition)
-        )
+        result = serializer._serialize_acquisition_link(acquisition).serialize()
         assert result["properties"]["availability"]["state"] == "reserved"
 
         acquisition = Acquisition(
@@ -325,9 +321,7 @@ class TestOPDS2Serializer:
             availability_status="available",
             type="application/epub+zip",
         )
-        result = serializer._dump_model(
-            serializer._serialize_acquisition_link(acquisition)
-        )
+        result = serializer._serialize_acquisition_link(acquisition).serialize()
         assert result["properties"]["availability"]["state"] == "ready"
 
         # Test templated link
@@ -336,9 +330,7 @@ class TestOPDS2Serializer:
             templated=True,
             type="application/epub+zip",
         )
-        result = serializer._dump_model(
-            serializer._serialize_acquisition_link(acquisition)
-        )
+        result = serializer._serialize_acquisition_link(acquisition).serialize()
         assert result["templated"] is True
         assert result["href"] == acquisition.href
 
@@ -349,7 +341,7 @@ class TestOPDS2Serializer:
             link=Link(href="http://author", rel="contributor", title="Delete me!"),
         )
         serializer = OPDS2Serializer()
-        result = serializer._dump_model(serializer._serialize_contributor(author))
+        result = serializer._serialize_contributor(author).serialize()
         assert result["name"] == "Author"
         assert result["sortAs"] == "Author,"
         assert result["links"] == [{"href": "http://author", "rel": "contributor"}]
@@ -365,7 +357,7 @@ class TestOPDS2Serializer:
             ),
         )
         serializer = OPDS2Serializer()
-        result = serializer._dump_model(serializer._serialize_contributor(author))
+        result = serializer._serialize_contributor(author).serialize()
         assert result["links"] == [
             {
                 "href": "http://author",
@@ -612,7 +604,7 @@ class TestOPDS2Serializer:
         )
         result = serializer._serialize_acquisition_link(acquisition)
         assert result is not None
-        dumped = serializer._dump_model(result)
+        dumped = result.serialize()
         assert dumped["type"] == "application/epub+zip"
 
     def test_acquisition_link_type_fallback_to_semantic_indirect(self):
@@ -628,7 +620,7 @@ class TestOPDS2Serializer:
         )
         result = serializer._serialize_acquisition_link(acquisition)
         assert result is not None
-        dumped = serializer._dump_model(result)
+        dumped = result.serialize()
         assert dumped["type"] == opds2.BasePublication.content_type()
 
     def test_indirect_acquisition_without_type(self):
@@ -642,9 +634,7 @@ class TestOPDS2Serializer:
                 IndirectAcquisition(type=None),
             ],
         )
-        result = serializer._dump_model(
-            serializer._serialize_acquisition_link(acquisition)
-        )
+        result = serializer._serialize_acquisition_link(acquisition).serialize()
         # The indirect acquisition without type should be filtered out,
         # and the empty list is dropped from serialization
         assert "indirectAcquisition" not in result.get("properties", {})
@@ -749,9 +739,7 @@ class TestOPDS2Serializer:
             type="application/epub+zip",
             availability_status="bogus_status",
         )
-        result = serializer._dump_model(
-            serializer._serialize_acquisition_link(acquisition)
-        )
+        result = serializer._serialize_acquisition_link(acquisition).serialize()
         # Unknown status should be treated as if no status was provided
         assert "availability" not in result.get("properties", {})
 
@@ -908,9 +896,7 @@ class TestOPDS2Serializer:
             copies_total="5",
             copies_available="2",
         )
-        result = serializer._dump_model(
-            serializer._serialize_acquisition_link(acquisition)
-        )
+        result = serializer._serialize_acquisition_link(acquisition).serialize()
         props = result["properties"]
         assert props["holds"] == {"total": 10, "position": 3}
         assert props["copies"] == {"total": 5, "available": 2}

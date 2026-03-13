@@ -279,7 +279,7 @@ class TestPublicationMetadata:
             identifier="urn:isbn:123",
             type="http://schema.org/Book",
         )
-        data = metadata.model_dump(mode="json", by_alias=True)
+        data = metadata.serialize()
         assert "accessibility" not in data
 
     def test_model_serializer_populated_accessibility_serialized(self) -> None:
@@ -296,7 +296,7 @@ class TestPublicationMetadata:
                 },
             }
         )
-        data = metadata.model_dump(mode="json", by_alias=True)
+        data = metadata.serialize()
         assert "accessibility" in data
         assert data["accessibility"]["accessMode"] == ["textual", "visual"]
         assert data["accessibility"]["feature"] == ["tableOfContents"]
@@ -345,7 +345,7 @@ class TestFeed:
             publications=[],
             navigation=[],
         )
-        data = feed.model_dump(mode="json", by_alias=True, exclude_none=True)
+        data = feed.serialize()
 
         assert "groups" in data
         assert "publications" not in data
@@ -359,7 +359,7 @@ class TestFeed:
             groups=[self._minimal_group()],
             publications=[self._minimal_publication()],
         )
-        data = feed.model_dump(mode="json", by_alias=True, exclude_none=True)
+        data = feed.serialize()
 
         assert "groups" in data
         assert "publications" in data
@@ -373,7 +373,7 @@ class TestFeed:
             links=self._self_link(),
             groups=[],
         )
-        data = feed.model_dump(mode="json", by_alias=True, exclude_none=True)
+        data = feed.serialize()
 
         assert "groups" in data
         assert data["groups"] == []
@@ -388,7 +388,7 @@ class TestFeed:
             publications=[],
             navigation=[],
         )
-        data = feed.model_dump(mode="json", by_alias=True, exclude_none=True)
+        data = feed.serialize()
 
         # publications has higher priority than navigation.
         assert "publications" in data
