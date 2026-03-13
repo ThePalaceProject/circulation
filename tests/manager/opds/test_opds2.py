@@ -342,7 +342,7 @@ class TestFeed:
             Feed(
                 metadata=FeedMetadata(title="Feed"),
                 links=[
-                    StrictLink(
+                    Link(
                         href="http://feed",
                         rel="other",
                         type="application/opds+json",
@@ -353,7 +353,7 @@ class TestFeed:
 
     def test_links_validates_unique(self):
         """Feed.links must not contain duplicate links."""
-        other_link = StrictLink(href="http://other", rel="other", type="text/html")
+        other_link = Link(href="http://other", rel="other", type="text/html")
         with pytest.raises(ValidationError, match="Duplicate link"):
             Feed(
                 metadata=FeedMetadata(title="Feed"),
@@ -525,9 +525,7 @@ class TestBasePublicationFeed:
 
     @classmethod
     def _self_link(cls) -> list[Link]:
-        return [
-            Link(href="http://feed", rel="self", type="application/opds+json")
-        ]
+        return [Link(href="http://feed", rel="self", type="application/opds+json")]
 
     def test_rejects_duplicate_links(self) -> None:
         other_link = Link(href="http://other", rel="other", type="text/html")
