@@ -29,6 +29,9 @@
         "accessibility": {
           "feature": [
             "tableOfContents"
+          ],
+          "hazard": [
+            "none"
           ]
         },
         "language": "en",
@@ -662,7 +665,17 @@
           ],
           "accessModeSufficient": [
             "textual"
-          ]
+          ],
+          "hazard": [
+            "noFlashingHazard",
+            "noMotionSimulationHazard",
+            "noSoundHazard"
+          ],
+          "certification": {
+            "certifiedBy": "Benetech",
+            "credential": "GCA Certified",
+            "report": "https://example.com/a11y-report/9781476733531"
+          }
         },
         "language": "en",
         "modified": "2026-02-21T21:16:17+01:00",
