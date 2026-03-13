@@ -24,8 +24,8 @@ from palace.manager.integration.license.opds.requests import (
 from palace.manager.opds.authentication import AuthenticationDocument
 from palace.manager.opds.opds2 import (
     FeedMetadata,
+    Link,
     PublicationFeedNoValidation,
-    StrictLink,
 )
 from tests.fixtures.http import MockHttpClientFixture
 from tests.mocks.mock import MockRequestsResponse
@@ -122,12 +122,12 @@ class OpdsRequestFixture:
             metadata=FeedMetadata(title="Test Feed"),
             publications=[],
             links=[
-                StrictLink(
+                Link(
                     rel="http://opds-spec.org/auth/document",
                     href=self.auth_doc_url,
                     type=AuthenticationDocument.content_type(),
                 ),
-                StrictLink(
+                Link(
                     rel="self",
                     href=self.auth_doc_url,
                     type=PublicationFeedNoValidation.content_type(),
