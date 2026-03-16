@@ -73,15 +73,16 @@ class TestMinimalAuthenticationProvider:
         provider = minimal_auth_fixture.provider()
 
         result = provider.remote_authenticate(username, password)
+        patrondata = result.patron_data
 
         if expect_success:
-            assert isinstance(result, PatronData)
-            assert result.authorization_identifier is not None
-            assert result.permanent_id is not None
-            assert result.username is not None
-            assert result.personal_name is not None
+            assert isinstance(patrondata, PatronData)
+            assert patrondata.authorization_identifier is not None
+            assert patrondata.permanent_id is not None
+            assert patrondata.username is not None
+            assert patrondata.personal_name is not None
         else:
-            assert result is None
+            assert patrondata is None
 
     @pytest.mark.parametrize(
         "authorization_identifier",
@@ -200,11 +201,12 @@ class TestMinimalAuthenticationProvider:
 
         username = "testuser"
         result = provider.remote_authenticate(username, "any_password")
+        patrondata = result.patron_data
 
         # Should match what generate_patrondata produces
         expected = MinimalAuthenticationProvider.generate_patrondata(username)
 
-        assert result.authorization_identifier == expected.authorization_identifier
-        assert result.username == expected.username
-        assert result.permanent_id == expected.permanent_id
-        assert result.personal_name == expected.personal_name
+        assert patrondata.authorization_identifier == expected.authorization_identifier
+        assert patrondata.username == expected.username
+        assert patrondata.permanent_id == expected.permanent_id
+        assert patrondata.personal_name == expected.personal_name

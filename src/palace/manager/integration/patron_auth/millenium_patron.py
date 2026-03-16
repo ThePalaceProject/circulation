@@ -15,6 +15,7 @@ from palace.manager.api.authentication.basic import (
     BasicAuthenticationProvider,
     BasicAuthProviderLibrarySettings,
     BasicAuthProviderSettings,
+    RemoteAuthResult,
 )
 from palace.manager.api.authentication.patron_debug import HasPatronDebug
 from palace.manager.core.selftest import SelfTestResult
@@ -219,42 +220,45 @@ class MilleniumPatronAPI(
 
     def remote_authenticate(
         self, username: str, password: str | None
-    ) -> PatronData | None:
+    ) -> RemoteAuthResult:
         """Does the Millenium Patron API approve of these credentials?
 
-        :return: False if the credentials are invalid. If they are
-            valid, a PatronData that serves only to indicate which
-            authorization identifier the patron prefers.
+        :return: RemoteAuthResult with patron_data=None if the credentials
+            are invalid. If they are valid, patron_data is a PatronData that
+            serves only to indicate which authorization identifier the patron
+            prefers.
         """
         if not username:
-            return None
+            return RemoteAuthResult(patron_data=None)
 
         if not self.collects_password:
             # We don't even look at the password. If the patron exists, they
             # are authenticated.
             patrondata = self.remote_patron_lookup(username)
             if not patrondata:
-                return None
-            return patrondata
+                return RemoteAuthResult(patron_data=None)
+            return RemoteAuthResult(patron_data=patrondata)
 
         if self.auth_mode == AuthenticationMode.PIN:
-            return self._remote_authenticate_pintest(
-                username=username, password=password
+            return RemoteAuthResult(
+                patron_data=self._remote_authenticate_pintest(
+                    username=username, password=password
+                )
             )
         elif self.auth_mode == AuthenticationMode.FAMILY_NAME:
             # Patrons are authenticated by their family name.
             patrondata = self.remote_patron_lookup(username)
             if not patrondata:
                 # The patron doesn't even exist.
-                return None
+                return RemoteAuthResult(patron_data=None)
 
             # The patron exists; but do the last names match?
             if self.family_name_match(patrondata.personal_name, password):
                 # Since this is a complete PatronData, we'll be able
                 # to update their account without making a separate
                 # call to /dump.
-                return patrondata
-        return None
+                return RemoteAuthResult(patron_data=patrondata)
+        return RemoteAuthResult(patron_data=None)
 
     def _pintest_request(self, username: str, password: str | None) -> dict[str, str]:
         """Perform a PIN test HTTP request and return the parsed response.

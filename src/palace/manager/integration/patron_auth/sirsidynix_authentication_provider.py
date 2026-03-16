@@ -15,6 +15,7 @@ from palace.manager.api.authentication.basic import (
     BasicAuthenticationProvider,
     BasicAuthProviderLibrarySettings,
     BasicAuthProviderSettings,
+    RemoteAuthResult,
 )
 from palace.manager.core.config import Configuration
 from palace.manager.core.exceptions import (
@@ -203,21 +204,27 @@ class SirsiDynixHorizonAuthenticationProvider(
 
     def remote_authenticate(
         self, username: str, password: str | None
-    ) -> PatronData | None:
+    ) -> RemoteAuthResult:
         """Authenticate this user with the remote server."""
         if password is None:
-            return None
+            return RemoteAuthResult(patron_data=None)
 
         data = self.api_patron_login(username, password)
-        if isinstance(data, SirsiError):
-            return None
 
-        return SirsiDynixPatronData(
-            username=username,
-            authorization_identifier=username,
-            permanent_id=data.get("patronKey"),
-            session_token=data.get("sessionToken"),
-            complete=False,
+        if isinstance(data, SirsiError):
+            return RemoteAuthResult(patron_data=None) 
+
+        if not data:
+            return RemoteAuthResult(patron_data=None)
+
+        return RemoteAuthResult(
+            patron_data=SirsiDynixPatronData(
+                username=username,
+                authorization_identifier=username,
+                permanent_id=data.get("patronKey"),
+                session_token=data.get("sessionToken"),
+                complete=False,
+            )
         )
 
     def remote_patron_lookup(

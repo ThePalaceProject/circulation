@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from abc import ABC, abstractmethod
 from collections.abc import Generator
+from dataclasses import dataclass, field
 from enum import Enum
 from functools import partial
 from re import Pattern
@@ -52,6 +53,12 @@ from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.util.log import elapsed_time_logging
 from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
+
+
+@dataclass
+class RemoteAuthResult:
+    patron_data: PatronData | ProblemDetail | None
+    extra_context: dict[str, Any] = field(default_factory=dict)
 
 
 class LibraryIdentifierRestriction(Enum):
@@ -439,17 +446,22 @@ class BasicAuthenticationProvider[
     @abstractmethod
     def remote_authenticate(
         self, username: str, password: str | None
-    ) -> PatronData | ProblemDetail | None:
+    ) -> RemoteAuthResult:
         """Does the source of truth approve of these credentials?
 
-        If the credentials are valid, return a PatronData object. The PatronData object
-        has a `complete` field. This field on the returned PatronData object will be used
-        to determine if we need to call `remote_patron_lookup` later to get the complete
+        If the credentials are valid, return a RemoteAuthResult with patron_data
+        set to a PatronData object. The PatronData object has a `complete` field.
+        This field on the returned PatronData object will be used to determine
+        if we need to call `remote_patron_lookup` later to get the complete
         information about the patron.
 
-        If the credentials are invalid, return None.
+        If the credentials are invalid, return RemoteAuthResult(patron_data=None).
 
-        If there is a problem communicating with the remote, return a ProblemDetail.
+        If there is a problem communicating with the remote, return
+        RemoteAuthResult(patron_data=ProblemDetail).
+
+        Providers with richer upstream data (e.g. SIP2) may populate
+        extra_context for use in patron blocking rule evaluation.
         """
         ...
 
@@ -580,7 +592,7 @@ class BasicAuthenticationProvider[
         return value.strip()
 
     def _build_blocking_rule_values(
-        self, patron: Patron, credentials: dict
+        self, patron: Patron, extra_context: dict[str, Any]
     ) -> dict[str, Any]:
         """Build the values dict used when evaluating patron blocking rules.
 
@@ -590,14 +602,12 @@ class BasicAuthenticationProvider[
 
         Provider subclasses that have access to richer upstream data (e.g. the
         full SIP2 response dict) should override this to return a more complete
-        mapping.
+        mapping, using data from extra_context when available.
 
-        Args:
-            patron: The successfully authenticated patron.
-            credentials: The raw credentials dict passed to :meth:`authenticate`.
-
-        Returns:
-            Dict mapping placeholder key to resolved value for
+        :param patron: The successfully authenticated patron.
+        :param extra_context: Provider-specific data from :meth:`remote_authenticate`
+            (e.g. raw SIP2 response dict).  Empty for providers that do not populate it.
+        :returns: Dict mapping placeholder key to resolved value for
             :func:`~palace.manager.integration.patron_auth.patron_blocking
             .check_patron_blocking_rules_with_evaluator`.
         """
@@ -618,13 +628,13 @@ class BasicAuthenticationProvider[
             if an error occurs or a blocking rule fires; None if the
             credentials are missing or wrong.
         """
-        result = self._do_authenticate(_db, credentials)
+        result, extra_context = self._do_authenticate(_db, credentials)
         if (
             self.supports_patron_blocking_rules
             and self.patron_blocking_rules
             and isinstance(result, Patron)
         ):
-            values = self._build_blocking_rule_values(result, credentials)
+            values = self._build_blocking_rule_values(result, extra_context)
             blocked = check_patron_blocking_rules_with_evaluator(
                 self.patron_blocking_rules, values, log=self.log
             )
@@ -634,7 +644,7 @@ class BasicAuthenticationProvider[
 
     def _do_authenticate(
         self, _db: Session, credentials: dict
-    ) -> Patron | ProblemDetail | None:
+    ) -> tuple[Patron | ProblemDetail | None, dict[str, Any]]:
         """Core authentication logic (ILS round-trip + local patron lookup/create).
 
         Separated from :meth:`authenticate` so that the blocking-rules hook
@@ -653,10 +663,12 @@ class BasicAuthenticationProvider[
             return None
 
         # Check these credentials with the source of truth.
-        patrondata = self.remote_authenticate(username, password)
+        auth_result = self.remote_authenticate(username, password)
+        patrondata = auth_result.patron_data
+        extra_context = auth_result.extra_context
         if patrondata is None or isinstance(patrondata, ProblemDetail):
             # Either an error occurred or the credentials did not correspond to any patron.
-            return patrondata
+            return patrondata, extra_context
 
         # Check that the patron belongs to this library.
         patrondata = self.enforce_library_identifier_restriction(patrondata)
@@ -679,11 +691,11 @@ class BasicAuthenticationProvider[
                 if not isinstance(patrondata, PatronData):
                     # Something went wrong, we can't get the patron's information.
                     # so we fail the authentication process.
-                    return patrondata
+                    return patrondata, extra_context
 
             # Apply the information we have to the patron and return it.
             patrondata.apply(patron)
-            return patron
+            return patron, extra_context
 
         # At this point we didn't find the patron, so we want to look up the patron
         # with the remote, in case this allows us to find an existing patron, based
@@ -693,18 +705,18 @@ class BasicAuthenticationProvider[
             if not isinstance(patrondata, PatronData):
                 # Something went wrong, we can't get the patron's information.
                 # so we fail the authentication process.
-                return patrondata
+                return patrondata, extra_context
             patron = self.local_patron_lookup(_db, username, patrondata)
             if patron:
                 # We found the patron, so we apply the information we have to the patron and return it.
                 patrondata.apply(patron)
-                return patron
+                return patron, extra_context
 
         # We didn't find the patron, so we create a new patron with the information we have.
         patron, _ = patrondata.get_or_create_patron(
             _db, self.library_id, analytics=self.analytics
         )
-        return patron
+        return patron, extra_context
 
     def get_credential_from_header(self, auth: Authorization) -> str | None:
         """Extract a password credential from a WWW-Authenticate header

@@ -7,6 +7,7 @@ from palace.manager.api.authentication.basic import (
     BasicAuthenticationProvider,
     BasicAuthProviderLibrarySettings,
     BasicAuthProviderSettings,
+    RemoteAuthResult,
 )
 from palace.manager.sqlalchemy.model.patron import Patron
 
@@ -47,12 +48,12 @@ class MinimalAuthenticationProvider(
 
     def remote_authenticate(
         self, username: str, password: str | None
-    ) -> PatronData | None:
+    ) -> RemoteAuthResult:
         """No Auth authentication: Allow everyone through as long as they have a username."""
         if not username:
-            return None
+            return RemoteAuthResult(patron_data=None)
 
-        return self.generate_patrondata(username)
+        return RemoteAuthResult(patron_data=self.generate_patrondata(username))
 
     @classmethod
     def generate_patrondata(cls, authorization_identifier: str) -> PatronData:

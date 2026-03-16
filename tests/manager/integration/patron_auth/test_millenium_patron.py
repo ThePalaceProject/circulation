@@ -309,7 +309,7 @@ class TestMilleniumPatronAPI:
     ):
         provider = create_provider()
         provider.enqueue("pintest.no such barcode.html")
-        assert provider.remote_authenticate("wrong barcode", "pin") is None
+        assert provider.remote_authenticate("wrong barcode", "pin").patron_data is None
 
     def test_remote_authenticate_wrong_pin(
         self,
@@ -317,7 +317,7 @@ class TestMilleniumPatronAPI:
     ):
         provider = create_provider()
         provider.enqueue("pintest.bad.html")
-        assert provider.remote_authenticate("barcode", "wrong pin") is None
+        assert provider.remote_authenticate("barcode", "wrong pin").patron_data is None
 
     def test_remote_authenticate_correct_pin(
         self,
@@ -327,7 +327,8 @@ class TestMilleniumPatronAPI:
         api.enqueue("pintest.good.html")
         barcode = "barcode1234567!"
         pin = "!correct pin<>@/"
-        patrondata = api.remote_authenticate(barcode, pin)
+        result = api.remote_authenticate(barcode, pin)
+        patrondata = result.patron_data
         assert isinstance(patrondata, PatronData)
         # The return value includes everything we know about the
         # authenticated patron, which isn't much.
@@ -357,7 +358,8 @@ class TestMilleniumPatronAPI:
         api.enqueue("pintest.good.html")
         barcode = "barcode1234567!"
         pin = "!correct pin<>@/"
-        patrondata = api.remote_authenticate(barcode, pin)
+        result = api.remote_authenticate(barcode, pin)
+        patrondata = result.patron_data
         # The return value includes everything we know about the
         # authenticated patron, which isn't much.
         assert patrondata is not None
@@ -757,14 +759,14 @@ class TestMilleniumPatronAPI:
         # If the patron lookup succeeds, the user is authenticated
         # as that patron.
         api.enqueue("dump.success.html")
-        patrondata = api.remote_authenticate("44444444444447", None)
+        result = api.remote_authenticate("44444444444447", None)
+        patrondata = result.patron_data
         assert isinstance(patrondata, PatronData)
         assert "44444444444447" == patrondata.authorization_identifier
 
         # If it fails, the user is not authenticated.
         api.enqueue("dump.no such barcode.html")
-        patrondata = api.remote_authenticate("44444444444447", None)
-        assert patrondata is None
+        assert api.remote_authenticate("44444444444447", None).patron_data is None
 
     def test_authorization_family_name_success(
         self,
@@ -777,7 +779,8 @@ class TestMilleniumPatronAPI:
         settings = create_settings(authentication_mode=AuthenticationMode.FAMILY_NAME)
         api = create_provider(settings=settings)
         api.enqueue("dump.success.html")
-        patrondata = api.remote_authenticate("44444444444447", "Sheldon")
+        result = api.remote_authenticate("44444444444447", "Sheldon")
+        patrondata = result.patron_data
         assert isinstance(patrondata, PatronData)
         assert "44444444444447" == patrondata.authorization_identifier
 
@@ -796,7 +799,9 @@ class TestMilleniumPatronAPI:
         settings = create_settings(authentication_mode=AuthenticationMode.FAMILY_NAME)
         api = create_provider(settings=settings)
         api.enqueue("dump.success.html")
-        assert api.remote_authenticate("44444444444447", "wrong name") is None
+        assert (
+            api.remote_authenticate("44444444444447", "wrong name").patron_data is None
+        )
 
     def test_authorization_family_name_no_such_patron(
         self,
@@ -809,7 +814,7 @@ class TestMilleniumPatronAPI:
         settings = create_settings(authentication_mode=AuthenticationMode.FAMILY_NAME)
         api = create_provider(settings=settings)
         api.enqueue("dump.no such barcode.html")
-        assert api.remote_authenticate("44444444444447", "somebody") is None
+        assert api.remote_authenticate("44444444444447", "somebody").patron_data is None
 
     def test_extract_postal_code(self):
         # Test our heuristics for extracting postal codes from address fields.
