@@ -153,7 +153,8 @@ class TestKansasPatronAPI:
     def test_remote_authenticate(self, create_provider: Callable[..., MockAPI]):
         provider = create_provider()
         provider.enqueue("authorization_response_good.xml")
-        patrondata = provider.remote_authenticate("1234", "4321")
+        result = provider.remote_authenticate("1234", "4321")
+        patrondata = result.patron_data
         assert isinstance(patrondata, PatronData)
         assert patrondata.authorization_identifier == "1234"
         assert patrondata.permanent_id == "1234"
@@ -161,15 +162,14 @@ class TestKansasPatronAPI:
         assert patrondata.personal_name == "Montgomery Burns"
 
         provider.enqueue("authorization_response_bad.xml")
-        patrondata = provider.remote_authenticate("1234", "4321")
-        assert patrondata is None
+        assert provider.remote_authenticate("1234", "4321").patron_data is None
 
         provider.enqueue("authorization_response_no_status.xml")
-        patrondata = provider.remote_authenticate("1234", "4321")
-        assert patrondata is None
+        assert provider.remote_authenticate("1234", "4321").patron_data is None
 
         provider.enqueue("authorization_response_no_id.xml")
-        patrondata = provider.remote_authenticate("1234", "4321")
+        result = provider.remote_authenticate("1234", "4321")
+        patrondata = result.patron_data
         assert isinstance(patrondata, PatronData)
         assert patrondata.authorization_identifier == "1234"
         assert patrondata.permanent_id == "1234"
@@ -177,12 +177,10 @@ class TestKansasPatronAPI:
         assert patrondata.personal_name == "Gee"
 
         provider.enqueue("authorization_response_empty_tag.xml")
-        patrondata = provider.remote_authenticate("1234", "4321")
-        assert patrondata is None
+        assert provider.remote_authenticate("1234", "4321").patron_data is None
 
         provider.enqueue("authorization_response_malformed.xml")
-        patrondata = provider.remote_authenticate("1234", "4321")
-        assert patrondata is None
+        assert provider.remote_authenticate("1234", "4321").patron_data is None
 
     def test_remote_patron_lookup(
         self, create_provider: Callable[..., MockAPI], db: DatabaseTransactionFixture

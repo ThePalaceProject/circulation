@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import socket
-import threading
 from collections.abc import Callable, Generator
 from datetime import datetime
 from typing import Annotated, Any, ClassVar
@@ -17,6 +16,7 @@ from palace.manager.api.authentication.basic import (
     BasicAuthenticationProvider,
     BasicAuthProviderLibrarySettings,
     BasicAuthProviderSettings,
+    RemoteAuthResult,
 )
 from palace.manager.api.authentication.patron_debug import HasPatronDebug
 from palace.manager.api.problem_details import INVALID_CREDENTIALS
@@ -36,12 +36,6 @@ from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.util import MoneyUtility
 from palace.manager.util.network_diagnostics import run_network_diagnostics
 from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
-
-# Thread-local storage for the most-recent SIP2 patron_information response dict.
-# remote_authenticate() stores the raw info here so that _build_blocking_rule_values()
-# can use the full SIP2 payload for rule evaluation without a second network call.
-# Each worker thread has its own slot, so concurrent requests do not interfere.
-_sip2_thread_local: threading.local = threading.local()
 
 
 class SIP2Settings(BasicAuthProviderSettings):
@@ -426,11 +420,11 @@ class SIP2AuthenticationProvider(
 
     def remote_authenticate(
         self, username: str, password: str | None
-    ) -> PatronData | None | ProblemDetail:
+    ) -> RemoteAuthResult:
         """Authenticate a patron with the SIP2 server.
 
-        Caches the raw SIP2 response dict in :data:`_sip2_thread_local` so
-        that :meth:`_build_blocking_rule_values` can use the full payload for
+        Returns the raw SIP2 response dict in extra_context so that
+        :meth:`_build_blocking_rule_values` can use the full payload for
         rule evaluation without requiring a second network call.
 
         :param username: The patron's username/barcode/card
@@ -442,20 +436,22 @@ class SIP2AuthenticationProvider(
             # passing it on.
             password = None
         info = self.patron_information(username, password)
-        # Cache the raw SIP2 response for use in _build_blocking_rule_values().
-        _sip2_thread_local.last_info = info if isinstance(info, dict) else None
-        return self.info_to_patrondata(info)
+        extra_context = info if isinstance(info, dict) else {}
+        return RemoteAuthResult(
+            patron_data=self.info_to_patrondata(info),
+            extra_context=extra_context,
+        )
 
     def _build_blocking_rule_values(
-        self, patron: Patron, credentials: dict[str, Any]
+        self, patron: Patron, extra_context: dict[str, Any]
     ) -> dict[str, Any]:
         """Return the full SIP2 response dict as rule-evaluation values.
 
-        Uses the raw SIP2 ``patron_information`` payload cached by
-        :meth:`remote_authenticate` (same request thread, no extra network
-        call).  If no cached data is available (e.g. in tests that bypass
-        ``remote_authenticate``), falls back to the patron-model values
-        produced by :func:`~palace.manager.integration.patron_auth.patron_blocking
+        Uses the raw SIP2 ``patron_information`` payload passed via
+        extra_context from :meth:`remote_authenticate`.  If extra_context is
+        empty (e.g. in tests that bypass ``remote_authenticate``), falls back
+        to the patron-model values produced by
+        :func:`~palace.manager.integration.patron_auth.patron_blocking
         .build_runtime_values_from_patron`.
 
         The returned dict contains **every field** returned by the SIP2 server
@@ -463,10 +459,8 @@ class SIP2AuthenticationProvider(
         reference any SIP2 field by name (e.g. ``{sipserver_patron_class}``,
         ``{fee_amount}``, ``{polaris_patron_birthdate}``).
         """
-        info = getattr(_sip2_thread_local, "last_info", None)
-        if isinstance(info, dict):
-            return build_values_from_sip2_info(info)
-        # Fallback: SIP2 info was not cached (e.g. test bypassed remote_authenticate).
+        if extra_context:
+            return build_values_from_sip2_info(extra_context)
         return build_runtime_values_from_patron(patron)
 
     def patron_debug(

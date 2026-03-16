@@ -69,9 +69,10 @@ class TestSimpleAuth:
         settings = create_settings()
         provider = create_provider(settings=settings)
 
-        assert provider.remote_authenticate("user", "wrongpass") is None
-        assert provider.remote_authenticate("user", None) is None
-        user = provider.remote_authenticate("barcode", "pass")
+        assert provider.remote_authenticate("user", "wrongpass").patron_data is None
+        assert provider.remote_authenticate("user", None).patron_data is None
+        result = provider.remote_authenticate("barcode", "pass")
+        user = result.patron_data
         assert isinstance(user, PatronData)
         assert "barcode" == user.authorization_identifier
         assert "barcode_id" == user.permanent_id
@@ -91,15 +92,17 @@ class TestSimpleAuth:
         provider = create_provider(settings=settings)
 
         # If you don't provide a password, you're in.
-        user = provider.remote_authenticate("barcode", None)
+        result = provider.remote_authenticate("barcode", None)
+        user = result.patron_data
         assert isinstance(user, PatronData)
 
-        user2 = provider.remote_authenticate("barcode", "")
+        result2 = provider.remote_authenticate("barcode", "")
+        user2 = result2.patron_data
         assert isinstance(user2, PatronData)
         assert user2.authorization_identifier == user.authorization_identifier
 
         # If you provide any password, you're out.
-        assert provider.remote_authenticate("barcode", "pass") is None
+        assert provider.remote_authenticate("barcode", "pass").patron_data is None
 
     def test_additional_identifiers(
         self,
@@ -111,31 +114,36 @@ class TestSimpleAuth:
         )
         provider = create_provider(settings=settings)
 
-        assert provider.remote_authenticate("a", None) is None
+        assert provider.remote_authenticate("a", None).patron_data is None
 
-        user = provider.remote_authenticate("a", "pass")
+        result = provider.remote_authenticate("a", "pass")
+        user = result.patron_data
         assert isinstance(user, PatronData)
         assert "a" == user.authorization_identifier
         assert "a_id" == user.permanent_id
         assert "a_username" == user.username
 
-        user2 = provider.remote_authenticate("b", "pass")
+        result2 = provider.remote_authenticate("b", "pass")
+        user2 = result2.patron_data
         assert isinstance(user2, PatronData)
         assert "b" == user2.authorization_identifier
         assert "b_id" == user2.permanent_id
         assert "b_username" == user2.username
 
         # Users can also authenticate by their 'username'
-        user3 = provider.remote_authenticate("a_username", "pass")
+        result3 = provider.remote_authenticate("a_username", "pass")
+        user3 = result3.patron_data
         assert isinstance(user3, PatronData)
         assert "a" == user3.authorization_identifier
 
-        user4 = provider.remote_authenticate("b_username", "pass")
+        result4 = provider.remote_authenticate("b_username", "pass")
+        user4 = result4.patron_data
         assert isinstance(user4, PatronData)
         assert "b" == user4.authorization_identifier
 
         # The main user can still authenticate too.
-        user5 = provider.remote_authenticate("barcode", "pass")
+        result5 = provider.remote_authenticate("barcode", "pass")
+        user5 = result5.patron_data
         assert isinstance(user5, PatronData)
         assert "barcode" == user5.authorization_identifier
 

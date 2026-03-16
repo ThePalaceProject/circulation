@@ -28,7 +28,6 @@ from palace.manager.integration.patron_auth.sip2.provider import (
     SIP2AuthenticationProvider,
     SIP2LibrarySettings,
     SIP2Settings,
-    _sip2_thread_local,
 )
 from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
@@ -229,7 +228,8 @@ class TestSIP2AuthenticationProvider:
         # Some examples taken from a Sierra SIP API.
         client.queue_response(self.sierra_valid_login)
         client.queue_response(self.end_session_response)
-        patrondata = provider.remote_authenticate("user", "pass")
+        result = provider.remote_authenticate("user", "pass")
+        patrondata = result.patron_data
         assert isinstance(patrondata, PatronData)
         assert "12345" == patrondata.authorization_identifier
         assert "foo@example.com" == patrondata.email_address
@@ -241,7 +241,7 @@ class TestSIP2AuthenticationProvider:
 
         client.queue_response(self.sierra_invalid_login)
         client.queue_response(self.end_session_response)
-        assert provider.remote_authenticate("user", "pass") is None
+        assert provider.remote_authenticate("user", "pass").patron_data is None
 
         # Since Sierra provides both the patron's fine amount and the
         # maximum allowable amount, we can determine just by looking
@@ -249,14 +249,16 @@ class TestSIP2AuthenticationProvider:
         # fines.
         client.queue_response(self.sierra_excessive_fines)
         client.queue_response(self.end_session_response)
-        patrondata = provider.remote_authenticate("user", "pass")
+        result = provider.remote_authenticate("user", "pass")
+        patrondata = result.patron_data
         assert isinstance(patrondata, PatronData)
         assert PatronData.EXCESSIVE_FINES == patrondata.block_reason
 
         # A patron with an expired card.
         client.queue_response(self.evergreen_expired_card)
         client.queue_response(self.end_session_response)
-        patrondata = provider.remote_authenticate("user", "pass")
+        result = provider.remote_authenticate("user", "pass")
+        patrondata = result.patron_data
         assert isinstance(patrondata, PatronData)
         assert "12345" == patrondata.authorization_identifier
         # SIP extension field XI becomes sipserver_internal_id which
@@ -270,7 +272,8 @@ class TestSIP2AuthenticationProvider:
         # A patron with excessive fines
         client.queue_response(self.evergreen_excessive_fines)
         client.queue_response(self.end_session_response)
-        patrondata = provider.remote_authenticate("user", "pass")
+        result = provider.remote_authenticate("user", "pass")
+        patrondata = result.patron_data
         assert isinstance(patrondata, PatronData)
         assert "12345" == patrondata.authorization_identifier
         assert "863718" == patrondata.permanent_id
@@ -292,20 +295,23 @@ class TestSIP2AuthenticationProvider:
         # still borrow books.
         client.queue_response(self.evergreen_hold_privileges_denied)
         client.queue_response(self.end_session_response)
-        patrondata = provider.remote_authenticate("user", "pass")
+        result = provider.remote_authenticate("user", "pass")
+        patrondata = result.patron_data
         assert isinstance(patrondata, PatronData)
         assert PatronData.NO_VALUE == patrondata.block_reason
 
         client.queue_response(self.evergreen_card_reported_lost)
         client.queue_response(self.end_session_response)
-        patrondata = provider.remote_authenticate("user", "pass")
+        result = provider.remote_authenticate("user", "pass")
+        patrondata = result.patron_data
         assert isinstance(patrondata, PatronData)
         assert PatronData.CARD_REPORTED_LOST == patrondata.block_reason
 
         # Some examples taken from a Polaris instance.
         client.queue_response(self.polaris_valid_pin)
         client.queue_response(self.end_session_response)
-        patrondata = provider.remote_authenticate("user", "pass")
+        result = provider.remote_authenticate("user", "pass")
+        patrondata = result.patron_data
         assert isinstance(patrondata, PatronData)
         assert "25891000331441" == patrondata.authorization_identifier
         assert "foo@bar.com" == patrondata.email_address
@@ -315,18 +321,20 @@ class TestSIP2AuthenticationProvider:
 
         client.queue_response(self.polaris_wrong_pin)
         client.queue_response(self.end_session_response)
-        patrondata = provider.remote_authenticate("user", "pass")
-        assert patrondata is None
+        result = provider.remote_authenticate("user", "pass")
+        assert result.patron_data is None
 
         client.queue_response(self.polaris_expired_card)
         client.queue_response(self.end_session_response)
-        patrondata = provider.remote_authenticate("user", "pass")
+        result = provider.remote_authenticate("user", "pass")
+        patrondata = result.patron_data
         assert isinstance(patrondata, PatronData)
         assert datetime(2016, 10, 25, 23, 59, 59) == patrondata.authorization_expires
 
         client.queue_response(self.polaris_excess_fines)
         client.queue_response(self.end_session_response)
-        patrondata = provider.remote_authenticate("user", "pass")
+        result = provider.remote_authenticate("user", "pass")
+        patrondata = result.patron_data
         assert isinstance(patrondata, PatronData)
         assert 11.50 == patrondata.fines
 
@@ -335,15 +343,13 @@ class TestSIP2AuthenticationProvider:
         # valid_patron_password='N' when that happens.
         client.queue_response(self.polaris_no_such_patron)
         client.queue_response(self.end_session_response)
-        patrondata = provider.remote_authenticate("user", "pass")
-        assert patrondata is None
+        assert provider.remote_authenticate("user", "pass").patron_data is None
 
         # And once on an ILS that leaves valid_patron_password blank
         # when that happens.
         client.queue_response(self.tlc_no_such_patron)
         client.queue_response(self.end_session_response)
-        patrondata = provider.remote_authenticate("user", "pass")
-        assert patrondata is None
+        assert provider.remote_authenticate("user", "pass").patron_data is None
 
     def test_remote_authenticate_no_password(
         self,
@@ -358,7 +364,8 @@ class TestSIP2AuthenticationProvider:
         # This Evergreen instance doesn't use passwords.
         client.queue_response(self.evergreen_active_user)
         client.queue_response(self.end_session_response)
-        patrondata = provider.remote_authenticate("user", None)
+        result = provider.remote_authenticate("user", None)
+        patrondata = result.patron_data
         assert isinstance(patrondata, PatronData)
         assert "12345" == patrondata.authorization_identifier
         assert "863715" == patrondata.permanent_id
@@ -370,7 +377,8 @@ class TestSIP2AuthenticationProvider:
         # If a password is specified, it is not sent over the wire.
         client.queue_response(self.evergreen_active_user)
         client.queue_response(self.end_session_response)
-        patrondata = provider.remote_authenticate("user2", "some password")
+        result = provider.remote_authenticate("user2", "some password")
+        patrondata = result.patron_data
         assert isinstance(patrondata, PatronData)
         assert "12345" == patrondata.authorization_identifier
         request = client.requests[-1]
@@ -395,7 +403,8 @@ class TestSIP2AuthenticationProvider:
         # This patron has the CORRECT location.
         client.queue_response(self.evergreen_patron_with_location)
         client.queue_response(self.end_session_response)
-        patrondata = provider.remote_authenticate("user", "pass")
+        result = provider.remote_authenticate("user", "pass")
+        patrondata = result.patron_data
         assert isinstance(patrondata, PatronData)
         patrondata = provider.enforce_library_identifier_restriction(patrondata)
         assert isinstance(patrondata, PatronData)
@@ -404,7 +413,8 @@ class TestSIP2AuthenticationProvider:
         # This patron does NOT have an associated location.
         client.queue_response(self.evergreen_patron_wo_location)
         client.queue_response(self.end_session_response)
-        patrondata = provider.remote_authenticate("user", "pass")
+        result = provider.remote_authenticate("user", "pass")
+        patrondata = result.patron_data
         assert isinstance(patrondata, PatronData)
         with pytest.raises(ProblemDetailException) as exc:
             provider.enforce_library_identifier_restriction(patrondata)
@@ -415,7 +425,8 @@ class TestSIP2AuthenticationProvider:
         # This patron has the WRONG location.
         client.queue_response(self.evergreen_patron_with_wrong_loc)
         client.queue_response(self.end_session_response)
-        patrondata = provider.remote_authenticate("user", "pass")
+        result = provider.remote_authenticate("user", "pass")
+        patrondata = result.patron_data
         assert isinstance(patrondata, PatronData)
         with pytest.raises(ProblemDetailException) as exc:
             provider.enforce_library_identifier_restriction(patrondata)
@@ -442,7 +453,8 @@ class TestSIP2AuthenticationProvider:
         # as opposed to the CP850 version.
         client.queue_response(self.sierra_valid_login_utf8)
         client.queue_response(self.end_session_response)
-        patrondata = provider.remote_authenticate("user", "pass")
+        result = provider.remote_authenticate("user", "pass")
+        patrondata = result.patron_data
 
         # We're able to parse the message from the server and parse
         # out patron data, including the É character, with the proper
@@ -474,10 +486,11 @@ class TestSIP2AuthenticationProvider:
         )
         provider = create_provider(client=CannotConnect, settings=settings)
 
-        response = provider.remote_authenticate(
+        result = provider.remote_authenticate(
             "username",
             "password",
         )
+        response = result.patron_data
 
         assert isinstance(response, ProblemDetail)
         assert response.status_code == INVALID_CREDENTIALS.status_code
@@ -505,10 +518,11 @@ class TestSIP2AuthenticationProvider:
         )
         provider = create_provider(client=CannotSend, settings=settings)
 
-        response = provider.remote_authenticate(
+        result = provider.remote_authenticate(
             "username",
             "password",
         )
+        response = result.patron_data
 
         assert isinstance(response, ProblemDetail)
         assert response.status_code == INVALID_CREDENTIALS.status_code
@@ -1011,25 +1025,16 @@ class TestSIP2AuthenticateWithBlockingRules:
     ``False``, or expressions such as ``{fines} > 10``.
 
     **Test isolation**: the tests that patch ``_do_authenticate`` bypass
-    ``remote_authenticate``, so the SIP2 thread-local cache is never populated
-    by a real SIP2 call.  In those tests the provider falls back to
-    ``build_runtime_values_from_patron``.  Tests that want to exercise the
-    full SIP2-response path set ``_sip2_thread_local.last_info`` directly
-    (or patch ``remote_authenticate``).
+    ``remote_authenticate``, so extra_context is empty and the provider falls
+    back to ``build_runtime_values_from_patron``.  Tests that want to exercise
+    the full SIP2-response path pass the SIP2 dict as the second element of
+    the ``_do_authenticate`` return tuple.
     """
 
     _PATCH_TARGET = (
         "palace.manager.api.authentication.basic."
         "BasicAuthenticationProvider._do_authenticate"
     )
-
-    @pytest.fixture(autouse=True)
-    def _clear_sip2_thread_local(self):
-        """Ensure the SIP2 thread-local cache is clean before and after every
-        test so stale data from a previous test cannot affect results."""
-        _sip2_thread_local.last_info = None
-        yield
-        _sip2_thread_local.last_info = None
 
     def test_authenticate_blocked_when_rule_is_true(
         self,
@@ -1046,7 +1051,7 @@ class TestSIP2AuthenticateWithBlockingRules:
         provider = create_provider(library_settings=library_settings)
 
         mock_patron = MagicMock(spec=Patron)
-        with patch(self._PATCH_TARGET, return_value=mock_patron):
+        with patch(self._PATCH_TARGET, return_value=(mock_patron, {})):
             result = provider.authenticate(
                 MagicMock(), {"username": "u", "password": "p"}
             )
@@ -1067,7 +1072,7 @@ class TestSIP2AuthenticateWithBlockingRules:
         provider = create_provider(library_settings=library_settings)
 
         mock_patron = MagicMock(spec=Patron)
-        with patch(self._PATCH_TARGET, return_value=mock_patron):
+        with patch(self._PATCH_TARGET, return_value=(mock_patron, {})):
             result = provider.authenticate(
                 MagicMock(), {"username": "u", "password": "p"}
             )
@@ -1083,7 +1088,7 @@ class TestSIP2AuthenticateWithBlockingRules:
         assert provider.patron_blocking_rules == []
 
         mock_patron = MagicMock(spec=Patron)
-        with patch(self._PATCH_TARGET, return_value=mock_patron):
+        with patch(self._PATCH_TARGET, return_value=(mock_patron, {})):
             result = provider.authenticate(
                 MagicMock(), {"username": "u", "password": "p"}
             )
@@ -1101,7 +1106,7 @@ class TestSIP2AuthenticateWithBlockingRules:
         )
         provider = create_provider(library_settings=library_settings)
 
-        with patch(self._PATCH_TARGET, return_value=None):
+        with patch(self._PATCH_TARGET, return_value=(None, {})):
             result = provider.authenticate(
                 MagicMock(), {"username": "u", "password": "p"}
             )
@@ -1121,7 +1126,7 @@ class TestSIP2AuthenticateWithBlockingRules:
         provider = create_provider(library_settings=library_settings)
 
         base_problem = INVALID_CREDENTIALS.detailed("Server error.")
-        with patch(self._PATCH_TARGET, return_value=base_problem):
+        with patch(self._PATCH_TARGET, return_value=(base_problem, {})):
             result = provider.authenticate(
                 MagicMock(), {"username": "u", "password": "p"}
             )
@@ -1170,7 +1175,7 @@ class TestSIP2AuthenticateWithBlockingRules:
         mock_patron = MagicMock(spec=Patron)
         mock_patron.fines = None
         mock_patron.external_type = None
-        with patch(self._PATCH_TARGET, return_value=mock_patron):
+        with patch(self._PATCH_TARGET, return_value=(mock_patron, {})):
             result = provider.authenticate(
                 MagicMock(), {"username": "u", "password": "p"}
             )
@@ -1193,7 +1198,7 @@ class TestSIP2AuthenticateWithBlockingRules:
         mock_patron = MagicMock(spec=Patron)
         mock_patron.fines = None
         mock_patron.external_type = None
-        with patch(self._PATCH_TARGET, return_value=mock_patron):
+        with patch(self._PATCH_TARGET, return_value=(mock_patron, {})):
             result = provider.authenticate(
                 MagicMock(), {"username": "u", "password": "p"}
             )
@@ -1229,7 +1234,7 @@ class TestSIP2AuthenticateWithBlockingRules:
         mock_patron = MagicMock(spec=Patron)
         mock_patron.fines = None
         mock_patron.external_type = None
-        with patch(self._PATCH_TARGET, return_value=mock_patron):
+        with patch(self._PATCH_TARGET, return_value=(mock_patron, {})):
             result = provider.authenticate(
                 MagicMock(), {"username": "u", "password": "p"}
             )
@@ -1250,7 +1255,7 @@ class TestSIP2AuthenticateWithBlockingRules:
         mock_patron = MagicMock(spec=Patron)
         mock_patron.fines = None
         mock_patron.external_type = None
-        with patch(self._PATCH_TARGET, return_value=mock_patron):
+        with patch(self._PATCH_TARGET, return_value=(mock_patron, {})):
             result = provider_b.authenticate(
                 MagicMock(), {"username": "u", "password": "p"}
             )
@@ -1278,7 +1283,7 @@ class TestSIP2AuthenticateWithBlockingRules:
         mock_patron.fines = None
         mock_patron.external_type = None
 
-        with patch(self._PATCH_TARGET, return_value=mock_patron):
+        with patch(self._PATCH_TARGET, return_value=(mock_patron, {})):
             result_a = provider_a.authenticate(
                 MagicMock(), {"username": "u", "password": "p"}
             )
@@ -1297,7 +1302,7 @@ class TestSIP2AuthenticateWithBlockingRules:
     ) -> None:
         """A rule using {fines} blocks a patron with high fines (patron-fallback path).
 
-        ``_do_authenticate`` is patched so the SIP2 thread-local is empty;
+        ``_do_authenticate`` is patched with empty extra_context;
         ``fines`` is resolved via ``build_runtime_values_from_patron`` from the
         Patron model's ``fines`` attribute.
         """
@@ -1315,7 +1320,7 @@ class TestSIP2AuthenticateWithBlockingRules:
         mock_patron = MagicMock(spec=Patron)
         mock_patron.fines = "25.00"
         mock_patron.external_type = None
-        with patch(self._PATCH_TARGET, return_value=mock_patron):
+        with patch(self._PATCH_TARGET, return_value=(mock_patron, {})):
             result = provider.authenticate(
                 MagicMock(), {"username": "u", "password": "p"}
             )
@@ -1342,7 +1347,7 @@ class TestSIP2AuthenticateWithBlockingRules:
         mock_patron = MagicMock(spec=Patron)
         mock_patron.fines = "3.50"
         mock_patron.external_type = None
-        with patch(self._PATCH_TARGET, return_value=mock_patron):
+        with patch(self._PATCH_TARGET, return_value=(mock_patron, {})):
             result = provider.authenticate(
                 MagicMock(), {"username": "u", "password": "p"}
             )
@@ -1358,7 +1363,7 @@ class TestSIP2AuthenticateWithBlockingRules:
         create_provider: Callable[..., SIP2AuthenticationProvider],
         create_library_settings: Callable[..., SIP2LibrarySettings],
     ) -> None:
-        """When the SIP2 thread-local carries the full response dict, any raw
+        """When extra_context carries the full SIP2 response dict, any raw
         SIP2 field can be referenced in a blocking rule.
 
         This simulates what happens at runtime when ``remote_authenticate``
@@ -1378,13 +1383,15 @@ class TestSIP2AuthenticateWithBlockingRules:
         provider = create_provider(library_settings=library_settings)
         mock_patron = MagicMock(spec=Patron)
 
-        # Simulate the SIP2 info that remote_authenticate would have cached.
-        _sip2_thread_local.last_info = {
+        sip2_info = {
             "sipserver_patron_class": "restricted",
             "fee_amount": "0.00",
         }
 
-        with patch(self._PATCH_TARGET, return_value=mock_patron):
+        with patch(
+            self._PATCH_TARGET,
+            return_value=(mock_patron, sip2_info),
+        ):
             result = provider.authenticate(
                 MagicMock(), {"username": "u", "password": "p"}
             )
@@ -1398,7 +1405,7 @@ class TestSIP2AuthenticateWithBlockingRules:
         create_provider: Callable[..., SIP2AuthenticationProvider],
         create_library_settings: Callable[..., SIP2LibrarySettings],
     ) -> None:
-        """When the SIP2 thread-local is populated and the rule evaluates False,
+        """When extra_context is populated and the rule evaluates False,
         the patron is allowed through unchanged."""
         library_settings = create_library_settings(
             patron_blocking_rules=[
@@ -1412,12 +1419,15 @@ class TestSIP2AuthenticateWithBlockingRules:
         provider = create_provider(library_settings=library_settings)
         mock_patron = MagicMock(spec=Patron)
 
-        _sip2_thread_local.last_info = {
+        sip2_info = {
             "sipserver_patron_class": "adult",
             "fee_amount": "0.00",
         }
 
-        with patch(self._PATCH_TARGET, return_value=mock_patron):
+        with patch(
+            self._PATCH_TARGET,
+            return_value=(mock_patron, sip2_info),
+        ):
             result = provider.authenticate(
                 MagicMock(), {"username": "u", "password": "p"}
             )
@@ -1429,7 +1439,7 @@ class TestSIP2AuthenticateWithBlockingRules:
         create_provider: Callable[..., SIP2AuthenticationProvider],
         create_library_settings: Callable[..., SIP2LibrarySettings],
     ) -> None:
-        """When the SIP2 thread-local is populated, {fines} is derived from the
+        """When extra_context is populated, {fines} is derived from the
         ``fee_amount`` field of the SIP2 response via ``build_values_from_sip2_info``
         rather than from the Patron DB model.
 
@@ -1451,10 +1461,12 @@ class TestSIP2AuthenticateWithBlockingRules:
         mock_patron.fines = None
         mock_patron.external_type = None
 
-        # SIP2 server returns "$25.00".
-        _sip2_thread_local.last_info = {"fee_amount": "$25.00"}
+        sip2_info = {"fee_amount": "$25.00"}
 
-        with patch(self._PATCH_TARGET, return_value=mock_patron):
+        with patch(
+            self._PATCH_TARGET,
+            return_value=(mock_patron, sip2_info),
+        ):
             result = provider.authenticate(
                 MagicMock(), {"username": "u", "password": "p"}
             )
@@ -1467,7 +1479,7 @@ class TestSIP2AuthenticateWithBlockingRules:
         create_provider: Callable[..., SIP2AuthenticationProvider],
         create_library_settings: Callable[..., SIP2LibrarySettings],
     ) -> None:
-        """When the SIP2 thread-local is populated, its ``fee_amount`` is used
+        """When extra_context is populated, its ``fee_amount`` is used
         to compute ``{fines}`` even when the Patron model has a different value."""
         library_settings = create_library_settings(
             patron_blocking_rules=[
@@ -1484,10 +1496,12 @@ class TestSIP2AuthenticateWithBlockingRules:
         mock_patron.fines = "50.00"
         mock_patron.external_type = None
 
-        # SIP2 response says only $3.00 — below the threshold.
-        _sip2_thread_local.last_info = {"fee_amount": "$3.00"}
+        sip2_info = {"fee_amount": "$3.00"}
 
-        with patch(self._PATCH_TARGET, return_value=mock_patron):
+        with patch(
+            self._PATCH_TARGET,
+            return_value=(mock_patron, sip2_info),
+        ):
             result = provider.authenticate(
                 MagicMock(), {"username": "u", "password": "p"}
             )

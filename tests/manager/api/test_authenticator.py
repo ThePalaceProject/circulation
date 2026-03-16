@@ -33,6 +33,7 @@ from palace.manager.api.authentication.basic import (
     Keyboards,
     LibraryIdenfitierRestrictionField,
     LibraryIdentifierRestriction,
+    RemoteAuthResult,
 )
 from palace.manager.api.authentication.basic_token import (
     BasicTokenAuthenticationProvider,
@@ -154,7 +155,7 @@ class MockBasic(
         return "login.png"
 
     def remote_authenticate(self, username, password):
-        return self.patrondata
+        return RemoteAuthResult(patron_data=self.patrondata)
 
     def remote_patron_lookup(self, patrondata):
         return self.lookup_patrondata
@@ -1894,7 +1895,9 @@ class TestBasicAuthenticationProvider:
         # more than once. This test makes sure that if we have a complete patrondata from remote_authenticate,
         # or from enforce_library_identifier_restriction, we don't call remote_patron_lookup.
         provider = mock_basic()
-        provider.remote_authenticate = MagicMock(return_value=auth_return)
+        provider.remote_authenticate = MagicMock(
+            return_value=RemoteAuthResult(patron_data=auth_return)
+        )
         if isinstance(enforce_return, ProblemDetail):
             provider.enforce_library_identifier_restriction = MagicMock(
                 side_effect=ProblemDetailException(enforce_return)

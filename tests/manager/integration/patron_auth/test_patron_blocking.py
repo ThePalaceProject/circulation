@@ -409,13 +409,13 @@ class TestSupportsPatronBlockingRulesFlag:
         and the Patron object is returned unchanged."""
         mock_patron = MagicMock(spec=Patron)
 
-        with patch(self._PATCH_TARGET, return_value=mock_patron):
+        with patch(self._PATCH_TARGET, return_value=(mock_patron, {})):
             provider = MagicMock(spec=BasicAuthenticationProvider)
             provider.supports_patron_blocking_rules = False
             provider.patron_blocking_rules = [
                 PatronBlockingRule(name="block-all", rule="True")
             ]
-            provider._do_authenticate = MagicMock(return_value=mock_patron)
+            provider._do_authenticate = MagicMock(return_value=(mock_patron, {}))
             result = BasicAuthenticationProvider.authenticate(provider, MagicMock(), {})
 
         assert result is mock_patron
@@ -432,7 +432,7 @@ class TestSupportsPatronBlockingRulesFlag:
                 name="block-all", rule="True", message="Blocked by policy."
             )
         ]
-        provider._do_authenticate = MagicMock(return_value=mock_patron)
+        provider._do_authenticate = MagicMock(return_value=(mock_patron, {}))
         provider.log = MagicMock()
 
         result = BasicAuthenticationProvider.authenticate(provider, MagicMock(), {})
@@ -450,7 +450,7 @@ class TestSupportsPatronBlockingRulesFlag:
         provider.patron_blocking_rules = [
             PatronBlockingRule(name="block-all", rule="True")
         ]
-        provider._do_authenticate = MagicMock(return_value=None)
+        provider._do_authenticate = MagicMock(return_value=(None, {}))
 
         result = BasicAuthenticationProvider.authenticate(provider, MagicMock(), {})
 
@@ -466,7 +466,7 @@ class TestSupportsPatronBlockingRulesFlag:
         provider.patron_blocking_rules = [
             PatronBlockingRule(name="block-all", rule="True")
         ]
-        provider._do_authenticate = MagicMock(return_value=INVALID_CREDENTIALS)
+        provider._do_authenticate = MagicMock(return_value=(INVALID_CREDENTIALS, {}))
 
         result = BasicAuthenticationProvider.authenticate(provider, MagicMock(), {})
 
@@ -481,7 +481,7 @@ class TestSupportsPatronBlockingRulesFlag:
         provider.patron_blocking_rules = [
             PatronBlockingRule(name="never-block", rule="False")
         ]
-        provider._do_authenticate = MagicMock(return_value=mock_patron)
+        provider._do_authenticate = MagicMock(return_value=(mock_patron, {}))
         provider.log = MagicMock()
 
         result = BasicAuthenticationProvider.authenticate(provider, MagicMock(), {})

@@ -5,6 +5,7 @@ from palace.manager.api.authentication.basic import (
     BasicAuthenticationProvider,
     BasicAuthProviderLibrarySettings,
     BasicAuthProviderSettings,
+    RemoteAuthResult,
 )
 from palace.manager.integration.settings import (
     FormFieldType,
@@ -96,15 +97,15 @@ class SimpleAuthenticationProvider(
 
     def remote_authenticate(
         self, username: str, password: str | None
-    ) -> PatronData | None:
+    ) -> RemoteAuthResult:
         """Fake 'remote' authentication."""
         if not username or (self.collects_password and not password):
-            return None
+            return RemoteAuthResult(patron_data=None)
 
         if not self.valid_patron(username, password):
-            return None
+            return RemoteAuthResult(patron_data=None)
 
-        return self.generate_patrondata(username)
+        return RemoteAuthResult(patron_data=self.generate_patrondata(username))
 
     @classmethod
     def generate_patrondata(cls, authorization_identifier: str) -> PatronData:

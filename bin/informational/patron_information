@@ -30,8 +30,8 @@ class PatronInformationScript(LibraryInputScript):
         auth = LibraryAuthenticator.from_config(
             _db, args.libraries[0]
         ).basic_auth_provider
-        patron_data = auth.remote_authenticate(args.barcode, args.pin)
-        self.explain(patron_data)
+        result = auth.remote_authenticate(args.barcode, args.pin)
+        self.explain(result.patron_data)
 
     def explain(self, patron_data):
         if patron_data is None or patron_data is False:
