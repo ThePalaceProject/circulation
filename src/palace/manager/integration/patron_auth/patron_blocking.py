@@ -22,7 +22,7 @@ from palace.manager.api.authentication.patron_blocking_rules.rule_engine import 
     evaluate_rule_expression_strict_bool,
     get_evaluator,
 )
-from palace.manager.api.problem_details import BLOCKED_CREDENTIALS
+from palace.manager.api.problem_details import BLOCKED_BY_POLICY
 from palace.manager.util import MoneyUtility
 from palace.manager.util.problem_detail import ProblemDetail
 
@@ -152,9 +152,9 @@ def check_patron_blocking_rules_with_evaluator(
                     type(exc.__cause__).__name__ if exc.__cause__ else "unknown",
                     exc,
                 )
-            return BLOCKED_CREDENTIALS.detailed(_DEFAULT_BLOCK_MESSAGE)
+            return BLOCKED_BY_POLICY.detailed(_DEFAULT_BLOCK_MESSAGE)
 
         if blocked:
-            return BLOCKED_CREDENTIALS.detailed(rule.message or _DEFAULT_BLOCK_MESSAGE)
+            return BLOCKED_BY_POLICY.detailed(rule.message or _DEFAULT_BLOCK_MESSAGE)
 
     return None

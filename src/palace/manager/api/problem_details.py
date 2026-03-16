@@ -34,11 +34,18 @@ EXPIRED_CREDENTIALS = pd(
     _("Your library card has expired. You need to renew it."),
 )
 
-BLOCKED_CREDENTIALS = pd(
+SUSPENDED_CREDENTIALS = pd(
     "http://librarysimplified.org/terms/problem/credentials-suspended",
     403,
     _("Suspended credentials."),
     _("Your library card has been suspended. Contact your branch library."),
+)
+
+BLOCKED_BY_POLICY = pd(
+    "http://librarysimplified.org/terms/problem/credentials-blocked-by-policy",
+    403,
+    _("Blocked by library policy."),
+    _("Your access is restricted by library policy. Contact your branch library."),
 )
 
 NO_LICENSES = pd(
