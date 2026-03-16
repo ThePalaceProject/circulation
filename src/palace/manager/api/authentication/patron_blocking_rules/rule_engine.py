@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import threading
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import date
@@ -192,14 +193,44 @@ DEFAULT_ALLOWED_FUNCTIONS: dict[str, Callable[..., Any]] = {
 }
 
 
+_evaluator_local: threading.local = threading.local()
+
+
+def get_evaluator(
+    allowed_functions: dict[str, Callable[..., Any]] | None = None,
+) -> EvalWithCompoundTypes:
+    """Return a per-thread evaluator for rule expression evaluation.
+
+    Admin validation and runtime blocking both use this so the evaluator
+    lifecycle is unified.  The evaluator is cached per thread and reused;
+    :func:`validate_rule_expression` and :func:`evaluate_rule_expression_strict_bool`
+    clear ``evaluator.names`` after each call so no data leaks between rules.
+
+    :param allowed_functions: Override the function whitelist.  Pass an empty
+        dict to disallow all functions.  Only the first call per thread uses
+        this; subsequent calls ignore it.
+    :returns: A configured :class:`~simpleeval.EvalWithCompoundTypes`.
+    """
+    evaluator = getattr(_evaluator_local, "evaluator", None)
+    if evaluator is None:
+        functions = (
+            allowed_functions
+            if allowed_functions is not None
+            else DEFAULT_ALLOWED_FUNCTIONS
+        )
+        evaluator = EvalWithCompoundTypes(functions=functions, names={})
+        _evaluator_local.evaluator = evaluator
+    return _evaluator_local.evaluator
+
+
 def make_evaluator(
     allowed_functions: dict[str, Callable[..., Any]] | None = None,
 ) -> EvalWithCompoundTypes:
-    """Create a locked-down :class:`~simpleeval.EvalWithCompoundTypes` instance.
+    """Create a fresh locked-down :class:`~simpleeval.EvalWithCompoundTypes`.
 
-    Only the functions listed in *allowed_functions* (defaulting to
-    :data:`DEFAULT_ALLOWED_FUNCTIONS`) are available in expressions.  No
-    additional names or builtins are accessible.
+    Prefer :func:`get_evaluator` for production use so admin and runtime share
+    the same per-thread evaluator.  Use this when you need an isolated
+    evaluator (e.g. tests, or custom function sets).
 
     :param allowed_functions: Override the function whitelist.  Pass an empty
         dict to disallow all functions.
@@ -252,7 +283,8 @@ def validate_rule_expression(
         trial evaluation.  For live validation this is the dict returned by
         ``fetch_live_rule_validation_values``; it contains all raw SIP2
         response fields plus the normalised ``fines`` key.
-    :param evaluator: A locked-down evaluator from :func:`make_evaluator`.
+    :param evaluator: A locked-down evaluator from :func:`get_evaluator` or
+        :func:`make_evaluator`.
     :raises RuleValidationError: On any validation failure.
     """
     if not expr or not expr.strip():
@@ -309,7 +341,8 @@ def evaluate_rule_expression_strict_bool(
 
     :param expr: The raw rule expression string (same as stored).
     :param values: Mapping of placeholder key → runtime value.
-    :param evaluator: A locked-down evaluator from :func:`make_evaluator`.
+    :param evaluator: A locked-down evaluator from :func:`get_evaluator` or
+        :func:`make_evaluator`.
     :param rule_name: Optional identifier for the rule, included in error messages.
     :returns: ``True`` if the patron should be *blocked*, ``False`` otherwise.
     :raises RuleEvaluationError: On missing placeholders, parse/eval errors, or

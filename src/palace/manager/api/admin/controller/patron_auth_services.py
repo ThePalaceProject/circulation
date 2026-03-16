@@ -20,7 +20,7 @@ from palace.manager.api.authentication.base import AuthenticationProviderType
 from palace.manager.api.authentication.basic import BasicAuthenticationProvider
 from palace.manager.api.authentication.patron_blocking_rules.rule_engine import (
     RuleValidationError,
-    make_evaluator,
+    get_evaluator,
     validate_rule_expression,
 )
 from palace.manager.integration.goals import Goals
@@ -141,7 +141,7 @@ class PatronAuthServicesController(
         # any SIP2 failure (missing test_identifier, network error, etc.).
         live_values = protocol_class.fetch_live_rule_validation_values(settings)
 
-        evaluator = make_evaluator()
+        evaluator = get_evaluator()
         for i, rule in enumerate(library_settings.patron_blocking_rules):
             try:
                 validate_rule_expression(rule.rule, live_values, evaluator)
@@ -204,7 +204,7 @@ class PatronAuthServicesController(
             # missing test_identifier, network error, or SIP2 error response.
             live_values = protocol_class.fetch_live_rule_validation_values(settings)
 
-            evaluator = make_evaluator()
+            evaluator = get_evaluator()
             try:
                 validate_rule_expression(rule_expr, live_values, evaluator)
             except RuleValidationError as exc:
