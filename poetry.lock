@@ -5478,14 +5478,14 @@ types-setuptools = "*"
 
 [[package]]
 name = "types-croniter"
-version = "6.0.0.20250809"
+version = "6.2.2.20260316"
 description = "Typing stubs for croniter"
 optional = false
-python-versions = ">=3.9"
+python-versions = ">=3.10"
 groups = ["dev"]
 files = [
-    {file = "types_croniter-6.0.0.20250809-py3-none-any.whl", hash = "sha256:d9f53f3e837eb6af509e2090fd2f5bb29b38425dd78f77d7b3bf37ccd2b2bf93"},
-    {file = "types_croniter-6.0.0.20250809.tar.gz", hash = "sha256:c829295d4d65eaddcfafec905b0fbab59e72c3c91ee934a4d504dcafad79ff95"},
+    {file = "types_croniter-6.2.2.20260316-py3-none-any.whl", hash = "sha256:9c0339d7615deabbc2ca9156048f621e417d4e43886d2b80de2d8a685914bd45"},
+    {file = "types_croniter-6.2.2.20260316.tar.gz", hash = "sha256:ff569332e972f1f71c292ca6a10773ebf9f5ddd6d123595de9b6b03ccf89b9bd"},
 ]
 
 [[package]]
