@@ -24,9 +24,6 @@ from palace.manager.api.authentication.patron_blocking_rules.rule_engine import 
     validate_rule_expression,
 )
 from palace.manager.integration.goals import Goals
-from palace.manager.integration.patron_auth.sip2.provider import (
-    SIP2AuthenticationProvider,
-)
 from palace.manager.integration.settings import BaseSettings
 from palace.manager.sqlalchemy.listeners import site_configuration_has_changed
 from palace.manager.sqlalchemy.model.integration import (
@@ -130,9 +127,10 @@ class PatronAuthServicesController(
                 )
             )
 
-        # Live SIP2 rule validation — only runs for SIP2 integrations with rules.
+        # Live rule validation — only runs for integrations that support
+        # patron blocking rules and have rules configured.
         protocol_class = self.get_protocol_class(integration.parent.protocol)
-        if not issubclass(protocol_class, SIP2AuthenticationProvider):
+        if not getattr(protocol_class, "supports_patron_blocking_rules", False):
             return
         library_settings = protocol_class.library_settings_load(integration)
         if not library_settings.patron_blocking_rules:
@@ -195,9 +193,10 @@ class PatronAuthServicesController(
                 )
 
             protocol_class = self.get_protocol_class(integration.protocol)
-            if not issubclass(protocol_class, SIP2AuthenticationProvider):
+            if not getattr(protocol_class, "supports_patron_blocking_rules", False):
                 return INVALID_CONFIGURATION_OPTION.detailed(
-                    "Rule validation is only supported for SIP2 authentication services."
+                    "Rule validation is only supported for authentication "
+                    "services that support patron blocking rules."
                 )
 
             settings = protocol_class.settings_load(integration)
