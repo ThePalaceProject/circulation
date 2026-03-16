@@ -78,10 +78,6 @@ def build_runtime_values_from_patron(patron: Patron) -> dict[str, Any]:
     except Exception:
         values["patron_type"] = ""
 
-    # NOTE: "dob" is intentionally NOT included here yet.  Rules that
-    # reference {dob} will fail-closed (block) until a future version
-    # populates it from the patron record or SIP2 response.
-
     return values
 
 
