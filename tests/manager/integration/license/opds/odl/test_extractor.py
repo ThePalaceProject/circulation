@@ -14,7 +14,7 @@ from palace.manager.opds.odl.info import Checkouts, LicenseInfo, LicenseStatus
 from palace.manager.opds.odl.odl import License, LicenseMetadata, Publication
 from palace.manager.opds.odl.protection import Protection
 from palace.manager.opds.odl.terms import Terms
-from palace.manager.opds.opds2 import PublicationFeedNoValidation, StrictLink
+from palace.manager.opds.opds2 import Link, PublicationFeedNoValidation
 from palace.manager.opds.schema_org import Audience
 from palace.manager.sqlalchemy.constants import EditionConstants, MediaTypes
 from palace.manager.sqlalchemy.model.contributor import Contributor
@@ -30,15 +30,15 @@ class ODLExtractorTestFixture:
         self.license_identifier: str = "test-license-123"
         self.publication_identifier: str = "urn:isbn:9780306406157"
 
-    def license_links(self) -> list[StrictLink]:
+    def license_links(self) -> list[Link]:
         """Create standard license links for testing."""
         return [
-            StrictLink(
+            Link(
                 rel=rwpm.LinkRelations.self,
                 type=LicenseInfo.content_type(),
                 href="http://example.org/license",
             ),
-            StrictLink(
+            Link(
                 rel=opds2.AcquisitionLinkRelations.borrow,
                 type=LoanStatus.content_type(),
                 href="http://example.org/borrow",

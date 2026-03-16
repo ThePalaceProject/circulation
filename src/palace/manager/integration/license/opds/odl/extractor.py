@@ -652,7 +652,7 @@ class OPDS2WithODLExtractor[PublicationType: opds2.BasePublication](
 
     def _extract_opds2_formats(
         self,
-        links: Sequence[opds2.StrictLink],
+        links: Sequence[opds2.Link],
         rights_uri: str,
     ) -> list[FormatData]:
         """Find circulation formats in non open-access acquisition links.

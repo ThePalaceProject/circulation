@@ -28,7 +28,7 @@ from palace.manager.opds.types.link import (
     CompactCollection,
     validate_unique_links,
 )
-from palace.manager.opds.util import StrOrTuple, drop_if_falsy, obj_or_tuple_to_tuple
+from palace.manager.opds.util import drop_if_falsy, obj_or_tuple_to_tuple
 from palace.manager.util.datetime_helpers import utc_now
 
 
@@ -198,20 +198,6 @@ class Link(rwpm.Link):
     properties: LinkProperties = Field(default_factory=LinkProperties)
 
 
-class StrictLink(Link):
-    """
-    OPDS2 link with strict validation.
-
-    These links require that the rel and type fields are present.
-    """
-
-    rel: StrOrTuple[str]
-    type: str
-
-    alternate: CompactCollection[StrictLink] = Field(default_factory=CompactCollection)
-    children: CompactCollection[StrictLink] = Field(default_factory=CompactCollection)
-
-
 class TitleLink(Link):
     """
     OPDS2 link with title.
@@ -299,7 +285,7 @@ class BasePublication(BaseOpdsModel):
 
     metadata: PublicationMetadata
     images: CompactCollection[Link]
-    links: CompactCollection[StrictLink] = Field(default_factory=CompactCollection)
+    links: CompactCollection[Link] = Field(default_factory=CompactCollection)
 
     _validate_images = field_validator("images")(validate_images)
 
@@ -312,13 +298,13 @@ class Publication(BasePublication):
     https://github.com/opds-community/drafts/blob/main/schema/publication.schema.json
     """
 
-    links: Annotated[CompactCollection[StrictLink], Field(min_length=1)]
+    links: Annotated[CompactCollection[Link], Field(min_length=1)]
 
     @field_validator("links")
     @classmethod
     def validate_acquisition_link(
-        cls, value: CompactCollection[StrictLink]
-    ) -> CompactCollection[StrictLink]:
+        cls, value: CompactCollection[Link]
+    ) -> CompactCollection[Link]:
         """
         Must have at least one acquisition link.
 
@@ -364,7 +350,7 @@ class PublicationsGroup(BaseOpdsModel):
     """
 
     metadata: FeedMetadata
-    links: CompactCollection[StrictLink] = Field(default_factory=CompactCollection)
+    links: CompactCollection[Link] = Field(default_factory=CompactCollection)
     publications: Annotated[list[Publication], Field(min_length=1)]
 
     _validate_unique_links = field_validator("links")(validate_unique_links)
@@ -379,7 +365,7 @@ class NavigationGroup(BaseOpdsModel):
     """
 
     metadata: FeedMetadata
-    links: CompactCollection[StrictLink] = Field(default_factory=CompactCollection)
+    links: CompactCollection[Link] = Field(default_factory=CompactCollection)
     navigation: CompactCollection[TitleLink] = Field(..., min_length=1)
 
     _validate_unique_links = field_validator("links")(validate_unique_links)
@@ -399,7 +385,7 @@ class Feed(BaseOpdsModel):
         return "application/opds+json"
 
     metadata: FeedMetadata
-    links: CompactCollection[StrictLink]
+    links: CompactCollection[Link]
     navigation: CompactCollection[TitleLink] = Field(default_factory=CompactCollection)
     publications: list[Publication] = Field(default_factory=list)
     facets: list[Facet] = Field(default_factory=list)
@@ -458,7 +444,7 @@ class BasePublicationFeed[T](
         return "application/opds+json"
 
     metadata: FeedMetadata
-    links: CompactCollection[StrictLink]
+    links: CompactCollection[Link]
     publications: list[T]
 
     _validate_links = field_validator("links")(validate_self_link)
