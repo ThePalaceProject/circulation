@@ -84,3 +84,8 @@ src/palace/manager/core/_version.py
 
 # Celery beat schedule file
 celerybeat-schedule.db
+
+# Claude
+.claude/
+!.claude/settings.json
+CLAUDE.local.md
