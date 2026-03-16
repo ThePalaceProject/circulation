@@ -209,6 +209,11 @@ class BasicAuthProviderSettings(AuthProviderSettings):
 
 
 class BasicAuthProviderLibrarySettings(AuthProviderLibrarySettings):
+    """Library-scoped settings for basic auth providers."""
+
+    # Subclasses that support patron blocking rules (e.g. SIP2) override to True.
+    supports_patron_blocking_rules: ClassVar[bool] = False
+
     # When multiple libraries share an ILS, a person may be able to
     # authenticate with the ILS but not be considered a patron of
     # _this_ library. This setting contains the rule for determining
@@ -308,11 +313,22 @@ class BasicAuthProviderLibrarySettings(AuthProviderLibrarySettings):
         """Validate patron blocking rules: non-empty name/rule, no duplicate names,
         rule length <= 1000, and message length <= 1000.
 
+        Rejects rules when this settings class does not support blocking rules
+        (supports_patron_blocking_rules is False).
+
         Full expression validation (syntax, placeholder resolution, bool result)
         is deferred to admin-save time via a live SIP2 call in
         ``PatronAuthServicesController.library_integration_validation``, where
         real patron values are available.
         """
+        if rules and not cls.supports_patron_blocking_rules:
+            raise SettingsValidationError(
+                INVALID_CONFIGURATION_OPTION.detailed(
+                    "Patron blocking rules are not supported by this authentication "
+                    "provider. Rules are ignored at runtime."
+                )
+            )
+
         names_seen: set[str] = set()
         for i, rule in enumerate(rules):
             if not rule.name:

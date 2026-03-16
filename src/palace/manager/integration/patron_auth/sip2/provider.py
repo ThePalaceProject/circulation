@@ -206,6 +206,8 @@ class SIP2Settings(BasicAuthProviderSettings):
 
 
 class SIP2LibrarySettings(BasicAuthProviderLibrarySettings):
+    supports_patron_blocking_rules: ClassVar[bool] = True
+
     # Used as the SIP2 AO field.
     institution_id: Annotated[
         str | None,
