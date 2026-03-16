@@ -28,8 +28,9 @@ from palace.manager.api.authentication.base import (
     PatronLookupNotSupported,
 )
 from palace.manager.api.authentication.patron_blocking_rules.rule_engine import (
-    MAX_MESSAGE_LENGTH,
     MAX_RULE_LENGTH,
+    RuleValidationError,
+    validate_message,
 )
 from palace.manager.api.problem_details import (
     PATRON_OF_ANOTHER_LIBRARY,
@@ -343,14 +344,16 @@ class BasicAuthProviderLibrarySettings(AuthProviderLibrarySettings):
                     )
                 )
 
-            # Validate optional message length.
-            if rule.message is not None and len(rule.message) > MAX_MESSAGE_LENGTH:
-                raise SettingsValidationError(
-                    INVALID_CONFIGURATION_OPTION.detailed(
-                        f"Rule at index {i} ('{rule.name}'): message must not exceed "
-                        f"{MAX_MESSAGE_LENGTH} characters."
-                    )
-                )
+            # Validate optional message when provided.
+            if rule.message is not None:
+                try:
+                    validate_message(rule.message)
+                except RuleValidationError as exc:
+                    raise SettingsValidationError(
+                        INVALID_CONFIGURATION_OPTION.detailed(
+                            f"Rule at index {i} ('{rule.name}'): {exc.message}"
+                        )
+                    ) from exc
 
         return rules
 
