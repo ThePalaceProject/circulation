@@ -30,6 +30,7 @@ from palace.manager.integration.patron_auth.patron_blocking import (
 )
 from palace.manager.integration.patron_auth.sip2.provider import (
     SIP2AuthenticationProvider,
+    SIP2LibrarySettings,
 )
 from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.util.problem_detail import ProblemDetail
@@ -233,8 +234,17 @@ class TestBasicAuthLibrarySettingsBlockingRules:
         settings = BasicAuthProviderLibrarySettings()
         assert settings.patron_blocking_rules == []
 
+    def test_rules_rejected_when_provider_does_not_support(self) -> None:
+        """Providers that do not support blocking rules cannot have rules configured."""
+        with raises_problem_detail() as info:
+            BasicAuthProviderLibrarySettings(
+                patron_blocking_rules=[{"name": "r", "rule": "True"}]
+            )
+        assert info.value.detail is not None
+        assert "not supported" in info.value.detail.lower()
+
     def test_round_trip_with_valid_rules(self) -> None:
-        settings = BasicAuthProviderLibrarySettings(
+        settings = SIP2LibrarySettings(
             patron_blocking_rules=[
                 {"name": "block-all", "rule": "True", "message": "Sorry"},
                 {"name": "no-op", "rule": "False"},
@@ -254,7 +264,7 @@ class TestBasicAuthLibrarySettingsBlockingRules:
         assert "patron_blocking_rules" not in settings.model_dump()
 
     def test_model_dump_includes_non_empty_list(self) -> None:
-        settings = BasicAuthProviderLibrarySettings(
+        settings = SIP2LibrarySettings(
             patron_blocking_rules=[{"name": "r", "rule": "True"}]
         )
         dumped = settings.model_dump()
@@ -269,9 +279,7 @@ class TestBasicAuthLibrarySettingsBlockingRules:
 
     def test_validate_empty_name_raises(self) -> None:
         with raises_problem_detail() as info:
-            BasicAuthProviderLibrarySettings(
-                patron_blocking_rules=[{"name": "", "rule": "True"}]
-            )
+            SIP2LibrarySettings(patron_blocking_rules=[{"name": "", "rule": "True"}])
         assert info.value.detail is not None
         assert "index 0" in info.value.detail
         assert "'name' must not be empty" in info.value.detail
@@ -279,16 +287,14 @@ class TestBasicAuthLibrarySettingsBlockingRules:
     def test_validate_whitespace_only_name_raises(self) -> None:
         # str_strip_whitespace=True on PatronBlockingRule strips "   " to ""
         with raises_problem_detail() as info:
-            BasicAuthProviderLibrarySettings(
-                patron_blocking_rules=[{"name": "   ", "rule": "True"}]
-            )
+            SIP2LibrarySettings(patron_blocking_rules=[{"name": "   ", "rule": "True"}])
         assert info.value.detail is not None
         assert "index 0" in info.value.detail
         assert "'name' must not be empty" in info.value.detail
 
     def test_validate_empty_rule_raises(self) -> None:
         with raises_problem_detail() as info:
-            BasicAuthProviderLibrarySettings(
+            SIP2LibrarySettings(
                 patron_blocking_rules=[{"name": "valid-name", "rule": ""}]
             )
         assert info.value.detail is not None
@@ -297,7 +303,7 @@ class TestBasicAuthLibrarySettingsBlockingRules:
 
     def test_validate_duplicate_name_raises(self) -> None:
         with raises_problem_detail() as info:
-            BasicAuthProviderLibrarySettings(
+            SIP2LibrarySettings(
                 patron_blocking_rules=[
                     {"name": "same", "rule": "True"},
                     {"name": "same", "rule": "False"},
@@ -311,7 +317,7 @@ class TestBasicAuthLibrarySettingsBlockingRules:
     def test_validate_duplicate_at_higher_index(self) -> None:
         """The error message cites the index of the second occurrence."""
         with raises_problem_detail() as info:
-            BasicAuthProviderLibrarySettings(
+            SIP2LibrarySettings(
                 patron_blocking_rules=[
                     {"name": "a", "rule": "True"},
                     {"name": "b", "rule": "False"},
@@ -329,7 +335,7 @@ class TestBasicAuthLibrarySettingsBlockingRules:
         """rule text > 1000 characters is rejected at validation time."""
         long_rule = "True and " * 200  # well over 1000 chars
         with raises_problem_detail() as info:
-            BasicAuthProviderLibrarySettings(
+            SIP2LibrarySettings(
                 patron_blocking_rules=[{"name": "r", "rule": long_rule}]
             )
         assert info.value.detail is not None
@@ -338,7 +344,7 @@ class TestBasicAuthLibrarySettingsBlockingRules:
     def test_validate_message_length_over_1000_raises(self) -> None:
         """message > 1000 characters is rejected at validation time."""
         with raises_problem_detail() as info:
-            BasicAuthProviderLibrarySettings(
+            SIP2LibrarySettings(
                 patron_blocking_rules=[
                     {
                         "name": "r",
@@ -353,7 +359,7 @@ class TestBasicAuthLibrarySettingsBlockingRules:
 
     def test_validate_message_exactly_1000_chars_passes(self) -> None:
         """message of exactly 1000 chars is accepted."""
-        BasicAuthProviderLibrarySettings(
+        SIP2LibrarySettings(
             patron_blocking_rules=[
                 {
                     "name": "r",
@@ -367,7 +373,7 @@ class TestBasicAuthLibrarySettingsBlockingRules:
         """Any non-empty rule expression that fits within 1000 chars is accepted
         by static Pydantic validation.  Full syntax/semantic validation happens
         at admin-save time via a live SIP2 call."""
-        settings = BasicAuthProviderLibrarySettings(
+        settings = SIP2LibrarySettings(
             patron_blocking_rules=[
                 {"name": "fines-check", "rule": "{fines} > 10.0"},
                 {"name": "any-field", "rule": "{totally_unknown_key} > 0"},
@@ -379,7 +385,7 @@ class TestBasicAuthLibrarySettingsBlockingRules:
     def test_validate_rule_exactly_1000_chars_passes(self) -> None:
         """rule text of exactly 1000 chars is accepted."""
         rule = "T" * 1000
-        settings = BasicAuthProviderLibrarySettings(
+        settings = SIP2LibrarySettings(
             patron_blocking_rules=[{"name": "r", "rule": rule}]
         )
         assert settings.patron_blocking_rules[0].rule == rule
