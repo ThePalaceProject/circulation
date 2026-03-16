@@ -938,7 +938,7 @@ class TestLiveSIP2RuleValidation:
     PatronAuthServicesController.library_integration_validation."""
 
     _FETCH_PATCH = (
-        "palace.manager.api.admin.controller.patron_auth_services"
+        "palace.manager.integration.patron_auth.sip2.provider"
         ".SIP2AuthenticationProvider.fetch_live_rule_validation_values"
     )
 
@@ -1156,19 +1156,14 @@ class TestLiveSIP2RuleValidation:
         assert response.detail is not None
         assert "custom-check" in response.detail
 
-    def test_non_sip2_provider_skips_live_validation(
+    def test_non_supporting_provider_rejects_rules_at_save(
         self,
         controller_fixture: ControllerFixture,
         flask_app_fixture: FlaskAppFixture,
         db: DatabaseTransactionFixture,
-        monkeypatch: MonkeyPatch,
     ) -> None:
-        """For non-SIP2 providers the live SIP2 validation is never triggered
-        even when patron_blocking_rules are present in the static settings
-        (they pass static-only validation)."""
-        mock_fetch = MagicMock()
-        monkeypatch.setattr(self._FETCH_PATCH, mock_fetch)
-
+        """Providers that do not support patron blocking rules reject rules
+        at settings validation time; the live validation path is never reached."""
         with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
@@ -1201,10 +1196,10 @@ class TestLiveSIP2RuleValidation:
             )
             response = controller_fixture.controller.process_patron_auth_services()
 
-        # Static validation passes; live SIP2 call is never made.
-        assert isinstance(response, Response)
-        assert response.status_code in (200, 201)
-        mock_fetch.assert_not_called()
+        assert isinstance(response, ProblemDetail)
+        assert response.uri == INVALID_CONFIGURATION_OPTION.uri
+        assert response.detail is not None
+        assert "not supported" in response.detail.lower()
 
 
 class TestProcessValidatePatronBlockingRule:
@@ -1216,7 +1211,7 @@ class TestProcessValidatePatronBlockingRule:
     """
 
     _FETCH_PATCH = (
-        "palace.manager.api.admin.controller.patron_auth_services"
+        "palace.manager.integration.patron_auth.sip2.provider"
         ".SIP2AuthenticationProvider.fetch_live_rule_validation_values"
     )
 
@@ -1339,7 +1334,7 @@ class TestProcessValidatePatronBlockingRule:
         controller_fixture: ControllerFixture,
         flask_app_fixture: FlaskAppFixture,
     ) -> None:
-        """A non-SIP2 service returns an unsupported-protocol error."""
+        """A service that does not support patron blocking rules returns an error."""
         simple_id = self._create_simple_integration(
             controller_fixture, flask_app_fixture
         )
@@ -1349,7 +1344,7 @@ class TestProcessValidatePatronBlockingRule:
         assert isinstance(response, ProblemDetail)
         assert response.uri == INVALID_CONFIGURATION_OPTION.uri
         assert response.detail is not None
-        assert "SIP2" in response.detail
+        assert "patron blocking rules" in response.detail
 
     def test_valid_rule_returns_200(
         self,
