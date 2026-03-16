@@ -21,7 +21,7 @@ from palace.manager.api.authentication.basic import (
     BasicAuthenticationProvider,
     BasicAuthProviderLibrarySettings,
 )
-from palace.manager.api.problem_details import BLOCKED_CREDENTIALS, INVALID_CREDENTIALS
+from palace.manager.api.problem_details import BLOCKED_BY_POLICY, INVALID_CREDENTIALS
 from palace.manager.integration.patron_auth.patron_blocking import (
     PatronBlockingRule,
     build_runtime_values_from_patron,
@@ -86,7 +86,7 @@ class TestCheckPatronBlockingRulesWithEvaluator:
         result = check_patron_blocking_rules_with_evaluator(rules, {})
         assert isinstance(result, ProblemDetail)
         assert result.status_code == 403
-        assert result.uri == BLOCKED_CREDENTIALS.uri
+        assert result.uri == BLOCKED_BY_POLICY.uri
 
     def test_true_rule_uses_custom_message(self) -> None:
         rules = [
@@ -445,7 +445,7 @@ class TestBasicAuthenticationProvider:
 
         assert isinstance(result, ProblemDetail)
         assert result.status_code == 403
-        assert result.uri == BLOCKED_CREDENTIALS.uri
+        assert result.uri == BLOCKED_BY_POLICY.uri
         assert result.detail == "Blocked by policy."
 
     def test_blocking_not_applied_when_do_authenticate_returns_none(self) -> None:
