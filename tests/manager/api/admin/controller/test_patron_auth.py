@@ -927,22 +927,11 @@ class TestPatronAuth:
         assert mock.call_args.args[2] == library.id
         assert mock.call_args.args[3] == auth_service.id
 
-
-# ---------------------------------------------------------------------------
-# Live SIP2 rule validation on admin save
-# ---------------------------------------------------------------------------
-
-
-class TestLiveSIP2RuleValidation:
-    """Tests for the live SIP2 patronBlocking rule validation in
-    PatronAuthServicesController.library_integration_validation."""
-
+    # Shared for live rule validation and validate-rule endpoint tests.
     _FETCH_PATCH = (
         "palace.manager.integration.patron_auth.sip2.provider"
         ".SIP2AuthenticationProvider.fetch_live_rule_validation_values"
     )
-
-    # A minimal valid SIP2 form field list (no library-level entries).
     _SIP2_BASE_ARGS = [
         ("url", "sip.example.com"),
         ("test_identifier", "patron1"),
@@ -1200,29 +1189,6 @@ class TestLiveSIP2RuleValidation:
         assert response.uri == INVALID_CONFIGURATION_OPTION.uri
         assert response.detail is not None
         assert "not supported" in response.detail.lower()
-
-
-class TestProcessValidatePatronBlockingRule:
-    """Tests for PatronAuthServicesController.process_validate_patron_blocking_rule.
-
-    Each test creates the necessary integrations via process_patron_auth_services()
-    (the standard admin POST) to ensure a realistic DB state, then calls the
-    validate endpoint directly.
-    """
-
-    _FETCH_PATCH = (
-        "palace.manager.integration.patron_auth.sip2.provider"
-        ".SIP2AuthenticationProvider.fetch_live_rule_validation_values"
-    )
-
-    _SIP2_BASE_ARGS = [
-        ("url", "sip.example.com"),
-        ("test_identifier", "patron1"),
-        ("test_password", "pass"),
-        ("identifier_keyboard", Keyboards.DEFAULT.value),
-        ("password_keyboard", Keyboards.DEFAULT.value),
-        ("identifier_barcode_format", BarcodeFormats.CODABAR.value),
-    ]
 
     def _create_sip2_integration(
         self,

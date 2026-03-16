@@ -396,8 +396,8 @@ class TestBasicAuthLibrarySettingsBlockingRules:
 # ---------------------------------------------------------------------------
 
 
-class TestSupportsPatronBlockingRulesFlag:
-    """Tests for the supports_patron_blocking_rules ClassVar flag."""
+class TestBasicAuthenticationProvider:
+    """Tests for BasicAuthenticationProvider.authenticate with patron blocking rules."""
 
     _PATCH_TARGET = (
         "palace.manager.api.authentication.basic."
