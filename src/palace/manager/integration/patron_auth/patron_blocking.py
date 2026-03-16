@@ -20,7 +20,7 @@ from pydantic import BaseModel, ConfigDict
 from palace.manager.api.authentication.patron_blocking_rules.rule_engine import (
     RuleEvaluationError,
     evaluate_rule_expression_strict_bool,
-    make_evaluator,
+    get_evaluator,
 )
 from palace.manager.api.problem_details import BLOCKED_CREDENTIALS
 from palace.manager.util import MoneyUtility
@@ -124,8 +124,9 @@ def check_patron_blocking_rules_with_evaluator(
     Internal error details are logged server-side but never exposed to the
     patron.
 
-    A fresh :class:`~simpleeval.EvalWithCompoundTypes` is created for each
-    call so the function is safe to call from concurrent requests.
+    Uses a per-thread evaluator from :func:`~palace.manager.api.authentication
+    .patron_blocking_rules.rule_engine.get_evaluator` so the function is safe
+    to call from concurrent requests.
 
     :param rules: The list of :class:`PatronBlockingRule` objects for the library.
     :param values: Runtime placeholder values; for SIP2 providers this is the
@@ -135,7 +136,7 @@ def check_patron_blocking_rules_with_evaluator(
         (HTTP 403) if the patron should be blocked, or ``None`` if
         authentication should proceed normally.
     """
-    evaluator = make_evaluator()
+    evaluator = get_evaluator()
 
     for rule in rules:
         try:
