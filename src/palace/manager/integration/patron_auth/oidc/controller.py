@@ -15,6 +15,7 @@ from werkzeug.wrappers import Response as BaseResponse
 from palace.manager.api.authenticator import BaseOIDCAuthenticationProvider
 from palace.manager.api.util.flask import get_request_library
 from palace.manager.integration.patron_auth.oidc.util import (
+    LOGOUT_REDIRECT_QUERY_PARAM,
     OIDCStateValidationError,
     OIDCUtility,
 )
@@ -83,7 +84,6 @@ class OIDCController(LoggerMixin):
     CODE = "code"
     ACCESS_TOKEN = "access_token"
     PATRON_INFO = "patron_info"
-    POST_LOGOUT_REDIRECT_URI = "post_logout_redirect_uri"
     LOGOUT_STATUS = "logout_status"
     LOGOUT_TOKEN = "logout_token"
 
@@ -356,7 +356,7 @@ class OIDCController(LoggerMixin):
         :return: Redirect to provider logout endpoint or error
         """
         provider_name = request_args.get(self.PROVIDER_NAME)
-        post_logout_redirect_uri = request_args.get(self.POST_LOGOUT_REDIRECT_URI)
+        post_logout_redirect_uri = request_args.get(LOGOUT_REDIRECT_QUERY_PARAM)
 
         if not provider_name:
             return OIDC_INVALID_REQUEST.detailed(

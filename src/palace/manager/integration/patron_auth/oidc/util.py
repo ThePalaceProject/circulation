@@ -27,6 +27,9 @@ from palace.manager.util.http.exception import RequestNetworkException
 from palace.manager.util.http.http import HTTP
 from palace.manager.util.log import LoggerMixin
 
+# OIDC RP-Initiated Logout parameter name (per spec).
+LOGOUT_REDIRECT_QUERY_PARAM = "post_logout_redirect_uri"
+
 
 class OIDCUtilityError(BasePalaceException):
     """Base exception for OIDC utility errors."""

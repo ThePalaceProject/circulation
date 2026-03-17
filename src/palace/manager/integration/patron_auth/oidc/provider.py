@@ -22,6 +22,7 @@ from palace.manager.integration.patron_auth.oidc.configuration.model import (
     OIDCAuthSettings,
 )
 from palace.manager.integration.patron_auth.oidc.credential import OIDCCredentialManager
+from palace.manager.integration.patron_auth.oidc.util import LOGOUT_REDIRECT_QUERY_PARAM
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.sqlalchemy.model.credential import Credential
 from palace.manager.sqlalchemy.model.patron import Patron
@@ -32,6 +33,13 @@ from palace.manager.util.problem_detail import (
 
 if TYPE_CHECKING:
     from palace.manager.core.selftest import SelfTestResult
+
+OPDS_URI_TEMPLATE_VARIABLES_PROPERTY = "uri_template_variables"
+OPDS_URI_TEMPLATE_VARIABLES_TYPE = (
+    "http://palaceproject.io/terms/uri-template/variables"
+)
+
+PALACE_REDIRECT_URI_TERM = "http://palaceproject.io/terms/redirect-uri"
 
 OIDC_CANNOT_DETERMINE_PATRON = pd(
     "http://palaceproject.io/terms/problem/auth/unrecoverable/oidc/cannot-identify-patron",
@@ -188,7 +196,21 @@ class OIDCAuthenticationProvider(
                 library_short_name=library.short_name,
                 provider=self.label(),
             )
-            links.append({"rel": "logout", "href": logout_url})
+            links.append(
+                {
+                    "rel": "logout",
+                    "href": f"{logout_url}{{&{LOGOUT_REDIRECT_QUERY_PARAM}}}",
+                    "templated": True,
+                    "properties": {
+                        OPDS_URI_TEMPLATE_VARIABLES_PROPERTY: {
+                            "type": OPDS_URI_TEMPLATE_VARIABLES_TYPE,
+                            "map": {
+                                LOGOUT_REDIRECT_QUERY_PARAM: PALACE_REDIRECT_URI_TERM,
+                            },
+                        },
+                    },
+                }
+            )
 
         return {
             "type": self.flow_type,
