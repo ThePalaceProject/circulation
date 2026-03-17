@@ -107,7 +107,7 @@ LoggerType = logging.Logger | LoggerAdapterType
 
 
 class LoggerMixin:
-    """Mixin that adds a logger with a standardized name"""
+    """Mixin that adds a logger with a standardized name."""
 
     @classmethod
     @functools.cache
@@ -117,14 +117,16 @@ class LoggerMixin:
 
         This is cached so that we don't create a new logger every time
         it is called.
+
+        Prefer ``self.log`` when calling from an instance method.
+        Use ``cls.logger()`` only in classmethods or static contexts.
         """
         return logger_for_cls(cls)
 
     @property
     def log(self) -> LoggerType:
         """
-        A convenience property that returns the logger for the class,
-        so it is easier to access the logger from an instance.
+        The preferred way to access the logger from instance methods.
         """
         return self.logger()
 
