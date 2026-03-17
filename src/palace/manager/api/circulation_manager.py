@@ -149,6 +149,7 @@ class CirculationManager(LoggerMixin):
     admin_announcement_service: AnnouncementSettings
     admin_search_controller: AdminSearchController
     admin_view_controller: ViewController
+
     admin_quicksight_controller: QuickSightController
     admin_report_controller: ReportController
 

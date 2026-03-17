@@ -653,6 +653,9 @@ class BasicAuthenticationProvider[
             and self.patron_blocking_rules
             and isinstance(result, Patron)
         ):
+            # NOTE: This log is used by CloudWatch to count total patron blocking
+            # evaluations for error-rate calculation. Do not remove.
+            self.log.info("Patron blocking rules evaluation attempted")
             values = self._build_blocking_rule_values(result, extra_context)
             blocked = check_patron_blocking_rules_with_evaluator(
                 self.patron_blocking_rules, values, log=self.log

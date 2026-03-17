@@ -116,38 +116,33 @@ class TestCheckPatronBlockingRulesWithEvaluator:
         )
         assert check_patron_blocking_rules_with_evaluator(rules, {"fines": 5.0}) is None
 
-    def test_missing_placeholder_fails_closed(self) -> None:
-        """A rule referencing a missing placeholder key must block (fail closed)."""
+    def test_missing_placeholder_ignored_fail_open(self) -> None:
+        """A rule referencing a missing placeholder is ignored (fail-open)."""
         rules = [PatronBlockingRule(name="needs-dob", rule="{dob} == '2000-01-01'")]
         result = check_patron_blocking_rules_with_evaluator(rules, {})
-        assert isinstance(result, ProblemDetail)
-        assert result.status_code == 403
+        assert result is None
 
-    def test_missing_placeholder_uses_generic_message(self) -> None:
+    def test_invalid_expression_ignored_fail_open(self) -> None:
+        """A syntactically invalid rule is ignored (fail-open)."""
+        rules = [PatronBlockingRule(name="bad-rule", rule="{fines} >>>!!! invalid")]
+        result = check_patron_blocking_rules_with_evaluator(rules, {"fines": 5.0})
+        assert result is None
+
+    def test_non_bool_result_ignored_fail_open(self) -> None:
+        """A rule that does not evaluate to bool is ignored (fail-open)."""
+        rules = [PatronBlockingRule(name="non-bool", rule="{fines} + 1")]
+        result = check_patron_blocking_rules_with_evaluator(rules, {"fines": 5.0})
+        assert result is None
+
+    def test_error_rule_then_blocking_rule_blocks(self) -> None:
+        """When an error rule is followed by a blocking rule, the blocking rule applies."""
         rules = [
-            PatronBlockingRule(
-                name="needs-dob",
-                rule="{dob} == '2000-01-01'",
-                message="Custom should not appear.",
-            )
+            PatronBlockingRule(name="bad", rule="{missing} == 1"),
+            PatronBlockingRule(name="block", rule="True", message="Blocked."),
         ]
         result = check_patron_blocking_rules_with_evaluator(rules, {})
         assert isinstance(result, ProblemDetail)
-        # Generic message on error, not the rule's message
-        assert result.detail == "Patron is blocked by library policy."
-
-    def test_invalid_expression_fails_closed(self) -> None:
-        """A syntactically invalid rule must block (fail closed)."""
-        rules = [PatronBlockingRule(name="bad-rule", rule="{fines} >>>!!! invalid")]
-        result = check_patron_blocking_rules_with_evaluator(rules, {"fines": 5.0})
-        assert isinstance(result, ProblemDetail)
-        assert result.status_code == 403
-
-    def test_non_bool_result_fails_closed(self) -> None:
-        rules = [PatronBlockingRule(name="non-bool", rule="{fines} + 1")]
-        result = check_patron_blocking_rules_with_evaluator(rules, {"fines": 5.0})
-        assert isinstance(result, ProblemDetail)
-        assert result.status_code == 403
+        assert result.detail == "Blocked."
 
     def test_first_matching_rule_wins(self) -> None:
         rules = [
@@ -371,8 +366,7 @@ class TestBasicAuthLibrarySettingsBlockingRules:
 
     def test_validate_any_rule_expression_passes_static_check(self) -> None:
         """Any non-empty rule expression that fits within 1000 chars is accepted
-        by static Pydantic validation.  Full syntax/semantic validation happens
-        at admin-save time via a live SIP2 call."""
+        by static Pydantic validation."""
         settings = SIP2LibrarySettings(
             patron_blocking_rules=[
                 {"name": "fines-check", "rule": "{fines} > 10.0"},
@@ -447,6 +441,7 @@ class TestBasicAuthenticationProvider:
         assert result.status_code == 403
         assert result.uri == BLOCKED_BY_POLICY.uri
         assert result.detail == "Blocked by policy."
+        provider.log.info.assert_any_call("Patron blocking rules evaluation attempted")
 
     def test_blocking_not_applied_when_do_authenticate_returns_none(self) -> None:
         """When _do_authenticate returns None (bad credentials), the flag has no
@@ -493,6 +488,7 @@ class TestBasicAuthenticationProvider:
         result = BasicAuthenticationProvider.authenticate(provider, MagicMock(), {})
 
         assert result is mock_patron
+        provider.log.info.assert_any_call("Patron blocking rules evaluation attempted")
 
 
 # ---------------------------------------------------------------------------

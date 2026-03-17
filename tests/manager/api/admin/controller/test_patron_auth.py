@@ -996,96 +996,6 @@ class TestPatronAuth:
         assert response.status_code in (200, 201)
         mock_fetch.assert_not_called()
 
-    def test_rules_with_no_test_identifier_blocks_save(
-        self,
-        controller_fixture: ControllerFixture,
-        flask_app_fixture: FlaskAppFixture,
-        db: DatabaseTransactionFixture,
-        monkeypatch: MonkeyPatch,
-    ) -> None:
-        """When patron blocking rules are configured but test_identifier is absent,
-        the save must be blocked with INVALID_CONFIGURATION_OPTION."""
-        monkeypatch.setattr(
-            self._FETCH_PATCH,
-            MagicMock(
-                side_effect=ProblemDetailException(
-                    INVALID_CONFIGURATION_OPTION.detailed(
-                        "A test identifier must be configured"
-                    )
-                )
-            ),
-        )
-
-        response = self._post_sip2(
-            controller_fixture,
-            flask_app_fixture,
-            db.default_library(),
-            rules=[{"name": "fine-check", "rule": "{fines} > 10.0"}],
-        )
-
-        assert isinstance(response, ProblemDetail)
-        assert response.uri == INVALID_CONFIGURATION_OPTION.uri
-
-    def test_sip2_problem_detail_response_blocks_save(
-        self,
-        controller_fixture: ControllerFixture,
-        flask_app_fixture: FlaskAppFixture,
-        db: DatabaseTransactionFixture,
-        monkeypatch: MonkeyPatch,
-    ) -> None:
-        """When the SIP2 server returns a ProblemDetail (auth error, server error,
-        etc.) the save must be blocked."""
-        monkeypatch.setattr(
-            self._FETCH_PATCH,
-            MagicMock(
-                side_effect=ProblemDetailException(
-                    INVALID_CONFIGURATION_OPTION.detailed(
-                        "SIP2 server returned an error for test patron"
-                    )
-                )
-            ),
-        )
-
-        response = self._post_sip2(
-            controller_fixture,
-            flask_app_fixture,
-            db.default_library(),
-            rules=[{"name": "fine-check", "rule": "{fines} > 10.0"}],
-        )
-
-        assert isinstance(response, ProblemDetail)
-        assert response.uri == INVALID_CONFIGURATION_OPTION.uri
-
-    def test_sip2_oserror_blocks_save(
-        self,
-        controller_fixture: ControllerFixture,
-        flask_app_fixture: FlaskAppFixture,
-        db: DatabaseTransactionFixture,
-        monkeypatch: MonkeyPatch,
-    ) -> None:
-        """When the SIP2 server cannot be reached (OSError) the save must be
-        blocked (hard fail)."""
-        monkeypatch.setattr(
-            self._FETCH_PATCH,
-            MagicMock(
-                side_effect=ProblemDetailException(
-                    INVALID_CONFIGURATION_OPTION.detailed(
-                        "Could not contact the SIP2 server: Connection refused"
-                    )
-                )
-            ),
-        )
-
-        response = self._post_sip2(
-            controller_fixture,
-            flask_app_fixture,
-            db.default_library(),
-            rules=[{"name": "fine-check", "rule": "{fines} > 10.0"}],
-        )
-
-        assert isinstance(response, ProblemDetail)
-        assert response.uri == INVALID_CONFIGURATION_OPTION.uri
-
     def test_rule_passes_against_live_values_allows_save(
         self,
         controller_fixture: ControllerFixture,
@@ -1115,35 +1025,23 @@ class TestPatronAuth:
         assert isinstance(response, Response)
         assert response.status_code in (200, 201)
 
-    def test_rule_fails_against_live_values_blocks_save(
+    def test_rule_with_invalid_placeholder_allows_save(
         self,
         controller_fixture: ControllerFixture,
         flask_app_fixture: FlaskAppFixture,
         db: DatabaseTransactionFixture,
-        monkeypatch: MonkeyPatch,
     ) -> None:
-        """When a rule references a placeholder that is absent in the live
-        values dict the save must be blocked and the error message must include
-        the rule index and name."""
-        # Live values do NOT include 'custom_field' — simulates an ILS that
-        # never returns this field.
-        monkeypatch.setattr(
-            self._FETCH_PATCH,
-            MagicMock(return_value={"fines": 0.0, "patron_type": "adult"}),
-        )
-
+        """Rules are not validated on save; invalid rules are allowed and
+        ignored at auth time."""
         response = self._post_sip2(
             controller_fixture,
             flask_app_fixture,
             db.default_library(),
-            # This rule references {custom_field} which is absent in the live values.
             rules=[{"name": "custom-check", "rule": "{custom_field} == 'expected'"}],
         )
 
-        assert isinstance(response, ProblemDetail)
-        assert response.uri == INVALID_CONFIGURATION_OPTION.uri
-        assert response.detail is not None
-        assert "custom-check" in response.detail
+        assert isinstance(response, Response)
+        assert response.status_code in (200, 201)
 
     def test_non_supporting_provider_rejects_rules_at_save(
         self,

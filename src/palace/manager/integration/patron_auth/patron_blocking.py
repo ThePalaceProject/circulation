@@ -55,8 +55,8 @@ def build_runtime_values_from_patron(patron: Patron) -> dict[str, Any]:
 
     Keys produced here correspond to the placeholder names supported at
     runtime.  Any placeholder key *not* present in the returned dict will
-    cause :func:`check_patron_blocking_rules_with_evaluator` to fail closed
-    (block the patron) if a rule references it.
+    cause :func:`check_patron_blocking_rules_with_evaluator` to log and ignore
+    that rule if it references the missing key.
 
     :param patron: The authenticated
         :class:`~palace.manager.sqlalchemy.model.patron.Patron`.
@@ -119,10 +119,10 @@ def check_patron_blocking_rules_with_evaluator(
 ) -> ProblemDetail | None:
     """Evaluate blocking rules using the simpleeval rule engine.
 
-    This function is **fail-closed**: any evaluation error (missing
-    placeholder, parse error, non-bool result) is treated as a block.
-    Internal error details are logged server-side but never exposed to the
-    patron.
+    This function is **fail-open**: rules that cannot be parsed or evaluated
+    (missing placeholder, parse error, non-bool result) are logged and ignored;
+    evaluation continues with the next rule.  Only rules that successfully
+    evaluate to ``True`` cause a block.
 
     Uses a per-thread evaluator from :func:`~palace.manager.api.authentication
     .patron_blocking_rules.rule_engine.get_evaluator` so the function is safe
@@ -145,14 +145,17 @@ def check_patron_blocking_rules_with_evaluator(
             )
         except RuleEvaluationError as exc:
             if log:
+                # NOTE: This particular error string can be used by Cloudwatch or
+                # other monitoring tools.  Be aware that changing it may cause
+                # the alarm to fail silently.
                 log.error(
-                    "Patron blocking rule evaluation error "
-                    "(rule=%r, reason=%s: %s). Failing closed.",
+                    "Patron blocking rule evaluation failed (ignored): "
+                    "rule=%r, reason=%s: %s",
                     exc.rule_name,
                     type(exc.__cause__).__name__ if exc.__cause__ else "unknown",
                     exc,
                 )
-            return BLOCKED_BY_POLICY.detailed(_DEFAULT_BLOCK_MESSAGE)
+            continue
 
         if blocked:
             return BLOCKED_BY_POLICY.detailed(rule.message or _DEFAULT_BLOCK_MESSAGE)

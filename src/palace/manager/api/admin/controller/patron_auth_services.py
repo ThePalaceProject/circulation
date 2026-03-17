@@ -99,15 +99,8 @@ class PatronAuthServicesController(
     ) -> None:
         """Validate a library integration after its settings have been saved.
 
-        Performs two checks in order:
-
-        1. Ensures the library does not end up with more than one basic-auth
-           patron authentication service.
-        2. For SIP2 integrations that include patron blocking rules, makes a
-           live SIP2 call using the configured test identifier and re-validates
-           every rule against the real values returned.  This catches rules that
-           pass static syntax checks but would fail (or produce wrong results)
-           against actual patron data.
+        Ensures the library does not end up with more than one basic-auth
+        patron authentication service.
         """
         library = integration.library
         basic_auth_integrations = (
@@ -127,35 +120,6 @@ class PatronAuthServicesController(
                     f"to {library.short_name}, but it already has one."
                 )
             )
-
-        # Live rule validation — only runs for integrations that support
-        # patron blocking rules and have rules configured.
-        protocol_class = self.get_protocol_class(integration.parent.protocol)
-        if not getattr(protocol_class, "supports_patron_blocking_rules", False):
-            return
-        library_settings = protocol_class.library_settings_load(integration)
-        patron_blocking_rules = getattr(library_settings, "patron_blocking_rules", None)
-        if not patron_blocking_rules:
-            return
-
-        settings = protocol_class.settings_load(integration.parent)
-        # fetch_live_rule_validation_values raises ProblemDetailException on
-        # any SIP2 failure (missing test_identifier, network error, etc.).
-        fetch_values: Callable[[Any], dict[str, Any]] = getattr(
-            protocol_class, "fetch_live_rule_validation_values", lambda s: {}
-        )
-        live_values = fetch_values(settings)
-
-        evaluator = get_evaluator()
-        for i, rule in enumerate(patron_blocking_rules):
-            try:
-                validate_rule_expression(rule.rule, live_values, evaluator)
-            except RuleValidationError as exc:
-                raise ProblemDetailException(
-                    INVALID_CONFIGURATION_OPTION.detailed(
-                        f"Rule at index {i} ('{rule.name}'): {exc.message}"
-                    )
-                ) from exc
 
     def process_updated_libraries(
         self,
