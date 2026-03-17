@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 import flask
@@ -133,16 +134,20 @@ class PatronAuthServicesController(
         if not getattr(protocol_class, "supports_patron_blocking_rules", False):
             return
         library_settings = protocol_class.library_settings_load(integration)
-        if not library_settings.patron_blocking_rules:
+        patron_blocking_rules = getattr(library_settings, "patron_blocking_rules", None)
+        if not patron_blocking_rules:
             return
 
         settings = protocol_class.settings_load(integration.parent)
         # fetch_live_rule_validation_values raises ProblemDetailException on
         # any SIP2 failure (missing test_identifier, network error, etc.).
-        live_values = protocol_class.fetch_live_rule_validation_values(settings)
+        fetch_values: Callable[[Any], dict[str, Any]] = getattr(
+            protocol_class, "fetch_live_rule_validation_values", lambda s: {}
+        )
+        live_values = fetch_values(settings)
 
         evaluator = get_evaluator()
-        for i, rule in enumerate(library_settings.patron_blocking_rules):
+        for i, rule in enumerate(patron_blocking_rules):
             try:
                 validate_rule_expression(rule.rule, live_values, evaluator)
             except RuleValidationError as exc:
@@ -202,7 +207,10 @@ class PatronAuthServicesController(
             settings = protocol_class.settings_load(integration)
             # fetch_live_rule_validation_values raises ProblemDetailException on
             # missing test_identifier, network error, or SIP2 error response.
-            live_values = protocol_class.fetch_live_rule_validation_values(settings)
+            fetch_values: Callable[[Any], dict[str, Any]] = getattr(
+                protocol_class, "fetch_live_rule_validation_values", lambda s: {}
+            )
+            live_values = fetch_values(settings)
 
             evaluator = get_evaluator()
             try:
