@@ -107,11 +107,7 @@ LoggerType = logging.Logger | LoggerAdapterType
 
 
 class LoggerMixin:
-    """Mixin that adds a logger with a standardized name.
-
-    Use ``self.log`` from instance methods and ``cls.logger()`` from
-    classmethods or static contexts where ``self`` is unavailable.
-    """
+    """Mixin that adds a logger with a standardized name."""
 
     @classmethod
     @functools.cache
