@@ -486,6 +486,20 @@ class OIDCAuthenticationManager(LoggerMixin):
         self.log.info(f"Built logout URL for provider: {end_session_endpoint}")
         return logout_url
 
+    def _has_metadata_endpoints(self, *keys: str) -> bool:
+        """Return True if any of the given keys are present in provider metadata.
+
+        Silently returns False if metadata discovery fails.
+
+        :param keys: Metadata keys to check (e.g. ``"end_session_endpoint"``)
+        :return: True if any key has a truthy value in the discovered metadata
+        """
+        try:
+            metadata = self.get_provider_metadata()
+            return any(metadata.get(k) for k in keys)
+        except OIDCDiscoveryError:
+            return False
+
     def supports_rp_initiated_logout(self) -> bool:
         """Check if the OIDC provider supports RP-Initiated Logout.
 
@@ -494,13 +508,9 @@ class OIDCAuthenticationManager(LoggerMixin):
 
         :return: True if RP-Initiated Logout is supported
         """
-        try:
-            metadata = self.get_provider_metadata()
-            if metadata.get("end_session_endpoint"):
-                return True
-        except OIDCDiscoveryError:
-            pass
-        return bool(self._settings.end_session_endpoint)
+        return self._has_metadata_endpoints("end_session_endpoint") or bool(
+            self._settings.end_session_endpoint
+        )
 
     def supports_logout(self) -> bool:
         """Check if the OIDC provider supports any form of logout.
@@ -511,15 +521,9 @@ class OIDCAuthenticationManager(LoggerMixin):
 
         :return: True if any logout mechanism is supported
         """
-        try:
-            metadata = self.get_provider_metadata()
-            if metadata.get("end_session_endpoint") or metadata.get(
-                "revocation_endpoint"
-            ):
-                return True
-        except OIDCDiscoveryError:
-            pass
-        return bool(
+        return self._has_metadata_endpoints(
+            "end_session_endpoint", "revocation_endpoint"
+        ) or bool(
             self._settings.end_session_endpoint or self._settings.revocation_endpoint
         )
 
