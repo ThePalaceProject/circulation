@@ -9,6 +9,7 @@ from palace.manager.api.circulation.fulfillment import (
     RedirectFulfillment,
     StreamingFulfillment,
 )
+from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism
 from palace.manager.util.http.exception import BadResponseException
 from tests.fixtures.http import MockHttpClientFixture
@@ -124,10 +125,16 @@ class TestFetchFulfillment:
     def test_fetch_fulfillment_allowed_response_codes(
         self, caplog: pytest.LogCaptureFixture, http_client: MockHttpClientFixture
     ) -> None:
+        caplog.set_level(LogLevel.error)
+
+        response_content = (
+            '{"type":"http://opds-spec.org/odl/error/checkout/expired",'
+            '"title":"the license has expired",'
+            '"detail":"loan_term_limit_reached","status":403}'
+        )
         http_client.queue_response(
             403,
-            content='{"type":"http://opds-spec.org/odl/error/checkout/expired",'
-            '"title":"the license has expired","detail":"["loan_term_limit_reached"]","status":403}',
+            content=response_content,
             media_type="application/api-problem+json",
         )
         fulfillment = FetchFulfillment(
@@ -140,10 +147,52 @@ class TestFetchFulfillment:
             excinfo.value.problem_detail.detail
             == "The server made a request to some.location, and got an unexpected or invalid response."
         )
+
+        assert len(caplog.records) == 1
+        [record] = caplog.records
+
         assert (
             "Error fulfilling loan. Bad response from: http://some.location."
-            in caplog.text
+            in record.msg
         )
+
+        # Verify structured data is included in the log record for CloudWatch querying.
+        assert getattr(record, "palace_fulfillment_url") == "http://some.location"
+        assert getattr(record, "palace_fulfillment_status_code") == 403
+        # JSON responses are parsed into dicts for structured querying.
+        response = getattr(record, "palace_fulfillment_response")
+        assert isinstance(response, dict)
+        assert response["title"] == "the license has expired"
+        headers = getattr(record, "palace_fulfillment_headers")
+        assert isinstance(headers, dict)
+        assert headers["content-type"] == "application/api-problem+json"
+
+    def test_fetch_fulfillment_non_json_error(
+        self, caplog: pytest.LogCaptureFixture, http_client: MockHttpClientFixture
+    ) -> None:
+        """Non-JSON error responses are logged as raw strings."""
+
+        caplog.set_level(LogLevel.error)
+        response_content = "<html><body>Bad Gateway</body></html>"
+        http_client.queue_response(
+            502,
+            content=response_content,
+            media_type="text/html",
+        )
+        fulfillment = FetchFulfillment(
+            "http://some.location", allowed_response_codes=["2xx"]
+        )
+        with pytest.raises(BadResponseException):
+            fulfillment.response()
+
+        assert len(caplog.records) == 1
+        [record] = caplog.records
+
+        assert getattr(record, "palace_fulfillment_status_code") == 502
+        assert getattr(record, "palace_fulfillment_response") == response_content
+        headers = getattr(record, "palace_fulfillment_headers")
+        assert isinstance(headers, dict)
+        assert headers["content-type"] == "text/html"
 
     def test__repr__(self) -> None:
         fulfillment = FetchFulfillment("http://some.location")
