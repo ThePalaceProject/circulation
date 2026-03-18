@@ -389,11 +389,14 @@ class OIDCController(LoggerMixin):
 
         cm_jwt = auth_header.removeprefix("Bearer ")
         try:
-            _provider_name, provider_token = library_authenticator.decode_bearer_token(
-                cm_jwt
+            decoded_provider_name, provider_token = (
+                library_authenticator.decode_bearer_token(cm_jwt)
             )
         except jwt.exceptions.InvalidTokenError:
             return OIDC_INVALID_REQUEST.detailed(_("Invalid bearer token"))
+
+        if decoded_provider_name != provider_name:
+            return OIDC_INVALID_REQUEST.detailed(_("Provider mismatch in bearer token"))
 
         provider = library_authenticator.oidc_provider_lookup(provider_name)
         if isinstance(provider, ProblemDetail):
@@ -483,6 +486,7 @@ class OIDCController(LoggerMixin):
             )
         except (OIDCDiscoveryError, OIDCAuthenticationError) as e:
             self.log.exception("Failed to build logout URL")
+            utility.delete_logout_state(logout_state)
             return OIDC_LOGOUT_NOT_SUPPORTED.detailed(_(str(e)))
 
         return redirect(logout_url)

@@ -1215,6 +1215,40 @@ class TestOIDCControllerLogout:
 
             assert result == UNKNOWN_OIDC_PROVIDER
 
+    def test_oidc_logout_initiate_provider_mismatch(
+        self, logout_controller: OIDCController, db: DatabaseTransactionFixture
+    ) -> None:
+        """Test logout initiate when bearer token was issued by a different provider.
+
+        A patron authenticated with provider A must not be able to initiate logout
+        against provider B by supplying provider=B in the request parameters.
+        """
+        library = db.default_library()
+        mock_library_auth = Mock()
+        mock_library_auth.decode_bearer_token.return_value = (
+            "Provider A",
+            "provider-token",
+        )
+        logout_controller._authenticator.library_authenticators[library.short_name] = (
+            mock_library_auth
+        )
+
+        with patch(
+            "palace.manager.integration.patron_auth.oidc.controller.get_request_library",
+            return_value=library,
+        ):
+            params = {
+                "provider": "Provider B",
+                "post_logout_redirect_uri": "https://app.example.com/logout/callback",
+            }
+            result = logout_controller.oidc_logout_initiate(
+                params, db.session, auth_header="Bearer valid.jwt.token"
+            )
+
+        assert result.uri == OIDC_INVALID_REQUEST.uri
+        assert result.detail is not None
+        assert "Provider mismatch in bearer token" in result.detail
+
     @pytest.mark.parametrize(
         "provider_token,expected_message",
         [
@@ -1379,6 +1413,9 @@ class TestOIDCControllerLogout:
             patch(
                 "palace.manager.integration.patron_auth.oidc.controller.url_for"
             ) as mock_url_for,
+            patch(
+                "palace.manager.integration.patron_auth.oidc.controller.OIDCUtility"
+            ) as MockOIDCUtility,
         ):
             mock_url_for.return_value = "https://cm.test/oidc_logout_callback"
 
@@ -1396,6 +1433,12 @@ class TestOIDCControllerLogout:
                     mock_provider._credential_manager.invalidate_patron_credentials.assert_not_called()
             else:
                 assert result.uri == expected_uri
+                if build_url_error:
+                    mock_utility = MockOIDCUtility.return_value
+                    stored_state = mock_utility.store_logout_state.call_args[0][0]
+                    mock_utility.delete_logout_state.assert_called_once_with(
+                        stored_state
+                    )
 
     def test_oidc_logout_initiate_credential_invalidation_is_nonfatal(
         self, logout_controller: OIDCController, db: DatabaseTransactionFixture
