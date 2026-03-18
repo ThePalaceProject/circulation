@@ -69,10 +69,10 @@ class TestRequestScopedSession:
 
     def test_session_different_request(self, flask_app, session):
         with flask_app.test_request_context():
-            prev_id = id(session())
+            prev_session = session()
 
         with flask_app.test_request_context():
-            assert prev_id != id(session())
+            assert prev_session is not session()
 
         assert session.remove.call_count == 2
 
@@ -92,7 +92,7 @@ class TestCurrentSession:
 
     def test_session_different_request(self, flask_app):
         with flask_app.test_request_context():
-            prev_id = id(current_session._get_current_object()())
+            prev_session = current_session._get_current_object()()
 
         with flask_app.test_request_context():
-            assert prev_id != id(current_session._get_current_object()())
+            assert prev_session is not current_session._get_current_object()()
