@@ -567,8 +567,8 @@ def oidc_authenticate():
 # While OIDC allows multiple redirect URIs to be registered (unlike SAML),
 # a constant callback URL means we only need to register one URI with each provider.
 # Library information is passed via the state parameter and processed in the controller.
-@returns_problem_detail
 @app.route("/oidc/callback", methods=["GET"])
+@returns_problem_detail
 def oidc_callback():
     return app.manager.oidc_controller.oidc_authentication_callback(
         flask.request.args, app.manager._db
@@ -587,8 +587,8 @@ def oidc_logout():
 
 
 # Redirect URI for OIDC logout callback
-@returns_problem_detail
 @app.route("/oidc/logout_callback", methods=["GET"])
+@returns_problem_detail
 def oidc_logout_callback():
     return app.manager.oidc_controller.oidc_logout_callback(
         flask.request.args, app.manager._db
@@ -623,8 +623,8 @@ def saml_authenticate():
 # the IdP will fail this request because the URL mentioned in the request and
 # the URL saved in the SP's metadata configured in this IdP will differ.
 # Library's name is passed as a part of the relay state and processed in SAMLController.saml_authentication_callback
-@returns_problem_detail
 @app.route("/saml_callback", methods=["POST"])
+@returns_problem_detail
 def saml_callback():
     return app.manager.saml_controller.saml_authentication_callback(
         request, app.manager._db
