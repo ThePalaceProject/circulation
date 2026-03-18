@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 import pytest
 from pydantic import HttpUrl
 
+from palace.manager.integration.patron_auth.oidc.auth import OIDCAuthenticationManager
 from palace.manager.integration.patron_auth.oidc.configuration.model import (
     OIDCAuthLibrarySettings,
     OIDCAuthSettings,
@@ -32,12 +35,19 @@ def oidc_provider(db: DatabaseTransactionFixture) -> OIDCAuthenticationProvider:
         client_secret="test-client-secret",
     )
     library_settings = OIDCAuthLibrarySettings()
-    return OIDCAuthenticationProvider(
+    provider = OIDCAuthenticationProvider(
         library_id=library.id,
         integration_id=1,
         settings=settings,
         library_settings=library_settings,
     )
+    # Pre-configure the auth manager to prevent live OIDC discovery calls in tests.
+    # Tests that exercise the initialization path must reset _auth_manager = None first.
+    with patch.object(
+        OIDCAuthenticationManager, "get_provider_metadata", return_value={}
+    ):
+        provider.get_authentication_manager()
+    return provider
 
 
 @pytest.fixture
