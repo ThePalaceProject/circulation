@@ -531,9 +531,9 @@ class OIDCController(LoggerMixin):
         # is needed to look up the signing secret before full validation.
         try:
             state_payload = OIDCUtility.decode_state_payload(state)
-        except OIDCStateValidationError:
+        except OIDCStateValidationError as e:
             self.log.exception("Failed to decode logout state payload")
-            return OIDC_INVALID_STATE
+            return OIDC_INVALID_STATE.detailed(_(str(e)))
 
         library_short_name = state_payload.get("library_short_name")
         if not library_short_name:
