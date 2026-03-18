@@ -16,9 +16,11 @@ from werkzeug.wrappers import Response as BaseResponse
 
 from palace.manager.api.authenticator import BaseOIDCAuthenticationProvider
 from palace.manager.api.util.flask import get_request_library
+from palace.manager.integration.patron_auth.oidc.auth import OIDCAuthenticationError
 from palace.manager.integration.patron_auth.oidc.credential import OIDCCredentialManager
 from palace.manager.integration.patron_auth.oidc.util import (
     LOGOUT_REDIRECT_QUERY_PARAM,
+    OIDCDiscoveryError,
     OIDCStateValidationError,
     OIDCUtility,
 )
@@ -486,7 +488,7 @@ class OIDCController(LoggerMixin):
             logout_url = auth_manager.build_logout_url(
                 stored_id_token, callback_url, logout_state
             )
-        except Exception as e:
+        except (OIDCDiscoveryError, OIDCAuthenticationError) as e:
             self.log.exception("Failed to build logout URL")
             return OIDC_LOGOUT_NOT_SUPPORTED.detailed(_(str(e)))
 
