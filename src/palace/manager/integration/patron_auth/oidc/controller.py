@@ -433,7 +433,7 @@ class OIDCController(LoggerMixin):
             else:
                 self.log.warning(f"Patron not found for identifier {patron_identifier}")
 
-        except (SQLAlchemyError, AttributeError) as e:
+        except (SQLAlchemyError, AttributeError):
             self.log.exception("Failed to invalidate credentials")
 
         # Best-effort: revoke the OAuth refresh token to prevent silent re-authentication
