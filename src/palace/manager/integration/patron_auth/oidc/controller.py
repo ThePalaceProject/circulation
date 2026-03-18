@@ -393,6 +393,7 @@ class OIDCController(LoggerMixin):
                 library_authenticator.decode_bearer_token(cm_jwt)
             )
         except jwt.exceptions.InvalidTokenError:
+            self.log.warning("Invalid bearer token in logout request", exc_info=True)
             return OIDC_INVALID_REQUEST.detailed(_("Invalid bearer token"))
 
         if decoded_provider_name != provider_name:
