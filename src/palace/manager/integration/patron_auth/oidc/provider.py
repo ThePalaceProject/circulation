@@ -37,6 +37,8 @@ from palace.manager.util.problem_detail import (
 if TYPE_CHECKING:
     from palace.manager.core.selftest import SelfTestResult
 
+# TODO: These OPDS constants are provider-agnostic and should be moved to a shared
+# constants module if other authentication providers (e.g., SAML) need them.
 OPDS_URI_TEMPLATE_VARIABLES_PROPERTY = "uri_template_variables"
 OPDS_URI_TEMPLATE_VARIABLES_TYPE = (
     "http://palaceproject.io/terms/uri-template/variables"
