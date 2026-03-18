@@ -85,7 +85,9 @@ class OIDCCredentialManager(LoggerMixin):
         """Parse and validate a raw OIDC credential JSON string.
 
         :param value: JSON string produced by :meth:`_create_token_value`
-        :raises ValueError: If the string is not valid JSON or is missing required fields
+        :raises PalaceValueError: If the string is not valid JSON or is missing required fields.
+            `PalaceValueError` is a subclass of `ValueError`, so callers that catch
+            `ValueError` will still handle it correctly.
         :return: Parsed token data dictionary
         """
         try:
