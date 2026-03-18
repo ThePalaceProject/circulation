@@ -16,6 +16,7 @@ from werkzeug.wrappers import Response as BaseResponse
 
 from palace.manager.api.authenticator import BaseOIDCAuthenticationProvider
 from palace.manager.api.util.flask import get_request_library
+from palace.manager.integration.patron_auth.oidc.credential import OIDCCredentialManager
 from palace.manager.integration.patron_auth.oidc.util import (
     LOGOUT_REDIRECT_QUERY_PARAM,
     OIDCStateValidationError,
@@ -404,10 +405,8 @@ class OIDCController(LoggerMixin):
         # This avoids a DB lookup that would fail after token refresh (the credential
         # value changes on refresh, but the patron's bearer token still has the old value).
         try:
-            token_data = json.loads(provider_token)
-            if "id_token_claims" not in token_data or "access_token" not in token_data:
-                raise ValueError("Missing required fields in token data")
-        except Exception:
+            token_data = OIDCCredentialManager.parse_token_value(provider_token)
+        except ValueError:
             self.log.exception("Failed to parse token data from bearer token")
             return OIDC_INVALID_REQUEST.detailed(_("Invalid credential data"))
 

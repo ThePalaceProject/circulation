@@ -79,6 +79,26 @@ class OIDCCredentialManager(LoggerMixin):
 
         return json.dumps(token_data)
 
+    @staticmethod
+    def parse_token_value(value: str) -> dict[str, Any]:
+        """Parse and validate a raw OIDC credential JSON string.
+
+        :param value: JSON string produced by :meth:`_create_token_value`
+        :raises ValueError: If the string is not valid JSON or is missing required fields
+        :return: Parsed token data dictionary
+        """
+        try:
+            token_data = cast(dict[str, Any], json.loads(value))
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Invalid OIDC token format: {str(e)}") from e
+
+        if "id_token_claims" not in token_data:
+            raise ValueError("OIDC token missing id_token_claims")
+        if "access_token" not in token_data:
+            raise ValueError("OIDC token missing access_token")
+
+        return token_data
+
     def extract_token_data(self, credential: Credential) -> dict[str, Any]:
         """Extract token data from credential.
 
@@ -86,22 +106,12 @@ class OIDCCredentialManager(LoggerMixin):
         :return: Dictionary with id_token_claims, access_token, refresh_token
         """
         self.log.debug(f"Extracting OIDC token data from credential {credential.id}")
-
         credential_value = credential.credential if credential.credential else "{}"
-
         try:
-            token_data = cast(dict[str, Any], json.loads(credential_value))
-        except json.JSONDecodeError as e:
+            return self.parse_token_value(credential_value)
+        except ValueError as e:
             self.log.exception("Failed to decode OIDC token data")
-            raise ValueError(f"Invalid OIDC token format: {str(e)}") from e
-
-        # Validate structure
-        if "id_token_claims" not in token_data:
-            raise ValueError("OIDC token missing id_token_claims")
-        if "access_token" not in token_data:
-            raise ValueError("OIDC token missing access_token")
-
-        return token_data
+            raise
 
     def create_oidc_token(
         self,
