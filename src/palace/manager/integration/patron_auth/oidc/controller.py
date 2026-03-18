@@ -410,7 +410,7 @@ class OIDCController(LoggerMixin):
             self.log.exception("Failed to parse token data from bearer token")
             return OIDC_INVALID_REQUEST.detailed(_("Invalid credential data"))
 
-        id_token_claims = token_data.get("id_token_claims", {})
+        id_token_claims = token_data["id_token_claims"]
         patron_identifier = id_token_claims.get(provider._settings.patron_id_claim)  # type: ignore[attr-defined]
         if not patron_identifier:
             return OIDC_INVALID_REQUEST.detailed(

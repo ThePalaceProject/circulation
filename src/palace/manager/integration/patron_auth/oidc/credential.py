@@ -17,6 +17,7 @@ from typing import Any, cast
 from sqlalchemy import and_, exists
 from sqlalchemy.orm import Session
 
+from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.integration.patron_auth.oidc.auth import (
     OIDCAuthenticationManager,
     OIDCRefreshTokenError,
@@ -90,12 +91,12 @@ class OIDCCredentialManager(LoggerMixin):
         try:
             token_data = cast(dict[str, Any], json.loads(value))
         except json.JSONDecodeError as e:
-            raise ValueError(f"Invalid OIDC token format: {str(e)}") from e
+            raise PalaceValueError(f"Invalid OIDC token format: {str(e)}") from e
 
-        if "id_token_claims" not in token_data:
-            raise ValueError("OIDC token missing id_token_claims")
+        if not isinstance(token_data.get("id_token_claims"), dict):
+            raise PalaceValueError("OIDC token missing or invalid id_token_claims")
         if "access_token" not in token_data:
-            raise ValueError("OIDC token missing access_token")
+            raise PalaceValueError("OIDC token missing access_token")
 
         return token_data
 

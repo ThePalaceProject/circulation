@@ -84,8 +84,13 @@ class TestOIDCCredentialManager:
             pytest.param("not-json", "Invalid OIDC token format", id="invalid-json"),
             pytest.param(
                 json.dumps({"access_token": "tok"}),
-                "missing id_token_claims",
+                "missing or invalid id_token_claims",
                 id="missing-id-token-claims",
+            ),
+            pytest.param(
+                json.dumps({"id_token_claims": "not-a-dict", "access_token": "tok"}),
+                "missing or invalid id_token_claims",
+                id="non-dict-id-token-claims",
             ),
             pytest.param(
                 json.dumps({"id_token_claims": {"sub": "u"}}),
@@ -184,7 +189,7 @@ class TestOIDCCredentialManager:
 
         with pytest.raises(ValueError) as exc_info:
             manager.extract_token_data(credential)
-        assert "missing id_token_claims" in str(exc_info.value)
+        assert "missing or invalid id_token_claims" in str(exc_info.value)
 
     def test_extract_token_data_missing_access_token(
         self,
