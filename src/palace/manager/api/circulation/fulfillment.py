@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
@@ -139,10 +140,21 @@ class FetchFulfillment(UrlFulfillment, LoggerMixin):
             response = self.get(self.content_link)
         except BadResponseException as ex:
             exc_response = ex.response
+            # Attempt to parse a response as JSON for structured logging, but fall back to string
+            # since there is no guarantee we get JSON here.
+            try:
+                fulfillment_response = json.loads(exc_response.text)
+            except (json.JSONDecodeError, TypeError):
+                fulfillment_response = exc_response.text
             self.log.exception(
                 f"Error fulfilling loan. Bad response from: {self.content_link}. "
-                f"Status code: {exc_response.status_code}. "
-                f"Response: {exc_response.text}."
+                f"Status code: {exc_response.status_code}.",
+                extra={
+                    "palace_fulfillment_url": self.content_link,
+                    "palace_fulfillment_status_code": exc_response.status_code,
+                    "palace_fulfillment_response": fulfillment_response,
+                    "palace_fulfillment_headers": dict(exc_response.headers),
+                },
             )
             raise
 
