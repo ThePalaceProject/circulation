@@ -1673,6 +1673,30 @@ class TestOIDCControllerLogout:
         assert result.uri == OIDC_INVALID_REQUEST.uri
         assert "No authenticator found for library" in result.detail
 
+    def test_oidc_logout_callback_malformed_state_payload(
+        self, logout_controller: OIDCController, db: DatabaseTransactionFixture
+    ) -> None:
+        """Test logout callback when the state token cannot be decoded at all.
+
+        A token that has no '.' separator fails decode_state_payload before we
+        can even attempt signature validation.
+        """
+        malformed_state = "not-a-valid-state-token"
+
+        mock_redis = logout_controller._circulation_manager.services.redis.client()
+        utility = OIDCUtility(mock_redis)
+        utility.store_logout_state(
+            malformed_state, "https://app.example.com/logout/callback"
+        )
+
+        result = logout_controller.oidc_logout_callback(
+            {"state": malformed_state}, db.session
+        )
+
+        assert result.uri == OIDC_INVALID_STATE.uri
+        assert result.detail is not None
+        assert "Invalid state parameter format" in result.detail
+
     def test_oidc_logout_callback_state_validation_exception(
         self, logout_controller, db
     ):
