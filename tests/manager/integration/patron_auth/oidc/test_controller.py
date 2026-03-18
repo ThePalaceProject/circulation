@@ -1,6 +1,7 @@
 """Tests for OIDC controller."""
 
 import json
+import logging
 from unittest.mock import MagicMock, Mock, patch
 
 import jwt
@@ -783,12 +784,18 @@ class TestOIDCControllerLogout:
                 mock_auth_manager.build_logout_url.call_args[0][2],
             )
 
-    def test_oidc_logout_initiate_revocation_only(self, logout_controller, db):
+    def test_oidc_logout_initiate_revocation_only(
+        self,
+        logout_controller: OIDCController,
+        db: DatabaseTransactionFixture,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
         """Test logout for providers with revocation_endpoint but no end_session_endpoint.
 
         The flow should: invalidate CM credential, revoke token, redirect directly
         to post_logout_redirect_uri without going through the IdP.
         """
+        caplog.set_level(logging.INFO)
         controller = logout_controller
         patron = db.patron()
         patron.authorization_identifier = "user123@example.com"
@@ -849,6 +856,7 @@ class TestOIDCControllerLogout:
             assert result.status_code == 302
             assert "https://app.example.com/logout/callback" in result.location
             assert "logout_status=success" in result.location
+            assert "provider does not support it" in caplog.text
 
             # Verify RP-Initiated Logout was NOT attempted
             mock_auth_manager.build_logout_url.assert_not_called()
@@ -861,7 +869,12 @@ class TestOIDCControllerLogout:
                 db.session, patron.id
             )
 
-    def test_oidc_logout_initiate_no_stored_id_token(self, logout_controller, db):
+    def test_oidc_logout_initiate_no_stored_id_token(
+        self,
+        logout_controller: OIDCController,
+        db: DatabaseTransactionFixture,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
         """Test logout when provider supports RP-Initiated Logout but no id_token is stored.
 
         Should redirect directly with logout_status=partial and log a warning.
@@ -922,6 +935,7 @@ class TestOIDCControllerLogout:
             assert result.status_code == 302
             assert "https://app.example.com/logout/callback" in result.location
             assert "logout_status=partial" in result.location
+            assert "no id_token stored in credential" in caplog.text
 
             mock_auth_manager.build_logout_url.assert_not_called()
 

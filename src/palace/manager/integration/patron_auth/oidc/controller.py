@@ -450,6 +450,7 @@ class OIDCController(LoggerMixin):
         # If the provider does not support RP-Initiated Logout (only token revocation),
         # redirect directly — local invalidation and token revocation are already done.
         if not auth_manager.supports_rp_initiated_logout():
+            self.log.info("Skipping RP-Initiated Logout: provider does not support it.")
             final_redirect_uri = self._add_params_to_url(
                 post_logout_redirect_uri, {self.LOGOUT_STATUS: "success"}
             )
