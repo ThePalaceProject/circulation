@@ -275,7 +275,6 @@ class TestOIDCAuthenticationProvider:
             "palace.manager.integration.patron_auth.oidc.provider.OIDCAuthenticationManager"
         ) as MockManager:
             mock_manager = MagicMock()
-            mock_manager.is_configured = True
             mock_manager.get_provider_metadata.return_value = {}
             MockManager.return_value = mock_manager
 
