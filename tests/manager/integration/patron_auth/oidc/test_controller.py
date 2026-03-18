@@ -11,6 +11,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from palace.manager.api.authentication.base import PatronData
 from palace.manager.api.authenticator import BaseOIDCAuthenticationProvider
 from palace.manager.api.problem_details import LIBRARY_NOT_FOUND, UNKNOWN_OIDC_PROVIDER
+from palace.manager.integration.patron_auth.oidc.auth import OIDCAuthenticationError
 from palace.manager.integration.patron_auth.oidc.configuration.model import (
     OIDCAuthLibrarySettings,
     OIDCAuthSettings,
@@ -1296,7 +1297,7 @@ class TestOIDCControllerLogout:
             pytest.param(
                 True,
                 None,
-                Exception("Logout not supported"),
+                OIDCAuthenticationError("Logout not supported"),
                 None,
                 "http://palaceproject.io/terms/problem/auth/unrecoverable/oidc/logout-not-supported",
                 id="build-logout-url-exception",
@@ -1305,14 +1306,14 @@ class TestOIDCControllerLogout:
     )
     def test_oidc_logout_initiate_exceptions(
         self,
-        logout_controller,
-        db,
-        patron_found,
-        invalidation_error,
-        build_url_error,
-        expected_status,
-        expected_uri,
-    ):
+        logout_controller: OIDCController,
+        db: DatabaseTransactionFixture,
+        patron_found: bool,
+        invalidation_error: SQLAlchemyError | None,
+        build_url_error: OIDCAuthenticationError | None,
+        expected_status: int | None,
+        expected_uri: str | None,
+    ) -> None:
         """Test logout initiate with patron lookup and exception scenarios."""
         library = db.default_library()
         patron = db.patron()
@@ -1397,8 +1398,8 @@ class TestOIDCControllerLogout:
                 assert result.uri == expected_uri
 
     def test_oidc_logout_initiate_credential_invalidation_is_nonfatal(
-        self, logout_controller, db
-    ):
+        self, logout_controller: OIDCController, db: DatabaseTransactionFixture
+    ) -> None:
         """Credential invalidation failure must not abort the logout flow.
 
         Token revocation and the final redirect must still happen even when
