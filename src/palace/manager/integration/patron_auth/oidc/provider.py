@@ -260,10 +260,9 @@ class OIDCAuthenticationProvider(
     def get_authentication_manager(self) -> OIDCAuthenticationManager:
         """Return OIDC authentication manager for this provider.
 
-        The manager is cached once it has successfully loaded provider metadata
-        (i.e. ``is_configured`` is True). If configuration fails — for example
-        because the IdP is temporarily unreachable — the manager is returned
-        uncached so the next call retries configuration from scratch.
+        The manager is cached once provider metadata loads successfully. If
+        discovery fails — for example because the IdP is temporarily unreachable
+        — the manager is returned uncached so the next call retries from scratch.
 
         :return: OIDC authentication manager
         """
