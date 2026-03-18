@@ -738,7 +738,7 @@ class TestOIDCControllerLogout:
             json.dumps(
                 {
                     "id_token_claims": {"sub": "user123@example.com"},
-                    "access_token": "access-token",
+                    "access_token": "test-access-token",
                     "refresh_token": "refresh-token",
                     "id_token": "raw.id.token.jwt",
                 }
@@ -776,8 +776,11 @@ class TestOIDCControllerLogout:
             mock_provider._credential_manager.invalidate_patron_credentials.assert_called_once_with(
                 db.session, patron.id
             )
-            # Verify refresh token revocation was attempted
-            mock_auth_manager.revoke_token.assert_called_once_with("refresh-token")
+            # Verify both tokens were revoked
+            mock_auth_manager.revoke_token.assert_any_call(
+                "test-access-token", "access_token"
+            )
+            mock_auth_manager.revoke_token.assert_any_call("refresh-token")
             # Verify stored id_token was used as id_token_hint for RP-Initiated Logout
             mock_auth_manager.build_logout_url.assert_called_once_with(
                 "raw.id.token.jwt",
@@ -830,7 +833,7 @@ class TestOIDCControllerLogout:
             json.dumps(
                 {
                     "id_token_claims": {"sub": "user123@example.com"},
-                    "access_token": "access-token",
+                    "access_token": "test-access-token",
                     "refresh_token": "refresh-token",
                 }
             ),
@@ -861,8 +864,11 @@ class TestOIDCControllerLogout:
             # Verify RP-Initiated Logout was NOT attempted
             mock_auth_manager.build_logout_url.assert_not_called()
 
-            # Verify token was revoked
-            mock_auth_manager.revoke_token.assert_called_once_with("refresh-token")
+            # Verify both tokens were revoked
+            mock_auth_manager.revoke_token.assert_any_call(
+                "test-access-token", "access_token"
+            )
+            mock_auth_manager.revoke_token.assert_any_call("refresh-token")
 
             # Verify CM credentials were invalidated
             mock_provider._credential_manager.invalidate_patron_credentials.assert_called_once_with(
@@ -910,7 +916,7 @@ class TestOIDCControllerLogout:
             json.dumps(
                 {
                     "id_token_claims": {"sub": "user123@example.com"},
-                    "access_token": "access-token",
+                    "access_token": "test-access-token",
                     # No id_token field
                 }
             ),
@@ -1005,7 +1011,7 @@ class TestOIDCControllerLogout:
                 json.dumps(
                     {
                         "id_token_claims": {"sub": patron.authorization_identifier},
-                        "access_token": "access-token",
+                        "access_token": "test-access-token",
                         "refresh_token": "refresh-token",
                         "id_token": f"raw.id.token.{i+1}",
                     }
@@ -1323,7 +1329,7 @@ class TestOIDCControllerLogout:
         library = db.default_library()
         token_data = {
             "id_token_claims": {"iss": "issuer"},  # 'sub' / patron_id_claim absent
-            "access_token": "access-token",
+            "access_token": "test-access-token",
             "refresh_token": "refresh-token",
         }
 
@@ -1360,7 +1366,10 @@ class TestOIDCControllerLogout:
         assert result.uri == OIDC_INVALID_REQUEST.uri
         assert result.detail is not None
         assert "Credential missing patron identifier claim" in result.detail
-        mock_auth_manager.revoke_token.assert_called_once_with("refresh-token")
+        mock_auth_manager.revoke_token.assert_any_call(
+            "test-access-token", "access_token"
+        )
+        mock_auth_manager.revoke_token.assert_any_call("refresh-token")
 
     @pytest.mark.parametrize(
         "patron_found,invalidation_error,build_url_error,expected_status,expected_uri",
@@ -1407,7 +1416,7 @@ class TestOIDCControllerLogout:
 
         token_data: dict = {
             "id_token_claims": {"sub": "user@test.com"},
-            "access_token": "access-token",
+            "access_token": "test-access-token",
         }
         if build_url_error:
             # RP-Initiated Logout path — needs id_token and the method to return True
@@ -1511,7 +1520,7 @@ class TestOIDCControllerLogout:
             json.dumps(
                 {
                     "id_token_claims": {"sub": "user@test.com"},
-                    "access_token": "access-token",
+                    "access_token": "test-access-token",
                     "refresh_token": "refresh-token",
                 }
             ),
@@ -1550,7 +1559,10 @@ class TestOIDCControllerLogout:
 
         assert result.status_code == 302
         assert "logout_status=success" in result.location
-        mock_auth_manager.revoke_token.assert_called_once_with("refresh-token")
+        mock_auth_manager.revoke_token.assert_any_call(
+            "test-access-token", "access_token"
+        )
+        mock_auth_manager.revoke_token.assert_any_call("refresh-token")
 
     def test_oidc_logout_callback_success(self, logout_controller, db):
         library = db.default_library()

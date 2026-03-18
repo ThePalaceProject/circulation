@@ -416,21 +416,20 @@ class OIDCController(LoggerMixin):
 
         id_token_claims = token_data["id_token_claims"]
         patron_identifier = id_token_claims.get(provider._settings.patron_id_claim)  # type: ignore[attr-defined]
-        refresh_token = token_data.get("refresh_token")
+
+        # Best-effort: revoke access and refresh tokens to prevent silent re-authentication
+        # at the IdP after local CM logout. revoke_token suppresses all errors internally.
+        access_token = token_data["access_token"]
+        auth_manager.revoke_token(access_token, "access_token")
+        if refresh_token := token_data.get("refresh_token"):
+            auth_manager.revoke_token(refresh_token)
 
         if not patron_identifier:
-            # Best-effort cleanup: revoke the refresh token so the IdP session doesn't
-            # persist even though we can't identify (and thus invalidate) the patron.
-            if refresh_token:
-                auth_manager.revoke_token(refresh_token)
             return OIDC_INVALID_REQUEST.detailed(
                 _("Credential missing patron identifier claim")
             )
 
-        # The raw id_token JWT stored at authentication time; used as id_token_hint
-        # for RP-Initiated Logout.
-        stored_id_token = token_data.get("id_token")
-
+        # Invalidate our local patron credentials.
         try:
             credential_manager = provider._credential_manager  # type: ignore[attr-defined]
             patron = credential_manager.lookup_patron_by_identifier(
@@ -442,14 +441,8 @@ class OIDCController(LoggerMixin):
                 self.log.info(f"Invalidated credentials for patron {patron_identifier}")
             else:
                 self.log.warning(f"Patron not found for identifier {patron_identifier}")
-
         except (SQLAlchemyError, AttributeError):
             self.log.exception("Failed to invalidate credentials")
-
-        # Best-effort: revoke the OAuth refresh token to prevent silent re-authentication
-        # at the IdP after local CM logout. revoke_token suppresses all errors internally.
-        if refresh_token:
-            auth_manager.revoke_token(refresh_token)
 
         # If the provider does not support RP-Initiated Logout (only token revocation),
         # redirect directly — local invalidation and token revocation are already done.
@@ -460,9 +453,9 @@ class OIDCController(LoggerMixin):
             )
             return redirect(final_redirect_uri)
 
-        # If no id_token is stored, skip RP-Initiated Logout. The provider session
-        # may remain active.
-        if not stored_id_token:
+        # If the raw id_token JWT (stored at authentication time) is not present,
+        # skip RP-Initiated Logout. The provider session may remain active.
+        if not (stored_id_token := token_data.get("id_token")):
             self.log.warning(
                 "Skipping RP-Initiated Logout: no id_token stored in credential. "
                 "Provider session may remain active."
