@@ -506,7 +506,13 @@ class BasicAuthenticationProvider[
         """
         username = self.scrub_credential(credentials.get("username")) or ""
         password = self.scrub_credential(credentials.get("password"))
-        if not self.server_side_validation(username, password):
+        result = self.server_side_validation(username, password)
+        if not result:
+            self.log.info(
+                "Server-side validation failed for identifier %r: %s",
+                username,
+                result.details,
+            )
             return None
 
         # Check these credentials with the source of truth.
