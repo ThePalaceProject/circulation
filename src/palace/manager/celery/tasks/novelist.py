@@ -21,6 +21,7 @@ def update_novelists_for_all_libraries(task: Task) -> None:
             .join(IntegrationLibraryConfiguration)
             .join(IntegrationConfiguration)
             .where(IntegrationConfiguration.protocol == novelist_protocol)
+            .order_by(Library.id)
         )
         libraries = session.execute(all_libraries_with_novelist_config).all()
         if libraries:
