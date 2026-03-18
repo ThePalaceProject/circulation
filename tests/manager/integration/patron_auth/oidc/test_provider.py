@@ -1,5 +1,6 @@
 """Tests for OIDC authentication provider."""
 
+import logging
 import re
 from unittest.mock import MagicMock, patch
 
@@ -20,7 +21,10 @@ from palace.manager.integration.patron_auth.oidc.provider import (
     PALACE_REDIRECT_URI_TERM,
     OIDCAuthenticationProvider,
 )
-from palace.manager.integration.patron_auth.oidc.util import LOGOUT_REDIRECT_QUERY_PARAM
+from palace.manager.integration.patron_auth.oidc.util import (
+    LOGOUT_REDIRECT_QUERY_PARAM,
+    OIDCDiscoveryError,
+)
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.util.problem_detail import ProblemDetailException
 from tests.fixtures.database import DatabaseTransactionFixture
@@ -262,6 +266,83 @@ class TestOIDCAuthenticationProvider:
             assert len(result["links"]) == 1
             assert result["links"][0]["rel"] == "authenticate"
 
+    def test_get_authentication_manager_cached_after_successful_configuration(
+        self, oidc_provider: OIDCAuthenticationProvider
+    ) -> None:
+        """Manager is cached once metadata loads successfully."""
+        with patch(
+            "palace.manager.integration.patron_auth.oidc.provider.OIDCAuthenticationManager"
+        ) as MockManager:
+            mock_manager = MagicMock()
+            mock_manager.is_configured = True
+            mock_manager.get_provider_metadata.return_value = {}
+            MockManager.return_value = mock_manager
+
+            first = oidc_provider.get_authentication_manager()
+            second = oidc_provider.get_authentication_manager()
+
+        assert first is second
+        MockManager.assert_called_once()
+
+    def test_get_authentication_manager_not_cached_on_discovery_failure(
+        self,
+        oidc_provider: OIDCAuthenticationProvider,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Manager is not cached when metadata discovery fails; next call retries."""
+        caplog.set_level(logging.WARNING)
+
+        with patch(
+            "palace.manager.integration.patron_auth.oidc.provider.OIDCAuthenticationManager"
+        ) as MockManager:
+            first_manager = MagicMock()
+            first_manager.get_provider_metadata.side_effect = OIDCDiscoveryError(
+                "IdP unreachable"
+            )
+            second_manager = MagicMock()
+            second_manager.get_provider_metadata.side_effect = OIDCDiscoveryError(
+                "IdP unreachable"
+            )
+            MockManager.side_effect = [first_manager, second_manager]
+
+            first = oidc_provider.get_authentication_manager()
+            second = oidc_provider.get_authentication_manager()
+
+        assert first is first_manager
+        assert second is second_manager
+        assert first is not second
+        assert MockManager.call_count == 2
+        assert "Failed to configure OIDC authentication manager" in caplog.text
+        assert "Will retry on next request" in caplog.text
+
+    def test_get_authentication_manager_cached_after_recovery(
+        self,
+        oidc_provider: OIDCAuthenticationProvider,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Manager is cached once IdP becomes reachable after previous failures."""
+        caplog.set_level(logging.WARNING)
+
+        with patch(
+            "palace.manager.integration.patron_auth.oidc.provider.OIDCAuthenticationManager"
+        ) as MockManager:
+            failing_manager = MagicMock()
+            failing_manager.get_provider_metadata.side_effect = OIDCDiscoveryError(
+                "IdP unreachable"
+            )
+            succeeding_manager = MagicMock()
+            succeeding_manager.get_provider_metadata.return_value = {}
+            MockManager.side_effect = [failing_manager, succeeding_manager]
+
+            first = oidc_provider.get_authentication_manager()
+            second = oidc_provider.get_authentication_manager()
+            third = oidc_provider.get_authentication_manager()
+
+        assert first is failing_manager
+        assert second is succeeding_manager
+        assert third is succeeding_manager  # cached after recovery
+        assert MockManager.call_count == 2
+
     def test_run_self_tests(self, db: DatabaseTransactionFixture, oidc_provider):
         results = list(oidc_provider._run_self_tests(db.session))
         assert results == []
@@ -454,24 +535,42 @@ class TestOIDCAuthenticationProvider:
         assert credential.credential is not None
         assert credential.patron == patron
 
-    def test_get_authentication_manager(self, oidc_provider):
-        manager = oidc_provider.get_authentication_manager()
+    def test_get_authentication_manager(
+        self, oidc_provider: OIDCAuthenticationProvider
+    ) -> None:
+        with patch(
+            "palace.manager.integration.patron_auth.oidc.provider.OIDCAuthenticationManager"
+        ) as MockManager:
+            mock_manager = MagicMock()
+            mock_manager.get_provider_metadata.return_value = {}
+            MockManager.return_value = mock_manager
 
-        assert manager is not None
-        assert manager._settings == oidc_provider._settings
+            manager = oidc_provider.get_authentication_manager()
 
-        # Same instance returned on repeated calls — avoids re-fetching OIDC discovery doc.
-        assert oidc_provider.get_authentication_manager() is manager
+            assert manager is mock_manager
+            assert MockManager.call_args[0][0] == oidc_provider._settings
+
+            # Same instance returned on repeated calls — avoids re-fetching OIDC discovery doc.
+            assert oidc_provider.get_authentication_manager() is manager
+            MockManager.assert_called_once()
 
         # A new provider instance (simulating a config reload) produces a new manager.
+        new_settings = OIDCAuthSettings(
+            issuer_url="https://new-idp.example.com",
+            client_id="new-client-id",
+            client_secret="new-client-secret",
+        )
         new_provider = OIDCAuthenticationProvider(
             library_id=oidc_provider.library_id,
             integration_id=oidc_provider.integration_id,
-            settings=OIDCAuthSettings(
-                issuer_url="https://new-idp.example.com",
-                client_id="new-client-id",
-                client_secret="new-client-secret",
-            ),
+            settings=new_settings,
             library_settings=OIDCAuthLibrarySettings(),
         )
-        assert new_provider.get_authentication_manager() is not manager
+        with patch(
+            "palace.manager.integration.patron_auth.oidc.provider.OIDCAuthenticationManager"
+        ) as MockNewManager:
+            new_mock_manager = MagicMock()
+            new_mock_manager.get_provider_metadata.return_value = {}
+            MockNewManager.return_value = new_mock_manager
+
+            assert new_provider.get_authentication_manager() is not manager

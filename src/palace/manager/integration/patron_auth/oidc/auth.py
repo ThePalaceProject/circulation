@@ -78,6 +78,11 @@ class OIDCAuthenticationManager(LoggerMixin):
         self._validator = OIDCTokenValidator()
         self._metadata: dict[str, Any] | None = None
 
+    @property
+    def is_configured(self) -> bool:
+        """Return True if provider metadata has been successfully loaded."""
+        return self._metadata is not None
+
     def _extract_error_detail_from_response(
         self, exception: RequestNetworkException
     ) -> str:
