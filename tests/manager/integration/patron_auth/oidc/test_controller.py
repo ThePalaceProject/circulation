@@ -860,6 +860,70 @@ class TestOIDCControllerLogout:
                 db.session, patron.id
             )
 
+    def test_oidc_logout_initiate_no_stored_id_token(self, logout_controller, db):
+        """Test logout when provider supports RP-Initiated Logout but no id_token is stored.
+
+        Should redirect directly with logout_status=partial and log a warning.
+        """
+        controller = logout_controller
+        patron = db.patron()
+        patron.authorization_identifier = "user123@example.com"
+        db.session.commit()
+
+        library = db.default_library()
+
+        mock_library_auth = Mock()
+        mock_library_auth.bearer_token_signing_secret = "test-secret"
+        mock_provider = Mock()
+        mock_provider._settings = Mock()
+        mock_provider._settings.patron_id_claim = "sub"
+        mock_provider._credential_manager = Mock()
+
+        mock_auth_manager = Mock()
+        mock_auth_manager.supports_rp_initiated_logout.return_value = True
+        mock_provider.get_authentication_manager.return_value = mock_auth_manager
+
+        mock_patron = Mock()
+        mock_patron.id = patron.id
+        mock_provider._credential_manager.lookup_patron_by_identifier.return_value = (
+            mock_patron
+        )
+        mock_provider._credential_manager.invalidate_patron_credentials.return_value = 1
+
+        mock_library_auth.oidc_provider_lookup.return_value = mock_provider
+        mock_library_auth.decode_bearer_token.return_value = (
+            "Test OIDC",
+            json.dumps(
+                {
+                    "id_token_claims": {"sub": "user123@example.com"},
+                    "access_token": "access-token",
+                    # No id_token field
+                }
+            ),
+        )
+
+        controller._authenticator.library_authenticators[library.short_name] = (
+            mock_library_auth
+        )
+
+        with patch(
+            "palace.manager.integration.patron_auth.oidc.controller.get_request_library",
+            return_value=library,
+        ):
+            params = {
+                "provider": "Test OIDC",
+                "post_logout_redirect_uri": "https://app.example.com/logout/callback",
+            }
+            result = controller.oidc_logout_initiate(
+                params, db.session, auth_header="Bearer valid.jwt.token"
+            )
+
+            assert result.status_code == 302
+            assert "https://app.example.com/logout/callback" in result.location
+            assert "logout_status=partial" in result.location
+
+            mock_auth_manager.build_logout_url.assert_not_called()
+
     @pytest.mark.parametrize(
         "library_index,patron_email,logout_url",
         [

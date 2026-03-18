@@ -446,11 +446,22 @@ class OIDCController(LoggerMixin):
                 )
 
         # If the provider does not support RP-Initiated Logout (only token revocation),
-        # or if no id_token was stored (credentials pre-dating this feature), redirect
-        # directly — local invalidation and token revocation are already done.
-        if not auth_manager.supports_rp_initiated_logout() or not stored_id_token:
+        # redirect directly — local invalidation and token revocation are already done.
+        if not auth_manager.supports_rp_initiated_logout():
             final_redirect_uri = self._add_params_to_url(
                 post_logout_redirect_uri, {self.LOGOUT_STATUS: "success"}
+            )
+            return redirect(final_redirect_uri)
+
+        # If no id_token is stored, skip RP-Initiated Logout. The provider session
+        # may remain active.
+        if not stored_id_token:
+            self.log.warning(
+                "Skipping RP-Initiated Logout: no id_token stored in credential. "
+                "Provider session may remain active."
+            )
+            final_redirect_uri = self._add_params_to_url(
+                post_logout_redirect_uri, {self.LOGOUT_STATUS: "partial"}
             )
             return redirect(final_redirect_uri)
 
