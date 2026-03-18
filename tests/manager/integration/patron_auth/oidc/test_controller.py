@@ -1142,13 +1142,15 @@ class TestOIDCControllerLogout:
     )
     def test_oidc_logout_initiate_bearer_token_errors(
         self,
-        logout_controller,
-        db,
-        auth_header,
-        decode_side_effect,
-        expected_detail,
-    ):
+        logout_controller: OIDCController,
+        db: DatabaseTransactionFixture,
+        caplog: pytest.LogCaptureFixture,
+        auth_header: str | None,
+        decode_side_effect: jwt.exceptions.InvalidTokenError | None,
+        expected_detail: str,
+    ) -> None:
         """Test logout initiate bearer token validation errors."""
+        caplog.set_level(logging.WARNING)
         library = db.default_library()
 
         mock_library_auth = Mock()
@@ -1185,7 +1187,10 @@ class TestOIDCControllerLogout:
             )
 
         assert result.uri == OIDC_INVALID_REQUEST.uri
+        assert result.detail is not None
         assert expected_detail in result.detail
+        if decode_side_effect:
+            assert "Invalid bearer token in logout request" in caplog.text
 
     def test_oidc_logout_initiate_unknown_provider(self, logout_controller, db):
         """Test logout initiate with unknown provider."""
