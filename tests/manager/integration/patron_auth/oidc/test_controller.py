@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, Mock, patch
 
 import jwt
 import pytest
+from sqlalchemy.exc import SQLAlchemyError
 
 from palace.manager.api.authentication.base import PatronData
 from palace.manager.api.authenticator import BaseOIDCAuthenticationProvider
@@ -1272,7 +1273,7 @@ class TestOIDCControllerLogout:
             ),
             pytest.param(
                 True,
-                Exception("Database error"),
+                SQLAlchemyError("Database error"),
                 None,
                 302,
                 None,
@@ -1380,6 +1381,65 @@ class TestOIDCControllerLogout:
                     mock_provider._credential_manager.invalidate_patron_credentials.assert_not_called()
             else:
                 assert result.uri == expected_uri
+
+    def test_oidc_logout_initiate_credential_invalidation_is_nonfatal(
+        self, logout_controller, db
+    ):
+        """Credential invalidation failure must not abort the logout flow.
+
+        Token revocation and the final redirect must still happen even when
+        invalidate_patron_credentials raises SQLAlchemyError.
+        """
+        library = db.default_library()
+        patron = db.patron()
+
+        mock_library_auth = Mock()
+        mock_library_auth.bearer_token_signing_secret = "test-secret"
+        mock_library_auth.decode_bearer_token.return_value = (
+            "Test OIDC",
+            json.dumps(
+                {
+                    "id_token_claims": {"sub": "user@test.com"},
+                    "access_token": "access-token",
+                    "refresh_token": "refresh-token",
+                }
+            ),
+        )
+        mock_provider = Mock()
+        mock_provider._settings = Mock()
+        mock_provider._settings.patron_id_claim = "sub"
+        mock_provider._credential_manager = Mock()
+        mock_provider._credential_manager.lookup_patron_by_identifier.return_value = (
+            Mock(id=patron.id)
+        )
+        mock_provider._credential_manager.invalidate_patron_credentials.side_effect = (
+            SQLAlchemyError("DB error")
+        )
+
+        mock_auth_manager = Mock()
+        mock_auth_manager.supports_rp_initiated_logout.return_value = False
+        mock_provider.get_authentication_manager.return_value = mock_auth_manager
+        mock_library_auth.oidc_provider_lookup.return_value = mock_provider
+        logout_controller._authenticator.library_authenticators[library.short_name] = (
+            mock_library_auth
+        )
+
+        with patch(
+            "palace.manager.integration.patron_auth.oidc.controller.get_request_library",
+            return_value=library,
+        ):
+            result = logout_controller.oidc_logout_initiate(
+                {
+                    "provider": "Test OIDC",
+                    "post_logout_redirect_uri": "https://app.example.com/logout/callback",
+                },
+                db.session,
+                auth_header="Bearer valid.jwt.token",
+            )
+
+        assert result.status_code == 302
+        assert "logout_status=success" in result.location
+        mock_auth_manager.revoke_token.assert_called_once_with("refresh-token")
 
     def test_oidc_logout_callback_success(self, logout_controller, db):
         library = db.default_library()

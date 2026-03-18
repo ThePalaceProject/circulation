@@ -9,6 +9,8 @@ from urllib.parse import SplitResult, parse_qs, urlencode, urlsplit
 import jwt
 from flask import redirect, url_for
 from flask_babel import lazy_gettext as _
+from requests import RequestException
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from werkzeug.wrappers import Response as BaseResponse
 
@@ -19,6 +21,7 @@ from palace.manager.integration.patron_auth.oidc.util import (
     OIDCStateValidationError,
     OIDCUtility,
 )
+from palace.manager.util.http.exception import RequestNetworkException
 from palace.manager.util.log import LoggerMixin
 from palace.manager.util.problem_detail import (
     ProblemDetail,
@@ -431,7 +434,7 @@ class OIDCController(LoggerMixin):
             else:
                 self.log.warning(f"Patron not found for identifier {patron_identifier}")
 
-        except Exception as e:
+        except (SQLAlchemyError, AttributeError) as e:
             self.log.exception("Failed to invalidate credentials")
 
         # Best-effort: revoke the OAuth refresh token to prevent silent re-authentication
@@ -440,7 +443,7 @@ class OIDCController(LoggerMixin):
         if refresh_token:
             try:
                 auth_manager.revoke_token(refresh_token)
-            except Exception:
+            except (RequestNetworkException, RequestException):
                 self.log.warning(
                     "Failed to revoke refresh token (non-critical)", exc_info=True
                 )

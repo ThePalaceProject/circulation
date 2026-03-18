@@ -560,7 +560,7 @@ class OIDCAuthenticationManager(LoggerMixin):
                 allowed_response_codes=["2xx"],
             )
             self.log.info(f"Successfully revoked {token_type_hint}")
-        except Exception:
+        except (RequestNetworkException, RequestException):
             self.log.warning("Token revocation failed (non-critical)", exc_info=True)
 
     def validate_id_token_hint(self, id_token: str) -> dict[str, Any]:
