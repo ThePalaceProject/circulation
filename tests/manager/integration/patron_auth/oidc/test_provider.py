@@ -270,6 +270,7 @@ class TestOIDCAuthenticationProvider:
         self, oidc_provider: OIDCAuthenticationProvider
     ) -> None:
         """Manager is cached once metadata loads successfully."""
+        oidc_provider._auth_manager = None
         with patch(
             "palace.manager.integration.patron_auth.oidc.provider.OIDCAuthenticationManager"
         ) as MockManager:
@@ -290,6 +291,7 @@ class TestOIDCAuthenticationProvider:
         caplog: pytest.LogCaptureFixture,
     ) -> None:
         """Manager is not cached when metadata discovery fails; next call retries."""
+        oidc_provider._auth_manager = None
         caplog.set_level(logging.WARNING)
 
         with patch(
@@ -321,6 +323,7 @@ class TestOIDCAuthenticationProvider:
         caplog: pytest.LogCaptureFixture,
     ) -> None:
         """Manager is cached once IdP becomes reachable after previous failures."""
+        oidc_provider._auth_manager = None
         caplog.set_level(logging.WARNING)
 
         with patch(
@@ -538,6 +541,7 @@ class TestOIDCAuthenticationProvider:
     def test_get_authentication_manager(
         self, oidc_provider: OIDCAuthenticationProvider
     ) -> None:
+        oidc_provider._auth_manager = None
         with patch(
             "palace.manager.integration.patron_auth.oidc.provider.OIDCAuthenticationManager"
         ) as MockManager:
