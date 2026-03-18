@@ -415,7 +415,13 @@ class OIDCController(LoggerMixin):
 
         id_token_claims = token_data["id_token_claims"]
         patron_identifier = id_token_claims.get(provider._settings.patron_id_claim)  # type: ignore[attr-defined]
+        refresh_token = token_data.get("refresh_token")
+
         if not patron_identifier:
+            # Best-effort cleanup: revoke the refresh token so the IdP session doesn't
+            # persist even though we can't identify (and thus invalidate) the patron.
+            if refresh_token:
+                auth_manager.revoke_token(refresh_token)
             return OIDC_INVALID_REQUEST.detailed(
                 _("Credential missing patron identifier claim")
             )
@@ -441,7 +447,6 @@ class OIDCController(LoggerMixin):
 
         # Best-effort: revoke the OAuth refresh token to prevent silent re-authentication
         # at the IdP after local CM logout. revoke_token suppresses all errors internally.
-        refresh_token = token_data.get("refresh_token")
         if refresh_token:
             auth_manager.revoke_token(refresh_token)
 

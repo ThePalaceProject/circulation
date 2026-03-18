@@ -1309,6 +1309,56 @@ class TestOIDCControllerLogout:
             assert result.uri == OIDC_INVALID_REQUEST.uri
             assert expected_message in result.detail
 
+    def test_oidc_logout_initiate_missing_patron_claim_revokes_token(
+        self, logout_controller: OIDCController, db: DatabaseTransactionFixture
+    ) -> None:
+        """Refresh token is revoked even when the patron identifier claim is absent.
+
+        Without a patron identifier we cannot look up or invalidate the patron's
+        credentials, but we can still revoke the refresh token to close the IdP session.
+        """
+        library = db.default_library()
+        token_data = {
+            "id_token_claims": {"iss": "issuer"},  # 'sub' / patron_id_claim absent
+            "access_token": "access-token",
+            "refresh_token": "refresh-token",
+        }
+
+        mock_library_auth = Mock()
+        mock_library_auth.decode_bearer_token.return_value = (
+            "Test OIDC",
+            json.dumps(token_data),
+        )
+        mock_provider = Mock()
+        mock_provider._settings = Mock()
+        mock_provider._settings.patron_id_claim = "sub"
+
+        mock_auth_manager = Mock()
+        mock_provider.get_authentication_manager.return_value = mock_auth_manager
+        mock_library_auth.oidc_provider_lookup.return_value = mock_provider
+
+        logout_controller._authenticator.library_authenticators[library.short_name] = (
+            mock_library_auth
+        )
+
+        with patch(
+            "palace.manager.integration.patron_auth.oidc.controller.get_request_library",
+            return_value=library,
+        ):
+            result = logout_controller.oidc_logout_initiate(
+                {
+                    "provider": "Test OIDC",
+                    "post_logout_redirect_uri": "https://app.example.com/logout/callback",
+                },
+                db.session,
+                auth_header="Bearer valid.jwt.token",
+            )
+
+        assert result.uri == OIDC_INVALID_REQUEST.uri
+        assert result.detail is not None
+        assert "Credential missing patron identifier claim" in result.detail
+        mock_auth_manager.revoke_token.assert_called_once_with("refresh-token")
+
     @pytest.mark.parametrize(
         "patron_found,invalidation_error,build_url_error,expected_status,expected_uri",
         [
