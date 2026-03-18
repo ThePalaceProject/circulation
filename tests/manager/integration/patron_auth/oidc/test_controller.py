@@ -846,7 +846,6 @@ class TestOIDCControllerLogout:
         ):
             params = {
                 "provider": "Test OIDC",
-                "id_token_hint": "test.id.token",
                 "post_logout_redirect_uri": "https://app.example.com/logout/callback",
             }
             result = controller.oidc_logout_initiate(
@@ -1041,7 +1040,6 @@ class TestOIDCControllerLogout:
 
             params = {
                 "provider": "Test OIDC",
-                "id_token_hint": "test.id.token",
                 "post_logout_redirect_uri": "https://app.example.com/logout/callback",
             }
             result = controller.oidc_logout_initiate(
