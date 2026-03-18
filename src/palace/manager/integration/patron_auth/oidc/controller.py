@@ -9,7 +9,6 @@ from urllib.parse import SplitResult, parse_qs, urlencode, urlsplit
 import jwt
 from flask import redirect, url_for
 from flask_babel import lazy_gettext as _
-from requests import RequestException
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from werkzeug.wrappers import Response as BaseResponse
@@ -24,7 +23,6 @@ from palace.manager.integration.patron_auth.oidc.util import (
     OIDCStateValidationError,
     OIDCUtility,
 )
-from palace.manager.util.http.exception import RequestNetworkException
 from palace.manager.util.log import LoggerMixin
 from palace.manager.util.problem_detail import (
     ProblemDetail,
@@ -439,15 +437,10 @@ class OIDCController(LoggerMixin):
             self.log.exception("Failed to invalidate credentials")
 
         # Best-effort: revoke the OAuth refresh token to prevent silent re-authentication
-        # at the IdP after local CM logout. Errors are non-fatal.
+        # at the IdP after local CM logout. revoke_token suppresses all errors internally.
         refresh_token = token_data.get("refresh_token")
         if refresh_token:
-            try:
-                auth_manager.revoke_token(refresh_token)
-            except (RequestNetworkException, RequestException):
-                self.log.warning(
-                    "Failed to revoke refresh token (non-critical)", exc_info=True
-                )
+            auth_manager.revoke_token(refresh_token)
 
         # If the provider does not support RP-Initiated Logout (only token revocation),
         # redirect directly — local invalidation and token revocation are already done.
