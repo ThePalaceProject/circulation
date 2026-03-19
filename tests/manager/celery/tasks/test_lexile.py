@@ -12,6 +12,7 @@ from palace.manager.integration.goals import Goals
 from palace.manager.integration.metadata.lexile.service import LexileDBService
 from palace.manager.integration.metadata.lexile.settings import LexileDBSettings
 from palace.manager.service.logging.configuration import LogLevel
+from palace.manager.service.redis.models.lock import RedisLock
 from palace.manager.sqlalchemy.constants import DataSourceConstants
 from palace.manager.sqlalchemy.model.classification import Classification, Subject
 from palace.manager.sqlalchemy.model.coverage import Timestamp
@@ -78,7 +79,7 @@ class TestLexileDBUpdate:
             ),
         )
         caplog.set_level(LogLevel.info)
-        with patch.object(lexile.RedisLock, "locked", return_value=True):
+        with patch.object(RedisLock, "locked", return_value=True):
             lexile.run_lexile_db_update.delay().wait()
         assert "Lexile DB update already in progress, skipping." in caplog.text
         assert "Lexile DB update task queued" not in caplog.text
