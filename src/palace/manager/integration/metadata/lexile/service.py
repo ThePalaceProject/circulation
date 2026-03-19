@@ -92,11 +92,7 @@ class LexileDBService(
 
     def _run_self_tests(self, _db: Session) -> Generator[SelfTestResult]:
         """Run a self-test by fetching Lexile data for the sample ISBN."""
-        isbn = (
-            self._settings.sample_identifier.strip()
-            if self._settings.sample_identifier
-            else DEFAULT_SAMPLE_ISBN
-        )
+        isbn = (self._settings.sample_identifier or DEFAULT_SAMPLE_ISBN).strip()
 
         def test_lookup() -> str:
             api = LexileDBAPI(self._settings)

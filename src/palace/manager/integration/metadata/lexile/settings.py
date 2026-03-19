@@ -28,10 +28,10 @@ class LexileDBSettings(MetadataServiceSettings):
         ),
     ]
     sample_identifier: Annotated[
-        str,
+        str | None,
         FormMetadata(
             label="Sample ISBN for self-test",
             description="ISBN used when running the connection self-test. "
-            "Leave blank to use the default (9780547928227).",
+            f"Defaults to {DEFAULT_SAMPLE_ISBN} if not set.",
         ),
-    ] = DEFAULT_SAMPLE_ISBN
+    ] = None
