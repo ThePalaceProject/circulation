@@ -147,11 +147,6 @@ def run_lexile_db_update(task: Task) -> None:
             task.log.info("Lexile DB update already in progress, skipping.")
             return
 
-        if not lock.acquire():
-            task.log.info("Lexile DB update could not acquire lock, skipping.")
-            return
-
-        lock.release()
         lexile_db_update_task.delay(force=False)
         task.log.info("Lexile DB update task queued.")
 
