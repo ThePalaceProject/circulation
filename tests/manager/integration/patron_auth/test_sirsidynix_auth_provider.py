@@ -43,10 +43,9 @@ class SirsiAuthFixture:
         self.app_id = "UNITTEST"
         monkeypatch.setenv(Configuration.SIRSI_DYNIX_APP_ID, self.app_id)
 
-        self.library_id = "libraryid"
         self.library_settings = partial(
             SirsiDynixHorizonAuthLibrarySettings,
-            library_id=self.library_id,
+            library_id="libraryid",
         )
 
         self.url = "http://example.org/sirsi/"
@@ -93,7 +92,6 @@ class SirsiAuthFixture:
     def headers(self, api: SirsiDynixHorizonAuthenticationProvider) -> dict[str, str]:
         return {
             "SD-Originating-App-Id": api.sirsi_app_id,
-            "SD-Working-LibraryID": api.sirsi_library_id,
             "x-sirs-clientID": api.sirsi_client_id,
         }
 
@@ -164,7 +162,6 @@ class TestSirsiDynixAuthenticationProvider:
         assert provider.server_url == "http://example.org/sirsi/"
         assert provider.sirsi_client_id == "clientid"
         assert provider.sirsi_app_id == "UNITTEST"
-        assert provider.sirsi_library_id == "libraryid"
 
     def test_api_patron_login(self, sirsi_auth_fixture: SirsiAuthFixture):
         provider = sirsi_auth_fixture.provider()
