@@ -41,6 +41,33 @@ def import_key(collection_id: int, *additional: str) -> list[str]:
     ]
 
 
+def import_workflow_key(collection_id: int) -> list[str]:
+    """
+    Generate a Redis key for the workflow-level lock for the given collection.
+    """
+    return [
+        "ImportCollectionWorkflow",
+        Collection.redis_key_from_id(collection_id),
+    ]
+
+
+def import_workflow_lock(
+    client: Redis, collection_id: int, random_value: str
+) -> RedisLock:
+    """
+    Create a workflow-level lock spanning all pages of a single import run.
+
+    This lock is held across page boundaries (between task.replace() calls)
+    to ensure at most one import runs per collection at a time.
+    """
+    return RedisLock(
+        client,
+        import_workflow_key(collection_id),
+        random_value=random_value,
+        lock_timeout=timedelta(hours=2),
+    )
+
+
 def import_lock(client: Redis, collection_id: int) -> RedisLock:
     """
     Create a lock for the given collection.
