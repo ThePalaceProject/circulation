@@ -8,6 +8,7 @@ from palace.manager.celery.tasks import lexile
 from palace.manager.integration.goals import Goals
 from palace.manager.integration.metadata.lexile.service import LexileDBService
 from palace.manager.integration.metadata.lexile.settings import LexileDBSettings
+from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.sqlalchemy.constants import DataSourceConstants
 from palace.manager.sqlalchemy.model.classification import Classification, Subject
 from palace.manager.sqlalchemy.model.coverage import Timestamp
@@ -17,6 +18,7 @@ from palace.manager.sqlalchemy.util import get_one
 from tests.fixtures.celery import CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.http import MockHttpClientFixture
+from tests.fixtures.redis import RedisFixture
 
 
 class TestLexileDBUpdate:
@@ -26,9 +28,11 @@ class TestLexileDBUpdate:
         self,
         db: DatabaseTransactionFixture,
         celery_fixture: CeleryFixture,
+        redis_fixture: RedisFixture,
         caplog: LogCaptureFixture,
     ) -> None:
         """Orchestrator skips when no Lexile DB integration exists."""
+        caplog.set_level(LogLevel.info)
         lexile.run_lexile_db_update.delay().wait()
         assert "Lexile DB update skipped" in caplog.text
 
@@ -36,6 +40,7 @@ class TestLexileDBUpdate:
         self,
         db: DatabaseTransactionFixture,
         celery_fixture: CeleryFixture,
+        redis_fixture: RedisFixture,
         caplog: LogCaptureFixture,
     ) -> None:
         """Orchestrator queues worker when integration exists and lock is free."""
@@ -48,6 +53,7 @@ class TestLexileDBUpdate:
                 base_url="https://api.example.com",
             ),
         )
+        caplog.set_level(LogLevel.info)
         lexile.run_lexile_db_update.delay().wait()
         assert "Lexile DB update task queued" in caplog.text
 
@@ -55,6 +61,7 @@ class TestLexileDBUpdate:
         self,
         db: DatabaseTransactionFixture,
         celery_fixture: CeleryFixture,
+        redis_fixture: RedisFixture,
         http_client: MockHttpClientFixture,
     ) -> None:
         """Worker fetches Lexile from API and adds classification."""
@@ -88,13 +95,14 @@ class TestLexileDBUpdate:
             if c.subject.type == Subject.LEXILE_SCORE
         ]
         assert len(classifications) == 1
-        assert classifications[0].identifier == "650"
+        assert classifications[0].subject.identifier == "650"
         assert classifications[0].data_source.name == DataSourceConstants.LEXILE_DB
 
     def test_lexile_db_update_task_force_mode_replaces_existing(
         self,
         db: DatabaseTransactionFixture,
         celery_fixture: CeleryFixture,
+        redis_fixture: RedisFixture,
         http_client: MockHttpClientFixture,
     ) -> None:
         """Force mode replaces existing Lexile DB classification with new value."""
@@ -139,12 +147,13 @@ class TestLexileDBUpdate:
             if c.subject.type == Subject.LEXILE_SCORE
         ]
         assert len(classifications) == 1
-        assert classifications[0].identifier == "720"
+        assert classifications[0].subject.identifier == "720"
 
     def test_lexile_db_update_task_creates_timestamp(
         self,
         db: DatabaseTransactionFixture,
         celery_fixture: CeleryFixture,
+        redis_fixture: RedisFixture,
         http_client: MockHttpClientFixture,
     ) -> None:
         """Worker creates Timestamp for run status."""
