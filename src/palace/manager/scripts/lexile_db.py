@@ -42,6 +42,5 @@ class LexileDBUpdateScript(Script):
         force = getattr(parsed, "force", self._force)
         lexile_db_update_task.delay(force=force)
         self.log.info(
-            "Successfully queued lexile_db_update_task (force=%s)",
-            force,
+            f"Successfully queued lexile_db_update_task (force={force})",
         )
