@@ -40,6 +40,7 @@ class TestLexileDBUpdateScript:
         args = parser.parse_args(["--force"])
         assert args.force is True
 
+        assert parser.description is not None
         assert "Lexile" in parser.description
         assert "augment" in parser.description.lower()
 
