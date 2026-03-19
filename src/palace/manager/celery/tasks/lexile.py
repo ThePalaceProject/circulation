@@ -85,7 +85,7 @@ def _query_isbns_without_lexile(
         query = query.where(~exists(lexile_subject_exists))
 
     query = query.order_by(Identifier.id).offset(offset).limit(limit)
-    return list(session.execute(query).scalars().all())
+    return list(session.execute(query).unique().scalars().all())
 
 
 def _process_identifier(
