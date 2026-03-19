@@ -25,6 +25,7 @@ from palace.manager.api.admin.problem_details import (
     UNKNOWN_PROTOCOL,
 )
 from palace.manager.integration.goals import Goals
+from palace.manager.integration.metadata.lexile.service import LexileDBService
 from palace.manager.integration.metadata.novelist import (
     NoveListAPI,
     NoveListApiSettings,
@@ -54,6 +55,10 @@ class MetadataServicesFixture:
         nyt_protocol = self.registry.get_protocol(NYTBestSellerAPI)
         assert nyt_protocol is not None
         self.nyt_protocol = nyt_protocol
+
+        lexile_protocol = self.registry.get_protocol(LexileDBService)
+        assert lexile_protocol is not None
+        self.lexile_protocol = lexile_protocol
 
         self.controller = MetadataServicesController(db.session, self.registry)
         self.db = db
@@ -127,15 +132,34 @@ class TestMetadataServices:
         response_content = response.json
         assert isinstance(response_content, dict)
         assert response_content.get("metadata_services") == []
-        [nyt, novelist] = response_content.get("protocols", [])
+        protocols = response_content.get("protocols", [])
+        protocol_names = [p.get("name") for p in protocols]
+        assert metadata_services_fixture.lexile_protocol in protocol_names
+        assert metadata_services_fixture.novelist_protocol in protocol_names
+        assert metadata_services_fixture.nyt_protocol in protocol_names
 
-        assert novelist.get("name") == metadata_services_fixture.novelist_protocol
+        novelist = next(
+            p
+            for p in protocols
+            if p.get("name") == metadata_services_fixture.novelist_protocol
+        )
         assert "settings" in novelist
         assert novelist.get("sitewide") is False
 
-        assert nyt.get("name") == metadata_services_fixture.nyt_protocol
+        nyt = next(
+            p
+            for p in protocols
+            if p.get("name") == metadata_services_fixture.nyt_protocol
+        )
         assert "settings" in nyt
         assert nyt.get("sitewide") is True
+
+        lexile = next(
+            p
+            for p in protocols
+            if p.get("name") == metadata_services_fixture.lexile_protocol
+        )
+        assert "settings" in lexile
 
     def test_process_get_with_one_service(
         self,

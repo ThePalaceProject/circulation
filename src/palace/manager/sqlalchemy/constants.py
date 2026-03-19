@@ -41,6 +41,7 @@ class DataSourceConstants:
     FEEDBOOKS = "FeedBooks"
     BIBBLIO = "Bibblio"
     PROQUEST = "ProQuest"
+    LEXILE_DB = "Lexile DB"
 
     DEPRECATED_NAMES: frozenbidict[str, str] = frozenbidict({})
 

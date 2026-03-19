@@ -1,0 +1,9 @@
+#!/usr/bin/env python
+"""Run the Lexile DB update task.
+
+Use --force to update all ISBNs, including those that already have Lexile data
+from Lexile DB (useful when Lexile may have updated their records).
+"""
+from palace.manager.scripts.lexile_db import LexileDBUpdateScript
+
+LexileDBUpdateScript().run()
