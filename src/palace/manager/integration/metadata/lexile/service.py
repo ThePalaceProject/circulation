@@ -46,6 +46,11 @@ class LexileDBService(
         """
         self._settings = settings
 
+    @property
+    def settings(self) -> LexileDBSettings:
+        """The Lexile DB configuration for this service instance."""
+        return self._settings
+
     @classmethod
     def label(cls) -> str:
         return "MetaMetrics Lexile DB Service"

@@ -205,7 +205,7 @@ def lexile_db_update_task(
                 task.log.error("Lexile DB data source not found")
                 return
 
-            api = LexileDBAPI(service._settings)
+            api = LexileDBAPI(service.settings)
             identifiers = _query_isbns_without_lexile(
                 session, offset, BATCH_SIZE, force
             )
