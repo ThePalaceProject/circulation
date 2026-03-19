@@ -41,9 +41,10 @@ class LexileDBService(
     ) -> None:
         """Initialize the service.
 
-        :param _db: Database session (required for HasSelfTests compatibility).
+        :param _db: Database session.
         :param settings: Lexile DB configuration.
         """
+        self._db = _db
         self._settings = settings
 
     @property
