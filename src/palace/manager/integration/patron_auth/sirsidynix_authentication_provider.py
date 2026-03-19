@@ -107,7 +107,10 @@ class SirsiDynixHorizonAuthLibrarySettings(BasicAuthProviderLibrarySettings):
         str,
         FormMetadata(
             label="Library ID",
-            description="This is used to identify a unique library on the API. This must match what the API expects.",
+            description=(
+                "<b>Deprecated</b> This is used to identify a unique library on the API. This value "
+                "has been deprecated and will be removed in a future release."
+            ),
         ),
     ]
     library_disallowed_suffixes: Annotated[
@@ -194,7 +197,6 @@ class SirsiDynixHorizonAuthenticationProvider(
         )
 
         self.sirsi_disallowed_suffixes = library_settings.library_disallowed_suffixes
-        self.sirsi_library_id = library_settings.library_id
 
         # Check if patrons should be blocked based on ILS status
         self.patron_blocks_enforced = settings.patron_blocks_enforced
@@ -346,7 +348,6 @@ class SirsiDynixHorizonAuthenticationProvider(
             )
         headers = {
             "SD-Originating-App-Id": self.sirsi_app_id,
-            "SD-Working-LibraryID": self.sirsi_library_id,
             "x-sirs-clientID": self.sirsi_client_id,
         }
         if session_token:
