@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 from collections.abc import Callable, Generator
+from dataclasses import dataclass
 from gettext import gettext as _
 from typing import TYPE_CHECKING, Annotated, Any, Literal
 from urllib.parse import urljoin
@@ -16,7 +17,10 @@ from palace.manager.api.authentication.basic import (
     BasicAuthProviderSettings,
 )
 from palace.manager.core.config import Configuration
-from palace.manager.core.exceptions import BasePalaceException, PalaceValueError
+from palace.manager.core.exceptions import (
+    IntegrationException,
+    PalaceValueError,
+)
 from palace.manager.core.selftest import SelfTestResult
 from palace.manager.integration.settings import (
     FormFieldType,
@@ -36,6 +40,21 @@ class SirsiBlockReasons:
     NOT_APPROVED = _("Patron has not yet been approved")
     EXPIRED = _("Patron membership has expired")
     PATRON_BLOCKED = _("Patron has been blocked.")
+
+
+@dataclass(frozen=True)
+class SirsiError:
+    """Represents an error response from the SirsiDynix API.
+
+    Falsy so that existing truthiness checks (``if not data:``) continue
+    to treat this as a failure without code changes.
+    """
+
+    status_code: int
+    message: str
+
+    def __bool__(self) -> bool:
+        return False
 
 
 class SirsiDynixHorizonAuthSettings(BasicAuthProviderSettings):
@@ -177,7 +196,7 @@ class SirsiDynixHorizonAuthenticationProvider(
             return None
 
         data = self.api_patron_login(username, password)
-        if not data:
+        if isinstance(data, SirsiError):
             return None
 
         return SirsiDynixPatronData(
@@ -215,7 +234,7 @@ class SirsiDynixHorizonAuthenticationProvider(
             patron_key=patrondata.permanent_id,
             session_token=patrondata.session_token,
         )
-        if not data or "fields" not in data:
+        if isinstance(data, SirsiError) or "fields" not in data:
             return None
 
         patrondata.complete = True
@@ -262,7 +281,7 @@ class SirsiDynixHorizonAuthenticationProvider(
             session_token=patrondata.session_token,
         )
 
-        if not status or "fields" not in status:
+        if isinstance(status, SirsiError) or "fields" not in status:
             return None
 
         status_fields: dict = status["fields"]
@@ -329,7 +348,7 @@ class SirsiDynixHorizonAuthenticationProvider(
 
     def api_patron_login(
         self, username: str, password: str
-    ) -> Literal[False] | dict[str, Any]:
+    ) -> SirsiError | dict[str, Any]:
         """API request to verify credentials of a user.
 
         :param username: The login username
@@ -342,13 +361,13 @@ class SirsiDynixHorizonAuthenticationProvider(
             self.log.info(
                 f"Authentication failed for username {username}: {response.text}"
             )
-            return False
+            return SirsiError(response.status_code, response.text)
         return response.json()
 
     def api_read_patron_data(
         self, patron_key: str, session_token: str
-    ) -> Literal[False] | dict[str, Any]:
-        """API request to pull basic patron information
+    ) -> SirsiError | dict[str, Any]:
+        """API request to pull basic patron information.
 
         :param patron_key: The permanent external identifier for a patron
         :param session_token: The session token for a logged in user
@@ -360,13 +379,13 @@ class SirsiDynixHorizonAuthenticationProvider(
             self.log.info(
                 f"Could not fetch patron data for {patron_key}: {response.text}"
             )
-            return False
+            return SirsiError(response.status_code, response.text)
         return response.json()
 
     def api_patron_status_info(
         self, patron_key: str, session_token: str
-    ) -> Literal[False] | dict[str, Any]:
-        """API request to pull patron status information, like fines
+    ) -> SirsiError | dict[str, Any]:
+        """API request to pull patron status information, like fines.
 
         :param patron_key: The permanent external identifier for a patron
         :param session_token: The session token for a logged in user
@@ -380,7 +399,7 @@ class SirsiDynixHorizonAuthenticationProvider(
             self.log.info(
                 f"Could not fetch patron status info for {patron_key}: {response.text}"
             )
-            return False
+            return SirsiError(response.status_code, response.text)
         return response.json()
 
     def _run_self_tests(self, _db: Session) -> Generator[SelfTestResult]:
@@ -400,8 +419,11 @@ class SirsiDynixHorizonAuthenticationProvider(
 
         def login(username: str, password: str) -> dict[str, Any]:
             result = self.api_patron_login(username, password)
-            if result is False:
-                raise BasePalaceException("Could not authenticate test patron")
+            if isinstance(result, SirsiError):
+                raise IntegrationException(
+                    "Could not authenticate test patron",
+                    debug_message=f"Status code: {result.status_code}\nResponse: {result.message}",
+                )
             return result
 
         yield (
@@ -417,19 +439,26 @@ class SirsiDynixHorizonAuthenticationProvider(
 
         def read_data(
             name: str,
-            func: Callable[[str, str], Literal[False] | dict[str, Any]],
+            func: Callable[[str, str], SirsiError | dict[str, Any]],
             patron_key: str,
             session_token: str,
         ) -> str:
             result = func(patron_key, session_token)
-            if result is False:
-                raise BasePalaceException(f"Could not fetch {name}")
+            if isinstance(result, SirsiError):
+                raise IntegrationException(
+                    f"Could not fetch {name}",
+                    debug_message=f"Status code: {result.status_code}\nResponse: {result.message}",
+                )
             fields = result.get("fields")
             if fields is None:
-                raise BasePalaceException(f"Field data 'fields' not found in {name}.")
+                raise IntegrationException(
+                    f"Field data 'fields' not found in {name}.",
+                    debug_message=f"Result data: \n{json.dumps(result, indent=1)}",
+                )
             if not isinstance(fields, dict):
-                raise BasePalaceException(
-                    f"Field data is not a dict (data: {json.dumps(fields)})."
+                raise IntegrationException(
+                    f"Field data is not a dict (type {type(fields).__name__}).",
+                    debug_message=f"Data: \n{json.dumps(fields, indent=1)}",
                 )
             return json.dumps(fields, indent=4)
 
