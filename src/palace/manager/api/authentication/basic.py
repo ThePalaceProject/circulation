@@ -682,7 +682,7 @@ class BasicAuthenticationProvider[
                 username,
                 result.details,
             )
-            return None
+            return None, {}
 
         # Check these credentials with the source of truth.
         auth_result = self.remote_authenticate(username, password)
