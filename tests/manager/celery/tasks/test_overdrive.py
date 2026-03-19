@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from unittest.mock import MagicMock, Mock, patch
+from uuid import uuid4
 
 import pytest
 from celery.result import AsyncResult
 
+from palace.manager.celery.importer import import_key, import_workflow_lock
 from palace.manager.celery.tasks import overdrive
 from palace.manager.celery.tasks.overdrive import import_collection_group
 from palace.manager.data_layer.identifier import IdentifierData
@@ -385,6 +387,98 @@ class TestImportCollection:
 
         # Result should be None when not tracking identifiers
         assert result is None
+
+    @patch("palace.manager.celery.tasks.overdrive.OverdriveImporter")
+    def test_workflow_lock_blocks_duplicate_import(
+        self,
+        mock_importer_class: MagicMock,
+        overdrive_import_fixture: OverdriveImportFixture,
+        redis_fixture: RedisFixture,
+    ):
+        """When the workflow lock is held, a new import skips without running the importer."""
+        collection = overdrive_import_fixture.collection
+        lock_value = str(uuid4())
+        workflow_lock = import_workflow_lock(
+            redis_fixture.client, collection.id, lock_value
+        )
+        workflow_lock.acquire()
+
+        result = overdrive.import_collection.delay(collection.id).wait()
+
+        mock_importer_class.assert_not_called()
+        assert result == {"key": import_key(collection.id, "__skipped__")}
+        workflow_lock.release()
+
+    @patch("palace.manager.celery.tasks.overdrive.OverdriveImporter")
+    def test_workflow_lock_released_on_final_page(
+        self,
+        mock_importer_class: MagicMock,
+        overdrive_import_fixture: OverdriveImportFixture,
+        redis_fixture: RedisFixture,
+    ):
+        """After a single-page import completes, the workflow lock is released."""
+        collection = overdrive_import_fixture.collection
+
+        mock_importer, _ = overdrive_import_fixture.create_mock_importer()
+        mock_importer_class.return_value = mock_importer
+
+        overdrive.import_collection.delay(collection.id).wait()
+
+        workflow_lock = import_workflow_lock(
+            redis_fixture.client, collection.id, random_value="any"
+        )
+        assert not workflow_lock.locked()
+
+    @patch("palace.manager.celery.tasks.overdrive.OverdriveImporter")
+    def test_workflow_lock_passed_to_next_page(
+        self,
+        mock_importer_class: MagicMock,
+        overdrive_import_fixture: OverdriveImportFixture,
+    ):
+        """When replacing task with next page, lock_value is passed to the next task."""
+        collection = overdrive_import_fixture.collection
+
+        next_endpoint = BookInfoEndpoint(url="http://test.com/books/page2")
+        mock_importer, _ = overdrive_import_fixture.create_mock_importer(
+            next_page=next_endpoint
+        )
+        mock_importer_class.return_value = mock_importer
+
+        with patch.object(overdrive.import_collection, "replace") as mock_replace:
+            mock_replace.side_effect = Exception("Task replaced")
+
+            with pytest.raises(Exception, match="Task replaced"):
+                overdrive.import_collection.delay(collection.id).wait()
+
+            replace_sig = mock_replace.call_args[0][0]
+            assert replace_sig.kwargs["lock_value"] is not None
+            assert isinstance(replace_sig.kwargs["lock_value"], str)
+
+    @patch("palace.manager.celery.tasks.overdrive.OverdriveImporter")
+    def test_workflow_lock_extended_on_subsequent_pages(
+        self,
+        mock_importer_class: MagicMock,
+        overdrive_import_fixture: OverdriveImportFixture,
+        redis_fixture: RedisFixture,
+    ):
+        """When lock_value is passed, the task extends the workflow lock and runs."""
+        collection = overdrive_import_fixture.collection
+        lock_value = str(uuid4())
+        workflow_lock = import_workflow_lock(
+            redis_fixture.client, collection.id, lock_value
+        )
+        workflow_lock.acquire()
+
+        mock_importer, _ = overdrive_import_fixture.create_mock_importer()
+        mock_importer_class.return_value = mock_importer
+
+        result = overdrive.import_collection.delay(
+            collection.id, page="http://test.com/page1", lock_value=lock_value
+        ).wait()
+
+        mock_importer_class.assert_called_once()
+        assert result is not None
+        # Task released the lock on final page; our release is a no-op if already gone
 
     @patch("palace.manager.celery.tasks.overdrive.OverdriveImporter")
     def test_import_collection_marked_for_deletion(

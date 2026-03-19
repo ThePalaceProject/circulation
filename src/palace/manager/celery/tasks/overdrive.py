@@ -1,9 +1,10 @@
 import datetime
 from typing import Any
+from uuid import uuid4
 
 from celery import chain, chord, group, shared_task
 
-from palace.manager.celery.importer import import_key, import_lock
+from palace.manager.celery.importer import import_key, import_lock, import_workflow_lock
 from palace.manager.celery.task import Task
 from palace.manager.celery.tasks import apply
 from palace.manager.celery.utils import load_from_id
@@ -38,7 +39,8 @@ def import_collection(
     start_time: datetime.datetime | None = None,
     return_identifiers: bool = True,
     parent_identifiers: dict[str, Any] | None = None,
-) -> IdentifierSet | None:
+    lock_value: str | None = None,
+) -> IdentifierSet | dict[str, Any] | None:
     """
     Run an import for a single Overdrive collection.
 
@@ -49,7 +51,7 @@ def import_collection(
 
     :param collection_id: The ID of the collection to import
     :param import_all: If True, import all titles regardless of whether they have changed.
-        If False, only import titles that have changed since the modified_since date.
+        If False, import titles that have changed since the modified_since date.
     :param page: The "page" to be processed. The page param is a url represented as a string. A None value means the
         import will start from the beginning of the set.
     :param modified_since: Only process titles modified after this datetime. This field parameter is ignored if
@@ -64,6 +66,8 @@ def import_collection(
     :param parent_identifiers: A running set of parent identifiers (if not a parent collection)
         that were processed before this run started. This value is a serialized representation of the
         parent_identifier IdentifierSet.
+    :param lock_value: UUID identifying this import workflow. Passed between pages to hold the workflow lock
+        across page boundaries. Generated on the first page when None.
     """
     redis = task.services.redis().client()
     registry = task.services.integration_registry().license_providers()
@@ -71,103 +75,128 @@ def import_collection(
     if start_time is None:
         start_time = utc_now()
 
-    with (
-        import_lock(redis, collection_id).lock(),
-        task.transaction() as session,
-    ):
-        collection = load_from_id(session, Collection, collection_id)
-        collection_name = collection.name
+    is_first_page = page is None and lock_value is None
+    if lock_value is None:
+        lock_value = str(uuid4())
 
-        identifier_set = (
-            IdentifierSet(redis, import_key(collection.id, task.request.id))
-            if return_identifiers
-            else None
+    workflow_lock = import_workflow_lock(redis, collection_id, lock_value)
+    workflow_lock_acquired = workflow_lock.acquire()
+    if not workflow_lock_acquired and is_first_page:
+        task.log.warning(
+            f"OverDrive import skipped for collection {collection_id}: "
+            "another import is already in progress."
+        )
+        return {"key": import_key(collection_id, "__skipped__")}
+    if not workflow_lock_acquired and not is_first_page:
+        task.log.warning(
+            f"OverDrive import for collection {collection_id}: workflow lock expired "
+            "between pages; continuing (another import may be running)."
         )
 
-        if collection.marked_for_deletion:
-            task.log.warning(
-                f"This collection is marked for deletion. "
-                f"Skipping import of '{collection_name}'."
+    release_workflow_lock = workflow_lock_acquired
+    try:
+        with (
+            import_lock(redis, collection_id).lock(),
+            task.transaction() as session,
+        ):
+            collection = load_from_id(session, Collection, collection_id)
+            collection_name = collection.name
+
+            identifier_set = (
+                IdentifierSet(redis, import_key(collection.id, task.request.id))
+                if return_identifiers
+                else None
             )
-            return identifier_set
 
-        parent_identifier_set = (
-            rehydrate_identifier_set(task, parent_identifiers)
-            if parent_identifiers
-            else None
-        )
+            if collection.marked_for_deletion:
+                task.log.warning(
+                    f"This collection is marked for deletion. "
+                    f"Skipping import of '{collection_name}'."
+                )
+                return identifier_set
 
-        importer = OverdriveImporter(
-            db=session,
-            collection=collection,
-            registry=registry,
-            identifier_set=identifier_set,
-            parent_identifier_set=parent_identifier_set,
-        )
+            parent_identifier_set = (
+                rehydrate_identifier_set(task, parent_identifiers)
+                if parent_identifiers
+                else None
+            )
 
-        if modified_since is None:
-            if import_all:
-                modified_since = None
-            else:
-                timestamp = importer.get_timestamp()
-                modified_since = timestamp.start
+            importer = OverdriveImporter(
+                db=session,
+                collection=collection,
+                registry=registry,
+                identifier_set=identifier_set,
+                parent_identifier_set=parent_identifier_set,
+            )
 
-        task.log.info(
-            f"OverDrive import started: '{collection_name}' Modified since: {modified_since}, "
-            f"page: {None if not page else page}"
-        )
+            if modified_since is None:
+                if import_all:
+                    modified_since = None
+                else:
+                    timestamp = importer.get_timestamp()
+                    modified_since = timestamp.start
 
-        endpoint = None if not page else BookInfoEndpoint(page)
-
-        result = importer.import_collection(
-            apply_bibliographic=apply.bibliographic_apply.delay,
-            apply_circulation=apply.circulation_apply.delay,
-            endpoint=endpoint,
-            modified_since=modified_since,
-        )
-
-        task.log.info(
-            f"OverDrive import page complete: '{collection_name}' Page: {result.current_page}. "
-            f"Processed: {result.processed_count}. "
-        )
-
-        if identifier_set:
             task.log.info(
-                f"OverDrive collection import '{collection_name}': Total processed in run so far: {identifier_set.len()}"
+                f"OverDrive import started: '{collection_name}' Modified since: {modified_since}, "
+                f"page: {None if not page else page}"
             )
 
-        if result.next_page is None:
-            # We are done. We only update the timestamp once we have processed all pages.
-            # To make sure that if we fail or are interrupted, we re-process any
-            # titles we may have missed.
-            timestamp = importer.get_timestamp()
-            timestamp.start = start_time
-            timestamp.finish = utc_now()
-            task.log.info(
-                f"OverDrive import complete: '{collection_name}' Total time: {timestamp.elapsed}."
-            )
+            endpoint = None if not page else BookInfoEndpoint(page)
 
-    if result.next_page is not None:
-        task.log.info(
-            f"OverDrive import re-queueing: '{collection_name}' Next page: {result.next_page}."
-        )
-        # Serialize parent_identifier_set to dict for passing to next task
-        serialized_parent_identifiers = (
-            parent_identifier_set.__json__() if parent_identifier_set else None
-        )
-        raise task.replace(
-            task.s(
-                collection_id=collection_id,
-                import_all=import_all,
-                parent_identifiers=serialized_parent_identifiers,
-                return_identifiers=return_identifiers,
-                page=result.next_page.url,
+            result = importer.import_collection(
+                apply_bibliographic=apply.bibliographic_apply.delay,
+                apply_circulation=apply.circulation_apply.delay,
+                endpoint=endpoint,
                 modified_since=modified_since,
-                start_time=start_time,
             )
-        )
-    else:
-        return identifier_set
+
+            task.log.info(
+                f"OverDrive import page complete: '{collection_name}' Page: {result.current_page}. "
+                f"Processed: {result.processed_count}. "
+            )
+
+            if identifier_set:
+                task.log.info(
+                    f"OverDrive collection import '{collection_name}': Total processed in run so far: {identifier_set.len()}"
+                )
+
+            if result.next_page is None:
+                # We are done. We only update the timestamp once we have processed all pages.
+                # To make sure that if we fail or are interrupted, we re-process any
+                # titles we may have missed.
+                timestamp = importer.get_timestamp()
+                timestamp.start = start_time
+                timestamp.finish = utc_now()
+                task.log.info(
+                    f"OverDrive import complete: '{collection_name}' Total time: {timestamp.elapsed}."
+                )
+
+        if result.next_page is not None:
+            task.log.info(
+                f"OverDrive import re-queueing: '{collection_name}' Next page: {result.next_page}."
+            )
+            # Serialize parent_identifier_set to dict for passing to next task
+            serialized_parent_identifiers = (
+                parent_identifier_set.__json__() if parent_identifier_set else None
+            )
+            release_workflow_lock = False
+            raise task.replace(
+                task.s(
+                    collection_id=collection_id,
+                    import_all=import_all,
+                    parent_identifiers=serialized_parent_identifiers,
+                    return_identifiers=return_identifiers,
+                    page=result.next_page.url,
+                    modified_since=modified_since,
+                    start_time=start_time,
+                    lock_value=lock_value,
+                )
+            )
+        else:
+            return identifier_set
+    finally:
+        if release_workflow_lock:
+            workflow_lock.release()
 
 
 @shared_task(
