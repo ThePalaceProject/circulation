@@ -39,6 +39,7 @@ def beat_schedule() -> dict[str, Any]:
     """
     from palace.manager.celery.tasks import (
         boundless,
+        lexile,
         marc,
         notifications,
         novelist,
@@ -221,6 +222,10 @@ def beat_schedule() -> dict[str, Any]:
                 minute="30",
                 hour="3",
             ),  # Every morning at 3:30 am.
+        },
+        "lexile_db_update": {
+            "task": lexile.run_lexile_db_update.name,
+            "schedule": crontab(minute="0", hour="3"),  # Every day at 3:00 AM
         },
         "update_novelists_for_all_libraries": {
             "task": novelist.update_novelists_for_all_libraries.name,
