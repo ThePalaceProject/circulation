@@ -79,12 +79,14 @@ class TestDataSource:
 
     def test_metadata_sources_for(self, db: DatabaseTransactionFixture):
         content_cafe = DataSource.lookup(db.session, DataSource.CONTENT_CAFE)
+        lexile_db = DataSource.lookup(db.session, DataSource.LEXILE_DB)
         isbn_metadata_sources = DataSource.metadata_sources_for(
             db.session, Identifier.ISBN
         )
 
-        assert 1 == len(isbn_metadata_sources)
-        assert [content_cafe] == isbn_metadata_sources
+        assert 2 == len(isbn_metadata_sources)
+        assert content_cafe in isbn_metadata_sources
+        assert lexile_db in isbn_metadata_sources
 
     def test_license_source_for(self, db: DatabaseTransactionFixture):
         identifier = db.identifier(Identifier.OVERDRIVE_ID)
