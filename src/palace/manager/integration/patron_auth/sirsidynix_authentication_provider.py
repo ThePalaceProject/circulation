@@ -46,8 +46,8 @@ class SirsiBlockReasons:
 class SirsiError:
     """Represents an error response from the SirsiDynix API.
 
-    Falsy so that existing truthiness checks (``if not data:``) continue
-    to treat this as a failure without code changes.
+    Falsy as a defensive safety net, ensuring any unchecked truthiness
+    tests still treat this as a failure.
     """
 
     status_code: int
