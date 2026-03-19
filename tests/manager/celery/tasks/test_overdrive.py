@@ -455,13 +455,13 @@ class TestImportCollection:
             assert isinstance(replace_sig.kwargs["lock_value"], str)
 
     @patch("palace.manager.celery.tasks.overdrive.OverdriveImporter")
-    def test_workflow_lock_extended_on_subsequent_pages(
+    def test_workflow_lock_subsequent_page_runs_importer(
         self,
         mock_importer_class: MagicMock,
         overdrive_import_fixture: OverdriveImportFixture,
         redis_fixture: RedisFixture,
     ):
-        """When lock_value is passed, the task extends the workflow lock and runs."""
+        """When lock_value is passed for a subsequent page, the task runs the importer."""
         collection = overdrive_import_fixture.collection
         lock_value = str(uuid4())
         workflow_lock = import_workflow_lock(
@@ -478,7 +478,40 @@ class TestImportCollection:
 
         mock_importer_class.assert_called_once()
         assert result is not None
-        # Task released the lock on final page; our release is a no-op if already gone
+
+    @patch("palace.manager.celery.tasks.overdrive.OverdriveImporter")
+    def test_workflow_lock_expired_between_pages(
+        self,
+        mock_importer_class: MagicMock,
+        overdrive_import_fixture: OverdriveImportFixture,
+        redis_fixture: RedisFixture,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        """When the workflow lock expired between pages, the task logs a warning and continues."""
+        collection = overdrive_import_fixture.collection
+        lock_value_held = str(uuid4())
+        lock_value_passed = str(uuid4())
+        workflow_lock = import_workflow_lock(
+            redis_fixture.client, collection.id, lock_value_held
+        )
+        workflow_lock.acquire()
+
+        mock_importer, _ = overdrive_import_fixture.create_mock_importer()
+        mock_importer_class.return_value = mock_importer
+
+        caplog.set_level(LogLevel.warning)
+
+        result = overdrive.import_collection.delay(
+            collection.id,
+            page="http://test.com/page1",
+            lock_value=lock_value_passed,
+        ).wait()
+
+        assert "workflow lock expired" in caplog.text
+        assert "between pages" in caplog.text
+        mock_importer_class.assert_called_once()
+        assert result is not None
+        workflow_lock.release()
 
     @patch("palace.manager.celery.tasks.overdrive.OverdriveImporter")
     def test_import_collection_marked_for_deletion(
