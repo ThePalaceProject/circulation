@@ -75,6 +75,8 @@ def import_collection(
     if start_time is None:
         start_time = utc_now()
 
+    # Both page and lock_value are None only on the first page of a fresh import.
+    # They are always set together when task.replace() chains to the next page.
     is_first_page = page is None and lock_value is None
     if lock_value is None:
         lock_value = str(uuid4())
