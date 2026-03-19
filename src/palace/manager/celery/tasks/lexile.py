@@ -79,10 +79,14 @@ def _query_isbns_without_lexile(
     query = select(Identifier).where(Identifier.type == Identifier.ISBN)
 
     if force:
-        # Force: process ISBNs that have no Lexile OR have Lexile from Lexile DB
+        # Force: process ISBNs that have no Lexile at all, OR that already have a
+        # Lexile DB record (to pick up updated values from MetaMetrics).
+        # ISBNs that have a Lexile from another source only (e.g. Overdrive) are
+        # intentionally excluded — we don't overwrite third-party scores unless we
+        # have our own authoritative record to replace.
         query = query.where(~exists(lexile_subject_exists) | exists(lexile_db_exists))
     else:
-        # Default: only process ISBNs with no Lexile at all
+        # Default: only process ISBNs with no Lexile classification from any source.
         query = query.where(~exists(lexile_subject_exists))
 
     query = query.order_by(Identifier.id).offset(offset).limit(limit)

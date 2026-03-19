@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 
 from palace.manager.core.exceptions import IntegrationException
@@ -19,7 +18,6 @@ class LexileDBAPI(LoggerMixin):
     def __init__(self, settings: LexileDBSettings):
         """Initialize the API client with credentials and base URL."""
         self._settings = settings
-        self._log = logging.getLogger(self.__class__.__name__)
 
     def fetch_lexile_for_isbn(
         self, isbn: str, *, raise_on_error: bool = False
