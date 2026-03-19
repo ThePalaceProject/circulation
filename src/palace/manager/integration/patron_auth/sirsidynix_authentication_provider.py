@@ -52,6 +52,8 @@ class SirsiError:
 
     status_code: int
     message: str
+    method: str
+    url: str
 
     def __bool__(self) -> bool:
         return False
@@ -346,6 +348,15 @@ class SirsiDynixHorizonAuthenticationProvider(
             method, url, headers=headers, json=json, max_retry_count=0
         )
 
+    def _make_error(self, method: str, path: str, response: Response) -> SirsiError:
+        """Build a :class:`SirsiError` from a failed API response."""
+        return SirsiError(
+            status_code=response.status_code,
+            message=response.text,
+            method=method,
+            url=urljoin(self.server_url, path),
+        )
+
     def api_patron_login(
         self, username: str, password: str
     ) -> SirsiError | dict[str, Any]:
@@ -354,14 +365,15 @@ class SirsiDynixHorizonAuthenticationProvider(
         :param username: The login username
         :param password: The login pin
         """
+        method, path = "POST", "user/patron/login"
         response = self._request(
-            "POST", "user/patron/login", json=dict(login=username, password=password)
+            method, path, json=dict(login=username, password=password)
         )
         if response.status_code != 200:
             self.log.info(
                 f"Authentication failed for username {username}: {response.text}"
             )
-            return SirsiError(response.status_code, response.text)
+            return self._make_error(method, path, response)
         return response.json()
 
     def api_read_patron_data(
@@ -372,14 +384,13 @@ class SirsiDynixHorizonAuthenticationProvider(
         :param patron_key: The permanent external identifier for a patron
         :param session_token: The session token for a logged in user
         """
-        response = self._request(
-            "GET", f"user/patron/key/{patron_key}", session_token=session_token
-        )
+        method, path = "GET", f"user/patron/key/{patron_key}"
+        response = self._request(method, path, session_token=session_token)
         if response.status_code != 200:
             self.log.info(
                 f"Could not fetch patron data for {patron_key}: {response.text}"
             )
-            return SirsiError(response.status_code, response.text)
+            return self._make_error(method, path, response)
         return response.json()
 
     def api_patron_status_info(
@@ -390,16 +401,13 @@ class SirsiDynixHorizonAuthenticationProvider(
         :param patron_key: The permanent external identifier for a patron
         :param session_token: The session token for a logged in user
         """
-        response = self._request(
-            "GET",
-            f"user/patronStatusInfo/key/{patron_key}",
-            session_token=session_token,
-        )
+        method, path = "GET", f"user/patronStatusInfo/key/{patron_key}"
+        response = self._request(method, path, session_token=session_token)
         if response.status_code != 200:
             self.log.info(
                 f"Could not fetch patron status info for {patron_key}: {response.text}"
             )
-            return SirsiError(response.status_code, response.text)
+            return self._make_error(method, path, response)
         return response.json()
 
     def _run_self_tests(self, _db: Session) -> Generator[SelfTestResult]:
@@ -422,7 +430,11 @@ class SirsiDynixHorizonAuthenticationProvider(
             if isinstance(result, SirsiError):
                 raise IntegrationException(
                     "Could not authenticate test patron",
-                    debug_message=f"Status code: {result.status_code}\nResponse: {result.message}",
+                    debug_message=(
+                        f"Made a {result.method} request to {result.url} "
+                        f"and received HTTP {result.status_code}.\n\n"
+                        f"Response body:\n{result.message}"
+                    ),
                 )
             return result
 
@@ -447,18 +459,30 @@ class SirsiDynixHorizonAuthenticationProvider(
             if isinstance(result, SirsiError):
                 raise IntegrationException(
                     f"Could not fetch {name}",
-                    debug_message=f"Status code: {result.status_code}\nResponse: {result.message}",
+                    debug_message=(
+                        f"Made a {result.method} request to {result.url} "
+                        f"and received HTTP {result.status_code}.\n\n"
+                        f"Response body:\n{result.message}"
+                    ),
                 )
             fields = result.get("fields")
             if fields is None:
                 raise IntegrationException(
                     f"Field data 'fields' not found in {name}.",
-                    debug_message=f"Result data: \n{json.dumps(result, indent=1)}",
+                    debug_message=(
+                        f"The API returned a successful response for {name}, but the "
+                        f"expected 'fields' key is missing from the JSON body.\n\n"
+                        f"Response body:\n{json.dumps(result, indent=1)}"
+                    ),
                 )
             if not isinstance(fields, dict):
                 raise IntegrationException(
                     f"Field data is not a dict (type {type(fields).__name__}).",
-                    debug_message=f"Data: \n{json.dumps(fields, indent=1)}",
+                    debug_message=(
+                        f"The 'fields' key in the {name} response is a "
+                        f"{type(fields).__name__} instead of the expected dict.\n\n"
+                        f"Value:\n{json.dumps(fields, indent=1)}"
+                    ),
                 )
             return json.dumps(fields, indent=4)
 

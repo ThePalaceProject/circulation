@@ -190,6 +190,8 @@ class TestSirsiDynixAuthenticationProvider:
         error = provider.api_patron_login("username", "pwd")
         assert isinstance(error, SirsiError)
         assert error.status_code == 401
+        assert error.method == "POST"
+        assert error.url == "http://example.org/sirsi/user/patron/login"
 
     def test_remote_authenticate(self, sirsi_auth_fixture: SirsiAuthFixture):
         provider = sirsi_auth_fixture.provider()
@@ -648,7 +650,9 @@ class TestSirsiDynixAuthenticationProvider:
     ):
         # Test bad patron status info
         provider_mock = sirsi_auth_fixture.provider_mocked_api()
-        provider_mock.api_patron_status_info.return_value = SirsiError(500, "error")
+        provider_mock.api_patron_status_info.return_value = SirsiError(
+            500, "error", "GET", "http://example.org/sirsi/user/patronStatusInfo/key/x"
+        )
         patrondata = provider_mock.provider.remote_patron_lookup(
             SirsiDynixPatronData(permanent_id="xxxx", session_token="xxx")
         )
@@ -834,6 +838,8 @@ class TestSirsiDynixAuthenticationProvider:
         error = test_method("patronkey", "sessiontoken")
         assert isinstance(error, SirsiError)
         assert error.status_code == 400
+        assert error.method == "GET"
+        assert error.url == sirsi_auth_fixture.url + uri
 
     def test__run_self_tests(self, sirsi_auth_fixture: SirsiAuthFixture):
         mocked_provider = sirsi_auth_fixture.provider_mocked_api()
@@ -895,33 +901,54 @@ class TestSirsiDynixAuthenticationProvider:
     def test__run_self_tests_patron_login(self, sirsi_auth_fixture: SirsiAuthFixture):
         mocked_provider = sirsi_auth_fixture.provider_mocked_api()
         mocked_provider.api_patron_login.return_value = SirsiError(
-            401, "Invalid credentials"
+            401,
+            "Invalid credentials",
+            "POST",
+            "http://example.org/sirsi/user/patron/login",
         )
         results = sirsi_auth_fixture.run_self_tests(mocked_provider.provider)
         assert len(results) == 3
         result = results[2]  # skip network diagnostics
         assert result.success is False
         assert str(result.exception) == "Could not authenticate test patron"
-        assert result.debug_message == "Status code: 401\nResponse: Invalid credentials"
+        assert result.debug_message is not None
+        assert (
+            "POST request to http://example.org/sirsi/user/patron/login"
+            in result.debug_message
+        )
+        assert "HTTP 401" in result.debug_message
+        assert "Invalid credentials" in result.debug_message
 
     @pytest.mark.parametrize(
-        "api_read_patron_data_resp, expected_exception, expected_debug_message",
+        "api_read_patron_data_resp, expected_exception, expected_debug_substrings",
         [
-            [
-                SirsiError(403, "Forbidden"),
+            pytest.param(
+                SirsiError(
+                    403,
+                    "Forbidden",
+                    "GET",
+                    "http://example.org/sirsi/user/patron/key/test",
+                ),
                 "Could not fetch Patron Data",
-                "Status code: 403\nResponse: Forbidden",
-            ],
-            [
+                [
+                    "GET request to http://example.org/sirsi/user/patron/key/test",
+                    "HTTP 403",
+                    "Forbidden",
+                ],
+                id="api_error",
+            ),
+            pytest.param(
                 {"bad": "data"},
                 "Field data 'fields' not found in Patron Data.",
-                'Result data: \n{\n "bad": "data"\n}',
-            ],
-            [
+                ["'fields' key is missing", '"bad": "data"'],
+                id="missing_fields_key",
+            ),
+            pytest.param(
                 {"fields": "bad data"},
                 "Field data is not a dict (type str).",
-                'Data: \n"bad data"',
-            ],
+                ["str instead of the expected dict", "bad data"],
+                id="fields_not_dict",
+            ),
         ],
     )
     def test__run_self_tests_read_patron_data(
@@ -929,7 +956,7 @@ class TestSirsiDynixAuthenticationProvider:
         sirsi_auth_fixture: SirsiAuthFixture,
         api_read_patron_data_resp: dict[str, Any] | SirsiError,
         expected_exception: str,
-        expected_debug_message: str | None,
+        expected_debug_substrings: list[str],
     ):
         mocked_provider = sirsi_auth_fixture.provider_mocked_api()
         mocked_provider.api_read_patron_data.return_value = api_read_patron_data_resp
@@ -944,26 +971,40 @@ class TestSirsiDynixAuthenticationProvider:
         result = results.pop()
         assert result.success is False  # patron_data
         assert str(result.exception) == expected_exception
-        assert result.debug_message == expected_debug_message
+        assert result.debug_message is not None
+        for substring in expected_debug_substrings:
+            assert substring in result.debug_message
 
     @pytest.mark.parametrize(
-        "api_patron_status_info_resp, expected_exception, expected_debug_message",
+        "api_patron_status_info_resp, expected_exception, expected_debug_substrings",
         [
-            [
-                SirsiError(500, "Internal Server Error"),
+            pytest.param(
+                SirsiError(
+                    500,
+                    "Internal Server Error",
+                    "GET",
+                    "http://example.org/sirsi/user/patronStatusInfo/key/test",
+                ),
                 "Could not fetch Patron Status",
-                "Status code: 500\nResponse: Internal Server Error",
-            ],
-            [
+                [
+                    "GET request to http://example.org/sirsi/user/patronStatusInfo/key/test",
+                    "HTTP 500",
+                    "Internal Server Error",
+                ],
+                id="api_error",
+            ),
+            pytest.param(
                 {},
                 "Field data 'fields' not found in Patron Status.",
-                "Result data: \n{}",
-            ],
-            [
+                ["'fields' key is missing"],
+                id="missing_fields_key",
+            ),
+            pytest.param(
                 {"fields": ["a", "b"]},
                 "Field data is not a dict (type list).",
-                'Data: \n[\n "a",\n "b"\n]',
-            ],
+                ["list instead of the expected dict"],
+                id="fields_not_dict",
+            ),
         ],
     )
     def test__run_self_tests_patron_status_info(
@@ -971,7 +1012,7 @@ class TestSirsiDynixAuthenticationProvider:
         sirsi_auth_fixture: SirsiAuthFixture,
         api_patron_status_info_resp: dict[str, Any] | SirsiError,
         expected_exception: str,
-        expected_debug_message: str | None,
+        expected_debug_substrings: list[str],
     ):
         mocked_provider = sirsi_auth_fixture.provider_mocked_api()
         mocked_provider.api_patron_status_info.return_value = (
@@ -991,4 +1032,6 @@ class TestSirsiDynixAuthenticationProvider:
         result = results.pop()
         assert result.success is False  # patron_status
         assert str(result.exception) == expected_exception
-        assert result.debug_message == expected_debug_message
+        assert result.debug_message is not None
+        for substring in expected_debug_substrings:
+            assert substring in result.debug_message
