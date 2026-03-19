@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from palace.manager.celery.task import Task
 from palace.manager.core.config import CannotLoadConfiguration
-from palace.manager.integration.metadata.lexile.api import LexileDBAPI
+from palace.manager.integration.metadata.lexile.api import API_TIMEOUT, LexileDBAPI
 from palace.manager.integration.metadata.lexile.service import LexileDBService
 from palace.manager.service.celery.celery import QueueNames
 from palace.manager.service.redis.models.lock import RedisLock
@@ -27,7 +27,8 @@ from palace.manager.sqlalchemy.util import get_one, get_one_or_create
 from palace.manager.util.datetime_helpers import utc_now
 
 BATCH_SIZE = 10
-LOCK_TIMEOUT = timedelta(minutes=30)
+# 2× the worst-case sequential time for a full batch (BATCH_SIZE requests × API_TIMEOUT each).
+LOCK_TIMEOUT = timedelta(seconds=BATCH_SIZE * API_TIMEOUT * 2)
 SERVICE_NAME = "Lexile DB Update"
 
 
