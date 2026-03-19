@@ -8,6 +8,7 @@ from flask import Response
 from werkzeug.datastructures import Authorization
 
 from palace.manager.api.circulation.exceptions import RemoteInitiatedServerError
+from palace.manager.api.controller.base import BaseCirculationManagerController
 from palace.manager.api.problem_details import (
     BAD_DELIVERY_MECHANISM,
     FORBIDDEN_BY_POLICY,
@@ -137,6 +138,88 @@ class TestBaseController:
             assert isinstance(result, ProblemDetail)
             assert result.status_code == 401
             assert getattr(flask.request, "patron") is None
+
+    def test_authenticated_patron_from_request_sets_authorization_identifier_basic_auth(
+        self, circulation_fixture: CirculationControllerFixture
+    ):
+        """AUTHORIZATION_IDENTIFIER logvar is set from basic auth credentials, even on auth failure."""
+        # Successful basic auth sets the logvar to the username, then overwrites
+        # with the patron's authorization_identifier.
+        with (
+            patch.object(
+                BaseCirculationManagerController, "_set_uwsgi_logvar"
+            ) as mock_logvar,
+            circulation_fixture.request_context_with_library(
+                "/", headers=dict(Authorization=circulation_fixture.valid_auth)
+            ),
+        ):
+            result = circulation_fixture.controller.authenticated_patron_from_request()
+            assert isinstance(result, Patron)
+            mock_logvar.assert_called_with(
+                "AUTHORIZATION_IDENTIFIER", result.authorization_identifier
+            )
+
+        # Failed basic auth still sets the logvar to the submitted username.
+        with (
+            patch.object(
+                BaseCirculationManagerController, "_set_uwsgi_logvar"
+            ) as mock_logvar,
+            circulation_fixture.request_context_with_library(
+                "/",
+                headers=dict(Authorization=circulation_fixture.invalid_auth),
+            ),
+        ):
+            result = circulation_fixture.controller.authenticated_patron_from_request()
+            assert not isinstance(result, Patron)
+            mock_logvar.assert_called_with("AUTHORIZATION_IDENTIFIER", "user1")
+
+    def test_authenticated_patron_from_request_sets_authorization_identifier_non_basic_auth(
+        self, circulation_fixture: CirculationControllerFixture
+    ):
+        """AUTHORIZATION_IDENTIFIER logvar is set from patron.authorization_identifier for non-basic auth."""
+        patron = circulation_fixture.default_patron
+        patron.authorization_identifier = "patron-auth-id"
+
+        with (
+            patch.object(
+                BaseCirculationManagerController, "_set_uwsgi_logvar"
+            ) as mock_logvar,
+            patch.object(
+                circulation_fixture.manager.auth,
+                "authenticated_patron",
+                return_value=patron,
+            ),
+            circulation_fixture.request_context_with_library(
+                "/", headers=dict(Authorization="Bearer some-token")
+            ),
+        ):
+            result = circulation_fixture.controller.authenticated_patron_from_request()
+            assert result == patron
+            mock_logvar.assert_called_once_with(
+                "AUTHORIZATION_IDENTIFIER", "patron-auth-id"
+            )
+
+    def test_set_uwsgi_logvar(self) -> None:
+        """Verify _set_uwsgi_logvar sanitizes values and calls uwsgi.set_logvar."""
+        mock_set_logvar = MagicMock()
+
+        with patch.dict("sys.modules", uwsgi=MagicMock(set_logvar=mock_set_logvar)):
+            # Simple value is passed through unchanged.
+            BaseCirculationManagerController._set_uwsgi_logvar("key", "simple")
+            mock_set_logvar.assert_called_with("key", "simple")
+
+            # Control characters are escaped.
+            BaseCirculationManagerController._set_uwsgi_logvar("key", "a\nb\tc")
+            mock_set_logvar.assert_called_with("key", "a\\x0Ab\\x09c")
+
+            # Spaces and double quotes are escaped.
+            BaseCirculationManagerController._set_uwsgi_logvar("key", 'hello "world"')
+            mock_set_logvar.assert_called_with("key", "hello\\x20\\x22world\\x22")
+
+    def test_set_uwsgi_logvar_no_uwsgi(self) -> None:
+        """_set_uwsgi_logvar is a no-op when uwsgi is not available."""
+        # Should not raise — the ImportError is silently caught.
+        BaseCirculationManagerController._set_uwsgi_logvar("key", "value")
 
     def test_authenticated_patron_invalid_credentials(
         self, circulation_fixture: CirculationControllerFixture

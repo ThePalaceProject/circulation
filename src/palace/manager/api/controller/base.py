@@ -1,6 +1,7 @@
 import flask
 from flask import Response
 from flask_babel import lazy_gettext as _
+from frozendict import frozendict
 from werkzeug.datastructures import Authorization
 
 from palace.manager.api.circulation.exceptions import RemoteInitiatedServerError
@@ -65,9 +66,22 @@ class BaseCirculationManagerController(LoggerMixin):
             # No credentials were provided.
             return self.authenticate()
 
+        # Set AUTHORIZATION_IDENTIFIER for uwsgi access log visibility. We set this
+        # early, before authenticating the patron, so that we have the username on
+        # authentication failures.
+        if auth.type.lower() == "basic" and auth.username:
+            self._set_uwsgi_logvar("AUTHORIZATION_IDENTIFIER", auth.username)
+
         patron = self.authenticated_patron(auth)
         if isinstance(patron, Patron):
             setattr(flask.request, "patron", patron)
+
+            # Overwrite AUTHORIZATION_IDENTIFIER with the patron's canonical
+            # identifier, which may differ from the submitted username.
+            if patron.authorization_identifier:
+                self._set_uwsgi_logvar(
+                    "AUTHORIZATION_IDENTIFIER", patron.authorization_identifier
+                )
 
         return patron
 
@@ -101,6 +115,28 @@ class BaseCirculationManagerController(LoggerMixin):
         headers = self.manager.auth.create_authentication_headers()
         data = self.manager.authentication_for_opds_document
         return Response(data, 401, headers)
+
+    # Translation table for sanitizing uwsgi logvar values. Maps control characters
+    # (0x00-0x20), DEL (0x7F), and double quotes to \xHH escape sequences.
+    _LOGVAR_SANITIZE_TABLE = frozendict(
+        {i: f"\\x{i:02X}" for i in (*range(0x00, 0x21), 0x7F, ord('"'))}
+    )
+
+    @classmethod
+    def _set_uwsgi_logvar(cls, key: str, value: str) -> None:
+        """Set a uwsgi log variable for access log visibility.
+
+        The value is sanitized to prevent log injection — uwsgi does not
+        escape logvar values, so control characters and whitespace that
+        could split or corrupt log lines are replaced.
+        """
+        try:
+            import uwsgi
+
+            sanitized = value.translate(cls._LOGVAR_SANITIZE_TABLE)
+            uwsgi.set_logvar(key, sanitized)
+        except ImportError:
+            pass
 
     def library_for_request(
         self, library_short_name: str | None
