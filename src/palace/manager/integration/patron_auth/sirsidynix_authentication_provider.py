@@ -51,12 +51,21 @@ class SirsiError:
     """
 
     status_code: int
-    message: str
+    response_body: str
     method: str
     url: str
 
     def __bool__(self) -> bool:
         return False
+
+    @property
+    def debug_message(self) -> str:
+        """Format a human-readable summary of the failed request."""
+        return (
+            f"Made a {self.method} request to {self.url} "
+            f"and received HTTP {self.status_code}.\n\n"
+            f"Response body:\n{self.response_body}"
+        )
 
 
 class SirsiDynixHorizonAuthSettings(BasicAuthProviderSettings):
@@ -352,7 +361,7 @@ class SirsiDynixHorizonAuthenticationProvider(
         """Build a :class:`SirsiError` from a failed API response."""
         return SirsiError(
             status_code=response.status_code,
-            message=response.text,
+            response_body=response.text,
             method=method,
             url=urljoin(self.server_url, path),
         )
@@ -430,11 +439,7 @@ class SirsiDynixHorizonAuthenticationProvider(
             if isinstance(result, SirsiError):
                 raise IntegrationException(
                     "Could not authenticate test patron",
-                    debug_message=(
-                        f"Made a {result.method} request to {result.url} "
-                        f"and received HTTP {result.status_code}.\n\n"
-                        f"Response body:\n{result.message}"
-                    ),
+                    debug_message=result.debug_message,
                 )
             return result
 
@@ -459,11 +464,7 @@ class SirsiDynixHorizonAuthenticationProvider(
             if isinstance(result, SirsiError):
                 raise IntegrationException(
                     f"Could not fetch {name}",
-                    debug_message=(
-                        f"Made a {result.method} request to {result.url} "
-                        f"and received HTTP {result.status_code}.\n\n"
-                        f"Response body:\n{result.message}"
-                    ),
+                    debug_message=result.debug_message,
                 )
             fields = result.get("fields")
             if fields is None:
