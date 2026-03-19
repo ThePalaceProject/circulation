@@ -4,7 +4,7 @@ from uuid import uuid4
 
 from celery import chain, chord, group, shared_task
 
-from palace.manager.celery.importer import import_key, import_lock, import_workflow_lock
+from palace.manager.celery.importer import import_key, import_workflow_lock
 from palace.manager.celery.task import Task
 from palace.manager.celery.tasks import apply
 from palace.manager.celery.utils import load_from_id
@@ -95,10 +95,7 @@ def import_collection(
 
     release_workflow_lock = workflow_lock_acquired
     try:
-        with (
-            import_lock(redis, collection_id).lock(),
-            task.transaction() as session,
-        ):
+        with task.transaction() as session:
             collection = load_from_id(session, Collection, collection_id)
             collection_name = collection.name
 
