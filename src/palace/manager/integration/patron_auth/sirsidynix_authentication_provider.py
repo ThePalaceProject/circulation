@@ -410,6 +410,20 @@ class SirsiDynixHorizonAuthenticationProvider(
             return self._make_error(method, path, response)
         return response.json()
 
+    def api_libraries_info(self, session_token: str) -> SirsiError | dict[str, Any]:
+        """API request to query information about configured libraries.
+
+        :param session_token: The session token for a logged in user
+        """
+        method, path = (
+            "GET",
+            f"policy/library/simpleQuery?key=*&includeFields=description,displayName",
+        )
+        response = self._request(method, path, session_token=session_token)
+        if response.status_code != 200:
+            return self._make_error(method, path, response)
+        return response.json()
+
     def _run_self_tests(self, _db: Session) -> Generator[SelfTestResult]:
         """Verify the credentials of the test patron for this integration,
         and update its metadata.
@@ -448,6 +462,26 @@ class SirsiDynixHorizonAuthenticationProvider(
 
         patron_key = test_result.result.get("patronKey")
         session_token = test_result.result.get("sessionToken")
+
+        def libraries_info(session_token: str) -> str:
+            """Query configured library information (informational only)."""
+            result = self.api_libraries_info(session_token)
+            if isinstance(result, SirsiError):
+                raise IntegrationException(
+                    "Could not fetch library information",
+                    debug_message=(
+                        f"Made a {result.method} request to {result.url} "
+                        f"and received HTTP {result.status_code}.\n\n"
+                        f"Response body:\n{result.message}"
+                    ),
+                )
+
+            return json.dumps(result, indent=4)
+
+        # This test is informational — a failure does not stop subsequent tests.
+        yield self.run_test(
+            "Library ID Query Information", libraries_info, session_token
+        )
 
         def read_data(
             name: str,

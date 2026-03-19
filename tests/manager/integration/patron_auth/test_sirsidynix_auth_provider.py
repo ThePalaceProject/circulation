@@ -36,6 +36,7 @@ class MockedSirsiApi:
     api_patron_login: MagicMock
     api_read_patron_data: MagicMock
     api_patron_status_info: MagicMock
+    api_libraries_info: MagicMock
 
 
 class SirsiAuthFixture:
@@ -135,15 +136,29 @@ class SirsiAuthFixture:
             return_value=patron_status_info,
         )
 
+        api_libraries_info = create_autospec(
+            provider.api_libraries_info,
+            return_value=[
+                {
+                    "fields": {
+                        "displayName": "Test Library",
+                        "description": "A test library",
+                    }
+                }
+            ],
+        )
+
         provider.api_patron_login = api_patron_login
         provider.api_read_patron_data = api_read_patron_data
         provider.api_patron_status_info = api_patron_status_info
+        provider.api_libraries_info = api_libraries_info
 
         return MockedSirsiApi(
             provider=provider,
             api_patron_login=api_patron_login,
             api_read_patron_data=api_read_patron_data,
             api_patron_status_info=api_patron_status_info,
+            api_libraries_info=api_libraries_info,
         )
 
     def run_self_tests(
@@ -848,7 +863,7 @@ class TestSirsiDynixAuthenticationProvider:
         )
         results = sirsi_auth_fixture.run_self_tests(mocked_provider.provider)
         results.reverse()
-        assert len(results) == 7
+        assert len(results) == 8
 
         # Network diagnostics (DNS + TCP) are yielded first.
         result = results.pop()
@@ -863,6 +878,14 @@ class TestSirsiDynixAuthenticationProvider:
         result = results.pop()
         assert result.name == "Login Patron"
         assert result.success is True
+
+        # Library information (informational, non-blocking)
+        result = results.pop()
+        assert result.name == "Library ID Query Information"
+        assert result.success is True
+        assert (
+            json.loads(result.result) == mocked_provider.api_libraries_info.return_value
+        )
 
         # We display a result for patron data and return the patrons fields as json
         result = results.pop()
@@ -919,6 +942,46 @@ class TestSirsiDynixAuthenticationProvider:
         assert "HTTP 401" in result.debug_message
         assert "Invalid credentials" in result.debug_message
 
+    def test__run_self_tests_libraries_info_failure_non_blocking(
+        self, sirsi_auth_fixture: SirsiAuthFixture
+    ):
+        """A failure fetching library info should not prevent subsequent tests."""
+        mocked_provider = sirsi_auth_fixture.provider_mocked_api()
+        mocked_provider.api_libraries_info.return_value = SirsiError(
+            403,
+            "Forbidden",
+            "GET",
+            "http://example.org/sirsi/policy/library/simpleQuery",
+        )
+        mocked_provider.provider.testing_patron_or_bust = MagicMock(
+            return_value=(MagicMock(), "test")
+        )
+        results = sirsi_auth_fixture.run_self_tests(mocked_provider.provider)
+        results = results[2:]  # skip network diagnostics
+        # All tests should still run: login, library info (fail), patron data,
+        # patron status, authenticate patron, sync metadata = 6
+        assert len(results) == 6
+        results.reverse()
+
+        result = results.pop()
+        assert result.name == "Login Patron"
+        assert result.success is True
+
+        result = results.pop()
+        assert result.name == "Library ID Query Information"
+        assert result.success is False
+        assert result.debug_message is not None
+        assert "HTTP 403" in result.debug_message
+
+        # Subsequent tests still ran despite the failure above
+        result = results.pop()
+        assert result.name == "Read Patron Data"
+        assert result.success is True
+
+        result = results.pop()
+        assert result.name == "Patron Status Info"
+        assert result.success is True
+
     @pytest.mark.parametrize(
         "api_read_patron_data_resp, expected_exception, expected_debug_substrings",
         [
@@ -961,12 +1024,15 @@ class TestSirsiDynixAuthenticationProvider:
         mocked_provider = sirsi_auth_fixture.provider_mocked_api()
         mocked_provider.api_read_patron_data.return_value = api_read_patron_data_resp
         results = sirsi_auth_fixture.run_self_tests(mocked_provider.provider)
-        assert len(results) == 4
+        assert len(results) == 5
         results = results[2:]  # skip network diagnostics
         results.reverse()
 
         result = results.pop()
         assert result.success is True  # login
+
+        result = results.pop()
+        assert result.success is True  # library information
 
         result = results.pop()
         assert result.success is False  # patron_data
@@ -1019,12 +1085,15 @@ class TestSirsiDynixAuthenticationProvider:
             api_patron_status_info_resp
         )
         results = sirsi_auth_fixture.run_self_tests(mocked_provider.provider)
-        assert len(results) == 5
+        assert len(results) == 6
         results = results[2:]  # skip network diagnostics
         results.reverse()
 
         result = results.pop()
         assert result.success is True  # login
+
+        result = results.pop()
+        assert result.success is True  # library information
 
         result = results.pop()
         assert result.success is True  # patron_data
