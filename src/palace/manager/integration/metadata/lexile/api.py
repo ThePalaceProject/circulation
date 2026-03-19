@@ -10,6 +10,8 @@ from palace.manager.integration.metadata.lexile.settings import LexileDBSettings
 from palace.manager.util.http.http import HTTP
 from palace.manager.util.log import LoggerMixin
 
+API_TIMEOUT = 30  # seconds per request
+
 
 class LexileDBAPI(LoggerMixin):
     """Client for fetching Lexile measures from the MetaMetrics Lexile DB API."""
@@ -40,7 +42,7 @@ class LexileDBAPI(LoggerMixin):
         try:
             response = HTTP.get_with_timeout(
                 url,
-                timeout=30,
+                timeout=API_TIMEOUT,
                 auth=(self._settings.username, self._settings.password),
             )
         except Exception as e:
