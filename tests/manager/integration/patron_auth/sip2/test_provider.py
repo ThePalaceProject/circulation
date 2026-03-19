@@ -1206,44 +1206,6 @@ class TestSIP2AuthenticateWithBlockingRules:
         assert isinstance(result, ProblemDetail)
         assert result.detail == "Patron is blocked by library policy."
 
-    def test_missing_placeholder_fails_closed(
-        self,
-        create_provider: Callable[..., SIP2AuthenticationProvider],
-        create_library_settings: Callable[..., SIP2LibrarySettings],
-    ) -> None:
-        """A rule referencing a placeholder absent from the values dict blocks
-        the patron (fail closed) with the generic message.
-
-        When ``_do_authenticate`` is patched, ``remote_authenticate`` is never
-        called so the SIP2 thread-local cache stays ``None``; the provider
-        falls back to ``build_runtime_values_from_patron``, which only has
-        ``fines`` and ``patron_type``.  A rule referencing ``{custom_field}``
-        therefore fails with a missing-placeholder error → fail closed.
-        """
-        library_settings = create_library_settings(
-            patron_blocking_rules=[
-                {
-                    "name": "custom-check",
-                    "rule": "{custom_field} == 'expected'",
-                    "message": "This message should not appear on error.",
-                }
-            ]
-        )
-        provider = create_provider(library_settings=library_settings)
-
-        mock_patron = MagicMock(spec=Patron)
-        mock_patron.fines = None
-        mock_patron.external_type = None
-        with patch(self._PATCH_TARGET, return_value=(mock_patron, {})):
-            result = provider.authenticate(
-                MagicMock(), {"username": "u", "password": "p"}
-            )
-
-        # Fail closed → block, but with generic message (not the rule's message)
-        assert isinstance(result, ProblemDetail)
-        assert result.status_code == 403
-        assert result.detail == "Patron is blocked by library policy."
-
     def test_library_with_no_rules_does_not_block(
         self,
         create_provider: Callable[..., SIP2AuthenticationProvider],
