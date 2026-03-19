@@ -44,7 +44,7 @@ class LexileDBAPI(LoggerMixin):
                 auth=(self._settings.username, self._settings.password),
             )
         except Exception as e:
-            self.log.warning("Lexile API request failed for ISBN %s: %s", isbn, e)
+            self.log.warning(f"Lexile API request failed for ISBN {isbn}: {e}")
             if raise_on_error:
                 raise IntegrationException(
                     "Lexile API request failed",
@@ -54,7 +54,7 @@ class LexileDBAPI(LoggerMixin):
 
         if response.status_code != 200:
             self.log.warning(
-                "Lexile API returned %s for ISBN %s", response.status_code, isbn
+                f"Lexile API returned {response.status_code} for ISBN {isbn}"
             )
             if raise_on_error:
                 if response.status_code in (401, 403):
@@ -71,7 +71,7 @@ class LexileDBAPI(LoggerMixin):
         try:
             data: dict[str, Any] = response.json()
         except ValueError as e:
-            self.log.warning("Lexile API invalid JSON for ISBN %s: %s", isbn, e)
+            self.log.warning(f"Lexile API invalid JSON for ISBN {isbn}: {e}")
             return None
 
         meta = data.get("meta", {})
@@ -92,6 +92,6 @@ class LexileDBAPI(LoggerMixin):
             return int(lexile)
         except (TypeError, ValueError):
             self.log.warning(
-                "Lexile API returned non-numeric lexile %r for ISBN %s", lexile, isbn
+                f"Lexile API returned non-numeric lexile {lexile} for ISBN {isbn}"
             )
             return None

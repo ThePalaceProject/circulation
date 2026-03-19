@@ -139,7 +139,7 @@ def run_lexile_db_update(task: Task) -> None:
         try:
             LexileDBService.from_config(session)
         except CannotLoadConfiguration as e:
-            task.log.info("Lexile DB update skipped: %s", e)
+            task.log.info(f"Lexile DB update skipped: {e}")
             return
 
         redis_client = task.services.redis().client()
@@ -173,7 +173,7 @@ def lexile_db_update_task(
         try:
             service = LexileDBService.from_config(session)
         except CannotLoadConfiguration as e:
-            task.log.info("Lexile DB update skipped: %s", e)
+            task.log.info(f"Lexile DB update skipped: {e}")
             return
 
         if offset == 0:
@@ -248,7 +248,5 @@ def lexile_db_update_task(
         lock.release()
 
     task.log.info(
-        "Lexile DB update complete. Processed %d identifiers at offset %d.",
-        len(identifiers),
-        offset,
+        f"Lexile DB update complete. Processed {len(identifiers)} identifiers at offset {offset}.",
     )
