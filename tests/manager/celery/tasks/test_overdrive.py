@@ -483,6 +483,31 @@ class TestImportCollection:
         assert result is not None
 
     @patch("palace.manager.celery.tasks.overdrive.OverdriveImporter")
+    def test_workflow_lock_not_released_on_autoretry(
+        self,
+        mock_importer_class: MagicMock,
+        overdrive_import_fixture: OverdriveImportFixture,
+        redis_fixture: RedisFixture,
+    ):
+        """When an autoretry exception is raised, the workflow lock is not released."""
+        from palace.manager.util.http.exception import BadResponseException
+
+        collection = overdrive_import_fixture.collection
+        mock_importer, _ = overdrive_import_fixture.create_mock_importer()
+        mock_importer.import_collection.side_effect = BadResponseException(
+            "http://test.com", "Bad response"
+        )
+        mock_importer_class.return_value = mock_importer
+
+        with pytest.raises(BadResponseException):
+            overdrive.import_collection.apply(args=[collection.id]).get(propagate=True)
+
+        workflow_lock = import_workflow_lock(
+            redis_fixture.client, collection.id, random_value="any"
+        )
+        assert workflow_lock.locked()
+
+    @patch("palace.manager.celery.tasks.overdrive.OverdriveImporter")
     def test_workflow_lock_expired_between_pages(
         self,
         mock_importer_class: MagicMock,

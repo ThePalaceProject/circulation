@@ -3,6 +3,7 @@ from typing import Any
 from uuid import uuid4
 
 from celery import chain, chord, group, shared_task
+from celery.exceptions import Ignore
 
 from palace.manager.celery.importer import import_key, import_workflow_lock
 from palace.manager.celery.task import Task
@@ -87,21 +88,26 @@ def import_collection(
         lock_value = str(uuid4())
 
     workflow_lock = import_workflow_lock(redis, collection_id, lock_value)
-    workflow_lock_acquired = workflow_lock.acquire()
-    if not workflow_lock_acquired and is_first_page:
-        task.log.warning(
-            f"OverDrive import skipped for collection {collection_id}: "
-            "another import is already in progress."
-        )
-        return {IMPORT_SKIPPED: True}
-    if not workflow_lock_acquired and not is_first_page:
-        task.log.warning(
-            f"OverDrive import for collection {collection_id}: workflow lock expired "
-            "between pages; continuing (another import may be running)."
-        )
 
-    release_workflow_lock = workflow_lock_acquired
-    try:
+    # Ignore is raised by task.replace() and Retry is raised by autoretry_for exceptions.
+    # Neither should release the workflow lock: replace() hands it to the next page task,
+    # and retries should continue holding the lock across the backoff window.
+    with workflow_lock.lock(
+        raise_when_not_acquired=False,
+        ignored_exceptions=(Ignore, BadResponseException, RequestTimedOut),
+    ) as workflow_lock_acquired:
+        if not workflow_lock_acquired and is_first_page:
+            task.log.warning(
+                f"OverDrive import skipped for collection {collection_id}: "
+                "another import is already in progress."
+            )
+            return {IMPORT_SKIPPED: True}
+        if not workflow_lock_acquired and not is_first_page:
+            task.log.warning(
+                f"OverDrive import for collection {collection_id}: workflow lock expired "
+                "between pages; continuing (another import may be running)."
+            )
+
         with task.transaction() as session:
             collection = load_from_id(session, Collection, collection_id)
             collection_name = collection.name
@@ -183,7 +189,6 @@ def import_collection(
             serialized_parent_identifiers = (
                 parent_identifier_set.__json__() if parent_identifier_set else None
             )
-            release_workflow_lock = False
             raise task.replace(
                 task.s(
                     collection_id=collection_id,
@@ -198,9 +203,6 @@ def import_collection(
             )
         else:
             return identifier_set
-    finally:
-        if release_workflow_lock:
-            workflow_lock.release()
 
 
 @shared_task(
