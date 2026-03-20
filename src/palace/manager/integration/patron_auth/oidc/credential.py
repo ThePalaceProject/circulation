@@ -17,6 +17,7 @@ from typing import Any, cast
 from sqlalchemy import and_, exists
 from sqlalchemy.orm import Session
 
+from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.integration.patron_auth.oidc.auth import (
     OIDCAuthenticationManager,
     OIDCRefreshTokenError,
@@ -57,23 +58,49 @@ class OIDCCredentialManager(LoggerMixin):
         id_token_claims: dict[str, Any],
         access_token: str,
         refresh_token: str | None = None,
+        id_token: str | None = None,
     ) -> str:
         """Create OIDC token value by serializing token data.
 
         :param id_token_claims: Validated ID token claims
         :param access_token: Access token
         :param refresh_token: Optional refresh token
+        :param id_token: Raw ID token JWT (stored for use as id_token_hint on logout)
         :return: JSON-serialized token data
         """
-        token_data = {
+        token_data: dict[str, Any] = {
             "id_token_claims": id_token_claims,
             "access_token": access_token,
         }
 
         if refresh_token:
             token_data["refresh_token"] = refresh_token
+        if id_token:
+            token_data["id_token"] = id_token
 
         return json.dumps(token_data)
+
+    @staticmethod
+    def parse_token_value(value: str) -> dict[str, Any]:
+        """Parse and validate a raw OIDC credential JSON string.
+
+        :param value: JSON string produced by :meth:`_create_token_value`
+        :raises PalaceValueError: If the string is not valid JSON or is missing required fields.
+            `PalaceValueError` is a subclass of `ValueError`, so callers that catch
+            `ValueError` will still handle it correctly.
+        :return: Parsed token data dictionary
+        """
+        try:
+            token_data = cast(dict[str, Any], json.loads(value))
+        except json.JSONDecodeError as e:
+            raise PalaceValueError(f"Invalid OIDC token format: {str(e)}") from e
+
+        if not isinstance(token_data.get("id_token_claims"), dict):
+            raise PalaceValueError("OIDC token missing or invalid id_token_claims")
+        if "access_token" not in token_data:
+            raise PalaceValueError("OIDC token missing access_token")
+
+        return token_data
 
     def extract_token_data(self, credential: Credential) -> dict[str, Any]:
         """Extract token data from credential.
@@ -82,22 +109,12 @@ class OIDCCredentialManager(LoggerMixin):
         :return: Dictionary with id_token_claims, access_token, refresh_token
         """
         self.log.debug(f"Extracting OIDC token data from credential {credential.id}")
-
         credential_value = credential.credential if credential.credential else "{}"
-
         try:
-            token_data = cast(dict[str, Any], json.loads(credential_value))
-        except json.JSONDecodeError as e:
+            return self.parse_token_value(credential_value)
+        except ValueError as e:
             self.log.exception("Failed to decode OIDC token data")
-            raise ValueError(f"Invalid OIDC token format: {str(e)}") from e
-
-        # Validate structure
-        if "id_token_claims" not in token_data:
-            raise ValueError("OIDC token missing id_token_claims")
-        if "access_token" not in token_data:
-            raise ValueError("OIDC token missing access_token")
-
-        return token_data
+            raise
 
     def create_oidc_token(
         self,
@@ -108,6 +125,7 @@ class OIDCCredentialManager(LoggerMixin):
         refresh_token: str | None = None,
         expires_in: int | None = None,
         session_lifetime_days: int | None = None,
+        id_token: str | None = None,
     ) -> Credential:
         """Create a Credential object for OIDC tokens.
 
@@ -118,6 +136,7 @@ class OIDCCredentialManager(LoggerMixin):
         :param refresh_token: Optional refresh token
         :param expires_in: Token lifetime in seconds (from provider)
         :param session_lifetime_days: Override session lifetime in days
+        :param id_token: Raw ID token JWT (stored for use as id_token_hint on logout)
         :return: Created Credential object
         """
         # Calculate expiry
@@ -138,7 +157,7 @@ class OIDCCredentialManager(LoggerMixin):
 
         # Create token value
         token_value = self._create_token_value(
-            id_token_claims, access_token, refresh_token
+            id_token_claims, access_token, refresh_token, id_token
         )
 
         # Get data source
@@ -279,25 +298,26 @@ class OIDCCredentialManager(LoggerMixin):
             self.log.exception("Failed to refresh OIDC token")
             raise
 
-        # Validate new ID token if present
-        new_id_token_claims = token_data[
-            "id_token_claims"
-        ]  # Keep old claims as fallback
+        # Validate new ID token if present; fall back to stored values.
+        new_id_token_claims = token_data["id_token_claims"]
+        new_id_token = token_data.get("id_token")
         if "id_token" in new_tokens:
             try:
                 # Validate new ID token (no nonce check for refresh)
                 new_id_token_claims = auth_manager.validate_id_token(
                     new_tokens["id_token"], nonce=None
                 )
+                new_id_token = new_tokens["id_token"]
             except Exception as e:
                 self.log.warning(f"Failed to validate refreshed ID token: {e}")
-                # Keep using old claims if new token validation fails
+                # Keep using old claims and token if new token validation fails
 
         # Update credential with new tokens
         new_token_value = self._create_token_value(
             new_id_token_claims,
             new_tokens["access_token"],
             new_tokens.get("refresh_token", refresh_token),  # Use new or keep old
+            new_id_token,
         )
 
         credential.credential = new_token_value

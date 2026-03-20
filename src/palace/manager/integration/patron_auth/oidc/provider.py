@@ -15,12 +15,17 @@ from werkzeug.datastructures import Authorization
 
 from palace.manager.api.authentication.base import PatronData, PatronLookupNotSupported
 from palace.manager.api.authenticator import BaseOIDCAuthenticationProvider
+from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.integration.patron_auth.oidc.auth import OIDCAuthenticationManager
 from palace.manager.integration.patron_auth.oidc.configuration.model import (
     OIDCAuthLibrarySettings,
     OIDCAuthSettings,
 )
 from palace.manager.integration.patron_auth.oidc.credential import OIDCCredentialManager
+from palace.manager.integration.patron_auth.oidc.util import (
+    LOGOUT_REDIRECT_QUERY_PARAM,
+    OIDCDiscoveryError,
+)
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.sqlalchemy.model.credential import Credential
 from palace.manager.sqlalchemy.model.patron import Patron
@@ -31,6 +36,15 @@ from palace.manager.util.problem_detail import (
 
 if TYPE_CHECKING:
     from palace.manager.core.selftest import SelfTestResult
+
+# TODO: These OPDS constants are provider-agnostic and should be moved to a shared
+# constants module if other authentication providers (e.g., SAML) need them.
+OPDS_URI_TEMPLATE_VARIABLES_PROPERTY = "uri_template_variables"
+OPDS_URI_TEMPLATE_VARIABLES_TYPE = (
+    "http://palaceproject.io/terms/uri-template/variables"
+)
+
+PALACE_REDIRECT_URI_TERM = "http://palaceproject.io/terms/redirect-uri"
 
 OIDC_CANNOT_DETERMINE_PATRON = pd(
     "http://palaceproject.io/terms/problem/auth/unrecoverable/oidc/cannot-identify-patron",
@@ -79,6 +93,7 @@ class OIDCAuthenticationProvider(
 
         self._credential_manager = OIDCCredentialManager()
         self._settings = settings
+        self._auth_manager: OIDCAuthenticationManager | None = None
 
     @classmethod
     def label(cls) -> str:
@@ -166,7 +181,7 @@ class OIDCAuthenticationProvider(
         """
         library = self.library(db)
         if not library:
-            raise ValueError("Library not found")
+            raise PalaceValueError("Library not found")
 
         authenticate_url = url_for(
             "oidc_authenticate",
@@ -174,12 +189,38 @@ class OIDCAuthenticationProvider(
             library_short_name=library.short_name,
             provider=self.label(),
         )
-        link = self._create_authentication_link(authenticate_url)
+        links: list[dict[str, Any]] = [
+            self._create_authentication_link(authenticate_url)
+        ]
+
+        auth_manager = self.get_authentication_manager()
+        if auth_manager.supports_logout():
+            logout_url = url_for(
+                "oidc_logout",
+                _external=True,
+                library_short_name=library.short_name,
+                provider=self.label(),
+            )
+            links.append(
+                {
+                    "rel": "logout",
+                    "href": f"{logout_url}{{&{LOGOUT_REDIRECT_QUERY_PARAM}}}",
+                    "templated": True,
+                    "properties": {
+                        OPDS_URI_TEMPLATE_VARIABLES_PROPERTY: {
+                            "type": OPDS_URI_TEMPLATE_VARIABLES_TYPE,
+                            "map": {
+                                LOGOUT_REDIRECT_QUERY_PARAM: PALACE_REDIRECT_URI_TERM,
+                            },
+                        },
+                    },
+                }
+            )
 
         return {
             "type": self.flow_type,
             "description": self.label(),
-            "links": [link],
+            "links": links,
         }
 
     def _run_self_tests(self, db: Session) -> Generator[SelfTestResult]:
@@ -219,9 +260,27 @@ class OIDCAuthenticationProvider(
     def get_authentication_manager(self) -> OIDCAuthenticationManager:
         """Return OIDC authentication manager for this provider.
 
+        The manager is cached once provider metadata loads successfully. If
+        discovery fails — for example because the IdP is temporarily unreachable
+        — the manager is returned uncached so the next call retries from scratch.
+
         :return: OIDC authentication manager
         """
-        return OIDCAuthenticationManager(self._settings)
+        if self._auth_manager is not None:
+            return self._auth_manager
+
+        manager = OIDCAuthenticationManager(self._settings)
+        try:
+            manager.get_provider_metadata()
+        except OIDCDiscoveryError as e:
+            self.log.warning(
+                f"Failed to configure OIDC authentication manager: {e}. "
+                "Will retry on next request."
+            )
+            return manager
+
+        self._auth_manager = manager
+        return self._auth_manager
 
     def remote_patron_lookup_from_oidc_claims(
         self, id_token_claims: dict[str, str]
@@ -278,6 +337,7 @@ class OIDCAuthenticationProvider(
         access_token: str,
         refresh_token: str | None = None,
         expires_in: int | None = None,
+        id_token: str | None = None,
     ) -> tuple[Credential, Patron, PatronData]:
         """Handle OIDC callback after successful authentication.
 
@@ -286,6 +346,7 @@ class OIDCAuthenticationProvider(
         :param access_token: Access token from token exchange
         :param refresh_token: Optional refresh token
         :param expires_in: Token expiry in seconds
+        :param id_token: Raw ID token JWT (stored for use as id_token_hint on logout)
         :return: 3-tuple (Credential, Patron, PatronData)
         """
         patron_data = self.remote_patron_lookup_from_oidc_claims(id_token_claims)
@@ -302,6 +363,7 @@ class OIDCAuthenticationProvider(
             refresh_token,
             expires_in,
             self._settings.session_lifetime,
+            id_token,
         )
 
         return credential, patron, patron_data
