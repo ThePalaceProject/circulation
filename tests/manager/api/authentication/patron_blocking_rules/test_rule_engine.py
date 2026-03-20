@@ -27,7 +27,7 @@ def evaluator():
 
 
 class TestCompileRuleExpression:
-    """Tests for compile_rule_expression()."""
+    """Tests for :func:`~palace.manager.api.authentication.patron_blocking_rules.rule_engine.compile_rule_expression`."""
 
     def test_single_placeholder_replaced(self):
         result = compile_rule_expression("age_in_years({dob}) >= 18")
@@ -69,7 +69,7 @@ class TestCompileRuleExpression:
 
 
 class TestBuildNames:
-    """Tests for build_names()."""
+    """Tests for :func:`~palace.manager.api.authentication.patron_blocking_rules.rule_engine.build_names`."""
 
     def test_maps_key_to_var_name(self):
         compiled = compile_rule_expression("{fines} >= 5")
@@ -126,7 +126,7 @@ class TestBuildNames:
 
 
 class TestValidateMessage:
-    """Tests for validate_message()."""
+    """Tests for :func:`~palace.manager.api.authentication.patron_blocking_rules.rule_engine.validate_message`."""
 
     def test_valid_message_passes(self):
         validate_message("Your account has outstanding fines.")
@@ -148,7 +148,7 @@ class TestValidateMessage:
 
 
 class TestValidateRuleExpression:
-    """Tests for validate_rule_expression()."""
+    """Tests for :func:`~palace.manager.api.authentication.patron_blocking_rules.rule_engine.validate_rule_expression`."""
 
     def test_valid_expression_passes(self, evaluator):
         validate_rule_expression(
@@ -262,7 +262,7 @@ class TestValidateRuleExpression:
 
 
 class TestEvaluateRuleExpressionStrictBool:
-    """Tests for evaluate_rule_expression_strict_bool()."""
+    """Tests for :func:`~palace.manager.api.authentication.patron_blocking_rules.rule_engine.evaluate_rule_expression_strict_bool`."""
 
     def test_true_result_returned(self, evaluator):
         result = evaluate_rule_expression_strict_bool(
@@ -388,7 +388,7 @@ class TestEvaluateRuleExpressionStrictBool:
 
 
 class TestAgeInYears:
-    """Tests for age_in_years()."""
+    """Tests for :func:`~palace.manager.api.authentication.patron_blocking_rules.rule_engine.age_in_years`."""
 
     _REF_DATE = date(2025, 6, 15)
 

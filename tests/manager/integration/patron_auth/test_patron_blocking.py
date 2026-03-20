@@ -1,14 +1,13 @@
 """Tests for the shared patron blocking-rules infrastructure.
 
 Covers:
-- PatronBlockingRule model (patron_blocking.py)
-- check_patron_blocking_rules() pure function (patron_blocking.py)
-- check_patron_blocking_rules_with_evaluator() (patron_blocking.py)
-- build_runtime_values_from_patron() (patron_blocking.py)
-- patron_blocking_rules field on PatronBlockingRulesSetting (basic.py)
-  including simpleeval validation and message-length checks
-- HasPatronBlockingRules mixin on BasicAuthenticationProvider (basic.py)
-- blocking-rules hook in BasicAuthenticationProvider.authenticate (basic.py)
+
+- :class:`~palace.manager.integration.patron_auth.patron_blocking.PatronBlockingRule` model
+- :func:`~palace.manager.integration.patron_auth.patron_blocking.check_patron_blocking_rules_with_evaluator`
+- :func:`~palace.manager.integration.patron_auth.patron_blocking.build_runtime_values_from_patron`
+- ``patron_blocking_rules`` field on :class:`~palace.manager.api.authentication.basic.PatronBlockingRulesSetting`
+- :class:`~palace.manager.api.authentication.patron_blocking_rules.mixin.HasPatronBlockingRules` mixin
+- blocking-rules hook in :meth:`~palace.manager.api.authentication.basic.BasicAuthenticationProvider.authenticate`
 """
 
 from __future__ import annotations
@@ -37,11 +36,11 @@ from tests.fixtures.problem_detail import raises_problem_detail
 
 
 class ConcreteSettings(PatronBlockingRulesSetting, BasicAuthProviderLibrarySettings):
-    """Minimal concrete settings class used to test PatronBlockingRulesSetting in isolation."""
+    """Minimal concrete settings class used to test :class:`PatronBlockingRulesSetting` in isolation."""
 
 
 class TestPatronBlockingRule:
-    """Unit tests for the PatronBlockingRule value object."""
+    """Unit tests for the :class:`~palace.manager.integration.patron_auth.patron_blocking.PatronBlockingRule` value object."""
 
     def test_basic_construction(self) -> None:
         rule = PatronBlockingRule(name="rule1", rule="True")
@@ -70,7 +69,7 @@ class TestPatronBlockingRule:
 
 
 class TestCheckPatronBlockingRulesWithEvaluator:
-    """Tests for the simpleeval-based check_patron_blocking_rules_with_evaluator()."""
+    """Tests for :func:`~palace.manager.integration.patron_auth.patron_blocking.check_patron_blocking_rules_with_evaluator`."""
 
     def test_empty_rules_returns_none(self) -> None:
         assert check_patron_blocking_rules_with_evaluator([], {}) is None
@@ -165,7 +164,7 @@ class TestCheckPatronBlockingRulesWithEvaluator:
 
 
 class TestBuildRuntimeValuesFromPatron:
-    """Tests for build_runtime_values_from_patron()."""
+    """Tests for :func:`~palace.manager.integration.patron_auth.patron_blocking.build_runtime_values_from_patron`."""
 
     def _make_patron(self, fines=None, external_type=None):
         patron = MagicMock(spec=Patron)
@@ -205,10 +204,11 @@ class TestBuildRuntimeValuesFromPatron:
 
 
 class TestBasicAuthLibrarySettingsBlockingRules:
-    """Tests for patron_blocking_rules on PatronBlockingRulesSetting.
+    """Tests for ``patron_blocking_rules`` on :class:`PatronBlockingRulesSetting`.
 
-    Uses ConcreteSettings — a minimal class that mixes in PatronBlockingRulesSetting —
-    to test the mixin in isolation without coupling to any specific provider.
+    Uses :class:`ConcreteSettings` — a minimal class that mixes in
+    :class:`PatronBlockingRulesSetting` — to test the mixin in isolation without
+    coupling to any specific provider.
     """
 
     def test_default_is_empty_list(self) -> None:
@@ -363,7 +363,7 @@ class TestBasicAuthLibrarySettingsBlockingRules:
 
 
 class TestBasicAuthenticationProvider:
-    """Tests for BasicAuthenticationProvider.authenticate with patron blocking rules."""
+    """Tests for :meth:`~palace.manager.api.authentication.basic.BasicAuthenticationProvider.authenticate` with patron blocking rules."""
 
     _PATCH_TARGET = (
         "palace.manager.api.authentication.basic."
