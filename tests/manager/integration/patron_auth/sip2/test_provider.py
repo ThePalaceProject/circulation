@@ -1484,12 +1484,12 @@ class TestFetchLiveRuleValidationValues:
     """Unit tests for SIP2AuthenticationProvider.fetch_live_rule_validation_values.
 
     Each test uses a real (non-mocked) SIP2Settings instance and patches only
-    ``patron_information`` on the class to avoid any real network calls.
+    ``_fetch_patron_info_via_sip2`` on the class to avoid any real network calls.
     """
 
-    _PATRON_INFO_PATCH = (
+    _FETCH_PATCH = (
         "palace.manager.integration.patron_auth.sip2.provider"
-        ".SIP2AuthenticationProvider.patron_information"
+        ".SIP2AuthenticationProvider._fetch_patron_info_via_sip2"
     )
 
     @pytest.fixture
@@ -1526,7 +1526,7 @@ class TestFetchLiveRuleValidationValues:
         """When patron_information raises any exception (e.g. network error),
         it is wrapped in a ProblemDetailException."""
         with patch(
-            self._PATRON_INFO_PATCH,
+            self._FETCH_PATCH,
             side_effect=OSError("Connection refused"),
         ):
             with pytest.raises(ProblemDetailException) as exc_info:
@@ -1545,7 +1545,7 @@ class TestFetchLiveRuleValidationValues:
         """When patron_information returns a ProblemDetail (e.g. bad credentials),
         it is raised as a ProblemDetailException with a descriptive message."""
         sip2_error = INVALID_CREDENTIALS.detailed("Patron not found")
-        with patch(self._PATRON_INFO_PATCH, return_value=sip2_error):
+        with patch(self._FETCH_PATCH, return_value=sip2_error):
             with pytest.raises(ProblemDetailException) as exc_info:
                 SIP2AuthenticationProvider.fetch_live_rule_validation_values(
                     settings_with_identifier
@@ -1563,7 +1563,7 @@ class TestFetchLiveRuleValidationValues:
         """When patron_information succeeds, the raw SIP2 info dict is transformed with
         enhanced values and returned."""
         sip2_info = {"fee_amount": "$5.00", "sipserver_patron_class": "adult"}
-        with patch(self._PATRON_INFO_PATCH, return_value=sip2_info):
+        with patch(self._FETCH_PATCH, return_value=sip2_info):
             result = SIP2AuthenticationProvider.fetch_live_rule_validation_values(
                 settings_with_identifier
             )
@@ -1576,28 +1576,28 @@ class TestFetchLiveRuleValidationValues:
         self,
         create_settings: Callable[..., SIP2Settings],
     ) -> None:
-        """patron_information is called with test_identifier and test_password."""
+        """_fetch_patron_info_via_sip2 is called with test_identifier and test_password."""
         settings = create_settings(test_identifier="user1", test_password="mypass")
         sip2_info = {"fee_amount": "0.00"}
 
-        with patch(self._PATRON_INFO_PATCH, return_value=sip2_info) as mock_pi:
+        with patch(self._FETCH_PATCH, return_value=sip2_info) as mock_fetch:
             SIP2AuthenticationProvider.fetch_live_rule_validation_values(settings)
 
-        mock_pi.assert_called_once_with("user1", "mypass")
+        mock_fetch.assert_called_once_with(settings, "user1", "mypass")
 
     def test_uses_empty_string_when_no_test_password(
         self,
         create_settings: Callable[..., SIP2Settings],
     ) -> None:
-        """When test_password is not set, patron_information is called with an
-        empty string rather than None."""
+        """When test_password is not set, _fetch_patron_info_via_sip2 is called with
+        an empty string rather than None."""
         settings = create_settings(test_identifier="user1", test_password=None)
         sip2_info = {"fee_amount": "0.00"}
 
-        with patch(self._PATRON_INFO_PATCH, return_value=sip2_info) as mock_pi:
+        with patch(self._FETCH_PATCH, return_value=sip2_info) as mock_fetch:
             SIP2AuthenticationProvider.fetch_live_rule_validation_values(settings)
 
-        mock_pi.assert_called_once_with("user1", "")
+        mock_fetch.assert_called_once_with(settings, "user1", "")
 
 
 class TestBuildValuesFromSip2Info:
