@@ -4,7 +4,6 @@ from flask_babel import lazy_gettext as _
 
 from palace.manager.api.problem_details import (
     BAD_DELIVERY_MECHANISM,
-    BLOCKED_CREDENTIALS,
     CANNOT_FULFILL,
     CANNOT_RELEASE_HOLD,
     CHECKOUT_FAILED,
@@ -24,6 +23,7 @@ from palace.manager.api.problem_details import (
     RENEW_FAILED,
     SPECIFIC_HOLD_LIMIT_MESSAGE,
     SPECIFIC_LOAN_LIMIT_MESSAGE,
+    SUSPENDED_CREDENTIALS,
 )
 from palace.manager.core.exceptions import IntegrationException
 from palace.manager.core.problem_details import (
@@ -199,7 +199,7 @@ class AuthorizationBlocked(CannotLoan):
 
     @property
     def base(self) -> ProblemDetail:
-        return BLOCKED_CREDENTIALS
+        return SUSPENDED_CREDENTIALS
 
 
 class LimitReached(CirculationException, ABC):

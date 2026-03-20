@@ -10,6 +10,11 @@
 
 Palace Manager is a backend service for digital library systems, maintained by [The Palace Project](https://thepalaceproject.org).
 
+## Documentation
+
+- [Patron Blocking Rules — Allowed Functions](docs/FUNCTIONS.md) —
+  Reference for the functions available in patron blocking rule expressions.
+
 ## Installation
 
 Docker images created from this code are available at:

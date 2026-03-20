@@ -1,0 +1,353 @@
+from __future__ import annotations
+
+import re
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass, field
+from datetime import date
+from typing import Any
+
+from frozendict import frozendict
+from simpleeval import (
+    EvalWithCompoundTypes,
+    FunctionNotDefined,
+    NameNotDefined,
+)
+
+from palace.manager.core.exceptions import BasePalaceException
+
+MAX_RULE_LENGTH = 1000
+MAX_MESSAGE_LENGTH = 1000
+
+# Placeholder keys: alphanumeric + underscore, e.g. {patron_type}, {fines}
+_PLACEHOLDER_RE = re.compile(r"\{([A-Za-z0-9_]+)\}")
+
+# Variable name prefix used when compiling placeholders to safe identifiers.
+_VAR_PREFIX = "__v_"
+
+
+def _format_available_keys(available: Mapping[str, Any]) -> str:
+    """Return a sorted, human-readable listing of available keys and values."""
+    if not available:
+        return "(none)"
+    return ", ".join(
+        f"{k}={v!r}" for k, v in sorted(available.items(), key=lambda kv: kv[0])
+    )
+
+
+def _format_allowed_functions(functions: Mapping[str, Callable[..., Any]]) -> str:
+    """Return a sorted, human-readable list of allowed function names."""
+    if not functions:
+        return "(none)"
+    return ", ".join(sorted(functions.keys()))
+
+
+class RuleValidationError(BasePalaceException):
+    """Raised when a patron blocking rule fails admin-save validation."""
+
+    message: str
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+
+
+class MissingPlaceholderError(BasePalaceException):
+    """Raised when a required placeholder key is absent from the values dict.
+
+    :ivar key: The name of the missing placeholder (without braces).
+    :ivar available: The keys (and their values) that *were* available at the
+        time the error was raised.  Included in the error message so that
+        operators can identify the correct field name to use.
+    """
+
+    def __init__(self, key: str, available: Mapping[str, Any] | None = None) -> None:
+        avail = available or {}
+        available_str = _format_available_keys(avail)
+        msg = (
+            f"Placeholder {{{key}}} is not available. "
+            f"Available fields: {available_str}"
+        )
+        super().__init__(msg)
+        self.key = key
+        self.available: dict[str, Any] = dict(avail)
+
+
+class RuleEvaluationError(BasePalaceException):
+    """Raised at runtime when a rule cannot be evaluated safely."""
+
+    def __init__(self, message: str, rule_name: str | None = None) -> None:
+        super().__init__(message)
+        self.rule_name = rule_name
+
+
+@dataclass(frozen=True)
+class CompiledRule:
+    """The result of compiling a rule expression.
+
+    :ivar original: The original rule expression string (with {key} placeholders).
+    :ivar compiled: The expression with placeholders replaced by safe variable
+        names (e.g. ``__v_key``), ready for simpleeval.
+    :ivar var_map: Mapping from original placeholder key to its safe variable name.
+    """
+
+    original: str
+    compiled: str
+    var_map: dict[str, str] = field(default_factory=dict)
+
+
+def compile_rule_expression(expr: str) -> CompiledRule:
+    """Compile a rule expression by replacing ``{key}`` placeholders with safe
+    variable identifiers.
+
+    The resulting expression string is suitable for passing to simpleeval.
+    Placeholder values are injected via the ``names`` dict (see
+    :func:`build_names`).
+
+    :param expr: The raw rule expression, e.g. ``"{fines} > 10.0"``.
+    :returns: A :class:`CompiledRule` instance.
+    """
+    var_map: dict[str, str] = {}
+
+    def _replace(m: re.Match[str]) -> str:
+        key = m.group(1)
+        var_name = f"{_VAR_PREFIX}{key}"
+        var_map[key] = var_name
+        return var_name
+
+    compiled = _PLACEHOLDER_RE.sub(_replace, expr)
+    return CompiledRule(original=expr, compiled=compiled, var_map=var_map)
+
+
+def build_names(compiled: CompiledRule, values: Mapping[str, Any]) -> dict[str, Any]:
+    """Build the simpleeval ``names`` dict for a compiled rule.
+
+    Raises :class:`MissingPlaceholderError` if any placeholder referenced in
+    *compiled* is absent from *values*.  The error message includes a listing
+    of all available keys and their values to help operators fix the rule.
+
+    :param compiled: A :class:`CompiledRule` produced by
+        :func:`compile_rule_expression`.
+    :param values: Mapping of placeholder key to concrete value, e.g.
+        ``{"fines": 5.0, "sipserver_patron_class": "adult"}``.
+    :returns: Dict mapping safe variable names to their values, ready to pass
+        as ``evaluator.names``.
+    :raises MissingPlaceholderError: If a required key is absent from *values*.
+    """
+    names: dict[str, Any] = {}
+    for key, var_name in compiled.var_map.items():
+        if key not in values:
+            raise MissingPlaceholderError(key, available=values)
+        names[var_name] = values[key]
+    return names
+
+
+def age_in_years(
+    date_str: str,
+    fmt: str | None = None,
+    *,
+    today: date | None = None,
+) -> int:
+    """Return the age in whole years relative to *today*.
+
+    :param date_str: A date string to parse.
+    :param fmt: Optional :func:`~datetime.datetime.strptime` format string.  When
+        omitted the function attempts ISO 8601 parsing first, then falls back to
+        ``dateutil.parser`` if available.
+    :param today: Keyword-only override for the reference date; defaults to
+        :func:`datetime.date.today`.  Intended for deterministic tests.
+    :returns: Age in whole years (floor).
+    :raises ValueError: If *date_str* cannot be parsed.
+    """
+    from datetime import datetime
+
+    ref = today if today is not None else date.today()
+
+    birth: date
+    if fmt is not None:
+        birth = datetime.strptime(date_str, fmt).date()
+    else:
+        # Try ISO 8601 first.
+        try:
+            birth = date.fromisoformat(date_str)
+        except ValueError:
+            # Fall back to dateutil if available.
+            try:
+                from dateutil import parser as _dateutil_parser
+
+                birth = _dateutil_parser.parse(date_str).date()
+            except Exception:
+                raise ValueError(f"Cannot parse date string: {date_str!r}") from None
+
+    years = ref.year - birth.year
+    if (ref.month, ref.day) < (birth.month, birth.day):
+        years -= 1
+    return years
+
+
+#: Default set of functions available in rule expressions.
+DEFAULT_ALLOWED_FUNCTIONS: frozendict[str, Callable[..., Any]] = frozendict(
+    {
+        "age_in_years": age_in_years,
+        "int": int,
+    }
+)
+
+
+def make_evaluator(
+    allowed_functions: dict[str, Callable[..., Any]] | None = None,
+) -> EvalWithCompoundTypes:
+    """Create a fresh locked-down :class:`~simpleeval.EvalWithCompoundTypes`.
+
+    :param allowed_functions: Override the function whitelist.  Pass an empty
+        dict to disallow all functions.
+    :returns: A configured :class:`~simpleeval.EvalWithCompoundTypes`.
+    """
+    functions = (
+        allowed_functions
+        if allowed_functions is not None
+        else dict(DEFAULT_ALLOWED_FUNCTIONS)
+    )
+    return EvalWithCompoundTypes(functions=functions, names={})
+
+
+def validate_message(message: str) -> None:
+    """Validate a patron blocking rule *message* string.
+
+    :param message: The human-readable message shown when a patron is blocked.
+    :raises RuleValidationError: If the message is empty/whitespace or exceeds
+        :data:`MAX_MESSAGE_LENGTH` characters.
+    """
+    if not message or not message.strip():
+        raise RuleValidationError("Message must not be empty or whitespace.")
+    if len(message) > MAX_MESSAGE_LENGTH:
+        raise RuleValidationError(
+            f"Message must not exceed {MAX_MESSAGE_LENGTH} characters "
+            f"(got {len(message)})."
+        )
+
+
+def validate_rule_expression(
+    expr: str,
+    test_values: Mapping[str, Any],
+    evaluator: EvalWithCompoundTypes,
+) -> None:
+    """Validate a rule expression at admin-save time.
+
+    Checks performed (in order):
+    1. Non-empty / non-whitespace.
+    2. Length ≤ :data:`MAX_RULE_LENGTH`.
+    3. All placeholders present in *test_values*.
+    4. Expression parses and evaluates without error.
+    5. Result is a strict :class:`bool`.
+
+    When a placeholder is missing or an unsupported function is referenced the
+    error message includes a listing of all available keys/functions so
+    operators can correct the rule without guessing.
+
+    :param expr: The raw rule expression string.
+    :param test_values: Mapping of placeholder key → test value used for the
+        trial evaluation.  For live validation this is the dict returned by
+        the provider's ``fetch_live_rule_validation_values``.
+    :param evaluator: A locked-down evaluator from :func:`make_evaluator`.
+    :raises RuleValidationError: On any validation failure.
+    """
+    if not expr or not expr.strip():
+        raise RuleValidationError("Rule expression must not be empty or whitespace.")
+    if len(expr) > MAX_RULE_LENGTH:
+        raise RuleValidationError(
+            f"Rule expression must not exceed {MAX_RULE_LENGTH} characters "
+            f"(got {len(expr)})."
+        )
+
+    compiled = compile_rule_expression(expr)
+
+    try:
+        names = build_names(compiled, test_values)
+    except MissingPlaceholderError as exc:
+        raise RuleValidationError(str(exc.message)) from exc
+
+    evaluator.names = names
+    try:
+        result = evaluator.eval(compiled.compiled)
+    except FunctionNotDefined as exc:
+        allowed_fns = _format_allowed_functions(evaluator.functions)
+        raise RuleValidationError(
+            f"Rule expression references an unsupported function: {exc}. "
+            f"Allowed functions: {allowed_fns}"
+        ) from exc
+    except Exception as exc:
+        raise RuleValidationError(f"Rule expression failed to evaluate: {exc}") from exc
+    finally:
+        evaluator.names = {}
+
+    if not isinstance(result, bool):
+        raise RuleValidationError(
+            f"Rule expression must evaluate to a boolean, got {type(result).__name__!r}."
+        )
+
+
+def evaluate_rule_expression_strict_bool(
+    expr: str,
+    values: Mapping[str, Any],
+    evaluator: EvalWithCompoundTypes,
+    rule_name: str | None = None,
+) -> bool:
+    """Evaluate a rule expression at runtime.
+
+    Aany error raises
+    :class:`RuleEvaluationError` rather than silently allowing access.
+
+    When a placeholder is missing, the error message lists all available keys
+    and their values.  When an unsupported function is referenced, the error
+    message lists all allowed functions.  This information is logged
+    server-side so operators can diagnose and fix the rule.
+
+    :param expr: The raw rule expression string (same as stored).
+    :param values: Mapping of placeholder key → runtime value.
+    :param evaluator: A locked-down evaluator from :func:`make_evaluator`.
+    :param rule_name: Optional identifier for the rule, included in error messages.
+    :returns: ``True`` if the patron should be *blocked*, ``False`` otherwise.
+    :raises RuleEvaluationError: On missing placeholders, parse/eval errors, or
+        non-boolean result.
+    """
+    compiled = compile_rule_expression(expr)
+
+    try:
+        names = build_names(compiled, values)
+    except MissingPlaceholderError as exc:
+        raise RuleEvaluationError(
+            f"Missing placeholder {{{exc.key}}} for rule {rule_name!r}. "
+            f"Available fields: {_format_available_keys(exc.available)}",
+            rule_name=rule_name,
+        ) from exc
+
+    evaluator.names = names
+    try:
+        result = evaluator.eval(compiled.compiled)
+    except FunctionNotDefined as exc:
+        allowed_fns = _format_allowed_functions(evaluator.functions)
+        raise RuleEvaluationError(
+            f"Rule {rule_name!r} references an unsupported function: {exc}. "
+            f"Allowed functions: {allowed_fns}",
+            rule_name=rule_name,
+        ) from exc
+    except NameNotDefined as exc:
+        raise RuleEvaluationError(
+            f"Undefined name in rule {rule_name!r}: {exc}",
+            rule_name=rule_name,
+        ) from exc
+    except Exception as exc:
+        raise RuleEvaluationError(
+            f"Rule {rule_name!r} could not be evaluated.",
+            rule_name=rule_name,
+        ) from exc
+    finally:
+        evaluator.names = {}
+
+    if not isinstance(result, bool):
+        raise RuleEvaluationError(
+            f"Rule {rule_name!r} did not return a boolean "
+            f"(got {type(result).__name__!r}).",
+            rule_name=rule_name,
+        )
+
+    return result

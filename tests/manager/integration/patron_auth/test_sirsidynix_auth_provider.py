@@ -11,7 +11,10 @@ import pytest
 from _pytest._code import ExceptionInfo
 
 from palace.manager.api.authentication.base import PatronData
-from palace.manager.api.authentication.basic import LibraryIdentifierRestriction
+from palace.manager.api.authentication.basic import (
+    LibraryIdentifierRestriction,
+    RemoteAuthResult,
+)
 from palace.manager.api.config import Configuration
 from palace.manager.api.problem_details import PATRON_OF_ANOTHER_LIBRARY
 from palace.manager.core.selftest import SelfTestResult
@@ -197,7 +200,8 @@ class TestSirsiDynixAuthenticationProvider:
             200, content=response_dict
         )
 
-        response = provider.remote_authenticate("username", "pwd")
+        result = provider.remote_authenticate("username", "pwd")
+        response = result.patron_data
         assert type(response) == SirsiDynixPatronData
         assert response.authorization_identifier == "username"
         assert response.username == "username"
@@ -206,15 +210,15 @@ class TestSirsiDynixAuthenticationProvider:
         sirsi_auth_fixture.mock_request.return_value = MockRequestsResponse(
             401, content=response_dict
         )
-        assert provider.remote_authenticate("username", "pwd") is None
+        assert provider.remote_authenticate("username", "pwd").patron_data is None
 
     def test_remote_authenticate_username_password_none(
         self, sirsi_auth_fixture: SirsiAuthFixture
     ):
         provider = sirsi_auth_fixture.provider()
 
-        response = provider.remote_authenticate("username", None)
-        assert response is None
+        result = provider.remote_authenticate("username", None)
+        assert result.patron_data is None
 
     def test_remote_patron_lookup(self, sirsi_auth_fixture: SirsiAuthFixture):
         provider_mock = sirsi_auth_fixture.provider_mocked_api()
@@ -703,8 +707,10 @@ class TestSirsiDynixAuthenticationProvider:
             library_settings=library_settings,
         )
         provider.remote_authenticate = MagicMock(
-            return_value=SirsiDynixPatronData(
-                permanent_id="xxxx", session_token="xxx", complete=False
+            return_value=RemoteAuthResult(
+                patron_data=SirsiDynixPatronData(
+                    permanent_id="xxxx", session_token="xxx", complete=False
+                )
             )
         )
         provider.remote_patron_lookup = MagicMock(
