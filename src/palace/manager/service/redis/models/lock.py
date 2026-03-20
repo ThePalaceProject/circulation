@@ -101,15 +101,19 @@ class BaseRedisLock(ABC):
             raise LockNotAcquired(f"Lock {self.key} could not be acquired")
 
         exception_occurred = False
+        ignored_exception_occurred = False
         try:
             yield locked
         except Exception as exc:
-            if not issubclass(exc.__class__, ignored_exceptions):
+            if issubclass(exc.__class__, ignored_exceptions):
+                ignored_exception_occurred = True
+            else:
                 exception_occurred = True
             raise
         finally:
-            if (release_on_error and exception_occurred) or (
-                release_on_exit and not exception_occurred
+            if not ignored_exception_occurred and (
+                (release_on_error and exception_occurred)
+                or (release_on_exit and not exception_occurred)
             ):
                 self.release()
 
