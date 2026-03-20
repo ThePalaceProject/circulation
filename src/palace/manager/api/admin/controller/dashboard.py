@@ -14,6 +14,7 @@ from palace.manager.api.controller.circulation_manager import (
 from palace.manager.api.local_analytics_exporter import LocalAnalyticsExporter
 from palace.manager.api.util.flask import get_request_library
 from palace.manager.sqlalchemy.model.admin import Admin
+from palace.manager.util.problem_detail import ProblemDetail
 
 
 class DashboardController(CirculationManagerController):
@@ -25,7 +26,7 @@ class DashboardController(CirculationManagerController):
 
     def bulk_circulation_events(
         self, analytics_exporter: LocalAnalyticsExporter | None = None
-    ) -> tuple[str, str, str, str | None]:
+    ) -> tuple[str | ProblemDetail, str, str, str | None]:
         date_format = "%Y-%m-%d"
 
         def get_date(field: str) -> date:

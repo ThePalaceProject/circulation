@@ -14,6 +14,7 @@ from palace.manager.api.admin.problem_details import (
     CANNOT_DELETE_COLLECTION_WITH_CHILDREN,
     IMPORT_NOT_SUPPORTED,
     MISSING_COLLECTION,
+    MISSING_IDENTIFIER,
     MISSING_PARENT,
     MISSING_SERVICE,
     PROTOCOL_DOES_NOT_SUPPORT_PARENTS,
@@ -170,13 +171,17 @@ class CollectionSettingsController(
             reap_unassociated_loans.delay()
             reap_unassociated_holds.delay()
 
-    def process_delete(self, service_id: int) -> Response | ProblemDetail:
+    def process_delete(self, service_id: int | str) -> Response | ProblemDetail:
         self.require_system_admin()
+        try:
+            sid = int(service_id) if isinstance(service_id, str) else service_id
+        except ValueError:
+            return MISSING_SERVICE
 
         integration = get_one(
             self._db,
             IntegrationConfiguration,
-            id=service_id,
+            id=sid,
             goal=self.registry.goal,
         )
         if not integration:
@@ -233,8 +238,13 @@ class CollectionSettingsController(
         return Response("Import task queued.", 200)
 
     def process_collection_self_tests(
-        self, identifier: int | None
+        self, identifier: int | str | None
     ) -> Response | ProblemDetail:
+        if identifier is not None and isinstance(identifier, str):
+            try:
+                identifier = int(identifier)
+            except ValueError:
+                return MISSING_IDENTIFIER
         return self.process_self_tests(identifier)
 
     def run_self_tests(
