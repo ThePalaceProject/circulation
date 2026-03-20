@@ -103,16 +103,6 @@ class SirsiDynixHorizonAuthSettings(BasicAuthProviderSettings):
 
 
 class SirsiDynixHorizonAuthLibrarySettings(BasicAuthProviderLibrarySettings):
-    library_id: Annotated[
-        str,
-        FormMetadata(
-            label="Library ID",
-            description=(
-                "<b>Deprecated</b> This is used to identify a unique library on the API. This value "
-                "has been deprecated and will be removed in a future release."
-            ),
-        ),
-    ]
     library_disallowed_suffixes: Annotated[
         list[str],
         FormMetadata(

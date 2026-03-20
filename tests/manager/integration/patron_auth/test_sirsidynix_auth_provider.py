@@ -45,7 +45,6 @@ class SirsiAuthFixture:
 
         self.library_settings = partial(
             SirsiDynixHorizonAuthLibrarySettings,
-            library_id="libraryid",
         )
 
         self.url = "http://example.org/sirsi/"
