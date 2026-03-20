@@ -306,6 +306,45 @@ class AlembicDatabaseFixture:
         assert isinstance(collection.id, int)
         return collection.id
 
+    def integration_library_configuration(
+        self,
+        parent_id: int,
+        library_id: int,
+        settings: dict[str, Any] | None = None,
+    ) -> None:
+        """Create an integration_library_configurations record."""
+        if settings is None:
+            settings = {}
+
+        settings_json = json_serializer(settings)
+
+        with self._engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO integration_library_configurations "
+                    "(parent_id, library_id, settings) "
+                    "VALUES (:parent_id, :library_id, :settings)"
+                ).bindparams(
+                    parent_id=parent_id,
+                    library_id=library_id,
+                    settings=settings_json,
+                )
+            )
+
+    def fetch_integration_library_configuration(
+        self, parent_id: int, library_id: int
+    ) -> Row:
+        """Fetch an integration_library_configurations record."""
+        with self._engine.begin() as connection:
+            result = connection.execute(
+                text(
+                    "SELECT * FROM integration_library_configurations "
+                    "WHERE parent_id = :parent_id AND library_id = :library_id"
+                ),
+                {"parent_id": parent_id, "library_id": library_id},
+            )
+            return result.one()
+
     def license_pool(
         self,
         data_source_id: int,
