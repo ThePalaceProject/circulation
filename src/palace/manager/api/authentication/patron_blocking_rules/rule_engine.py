@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Any
 
+from frozendict import frozendict
 from simpleeval import (
     EvalWithCompoundTypes,
     FunctionNotDefined,
@@ -187,10 +188,12 @@ def age_in_years(
 
 
 #: Default set of functions available in rule expressions.
-DEFAULT_ALLOWED_FUNCTIONS: dict[str, Callable[..., Any]] = {
-    "age_in_years": age_in_years,
-    "int": int,
-}
+DEFAULT_ALLOWED_FUNCTIONS: frozendict[str, Callable[..., Any]] = frozendict(
+    {
+        "age_in_years": age_in_years,
+        "int": int,
+    }
+)
 
 
 _evaluator_local: threading.local = threading.local()
