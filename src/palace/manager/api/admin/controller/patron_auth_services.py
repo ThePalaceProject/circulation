@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Callable
 from typing import Any
 
 import flask
@@ -19,6 +18,9 @@ from palace.manager.api.admin.problem_details import (
 )
 from palace.manager.api.authentication.base import AuthenticationProviderType
 from palace.manager.api.authentication.basic import BasicAuthenticationProvider
+from palace.manager.api.authentication.patron_blocking_rules.mixin import (
+    HasPatronBlockingRules,
+)
 from palace.manager.api.authentication.patron_blocking_rules.rule_engine import (
     RuleValidationError,
     get_evaluator,
@@ -162,7 +164,7 @@ class PatronAuthServicesController(
                 )
 
             protocol_class = self.get_protocol_class(integration.protocol)
-            if not getattr(protocol_class, "supports_patron_blocking_rules", False):
+            if not issubclass(protocol_class, HasPatronBlockingRules):
                 return INVALID_CONFIGURATION_OPTION.detailed(
                     "Rule validation is only supported for authentication "
                     "services that support patron blocking rules."
@@ -170,11 +172,8 @@ class PatronAuthServicesController(
 
             settings = protocol_class.settings_load(integration)
             # fetch_live_rule_validation_values raises ProblemDetailException on
-            # missing test_identifier, network error, or SIP2 error response.
-            fetch_values: Callable[[Any], dict[str, Any]] = getattr(
-                protocol_class, "fetch_live_rule_validation_values", lambda s: {}
-            )
-            live_values = fetch_values(settings)
+            # missing test_identifier, network error, or ILS error response.
+            live_values = protocol_class.fetch_live_rule_validation_values(settings)
 
             evaluator = get_evaluator()
             try:

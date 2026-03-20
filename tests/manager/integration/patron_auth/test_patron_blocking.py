@@ -5,9 +5,9 @@ Covers:
 - check_patron_blocking_rules() pure function (patron_blocking.py)
 - check_patron_blocking_rules_with_evaluator() (patron_blocking.py)
 - build_runtime_values_from_patron() (patron_blocking.py)
-- patron_blocking_rules field on BasicAuthProviderLibrarySettings (basic.py)
+- patron_blocking_rules field on PatronBlockingRulesSetting (basic.py)
   including simpleeval validation and message-length checks
-- supports_patron_blocking_rules flag on BasicAuthenticationProvider (basic.py)
+- HasPatronBlockingRules mixin on BasicAuthenticationProvider (basic.py)
 - blocking-rules hook in BasicAuthenticationProvider.authenticate (basic.py)
 """
 
@@ -20,21 +20,25 @@ import pytest
 from palace.manager.api.authentication.basic import (
     BasicAuthenticationProvider,
     BasicAuthProviderLibrarySettings,
+    PatronBlockingRulesSetting,
+)
+from palace.manager.api.authentication.patron_blocking_rules.mixin import (
+    HasPatronBlockingRules,
 )
 from palace.manager.api.problem_details import BLOCKED_BY_POLICY, INVALID_CREDENTIALS
 from palace.manager.integration.patron_auth.patron_blocking import (
     PatronBlockingRule,
     build_runtime_values_from_patron,
-    build_values_from_sip2_info,
     check_patron_blocking_rules_with_evaluator,
-)
-from palace.manager.integration.patron_auth.sip2.provider import (
-    SIP2AuthenticationProvider,
-    SIP2LibrarySettings,
 )
 from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.util.problem_detail import ProblemDetail
 from tests.fixtures.problem_detail import raises_problem_detail
+
+
+class ConcreteSettings(PatronBlockingRulesSetting, BasicAuthProviderLibrarySettings):
+    """Minimal concrete settings class used to test PatronBlockingRulesSetting in isolation."""
+
 
 # ---------------------------------------------------------------------------
 # PatronBlockingRule value object
@@ -214,32 +218,29 @@ class TestBuildRuntimeValuesFromPatron:
 
 
 # ---------------------------------------------------------------------------
-# BasicAuthProviderLibrarySettings — patron_blocking_rules field validation
+# PatronBlockingRulesSetting — patron_blocking_rules field validation
 # ---------------------------------------------------------------------------
 
 
 class TestBasicAuthLibrarySettingsBlockingRules:
-    """Tests for patron_blocking_rules on BasicAuthProviderLibrarySettings.
+    """Tests for patron_blocking_rules on PatronBlockingRulesSetting.
 
-    The field lives on the base class so every basic-auth protocol (SIP2,
-    Millennium, SirsiDynix, …) inherits validation for free.
+    Uses ConcreteSettings — a minimal class that mixes in PatronBlockingRulesSetting —
+    to test the mixin in isolation without coupling to any specific provider.
     """
 
     def test_default_is_empty_list(self) -> None:
-        settings = BasicAuthProviderLibrarySettings()
+        settings = ConcreteSettings()
         assert settings.patron_blocking_rules == []
 
-    def test_rules_rejected_when_provider_does_not_support(self) -> None:
-        """Providers that do not support blocking rules cannot have rules configured."""
-        with raises_problem_detail() as info:
-            BasicAuthProviderLibrarySettings(
-                patron_blocking_rules=[{"name": "r", "rule": "True"}]
-            )
-        assert info.value.detail is not None
-        assert "not supported" in info.value.detail.lower()
+    def test_base_library_settings_has_no_blocking_rules_field(self) -> None:
+        """BasicAuthProviderLibrarySettings does not have patron_blocking_rules;
+        only providers that mix in PatronBlockingRulesSetting do."""
+        settings = BasicAuthProviderLibrarySettings()
+        assert not hasattr(settings, "patron_blocking_rules")
 
     def test_round_trip_with_valid_rules(self) -> None:
-        settings = SIP2LibrarySettings(
+        settings = ConcreteSettings(
             patron_blocking_rules=[
                 {"name": "block-all", "rule": "True", "message": "Sorry"},
                 {"name": "no-op", "rule": "False"},
@@ -255,11 +256,11 @@ class TestBasicAuthLibrarySettingsBlockingRules:
     def test_model_dump_excludes_empty_list_by_default(self) -> None:
         """Empty list (the default) is omitted from model_dump so we don't
         store defaults in the JSON blob."""
-        settings = BasicAuthProviderLibrarySettings()
+        settings = ConcreteSettings()
         assert "patron_blocking_rules" not in settings.model_dump()
 
     def test_model_dump_includes_non_empty_list(self) -> None:
-        settings = SIP2LibrarySettings(
+        settings = ConcreteSettings(
             patron_blocking_rules=[{"name": "r", "rule": "True"}]
         )
         dumped = settings.model_dump()
@@ -269,12 +270,12 @@ class TestBasicAuthLibrarySettingsBlockingRules:
 
     def test_model_validate_missing_field_produces_default(self) -> None:
         """A settings dict without the key deserialises to an empty list."""
-        settings = BasicAuthProviderLibrarySettings.model_validate({})
+        settings = ConcreteSettings.model_validate({})
         assert settings.patron_blocking_rules == []
 
     def test_validate_empty_name_raises(self) -> None:
         with raises_problem_detail() as info:
-            SIP2LibrarySettings(patron_blocking_rules=[{"name": "", "rule": "True"}])
+            ConcreteSettings(patron_blocking_rules=[{"name": "", "rule": "True"}])
         assert info.value.detail is not None
         assert "index 0" in info.value.detail
         assert "'name' must not be empty" in info.value.detail
@@ -282,23 +283,21 @@ class TestBasicAuthLibrarySettingsBlockingRules:
     def test_validate_whitespace_only_name_raises(self) -> None:
         # str_strip_whitespace=True on PatronBlockingRule strips "   " to ""
         with raises_problem_detail() as info:
-            SIP2LibrarySettings(patron_blocking_rules=[{"name": "   ", "rule": "True"}])
+            ConcreteSettings(patron_blocking_rules=[{"name": "   ", "rule": "True"}])
         assert info.value.detail is not None
         assert "index 0" in info.value.detail
         assert "'name' must not be empty" in info.value.detail
 
     def test_validate_empty_rule_raises(self) -> None:
         with raises_problem_detail() as info:
-            SIP2LibrarySettings(
-                patron_blocking_rules=[{"name": "valid-name", "rule": ""}]
-            )
+            ConcreteSettings(patron_blocking_rules=[{"name": "valid-name", "rule": ""}])
         assert info.value.detail is not None
         assert "index 0" in info.value.detail
         assert "'rule' expression must not be empty" in info.value.detail
 
     def test_validate_duplicate_name_raises(self) -> None:
         with raises_problem_detail() as info:
-            SIP2LibrarySettings(
+            ConcreteSettings(
                 patron_blocking_rules=[
                     {"name": "same", "rule": "True"},
                     {"name": "same", "rule": "False"},
@@ -312,7 +311,7 @@ class TestBasicAuthLibrarySettingsBlockingRules:
     def test_validate_duplicate_at_higher_index(self) -> None:
         """The error message cites the index of the second occurrence."""
         with raises_problem_detail() as info:
-            SIP2LibrarySettings(
+            ConcreteSettings(
                 patron_blocking_rules=[
                     {"name": "a", "rule": "True"},
                     {"name": "b", "rule": "False"},
@@ -323,23 +322,21 @@ class TestBasicAuthLibrarySettingsBlockingRules:
         assert "index 2" in info.value.detail
 
     # ------------------------------------------------------------------
-    # New: simpleeval-based rule expression validation
+    # simpleeval-based rule expression validation
     # ------------------------------------------------------------------
 
     def test_validate_rule_length_over_1000_raises(self) -> None:
         """rule text > 1000 characters is rejected at validation time."""
         long_rule = "True and " * 200  # well over 1000 chars
         with raises_problem_detail() as info:
-            SIP2LibrarySettings(
-                patron_blocking_rules=[{"name": "r", "rule": long_rule}]
-            )
+            ConcreteSettings(patron_blocking_rules=[{"name": "r", "rule": long_rule}])
         assert info.value.detail is not None
         assert "index 0" in info.value.detail
 
     def test_validate_message_length_over_1000_raises(self) -> None:
         """message > 1000 characters is rejected at validation time."""
         with raises_problem_detail() as info:
-            SIP2LibrarySettings(
+            ConcreteSettings(
                 patron_blocking_rules=[
                     {
                         "name": "r",
@@ -354,7 +351,7 @@ class TestBasicAuthLibrarySettingsBlockingRules:
 
     def test_validate_message_exactly_1000_chars_passes(self) -> None:
         """message of exactly 1000 chars is accepted."""
-        SIP2LibrarySettings(
+        ConcreteSettings(
             patron_blocking_rules=[
                 {
                     "name": "r",
@@ -367,7 +364,7 @@ class TestBasicAuthLibrarySettingsBlockingRules:
     def test_validate_any_rule_expression_passes_static_check(self) -> None:
         """Any non-empty rule expression that fits within 1000 chars is accepted
         by static Pydantic validation."""
-        settings = SIP2LibrarySettings(
+        settings = ConcreteSettings(
             patron_blocking_rules=[
                 {"name": "fines-check", "rule": "{fines} > 10.0"},
                 {"name": "any-field", "rule": "{totally_unknown_key} > 0"},
@@ -379,14 +376,12 @@ class TestBasicAuthLibrarySettingsBlockingRules:
     def test_validate_rule_exactly_1000_chars_passes(self) -> None:
         """rule text of exactly 1000 chars is accepted."""
         rule = "T" * 1000
-        settings = SIP2LibrarySettings(
-            patron_blocking_rules=[{"name": "r", "rule": rule}]
-        )
+        settings = ConcreteSettings(patron_blocking_rules=[{"name": "r", "rule": rule}])
         assert settings.patron_blocking_rules[0].rule == rule
 
 
 # ---------------------------------------------------------------------------
-# supports_patron_blocking_rules flag + authenticate hook
+# HasPatronBlockingRules mixin + authenticate hook
 # ---------------------------------------------------------------------------
 
 
@@ -398,20 +393,16 @@ class TestBasicAuthenticationProvider:
         "BasicAuthenticationProvider._do_authenticate"
     )
 
-    def test_base_class_flag_is_false(self) -> None:
-        assert BasicAuthenticationProvider.supports_patron_blocking_rules is False
+    def test_base_class_does_not_support_blocking_rules(self) -> None:
+        assert not issubclass(BasicAuthenticationProvider, HasPatronBlockingRules)
 
-    def test_sip2_flag_is_true(self) -> None:
-        assert SIP2AuthenticationProvider.supports_patron_blocking_rules is True
-
-    def test_blocking_skipped_when_flag_false(self) -> None:
-        """When supports_patron_blocking_rules is False, a True rule is ignored
-        and the Patron object is returned unchanged."""
+    def test_blocking_skipped_when_not_has_patron_blocking_rules(self) -> None:
+        """When the provider is not an instance of HasPatronBlockingRules, a True
+        rule is ignored and the Patron object is returned unchanged."""
         mock_patron = MagicMock(spec=Patron)
 
         with patch(self._PATCH_TARGET, return_value=(mock_patron, {})):
             provider = MagicMock(spec=BasicAuthenticationProvider)
-            provider.supports_patron_blocking_rules = False
             provider.patron_blocking_rules = [
                 PatronBlockingRule(name="block-all", rule="True")
             ]
@@ -420,13 +411,12 @@ class TestBasicAuthenticationProvider:
 
         assert result is mock_patron
 
-    def test_blocking_applied_when_flag_true(self) -> None:
-        """When supports_patron_blocking_rules is True, a True rule intercepts
-        the authenticated Patron and returns a 403 ProblemDetail."""
+    def test_blocking_applied_when_has_patron_blocking_rules(self) -> None:
+        """When the provider is an instance of HasPatronBlockingRules, a True rule
+        intercepts the authenticated Patron and returns a 403 ProblemDetail."""
         mock_patron = MagicMock(spec=Patron)
 
         provider = MagicMock(spec=BasicAuthenticationProvider)
-        provider.supports_patron_blocking_rules = True
         provider.patron_blocking_rules = [
             PatronBlockingRule(
                 name="block-all", rule="True", message="Blocked by policy."
@@ -435,7 +425,15 @@ class TestBasicAuthenticationProvider:
         provider._do_authenticate = MagicMock(return_value=(mock_patron, {}))
         provider.log = MagicMock()
 
-        result = BasicAuthenticationProvider.authenticate(provider, MagicMock(), {})
+        real_instancecheck = type(HasPatronBlockingRules).__instancecheck__
+
+        def mock_instancecheck(cls: type, instance: object) -> bool:
+            return instance is provider or real_instancecheck(cls, instance)
+
+        with patch.object(
+            type(HasPatronBlockingRules), "__instancecheck__", mock_instancecheck
+        ):
+            result = BasicAuthenticationProvider.authenticate(provider, MagicMock(), {})
 
         assert isinstance(result, ProblemDetail)
         assert result.status_code == 403
@@ -444,10 +442,9 @@ class TestBasicAuthenticationProvider:
         provider.log.info.assert_any_call("Patron blocking rules evaluation attempted")
 
     def test_blocking_not_applied_when_do_authenticate_returns_none(self) -> None:
-        """When _do_authenticate returns None (bad credentials), the flag has no
-        effect — None is passed through."""
+        """When _do_authenticate returns None (bad credentials), blocking rules
+        are not evaluated — None is passed through."""
         provider = MagicMock(spec=BasicAuthenticationProvider)
-        provider.supports_patron_blocking_rules = True
         provider.patron_blocking_rules = [
             PatronBlockingRule(name="block-all", rule="True")
         ]
@@ -463,7 +460,6 @@ class TestBasicAuthenticationProvider:
         """When _do_authenticate itself returns a ProblemDetail (e.g. connection
         failure), blocking rules are not evaluated — the original error is returned."""
         provider = MagicMock(spec=BasicAuthenticationProvider)
-        provider.supports_patron_blocking_rules = True
         provider.patron_blocking_rules = [
             PatronBlockingRule(name="block-all", rule="True")
         ]
@@ -478,74 +474,21 @@ class TestBasicAuthenticationProvider:
         mock_patron = MagicMock(spec=Patron)
 
         provider = MagicMock(spec=BasicAuthenticationProvider)
-        provider.supports_patron_blocking_rules = True
         provider.patron_blocking_rules = [
             PatronBlockingRule(name="never-block", rule="False")
         ]
         provider._do_authenticate = MagicMock(return_value=(mock_patron, {}))
         provider.log = MagicMock()
 
-        result = BasicAuthenticationProvider.authenticate(provider, MagicMock(), {})
+        real_instancecheck = type(HasPatronBlockingRules).__instancecheck__
+
+        def mock_instancecheck(cls: type, instance: object) -> bool:
+            return instance is provider or real_instancecheck(cls, instance)
+
+        with patch.object(
+            type(HasPatronBlockingRules), "__instancecheck__", mock_instancecheck
+        ):
+            result = BasicAuthenticationProvider.authenticate(provider, MagicMock(), {})
 
         assert result is mock_patron
         provider.log.info.assert_any_call("Patron blocking rules evaluation attempted")
-
-
-# ---------------------------------------------------------------------------
-# build_values_from_sip2_info
-# ---------------------------------------------------------------------------
-
-
-class TestBuildValuesFromSip2Info:
-    """Tests for build_values_from_sip2_info()."""
-
-    def test_fee_amount_plain_float_string(self) -> None:
-        """fee_amount like '5.00' is parsed to a float under the 'fines' key."""
-        values = build_values_from_sip2_info({"fee_amount": "5.00"})
-        assert values["fines"] == pytest.approx(5.0)
-
-    def test_fee_amount_dollar_prefix(self) -> None:
-        """fee_amount like '$12.50' (dollar sign prefix) is parsed correctly."""
-        values = build_values_from_sip2_info({"fee_amount": "$12.50"})
-        assert values["fines"] == pytest.approx(12.5)
-
-    def test_fee_amount_missing_defaults_to_zero(self) -> None:
-        """Absent fee_amount → fines = 0.0."""
-        values = build_values_from_sip2_info({})
-        assert values["fines"] == pytest.approx(0.0)
-
-    def test_fee_amount_unparseable_defaults_to_zero(self) -> None:
-        """Unparseable fee_amount → fines = 0.0 (no exception raised)."""
-        values = build_values_from_sip2_info({"fee_amount": "not-a-number"})
-        assert values["fines"] == pytest.approx(0.0)
-
-    def test_all_raw_sip2_fields_are_included(self) -> None:
-        """Every key in the raw info dict is present verbatim in the result."""
-        info = {
-            "fee_amount": "3.50",
-            "sipserver_patron_class": "student",
-            "polaris_patron_birthdate": "2000-06-15",
-            "patron_status": "active",
-            "personal_name": "Jane Doe",
-        }
-        values = build_values_from_sip2_info(info)
-        # All raw keys must be present.
-        for k, v in info.items():
-            assert values[k] == v
-
-    def test_normalized_fines_added_alongside_raw_fee_amount(self) -> None:
-        """The 'fines' key (float) is added IN ADDITION to the raw fee_amount."""
-        info = {"fee_amount": "3.50"}
-        values = build_values_from_sip2_info(info)
-        assert "fee_amount" in values  # raw field preserved
-        assert values["fines"] == pytest.approx(3.5)  # normalised key added
-
-    def test_empty_info_dict_has_only_fines_key(self) -> None:
-        """An empty SIP2 response still produces the 'fines' key (defaulting to 0)."""
-        values = build_values_from_sip2_info({})
-        assert values == {"fines": pytest.approx(0.0)}
-
-    def test_polaris_patron_birthdate_accessible_directly(self) -> None:
-        """polaris_patron_birthdate is accessible under its own raw key."""
-        values = build_values_from_sip2_info({"polaris_patron_birthdate": "1990-01-01"})
-        assert values["polaris_patron_birthdate"] == "1990-01-01"

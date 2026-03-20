@@ -22,6 +22,9 @@ from palace.manager.api.problem_details import (
 )
 from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.core.selftest import SelfTestResult
+from palace.manager.integration.patron_auth.patron_blocking import (
+    build_values_from_sip2_info,
+)
 from palace.manager.integration.patron_auth.sip2.client import Sip2Encoding
 from palace.manager.integration.patron_auth.sip2.dialect import Dialect
 from palace.manager.integration.patron_auth.sip2.provider import (
@@ -131,6 +134,14 @@ class TestSIP2AuthenticationProvider:
     tlc_no_such_patron = b"64YYYY          00020171031    092000000000000000000000000000AOhq|AA2642|AE|BLN|AF#Unknown borrower barcode - please refer to the circulation desk.|AY1AZD46E"
 
     end_session_response = b"36Y201610210000142637AO3|AA25891000331441|AF|AG"
+
+    def test_supports_patron_blocking_rules(self) -> None:
+        """SIP2AuthenticationProvider opts into the HasPatronBlockingRules interface."""
+        from palace.manager.api.authentication.patron_blocking_rules.mixin import (
+            HasPatronBlockingRules,
+        )
+
+        assert issubclass(SIP2AuthenticationProvider, HasPatronBlockingRules)
 
     def test_initialize_from_settings(
         self,
@@ -1590,3 +1601,67 @@ class TestFetchLiveRuleValidationValues:
             SIP2AuthenticationProvider.fetch_live_rule_validation_values(settings)
 
         mock_pi.assert_called_once_with("user1", "")
+
+
+# ---------------------------------------------------------------------------
+# build_values_from_sip2_info
+# ---------------------------------------------------------------------------
+
+
+class TestBuildValuesFromSip2Info:
+    """Tests for build_values_from_sip2_info().
+
+    This function is SIP2-specific: it translates raw SIP2 response fields
+    (e.g. ``fee_amount``) into the normalised keys used by patron blocking
+    rule expressions (e.g. ``fines``).
+    """
+
+    def test_fee_amount_plain_float_string(self) -> None:
+        """fee_amount like '5.00' is parsed to a float under the 'fines' key."""
+        values = build_values_from_sip2_info({"fee_amount": "5.00"})
+        assert values["fines"] == pytest.approx(5.0)
+
+    def test_fee_amount_dollar_prefix(self) -> None:
+        """fee_amount like '$12.50' (dollar sign prefix) is parsed correctly."""
+        values = build_values_from_sip2_info({"fee_amount": "$12.50"})
+        assert values["fines"] == pytest.approx(12.5)
+
+    def test_fee_amount_missing_defaults_to_zero(self) -> None:
+        """Absent fee_amount → fines = 0.0."""
+        values = build_values_from_sip2_info({})
+        assert values["fines"] == pytest.approx(0.0)
+
+    def test_fee_amount_unparseable_defaults_to_zero(self) -> None:
+        """Unparseable fee_amount → fines = 0.0 (no exception raised)."""
+        values = build_values_from_sip2_info({"fee_amount": "not-a-number"})
+        assert values["fines"] == pytest.approx(0.0)
+
+    def test_all_raw_sip2_fields_are_included(self) -> None:
+        """Every key in the raw info dict is present verbatim in the result."""
+        info = {
+            "fee_amount": "3.50",
+            "sipserver_patron_class": "student",
+            "polaris_patron_birthdate": "2000-06-15",
+            "patron_status": "active",
+            "personal_name": "Jane Doe",
+        }
+        values = build_values_from_sip2_info(info)
+        for k, v in info.items():
+            assert values[k] == v
+
+    def test_normalized_fines_added_alongside_raw_fee_amount(self) -> None:
+        """The 'fines' key (float) is added IN ADDITION to the raw fee_amount."""
+        info = {"fee_amount": "3.50"}
+        values = build_values_from_sip2_info(info)
+        assert "fee_amount" in values
+        assert values["fines"] == pytest.approx(3.5)
+
+    def test_empty_info_dict_has_only_fines_key(self) -> None:
+        """An empty SIP2 response still produces the 'fines' key (defaulting to 0)."""
+        values = build_values_from_sip2_info({})
+        assert values == {"fines": pytest.approx(0.0)}
+
+    def test_polaris_patron_birthdate_accessible_directly(self) -> None:
+        """polaris_patron_birthdate is accessible under its own raw key."""
+        values = build_values_from_sip2_info({"polaris_patron_birthdate": "1990-01-01"})
+        assert values["polaris_patron_birthdate"] == "1990-01-01"
