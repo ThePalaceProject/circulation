@@ -8,9 +8,12 @@ from uuid import uuid4
 import pytest
 from celery.result import AsyncResult
 
-from palace.manager.celery.importer import import_key, import_workflow_lock
+from palace.manager.celery.importer import import_workflow_lock
 from palace.manager.celery.tasks import overdrive
-from palace.manager.celery.tasks.overdrive import import_collection_group
+from palace.manager.celery.tasks.overdrive import (
+    IMPORT_SKIPPED,
+    import_collection_group,
+)
 from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.integration.license.overdrive.api import (
     BookInfoEndpoint,
@@ -406,7 +409,7 @@ class TestImportCollection:
         result = overdrive.import_collection.delay(collection.id).wait()
 
         mock_importer_class.assert_not_called()
-        assert result == {"key": import_key(collection.id, "__skipped__")}
+        assert result == {IMPORT_SKIPPED: True}
         workflow_lock.release()
 
     @patch("palace.manager.celery.tasks.overdrive.OverdriveImporter")
@@ -549,21 +552,21 @@ class TestImportCollectionGroup:
     @staticmethod
     def setup_chain_mocks(
         mock_import_collection: MagicMock,
-        mock_cleanup_chord: MagicMock,
+        mock_router: MagicMock,
         mock_chain: MagicMock,
     ) -> Mock:
         """Set up mock chain and task signatures for testing.
 
         :param mock_import_collection: Mock for import_collection task
-        :param mock_cleanup_chord: Mock for cleanup chord task
+        :param mock_router: Mock for import_result_router task
         :param mock_chain: Mock for chain function
         :return: Mock chain result
         """
         mock_import_sig = Mock()
         mock_import_collection.s.return_value = mock_import_sig
 
-        mock_cleanup_sig = Mock()
-        mock_cleanup_chord.s.return_value = mock_cleanup_sig
+        mock_router_sig = Mock()
+        mock_router.s.return_value = mock_router_sig
 
         # Mock the async result returned when the chain is called
         mock_async_result = Mock()
@@ -577,20 +580,20 @@ class TestImportCollectionGroup:
 
     @patch("palace.manager.celery.tasks.overdrive.chain")
     @patch("palace.manager.celery.tasks.overdrive.import_collection")
-    @patch("palace.manager.celery.tasks.overdrive.import_children_and_cleanup_chord")
+    @patch("palace.manager.celery.tasks.overdrive.import_result_router")
     def test_import_collection_group_basic(
         self,
-        mock_cleanup_chord: MagicMock,
+        mock_router: MagicMock,
         mock_import_collection: MagicMock,
         mock_chain: MagicMock,
         overdrive_import_fixture: OverdriveImportFixture,
     ):
-        """Test import_collection_group chains parent and children import."""
+        """Test import_collection_group chains parent import and router."""
         collection = overdrive_import_fixture.collection
 
         # Set up chain mocks
         mock_chain_result = self.setup_chain_mocks(
-            mock_import_collection, mock_cleanup_chord, mock_chain
+            mock_import_collection, mock_router, mock_chain
         )
 
         # Run the task
@@ -607,8 +610,8 @@ class TestImportCollectionGroup:
             start_time=None,
         )
 
-        # Verify cleanup chord signature was created
-        mock_cleanup_chord.s.assert_called_once_with(
+        # Verify router signature was created
+        mock_router.s.assert_called_once_with(
             collection_id=collection.id,
             import_all=False,
             modified_since=None,
@@ -620,10 +623,10 @@ class TestImportCollectionGroup:
 
     @patch("palace.manager.celery.tasks.overdrive.chain")
     @patch("palace.manager.celery.tasks.overdrive.import_collection")
-    @patch("palace.manager.celery.tasks.overdrive.import_children_and_cleanup_chord")
+    @patch("palace.manager.celery.tasks.overdrive.import_result_router")
     def test_import_collection_group_with_import_all(
         self,
-        mock_cleanup_chord: MagicMock,
+        mock_router: MagicMock,
         mock_import_collection: MagicMock,
         mock_chain: MagicMock,
         overdrive_import_fixture: OverdriveImportFixture,
@@ -632,7 +635,7 @@ class TestImportCollectionGroup:
         collection = overdrive_import_fixture.collection
 
         # Set up chain mocks
-        self.setup_chain_mocks(mock_import_collection, mock_cleanup_chord, mock_chain)
+        self.setup_chain_mocks(mock_import_collection, mock_router, mock_chain)
 
         # Run the task with import_all=True
         overdrive.import_collection_group.delay(collection.id, import_all=True).wait()
@@ -643,10 +646,10 @@ class TestImportCollectionGroup:
 
     @patch("palace.manager.celery.tasks.overdrive.chain")
     @patch("palace.manager.celery.tasks.overdrive.import_collection")
-    @patch("palace.manager.celery.tasks.overdrive.import_children_and_cleanup_chord")
+    @patch("palace.manager.celery.tasks.overdrive.import_result_router")
     def test_import_collection_group_with_custom_dates(
         self,
-        mock_cleanup_chord: MagicMock,
+        mock_router: MagicMock,
         mock_import_collection: MagicMock,
         mock_chain: MagicMock,
         overdrive_import_fixture: OverdriveImportFixture,
@@ -657,7 +660,7 @@ class TestImportCollectionGroup:
         start_time = datetime_utc(2023, 6, 1)
 
         # Set up chain mocks
-        self.setup_chain_mocks(mock_import_collection, mock_cleanup_chord, mock_chain)
+        self.setup_chain_mocks(mock_import_collection, mock_router, mock_chain)
 
         # Run the task with custom dates
         overdrive.import_collection_group.delay(
@@ -668,6 +671,81 @@ class TestImportCollectionGroup:
         call_args = mock_import_collection.s.call_args.kwargs
         assert call_args["modified_since"] == modified_since
         assert call_args["start_time"] == start_time
+
+
+class TestImportResultRouter:
+    """Tests for the import_result_router Celery task."""
+
+    @patch("palace.manager.celery.tasks.overdrive.import_children_and_cleanup_chord")
+    def test_router_short_circuits_when_skipped(
+        self,
+        mock_chord: MagicMock,
+        overdrive_import_fixture: OverdriveImportFixture,
+        celery_fixture: CeleryFixture,
+    ):
+        """When import_result has IMPORT_SKIPPED, router returns early without invoking chord."""
+        collection = overdrive_import_fixture.collection
+        import_result = {IMPORT_SKIPPED: True}
+
+        result = overdrive.import_result_router.delay(
+            import_result=import_result,
+            collection_id=collection.id,
+            import_all=False,
+            modified_since=None,
+        ).wait()
+
+        mock_chord.apply_async.assert_not_called()
+        assert result == {IMPORT_SKIPPED: True}
+
+    @patch("palace.manager.celery.tasks.overdrive.import_children_and_cleanup_chord")
+    def test_router_invokes_chord_when_import_completed(
+        self,
+        mock_chord: MagicMock,
+        overdrive_import_fixture: OverdriveImportFixture,
+        celery_fixture: CeleryFixture,
+        redis_fixture: RedisFixture,
+    ):
+        """When import_result is valid identifier set info, router invokes the chord."""
+        collection = overdrive_import_fixture.collection
+        identifier_set_info = {"key": ["test", "key"], "expire_time": 43200}
+        mock_async_result = Mock()
+        mock_async_result.id = "chord-id"
+        mock_chord.apply_async.return_value = mock_async_result
+
+        result = overdrive.import_result_router.delay(
+            import_result=identifier_set_info,
+            collection_id=collection.id,
+            import_all=False,
+            modified_since=datetime_utc(2023, 1, 1),
+        ).wait()
+
+        mock_chord.apply_async.assert_called_once()
+        call_args = mock_chord.apply_async.call_args
+        assert call_args[0][0] == identifier_set_info
+        assert call_args[0][1] == collection.id
+        assert call_args[0][2] is False
+        assert call_args[0][3] == datetime_utc(2023, 1, 1)
+        assert result == {"chord_id": "chord-id"}
+
+    @patch("palace.manager.celery.tasks.overdrive.import_children_and_cleanup_chord")
+    def test_router_skips_chord_when_import_result_is_none(
+        self,
+        mock_chord: MagicMock,
+        overdrive_import_fixture: OverdriveImportFixture,
+        celery_fixture: CeleryFixture,
+    ):
+        """When import_result is None, router returns without invoking chord."""
+        collection = overdrive_import_fixture.collection
+
+        result = overdrive.import_result_router.delay(
+            import_result=None,
+            collection_id=collection.id,
+            import_all=False,
+            modified_since=None,
+        ).wait()
+
+        mock_chord.apply_async.assert_not_called()
+        assert result == {"chord_id": None}
 
 
 class TestRehydrateIdentifierSet:
