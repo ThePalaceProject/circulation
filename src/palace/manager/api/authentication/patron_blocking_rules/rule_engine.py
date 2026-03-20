@@ -72,10 +72,7 @@ class MissingPlaceholderError(BasePalaceException):
 
 
 class RuleEvaluationError(BasePalaceException):
-    """Raised at runtime when a rule cannot be evaluated safely.
-
-    All callers should treat this as a block (fail-closed).
-    """
+    """Raised at runtime when a rule cannot be evaluated safely."""
 
     def __init__(self, message: str, rule_name: str | None = None) -> None:
         super().__init__(message)
@@ -105,7 +102,7 @@ def compile_rule_expression(expr: str) -> CompiledRule:
     Placeholder values are injected via the ``names`` dict (see
     :func:`build_names`).
 
-    :param expr: The raw rule expression, e.g. ``"fines > 10.0"``.
+    :param expr: The raw rule expression, e.g. ``"{fines} > 10.0"``.
     :returns: A :class:`CompiledRule` instance.
     """
     var_map: dict[str, str] = {}
@@ -249,8 +246,7 @@ def validate_rule_expression(
     :param expr: The raw rule expression string.
     :param test_values: Mapping of placeholder key → test value used for the
         trial evaluation.  For live validation this is the dict returned by
-        ``fetch_live_rule_validation_values``; it contains all raw SIP2
-        response fields plus the normalised ``fines`` key.
+        the provider's ``fetch_live_rule_validation_values``.
     :param evaluator: A locked-down evaluator from :func:`make_evaluator`.
     :raises RuleValidationError: On any validation failure.
     """
@@ -297,14 +293,13 @@ def evaluate_rule_expression_strict_bool(
 ) -> bool:
     """Evaluate a rule expression at runtime.
 
-    This function is **fail-closed**: any error raises
+    Aany error raises
     :class:`RuleEvaluationError` rather than silently allowing access.
 
-    When a placeholder is missing the error message lists all available keys
-    and their values.  When an unsupported function is referenced the error
+    When a placeholder is missing, the error message lists all available keys
+    and their values.  When an unsupported function is referenced, the error
     message lists all allowed functions.  This information is logged
-    server-side (never exposed to patrons) so operators can diagnose and fix
-    the rule.
+    server-side so operators can diagnose and fix the rule.
 
     :param expr: The raw rule expression string (same as stored).
     :param values: Mapping of placeholder key → runtime value.

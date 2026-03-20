@@ -3,8 +3,10 @@
 Patron blocking rule expressions are evaluated by a locked-down
 [simpleeval](https://github.com/danthedeckie/simpleeval) sandbox.
 Only the functions listed below may be called inside a rule expression.
-Any reference to an unlisted function causes the rule to **fail closed**
-(the patron is blocked at runtime; the rule is rejected at admin-save time).
+Any reference to an unlisted function causes the rule to **fail open**
+(the patron is not blocked at runtime; the rule is accepted at admin-save time,
+though there is feedback in the Admin UI warning the user that there is a problem
+with the rule).
 
 ---
 
@@ -45,7 +47,7 @@ not rounded).
 
 `ValueError` — If `date_str` cannot be parsed (either by ISO 8601, the
 supplied `fmt`, or `dateutil`). At runtime this causes the rule to
-**fail closed**.
+**fail open**.
 
 ### Examples
 
@@ -83,7 +85,7 @@ int(value) -> int
 - **`value`** — The value to convert. Typically a string such as `"3"` or
   a float such as `2.9`. Any value accepted by Python's built-in `int()` is
   valid. Passing a non-numeric string (e.g. `"adult"`) raises a `ValueError`
-  and causes the rule to **fail closed**.
+  and causes the rule to **fail open**.
 
 ### Returns
 
@@ -95,7 +97,7 @@ floats).
 ### Raises
 
 `ValueError` — If `value` cannot be converted to an integer. At runtime
-this causes the rule to **fail closed**.
+this causes the rule to **fail open**.
 
 ### Examples
 
@@ -119,11 +121,13 @@ int({expire_year}) < 2025
   {patron_identifier}.startswith("1234")
   ```
 
-- **Fail-closed behaviour** — any function call that raises an exception
+- **Fail-open behaviour** — any function call that raises an exception
   (e.g. an unparseable date or a non-numeric string passed to `int()`)
-  causes the patron to be **blocked** at runtime and the rule to be
-  **rejected** at admin-save time. Write test rules carefully using
-  representative patron data before enabling them in production.
+  causes the rule to be **skipped** at runtime (the patron is not blocked
+  by that rule) and the rule to be **accepted** at admin-save time (with
+  a warning in the Admin UI that there is a problem with the rule). Write
+  test rules carefully using representative patron data before enabling
+  them in production.
 - **No other builtins** — Python builtins such as `len`, `str`, `float`,
   `abs`, and `round` are **not** available. If you need additional
   functions, request them via the standard feature-request process so they
