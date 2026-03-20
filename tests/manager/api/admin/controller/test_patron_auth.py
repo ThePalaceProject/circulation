@@ -78,14 +78,14 @@ if TYPE_CHECKING:
 class ConcreteBlockingRulesLibrarySettings(
     PatronBlockingRulesSetting, BasicAuthProviderLibrarySettings
 ):
-    """Minimal library settings class used to test PatronBlockingRulesSetting via the controller."""
+    """Minimal library settings class used to test :class:`PatronBlockingRulesSetting` via the controller."""
 
 
 class ConcreteBlockingRulesProvider(
     HasPatronBlockingRules, MinimalAuthenticationProvider
 ):
-    """Minimal provider that opts into HasPatronBlockingRules, used to test the
-    patron blocking rules controller infrastructure without depending on SIP2."""
+    """Minimal provider that opts into :class:`HasPatronBlockingRules`, used to test
+    the patron blocking rules controller infrastructure without depending on SIP2."""
 
     @classmethod
     def label(cls) -> str:
@@ -138,8 +138,9 @@ class BlockingRulesFixture:
     """Encapsulates helpers for patron-auth controller tests that exercise the
     patron blocking rules mixin infrastructure.
 
-    Uses ConcreteBlockingRulesProvider — a minimal in-test provider that opts
-    into HasPatronBlockingRules — so these tests do not depend on SIP2.
+    Uses :class:`ConcreteBlockingRulesProvider` — a minimal in-test provider that
+    opts into :class:`~palace.manager.api.authentication.patron_blocking_rules.mixin.HasPatronBlockingRules` —
+    so these tests do not depend on SIP2.
     """
 
     FETCH_PATCH: str = (
@@ -175,7 +176,7 @@ class BlockingRulesFixture:
         service_name: str = "live-blocking-rules-test",
         library: Library | None = None,
     ) -> ProblemDetail | Response:
-        """Submit a ConcreteBlockingRulesProvider patron-auth service POST and return the response."""
+        """Submit a :class:`ConcreteBlockingRulesProvider` patron-auth service POST and return the response."""
         if library is None:
             library = self.db.default_library()
         library_data: dict = {

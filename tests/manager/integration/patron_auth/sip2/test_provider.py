@@ -1601,9 +1601,9 @@ class TestFetchLiveRuleValidationValues:
 
 
 class TestBuildValuesFromSip2Info:
-    """Tests for SIP2AuthenticationProvider._build_values_from_sip2_info().
+    """Tests for :meth:`~palace.manager.integration.patron_auth.sip2.provider.SIP2AuthenticationProvider._build_values_from_sip2_info`.
 
-    This function is SIP2-specific: it translates raw SIP2 response fields
+    This method is SIP2-specific: it translates raw SIP2 response fields
     (e.g. ``fee_amount``) into the normalised keys used by patron blocking
     rule expressions (e.g. ``fines``).
     """

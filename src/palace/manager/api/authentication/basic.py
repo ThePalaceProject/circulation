@@ -655,8 +655,9 @@ class BasicAuthenticationProvider[
 
         :param credentials: A dictionary with keys `username` and `password`.
 
-        :return: A Patron if one can be authenticated; a ProblemDetail
-            if an error occurs or a blocking rule fires; None if the
+        :returns: A :class:`~palace.manager.sqlalchemy.model.patron.Patron` if one can
+            be authenticated; a :class:`~palace.manager.util.problem_detail.ProblemDetail`
+            if an error occurs or a blocking rule fires; ``None`` if the
             credentials are missing or wrong.
         """
         result, extra_context = self._do_authenticate(_db, credentials)

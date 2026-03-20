@@ -361,17 +361,12 @@ class SIP2AuthenticationProvider(
         database session — the temporary provider instance it creates is never
         persisted.
 
-        Args:
-            settings: The validated :class:`SIP2Settings` for this integration.
-
-        Returns:
-            A dict mapping placeholder key to resolved value, produced by
+        :param settings: The validated :class:`SIP2Settings` for this integration.
+        :returns: A dict mapping placeholder key to resolved value, produced by
             :meth:`_build_values_from_sip2_info`.
-
-        Raises:
-            :class:`~palace.manager.util.problem_detail.ProblemDetailException`:
-                If ``test_identifier`` is not configured, the SIP2 server cannot
-                be reached, or the server returns an error response.
+        :raises ProblemDetailException: If ``test_identifier`` is not configured,
+            the SIP2 server cannot be reached, or the server returns an error
+            response.
         """
         if not settings.test_identifier:
             raise ProblemDetailException(

@@ -3,11 +3,12 @@
 A blocking rule is a simple named predicate attached to a library's
 per-protocol settings.  At authentication time, the rules are evaluated
 after the remote ILS has successfully authenticated the patron.  If any
-rule triggers a block, a ProblemDetail is returned instead of the Patron
+rule triggers a block, a :class:`~palace.manager.util.problem_detail.ProblemDetail`
+is returned instead of the :class:`~palace.manager.sqlalchemy.model.patron.Patron`
 object and the request is rejected.
 
 Rule expressions are evaluated with the simpleeval-based rule engine
-(see palace.manager.api.authentication.patron_blocking_rules.rule_engine).
+(:mod:`palace.manager.api.authentication.patron_blocking_rules.rule_engine`).
 """
 
 from __future__ import annotations
