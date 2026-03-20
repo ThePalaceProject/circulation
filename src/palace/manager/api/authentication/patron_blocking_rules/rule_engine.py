@@ -219,7 +219,7 @@ def get_evaluator(
         functions = (
             allowed_functions
             if allowed_functions is not None
-            else DEFAULT_ALLOWED_FUNCTIONS
+            else dict(DEFAULT_ALLOWED_FUNCTIONS)
         )
         evaluator = EvalWithCompoundTypes(functions=functions, names={})
         _evaluator_local.evaluator = evaluator
@@ -242,7 +242,7 @@ def make_evaluator(
     functions = (
         allowed_functions
         if allowed_functions is not None
-        else DEFAULT_ALLOWED_FUNCTIONS
+        else dict(DEFAULT_ALLOWED_FUNCTIONS)
     )
     return EvalWithCompoundTypes(functions=functions, names={})
 

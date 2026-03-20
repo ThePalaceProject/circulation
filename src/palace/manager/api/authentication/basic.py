@@ -7,10 +7,10 @@ from dataclasses import dataclass, field
 from enum import Enum
 from functools import partial
 from re import Pattern
-from typing import Annotated, Any, ClassVar, cast
+from typing import Annotated, Any, cast
 
 from flask import url_for
-from pydantic import PositiveInt, field_validator
+from pydantic import PositiveInt, field_validator, model_validator
 from pydantic_core.core_schema import ValidationInfo
 from sqlalchemy.orm import Session
 from werkzeug.datastructures import Authorization
@@ -26,6 +26,9 @@ from palace.manager.api.authentication.base import (
     PatronAuthResult,
     PatronData,
     PatronLookupNotSupported,
+)
+from palace.manager.api.authentication.patron_blocking_rules.mixin import (
+    HasPatronBlockingRules,
 )
 from palace.manager.api.authentication.patron_blocking_rules.rule_engine import (
     MAX_RULE_LENGTH,
@@ -46,6 +49,7 @@ from palace.manager.integration.patron_auth.patron_blocking import (
     check_patron_blocking_rules_with_evaluator,
 )
 from palace.manager.integration.settings import (
+    BaseSettings,
     FormFieldType,
     FormMetadata,
     SettingsValidationError,
@@ -208,11 +212,106 @@ class BasicAuthProviderSettings(AuthProviderSettings):
     ] = "PIN"
 
 
-class BasicAuthProviderLibrarySettings(AuthProviderLibrarySettings):
-    """Library-scoped settings for basic auth providers."""
+class PatronBlockingRulesSetting(BaseSettings):
+    """Mixin for library settings that support patron blocking rules.
 
-    # Subclasses that support patron blocking rules (e.g. SIP2) override to True.
-    supports_patron_blocking_rules: ClassVar[bool] = False
+    Presence of this mixin declares support; providers that inherit from it
+    can configure and validate patron blocking rules.
+    """
+
+    patron_blocking_rules: Annotated[
+        list[PatronBlockingRule],
+        FormMetadata(
+            label="Patron Blocking Rules",
+            description=(
+                "A list of rules that can block patron access after successful ILS "
+                "authentication. Each rule has a name, a rule expression, and an "
+                "optional message shown to the patron when blocked."
+            ),
+            hidden=True,
+        ),
+    ] = []
+
+    @field_validator("patron_blocking_rules")
+    @classmethod
+    def validate_patron_blocking_rules(
+        cls, rules: list[PatronBlockingRule]
+    ) -> list[PatronBlockingRule]:
+        """Validate patron blocking rules: non-empty name/rule, no duplicate names,
+        rule length <= 1000, and message length <= 1000.
+
+        Full expression validation (syntax, placeholder resolution, bool result)
+        is deferred to admin-save time via a live ILS call in
+        ``PatronAuthServicesController.process_validate_patron_blocking_rule``,
+        where real patron values are available.
+        """
+        names_seen: set[str] = set()
+        for i, rule in enumerate(rules):
+            if not rule.name:
+                raise SettingsValidationError(
+                    INVALID_CONFIGURATION_OPTION.detailed(
+                        f"Rule at index {i}: 'name' must not be empty"
+                    )
+                )
+            if not rule.rule:
+                raise SettingsValidationError(
+                    INVALID_CONFIGURATION_OPTION.detailed(
+                        f"Rule at index {i}: 'rule' expression must not be empty"
+                    )
+                )
+            if rule.name in names_seen:
+                raise SettingsValidationError(
+                    INVALID_CONFIGURATION_OPTION.detailed(
+                        f"Rule at index {i}: duplicate rule name '{rule.name}'"
+                    )
+                )
+            names_seen.add(rule.name)
+
+            if len(rule.rule) > MAX_RULE_LENGTH:
+                raise SettingsValidationError(
+                    INVALID_CONFIGURATION_OPTION.detailed(
+                        f"Rule at index {i} ('{rule.name}'): rule expression must not "
+                        f"exceed {MAX_RULE_LENGTH} characters."
+                    )
+                )
+
+            if rule.message is not None:
+                try:
+                    validate_message(rule.message)
+                except RuleValidationError as exc:
+                    raise SettingsValidationError(
+                        INVALID_CONFIGURATION_OPTION.detailed(
+                            f"Rule at index {i} ('{rule.name}'): {exc.message}"
+                        )
+                    ) from exc
+
+        return rules
+
+
+class BasicAuthProviderLibrarySettings(AuthProviderLibrarySettings):
+    """Library-scoped settings for basic auth providers.
+
+    Does not include patron_blocking_rules; providers that support them mix in
+    :class:`PatronBlockingRulesSetting`. This validator rejects attempts to
+    configure rules on providers that do not support them.
+    """
+
+    @model_validator(mode="before")
+    @classmethod
+    def reject_patron_blocking_rules_if_not_supported(
+        cls, data: dict[str, Any] | AuthProviderLibrarySettings
+    ) -> dict[str, Any] | AuthProviderLibrarySettings:
+        """Reject patron_blocking_rules when this settings class does not support them."""
+        if "patron_blocking_rules" in getattr(cls, "model_fields", {}):
+            return data
+        if isinstance(data, dict) and data.get("patron_blocking_rules"):
+            raise SettingsValidationError(
+                INVALID_CONFIGURATION_OPTION.detailed(
+                    "Patron blocking rules are not supported by this authentication "
+                    "provider. Rules are ignored at runtime."
+                )
+            )
+        return data
 
     # When multiple libraries share an ILS, a person may be able to
     # authenticate with the ILS but not be considered a patron of
@@ -273,19 +372,6 @@ class BasicAuthProviderLibrarySettings(AuthProviderLibrarySettings):
         ),
     ] = None
 
-    patron_blocking_rules: Annotated[
-        list[PatronBlockingRule],
-        FormMetadata(
-            label="Patron Blocking Rules",
-            description=(
-                "A list of rules that can block patron access after successful ILS "
-                "authentication. Each rule has a name, a rule expression, and an "
-                "optional message shown to the patron when blocked."
-            ),
-            hidden=True,
-        ),
-    ] = []
-
     @field_validator("library_identifier_restriction_criteria")
     @classmethod
     def validate_restriction_criteria(
@@ -305,74 +391,6 @@ class BasicAuthProviderLibrarySettings(AuthProviderLibrarySettings):
                 )
         return restriction_criteria
 
-    @field_validator("patron_blocking_rules")
-    @classmethod
-    def validate_patron_blocking_rules(
-        cls, rules: list[PatronBlockingRule]
-    ) -> list[PatronBlockingRule]:
-        """Validate patron blocking rules: non-empty name/rule, no duplicate names,
-        rule length <= 1000, and message length <= 1000.
-
-        Rejects rules when this settings class does not support blocking rules
-        (supports_patron_blocking_rules is False).
-
-        Full expression validation (syntax, placeholder resolution, bool result)
-        is deferred to admin-save time via a live SIP2 call in
-        ``PatronAuthServicesController.library_integration_validation``, where
-        real patron values are available.
-        """
-        if rules and not cls.supports_patron_blocking_rules:
-            raise SettingsValidationError(
-                INVALID_CONFIGURATION_OPTION.detailed(
-                    "Patron blocking rules are not supported by this authentication "
-                    "provider. Rules are ignored at runtime."
-                )
-            )
-
-        names_seen: set[str] = set()
-        for i, rule in enumerate(rules):
-            if not rule.name:
-                raise SettingsValidationError(
-                    INVALID_CONFIGURATION_OPTION.detailed(
-                        f"Rule at index {i}: 'name' must not be empty"
-                    )
-                )
-            if not rule.rule:
-                raise SettingsValidationError(
-                    INVALID_CONFIGURATION_OPTION.detailed(
-                        f"Rule at index {i}: 'rule' expression must not be empty"
-                    )
-                )
-            if rule.name in names_seen:
-                raise SettingsValidationError(
-                    INVALID_CONFIGURATION_OPTION.detailed(
-                        f"Rule at index {i}: duplicate rule name '{rule.name}'"
-                    )
-                )
-            names_seen.add(rule.name)
-
-            # Enforce rule length limit.
-            if len(rule.rule) > MAX_RULE_LENGTH:
-                raise SettingsValidationError(
-                    INVALID_CONFIGURATION_OPTION.detailed(
-                        f"Rule at index {i} ('{rule.name}'): rule expression must not "
-                        f"exceed {MAX_RULE_LENGTH} characters."
-                    )
-                )
-
-            # Validate optional message when provided.
-            if rule.message is not None:
-                try:
-                    validate_message(rule.message)
-                except RuleValidationError as exc:
-                    raise SettingsValidationError(
-                        INVALID_CONFIGURATION_OPTION.detailed(
-                            f"Rule at index {i} ('{rule.name}'): {exc.message}"
-                        )
-                    ) from exc
-
-        return rules
-
 
 class BasicAuthenticationProvider[
     SettingsType: BasicAuthProviderSettings,
@@ -381,12 +399,6 @@ class BasicAuthenticationProvider[
     """Verify a username/password, obtained through HTTP Basic Auth, with
     a remote source of truth.
     """
-
-    # Subclasses that connect to an ILS and wish to honour patron blocking rules
-    # should override this to True.  Non-ILS providers (e.g. SimpleAuthentication,
-    # MinimalAuthentication) leave it as False so that the blocking-rules check
-    # in authenticate() is skipped entirely for those providers.
-    supports_patron_blocking_rules: ClassVar[bool] = False
 
     def __init__(
         self,
@@ -425,7 +437,7 @@ class BasicAuthenticationProvider[
                 library_settings.library_identifier_restriction_criteria
             )
         )
-        self.patron_blocking_rules = library_settings.patron_blocking_rules
+        self.patron_blocking_rules: list[PatronBlockingRule] = []
 
     def process_library_identifier_restriction_criteria(
         self, criteria: str | None
@@ -649,7 +661,7 @@ class BasicAuthenticationProvider[
         """
         result, extra_context = self._do_authenticate(_db, credentials)
         if (
-            self.supports_patron_blocking_rules
+            isinstance(self, HasPatronBlockingRules)
             and self.patron_blocking_rules
             and isinstance(result, Patron)
         ):

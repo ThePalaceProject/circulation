@@ -4,7 +4,7 @@ import json
 import socket
 from collections.abc import Callable, Generator
 from datetime import datetime
-from typing import Annotated, Any, ClassVar
+from typing import Annotated, Any
 
 from annotated_types import Ge, Le
 from pydantic import PositiveInt
@@ -16,7 +16,11 @@ from palace.manager.api.authentication.basic import (
     BasicAuthenticationProvider,
     BasicAuthProviderLibrarySettings,
     BasicAuthProviderSettings,
+    PatronBlockingRulesSetting,
     RemoteAuthResult,
+)
+from palace.manager.api.authentication.patron_blocking_rules.mixin import (
+    HasPatronBlockingRules,
 )
 from palace.manager.api.authentication.patron_debug import HasPatronDebug
 from palace.manager.api.problem_details import INVALID_CREDENTIALS
@@ -205,9 +209,7 @@ class SIP2Settings(BasicAuthProviderSettings):
     ] = 3
 
 
-class SIP2LibrarySettings(BasicAuthProviderLibrarySettings):
-    supports_patron_blocking_rules: ClassVar[bool] = True
-
+class SIP2LibrarySettings(PatronBlockingRulesSetting, BasicAuthProviderLibrarySettings):
     # Used as the SIP2 AO field.
     institution_id: Annotated[
         str | None,
@@ -220,10 +222,9 @@ class SIP2LibrarySettings(BasicAuthProviderLibrarySettings):
 
 class SIP2AuthenticationProvider(
     BasicAuthenticationProvider[SIP2Settings, SIP2LibrarySettings],
+    HasPatronBlockingRules,
     HasPatronDebug,
 ):
-    supports_patron_blocking_rules: ClassVar[bool] = True
-
     DATE_FORMATS = ["%Y%m%d", "%Y%m%d%Z%H%M%S", "%Y%m%d    %H%M%S"]
 
     # Map the reasons why SIP2 might report a patron is blocked to the
@@ -270,6 +271,7 @@ class SIP2AuthenticationProvider(
         self.institution_id = library_settings.institution_id
         self.timeout = settings.timeout
         self._client = client
+        self.patron_blocking_rules = library_settings.patron_blocking_rules
 
         # Check if patrons should be blocked based on SIP status
         if settings.patron_status_block:
