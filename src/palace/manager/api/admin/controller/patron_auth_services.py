@@ -23,7 +23,7 @@ from palace.manager.api.authentication.patron_blocking_rules.mixin import (
 )
 from palace.manager.api.authentication.patron_blocking_rules.rule_engine import (
     RuleValidationError,
-    get_evaluator,
+    make_evaluator,
     validate_rule_expression,
 )
 from palace.manager.integration.goals import Goals
@@ -175,7 +175,7 @@ class PatronAuthServicesController(
             # missing test_identifier, network error, or ILS error response.
             live_values = protocol_class.fetch_live_rule_validation_values(settings)
 
-            evaluator = get_evaluator()
+            evaluator = make_evaluator()
             try:
                 validate_rule_expression(rule_expr, live_values, evaluator)
             except RuleValidationError as exc:
