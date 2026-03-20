@@ -23,7 +23,6 @@ from palace.manager.api.authentication.patron_blocking_rules.rule_engine import 
     make_evaluator,
 )
 from palace.manager.api.problem_details import BLOCKED_BY_POLICY
-from palace.manager.util import MoneyUtility
 from palace.manager.util.problem_detail import ProblemDetail
 
 if TYPE_CHECKING:
@@ -81,34 +80,6 @@ def build_runtime_values_from_patron(patron: Patron) -> dict[str, Any]:
     return values
 
 
-def build_values_from_sip2_info(info: dict[str, Any]) -> dict[str, Any]:
-    """Build a simpleeval values dict from a raw SIP2 ``patron_information`` dict.
-
-    Returns **all** fields present in the SIP2 response so that operators have
-    the widest possible set of keys to reference in blocking rules, plus a
-    normalised ``fines`` key derived from ``fee_amount``.
-
-    This is used at admin-save validation time (live SIP2 call) and may also
-    be used at runtime once richer SIP2 data is available in the auth flow.
-
-    :param info: The dict returned by
-        :meth:`~palace.manager.integration.patron_auth.sip2.client.SIPClient.patron_information`.
-    :returns: Dict mapping placeholder key to resolved value.  All raw SIP2
-        fields are included verbatim; the additional ``fines`` key is a parsed
-        :class:`float` derived from ``fee_amount``.
-    """
-    # Include every raw SIP2 field so rules can reference any server-returned key.
-    values: dict[str, Any] = dict(info)
-
-    # Add normalised 'fines' from fee_amount (BV); may be "$5.00", "5.00", or absent.
-    try:
-        values["fines"] = float(MoneyUtility.parse(info.get("fee_amount") or "0"))
-    except (ValueError, TypeError):
-        values["fines"] = 0.0
-
-    return values
-
-
 _DEFAULT_BLOCK_MESSAGE = "Patron is blocked by library policy."
 
 
@@ -125,8 +96,7 @@ def check_patron_blocking_rules_with_evaluator(
     evaluate to ``True`` cause a block.
 
     :param rules: The list of :class:`PatronBlockingRule` objects for the library.
-    :param values: Runtime placeholder values; for SIP2 providers this is the
-        full raw SIP2 response dict (see :func:`build_values_from_sip2_info`).
+    :param values: Runtime placeholder values.
     :param log: Optional logger for server-side error diagnostics.
     :returns: A :class:`~palace.manager.util.problem_detail.ProblemDetail`
         (HTTP 403) if the patron should be blocked, or ``None`` if
