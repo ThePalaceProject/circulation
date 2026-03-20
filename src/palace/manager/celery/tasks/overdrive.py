@@ -20,6 +20,8 @@ from palace.manager.util.http.exception import (
     RequestTimedOut,
 )
 
+IMPORT_SKIPPED: str = "import_skipped"
+
 
 @shared_task(
     queue=QueueNames.default,
@@ -68,6 +70,9 @@ def import_collection(
         parent_identifier IdentifierSet.
     :param lock_value: UUID identifying this import workflow. Passed between pages to hold the workflow lock
         across page boundaries. Generated on the first page when None.
+    :return: IdentifierSet when import completes and return_identifiers is True; None when
+        return_identifiers is False or collection is marked for deletion; {IMPORT_SKIPPED: True}
+        when the workflow lock is held and another import is already in progress.
     """
     redis = task.services.redis().client()
     registry = task.services.integration_registry().license_providers()
@@ -88,7 +93,7 @@ def import_collection(
             f"OverDrive import skipped for collection {collection_id}: "
             "another import is already in progress."
         )
-        return {"key": import_key(collection_id, "__skipped__")}
+        return {IMPORT_SKIPPED: True}
     if not workflow_lock_acquired and not is_first_page:
         task.log.warning(
             f"OverDrive import for collection {collection_id}: workflow lock expired "
@@ -247,13 +252,68 @@ def import_collection_group(
             modified_since=modified_since,
             start_time=start_time,
         ),
-        import_children_and_cleanup_chord.s(
+        import_result_router.s(
             collection_id=collection_id,
             import_all=import_all,
             modified_since=modified_since,
         ),
     )()
     return {"chain_id": result.id}
+
+
+@shared_task(
+    queue=QueueNames.default,
+    bind=True,
+    max_retries=4,
+    autoretry_for=(BadResponseException, RequestTimedOut),
+    throws=(RemoteIntegrationException,),
+    retry_backoff=60,
+)
+def import_result_router(
+    task: Task,
+    import_result: IdentifierSet | dict[str, Any] | None,
+    collection_id: int,
+    import_all: bool,
+    modified_since: datetime.datetime | None,
+) -> dict[str, Any]:
+    """Route import result to child imports or short-circuit when skipped.
+
+    This task receives the result of import_collection and either invokes the
+    child-import chord (when the import ran) or returns early (when the import
+    was skipped due to another import already in progress).
+
+    :param import_result: Result from import_collection. Either an IdentifierSet
+        (or its serialized form), {IMPORT_SKIPPED: True} when skipped, or None
+        when the import returned no identifier set (e.g. marked for deletion).
+    :param collection_id: The parent collection ID.
+    :param import_all: Whether to import all titles in children.
+    :param modified_since: Only import titles modified after this datetime.
+    :return: {"chord_id": "..."} when chord is invoked, {IMPORT_SKIPPED: True}
+        when skipped, or {"chord_id": None} when import_result is None.
+    """
+    if isinstance(import_result, dict) and import_result.get(IMPORT_SKIPPED):
+        task.log.info(
+            f"OverDrive import skipped for collection {collection_id}: "
+            "skipping child imports (another import already in progress)."
+        )
+        return {IMPORT_SKIPPED: True}
+
+    if import_result is None:
+        task.log.warning(
+            f"OverDrive import for collection {collection_id}: no identifier set "
+            "returned; skipping child imports."
+        )
+        return {"chord_id": None}
+
+    identifier_set_info = (
+        import_result.__json__()
+        if hasattr(import_result, "__json__")
+        else import_result
+    )
+    async_res = import_children_and_cleanup_chord.apply_async(
+        args=[identifier_set_info, collection_id, import_all, modified_since],
+    )
+    return {"chord_id": async_res.id}
 
 
 def rehydrate_identifier_set(
