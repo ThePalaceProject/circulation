@@ -1600,11 +1600,6 @@ class TestFetchLiveRuleValidationValues:
         mock_pi.assert_called_once_with("user1", "")
 
 
-# ---------------------------------------------------------------------------
-# _build_values_from_sip2_info
-# ---------------------------------------------------------------------------
-
-
 class TestBuildValuesFromSip2Info:
     """Tests for SIP2AuthenticationProvider._build_values_from_sip2_info().
 
