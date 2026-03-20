@@ -34,6 +34,7 @@ from tests.fixtures.celery import ApplyTaskFixture, CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.overdrive import OverdriveAPIFixture
 from tests.fixtures.redis import RedisFixture
+from tests.mocks.mock import MockRequestsResponse
 from tests.mocks.overdrive import MockOverdriveAPI
 
 
@@ -433,6 +434,27 @@ class TestImportCollection:
         assert not workflow_lock.locked()
 
     @patch("palace.manager.celery.tasks.overdrive.OverdriveImporter")
+    def test_workflow_lock_released_on_marked_for_deletion(
+        self,
+        mock_importer_class: MagicMock,
+        overdrive_import_fixture: OverdriveImportFixture,
+        redis_fixture: RedisFixture,
+    ):
+        """When collection is marked for deletion, the workflow lock is still released on exit."""
+        collection = overdrive_import_fixture.collection
+        collection.marked_for_deletion = True
+
+        overdrive.import_collection.delay(
+            collection.id, return_identifiers=False
+        ).wait()
+
+        mock_importer_class.assert_not_called()
+        workflow_lock = import_workflow_lock(
+            redis_fixture.client, collection.id, random_value="any"
+        )
+        assert not workflow_lock.locked()
+
+    @patch("palace.manager.celery.tasks.overdrive.OverdriveImporter")
     def test_workflow_lock_passed_to_next_page(
         self,
         mock_importer_class: MagicMock,
@@ -488,20 +510,25 @@ class TestImportCollection:
         mock_importer_class: MagicMock,
         overdrive_import_fixture: OverdriveImportFixture,
         redis_fixture: RedisFixture,
+        celery_fixture: CeleryFixture,
     ):
         """When an autoretry exception is raised, the workflow lock is not released."""
         from palace.manager.util.http.exception import BadResponseException
 
         collection = overdrive_import_fixture.collection
         mock_importer, _ = overdrive_import_fixture.create_mock_importer()
+        mock_response = MockRequestsResponse(500, content="Internal Server Error")
         mock_importer.import_collection.side_effect = BadResponseException(
-            "http://test.com", "Bad response"
+            "http://test.com", "Bad response", mock_response
         )
         mock_importer_class.return_value = mock_importer
 
-        with pytest.raises(BadResponseException):
-            overdrive.import_collection.apply(args=[collection.id]).get(propagate=True)
+        with celery_fixture.patch_retry_backoff():
+            result = overdrive.import_collection.delay(collection.id).wait()
 
+        # First attempt raises BadResponseException; lock is not released (ignored).
+        # Retry fails to acquire (lock still held), returns IMPORT_SKIPPED.
+        assert result == {IMPORT_SKIPPED: True}
         workflow_lock = import_workflow_lock(
             redis_fixture.client, collection.id, random_value="any"
         )
@@ -745,11 +772,43 @@ class TestImportResultRouter:
         ).wait()
 
         mock_chord.apply_async.assert_called_once()
-        call_args = mock_chord.apply_async.call_args
-        assert call_args[0][0] == identifier_set_info
-        assert call_args[0][1] == collection.id
-        assert call_args[0][2] is False
-        assert call_args[0][3] == datetime_utc(2023, 1, 1)
+        call_args = mock_chord.apply_async.call_args.kwargs["args"]
+        assert call_args[0] == identifier_set_info
+        assert call_args[1] == collection.id
+        assert call_args[2] is False
+        assert call_args[3] == datetime_utc(2023, 1, 1)
+        assert result == {"chord_id": "chord-id"}
+
+    @patch("palace.manager.celery.tasks.overdrive.import_children_and_cleanup_chord")
+    def test_router_serializes_identifier_set_before_invoking_chord(
+        self,
+        mock_chord: MagicMock,
+        overdrive_import_fixture: OverdriveImportFixture,
+        celery_fixture: CeleryFixture,
+        redis_fixture: RedisFixture,
+    ):
+        """When import_result is an IdentifierSet, router serializes it via __json__() before invoking chord."""
+        collection = overdrive_import_fixture.collection
+        identifier_set = IdentifierSet(
+            redis_fixture.client, ["test", "router", "key"]
+        )  # key segments
+        mock_async_result = Mock()
+        mock_async_result.id = "chord-id"
+        mock_chord.apply_async.return_value = mock_async_result
+
+        result = overdrive.import_result_router.delay(
+            import_result=identifier_set,
+            collection_id=collection.id,
+            import_all=False,
+            modified_since=None,
+        ).wait()
+
+        mock_chord.apply_async.assert_called_once()
+        call_args = mock_chord.apply_async.call_args.kwargs["args"]
+        # Verify the IdentifierSet was serialized to a dict (not passed as an object)
+        serialized = call_args[0]
+        assert isinstance(serialized, dict)
+        assert serialized == identifier_set.__json__()
         assert result == {"chord_id": "chord-id"}
 
     @patch("palace.manager.celery.tasks.overdrive.import_children_and_cleanup_chord")
@@ -876,6 +935,10 @@ class TestImportChildrenAndCleanupChord:
 
         # Verify group was created with import tasks for each child
         assert mock_import.si.call_count == 2
+
+        # Verify each child import received the parent identifier set
+        for call in mock_import.si.call_args_list:
+            assert call.kwargs["parent_identifiers"] == mock_identifier_set
 
         # Verify chord was created
         mock_chord.assert_called_once()
