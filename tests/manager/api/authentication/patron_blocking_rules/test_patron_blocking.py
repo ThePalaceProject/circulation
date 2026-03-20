@@ -2,9 +2,9 @@
 
 Covers:
 
-- :class:`~palace.manager.integration.patron_auth.patron_blocking.PatronBlockingRule` model
-- :func:`~palace.manager.integration.patron_auth.patron_blocking.check_patron_blocking_rules_with_evaluator`
-- :func:`~palace.manager.integration.patron_auth.patron_blocking.build_runtime_values_from_patron`
+- :class:`~palace.manager.api.authentication.patron_blocking_rules.patron_blocking.PatronBlockingRule` model
+- :func:`~palace.manager.api.authentication.patron_blocking_rules.patron_blocking.check_patron_blocking_rules_with_evaluator`
+- :func:`~palace.manager.api.authentication.patron_blocking_rules.patron_blocking.build_runtime_values_from_patron`
 - ``patron_blocking_rules`` field on :class:`~palace.manager.api.authentication.basic.PatronBlockingRulesSetting`
 - :class:`~palace.manager.api.authentication.patron_blocking_rules.mixin.HasPatronBlockingRules` mixin
 - blocking-rules hook in :meth:`~palace.manager.api.authentication.basic.BasicAuthenticationProvider.authenticate`
@@ -24,12 +24,12 @@ from palace.manager.api.authentication.basic import (
 from palace.manager.api.authentication.patron_blocking_rules.mixin import (
     HasPatronBlockingRules,
 )
-from palace.manager.api.problem_details import BLOCKED_BY_POLICY, INVALID_CREDENTIALS
-from palace.manager.integration.patron_auth.patron_blocking import (
+from palace.manager.api.authentication.patron_blocking_rules.patron_blocking import (
     PatronBlockingRule,
     build_runtime_values_from_patron,
     check_patron_blocking_rules_with_evaluator,
 )
+from palace.manager.api.problem_details import BLOCKED_BY_POLICY, INVALID_CREDENTIALS
 from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.util.problem_detail import ProblemDetail
 from tests.fixtures.problem_detail import raises_problem_detail
@@ -40,7 +40,7 @@ class ConcreteSettings(PatronBlockingRulesSetting, BasicAuthProviderLibrarySetti
 
 
 class TestPatronBlockingRule:
-    """Unit tests for the :class:`~palace.manager.integration.patron_auth.patron_blocking.PatronBlockingRule` value object."""
+    """Unit tests for the :class:`~palace.manager.api.authentication.patron_blocking_rules.patron_blocking.PatronBlockingRule` value object."""
 
     def test_basic_construction(self) -> None:
         rule = PatronBlockingRule(name="rule1", rule="True")
@@ -69,7 +69,7 @@ class TestPatronBlockingRule:
 
 
 class TestCheckPatronBlockingRulesWithEvaluator:
-    """Tests for :func:`~palace.manager.integration.patron_auth.patron_blocking.check_patron_blocking_rules_with_evaluator`."""
+    """Tests for :func:`~palace.manager.api.authentication.patron_blocking_rules.patron_blocking.check_patron_blocking_rules_with_evaluator`."""
 
     def test_empty_rules_returns_none(self) -> None:
         assert check_patron_blocking_rules_with_evaluator([], {}) is None
@@ -164,7 +164,7 @@ class TestCheckPatronBlockingRulesWithEvaluator:
 
 
 class TestBuildRuntimeValuesFromPatron:
-    """Tests for :func:`~palace.manager.integration.patron_auth.patron_blocking.build_runtime_values_from_patron`."""
+    """Tests for :func:`~palace.manager.api.authentication.patron_blocking_rules.patron_blocking.build_runtime_values_from_patron`."""
 
     def _make_patron(self, fines=None, external_type=None):
         patron = MagicMock(spec=Patron)
