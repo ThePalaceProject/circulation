@@ -12,6 +12,8 @@ Covers:
 
 from __future__ import annotations
 
+from abc import ABCMeta
+from typing import cast
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -408,7 +410,9 @@ class TestBasicAuthenticationProvider:
             return instance is provider or real_instancecheck(cls, instance)
 
         with patch.object(
-            type(HasPatronBlockingRules), "__instancecheck__", mock_instancecheck
+            cast(ABCMeta, type(HasPatronBlockingRules)),
+            "__instancecheck__",
+            mock_instancecheck,
         ):
             result = BasicAuthenticationProvider.authenticate(provider, MagicMock(), {})
 
@@ -463,7 +467,9 @@ class TestBasicAuthenticationProvider:
             return instance is provider or real_instancecheck(cls, instance)
 
         with patch.object(
-            type(HasPatronBlockingRules), "__instancecheck__", mock_instancecheck
+            cast(ABCMeta, type(HasPatronBlockingRules)),
+            "__instancecheck__",
+            mock_instancecheck,
         ):
             result = BasicAuthenticationProvider.authenticate(provider, MagicMock(), {})
 

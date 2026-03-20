@@ -212,7 +212,7 @@ class SirsiDynixHorizonAuthenticationProvider(
         data = self.api_patron_login(username, password)
 
         if isinstance(data, SirsiError):
-            return RemoteAuthResult(patron_data=None) 
+            return RemoteAuthResult(patron_data=None)
 
         if not data:
             return RemoteAuthResult(patron_data=None)
