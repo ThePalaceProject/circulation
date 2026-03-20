@@ -180,6 +180,26 @@ class TestRedisLock:
             assert redis_lock_fixture.lock.locked() is True
         assert redis_lock_fixture.lock.locked() is not release_on_exit
 
+    def test_lock_not_released_on_ignored_exception(
+        self, redis_lock_fixture: RedisLockFixture, redis_fixture: RedisFixture
+    ):
+        """When an exception in ignored_exceptions is raised, the lock is not released."""
+        lock = RedisLock(
+            redis_fixture.client, "test_lock_ignored_exc", lock_timeout=timedelta(60)
+        )
+        try:
+            with lock.lock(ignored_exceptions=(ValueError,)) as acquired:
+                assert acquired
+                assert lock.locked()
+                raise ValueError("ignored - lock should remain held")
+        except ValueError:
+            pass
+        assert lock.locked(), (
+            "Lock should remain held when an ignored exception is raised; "
+            "the caller may retry or chain to another task."
+        )
+        lock.release()
+
 
 class TestTaskLock:
     def test___init__(self, redis_fixture: RedisFixture):
