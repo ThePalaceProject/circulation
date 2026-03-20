@@ -30,6 +30,11 @@ from palace.manager.api.authentication.base import (
 from palace.manager.api.authentication.patron_blocking_rules.mixin import (
     HasPatronBlockingRules,
 )
+from palace.manager.api.authentication.patron_blocking_rules.patron_blocking import (
+    PatronBlockingRule,
+    build_runtime_values_from_patron,
+    check_patron_blocking_rules_with_evaluator,
+)
 from palace.manager.api.authentication.patron_blocking_rules.rule_engine import (
     MAX_RULE_LENGTH,
     RuleValidationError,
@@ -43,11 +48,6 @@ from palace.manager.api.util.patron import PatronUtility
 from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.core.exceptions import IntegrationException
 from palace.manager.core.selftest import SelfTestResult
-from palace.manager.integration.patron_auth.patron_blocking import (
-    PatronBlockingRule,
-    build_runtime_values_from_patron,
-    check_patron_blocking_rules_with_evaluator,
-)
 from palace.manager.integration.settings import (
     BaseSettings,
     FormFieldType,
@@ -639,8 +639,8 @@ class BasicAuthenticationProvider[
         :param extra_context: Provider-specific data from :meth:`remote_authenticate`
             (e.g. raw SIP2 response dict).  Empty for providers that do not populate it.
         :returns: Dict mapping placeholder key to resolved value for
-            :func:`~palace.manager.integration.patron_auth.patron_blocking
-            .check_patron_blocking_rules_with_evaluator`.
+            :func:`~palace.manager.api.authentication.patron_blocking_rules
+            .patron_blocking.check_patron_blocking_rules_with_evaluator`.
         """
         return build_runtime_values_from_patron(patron)
 

@@ -22,12 +22,12 @@ from palace.manager.api.authentication.basic import (
 from palace.manager.api.authentication.patron_blocking_rules.mixin import (
     HasPatronBlockingRules,
 )
+from palace.manager.api.authentication.patron_blocking_rules.patron_blocking import (
+    build_runtime_values_from_patron,
+)
 from palace.manager.api.authentication.patron_debug import HasPatronDebug
 from palace.manager.api.problem_details import INVALID_CREDENTIALS
 from palace.manager.core.selftest import SelfTestResult
-from palace.manager.integration.patron_auth.patron_blocking import (
-    build_runtime_values_from_patron,
-)
 from palace.manager.integration.patron_auth.sip2.client import Sip2Encoding, SIPClient
 from palace.manager.integration.patron_auth.sip2.dialect import Dialect as Sip2Dialect
 from palace.manager.integration.settings import (
@@ -472,8 +472,8 @@ class SIP2AuthenticationProvider(
         extra_context from :meth:`remote_authenticate`.  If extra_context is
         empty (e.g. in tests that bypass ``remote_authenticate``), falls back
         to the patron-model values produced by
-        :func:`~palace.manager.integration.patron_auth.patron_blocking
-        .build_runtime_values_from_patron`.
+        :func:`~palace.manager.api.authentication.patron_blocking_rules
+        .patron_blocking.build_runtime_values_from_patron`.
 
         The returned dict contains **every field** returned by the SIP2 server
         plus a normalised ``fines`` float key.  This allows blocking rules to
