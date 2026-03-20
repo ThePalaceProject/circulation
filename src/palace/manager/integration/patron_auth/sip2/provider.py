@@ -345,6 +345,63 @@ class SIP2AuthenticationProvider(
     def library_settings_class(cls) -> type[SIP2LibrarySettings]:
         return SIP2LibrarySettings
 
+    @staticmethod
+    def _build_client_from_settings(
+        settings: SIP2Settings, institution_id: str = ""
+    ) -> SIPClient:
+        """Build a :class:`SIPClient` from settings, for use without a provider instance."""
+        return SIPClient(
+            target_server=settings.url,
+            target_port=settings.port,
+            login_user_id=settings.username,
+            login_password=settings.password,
+            location_code=settings.location_code,
+            institution_id=institution_id,
+            separator=settings.field_separator,
+            use_ssl=settings.use_ssl,
+            ssl_cert=settings.ssl_certificate,
+            ssl_key=settings.ssl_key,
+            ssl_verification=settings.ssl_verification,
+            encoding=settings.encoding.value.lower(),
+            dialect=settings.ils,
+            timeout=settings.timeout,
+        )
+
+    @classmethod
+    def _fetch_patron_info_via_sip2(
+        cls,
+        settings: SIP2Settings,
+        username: str,
+        password: str | None,
+        institution_id: str = "",
+    ) -> dict[str, Any] | ProblemDetail:
+        """Fetch patron information from the SIP2 server using settings only.
+
+        Performs connect, login, sc_status, patron_information, end_session, disconnect.
+        Does not require a provider instance.
+
+        :param settings: The validated :class:`SIP2Settings`.
+        :param username: Patron identifier (e.g. test_identifier).
+        :param password: Patron password (e.g. test_password or empty string).
+        :param institution_id: Optional institution ID from library settings.
+        :returns: Raw SIP2 info dict on success, or a :class:`ProblemDetail` on error.
+        """
+        sip = cls._build_client_from_settings(settings, institution_id)
+        try:
+            sip.connect()
+            sip.login()
+            sip.sc_status()
+            info = sip.patron_information(username, password)
+            sip.end_session(username, password)
+            sip.disconnect()
+            return info
+        except OSError as e:
+            server_name = settings.url or "unknown server"
+            return INVALID_CREDENTIALS.detailed(
+                f"Error contacting authentication server ({server_name}). "
+                "Please try again later."
+            )
+
     @classmethod
     def fetch_live_rule_validation_values(
         cls, settings: SIP2Settings
@@ -358,8 +415,8 @@ class SIP2AuthenticationProvider(
         .rule_engine.validate_rule_expression`.
 
         This is intentionally a classmethod so it can be called without a
-        database session — the temporary provider instance it creates is never
-        persisted.
+        database session.  It constructs a SIP client directly from settings and
+        does not instantiate a provider.
 
         :param settings: The validated :class:`SIP2Settings` for this integration.
         :returns: A dict mapping placeholder key to resolved value, produced by
@@ -377,19 +434,11 @@ class SIP2AuthenticationProvider(
                 )
             )
 
-        # Instantiate a temporary provider to reuse patron_information().
-        # library_id=0 and integration_id=0 are placeholders — they are never
-        # written to the database.
-        provider = cls(
-            library_id=0,
-            integration_id=0,
-            settings=settings,
-            library_settings=cls.library_settings_class()(),
-        )
-
         try:
-            info = provider.patron_information(
-                settings.test_identifier, settings.test_password or ""
+            info = cls._fetch_patron_info_via_sip2(
+                settings,
+                settings.test_identifier,
+                settings.test_password or "",
             )
         except Exception as exc:
             raise ProblemDetailException(
