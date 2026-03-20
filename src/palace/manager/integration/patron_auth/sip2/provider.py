@@ -27,7 +27,6 @@ from palace.manager.api.problem_details import INVALID_CREDENTIALS
 from palace.manager.core.selftest import SelfTestResult
 from palace.manager.integration.patron_auth.patron_blocking import (
     build_runtime_values_from_patron,
-    build_values_from_sip2_info,
 )
 from palace.manager.integration.patron_auth.sip2.client import Sip2Encoding, SIPClient
 from palace.manager.integration.patron_auth.sip2.dialect import Dialect as Sip2Dialect
@@ -242,6 +241,30 @@ class SIP2AuthenticationProvider(
         SIPClient.RECALL_OVERDUE: PatronData.RECALL_OVERDUE,
     }
 
+    @staticmethod
+    def _build_values_from_sip2_info(info: dict[str, Any]) -> dict[str, Any]:
+        """Build a simpleeval values dict from a raw SIP2 ``patron_information`` dict.
+
+        Returns **all** fields present in the SIP2 response so that operators have
+        the widest possible set of keys to reference in blocking rules, plus a
+        normalised ``fines`` key derived from ``fee_amount``.
+
+        This is used at admin-save validation time (live SIP2 call) and at runtime
+        when richer SIP2 data is available in the auth flow.
+
+        :param info: The dict returned by
+            :meth:`~palace.manager.integration.patron_auth.sip2.client.SIPClient.patron_information`.
+        :returns: Dict mapping placeholder key to resolved value.  All raw SIP2
+            fields are included verbatim; the additional ``fines`` key is a parsed
+            :class:`float` derived from ``fee_amount``.
+        """
+        values: dict[str, Any] = dict(info)
+        try:
+            values["fines"] = float(MoneyUtility.parse(info.get("fee_amount") or "0"))
+        except (ValueError, TypeError):
+            values["fines"] = 0.0
+        return values
+
     def __init__(
         self,
         library_id: int,
@@ -343,8 +366,7 @@ class SIP2AuthenticationProvider(
 
         Returns:
             A dict mapping placeholder key to resolved value, produced by
-            :func:`~palace.manager.integration.patron_auth.patron_blocking
-            .build_values_from_sip2_info`.
+            :meth:`_build_values_from_sip2_info`.
 
         Raises:
             :class:`~palace.manager.util.problem_detail.ProblemDetailException`:
@@ -391,7 +413,7 @@ class SIP2AuthenticationProvider(
                 )
             )
 
-        return build_values_from_sip2_info(info)
+        return cls._build_values_from_sip2_info(info)
 
     def patron_information(
         self, username: str, password: str | None
@@ -464,7 +486,7 @@ class SIP2AuthenticationProvider(
         ``{fee_amount}``, ``{polaris_patron_birthdate}``).
         """
         if extra_context:
-            return build_values_from_sip2_info(extra_context)
+            return self._build_values_from_sip2_info(extra_context)
         return build_runtime_values_from_patron(patron)
 
     def patron_debug(

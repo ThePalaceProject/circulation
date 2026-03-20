@@ -22,9 +22,6 @@ from palace.manager.api.problem_details import (
 )
 from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.core.selftest import SelfTestResult
-from palace.manager.integration.patron_auth.patron_blocking import (
-    build_values_from_sip2_info,
-)
 from palace.manager.integration.patron_auth.sip2.client import Sip2Encoding
 from palace.manager.integration.patron_auth.sip2.dialect import Dialect
 from palace.manager.integration.patron_auth.sip2.provider import (
@@ -1413,7 +1410,7 @@ class TestSIP2AuthenticateWithBlockingRules:
         create_library_settings: Callable[..., SIP2LibrarySettings],
     ) -> None:
         """When extra_context is populated, {fines} is derived from the
-        ``fee_amount`` field of the SIP2 response via ``build_values_from_sip2_info``
+        ``fee_amount`` field of the SIP2 response via ``_build_values_from_sip2_info``
         rather than from the Patron DB model.
 
         This verifies that the normalised ``fines`` float takes precedence over
@@ -1563,8 +1560,8 @@ class TestFetchLiveRuleValidationValues:
         self,
         settings_with_identifier: SIP2Settings,
     ) -> None:
-        """When patron_information succeeds, the raw SIP2 info dict is passed through
-        build_values_from_sip2_info and returned."""
+        """When patron_information succeeds, the raw SIP2 info dict is transformed with
+        enhanced values and returned."""
         sip2_info = {"fee_amount": "$5.00", "sipserver_patron_class": "adult"}
         with patch(self._PATRON_INFO_PATCH, return_value=sip2_info):
             result = SIP2AuthenticationProvider.fetch_live_rule_validation_values(
@@ -1604,12 +1601,12 @@ class TestFetchLiveRuleValidationValues:
 
 
 # ---------------------------------------------------------------------------
-# build_values_from_sip2_info
+# _build_values_from_sip2_info
 # ---------------------------------------------------------------------------
 
 
 class TestBuildValuesFromSip2Info:
-    """Tests for build_values_from_sip2_info().
+    """Tests for SIP2AuthenticationProvider._build_values_from_sip2_info().
 
     This function is SIP2-specific: it translates raw SIP2 response fields
     (e.g. ``fee_amount``) into the normalised keys used by patron blocking
@@ -1618,22 +1615,28 @@ class TestBuildValuesFromSip2Info:
 
     def test_fee_amount_plain_float_string(self) -> None:
         """fee_amount like '5.00' is parsed to a float under the 'fines' key."""
-        values = build_values_from_sip2_info({"fee_amount": "5.00"})
+        values = SIP2AuthenticationProvider._build_values_from_sip2_info(
+            {"fee_amount": "5.00"}
+        )
         assert values["fines"] == pytest.approx(5.0)
 
     def test_fee_amount_dollar_prefix(self) -> None:
         """fee_amount like '$12.50' (dollar sign prefix) is parsed correctly."""
-        values = build_values_from_sip2_info({"fee_amount": "$12.50"})
+        values = SIP2AuthenticationProvider._build_values_from_sip2_info(
+            {"fee_amount": "$12.50"}
+        )
         assert values["fines"] == pytest.approx(12.5)
 
     def test_fee_amount_missing_defaults_to_zero(self) -> None:
         """Absent fee_amount → fines = 0.0."""
-        values = build_values_from_sip2_info({})
+        values = SIP2AuthenticationProvider._build_values_from_sip2_info({})
         assert values["fines"] == pytest.approx(0.0)
 
     def test_fee_amount_unparseable_defaults_to_zero(self) -> None:
         """Unparseable fee_amount → fines = 0.0 (no exception raised)."""
-        values = build_values_from_sip2_info({"fee_amount": "not-a-number"})
+        values = SIP2AuthenticationProvider._build_values_from_sip2_info(
+            {"fee_amount": "not-a-number"}
+        )
         assert values["fines"] == pytest.approx(0.0)
 
     def test_all_raw_sip2_fields_are_included(self) -> None:
@@ -1645,23 +1648,25 @@ class TestBuildValuesFromSip2Info:
             "patron_status": "active",
             "personal_name": "Jane Doe",
         }
-        values = build_values_from_sip2_info(info)
+        values = SIP2AuthenticationProvider._build_values_from_sip2_info(info)
         for k, v in info.items():
             assert values[k] == v
 
     def test_normalized_fines_added_alongside_raw_fee_amount(self) -> None:
         """The 'fines' key (float) is added IN ADDITION to the raw fee_amount."""
         info = {"fee_amount": "3.50"}
-        values = build_values_from_sip2_info(info)
+        values = SIP2AuthenticationProvider._build_values_from_sip2_info(info)
         assert "fee_amount" in values
         assert values["fines"] == pytest.approx(3.5)
 
     def test_empty_info_dict_has_only_fines_key(self) -> None:
         """An empty SIP2 response still produces the 'fines' key (defaulting to 0)."""
-        values = build_values_from_sip2_info({})
+        values = SIP2AuthenticationProvider._build_values_from_sip2_info({})
         assert values == {"fines": pytest.approx(0.0)}
 
     def test_polaris_patron_birthdate_accessible_directly(self) -> None:
         """polaris_patron_birthdate is accessible under its own raw key."""
-        values = build_values_from_sip2_info({"polaris_patron_birthdate": "1990-01-01"})
+        values = SIP2AuthenticationProvider._build_values_from_sip2_info(
+            {"polaris_patron_birthdate": "1990-01-01"}
+        )
         assert values["polaris_patron_birthdate"] == "1990-01-01"
