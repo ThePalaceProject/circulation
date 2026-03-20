@@ -12,15 +12,15 @@ Covers:
 
 from __future__ import annotations
 
-from abc import ABCMeta
-from typing import cast
-from unittest.mock import MagicMock, patch
+from typing import Any
+from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
 
 from palace.manager.api.authentication.basic import (
     BasicAuthenticationProvider,
     BasicAuthProviderLibrarySettings,
+    BasicAuthProviderSettings,
     PatronBlockingRulesSetting,
 )
 from palace.manager.api.authentication.patron_blocking_rules.mixin import (
@@ -32,6 +32,9 @@ from palace.manager.api.authentication.patron_blocking_rules.patron_blocking imp
     check_patron_blocking_rules_with_evaluator,
 )
 from palace.manager.api.problem_details import BLOCKED_BY_POLICY, INVALID_CREDENTIALS
+from palace.manager.integration.patron_auth.minimal_authentication import (
+    MinimalAuthenticationProvider,
+)
 from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.util.problem_detail import ProblemDetail
 from tests.fixtures.problem_detail import raises_problem_detail
@@ -39,6 +42,18 @@ from tests.fixtures.problem_detail import raises_problem_detail
 
 class ConcreteSettings(PatronBlockingRulesSetting, BasicAuthProviderLibrarySettings):
     """Minimal concrete settings class used to test :class:`PatronBlockingRulesSetting` in isolation."""
+
+
+class _ConcreteBlockingProvider(HasPatronBlockingRules, MinimalAuthenticationProvider):
+    """Minimal provider that actually inherits :class:`HasPatronBlockingRules`.
+
+    Used in :class:`TestBasicAuthenticationProvider` to exercise the blocking-rules
+    hook in :meth:`BasicAuthenticationProvider.authenticate` without metaclass tricks.
+    """
+
+    @classmethod
+    def fetch_live_rule_validation_values(cls, settings: Any) -> dict[str, Any]:
+        return {}
 
 
 class TestPatronBlockingRule:
@@ -394,33 +409,34 @@ class TestBasicAuthenticationProvider:
         """When the provider is an instance of HasPatronBlockingRules, a True rule
         intercepts the authenticated Patron and returns a 403 ProblemDetail."""
         mock_patron = MagicMock(spec=Patron)
+        mock_log = MagicMock()
 
-        provider = MagicMock(spec=BasicAuthenticationProvider)
+        provider = _ConcreteBlockingProvider(
+            0, 0, BasicAuthProviderSettings(), BasicAuthProviderLibrarySettings()
+        )
         provider.patron_blocking_rules = [
             PatronBlockingRule(
                 name="block-all", rule="True", message="Blocked by policy."
             )
         ]
-        provider._do_authenticate = MagicMock(return_value=(mock_patron, {}))
-        provider.log = MagicMock()
-
-        real_instancecheck = type(HasPatronBlockingRules).__instancecheck__
-
-        def mock_instancecheck(cls: type, instance: object) -> bool:
-            return instance is provider or real_instancecheck(cls, instance)
 
         with patch.object(
-            cast(ABCMeta, type(HasPatronBlockingRules)),
-            "__instancecheck__",
-            mock_instancecheck,
+            _ConcreteBlockingProvider,
+            "log",
+            new_callable=PropertyMock,
+            return_value=mock_log,
+        ), patch.object(
+            _ConcreteBlockingProvider,
+            "_do_authenticate",
+            return_value=(mock_patron, {}),
         ):
-            result = BasicAuthenticationProvider.authenticate(provider, MagicMock(), {})
+            result = provider.authenticate(MagicMock(), {})
 
         assert isinstance(result, ProblemDetail)
         assert result.status_code == 403
         assert result.uri == BLOCKED_BY_POLICY.uri
         assert result.detail == "Blocked by policy."
-        provider.log.info.assert_any_call("Patron blocking rules evaluation attempted")
+        mock_log.info.assert_any_call("Patron blocking rules evaluation attempted")
 
     def test_blocking_not_applied_when_do_authenticate_returns_none(self) -> None:
         """When _do_authenticate returns None (bad credentials), blocking rules
@@ -453,25 +469,26 @@ class TestBasicAuthenticationProvider:
     def test_false_rule_does_not_block(self) -> None:
         """A False rule does not block the patron."""
         mock_patron = MagicMock(spec=Patron)
+        mock_log = MagicMock()
 
-        provider = MagicMock(spec=BasicAuthenticationProvider)
+        provider = _ConcreteBlockingProvider(
+            0, 0, BasicAuthProviderSettings(), BasicAuthProviderLibrarySettings()
+        )
         provider.patron_blocking_rules = [
             PatronBlockingRule(name="never-block", rule="False")
         ]
-        provider._do_authenticate = MagicMock(return_value=(mock_patron, {}))
-        provider.log = MagicMock()
-
-        real_instancecheck = type(HasPatronBlockingRules).__instancecheck__
-
-        def mock_instancecheck(cls: type, instance: object) -> bool:
-            return instance is provider or real_instancecheck(cls, instance)
 
         with patch.object(
-            cast(ABCMeta, type(HasPatronBlockingRules)),
-            "__instancecheck__",
-            mock_instancecheck,
+            _ConcreteBlockingProvider,
+            "log",
+            new_callable=PropertyMock,
+            return_value=mock_log,
+        ), patch.object(
+            _ConcreteBlockingProvider,
+            "_do_authenticate",
+            return_value=(mock_patron, {}),
         ):
-            result = BasicAuthenticationProvider.authenticate(provider, MagicMock(), {})
+            result = provider.authenticate(MagicMock(), {})
 
         assert result is mock_patron
-        provider.log.info.assert_any_call("Patron blocking rules evaluation attempted")
+        mock_log.info.assert_any_call("Patron blocking rules evaluation attempted")
