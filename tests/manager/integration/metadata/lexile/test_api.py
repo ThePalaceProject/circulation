@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 import pytest
 
 from palace.manager.core.exceptions import IntegrationException
 from palace.manager.integration.metadata.lexile.api import LexileDBAPI
 from palace.manager.integration.metadata.lexile.settings import LexileDBSettings
+from palace.manager.util.http.http import HTTP
 from tests.fixtures.http import MockHttpClientFixture
 
 
@@ -197,3 +200,120 @@ class TestLexileDBAPI:
             api.fetch_lexile_for_isbn("9780123456789", raise_on_error=True)
 
         assert "authentication" in str(excinfo.value).lower()
+
+    def test_fetch_lexile_for_isbn_http_exception_returns_none(
+        self, http_client: MockHttpClientFixture
+    ) -> None:
+        """API returns None when HTTP request raises an exception."""
+        with patch.object(
+            HTTP, "get_with_timeout", side_effect=Exception("Connection refused")
+        ):
+            settings = LexileDBSettings(
+                username="user",
+                password="pass",
+                base_url="https://api.example.com",
+            )
+            api = LexileDBAPI(settings)
+
+            result = api.fetch_lexile_for_isbn("9780123456789")
+
+        assert result is None
+
+    def test_fetch_lexile_for_isbn_http_exception_raise_on_error(
+        self, http_client: MockHttpClientFixture
+    ) -> None:
+        """API raises IntegrationException when HTTP request fails and raise_on_error=True."""
+        with patch.object(
+            HTTP, "get_with_timeout", side_effect=Exception("Connection refused")
+        ):
+            settings = LexileDBSettings(
+                username="user",
+                password="pass",
+                base_url="https://api.example.com",
+            )
+            api = LexileDBAPI(settings)
+
+            with pytest.raises(IntegrationException) as excinfo:
+                api.fetch_lexile_for_isbn("9780123456789", raise_on_error=True)
+
+        assert excinfo.value.message == "Lexile API request failed"
+        assert excinfo.value.debug_message == "Connection refused"
+
+    def test_fetch_lexile_for_isbn_non_401_403_raise_on_error(
+        self, http_client: MockHttpClientFixture
+    ) -> None:
+        """API raises IntegrationException on 500 when raise_on_error=True."""
+        http_client.queue_response(500, content="Internal Server Error")
+        settings = LexileDBSettings(
+            username="user",
+            password="pass",
+            base_url="https://api.example.com",
+        )
+        api = LexileDBAPI(settings)
+
+        with pytest.raises(IntegrationException) as excinfo:
+            api.fetch_lexile_for_isbn("9780123456789", raise_on_error=True)
+
+        assert excinfo.value.message == "Lexile API request failed"
+        assert "500" in (excinfo.value.debug_message or "")
+
+    def test_fetch_lexile_for_isbn_invalid_json(
+        self, http_client: MockHttpClientFixture
+    ) -> None:
+        """API returns None when response body is invalid JSON."""
+        http_client.queue_response(200, content="not valid json")
+        settings = LexileDBSettings(
+            username="user",
+            password="pass",
+            base_url="https://api.example.com",
+        )
+        api = LexileDBAPI(settings)
+
+        result = api.fetch_lexile_for_isbn("9780123456789")
+
+        assert result is None
+
+    def test_fetch_lexile_for_isbn_non_numeric_lexile(
+        self, http_client: MockHttpClientFixture
+    ) -> None:
+        """API returns None when lexile field is non-numeric."""
+        http_client.queue_response(
+            200,
+            content={
+                "meta": {"total_count": 1},
+                "objects": [{"lexile": "abc"}],
+            },
+        )
+        settings = LexileDBSettings(
+            username="user",
+            password="pass",
+            base_url="https://api.example.com",
+        )
+        api = LexileDBAPI(settings)
+
+        result = api.fetch_lexile_for_isbn("9780123456789")
+
+        assert result is None
+
+    def test_fetch_lexile_for_isbn_base_url_trailing_slash(
+        self, http_client: MockHttpClientFixture
+    ) -> None:
+        """API constructs URL correctly when base_url has trailing slash."""
+        http_client.queue_response(
+            200,
+            content={
+                "meta": {"total_count": 1},
+                "objects": [{"lexile": 650}],
+            },
+        )
+        settings = LexileDBSettings(
+            username="user",
+            password="pass",
+            base_url="https://api.example.com/",
+        )
+        api = LexileDBAPI(settings)
+
+        result = api.fetch_lexile_for_isbn("9780123456789")
+
+        assert result == 650
+        assert "https://api.example.com/api/fab/v3/book/" in http_client.requests[0]
