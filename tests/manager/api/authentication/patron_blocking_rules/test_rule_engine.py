@@ -20,22 +20,15 @@ from palace.manager.api.authentication.patron_blocking_rules.rule_engine import 
     validate_rule_expression,
 )
 
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
-
 
 @pytest.fixture()
 def evaluator():
     return make_evaluator()
 
 
-# ---------------------------------------------------------------------------
-# compile_rule_expression
-# ---------------------------------------------------------------------------
-
-
 class TestCompileRuleExpression:
+    """Tests for compile_rule_expression()."""
+
     def test_single_placeholder_replaced(self):
         result = compile_rule_expression("age_in_years({dob}) >= 18")
         assert "__v_dob" in result.compiled
@@ -75,12 +68,9 @@ class TestCompileRuleExpression:
     # validation is added (e.g. {123invalid}).
 
 
-# ---------------------------------------------------------------------------
-# build_names
-# ---------------------------------------------------------------------------
-
-
 class TestBuildNames:
+    """Tests for build_names()."""
+
     def test_maps_key_to_var_name(self):
         compiled = compile_rule_expression("{fines} >= 5")
         names = build_names(compiled, {"fines": 5.0})
@@ -135,12 +125,9 @@ class TestBuildNames:
         assert "__v_y" not in names
 
 
-# ---------------------------------------------------------------------------
-# validate_message
-# ---------------------------------------------------------------------------
-
-
 class TestValidateMessage:
+    """Tests for validate_message()."""
+
     def test_valid_message_passes(self):
         validate_message("Your account has outstanding fines.")
 
@@ -160,12 +147,9 @@ class TestValidateMessage:
             validate_message("x" * (MAX_MESSAGE_LENGTH + 1))
 
 
-# ---------------------------------------------------------------------------
-# validate_rule_expression
-# ---------------------------------------------------------------------------
-
-
 class TestValidateRuleExpression:
+    """Tests for validate_rule_expression()."""
+
     def test_valid_expression_passes(self, evaluator):
         validate_rule_expression(
             "{fines} > 5",
@@ -277,12 +261,9 @@ class TestValidateRuleExpression:
         assert result is None
 
 
-# ---------------------------------------------------------------------------
-# evaluate_rule_expression_strict_bool
-# ---------------------------------------------------------------------------
-
-
 class TestEvaluateRuleExpressionStrictBool:
+    """Tests for evaluate_rule_expression_strict_bool()."""
+
     def test_true_result_returned(self, evaluator):
         result = evaluate_rule_expression_strict_bool(
             "{fines} > 5",
@@ -406,12 +387,9 @@ class TestEvaluateRuleExpressionStrictBool:
             )
 
 
-# ---------------------------------------------------------------------------
-# age_in_years
-# ---------------------------------------------------------------------------
-
-
 class TestAgeInYears:
+    """Tests for age_in_years()."""
+
     _REF_DATE = date(2025, 6, 15)
 
     def test_exact_birthday_today(self):

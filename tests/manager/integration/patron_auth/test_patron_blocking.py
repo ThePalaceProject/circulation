@@ -40,11 +40,6 @@ class ConcreteSettings(PatronBlockingRulesSetting, BasicAuthProviderLibrarySetti
     """Minimal concrete settings class used to test PatronBlockingRulesSetting in isolation."""
 
 
-# ---------------------------------------------------------------------------
-# PatronBlockingRule value object
-# ---------------------------------------------------------------------------
-
-
 class TestPatronBlockingRule:
     """Unit tests for the PatronBlockingRule value object."""
 
@@ -72,11 +67,6 @@ class TestPatronBlockingRule:
         rule = PatronBlockingRule(name="r", rule="True", message="msg")
         restored = PatronBlockingRule.model_validate(rule.model_dump())
         assert restored == rule
-
-
-# ---------------------------------------------------------------------------
-# check_patron_blocking_rules_with_evaluator
-# ---------------------------------------------------------------------------
 
 
 class TestCheckPatronBlockingRulesWithEvaluator:
@@ -174,12 +164,9 @@ class TestCheckPatronBlockingRulesWithEvaluator:
         assert mock_log.error.called
 
 
-# ---------------------------------------------------------------------------
-# build_runtime_values_from_patron
-# ---------------------------------------------------------------------------
-
-
 class TestBuildRuntimeValuesFromPatron:
+    """Tests for build_runtime_values_from_patron()."""
+
     def _make_patron(self, fines=None, external_type=None):
         patron = MagicMock(spec=Patron)
         patron.fines = fines
@@ -215,11 +202,6 @@ class TestBuildRuntimeValuesFromPatron:
         patron = self._make_patron()
         values = build_runtime_values_from_patron(patron)
         assert isinstance(values, dict)
-
-
-# ---------------------------------------------------------------------------
-# PatronBlockingRulesSetting — patron_blocking_rules field validation
-# ---------------------------------------------------------------------------
 
 
 class TestBasicAuthLibrarySettingsBlockingRules:
@@ -378,11 +360,6 @@ class TestBasicAuthLibrarySettingsBlockingRules:
         rule = "T" * 1000
         settings = ConcreteSettings(patron_blocking_rules=[{"name": "r", "rule": rule}])
         assert settings.patron_blocking_rules[0].rule == rule
-
-
-# ---------------------------------------------------------------------------
-# HasPatronBlockingRules mixin + authenticate hook
-# ---------------------------------------------------------------------------
 
 
 class TestBasicAuthenticationProvider:
