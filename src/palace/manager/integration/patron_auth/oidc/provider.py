@@ -37,15 +37,6 @@ from palace.manager.util.problem_detail import (
 if TYPE_CHECKING:
     from palace.manager.core.selftest import SelfTestResult
 
-# TODO: These OPDS constants are provider-agnostic and should be moved to a shared
-# constants module if other authentication providers (e.g., SAML) need them.
-OPDS_URI_TEMPLATE_VARIABLES_PROPERTY = "uri_template_variables"
-OPDS_URI_TEMPLATE_VARIABLES_TYPE = (
-    "http://palaceproject.io/terms/uri-template/variables"
-)
-
-PALACE_REDIRECT_URI_TERM = "http://palaceproject.io/terms/redirect-uri"
-
 OIDC_CANNOT_DETERMINE_PATRON = pd(
     "http://palaceproject.io/terms/problem/auth/unrecoverable/oidc/cannot-identify-patron",
     status_code=401,
@@ -206,14 +197,6 @@ class OIDCAuthenticationProvider(
                     "rel": "logout",
                     "href": f"{logout_url}{{&{LOGOUT_REDIRECT_QUERY_PARAM}}}",
                     "templated": True,
-                    "properties": {
-                        OPDS_URI_TEMPLATE_VARIABLES_PROPERTY: {
-                            "type": OPDS_URI_TEMPLATE_VARIABLES_TYPE,
-                            "map": {
-                                LOGOUT_REDIRECT_QUERY_PARAM: PALACE_REDIRECT_URI_TERM,
-                            },
-                        },
-                    },
                 }
             )
 

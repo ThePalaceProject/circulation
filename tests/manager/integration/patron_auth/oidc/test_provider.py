@@ -16,9 +16,6 @@ from palace.manager.integration.patron_auth.oidc.configuration.model import (
 from palace.manager.integration.patron_auth.oidc.provider import (
     OIDC_CANNOT_DETERMINE_PATRON,
     OIDC_TOKEN_EXPIRED,
-    OPDS_URI_TEMPLATE_VARIABLES_PROPERTY,
-    OPDS_URI_TEMPLATE_VARIABLES_TYPE,
-    PALACE_REDIRECT_URI_TERM,
     OIDCAuthenticationProvider,
 )
 from palace.manager.integration.patron_auth.oidc.util import (
@@ -232,12 +229,7 @@ class TestOIDCAuthenticationProvider:
             assert library.short_name in logout_link["href"]
             assert f"{{&{LOGOUT_REDIRECT_QUERY_PARAM}}}" in logout_link["href"]
             assert logout_link["templated"] is True
-            assert logout_link["properties"] == {
-                OPDS_URI_TEMPLATE_VARIABLES_PROPERTY: {
-                    "type": OPDS_URI_TEMPLATE_VARIABLES_TYPE,
-                    "map": {LOGOUT_REDIRECT_QUERY_PARAM: PALACE_REDIRECT_URI_TERM},
-                }
-            }
+            assert "properties" not in logout_link
 
     def test_authentication_flow_document_without_logout_link(
         self, db: DatabaseTransactionFixture, oidc_provider
