@@ -78,6 +78,50 @@ class TestOIDCCredentialManager:
         else:
             assert "refresh_token" not in token_data
 
+    @pytest.mark.parametrize(
+        "value,expected_error",
+        [
+            pytest.param("not-json", "Invalid OIDC token format", id="invalid-json"),
+            pytest.param(
+                json.dumps({"access_token": "tok"}),
+                "missing or invalid id_token_claims",
+                id="missing-id-token-claims",
+            ),
+            pytest.param(
+                json.dumps({"id_token_claims": "not-a-dict", "access_token": "tok"}),
+                "missing or invalid id_token_claims",
+                id="non-dict-id-token-claims",
+            ),
+            pytest.param(
+                json.dumps({"id_token_claims": {"sub": "u"}}),
+                "missing access_token",
+                id="missing-access-token",
+            ),
+        ],
+    )
+    def test_parse_token_value_invalid(self, value: str, expected_error: str) -> None:
+        """Test parse_token_value raises ValueError for malformed input."""
+        with pytest.raises(ValueError, match=expected_error):
+            OIDCCredentialManager.parse_token_value(value)
+
+    def test_parse_token_value_success(
+        self, sample_id_token_claims: dict[str, str]
+    ) -> None:
+        """Test parse_token_value returns parsed dict for valid input."""
+        value = json.dumps(
+            {
+                "id_token_claims": sample_id_token_claims,
+                "access_token": "tok",
+                "refresh_token": "ref",
+                "id_token": "raw.jwt",
+            }
+        )
+        result = OIDCCredentialManager.parse_token_value(value)
+        assert result["id_token_claims"] == sample_id_token_claims
+        assert result["access_token"] == "tok"
+        assert result["refresh_token"] == "ref"
+        assert result["id_token"] == "raw.jwt"
+
     def test_extract_token_data_success(
         self,
         manager,
@@ -145,7 +189,7 @@ class TestOIDCCredentialManager:
 
         with pytest.raises(ValueError) as exc_info:
             manager.extract_token_data(credential)
-        assert "missing id_token_claims" in str(exc_info.value)
+        assert "missing or invalid id_token_claims" in str(exc_info.value)
 
     def test_extract_token_data_missing_access_token(
         self,

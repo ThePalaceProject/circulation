@@ -157,12 +157,25 @@ class OIDCAuthSettings(AuthProviderSettings, LoggerMixin):
     end_session_endpoint: Annotated[
         HttpUrl | None,
         FormMetadata(
-            label=_("End Session Endpoint (Optional)"),
+            label=_("End Session Endpoint (Manual Mode - Optional)"),
             description=_(
                 "OIDC provider's end session endpoint URL for RP-Initiated Logout. "
                 "Optional - enables logout functionality if supported by provider. "
                 "Automatically discovered if Issuer URL is provided. "
-                "Example: https://accounts.google.com/o/oauth2/revoke"
+                "Example: https://login.microsoftonline.com/common/oauth2/v2.0/logout"
+            ),
+        ),
+    ] = None
+
+    revocation_endpoint: Annotated[
+        HttpUrl | None,
+        FormMetadata(
+            label=_("Revocation Endpoint (Manual Mode - Optional)"),
+            description=_(
+                "OIDC provider's token revocation endpoint URL (RFC 7009). "
+                "Used to revoke access and refresh tokens on logout. "
+                "Automatically discovered if Issuer URL is provided. "
+                "Example: https://oauth2.googleapis.com/revoke"
             ),
         ),
     ] = None
@@ -417,6 +430,7 @@ class OIDCAuthSettings(AuthProviderSettings, LoggerMixin):
         "jwks_uri",
         "userinfo_endpoint",
         "end_session_endpoint",
+        "revocation_endpoint",
     )
     @classmethod
     def validate_url_fields(

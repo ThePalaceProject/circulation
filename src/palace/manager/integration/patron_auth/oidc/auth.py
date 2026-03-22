@@ -23,6 +23,7 @@ from palace.manager.integration.patron_auth.oidc.configuration.model import (
     OIDCAuthSettings,
 )
 from palace.manager.integration.patron_auth.oidc.util import (
+    OIDCDiscoveryError,
     OIDCUtility,
 )
 from palace.manager.integration.patron_auth.oidc.validator import (
@@ -257,9 +258,17 @@ class OIDCAuthenticationManager(LoggerMixin):
             "jwks_uri": self._settings.jwks_uri,
         }
 
-        # Add optional userinfo endpoint
+        # Add optional endpoints
         if self._settings.userinfo_endpoint:
             self._metadata["userinfo_endpoint"] = self._settings.userinfo_endpoint
+        if self._settings.end_session_endpoint:
+            self._metadata["end_session_endpoint"] = str(
+                self._settings.end_session_endpoint
+            )
+        if self._settings.revocation_endpoint:
+            self._metadata["revocation_endpoint"] = str(
+                self._settings.revocation_endpoint
+            )
 
         return self._metadata
 
@@ -476,6 +485,87 @@ class OIDCAuthenticationManager(LoggerMixin):
 
         self.log.info(f"Built logout URL for provider: {end_session_endpoint}")
         return logout_url
+
+    def _has_metadata_endpoints(self, *keys: str) -> bool:
+        """Return True if any of the given keys are present in provider metadata.
+
+        Silently returns False if metadata discovery fails.
+
+        :param keys: Metadata keys to check (e.g. ``"end_session_endpoint"``)
+        :return: True if any key has a truthy value in the discovered metadata
+        """
+        try:
+            metadata = self.get_provider_metadata()
+            return any(metadata.get(k) for k in keys)
+        except OIDCDiscoveryError:
+            return False
+
+    def supports_rp_initiated_logout(self) -> bool:
+        """Check if the OIDC provider supports RP-Initiated Logout.
+
+        Returns True if an end_session_endpoint is available via auto-discovery
+        or manual configuration.
+
+        :return: True if RP-Initiated Logout is supported
+        """
+        return self._has_metadata_endpoints("end_session_endpoint") or bool(
+            self._settings.end_session_endpoint
+        )
+
+    def supports_logout(self) -> bool:
+        """Check if the OIDC provider supports any form of logout.
+
+        Returns True if either an end_session_endpoint (RP-Initiated Logout) or
+        a revocation_endpoint (RFC 7009 token revocation) is available via
+        auto-discovery or manual configuration.
+
+        :return: True if any logout mechanism is supported
+        """
+        return self._has_metadata_endpoints(
+            "end_session_endpoint", "revocation_endpoint"
+        ) or bool(
+            self._settings.end_session_endpoint or self._settings.revocation_endpoint
+        )
+
+    def revoke_token(self, token: str, token_type_hint: str = "refresh_token") -> None:
+        """Revoke an OAuth 2.0 token via the token revocation endpoint (RFC 7009).
+
+        This is a best-effort operation. If the provider does not support revocation
+        or the call fails, the error is logged and suppressed.
+
+        :param token: Token to revoke
+        :param token_type_hint: Type hint for the token ('refresh_token' or 'access_token')
+        """
+        try:
+            metadata = self.get_provider_metadata()
+        except OIDCDiscoveryError:
+            self.log.debug("Cannot revoke token: failed to get provider metadata")
+            return
+
+        revocation_endpoint = metadata.get("revocation_endpoint")
+        if not revocation_endpoint:
+            self.log.debug(
+                "Provider does not support token revocation (no revocation_endpoint)"
+            )
+            return
+
+        data: dict[str, str] = {
+            "token": token,
+            "token_type_hint": token_type_hint,
+        }
+        auth = self._prepare_token_endpoint_auth(data)
+
+        try:
+            HTTP.post_with_timeout(
+                str(revocation_endpoint),
+                data=data,
+                auth=auth,
+                headers={"Accept": "application/json"},
+                allowed_response_codes=["2xx"],
+            )
+            self.log.info(f"Successfully revoked {token_type_hint}")
+        except (RequestNetworkException, RequestException):
+            self.log.warning("Token revocation failed (non-critical)", exc_info=True)
 
     def validate_id_token_hint(self, id_token: str) -> dict[str, Any]:
         """Validate ID token hint for logout.
