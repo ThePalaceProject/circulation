@@ -10,10 +10,7 @@ from celery.result import AsyncResult
 
 from palace.manager.celery.importer import import_workflow_lock
 from palace.manager.celery.tasks import overdrive
-from palace.manager.celery.tasks.overdrive import (
-    IMPORT_SKIPPED,
-    import_collection_group,
-)
+from palace.manager.celery.tasks.overdrive import import_collection_group
 from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.integration.license.overdrive.api import (
     BookInfoEndpoint,
@@ -410,7 +407,7 @@ class TestImportCollection:
         result = overdrive.import_collection.delay(collection.id).wait()
 
         mock_importer_class.assert_not_called()
-        assert result == {IMPORT_SKIPPED: True}
+        assert result == overdrive._import_skipped_payload()
         workflow_lock.release()
 
     @patch("palace.manager.celery.tasks.overdrive.OverdriveImporter")
@@ -527,8 +524,8 @@ class TestImportCollection:
             result = overdrive.import_collection.delay(collection.id).wait()
 
         # First attempt raises BadResponseException; lock is not released (ignored).
-        # Retry fails to acquire (lock still held), returns IMPORT_SKIPPED.
-        assert result == {IMPORT_SKIPPED: True}
+        # Retry fails to acquire (lock still held), returns skip payload.
+        assert result == overdrive._import_skipped_payload()
         workflow_lock = import_workflow_lock(
             redis_fixture.client, collection.id, random_value="any"
         )
@@ -735,9 +732,9 @@ class TestImportResultRouter:
         overdrive_import_fixture: OverdriveImportFixture,
         celery_fixture: CeleryFixture,
     ):
-        """When import_result has IMPORT_SKIPPED, router returns early without invoking chord."""
+        """When import_result has import_skipped, router returns early without invoking chord."""
         collection = overdrive_import_fixture.collection
-        import_result = {IMPORT_SKIPPED: True}
+        import_result = overdrive._import_skipped_payload()
 
         result = overdrive.import_result_router.delay(
             import_result=import_result,
@@ -747,7 +744,7 @@ class TestImportResultRouter:
         ).wait()
 
         mock_chord.apply_async.assert_not_called()
-        assert result == {IMPORT_SKIPPED: True}
+        assert result == overdrive._import_skipped_payload()
 
     @patch("palace.manager.celery.tasks.overdrive.import_children_and_cleanup_chord")
     def test_router_invokes_chord_when_import_completed(

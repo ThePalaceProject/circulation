@@ -1,5 +1,5 @@
 import datetime
-from typing import Any
+from typing import Any, Literal, TypedDict, TypeGuard
 from uuid import uuid4
 
 from celery import chain, chord, group, shared_task
@@ -24,6 +24,19 @@ from palace.manager.util.http.exception import (
 IMPORT_SKIPPED: str = "import_skipped"
 
 
+class ImportSkippedPayload(TypedDict):
+    """Payload returned when import is skipped (workflow lock already held)."""
+
+    import_skipped: Literal[True]
+
+
+class ImportRouterResult(TypedDict, total=False):
+    """Result of import_result_router: chord_id when chord runs, import_skipped when skipped."""
+
+    import_skipped: Literal[True]
+    chord_id: str | None
+
+
 @shared_task(
     queue=QueueNames.default,
     bind=True,
@@ -43,7 +56,7 @@ def import_collection(
     return_identifiers: bool = True,
     parent_identifiers: dict[str, Any] | None = None,
     lock_value: str | None = None,
-) -> IdentifierSet | dict[str, Any] | None:
+) -> IdentifierSet | ImportSkippedPayload | None:
     """
     Run an import for a single Overdrive collection.
 
@@ -101,7 +114,7 @@ def import_collection(
                 f"OverDrive import skipped for collection {collection_id}: "
                 "another import is already in progress."
             )
-            return {IMPORT_SKIPPED: True}
+            return _import_skipped_payload()
         if not workflow_lock_acquired and not is_first_page:
             task.log.warning(
                 f"OverDrive import for collection {collection_id}: workflow lock expired "
@@ -263,6 +276,18 @@ def import_collection_group(
     return {"chain_id": result.id}
 
 
+def _is_import_skipped(
+    result: IdentifierSet | dict[str, Any] | None,
+) -> TypeGuard[dict[str, Any]]:
+    """Type guard: True when result is the skip payload."""
+    return isinstance(result, dict) and result.get(IMPORT_SKIPPED) is True
+
+
+def _import_skipped_payload() -> ImportSkippedPayload:
+    """Build the skip payload for return values."""
+    return {"import_skipped": True}
+
+
 @shared_task(queue=QueueNames.default, bind=True)
 def import_result_router(
     task: Task,
@@ -270,7 +295,7 @@ def import_result_router(
     collection_id: int,
     import_all: bool,
     modified_since: datetime.datetime | None,
-) -> dict[str, Any]:
+) -> ImportRouterResult:
     """Route import result to child imports or short-circuit when skipped.
 
     This task receives the result of import_collection and either invokes the
@@ -278,20 +303,21 @@ def import_result_router(
     was skipped due to another import already in progress).
 
     :param import_result: Result from import_collection. Either an IdentifierSet
-        (or its serialized form), {IMPORT_SKIPPED: True} when skipped, or None
-        when the import returned no identifier set (e.g. marked for deletion).
+        (or its serialized form when passed through Celery), ImportSkippedPayload
+        when skipped, or None when the import returned no identifier set.
     :param collection_id: The parent collection ID.
     :param import_all: Whether to import all titles in children.
     :param modified_since: Only import titles modified after this datetime.
     :return: {"chord_id": "..."} when chord is invoked, {IMPORT_SKIPPED: True}
         when skipped, or {"chord_id": None} when import_result is None.
     """
-    if isinstance(import_result, dict) and import_result.get(IMPORT_SKIPPED):
+    if _is_import_skipped(import_result):
         task.log.info(
             f"OverDrive import skipped for collection {collection_id}: "
             "skipping child imports (another import already in progress)."
         )
-        return {IMPORT_SKIPPED: True}
+        skip_result: ImportRouterResult = {"import_skipped": True}
+        return skip_result
 
     if import_result is None:
         task.log.warning(
@@ -302,7 +328,7 @@ def import_result_router(
 
     identifier_set_info = (
         import_result.__json__()
-        if hasattr(import_result, "__json__")
+        if isinstance(import_result, IdentifierSet)
         else import_result
     )
     async_res = import_children_and_cleanup_chord.apply_async(
