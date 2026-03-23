@@ -53,8 +53,8 @@ def _query_isbns_without_lexile(
     :param session: Database session.
     :param offset: Offset for pagination.
     :param limit: Maximum number of identifiers to return.
-    :param force: If True, include all ISBNs (including those with Lexile from other
-        sources). If False, only include ISBNs with no Lexile classification.
+    :param force: If True, include all ISBNs (including those that already have lexile scores from
+      Lexile DB).  If False, only include ISBNs without Lexile classification.
     :return: List of Identifier objects.
     """
     lexile_subject_exists = (
