@@ -212,6 +212,7 @@ module = [
     # contains a couple version strings it can be safely ignored
     "palace.manager._version",
     "pyld",
+    "simpleeval",
     "textblob.*",
     "unicodecsv",
     "uwsgi",
@@ -284,6 +285,7 @@ pyyaml = "^6.0"
 redis = "^6.4.0"
 redmail = "^0.6.0"
 requests = "^2.29"
+simpleeval = "^1.0.3"
 sqlalchemy = {version = "^1.4", extras = ["mypy"]}
 tenacity = "^9.0.0"
 textblob = "0.19.0"

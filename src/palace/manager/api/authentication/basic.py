@@ -3,18 +3,20 @@ from __future__ import annotations
 import re
 from abc import ABC, abstractmethod
 from collections.abc import Generator
+from dataclasses import dataclass, field
 from enum import Enum
 from functools import partial
 from re import Pattern
 from typing import Annotated, Any, cast
 
 from flask import url_for
-from pydantic import PositiveInt, field_validator
+from pydantic import PositiveInt, field_validator, model_validator
 from pydantic_core.core_schema import ValidationInfo
 from sqlalchemy.orm import Session
 from werkzeug.datastructures import Authorization
 
 from palace.manager.api.admin.problem_details import (
+    INVALID_CONFIGURATION_OPTION,
     INVALID_LIBRARY_IDENTIFIER_RESTRICTION_REGULAR_EXPRESSION,
 )
 from palace.manager.api.authentication.base import (
@@ -25,6 +27,19 @@ from palace.manager.api.authentication.base import (
     PatronData,
     PatronLookupNotSupported,
 )
+from palace.manager.api.authentication.patron_blocking_rules.mixin import (
+    HasPatronBlockingRules,
+)
+from palace.manager.api.authentication.patron_blocking_rules.patron_blocking import (
+    PatronBlockingRule,
+    build_runtime_values_from_patron,
+    check_patron_blocking_rules_with_evaluator,
+)
+from palace.manager.api.authentication.patron_blocking_rules.rule_engine import (
+    MAX_RULE_LENGTH,
+    RuleValidationError,
+    validate_message,
+)
 from palace.manager.api.problem_details import (
     PATRON_OF_ANOTHER_LIBRARY,
     UNSUPPORTED_AUTHENTICATION_MECHANISM,
@@ -34,6 +49,7 @@ from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.core.exceptions import IntegrationException
 from palace.manager.core.selftest import SelfTestResult
 from palace.manager.integration.settings import (
+    BaseSettings,
     FormFieldType,
     FormMetadata,
     SettingsValidationError,
@@ -42,6 +58,12 @@ from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.util.log import elapsed_time_logging
 from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
+
+
+@dataclass
+class RemoteAuthResult:
+    patron_data: PatronData | ProblemDetail | None
+    extra_context: dict[str, Any] = field(default_factory=dict)
 
 
 class LibraryIdentifierRestriction(Enum):
@@ -190,7 +212,107 @@ class BasicAuthProviderSettings(AuthProviderSettings):
     ] = "PIN"
 
 
+class PatronBlockingRulesSetting(BaseSettings):
+    """Mixin for library settings that support patron blocking rules.
+
+    Presence of this mixin declares support; providers that inherit from it
+    can configure and validate patron blocking rules.
+    """
+
+    patron_blocking_rules: Annotated[
+        list[PatronBlockingRule],
+        FormMetadata(
+            label="Patron Blocking Rules",
+            description=(
+                "A list of rules that can block patron access after successful ILS "
+                "authentication. Each rule has a name, a rule expression, and an "
+                "optional message shown to the patron when blocked."
+            ),
+            hidden=True,
+        ),
+    ] = []
+
+    @field_validator("patron_blocking_rules")
+    @classmethod
+    def validate_patron_blocking_rules(
+        cls, rules: list[PatronBlockingRule]
+    ) -> list[PatronBlockingRule]:
+        """Validate patron blocking rules: non-empty name/rule, no duplicate names,
+        rule length <= 1000, and message length <= 1000.
+
+        Full expression validation (syntax, placeholder resolution, bool result)
+        is deferred to admin-save time via a live ILS call in
+        ``PatronAuthServicesController.process_validate_patron_blocking_rule``,
+        where real patron values are available.
+        """
+        names_seen: set[str] = set()
+        for i, rule in enumerate(rules):
+            if not rule.name:
+                raise SettingsValidationError(
+                    INVALID_CONFIGURATION_OPTION.detailed(
+                        f"Rule at index {i}: 'name' must not be empty"
+                    )
+                )
+            if not rule.rule:
+                raise SettingsValidationError(
+                    INVALID_CONFIGURATION_OPTION.detailed(
+                        f"Rule at index {i}: 'rule' expression must not be empty"
+                    )
+                )
+            if rule.name in names_seen:
+                raise SettingsValidationError(
+                    INVALID_CONFIGURATION_OPTION.detailed(
+                        f"Rule at index {i}: duplicate rule name '{rule.name}'"
+                    )
+                )
+            names_seen.add(rule.name)
+
+            if len(rule.rule) > MAX_RULE_LENGTH:
+                raise SettingsValidationError(
+                    INVALID_CONFIGURATION_OPTION.detailed(
+                        f"Rule at index {i} ('{rule.name}'): rule expression must not "
+                        f"exceed {MAX_RULE_LENGTH} characters."
+                    )
+                )
+
+            if rule.message is not None:
+                try:
+                    validate_message(rule.message)
+                except RuleValidationError as exc:
+                    raise SettingsValidationError(
+                        INVALID_CONFIGURATION_OPTION.detailed(
+                            f"Rule at index {i} ('{rule.name}'): {exc.message}"
+                        )
+                    ) from exc
+
+        return rules
+
+
 class BasicAuthProviderLibrarySettings(AuthProviderLibrarySettings):
+    """Library-scoped settings for basic auth providers.
+
+    Does not include patron_blocking_rules; providers that support them mix in
+    :class:`PatronBlockingRulesSetting`. This validator rejects attempts to
+    configure rules on providers that do not support them.
+    """
+
+    @model_validator(mode="before")
+    @classmethod
+    def reject_patron_blocking_rules_if_not_supported(
+        cls, data: dict[str, Any] | AuthProviderLibrarySettings
+    ) -> dict[str, Any] | AuthProviderLibrarySettings:
+        """Reject patron_blocking_rules when this settings class does not support them."""
+        if "patron_blocking_rules" in getattr(cls, "model_fields", {}):
+            return data
+        if isinstance(data, dict) and data.get("patron_blocking_rules"):
+            raise SettingsValidationError(
+                INVALID_CONFIGURATION_OPTION.detailed(
+                    "Patron blocking rules are not supported by this authentication "
+                    "provider. Rules are ignored at runtime."
+                )
+            )
+        return data
+
     # When multiple libraries share an ILS, a person may be able to
     # authenticate with the ILS but not be considered a patron of
     # _this_ library. This setting contains the rule for determining
@@ -315,6 +437,7 @@ class BasicAuthenticationProvider[
                 library_settings.library_identifier_restriction_criteria
             )
         )
+        self.patron_blocking_rules: list[PatronBlockingRule] = []
 
     def process_library_identifier_restriction_criteria(
         self, criteria: str | None
@@ -354,17 +477,22 @@ class BasicAuthenticationProvider[
     @abstractmethod
     def remote_authenticate(
         self, username: str, password: str | None
-    ) -> PatronData | ProblemDetail | None:
+    ) -> RemoteAuthResult:
         """Does the source of truth approve of these credentials?
 
-        If the credentials are valid, return a PatronData object. The PatronData object
-        has a `complete` field. This field on the returned PatronData object will be used
-        to determine if we need to call `remote_patron_lookup` later to get the complete
+        If the credentials are valid, return a RemoteAuthResult with patron_data
+        set to a PatronData object. The PatronData object has a `complete` field.
+        This field on the returned PatronData object will be used to determine
+        if we need to call `remote_patron_lookup` later to get the complete
         information about the patron.
 
-        If the credentials are invalid, return None.
+        If the credentials are invalid, return RemoteAuthResult(patron_data=None).
 
-        If there is a problem communicating with the remote, return a ProblemDetail.
+        If there is a problem communicating with the remote, return
+        RemoteAuthResult(patron_data=ProblemDetail).
+
+        Providers with richer upstream data (e.g. SIP2) may populate
+        extra_context for use in patron blocking rule evaluation.
         """
         ...
 
@@ -494,15 +622,69 @@ class BasicAuthenticationProvider[
             return value
         return value.strip()
 
+    def _build_blocking_rule_values(
+        self, patron: Patron, extra_context: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Build the values dict used when evaluating patron blocking rules.
+
+        The base implementation extracts the small set of values available on
+        the :class:`~palace.manager.sqlalchemy.model.patron.Patron` DB model
+        (``fines``, ``patron_type``).
+
+        Provider subclasses that have access to richer upstream data (e.g. the
+        full SIP2 response dict) should override this to return a more complete
+        mapping, using data from extra_context when available.
+
+        :param patron: The successfully authenticated patron.
+        :param extra_context: Provider-specific data from :meth:`remote_authenticate`
+            (e.g. raw SIP2 response dict).  Empty for providers that do not populate it.
+        :returns: Dict mapping placeholder key to resolved value for
+            :func:`~palace.manager.api.authentication.patron_blocking_rules
+            .patron_blocking.check_patron_blocking_rules_with_evaluator`.
+        """
+        return build_runtime_values_from_patron(patron)
+
     def authenticate(
         self, _db: Session, credentials: dict
     ) -> Patron | ProblemDetail | None:
         """Turn a set of credentials into a Patron object.
 
+        After the ILS successfully authenticates the patron, any configured
+        patron_blocking_rules are evaluated.  If a rule triggers a block,
+        a ProblemDetail is returned instead of the Patron object.
+
         :param credentials: A dictionary with keys `username` and `password`.
 
-        :return: A Patron if one can be authenticated; a ProblemDetail
-            if an error occurs; None if the credentials are missing or wrong.
+        :returns: A :class:`~palace.manager.sqlalchemy.model.patron.Patron` if one can
+            be authenticated; a :class:`~palace.manager.util.problem_detail.ProblemDetail`
+            if an error occurs or a blocking rule fires; ``None`` if the
+            credentials are missing or wrong.
+        """
+        result, extra_context = self._do_authenticate(_db, credentials)
+        if (
+            isinstance(self, HasPatronBlockingRules)
+            and self.patron_blocking_rules
+            and isinstance(result, Patron)
+        ):
+            # NOTE: This log is used by CloudWatch to count total patron blocking
+            # evaluations for error-rate calculation. Do not remove.
+            self.log.info("Patron blocking rules evaluation attempted")
+            values = self._build_blocking_rule_values(result, extra_context)
+            blocked = check_patron_blocking_rules_with_evaluator(
+                self.patron_blocking_rules, values, log=self.log
+            )
+            if blocked is not None:
+                return blocked
+        return result
+
+    def _do_authenticate(
+        self, _db: Session, credentials: dict
+    ) -> tuple[Patron | ProblemDetail | None, dict[str, Any]]:
+        """Core authentication logic (ILS round-trip + local patron lookup/create).
+
+        Separated from :meth:`authenticate` so that the blocking-rules hook
+        in that method has a single, clean intercept point regardless of
+        which code path inside this method resolves the patron.
         """
         username = self.scrub_credential(credentials.get("username")) or ""
         password = self.scrub_credential(credentials.get("password"))
@@ -513,13 +695,15 @@ class BasicAuthenticationProvider[
                 username,
                 result.details,
             )
-            return None
+            return None, {}
 
         # Check these credentials with the source of truth.
-        patrondata = self.remote_authenticate(username, password)
+        auth_result = self.remote_authenticate(username, password)
+        patrondata = auth_result.patron_data
+        extra_context = auth_result.extra_context
         if patrondata is None or isinstance(patrondata, ProblemDetail):
             # Either an error occurred or the credentials did not correspond to any patron.
-            return patrondata
+            return patrondata, extra_context
 
         # Check that the patron belongs to this library.
         patrondata = self.enforce_library_identifier_restriction(patrondata)
@@ -542,11 +726,11 @@ class BasicAuthenticationProvider[
                 if not isinstance(patrondata, PatronData):
                     # Something went wrong, we can't get the patron's information.
                     # so we fail the authentication process.
-                    return patrondata
+                    return patrondata, extra_context
 
             # Apply the information we have to the patron and return it.
             patrondata.apply(patron)
-            return patron
+            return patron, extra_context
 
         # At this point we didn't find the patron, so we want to look up the patron
         # with the remote, in case this allows us to find an existing patron, based
@@ -556,18 +740,18 @@ class BasicAuthenticationProvider[
             if not isinstance(patrondata, PatronData):
                 # Something went wrong, we can't get the patron's information.
                 # so we fail the authentication process.
-                return patrondata
+                return patrondata, extra_context
             patron = self.local_patron_lookup(_db, username, patrondata)
             if patron:
                 # We found the patron, so we apply the information we have to the patron and return it.
                 patrondata.apply(patron)
-                return patron
+                return patron, extra_context
 
         # We didn't find the patron, so we create a new patron with the information we have.
         patron, _ = patrondata.get_or_create_patron(
             _db, self.library_id, analytics=self.analytics
         )
-        return patron
+        return patron, extra_context
 
     def get_credential_from_header(self, auth: Authorization) -> str | None:
         """Extract a password credential from a WWW-Authenticate header

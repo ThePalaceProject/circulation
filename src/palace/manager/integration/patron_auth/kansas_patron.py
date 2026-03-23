@@ -8,6 +8,7 @@ from palace.manager.api.authentication.basic import (
     BasicAuthenticationProvider,
     BasicAuthProviderLibrarySettings,
     BasicAuthProviderSettings,
+    RemoteAuthResult,
 )
 from palace.manager.integration.settings import FormMetadata
 from palace.manager.sqlalchemy.model.patron import Patron
@@ -62,7 +63,7 @@ class KansasAuthenticationAPI(
 
     def remote_authenticate(
         self, username: str, password: str | None
-    ) -> PatronData | None:
+    ) -> RemoteAuthResult:
         # Create XML doc for request
         authorization_request = self.create_authorize_request(username, password)
         # Post request to the server
@@ -72,14 +73,16 @@ class KansasAuthenticationAPI(
             response.content
         )
         if not authorized:
-            return None
+            return RemoteAuthResult(patron_data=None)
         # Kansas auth gives very little data about the patron. Only name and a library identifier.
-        return PatronData(
-            permanent_id=username,
-            authorization_identifier=username,
-            personal_name=patron_name,
-            library_identifier=library_identifier,
-            complete=True,
+        return RemoteAuthResult(
+            patron_data=PatronData(
+                permanent_id=username,
+                authorization_identifier=username,
+                personal_name=patron_name,
+                library_identifier=library_identifier,
+                complete=True,
+            )
         )
 
     def remote_patron_lookup(

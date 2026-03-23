@@ -10,11 +10,20 @@ from annotated_types import Ge, Le
 from pydantic import PositiveInt
 from sqlalchemy.orm import Session
 
+from palace.manager.api.admin.problem_details import INVALID_CONFIGURATION_OPTION
 from palace.manager.api.authentication.base import PatronAuthResult, PatronData
 from palace.manager.api.authentication.basic import (
     BasicAuthenticationProvider,
     BasicAuthProviderLibrarySettings,
     BasicAuthProviderSettings,
+    PatronBlockingRulesSetting,
+    RemoteAuthResult,
+)
+from palace.manager.api.authentication.patron_blocking_rules.mixin import (
+    HasPatronBlockingRules,
+)
+from palace.manager.api.authentication.patron_blocking_rules.patron_blocking import (
+    build_runtime_values_from_patron,
 )
 from palace.manager.api.authentication.patron_debug import HasPatronDebug
 from palace.manager.api.problem_details import INVALID_CREDENTIALS
@@ -29,7 +38,7 @@ from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.util import MoneyUtility
 from palace.manager.util.network_diagnostics import run_network_diagnostics
-from palace.manager.util.problem_detail import ProblemDetail
+from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
 
 
 class SIP2Settings(BasicAuthProviderSettings):
@@ -199,7 +208,7 @@ class SIP2Settings(BasicAuthProviderSettings):
     ] = 3
 
 
-class SIP2LibrarySettings(BasicAuthProviderLibrarySettings):
+class SIP2LibrarySettings(PatronBlockingRulesSetting, BasicAuthProviderLibrarySettings):
     # Used as the SIP2 AO field.
     institution_id: Annotated[
         str | None,
@@ -212,6 +221,7 @@ class SIP2LibrarySettings(BasicAuthProviderLibrarySettings):
 
 class SIP2AuthenticationProvider(
     BasicAuthenticationProvider[SIP2Settings, SIP2LibrarySettings],
+    HasPatronBlockingRules,
     HasPatronDebug,
 ):
     DATE_FORMATS = ["%Y%m%d", "%Y%m%d%Z%H%M%S", "%Y%m%d    %H%M%S"]
@@ -230,6 +240,30 @@ class SIP2AuthenticationProvider(
         SIPClient.TOO_MANY_LOST: PatronData.TOO_MANY_LOST,
         SIPClient.RECALL_OVERDUE: PatronData.RECALL_OVERDUE,
     }
+
+    @staticmethod
+    def _build_values_from_sip2_info(info: dict[str, Any]) -> dict[str, Any]:
+        """Build a simpleeval values dict from a raw SIP2 ``patron_information`` dict.
+
+        Returns **all** fields present in the SIP2 response so that operators have
+        the widest possible set of keys to reference in blocking rules, plus a
+        normalised ``fines`` key derived from ``fee_amount``.
+
+        This is used at admin-save validation time (live SIP2 call) and at runtime
+        when richer SIP2 data is available in the auth flow.
+
+        :param info: The dict returned by
+            :meth:`~palace.manager.integration.patron_auth.sip2.client.SIPClient.patron_information`.
+        :returns: Dict mapping placeholder key to resolved value.  All raw SIP2
+            fields are included verbatim; the additional ``fines`` key is a parsed
+            :class:`float` derived from ``fee_amount``.
+        """
+        values: dict[str, Any] = dict(info)
+        try:
+            values["fines"] = float(MoneyUtility.parse(info.get("fee_amount") or "0"))
+        except (ValueError, TypeError):
+            values["fines"] = 0.0
+        return values
 
     def __init__(
         self,
@@ -260,6 +294,7 @@ class SIP2AuthenticationProvider(
         self.institution_id = library_settings.institution_id
         self.timeout = settings.timeout
         self._client = client
+        self.patron_blocking_rules = library_settings.patron_blocking_rules
 
         # Check if patrons should be blocked based on SIP status
         if settings.patron_status_block:
@@ -310,6 +345,120 @@ class SIP2AuthenticationProvider(
     def library_settings_class(cls) -> type[SIP2LibrarySettings]:
         return SIP2LibrarySettings
 
+    @staticmethod
+    def _build_client_from_settings(
+        settings: SIP2Settings, institution_id: str = ""
+    ) -> SIPClient:
+        """Build a :class:`SIPClient` from settings, for use without a provider instance."""
+        return SIPClient(
+            target_server=settings.url,
+            target_port=settings.port,
+            login_user_id=settings.username,
+            login_password=settings.password,
+            location_code=settings.location_code,
+            institution_id=institution_id,
+            separator=settings.field_separator,
+            use_ssl=settings.use_ssl,
+            ssl_cert=settings.ssl_certificate,
+            ssl_key=settings.ssl_key,
+            ssl_verification=settings.ssl_verification,
+            encoding=settings.encoding.value.lower(),
+            dialect=settings.ils,
+            timeout=settings.timeout,
+        )
+
+    @classmethod
+    def _fetch_patron_info_via_sip2(
+        cls,
+        settings: SIP2Settings,
+        username: str,
+        password: str | None,
+        institution_id: str = "",
+    ) -> dict[str, Any] | ProblemDetail:
+        """Fetch patron information from the SIP2 server using settings only.
+
+        Performs connect, login, sc_status, patron_information, end_session, disconnect.
+        Does not require a provider instance.
+
+        :param settings: The validated :class:`SIP2Settings`.
+        :param username: Patron identifier (e.g. test_identifier).
+        :param password: Patron password (e.g. test_password or empty string).
+        :param institution_id: Optional institution ID from library settings.
+        :returns: Raw SIP2 info dict on success, or a :class:`ProblemDetail` on error.
+        """
+        sip = cls._build_client_from_settings(settings, institution_id)
+        try:
+            sip.connect()
+            sip.login()
+            sip.sc_status()
+            info = sip.patron_information(username, password)
+            sip.end_session(username, password)
+            sip.disconnect()
+            return info
+        except OSError as e:
+            server_name = settings.url or "unknown server"
+            return INVALID_CREDENTIALS.detailed(
+                f"Error contacting authentication server ({server_name}). "
+                "Please try again later."
+            )
+
+    @classmethod
+    def fetch_live_rule_validation_values(
+        cls, settings: SIP2Settings
+    ) -> dict[str, Any]:
+        """Make a live SIP2 call and return placeholder values for rule validation.
+
+        Called at admin-save time when the library settings include patron blocking
+        rules.  Uses the provider's configured test identifier to fetch real patron
+        information from the SIP server and builds a values dict suitable for
+        passing to :func:`~palace.manager.api.authentication.patron_blocking_rules
+        .rule_engine.validate_rule_expression`.
+
+        This is intentionally a classmethod so it can be called without a
+        database session.  It constructs a SIP client directly from settings and
+        does not instantiate a provider.
+
+        :param settings: The validated :class:`SIP2Settings` for this integration.
+        :returns: A dict mapping placeholder key to resolved value, produced by
+            :meth:`_build_values_from_sip2_info`.
+        :raises ProblemDetailException: If ``test_identifier`` is not configured,
+            the SIP2 server cannot be reached, or the server returns an error
+            response.
+        """
+        if not settings.test_identifier:
+            raise ProblemDetailException(
+                INVALID_CONFIGURATION_OPTION.detailed(
+                    "A test identifier must be configured on this authentication "
+                    "service before patron blocking rules can be validated against "
+                    "live patron data."
+                )
+            )
+
+        try:
+            info = cls._fetch_patron_info_via_sip2(
+                settings,
+                settings.test_identifier,
+                settings.test_password or "",
+            )
+        except Exception as exc:
+            raise ProblemDetailException(
+                INVALID_CONFIGURATION_OPTION.detailed(
+                    f"Could not contact the SIP2 server while validating patron "
+                    f"blocking rules: {exc}"
+                )
+            ) from exc
+
+        if isinstance(info, ProblemDetail):
+            raise ProblemDetailException(
+                INVALID_CONFIGURATION_OPTION.detailed(
+                    f"SIP2 server returned an error while validating patron blocking "
+                    f"rules for test identifier {settings.test_identifier!r}: "
+                    f"{info.detail}"
+                )
+            )
+
+        return cls._build_values_from_sip2_info(info)
+
     def patron_information(
         self, username: str, password: str | None
     ) -> dict[str, Any] | ProblemDetail:
@@ -341,8 +490,12 @@ class SIP2AuthenticationProvider(
 
     def remote_authenticate(
         self, username: str, password: str | None
-    ) -> PatronData | None | ProblemDetail:
+    ) -> RemoteAuthResult:
         """Authenticate a patron with the SIP2 server.
+
+        Returns the raw SIP2 response dict in extra_context so that
+        :meth:`_build_blocking_rule_values` can use the full payload for
+        rule evaluation without requiring a second network call.
 
         :param username: The patron's username/barcode/card
             number/authorization identifier.
@@ -353,7 +506,32 @@ class SIP2AuthenticationProvider(
             # passing it on.
             password = None
         info = self.patron_information(username, password)
-        return self.info_to_patrondata(info)
+        extra_context = info if isinstance(info, dict) else {}
+        return RemoteAuthResult(
+            patron_data=self.info_to_patrondata(info),
+            extra_context=extra_context,
+        )
+
+    def _build_blocking_rule_values(
+        self, patron: Patron, extra_context: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Return the full SIP2 response dict as rule-evaluation values.
+
+        Uses the raw SIP2 ``patron_information`` payload passed via
+        extra_context from :meth:`remote_authenticate`.  If extra_context is
+        empty (e.g. in tests that bypass ``remote_authenticate``), falls back
+        to the patron-model values produced by
+        :func:`~palace.manager.api.authentication.patron_blocking_rules
+        .patron_blocking.build_runtime_values_from_patron`.
+
+        The returned dict contains **every field** returned by the SIP2 server
+        plus a normalised ``fines`` float key.  This allows blocking rules to
+        reference any SIP2 field by name (e.g. ``{sipserver_patron_class}``,
+        ``{fee_amount}``, ``{polaris_patron_birthdate}``).
+        """
+        if extra_context:
+            return self._build_values_from_sip2_info(extra_context)
+        return build_runtime_values_from_patron(patron)
 
     def patron_debug(
         self, username: str, password: str | None
