@@ -22,6 +22,10 @@ from palace.manager.data_layer.subject import SubjectData
 from palace.manager.integration.license.overdrive.constants import (
     OVERDRIVE_MAIN_ACCOUNT_ID,
 )
+from palace.manager.integration.license.overdrive.model import (
+    Availability,
+    AvailabilityAccount,
+)
 from palace.manager.integration.license.overdrive.util import _make_link_safe
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.classification import Classification, Subject
@@ -221,31 +225,41 @@ class OverdriveRepresentationExtractor(LoggerMixin):
                 processed.append(cls.overdrive_role_to_simplified_role[x])
         return processed
 
-    def book_info_to_circulation(self, book: dict[str, Any]) -> CirculationData:
-        """Note:  The json data passed into this method is from a different file/stream
-        from the json data that goes into the book_info_to_metadata() method.
+    def book_info_to_circulation(
+        self, availability: Availability, book_id: str | None = None
+    ) -> CirculationData:
+        """Convert an Overdrive availability document into a :class:`CirculationData` object.
+
+        Note: The availability data passed into this method is from a different
+        API endpoint than the metadata data that goes into
+        :meth:`book_info_to_bibliographic`.
+
+        :param availability: The parsed Overdrive availability document.
+        :param book_id: Optional Overdrive ID to use when the availability
+            document does not include a ``reserveId`` (e.g. a NotFound error
+            response).  If neither ``availability.reserve_id`` nor ``book_id``
+            is present, a :exc:`PalaceValueError` is raised.
         """
-        # In Overdrive, 'reserved' books show up as books on
-        # hold. There is no separate notion of reserved books.
+        # In Overdrive, 'reserved' books show up as books on hold.
         licenses_reserved = 0
 
         licenses_owned = None
         licenses_available = None
         patrons_in_hold_queue = None
 
-        # TODO: The only reason this works for a NotFound error is the
-        # circulation code sticks the known book ID into `book` ahead
-        # of time. That's a code smell indicating that this system
-        # needs to be refactored.
-        if "reserveId" in book and not "id" in book:
-            book["id"] = book["reserveId"]
-        if not "id" in book:
-            self.log.error("Book has no ID: %r", book)
+        # book_id takes precedence over the document's reserveId so that the
+        # caller can override the identifier (e.g. after a circulation lookup
+        # where the caller already knows the book's ID). Fall back to reserveId
+        # when no external book_id is provided (e.g. from the importer).
+        overdrive_id = book_id or availability.reserve_id
+        if not overdrive_id:
+            self.log.error("Availability has no ID: %r", availability)
             raise PalaceValueError("Book must have an id to be processed")
-        overdrive_id = book["id"]
+
         primary_identifier = IdentifierData(
             type=Identifier.OVERDRIVE_ID, identifier=overdrive_id
         )
+
         # TODO: We might be able to use this information to avoid the
         # need for explicit configuration of Advantage collections, or
         # at least to keep Advantage collections more up-to-date than
@@ -263,28 +277,24 @@ class OverdriveRepresentationExtractor(LoggerMixin):
         # similarly, though those can abruptly become unavailable, so
         # UNLIMITED_ACCESS is probably not appropriate.
 
-        error_code = book.get("errorCode")
         # TODO: It's not clear what other error codes there might be.
         # The current behavior will respond to errors other than
         # NotFound by leaving the book alone, but this might not be
         # the right behavior.
-        if error_code == "NotFound":
+        if availability.error_code == "NotFound":
             licenses_owned = 0
             licenses_available = 0
             patrons_in_hold_queue = 0
-        elif book.get("isOwnedByCollections") is not False:
+        elif availability.is_owned_by_collections is not False:
             # We own this book.
             licenses_owned = 0
             licenses_available = 0
 
-            for account in self._get_applicable_accounts(book.get("accounts", [])):
-                licenses_owned += int(account.get("copiesOwned", 0))
-                licenses_available += int(account.get("copiesAvailable", 0))
+            for account in self._get_applicable_accounts(availability.accounts):
+                licenses_owned += account.copies_owned
+                licenses_available += account.copies_available
 
-            if "numberOfHolds" in book:
-                if patrons_in_hold_queue is None:
-                    patrons_in_hold_queue = 0
-                patrons_in_hold_queue += book["numberOfHolds"]
+            patrons_in_hold_queue = availability.number_of_holds
 
         if licenses_owned is None:
             license_status = None
@@ -304,38 +314,26 @@ class OverdriveRepresentationExtractor(LoggerMixin):
         )
 
     def _get_applicable_accounts(
-        self, accounts: list[dict[str, Any]]
-    ) -> list[dict[str, Any]]:
+        self, accounts: list[AvailabilityAccount]
+    ) -> list[AvailabilityAccount]:
+        """Return the accounts from the availability document that apply to the
+        current Overdrive collection context.
+
+        For a parent collection, returns accounts for the main OverDrive
+        "library" and any sub-account with sharing enabled.
+
+        For a child Overdrive Advantage collection, returns only the account
+        matching that child's library ID (excluding shared copies, which are
+        counted with the parent).
         """
-        Returns those accounts from the accounts array that apply the
-        current overdrive collection context.
-
-        If this is an overdrive parent collection, we want to return accounts
-        associated with the main OverDrive "library" and any non-main account
-        with sharing enabled.
-
-        If this is a child OverDrive collection, then we return only the
-        account associated with that child's OverDrive Advantage "library".
-        Additionally, we want to exclude the account if it is "shared" since
-        we will be counting it with the parent collection.
-        """
-
         if self.library_id == OVERDRIVE_MAIN_ACCOUNT_ID:
-            # this is a parent collection
-            filtered_result = filter(
-                lambda account: account.get("id") == OVERDRIVE_MAIN_ACCOUNT_ID
-                or account.get("shared", False),
-                accounts,
-            )
+            # parent collection
+            return [
+                a for a in accounts if a.id == OVERDRIVE_MAIN_ACCOUNT_ID or a.shared
+            ]
         else:
-            # this is child collection
-            filtered_result = filter(
-                lambda account: account.get("id") == self.library_id
-                and not account.get("shared", False),
-                accounts,
-            )
-
-        return list(filtered_result)
+            # child Advantage collection
+            return [a for a in accounts if a.id == self.library_id and not a.shared]
 
     @classmethod
     def image_link_to_linkdata(
