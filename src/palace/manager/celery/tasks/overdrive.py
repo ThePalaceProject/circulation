@@ -263,14 +263,7 @@ def import_collection_group(
     return {"chain_id": result.id}
 
 
-@shared_task(
-    queue=QueueNames.default,
-    bind=True,
-    max_retries=4,
-    autoretry_for=(BadResponseException, RequestTimedOut),
-    throws=(RemoteIntegrationException,),
-    retry_backoff=60,
-)
+@shared_task(queue=QueueNames.default, bind=True)
 def import_result_router(
     task: Task,
     import_result: IdentifierSet | dict[str, Any] | None,
