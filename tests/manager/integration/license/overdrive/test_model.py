@@ -26,6 +26,9 @@ from palace.manager.integration.license.overdrive.exception import (
 from palace.manager.integration.license.overdrive.model import (
     Action,
     ActionField,
+    Availability,
+    AvailabilityAccount,
+    AvailabilityType,
     Checkout,
     Checkouts,
     ErrorResponse,
@@ -599,3 +602,93 @@ class TestPatronInformation:
 
         assert "checkouts" in patron_information.links
         assert "search" in patron_information.link_templates
+
+
+class TestAvailability:
+    def test_normal_availability(
+        self, overdrive_files_fixture: OverdriveFilesFixture
+    ) -> None:
+        availability = Availability.model_validate_json(
+            overdrive_files_fixture.sample_data(
+                "overdrive_availability_information.json"
+            )
+        )
+
+        assert availability.reserve_id == "2a005d55-a417-4053-b90d-7a38ca6d2065"
+        assert availability.availability_type == AvailabilityType.NORMAL
+        assert availability.available is False
+        assert availability.copies_available == 1
+        assert availability.copies_owned == 5
+        assert availability.number_of_holds == 0
+        assert availability.error_code is None
+        assert availability.is_owned_by_collections is None
+        assert len(availability.accounts) == 1
+
+        account = availability.accounts[0]
+        assert account.id == -1
+        assert account.copies_available == 1
+        assert account.copies_owned == 5
+        assert account.shared is False
+
+        assert "self" in availability.links
+
+    def test_availability_with_holds(
+        self, overdrive_files_fixture: OverdriveFilesFixture
+    ) -> None:
+        availability = Availability.model_validate_json(
+            overdrive_files_fixture.sample_data(
+                "overdrive_availability_information_holds.json"
+            )
+        )
+
+        assert availability.number_of_holds == 10
+        assert availability.copies_available == 0
+        assert availability.copies_owned == 5
+
+    def test_advantage_availability(
+        self, overdrive_files_fixture: OverdriveFilesFixture
+    ) -> None:
+        availability = Availability.model_validate_json(
+            overdrive_files_fixture.sample_data("overdrive_availability_advantage.json")
+        )
+
+        assert availability.available is True
+        assert len(availability.accounts) == 3
+
+        accounts_by_id = {a.id: a for a in availability.accounts}
+        assert accounts_by_id[61].copies_owned == 1
+        assert accounts_by_id[61].copies_available == 1
+        assert accounts_by_id[61].shared is False
+        assert accounts_by_id[63].copies_owned == 8
+        assert accounts_by_id[63].copies_available == 8
+        assert accounts_by_id[63].shared is True
+        assert accounts_by_id[-1].copies_owned == 2
+        assert accounts_by_id[-1].copies_available == 2
+
+    def test_not_found_error(
+        self, overdrive_files_fixture: OverdriveFilesFixture
+    ) -> None:
+        # A NotFound error response has no reserveId or accounts — it parses
+        # cleanly with all availability fields defaulted.
+        availability = Availability.model_validate_json(
+            overdrive_files_fixture.sample_data("overdrive_availability_not_found.json")
+        )
+
+        assert availability.reserve_id is None
+        assert availability.error_code == "NotFound"
+        assert availability.accounts == []
+        assert availability.copies_owned is None
+        assert availability.copies_available is None
+
+    def test_availability_type_enum(self) -> None:
+        for value in ("Normal", "AlwaysAvailable", "LimitedAvailability"):
+            availability = Availability.model_validate(
+                {"reserveId": "abc", "availabilityType": value}
+            )
+            assert availability.availability_type == AvailabilityType(value)
+
+    def test_availability_account_defaults(self) -> None:
+        account = AvailabilityAccount.model_validate({"id": 5})
+        assert account.copies_owned == 0
+        assert account.copies_available == 0
+        assert account.shared is False

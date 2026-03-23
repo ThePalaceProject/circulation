@@ -18,6 +18,7 @@ from palace.manager.integration.license.overdrive.api import (
     BookInfoEndpoint,
     OverdriveAPI,
 )
+from palace.manager.integration.license.overdrive.model import Availability
 from palace.manager.integration.license.overdrive.representation import (
     OverdriveRepresentationExtractor,
 )
@@ -162,8 +163,8 @@ class OverdriveImporter(LoggerMixin):
 
         # availability needs to be checked/updated in all but a few instances so it is
         # probably not worth the compute time to save ourselves a handful of unnecessary updates.
-        availability = book.get("availabilityV2", None)
-        if not availability:
+        availability_data = book.get("availabilityV2", None)
+        if not availability_data:
             # This is a rare and probably transient case where the availabilityV2
             # was not retrieved due to a 404 from OD.
             self.log.warning(
@@ -171,6 +172,7 @@ class OverdriveImporter(LoggerMixin):
                 f"arise when the OD returns a 404 for the availability url."
             )
         else:
+            availability = Availability.model_validate(availability_data)
             circulation = self._extractor.book_info_to_circulation(availability)
             # The circulation should never be null here because there is a non-null entry for availabilityV2 in the
             # book dictionary.  Mypy complains without an assertion or type hints.

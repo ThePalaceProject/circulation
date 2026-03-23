@@ -9,6 +9,7 @@ import pytest
 from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.data_layer.format import FormatData
 from palace.manager.data_layer.link import LinkData
+from palace.manager.integration.license.overdrive.model import Availability
 from palace.manager.integration.license.overdrive.representation import (
     OverdriveRepresentationExtractor,
 )
@@ -72,13 +73,14 @@ class TestOverdriveRepresentationExtractor:
         assert expect == OverdriveRepresentationExtractor.link(raw, "first")
 
     def test_book_info_to_circulation(self, overdrive_api_fixture: OverdriveAPIFixture):
-        # Tests that can convert an overdrive json block into a CirculationData object.
+        # Tests that can convert an overdrive availability document into a CirculationData object.
         fixture = overdrive_api_fixture
         session = overdrive_api_fixture.db.session
 
-        raw, info = fixture.sample_json("overdrive_availability_information_2.json")
+        raw, _ = fixture.sample_json("overdrive_availability_information_2.json")
+        availability = Availability.model_validate_json(raw)
         extractor = OverdriveRepresentationExtractor(fixture.api)
-        circulationdata = extractor.book_info_to_circulation(info)
+        circulationdata = extractor.book_info_to_circulation(availability)
 
         # NOTE: It's not realistic for licenses_available and
         # patrons_in_hold_queue to both be nonzero; this is just to
@@ -105,12 +107,13 @@ class TestOverdriveRepresentationExtractor:
         # different information from the same API responses as "main" Overdrive
         # accounts.
         fixture = overdrive_api_fixture
-        raw, info = fixture.sample_json("overdrive_availability_advantage.json")
+        raw, _ = fixture.sample_json("overdrive_availability_advantage.json")
+        availability = Availability.model_validate_json(raw)
 
         extractor = OverdriveRepresentationExtractor(fixture.api)
         # Calling in the context of a main account should return a count of
         # the main account and any shared sub account owned and available.
-        consortial_data = extractor.book_info_to_circulation(info)
+        consortial_data = extractor.book_info_to_circulation(availability)
         assert 10 == consortial_data.licenses_owned
         assert 10 == consortial_data.licenses_available
         assert LicensePoolStatus.ACTIVE == consortial_data.status
@@ -118,7 +121,7 @@ class TestOverdriveRepresentationExtractor:
         # Pretend to be an API for an Overdrive Advantage collection with
         # library ID 61.
         extractor = OverdriveRepresentationExtractor(MagicMock(advantage_library_id=61))
-        advantage_data = extractor.book_info_to_circulation(info)
+        advantage_data = extractor.book_info_to_circulation(availability)
         assert 1 == advantage_data.licenses_owned
         assert 1 == advantage_data.licenses_available
         assert LicensePoolStatus.ACTIVE == advantage_data.status
@@ -137,14 +140,14 @@ class TestOverdriveRepresentationExtractor:
         # CirculationData object at all, but this shouldn't happen in
         # a real scenario.
         extractor = OverdriveRepresentationExtractor(MagicMock(advantage_library_id=62))
-        advantage_data = extractor.book_info_to_circulation(info)
+        advantage_data = extractor.book_info_to_circulation(availability)
         assert 0 == advantage_data.licenses_owned
         assert 0 == advantage_data.licenses_available
 
         # Pretend to be an API for an Overdrive Advantage collection with
         # library ID 63 which contains shared copies.
         extractor = OverdriveRepresentationExtractor(MagicMock(advantage_library_id=63))
-        advantage_data = extractor.book_info_to_circulation(info)
+        advantage_data = extractor.book_info_to_circulation(availability)
         # since these copies are shared and counted as part of the main
         # context we do not count them here.
         assert 0 == advantage_data.licenses_owned
@@ -155,24 +158,23 @@ class TestOverdriveRepresentationExtractor:
     ):
         fixture = overdrive_api_fixture
         transaction = fixture.db
-        raw, info = fixture.sample_json("overdrive_availability_not_found.json")
+        raw, _ = fixture.sample_json("overdrive_availability_not_found.json")
+        availability = Availability.model_validate_json(raw)
 
-        # By default, a "NotFound" error can't be converted to a
-        # CirculationData object, because we don't know _which_ book it
-        # was that wasn't found.
+        # A "NotFound" error response has no reserveId. Without a book_id
+        # override we cannot identify the book.
         extractor = OverdriveRepresentationExtractor(fixture.api)
-        m = extractor.book_info_to_circulation
         with pytest.raises(
             PalaceValueError, match="Book must have an id to be processed"
         ):
-            m(info)
+            extractor.book_info_to_circulation(availability)
 
-        # However, if an ID was added to `info` ahead of time (as the
-        # circulation code does), we do know, and we can create a
-        # CirculationData.
+        # When the caller supplies the known book ID (as circulation code does
+        # via update_licensepool), we can produce a valid CirculationData.
         identifier = transaction.identifier(identifier_type=Identifier.OVERDRIVE_ID)
-        info["id"] = identifier.identifier
-        data = m(info)
+        data = extractor.book_info_to_circulation(
+            availability, book_id=identifier.identifier
+        )
         assert identifier == data.load_primary_identifier(transaction.session)
         assert 0 == data.licenses_owned
         assert 0 == data.licenses_available
@@ -193,13 +195,15 @@ class TestOverdriveRepresentationExtractor:
         fixture = overdrive_api_fixture
         extractor = OverdriveRepresentationExtractor(fixture.api)
 
-        # Create a mock info object that has neither an error code nor isOwnedByCollections
-        info = {
-            "id": "test-id-12345",
-            "isOwnedByCollections": False,  # Not owned, no error code
-        }
+        # isOwnedByCollections=False means the collection does not own this book.
+        availability = Availability.model_validate(
+            {
+                "reserveId": "test-id-12345",
+                "isOwnedByCollections": False,
+            }
+        )
 
-        data = extractor.book_info_to_circulation(info)
+        data = extractor.book_info_to_circulation(availability)
 
         # When we don't own the book and there's no error, licenses_owned is None
         assert data.licenses_owned is None

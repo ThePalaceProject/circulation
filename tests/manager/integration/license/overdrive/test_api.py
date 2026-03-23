@@ -35,7 +35,12 @@ from palace.manager.integration.license.overdrive.exception import (
 from palace.manager.integration.license.overdrive.fulfillment import (
     OverdriveManifestFulfillment,
 )
-from palace.manager.integration.license.overdrive.model import Checkout, Format, Link
+from palace.manager.integration.license.overdrive.model import (
+    Availability,
+    Checkout,
+    Format,
+    Link,
+)
 from palace.manager.integration.license.overdrive.representation import (
     OverdriveRepresentationExtractor,
 )
@@ -1741,6 +1746,7 @@ class TestOverdriveAPI:
         # Make it look like the availability information is for the
         # newly created Identifier.
         raw["reserveId"] = identifier.identifier
+        availability = Availability.model_validate(raw)
 
         pool, was_new = LicensePool.for_foreign_id(
             db.session,
@@ -1755,7 +1761,7 @@ class TestOverdriveAPI:
             was_new,
             changed,
         ) = overdrive_api_fixture.api.update_licensepool_with_book_info(
-            raw, pool, was_new
+            availability, identifier.identifier, pool, was_new
         )
         assert was_new is True
         assert changed is True
@@ -1784,7 +1790,7 @@ class TestOverdriveAPI:
 
         # Make it look like the availability information is for the
         # newly created LicensePool.
-        raw["id"] = pool.identifier.identifier
+        availability = Availability.model_validate(raw)
 
         wr.title = "The real title."
         assert pool.licenses_owned == 1
@@ -1797,7 +1803,7 @@ class TestOverdriveAPI:
             was_new,
             changed,
         ) = overdrive_api_fixture.api.update_licensepool_with_book_info(
-            raw, pool, False
+            availability, pool.identifier.identifier, pool, False
         )
         assert was_new is False
         assert changed is True
@@ -1829,7 +1835,7 @@ class TestOverdriveAPI:
         # Make it look like the availability information is for the
         # old pool's Identifier.
         identifier = old_pool.identifier
-        raw["id"] = identifier.identifier
+        availability = Availability.model_validate(raw)
 
         new_pool, was_new = LicensePool.for_foreign_id(
             db.session,
@@ -1848,7 +1854,7 @@ class TestOverdriveAPI:
             was_new,
             changed,
         ) = overdrive_api_fixture.api.update_licensepool_with_book_info(
-            raw, new_pool, was_new
+            availability, identifier.identifier, new_pool, was_new
         )
         assert new_pool is not None
         assert was_new is True
@@ -1863,7 +1869,7 @@ class TestOverdriveAPI:
             "overdrive_availability_information_holds.json"
         )
         identifier = db.identifier(identifier_type=Identifier.OVERDRIVE_ID)
-        raw["id"] = identifier.identifier
+        availability = Availability.model_validate(raw)
 
         license_pool, is_new = LicensePool.for_foreign_id(
             db.session,
@@ -1877,7 +1883,7 @@ class TestOverdriveAPI:
             was_new,
             changed,
         ) = overdrive_api_fixture.api.update_licensepool_with_book_info(
-            raw, license_pool, is_new
+            availability, identifier.identifier, license_pool, is_new
         )
         assert pool.patrons_in_hold_queue == 10
         assert changed is True
