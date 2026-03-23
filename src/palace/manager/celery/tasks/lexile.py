@@ -6,12 +6,13 @@ from datetime import timedelta
 from uuid import uuid4
 
 from celery import shared_task
+from celery.exceptions import Ignore
 from sqlalchemy import and_, delete, exists, select
 from sqlalchemy.orm import Session
 
 from palace.manager.celery.task import Task
 from palace.manager.core.config import CannotLoadConfiguration
-from palace.manager.integration.metadata.lexile.api import API_TIMEOUT, LexileDBAPI
+from palace.manager.integration.metadata.lexile.api import LexileDBAPI
 from palace.manager.integration.metadata.lexile.service import LexileDBService
 from palace.manager.service.celery.celery import QueueNames
 from palace.manager.service.redis.models.lock import RedisLock
@@ -28,23 +29,26 @@ from palace.manager.sqlalchemy.util import get_one, get_one_or_create
 from palace.manager.util.datetime_helpers import utc_now
 
 BATCH_SIZE = 10
-# 2× the worst-case sequential time for a full batch (BATCH_SIZE requests × API_TIMEOUT each).
-LOCK_TIMEOUT = timedelta(seconds=BATCH_SIZE * API_TIMEOUT * 2)
+# Workflow lock TTL: 2 hours, so a failed run will eventually unblock.
+WORKFLOW_LOCK_TIMEOUT = timedelta(hours=2)
 SERVICE_NAME = "Lexile DB Update"
 LEXILE_DB_LOCK_KEY: tuple[str, str] = ("LexileDB", "Update")
 
 
-def _lexile_db_lock(redis_client: Redis, lock_value: int | str) -> RedisLock:
-    """Create a RedisLock for the Lexile DB update.
+def _lexile_workflow_lock(redis_client: Redis, lock_value: str) -> RedisLock:
+    """Create a workflow-level RedisLock for the Lexile DB update.
 
-    :param lock_value: The lock value (timestamp_id for worker batches, or uuid for
-        the initial batch before a Timestamp exists).
+    The lock is held across all batches of a single run. ``lock_value`` is a UUID
+    generated on the first batch and passed to every replacement task, allowing
+    re-acquisition (extend) on each subsequent batch.
+
+    :param lock_value: UUID string identifying this workflow run.
     """
     return RedisLock(
         redis_client,
         list(LEXILE_DB_LOCK_KEY),
-        random_value=str(lock_value),
-        lock_timeout=LOCK_TIMEOUT,
+        random_value=lock_value,
+        lock_timeout=WORKFLOW_LOCK_TIMEOUT,
     )
 
 
@@ -158,8 +162,8 @@ def run_lexile_db_update(task: Task) -> None:
             return
 
         redis_client = task.services.redis().client()
-        lock = _lexile_db_lock(redis_client, "orchestrator")
-        if lock.locked():
+        # Check with a sentinel value — we only need to know if any lock is held.
+        if _lexile_workflow_lock(redis_client, "sentinel").locked():
             task.log.info("Lexile DB update already in progress, skipping.")
             return
 
@@ -173,15 +177,27 @@ def lexile_db_update_task(
     force: bool = False,
     offset: int = 0,
     timestamp_id: int | None = None,
+    lock_value: str | None = None,
 ) -> None:
     """Worker: process batches of ISBNs, fetching Lexile data from the API.
 
-    Uses task.replace() to continue with the next batch. Holds a lock across
-    replacements using the Timestamp id as the lock value so replacement tasks
-    can extend the lock.
+    Uses task.replace() to continue with the next batch. A workflow-level Redis
+    lock is held across all batches: acquired on the first batch (when lock_value
+    is None) and extended on each subsequent batch via re-acquisition with the same
+    UUID. The lock() context manager's ignored_exceptions=(Ignore,) ensures that the
+    lock is not released when task.replace() hands off to the next batch.
+
+    :param force: If True, reprocess ISBNs that already have a Lexile DB record.
+    :param offset: Pagination offset for the current batch.
+    :param timestamp_id: ID of the Timestamp DB record for this run. Required when offset > 0.
+    :param lock_value: UUID identifying this workflow run's lock. Generated on the first batch
+        and passed to every replacement task. Required when offset > 0.
     """
     if offset > 0 and timestamp_id is None:
         task.log.error("Lexile DB update: timestamp_id required when offset > 0")
+        return
+    if offset > 0 and lock_value is None:
+        task.log.error("Lexile DB update: lock_value required when offset > 0")
         return
 
     with task.transaction() as session:
@@ -191,16 +207,29 @@ def lexile_db_update_task(
             task.log.info(f"Lexile DB update skipped: {e}")
             return
 
-    # Use a provisional lock value for the initial batch; later batches use timestamp_id.
-    lock_value: int | str = timestamp_id if timestamp_id is not None else str(uuid4())
-    redis_client = task.services.redis().client()
-    lock = _lexile_db_lock(redis_client, lock_value)
-    if not lock.acquire():
-        task.log.info("Lexile DB update could not acquire lock, skipping.")
-        return
+    # is_first_batch is True only when no lock_value was passed in (fresh run).
+    is_first_batch = lock_value is None
+    if lock_value is None:
+        lock_value = str(uuid4())
 
-    identifiers: list[Identifier] = []
-    try:
+    redis_client = task.services.redis().client()
+    workflow_lock = _lexile_workflow_lock(redis_client, lock_value)
+
+    # Ignore is raised by task.replace() — it must not release the lock when chaining
+    # to the next batch, so the next batch can extend it with the same lock_value.
+    with workflow_lock.lock(
+        raise_when_not_acquired=False,
+        ignored_exceptions=(Ignore,),
+    ) as lock_acquired:
+        if not lock_acquired and is_first_batch:
+            task.log.info("Lexile DB update could not acquire lock, skipping.")
+            return
+        if not lock_acquired and not is_first_batch:
+            task.log.warning(
+                "Lexile DB update: workflow lock expired between batches; continuing."
+            )
+
+        identifiers: list[Identifier] = []
         with task.transaction() as session:
             if offset == 0:
                 stamp, _ = get_one_or_create(
@@ -247,15 +276,16 @@ def lexile_db_update_task(
 
         if len(identifiers) == BATCH_SIZE:
             # Celery expects replace() to be raised as an exception to trigger task chaining.
+            # Raising Ignore (via task.replace) is listed in ignored_exceptions above, so the
+            # workflow lock is NOT released here — the next batch task will extend it.
             raise task.replace(
                 lexile_db_update_task.s(
                     force=force,
                     offset=offset + BATCH_SIZE,
                     timestamp_id=timestamp_id,
+                    lock_value=lock_value,
                 )
             )
-    finally:
-        lock.release()
 
     task.log.info(
         f"Lexile DB update complete. Processed {len(identifiers)} identifiers at offset {offset}.",
