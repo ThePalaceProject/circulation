@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from datetime import timedelta
+from uuid import uuid4
 
 from celery import shared_task
-from sqlalchemy import and_, exists, select
+from sqlalchemy import and_, delete, exists, select
 from sqlalchemy.orm import Session
 
 from palace.manager.celery.task import Task
@@ -30,14 +31,19 @@ BATCH_SIZE = 10
 # 2× the worst-case sequential time for a full batch (BATCH_SIZE requests × API_TIMEOUT each).
 LOCK_TIMEOUT = timedelta(seconds=BATCH_SIZE * API_TIMEOUT * 2)
 SERVICE_NAME = "Lexile DB Update"
+LEXILE_DB_LOCK_KEY: tuple[str, str] = ("LexileDB", "Update")
 
 
-def _lexile_db_lock(redis_client: Redis, timestamp_id: int) -> RedisLock:
-    """Create a RedisLock for the Lexile DB update using timestamp_id as the lock value."""
+def _lexile_db_lock(redis_client: Redis, lock_value: int | str) -> RedisLock:
+    """Create a RedisLock for the Lexile DB update.
+
+    :param lock_value: The lock value (timestamp_id for worker batches, or uuid for
+        the initial batch before a Timestamp exists).
+    """
     return RedisLock(
         redis_client,
-        ["LexileDB", "Update"],
-        random_value=str(timestamp_id),
+        list(LEXILE_DB_LOCK_KEY),
+        random_value=str(lock_value),
         lock_timeout=LOCK_TIMEOUT,
     )
 
@@ -53,9 +59,14 @@ def _query_isbns_without_lexile(
     :param session: Database session.
     :param offset: Offset for pagination.
     :param limit: Maximum number of identifiers to return.
-    :param force: If True, include all ISBNs (including those that already have lexile scores from
-      Lexile DB).  If False, only include ISBNs without Lexile classification.
+    :param force: If True, include ISBNs that have no Lexile or already have a Lexile DB record
+      (to refresh from MetaMetrics). If False, only include ISBNs with no Lexile from any source.
     :return: List of Identifier objects.
+
+    Note: In force mode, ISBNs that have a Lexile score only from a third-party source (e.g.
+    Overdrive) are excluded. We only process ISBNs where we either have no Lexile data at all, or
+    we already have our own Lexile DB record to refresh. This avoids overwriting third-party
+    scores with a new Lexile DB lookup when we have never had authoritative data for that ISBN.
     """
     lexile_subject_exists = (
         select(Classification.id)
@@ -79,11 +90,8 @@ def _query_isbns_without_lexile(
     query = select(Identifier).where(Identifier.type == Identifier.ISBN)
 
     if force:
-        # Force: process ISBNs that have no Lexile at all, OR that already have a
-        # Lexile DB record (to pick up updated values from MetaMetrics).
-        # ISBNs that have a Lexile from another source only (e.g. Overdrive) are
-        # intentionally excluded — we don't overwrite third-party scores unless we
-        # have our own authoritative record to replace.
+        # Force: no Lexile at all, OR already have Lexile DB record (refresh from MetaMetrics).
+        # Third-party-only Lexiles (e.g. Overdrive) excluded; see docstring.
         query = query.where(~exists(lexile_subject_exists) | exists(lexile_db_exists))
     else:
         # Default: only process ISBNs with no Lexile classification from any source.
@@ -111,12 +119,19 @@ def _process_identifier(
 
     # For force mode: remove existing Lexile DB classification if present (in case value changed)
     if force:
-        for classification in list(identifier.classifications):
-            if (
-                classification.data_source.name == DataSourceConstants.LEXILE_DB
-                and classification.subject.type == Subject.LEXILE_SCORE
-            ):
-                session.delete(classification)
+        lexile_db_ids = (
+            select(Classification.id)
+            .where(
+                Classification.identifier_id == identifier.id,
+                Classification.data_source_id == data_source.id,
+            )
+            .join(Subject, Classification.subject_id == Subject.id)
+            .where(Subject.type == Subject.LEXILE_SCORE)
+        )
+        session.execute(
+            delete(Classification).where(Classification.id.in_(lexile_db_ids)),
+            execution_options={"synchronize_session": False},
+        )
 
     identifier.classify(
         data_source,
@@ -143,11 +158,7 @@ def run_lexile_db_update(task: Task) -> None:
             return
 
         redis_client = task.services.redis().client()
-        lock = RedisLock(
-            redis_client,
-            ["LexileDB", "Update"],
-            lock_timeout=LOCK_TIMEOUT,
-        )
+        lock = _lexile_db_lock(redis_client, "orchestrator")
         if lock.locked():
             task.log.info("Lexile DB update already in progress, skipping.")
             return
@@ -169,6 +180,10 @@ def lexile_db_update_task(
     replacements using the Timestamp id as the lock value so replacement tasks
     can extend the lock.
     """
+    if offset > 0 and timestamp_id is None:
+        task.log.error("Lexile DB update: timestamp_id required when offset > 0")
+        return
+
     with task.transaction() as session:
         try:
             service = LexileDBService.from_config(session)
@@ -176,26 +191,10 @@ def lexile_db_update_task(
             task.log.info(f"Lexile DB update skipped: {e}")
             return
 
-        if offset == 0:
-            stamp, _ = get_one_or_create(
-                session,
-                Timestamp,
-                service=SERVICE_NAME,
-                service_type=Timestamp.TASK_TYPE,
-                collection=None,
-            )
-            timestamp_id = stamp.id
-            stamp.start = utc_now()
-            stamp.finish = None
-            stamp.achievements = None
-            stamp.exception = None
-            session.commit()
-        elif timestamp_id is None:
-            task.log.error("Lexile DB update: timestamp_id required when offset > 0")
-            return
-
+    # Use a provisional lock value for the initial batch; later batches use timestamp_id.
+    lock_value: int | str = timestamp_id if timestamp_id is not None else str(uuid4())
     redis_client = task.services.redis().client()
-    lock = _lexile_db_lock(redis_client, timestamp_id)
+    lock = _lexile_db_lock(redis_client, lock_value)
     if not lock.acquire():
         task.log.info("Lexile DB update could not acquire lock, skipping.")
         return
@@ -203,13 +202,23 @@ def lexile_db_update_task(
     identifiers: list[Identifier] = []
     try:
         with task.transaction() as session:
+            if offset == 0:
+                stamp, _ = get_one_or_create(
+                    session,
+                    Timestamp,
+                    service=SERVICE_NAME,
+                    service_type=Timestamp.TASK_TYPE,
+                    collection=None,
+                )
+                timestamp_id = stamp.id
+                stamp.start = utc_now()
+                stamp.finish = None
+                stamp.achievements = None
+                stamp.exception = None
+
             data_source = DataSource.lookup(
                 session, DataSourceConstants.LEXILE_DB, autocreate=True
             )
-            if not data_source:
-                task.log.error("Lexile DB data source not found")
-                return
-
             api = LexileDBAPI(service.settings)
             identifiers = _query_isbns_without_lexile(
                 session, offset, BATCH_SIZE, force
@@ -237,6 +246,7 @@ def lexile_db_update_task(
                 )
 
         if len(identifiers) == BATCH_SIZE:
+            # Celery expects replace() to be raised as an exception to trigger task chaining.
             raise task.replace(
                 lexile_db_update_task.s(
                     force=force,

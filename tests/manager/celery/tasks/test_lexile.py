@@ -58,7 +58,13 @@ class TestLexileDBUpdate:
             ),
         )
         caplog.set_level(LogLevel.info)
-        lexile.run_lexile_db_update.delay().wait()
+        with patch.object(
+            lexile.lexile_db_update_task,
+            "delay",
+            wraps=lexile.lexile_db_update_task.delay,
+        ) as mock_delay:
+            lexile.run_lexile_db_update.delay().wait()
+        mock_delay.assert_called_once_with(force=False)
         assert "Lexile DB update task queued" in caplog.text
 
     def test_run_lexile_db_update_skipped_when_lock_already_held(
@@ -95,6 +101,29 @@ class TestLexileDBUpdate:
         caplog.set_level(LogLevel.info)
         lexile.lexile_db_update_task.delay(force=False).wait()
         assert "Lexile DB update skipped" in caplog.text
+
+    def test_lexile_db_update_task_errors_when_timestamp_id_missing_with_offset(
+        self,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        redis_fixture: RedisFixture,
+        caplog: LogCaptureFixture,
+    ) -> None:
+        """Worker logs error and returns when offset > 0 but timestamp_id is None."""
+        db.integration_configuration(
+            protocol=LexileDBService,
+            goal=Goals.METADATA_GOAL,
+            settings=LexileDBSettings(
+                username="user",
+                password="pass",
+                base_url="https://api.example.com",
+            ),
+        )
+        caplog.set_level(LogLevel.error)
+        lexile.lexile_db_update_task.delay(
+            force=False, offset=5, timestamp_id=None
+        ).wait()
+        assert "timestamp_id required when offset > 0" in caplog.text
 
     def test_lexile_db_update_task_adds_classification(
         self,
@@ -272,3 +301,93 @@ class TestLexileDBUpdate:
         assert sig.kwargs.get("offset") == lexile.BATCH_SIZE
         assert "timestamp_id" in sig.kwargs
         assert sig.kwargs["timestamp_id"] is not None
+
+    def test_lexile_db_update_task_excludes_overdrive_only_lexile_default_mode(
+        self,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        redis_fixture: RedisFixture,
+        http_client: MockHttpClientFixture,
+    ) -> None:
+        """Default mode does not process ISBNs that have Lexile only from Overdrive."""
+        db.integration_configuration(
+            protocol=LexileDBService,
+            goal=Goals.METADATA_GOAL,
+            settings=LexileDBSettings(
+                username="user",
+                password="pass",
+                base_url="https://api.example.com",
+            ),
+        )
+        overdrive_source = DataSource.lookup(
+            db.session, DataSourceConstants.OVERDRIVE, autocreate=True
+        )
+        identifier = db.identifier(
+            identifier_type=Identifier.ISBN, foreign_id="9780123456789"
+        )
+        identifier.classify(
+            overdrive_source,
+            Subject.LEXILE_SCORE,
+            "600",
+            None,
+            weight=Classification.TRUSTED_DISTRIBUTOR_WEIGHT,
+        )
+        db.session.commit()
+
+        lexile.lexile_db_update_task.delay(force=False).wait()
+
+        db.session.refresh(identifier)
+        lexile_classifications = [
+            c
+            for c in identifier.classifications
+            if c.subject.type == Subject.LEXILE_SCORE
+        ]
+        assert len(lexile_classifications) == 1
+        assert (
+            lexile_classifications[0].data_source.name == DataSourceConstants.OVERDRIVE
+        )
+
+    def test_lexile_db_update_task_excludes_overdrive_only_lexile_force_mode(
+        self,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        redis_fixture: RedisFixture,
+        http_client: MockHttpClientFixture,
+    ) -> None:
+        """Force mode does not process ISBNs that have Lexile only from Overdrive."""
+        db.integration_configuration(
+            protocol=LexileDBService,
+            goal=Goals.METADATA_GOAL,
+            settings=LexileDBSettings(
+                username="user",
+                password="pass",
+                base_url="https://api.example.com",
+            ),
+        )
+        overdrive_source = DataSource.lookup(
+            db.session, DataSourceConstants.OVERDRIVE, autocreate=True
+        )
+        identifier = db.identifier(
+            identifier_type=Identifier.ISBN, foreign_id="9780123456789"
+        )
+        identifier.classify(
+            overdrive_source,
+            Subject.LEXILE_SCORE,
+            "600",
+            None,
+            weight=Classification.TRUSTED_DISTRIBUTOR_WEIGHT,
+        )
+        db.session.commit()
+
+        lexile.lexile_db_update_task.delay(force=True).wait()
+
+        db.session.refresh(identifier)
+        lexile_classifications = [
+            c
+            for c in identifier.classifications
+            if c.subject.type == Subject.LEXILE_SCORE
+        ]
+        assert len(lexile_classifications) == 1
+        assert (
+            lexile_classifications[0].data_source.name == DataSourceConstants.OVERDRIVE
+        )

@@ -19,13 +19,11 @@ from palace.manager.integration.metadata.lexile.settings import (
 )
 from palace.manager.sqlalchemy.model.integration import IntegrationConfiguration
 from palace.manager.sqlalchemy.util import get_one
-from palace.manager.util.log import LoggerMixin
 
 
 class LexileDBService(
     MetadataService[LexileDBSettings],
     HasSelfTests,
-    LoggerMixin,
 ):
     """Augment Lexile scores from the authoritative MetaMetrics Lexile Titles Database.
 
@@ -41,10 +39,9 @@ class LexileDBService(
     ) -> None:
         """Initialize the service.
 
-        :param _db: Database session.
+        :param _db: Database session (required by the framework but not stored).
         :param settings: Lexile DB configuration.
         """
-        self._db = _db
         self._settings = settings
 
     @property
