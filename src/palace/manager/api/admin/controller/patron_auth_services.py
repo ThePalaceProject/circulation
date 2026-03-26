@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import flask
@@ -184,7 +185,11 @@ class PatronAuthServicesController(
         except ProblemDetailException as e:
             return e.problem_detail
 
-        return Response(status=200)
+        return Response(
+            json.dumps({"available_fields": live_values}),
+            status=200,
+            mimetype="application/json",
+        )
 
     def process_delete(self, service_id: int) -> Response | ProblemDetail:
         self.require_system_admin()
