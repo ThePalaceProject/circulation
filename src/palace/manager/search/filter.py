@@ -506,11 +506,14 @@ class Filter:
 
         # When sorting by author, exclude works with unknown authors.
         # The [Unknown] placeholder provides no useful sort information and
-        # can cause empty pages in the returned search results.
+        # can cause empty pages in the returned search results. We filter
+        # on author.keyword (exact match) rather than the analyzed
+        # sort_author field. The two fields are always in sync for the
+        # [Unknown] sentinel value.
         if self.primary_order == "sort_author":
             f = chain(
                 f,
-                Bool(must_not=[Term(sort_author=Edition.UNKNOWN_AUTHOR)]),
+                Bool(must_not=[Term(**{"author.keyword": Edition.UNKNOWN_AUTHOR})]),
             )
 
         # Perhaps only books whose bibliographic metadata was updated
