@@ -1115,6 +1115,48 @@ class TestFilter:
             == children_filter.target_age_filter.to_dict()
         )
 
+    def test_unknown_author_excluded_when_primary_sorting_by_author(self):
+        """When sorting by author, works with stale unknown sort data are excluded."""
+        sort_author_filter = {"match": {"sort_author": Edition.UNKNOWN_AUTHOR}}
+        display_author_filter = {"term": {"author.keyword": "[unknown]"}}
+
+        # When the primary sort field is sort_author, the filter should
+        # exclude works based on the sort_author field.
+        f = Filter()
+        f.order = "sort_author"
+        built, _ = f.build()
+        must_not = built.to_dict()["bool"]["must_not"]
+        assert sort_author_filter in must_not
+        assert display_author_filter not in must_not
+
+        # When order is a list containing sort_author as a primary field,
+        # same exclusion applies.
+        f2 = Filter()
+        f2.order = ["sort_author", "sort_title"]
+        built2, _ = f2.build()
+        assert sort_author_filter in built2.to_dict()["bool"]["must_not"]
+
+        # When sort_author is only a secondary key, no exclusion is added.
+        f3 = Filter()
+        f3.order = ["series_position", "sort_author"]
+        built3, _ = f3.build()
+        must_not = built3.to_dict().get("bool", {}).get("must_not", [])
+        assert sort_author_filter not in must_not
+
+        # When primary sort is NOT sort_author, no exclusion is added.
+        f4 = Filter()
+        f4.order = "sort_title"
+        built4, _ = f4.build()
+        must_not = built4.to_dict().get("bool", {}).get("must_not", [])
+        assert sort_author_filter not in must_not
+
+        # When there is no order at all, no such filter is added.
+        f5 = Filter()
+        built5, _ = f5.build()
+        if built5 is not None:
+            must_not = built5.to_dict().get("bool", {}).get("must_not", [])
+            assert sort_author_filter not in must_not
+
     def test__scrub(self):
         # Test the _scrub helper method, which transforms incoming strings
         # to the type of strings Opensearch uses.
@@ -1783,14 +1825,13 @@ class TestSearchOrder:
             collections=[transaction.default_collection()],
         )
 
-        # We can sort by author; 'Hohn' sorts before 'Melville' sorts
-        # before "[Unknown]"
+        # We can sort by author; 'Hohn' sorts before 'Melville'.
+        # Works with [Unknown] author are excluded when sorting by author.
         assert_order(
             Facets.ORDER_AUTHOR,
             [
                 data.moby_duck,
                 data.moby_dick,
-                data.untitled,
             ],
             collections=[transaction.default_collection()],
         )
