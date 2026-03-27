@@ -189,7 +189,12 @@ class TestSAMLWebSSOAuthenticationProvider:
                                     "language": "es",
                                 },
                             ],
-                        }
+                        },
+                        {
+                            "rel": "logout",
+                            "href": "http://localhost/default/saml/logout?provider=SAML+2.0+Web+SSO{&post_logout_redirect_uri}",
+                            "templated": True,
+                        },
                     ],
                 },
                 id="identity_provider_with_display_name",
@@ -217,7 +222,12 @@ class TestSAMLWebSSOAuthenticationProvider:
                             "information_urls": [],
                             "privacy_statement_urls": [],
                             "logo_urls": [],
-                        }
+                        },
+                        {
+                            "rel": "logout",
+                            "href": "http://localhost/default/saml/logout?provider=SAML+2.0+Web+SSO{&post_logout_redirect_uri}",
+                            "templated": True,
+                        },
                     ],
                 },
                 id="identity_provider_with_organization_display_name",
@@ -258,6 +268,11 @@ class TestSAMLWebSSOAuthenticationProvider:
                             "information_urls": [],
                             "privacy_statement_urls": [],
                             "logo_urls": [],
+                        },
+                        {
+                            "rel": "logout",
+                            "href": "http://localhost/default/saml/logout?provider=SAML+2.0+Web+SSO{&post_logout_redirect_uri}",
+                            "templated": True,
                         },
                     ],
                 },

@@ -6,6 +6,7 @@ from typing import Annotated, Any
 
 from annotated_types import Ge, Le
 from flask_babel import lazy_gettext as _
+from onelogin.saml2.constants import OneLogin_Saml2_Constants
 from onelogin.saml2.settings import OneLogin_Saml2_Settings
 from pydantic import PositiveInt, field_validator
 from sqlalchemy.orm import Session
@@ -462,6 +463,7 @@ class SAMLOneLoginConfiguration(LoggerMixin):
 
     IDP = "idp"
     SINGLE_SIGN_ON_SERVICE = "singleSignOnService"
+    SINGLE_LOGOUT_SERVICE = "singleLogoutService"
 
     SP = "sp"
     ASSERTION_CONSUMER_SERVICE = "assertionConsumerService"
@@ -639,7 +641,7 @@ class SAMLOneLoginConfiguration(LoggerMixin):
 
         :return: Dictionary containing service provider's settings in the OneLogin's SAML Toolkit format
         """
-        onelogin_identity_provider = {
+        onelogin_identity_provider: dict[str, Any] = {
             self.IDP: {
                 self.ENTITY_ID: identity_provider.entity_id,
                 self.SINGLE_SIGN_ON_SERVICE: {
@@ -651,6 +653,12 @@ class SAMLOneLoginConfiguration(LoggerMixin):
                 self.AUTHN_REQUESTS_SIGNED: identity_provider.want_authn_requests_signed
             },
         }
+
+        if identity_provider.slo_service:
+            onelogin_identity_provider[self.IDP][self.SINGLE_LOGOUT_SERVICE] = {
+                self.URL: identity_provider.slo_service.url,
+                self.BINDING: identity_provider.slo_service.binding.value,
+            }
 
         if (
             len(identity_provider.signing_certificates) == 1
@@ -812,3 +820,25 @@ class SAMLOneLoginConfiguration(LoggerMixin):
             self.SP: settings.get_sp_data(),
             self.SECURITY: settings.get_security_data(),
         }
+
+    def get_logout_settings(
+        self, db: Session, idp_entity_id: str, sp_slo_url: str
+    ) -> dict[str, Any]:
+        """Return settings for SAML SLO, extending base settings with SP SLO service URL.
+
+        The SP ``singleLogoutService`` is not part of the standard integration
+        settings (it's a runtime URL), so it must be patched in here. The IdP
+        ``singleLogoutService`` is included automatically by
+        ``_get_identity_provider_settings`` when the IdP's metadata contains one.
+
+        :param db: Database session
+        :param idp_entity_id: IdP's entity ID
+        :param sp_slo_url: Absolute URL for the SP's SLO callback endpoint
+        :return: Settings dict suitable for ``OneLogin_Saml2_Auth``
+        """
+        logout_settings = self.get_settings(db, idp_entity_id)
+        logout_settings[self.SP][self.SINGLE_LOGOUT_SERVICE] = {
+            self.URL: sp_slo_url,
+            self.BINDING: OneLogin_Saml2_Constants.BINDING_HTTP_REDIRECT,
+        }
+        return logout_settings

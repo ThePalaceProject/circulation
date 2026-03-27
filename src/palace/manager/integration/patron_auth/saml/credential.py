@@ -16,6 +16,7 @@ from palace.manager.sqlalchemy.model.credential import Credential
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.sqlalchemy.util import get_one_or_create
+from palace.manager.util.datetime_helpers import utc_now
 
 
 class SAMLCredentialManager:
@@ -169,3 +170,13 @@ class SAMLCredentialManager:
         )
 
         return credential
+
+    def invalidate_saml_token(
+        self, db: sqlalchemy.orm.session.Session, credential: Credential
+    ) -> None:
+        """Immediately expire a SAML credential, preventing further use.
+
+        :param db: Database session
+        :param credential: Credential to invalidate
+        """
+        credential.expires = utc_now()

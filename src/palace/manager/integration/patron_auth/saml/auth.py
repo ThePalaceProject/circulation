@@ -32,9 +32,12 @@ from palace.manager.integration.patron_auth.saml.python_expression_dsl.parser im
 from palace.manager.util.problem_detail import ProblemDetail as pd
 
 if TYPE_CHECKING:
+    import sqlalchemy.orm.session
+
     from palace.manager.integration.patron_auth.saml.configuration.model import (
         SAMLWebSSOAuthSettings,
     )
+    from palace.manager.integration.patron_auth.saml.metadata.model import SAMLNameID
 
 SAML_GENERIC_ERROR = pd(
     "http://librarysimplified.org/terms/problem/saml/generic-error",
@@ -128,7 +131,7 @@ class SAMLAuthenticationManager:
             "post_data": request.form.copy(),
         }
 
-    def _create_auth_object(self, db, idp_entity_id):
+    def _create_auth_object(self, db, idp_entity_id, settings=None):
         """Create and initialize an OneLogin_Saml2_Auth object.
 
         :param db: Database session
@@ -137,11 +140,16 @@ class SAMLAuthenticationManager:
         :param idp_entity_id: IdP's entityID
         :type idp_entity_id: string
 
+        :param settings: Optional pre-built settings dict. When provided, skips
+            ``get_settings`` so callers can supply custom settings (e.g. SLO settings).
+        :type settings: dict | None
+
         :return: OneLogin_Saml2_Auth object
         :rtype: OneLogin_Saml2_Auth
         """
         request_data = self._get_request_data()
-        settings = self._configuration.get_settings(db, idp_entity_id)
+        if settings is None:
+            settings = self._configuration.get_settings(db, idp_entity_id)
         auth = OneLogin_Saml2_Auth(request_data, old_settings=settings)
 
         return auth
@@ -249,6 +257,96 @@ class SAMLAuthenticationManager:
                 "Unexpected exception occurred while initiating authentication workflow"
             )
 
+            return SAML_GENERIC_ERROR.detailed(str(exception))
+
+    def start_logout(
+        self,
+        db: sqlalchemy.orm.session.Session,
+        idp_entity_id: str,
+        name_id: SAMLNameID,
+        sp_slo_callback_url: str,
+        relay_state: str,
+    ) -> str | pd:
+        """Initiate SP-Initiated SAML SLO by sending a LogoutRequest to the IdP.
+
+        :param db: Database session
+        :param idp_entity_id: IdP's entityID
+        :param name_id: Patron's SAML NameID from their existing session
+        :param sp_slo_callback_url: Absolute URL of our SLO callback endpoint
+        :param relay_state: State string to round-trip through the IdP (encodes redirect URI)
+        :return: Redirect URL to the IdP's SLO endpoint, or a ProblemDetail on error
+        """
+        self._logger.info(
+            f"Starting SLO for IdP '{idp_entity_id}' (callback={sp_slo_callback_url})"
+        )
+        try:
+            logout_settings = self._configuration.get_logout_settings(
+                db, idp_entity_id, sp_slo_callback_url
+            )
+            auth = self._create_auth_object(db, idp_entity_id, settings=logout_settings)
+            redirect_url = auth.logout(
+                return_to=relay_state,
+                name_id=name_id.name_id,
+                nq=name_id.name_qualifier,
+                name_id_format=name_id.name_format,
+                spnq=name_id.sp_name_qualifier,
+            )
+            self._logger.info(
+                f"SLO initiated for IdP '{idp_entity_id}': redirecting to {redirect_url}"
+            )
+            return redirect_url
+        except OneLogin_Saml2_Error as exception:
+            self._logger.exception("Unexpected error while initiating SAML SLO")
+            return SAML_GENERIC_ERROR.detailed(str(exception))
+
+    def finish_logout(
+        self,
+        db: sqlalchemy.orm.session.Session,
+        idp_entity_id: str,
+        sp_slo_callback_url: str,
+    ) -> bool | pd:
+        """Validate the IdP's LogoutResponse for SP-Initiated SLO.
+
+        Only handles SAMLResponse (LogoutResponse). IdP-Initiated SLO
+        (inbound SAMLRequest / LogoutRequest) is not supported.
+
+        :param db: Database session
+        :param idp_entity_id: IdP's entityID
+        :param sp_slo_callback_url: Absolute URL of our SLO callback endpoint
+        :return: True on success, or a ProblemDetail on error
+        """
+        request_data = self._get_request_data()
+
+        # Reject IdP-Initiated SLO (inbound LogoutRequest).
+        has_response = bool(
+            request_data.get("get_data", {}).get("SAMLResponse")
+            or request_data.get("post_data", {}).get("SAMLResponse")
+        )
+        if not has_response:
+            return SAML_GENERIC_ERROR.detailed(
+                "SAMLResponse not found; IdP-Initiated SLO is not supported"
+            )
+
+        self._logger.info(f"Processing SLO response for IdP '{idp_entity_id}'")
+        try:
+            logout_settings = self._configuration.get_logout_settings(
+                db, idp_entity_id, sp_slo_callback_url
+            )
+            auth = self._create_auth_object(db, idp_entity_id, settings=logout_settings)
+            auth.process_slo(keep_local_session=True)
+            errors = auth.get_errors()
+            if errors:
+                reason = auth.get_last_error_reason()
+                self._logger.error(f"SLO validation errors: {errors} — {reason}")
+                return SAML_GENERIC_ERROR.detailed(f"SLO validation failed: {reason}")
+            self._logger.info(
+                f"SLO response validated successfully for IdP '{idp_entity_id}'"
+            )
+            return True
+        except OneLogin_Saml2_Error as exception:
+            self._logger.exception(
+                "Unexpected error while processing SAML SLO response"
+            )
             return SAML_GENERIC_ERROR.detailed(str(exception))
 
     def finish_authentication(self, db, idp_entity_id):

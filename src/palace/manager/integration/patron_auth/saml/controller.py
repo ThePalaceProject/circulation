@@ -10,11 +10,13 @@ from urllib.parse import (
     urlunparse,
 )
 
-from flask import Response, redirect
+import jwt
+from flask import Response, redirect, request as flask_request, url_for
 from flask_babel import lazy_gettext as _
 from lxml import etree
 
 from palace.manager.api.util.flask import get_request_library
+from palace.manager.integration.patron_auth.constants import LOGOUT_REDIRECT_QUERY_PARAM
 from palace.manager.integration.patron_auth.saml.configuration.problem_details import (
     SAML_INCORRECT_METADATA,
     SAML_METADATA_NOT_CONFIGURED,
@@ -51,6 +53,13 @@ SAML_INVALID_RESPONSE = pd(
     detail=_("SAML invalid response."),
 )
 
+SAML_LOGOUT_FAILED = pd(
+    "http://palaceproject.io/terms/problem/auth/recoverable/saml/logout-failed",
+    status_code=400,
+    title=_("SAML logout failed."),
+    detail=_("An error occurred during SAML Single Logout."),
+)
+
 
 class SAMLController:
     """Controller used for handing SAML 2.0 authentication requests"""
@@ -63,6 +72,7 @@ class SAMLController:
     RELAY_STATE = "RelayState"
     ACCESS_TOKEN = "access_token"
     PATRON_INFO = "patron_info"
+    LOGOUT_STATUS = "logout_status"
 
     _SITE_WIDE_METADATA_CACHE_KEY: ClassVar[str | None] = None
     _sp_metadata_cache: ClassVar[dict[str | None, str | None]] = {}
@@ -416,6 +426,186 @@ class SAMLController:
         redirect_uri = self._add_params_to_url(redirect_uri, params)
 
         return redirect(redirect_uri)
+
+    def saml_logout_redirect(self, params, db):
+        """Initiate SP-Initiated SAML SLO.
+
+        Validates the patron's bearer token, immediately invalidates their local SAML
+        credential, then redirects to the IdP's SLO endpoint (if one is configured).
+        Falls back to a local-only logout redirect when the IdP does not support SLO.
+
+        :param params: Query parameters from the request
+        :param db: Database session
+        :return: Redirect response or ProblemDetail
+        """
+        provider_name = self._get_request_parameter(params, self.PROVIDER_NAME)
+        if isinstance(provider_name, ProblemDetail):
+            return provider_name
+
+        post_logout_redirect_uri = self._get_request_parameter(
+            params, LOGOUT_REDIRECT_QUERY_PARAM
+        )
+        if isinstance(post_logout_redirect_uri, ProblemDetail):
+            return post_logout_redirect_uri
+
+        auth_header = flask_request.headers.get("Authorization", "")
+        if not auth_header.startswith("Bearer "):
+            return SAML_INVALID_REQUEST.detailed(
+                _("Missing or invalid Authorization header")
+            )
+        cm_jwt = auth_header.removeprefix("Bearer ")
+
+        library = get_request_library()
+        library_authenticator = self._authenticator.library_authenticators.get(
+            library.short_name
+        )
+        if not library_authenticator:
+            return SAML_INVALID_REQUEST.detailed(
+                _("No authenticator found for library")
+            )
+
+        try:
+            decoded_provider_name, token_value = (
+                library_authenticator.decode_bearer_token(cm_jwt)
+            )
+        except jwt.exceptions.InvalidTokenError:
+            self._logger.warning("Invalid bearer token in SAML logout request")
+            return SAML_INVALID_REQUEST.detailed(_("Invalid bearer token"))
+
+        if decoded_provider_name != provider_name:
+            return SAML_INVALID_REQUEST.detailed(_("Provider mismatch in bearer token"))
+
+        provider = self._authenticator.saml_provider_lookup(provider_name)
+        if isinstance(provider, ProblemDetail):
+            return provider
+
+        credential = provider._credential_manager.lookup_saml_token_by_value(
+            db, token_value, library.id
+        )
+
+        name_id = None
+        idp_entity_id = None
+        if credential:
+            subject = provider._credential_manager.extract_saml_token(credential)
+            name_id = subject.name_id
+            idp_entity_id = subject.idp
+            provider._credential_manager.invalidate_saml_token(db, credential)
+
+        # If we can't identify the IdP or the patron's name ID, do a local-only logout.
+        if not name_id or not idp_entity_id:
+            final_uri = self._add_params_to_url(
+                post_logout_redirect_uri, {self.LOGOUT_STATUS: "success"}
+            )
+            return redirect(final_uri)
+
+        # Check if the IdP supports SLO.
+        auth_manager = provider.get_authentication_manager()
+        identity_providers = [
+            idp
+            for idp in auth_manager.configuration.get_identity_providers(db)
+            if idp.entity_id == idp_entity_id
+        ]
+        if not identity_providers or not identity_providers[0].slo_service:
+            final_uri = self._add_params_to_url(
+                post_logout_redirect_uri, {self.LOGOUT_STATUS: "success"}
+            )
+            return redirect(final_uri)
+
+        # Encode library/provider/idp into the relay state so the callback can
+        # reconstruct the context without server-side state storage.
+        relay_state = self._add_params_to_url(
+            post_logout_redirect_uri,
+            {
+                self.LIBRARY_SHORT_NAME: library.short_name,
+                self.PROVIDER_NAME: provider_name,
+                self.IDP_ENTITY_ID: idp_entity_id,
+            },
+        )
+
+        callback_url = url_for("saml_logout_callback", _external=True)
+        redirect_url = auth_manager.start_logout(
+            db, idp_entity_id, name_id, callback_url, relay_state
+        )
+        if isinstance(redirect_url, ProblemDetail):
+            self._logger.warning(
+                "Failed to initiate SAML SLO; falling back to partial logout"
+            )
+            final_uri = self._add_params_to_url(
+                post_logout_redirect_uri, {self.LOGOUT_STATUS: "partial"}
+            )
+            return redirect(final_uri)
+
+        return redirect(redirect_url)
+
+    def saml_logout_callback(self, request, db):
+        """Handle the IdP's LogoutResponse for SP-Initiated SAML SLO.
+
+        Validates the SAMLResponse and redirects the patron back to the
+        client app's redirect URI with a ``logout_status`` query parameter.
+
+        Supports both HTTP-Redirect (GET) and HTTP-POST binding.
+
+        :param request: Flask request object
+        :param db: Database session
+        :return: Redirect response or ProblemDetail
+        """
+        # Relay state may arrive via GET (HTTP-Redirect) or POST (HTTP-POST).
+        relay_state = request.args.get(self.RELAY_STATE) or request.form.get(
+            self.RELAY_STATE
+        )
+        if not relay_state:
+            return SAML_INVALID_RESPONSE.detailed(
+                _(
+                    "Required parameter {} is missing from the logout callback".format(
+                        self.RELAY_STATE
+                    )
+                )
+            )
+
+        relay_state_parse_result = urlparse(relay_state)
+        relay_state_parameters = parse_qs(relay_state_parse_result.query)
+
+        library_short_name = self._get_relay_state_parameter(
+            relay_state_parameters, self.LIBRARY_SHORT_NAME
+        )
+        if isinstance(library_short_name, ProblemDetail):
+            return library_short_name
+
+        provider_name = self._get_relay_state_parameter(
+            relay_state_parameters, self.PROVIDER_NAME
+        )
+        if isinstance(provider_name, ProblemDetail):
+            return provider_name
+
+        idp_entity_id = self._get_relay_state_parameter(
+            relay_state_parameters, self.IDP_ENTITY_ID
+        )
+        if isinstance(idp_entity_id, ProblemDetail):
+            return idp_entity_id
+
+        redirect_uri = self._get_redirect_uri(relay_state)
+
+        # Set request.library so invoke_authenticator_method can route correctly.
+        library = self._circulation_manager.index_controller.library_for_request(
+            library_short_name
+        )
+        if isinstance(library, ProblemDetail):
+            return self._redirect_with_error(redirect_uri, library)
+
+        provider = self._authenticator.saml_provider_lookup(provider_name)
+        if isinstance(provider, ProblemDetail):
+            return self._redirect_with_error(redirect_uri, provider)
+
+        auth_manager = provider.get_authentication_manager()
+        callback_url = url_for("saml_logout_callback", _external=True)
+        result = auth_manager.finish_logout(db, idp_entity_id, callback_url)
+        if isinstance(result, ProblemDetail):
+            return self._redirect_with_error(redirect_uri, result)
+
+        final_uri = self._add_params_to_url(
+            redirect_uri, {self.LOGOUT_STATUS: "success"}
+        )
+        return redirect(final_uri)
 
     def saml_sp_metadata(self) -> Response:
         """Returns the SAML SP metadata XML for the active library or system-wide.
