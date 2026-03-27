@@ -10,7 +10,6 @@ from opensearchpy import SF
 from opensearchpy.helpers.query import (
     Bool,
     Exists,
-    Match,
     MatchNone,
     Nested,
     Query as BaseQuery,
@@ -511,7 +510,7 @@ class Filter:
         if self.primary_order == "sort_author":
             f = chain(
                 f,
-                Bool(must_not=[Match(sort_author=Edition.UNKNOWN_AUTHOR)]),
+                Bool(must_not=[Term(sort_author=Edition.UNKNOWN_AUTHOR)]),
             )
 
         # Perhaps only books whose bibliographic metadata was updated

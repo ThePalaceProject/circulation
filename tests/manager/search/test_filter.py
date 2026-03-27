@@ -1117,7 +1117,7 @@ class TestFilter:
 
     def test_unknown_author_excluded_when_primary_sorting_by_author(self):
         """When sorting by author, works with stale unknown sort data are excluded."""
-        sort_author_filter = {"match": {"sort_author": Edition.UNKNOWN_AUTHOR}}
+        sort_author_filter = {"term": {"sort_author": Edition.UNKNOWN_AUTHOR}}
         display_author_filter = {"term": {"author.keyword": "[unknown]"}}
 
         # When the primary sort field is sort_author, the filter should
