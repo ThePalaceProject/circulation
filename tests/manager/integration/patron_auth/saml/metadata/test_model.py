@@ -519,6 +519,65 @@ class TestSAMLSubjectPatronIDExtractor:
                 "pairwiseId",
                 id="pairwise-id-with-regex-extraction",
             ),
+            pytest.param(
+                SAMLSubject(
+                    "http://idp.example.com",
+                    SAMLNameID(
+                        SAMLNameIDFormat.TRANSIENT.value, "", "", "transient-value"
+                    ),
+                    SAMLAttributeStatement([]),
+                ),
+                None,
+                True,
+                None,
+                None,
+                None,
+                id="transient-name-id-only",
+            ),
+            pytest.param(
+                SAMLSubject(
+                    "http://idp.example.com",
+                    SAMLNameID(
+                        SAMLNameIDFormat.TRANSIENT.value, "", "", "transient-value"
+                    ),
+                    SAMLAttributeStatement(
+                        [
+                            SAMLAttribute(
+                                name=SAMLAttributeType.eduPersonPrincipalName.name,
+                                values=["patron@university.org"],
+                            )
+                        ]
+                    ),
+                ),
+                None,
+                True,
+                [SAMLAttributeType.mail.name],
+                None,
+                None,
+                id="transient-name-id-no-attribute-match",
+            ),
+            pytest.param(
+                SAMLSubject(
+                    "http://idp.example.com",
+                    SAMLNameID(
+                        SAMLNameIDFormat.TRANSIENT.value, "", "", "transient-value"
+                    ),
+                    SAMLAttributeStatement(
+                        [
+                            SAMLAttribute(
+                                name=SAMLAttributeType.eduPersonUniqueId.name,
+                                values=["stable-id"],
+                            )
+                        ]
+                    ),
+                ),
+                "stable-id",
+                True,
+                None,
+                None,
+                "eduPersonUniqueId",
+                id="transient-name-id-with-matching-attribute",
+            ),
         ],
     )
     def test(

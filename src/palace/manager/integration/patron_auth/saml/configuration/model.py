@@ -155,7 +155,8 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
             label=_("Patron ID: SAML NameID"),
             description=_(
                 "Configuration setting indicating whether SAML NameID should be searched for a unique patron ID. "
-                "If NameID found, it will supersede any SAML attributes selected in the next section."
+                "NameID is only used as a fallback when no configured SAML attribute yields a patron ID. "
+                "TRANSIENT NameIDs are never used, regardless of this setting."
             ),
             type=FormFieldType.SELECT,
             options={

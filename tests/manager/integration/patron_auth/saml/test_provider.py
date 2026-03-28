@@ -436,6 +436,20 @@ class TestSAMLWebSSOAuthenticationProvider:
                 saml_strings.PATRON_ID_REGULAR_EXPRESSION_ORG,
                 id="subject_has_unique_id_not_matching_the_regular_expression",
             ),
+            pytest.param(
+                SAMLSubject(
+                    "http://idp.example.com",
+                    SAMLNameID(
+                        SAMLNameIDFormat.TRANSIENT.value, "", "", "transient-value"
+                    ),
+                    SAMLAttributeStatement([]),
+                ),
+                SAML_CANNOT_DETERMINE_PATRON,
+                True,
+                None,
+                None,
+                id="subject_has_only_transient_name_id",
+            ),
         ],
     )
     def test_remote_patron_lookup_from_saml_subject(
@@ -560,6 +574,20 @@ class TestSAMLWebSSOAuthenticationProvider:
                 None,
                 None,
                 id="subject_has_unique_id",
+            ),
+            pytest.param(
+                SAMLSubject(
+                    "http://idp.example.com",
+                    SAMLNameID(
+                        SAMLNameIDFormat.TRANSIENT.value, "", "", "transient-value"
+                    ),
+                    SAMLAttributeStatement([]),
+                ),
+                SAML_CANNOT_DETERMINE_PATRON,
+                None,
+                None,
+                None,
+                id="subject_has_only_transient_name_id",
             ),
             pytest.param(
                 SAMLSubject(
