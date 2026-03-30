@@ -1127,7 +1127,7 @@ class TestFilter:
         must_not = built.to_dict()["bool"]["must_not"]
         assert unknown_author_filter in must_not
 
-        # When order is a list containing sort_author as a primary field,
+        # When order is a list containing sort_author as the primary field,
         # same exclusion applies.
         f2 = Filter()
         f2.order = ["sort_author", "sort_title"]
