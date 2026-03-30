@@ -1989,13 +1989,15 @@ class TestLoanController:
         """
         pool2 = loan_fixture.second_pool()
 
+        # Give loan_fixture.pool a better hold-queue ratio so it is
+        # deterministically selected regardless of iteration order.
         loan_fixture.pool.licenses_available = 0
-        loan_fixture.pool.licenses_owned = 2
-        loan_fixture.pool.patrons_in_hold_queue = 4
+        loan_fixture.pool.licenses_owned = 4
+        loan_fixture.pool.patrons_in_hold_queue = 2
 
         pool2.licenses_available = 0
         pool2.licenses_owned = 2
-        pool2.patrons_in_hold_queue = 4
+        pool2.patrons_in_hold_queue = 6
 
         pool2.on_hold_to(
             loan_fixture.default_patron,
