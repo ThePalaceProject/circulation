@@ -1119,7 +1119,7 @@ class TestFilter:
         """When sorting by author, works with unknown authors are excluded."""
         unknown_author_filter = {"term": {"author.keyword": Edition.UNKNOWN_AUTHOR}}
 
-        # When the primary sort field is sort_author, the filter should
+        # When the only sort field is sort_author, the filter should
         # exclude works with [Unknown] author via author.keyword.
         f = Filter()
         f.order = "sort_author"
