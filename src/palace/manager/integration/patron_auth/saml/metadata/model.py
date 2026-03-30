@@ -1243,49 +1243,40 @@ class SAMLSubjectJSONDecoder(JSONDecoder):
 class SAMLSubjectPatronIDExtractor:
     """Extracts a unique patron ID from SAML subjects.
 
-    This class accepts several parameters in its constructor, allowing it to override its behavior.
-    The default behavior is described below.
+    The extraction strategy is controlled by three constructor parameters that map
+    directly to SAML integration settings:
 
-    Unfortunately, there is no single standard regarding what attributes can be treated as unique IDs.
-    Different systems use different attributes, and all of them have their pros and cons.
-    By default, this class looks for a unique patron ID in the following attributes.
+    - `attributes` — ordered list of SAML attribute names to check for a patron ID.
+      The first attribute present in the subject wins. When no attributes are
+      configured (i.e. `attributes` is `None` or empty), the default list
+      ``[eduPersonUniqueId, eduPersonTargetedID, uid]`` is used. This default
+      applies regardless of the `use_name_id` setting.
+
+    - `use_name_id` — when `True` (the default), the Name ID is used as a last
+      resort if no configured attribute yields a patron ID. TRANSIENT Name IDs are
+      always excluded regardless of this setting, because they change each login and
+      would create a new patron record on each login, orphaning the previous patron,
+      along with any of its loans, holds, and other settings.
+
+    - `regular_expression` — optional pattern applied to each candidate value (from
+      attributes or Name ID) before accepting it. The pattern must contain a named
+      group `patron_id`. If set, candidates that do not match are skipped.
+
+    Default attribute priority (when `attributes` is not configured):
 
     1. eduPersonUniqueId
        (https://wiki.refeds.org/display/STAN/eduPerson+2020-01#eduPerson2020-01-eduPersonUniqueId)
-
-       A long-lived, non re-assignable, omnidirectional identifier suitable for use as a principal identifier
-       by authentication providers or as a unique external key by applications.
+       A long-lived, non re-assignable, omnidirectional identifier.
 
     2. eduPersonTargetedID
        (https://wiki.refeds.org/display/STAN/eduPerson+2020-01#eduPerson2020-01-eduPersonTargetedID)
+       A persistent, non-reassigned, opaque identifier.
+       NOTE: deprecated — prefer pairwise-id (urn:oasis:names:tc:SAML:attribute:pairwise-id)
+       from the OASIS SAML 2.0 SubjectID Attributes Profile where possible.
 
-       A persistent, non-reassigned, opaque identifier for a principal.
-       eduPersonTargetedID is an abstracted version of the SAML V2.0 Name Identifier format of
-       "urn:oasis:names:tc:SAML:2.0:nameid-format:persistent"
-       (see http://www.oasis-open.org/committees/download.php/35711).
+    3. uid (http://oid-info.com/get/0.9.2342.19200300.100.1.1)
 
-       NOTE: eduPersonTargetedID is DEPRECATED and will be marked as obsolete in a future version
-       of this specification. Its equivalent definition in SAML 2.0 has been replaced by a new specification
-       for standard Subject Identifier attributes
-       [https://docs.oasis-open.org/security/saml-subject-id-attr/v1.0/saml-subject-id-attr-v1.0.html],
-       one of which ("urn:oasis:names:tc:SAML:attribute:pairwise-id") is a direct replacement for this identifier
-       with a simpler syntax and safer comparison rules.
-       Existing use of this attribute in SAML 1.1 or SAML 2.0 should be phased out
-       in favor of the new Subject Identifier attributes."
-
-    3. uid
-       (http://oid-info.com/get/0.9.2342.19200300.100.1.1)
-
-       See IETF RFC 4519.
-       IETF RFC 1274 uses the identifier "userid".
-
-    4. Name ID
-       The extractor fetches the first name ID it could find as a last resort which may no be correct.
-       It might be better to fetch only persistent name IDs.
-
-    Also, please note that eduPersonTargetedID attribute and name IDs should be phased out and replaced with
-    the pairwise-id attribute from the OASIS SAML 2.0 SubjectID Attributes Profile.
-    However, it's not yet supported by most of the IdPs.
+    4. Name ID (non-TRANSIENT only, when `use_name_id=True`)
     """
 
     PATRON_ID_REGULAR_EXPRESSION_NAMED_GROUP = "patron_id"
@@ -1371,12 +1362,16 @@ class SAMLSubjectPatronIDExtractor:
                         break
 
         # If we haven't found a patron id in the other attributes,
-        # maybe we can try the NameID.
+        # maybe we can try the NameID — but only if it's not TRANSIENT.
+        # TRANSIENT NameIDs change on each login, so using one as a patron ID
+        # would create a new patron record on each login, orphaning the previous
+        # patron (along with associated loans, holds, etc.).
         if (
             patron_id is None
             and self._use_name_id
             and subject.name_id
             and subject.name_id.name_id
+            and subject.name_id.name_format != SAMLNameIDFormat.TRANSIENT.value
         ):
             patron_id_candidate = subject.name_id.name_id
             patron_id = self._extract_patron_id(patron_id_candidate)
