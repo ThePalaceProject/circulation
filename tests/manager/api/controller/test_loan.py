@@ -3,6 +3,7 @@ from __future__ import annotations
 import datetime
 from collections.abc import Generator
 from decimal import Decimal
+from functools import partial
 from typing import Any
 from unittest.mock import MagicMock, create_autospec, patch
 from urllib.parse import quote
@@ -119,6 +120,28 @@ class LoanFixture(CirculationControllerFixture):
         self.manager.d_circulation.add_remote_api(
             self.pool, MockPatronActivityCirculationAPI(db.session, self.collection)
         )
+
+        # Pre-bound call to best_lendable_pool with common args filled in.
+        # Tests only need to pass mechanism_id (usually None).
+        self.best_lendable_pool = partial(
+            self.manager.loans.best_lendable_pool,
+            self.library,
+            self.default_patron,
+            self.identifier_type,
+            self.identifier_identifier,
+        )
+
+    def second_pool(self) -> LicensePool:
+        """Create a second pool for the same work/identifier as ``self.pool``."""
+        _, pool2 = self.db.edition(
+            with_open_access_download=True,
+            with_license_pool=True,
+            data_source_name=DataSource.BIBLIOTHECA,
+            collection=self.pool.collection,
+        )
+        pool2.identifier = self.identifier
+        pool2.work = self.pool.work
+        return pool2
 
 
 @pytest.fixture(scope="function")
@@ -1880,3 +1903,353 @@ class TestLoanController:
             assert format_datetime(loan_response_until) == format_datetime(
                 expected_opds_response_loan_end
             )
+
+    def test_best_lendable_pool_prioritizes_ready_hold(
+        self, loan_fixture: LoanFixture
+    ) -> None:
+        """When the patron has a position-0 (ready) hold on one pool,
+        ``best_lendable_pool`` should return that pool even if another
+        pool appears to have better availability metrics.
+        """
+        pool2 = loan_fixture.second_pool()
+
+        loan_fixture.pool.licenses_available = 0
+        loan_fixture.pool.licenses_owned = 2
+        loan_fixture.pool.patrons_in_hold_queue = 3
+
+        pool2.licenses_available = 2
+        pool2.licenses_owned = 5
+        pool2.patrons_in_hold_queue = 0
+
+        hold_end = utc_now() + datetime.timedelta(days=3)
+        loan_fixture.pool.on_hold_to(
+            loan_fixture.default_patron, end=hold_end, position=0
+        )
+
+        result = loan_fixture.best_lendable_pool(None)
+
+        assert isinstance(result, tuple)
+        selected_pool, selected_mechanism = result
+        assert selected_pool == loan_fixture.pool
+        assert selected_mechanism is None
+
+    def test_best_lendable_pool_prioritizes_ready_hold_without_expiry(
+        self, loan_fixture: LoanFixture
+    ) -> None:
+        """A position-0 hold with no expiry should still be treated as ready."""
+        pool2 = loan_fixture.second_pool()
+
+        loan_fixture.pool.licenses_available = 0
+        loan_fixture.pool.licenses_owned = 2
+        loan_fixture.pool.patrons_in_hold_queue = 3
+
+        pool2.licenses_available = 2
+        pool2.licenses_owned = 5
+        pool2.patrons_in_hold_queue = 0
+
+        loan_fixture.pool.on_hold_to(loan_fixture.default_patron, position=0)
+
+        result = loan_fixture.best_lendable_pool(None)
+
+        assert isinstance(result, tuple)
+        selected_pool, selected_mechanism = result
+        assert selected_pool == loan_fixture.pool
+        assert selected_mechanism is None
+
+    def test_best_lendable_pool_prefers_held_pool(
+        self, loan_fixture: LoanFixture
+    ) -> None:
+        """When the patron has a non-ready hold (position > 0) on one
+        pool, that pool should always be selected — even if another pool
+        has better availability.
+        """
+        pool2 = loan_fixture.second_pool()
+
+        loan_fixture.pool.licenses_available = 5
+        loan_fixture.pool.licenses_owned = 10
+        loan_fixture.pool.patrons_in_hold_queue = 0
+
+        pool2.licenses_available = 0
+        pool2.licenses_owned = 2
+        pool2.patrons_in_hold_queue = 4
+
+        pool2.on_hold_to(loan_fixture.default_patron, position=3)
+
+        result = loan_fixture.best_lendable_pool(None)
+
+        assert isinstance(result, tuple)
+        selected_pool, _ = result
+        assert selected_pool == pool2
+
+    def test_best_lendable_pool_excludes_expired_ready_hold(
+        self, loan_fixture: LoanFixture
+    ) -> None:
+        """An expired ready hold should not cause early return from the
+        hold preference loop — normal pool selection should apply instead.
+        """
+        pool2 = loan_fixture.second_pool()
+
+        loan_fixture.pool.licenses_available = 0
+        loan_fixture.pool.licenses_owned = 2
+        loan_fixture.pool.patrons_in_hold_queue = 4
+
+        pool2.licenses_available = 0
+        pool2.licenses_owned = 2
+        pool2.patrons_in_hold_queue = 4
+
+        pool2.on_hold_to(
+            loan_fixture.default_patron,
+            end=utc_now() - datetime.timedelta(days=1),
+            position=0,
+        )
+
+        result = loan_fixture.best_lendable_pool(None)
+
+        assert isinstance(result, tuple)
+        selected_pool, _ = result
+        assert selected_pool == loan_fixture.pool
+
+    def test_best_lendable_pool_nonready_hold_over_better_availability(
+        self, loan_fixture: LoanFixture
+    ) -> None:
+        """A non-ready hold (position > 0) should be preferred over a pool
+        with better availability (available copies).
+        """
+        pool2 = loan_fixture.second_pool()
+
+        loan_fixture.pool.licenses_available = 5
+        loan_fixture.pool.licenses_owned = 10
+        loan_fixture.pool.patrons_in_hold_queue = 0
+
+        pool2.licenses_available = 0
+        pool2.licenses_owned = 2
+        pool2.patrons_in_hold_queue = 4
+
+        pool2.on_hold_to(loan_fixture.default_patron, position=3)
+
+        result = loan_fixture.best_lendable_pool(None)
+
+        assert isinstance(result, tuple)
+        selected_pool, _ = result
+        assert selected_pool == pool2
+
+    def test_best_lendable_pool_nonready_hold_over_better_queue_ratio(
+        self, loan_fixture: LoanFixture
+    ) -> None:
+        """A non-ready hold should be preferred even when another pool has
+        a much better hold-queue ratio.
+        """
+        pool2 = loan_fixture.second_pool()
+
+        loan_fixture.pool.licenses_available = 0
+        loan_fixture.pool.licenses_owned = 10
+        loan_fixture.pool.patrons_in_hold_queue = 2
+
+        pool2.licenses_available = 0
+        pool2.licenses_owned = 2
+        pool2.patrons_in_hold_queue = 6
+
+        pool2.on_hold_to(loan_fixture.default_patron, position=2)
+
+        result = loan_fixture.best_lendable_pool(None)
+
+        assert isinstance(result, tuple)
+        selected_pool, _ = result
+        assert selected_pool == pool2
+
+    def test_best_lendable_pool_nonready_hold_bypasses_library_filtering(
+        self, loan_fixture: LoanFixture, library_fixture: LibraryFixture
+    ) -> None:
+        """A non-ready hold should bypass library content filtering, just
+        like a ready hold or existing loan.
+        """
+        loan_fixture.english_1.audience = Classifier.AUDIENCE_ADULT
+
+        settings = library_fixture.settings(loan_fixture.library)
+        settings.filtered_audiences = ["Adult"]
+
+        loan_fixture.pool.on_hold_to(loan_fixture.default_patron, position=5)
+
+        result = loan_fixture.best_lendable_pool(None)
+
+        # Should return the held pool, not FILTERED_BY_LIBRARY_POLICY.
+        assert isinstance(result, tuple)
+        selected_pool, _ = result
+        assert selected_pool == loan_fixture.pool
+
+    def test_best_lendable_pool_ready_hold_over_nonready_hold(
+        self, loan_fixture: LoanFixture
+    ) -> None:
+        """When the patron has both a ready hold on one pool and a
+        non-ready hold on another, the ready hold should always win.
+        """
+        pool2 = loan_fixture.second_pool()
+
+        loan_fixture.pool.licenses_available = 0
+        loan_fixture.pool.licenses_owned = 2
+        loan_fixture.pool.patrons_in_hold_queue = 3
+
+        pool2.licenses_available = 0
+        pool2.licenses_owned = 2
+        pool2.patrons_in_hold_queue = 3
+
+        patron = loan_fixture.default_patron
+        pool2.on_hold_to(patron, position=5)
+        hold_end = utc_now() + datetime.timedelta(days=3)
+        loan_fixture.pool.on_hold_to(patron, end=hold_end, position=0)
+
+        result = loan_fixture.best_lendable_pool(None)
+
+        assert isinstance(result, tuple)
+        selected_pool, _ = result
+        assert selected_pool == loan_fixture.pool
+
+    def test_best_lendable_pool_no_holds_prefers_most_available(
+        self, loan_fixture: LoanFixture
+    ) -> None:
+        """Without any existing holds, ``best_lendable_pool`` should
+        choose the pool with the most available copies.
+        """
+        pool2 = loan_fixture.second_pool()
+
+        loan_fixture.pool.licenses_available = 1
+        loan_fixture.pool.licenses_owned = 3
+        loan_fixture.pool.patrons_in_hold_queue = 0
+
+        pool2.licenses_available = 5
+        pool2.licenses_owned = 10
+        pool2.patrons_in_hold_queue = 0
+
+        result = loan_fixture.best_lendable_pool(None)
+
+        assert isinstance(result, tuple)
+        selected_pool, _ = result
+        assert selected_pool == pool2
+
+    def test_best_lendable_pool_ready_hold_with_valid_mechanism(
+        self, loan_fixture: LoanFixture
+    ) -> None:
+        """When the patron has a ready hold and a valid mechanism_id is
+        provided, ``best_lendable_pool`` should return the hold pool
+        together with the resolved delivery mechanism.
+        """
+        pool2 = loan_fixture.second_pool()
+
+        loan_fixture.pool.licenses_available = 0
+        loan_fixture.pool.licenses_owned = 2
+        pool2.licenses_available = 5
+        pool2.licenses_owned = 10
+
+        hold_end = utc_now() + datetime.timedelta(days=3)
+        loan_fixture.pool.on_hold_to(
+            loan_fixture.default_patron, end=hold_end, position=0
+        )
+
+        mechanism_id = loan_fixture.mech1.delivery_mechanism.id
+        result = loan_fixture.best_lendable_pool(mechanism_id)
+
+        assert isinstance(result, tuple)
+        selected_pool, selected_mechanism = result
+        assert selected_pool == loan_fixture.pool
+        assert selected_mechanism == loan_fixture.mech1
+
+    def test_best_lendable_pool_ready_hold_with_invalid_mechanism(
+        self, loan_fixture: LoanFixture
+    ) -> None:
+        """When the patron has a ready hold but the mechanism_id doesn't
+        match that pool, the hold pool is skipped and normal selection
+        picks the best alternative.
+        """
+        pool2 = loan_fixture.second_pool()
+
+        loan_fixture.pool.licenses_available = 0
+        loan_fixture.pool.licenses_owned = 2
+        pool2.licenses_available = 5
+        pool2.licenses_owned = 10
+
+        hold_end = utc_now() + datetime.timedelta(days=3)
+        loan_fixture.pool.on_hold_to(
+            loan_fixture.default_patron, end=hold_end, position=0
+        )
+
+        # This mechanism is valid on pool2 (Bibliotheca data source)
+        # but not on pool1 (different data source), so the hold
+        # pool is skipped.
+        pool2_lpdm = pool2.set_delivery_mechanism(
+            Representation.EPUB_MEDIA_TYPE,
+            DeliveryMechanism.ADOBE_DRM,
+            RightsStatus.IN_COPYRIGHT,
+            None,
+        )
+        result = loan_fixture.best_lendable_pool(pool2_lpdm.delivery_mechanism.id)
+
+        assert isinstance(result, tuple)
+        selected_pool, selected_mechanism = result
+        assert selected_pool == pool2
+        assert selected_mechanism == pool2_lpdm
+
+    def test_best_lendable_pool_available_beats_unavailable(
+        self, loan_fixture: LoanFixture
+    ) -> None:
+        """A pool with available copies should be preferred over a pool
+        with no available copies.
+        """
+        pool2 = loan_fixture.second_pool()
+
+        loan_fixture.pool.licenses_available = 0
+        loan_fixture.pool.licenses_owned = 2
+        loan_fixture.pool.patrons_in_hold_queue = 1
+
+        pool2.licenses_available = 3
+        pool2.licenses_owned = 5
+        pool2.patrons_in_hold_queue = 0
+
+        result = loan_fixture.best_lendable_pool(None)
+
+        assert isinstance(result, tuple)
+        selected_pool, _ = result
+        assert selected_pool == pool2
+
+    def test_best_lendable_pool_keeps_available_over_unavailable(
+        self, loan_fixture: LoanFixture
+    ) -> None:
+        """When the current best has available copies and the candidate
+        does not, the current best should be kept.
+        """
+        pool2 = loan_fixture.second_pool()
+
+        loan_fixture.pool.licenses_available = 3
+        loan_fixture.pool.licenses_owned = 5
+        loan_fixture.pool.patrons_in_hold_queue = 0
+
+        pool2.licenses_available = 0
+        pool2.licenses_owned = 5
+        pool2.patrons_in_hold_queue = 2
+
+        result = loan_fixture.best_lendable_pool(None)
+
+        assert isinstance(result, tuple)
+        selected_pool, _ = result
+        assert selected_pool == loan_fixture.pool
+
+    def test_best_lendable_pool_better_hold_queue_ratio(
+        self, loan_fixture: LoanFixture
+    ) -> None:
+        """When neither pool has available copies, the pool with the
+        better (lower) hold-queue-to-licenses ratio should be selected.
+        """
+        pool2 = loan_fixture.second_pool()
+
+        loan_fixture.pool.licenses_available = 0
+        loan_fixture.pool.licenses_owned = 2
+        loan_fixture.pool.patrons_in_hold_queue = 6
+
+        pool2.licenses_available = 0
+        pool2.licenses_owned = 2
+        pool2.patrons_in_hold_queue = 2
+
+        result = loan_fixture.best_lendable_pool(None)
+
+        assert isinstance(result, tuple)
+        selected_pool, _ = result
+        assert selected_pool == pool2
