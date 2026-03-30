@@ -504,6 +504,18 @@ class Filter:
             currently_available = Bool(should=[licenses_available, open_access])
             nested_filters["licensepools"].append(currently_available)
 
+        # When sorting by author, exclude works with unknown authors.
+        # The [Unknown] placeholder provides no useful sort information and
+        # can cause empty pages in the returned search results. We filter
+        # on author.keyword (exact match) rather than the analyzed
+        # sort_author field. The two fields are always in sync for the
+        # [Unknown] sentinel value.
+        if self.primary_order == "sort_author":
+            f = chain(
+                f,
+                Bool(must_not=[Term(**{"author.keyword": Edition.UNKNOWN_AUTHOR})]),
+            )
+
         # Perhaps only books whose bibliographic metadata was updated
         # recently should be included.
         if self.updated_after:
@@ -601,6 +613,15 @@ class Filter:
             if x not in order_field_keys:
                 order_fields.append({x: "asc"})
         return order_fields
+
+    @property
+    def primary_order(self) -> str | None:
+        """Return the primary requested sort field, if any."""
+        if not self.order:
+            return None
+        if isinstance(self.order, list):
+            return self.order[0] if self.order else None
+        return self.order
 
     @property
     def asc(self):
