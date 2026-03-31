@@ -43,6 +43,7 @@ from palace.manager.integration.license.opds.odl.demarque import (
 )
 from palace.manager.integration.license.opds.requests import OAuthOpdsRequest
 from palace.manager.opds.lcp.status import LoanStatus
+from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.licensing import (
     DeliveryMechanism,
@@ -831,11 +832,14 @@ class TestOPDS2WithODLApi:
         self,
         db: DatabaseTransactionFixture,
         opds2_with_odl_api_fixture: OPDS2WithODLApiFixture,
+        caplog: pytest.LogCaptureFixture,
     ) -> None:
         """
         We think there is a hold ready for us, but we are out of sync with the distributor,
         so there actually isn't a copy ready for our hold.
         """
+        caplog.set_level(LogLevel.warning)
+
         # We think there is a copy available for this hold.
         hold, _ = opds2_with_odl_api_fixture.pool.on_hold_to(
             opds2_with_odl_api_fixture.patron,
@@ -870,6 +874,9 @@ class TestOPDS2WithODLApi:
         # The hold has been updated to reflect the new availability.
         assert hold.position == 1
         assert hold.end is None
+
+        # Verify diagnostic logging was emitted.
+        assert "All license checkouts failed" in caplog.text
 
     def test_checkout_failures(
         self,
