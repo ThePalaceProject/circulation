@@ -4,6 +4,7 @@ import flask
 from flask import Response, request
 from flask_babel import lazy_gettext as _
 from pydantic import TypeAdapter
+from sqlalchemy import or_
 from werkzeug import Response as wkResponse
 
 from palace.manager.api.circulation.exceptions import (
@@ -36,6 +37,7 @@ from palace.manager.sqlalchemy.model.licensing import (
     LicensePoolDeliveryMechanism,
 )
 from palace.manager.sqlalchemy.model.patron import Hold, Loan, Patron
+from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.flask_util import OPDSEntryResponse
 from palace.manager.util.problem_detail import BaseProblemDetailException, ProblemDetail
 
@@ -213,11 +215,11 @@ class LoanController(CirculationManagerController):
         mechanism = None
         problem_doc = None
 
+        pool_ids = [lp.id for lp in pools]
+
         existing_loans: list[Loan] = (
             self._db.query(Loan)
-            .filter(
-                Loan.license_pool_id.in_([lp.id for lp in pools]), Loan.patron == patron
-            )
+            .filter(Loan.license_pool_id.in_(pool_ids), Loan.patron == patron)
             .all()
         )
         if existing_loans:
@@ -226,9 +228,48 @@ class LoanController(CirculationManagerController):
             # those loans instead of an error.
             return existing_loans[0]
 
+        # Check for existing holds. If the patron already has any active hold
+        # on a pool for this work, prioritize that pool and allow the checkout
+        # to proceed even if later filtering or borrowing-policy checks would
+        # now reject a new borrow. This preserves access for holds that were
+        # placed before those checks changed.
+        now = utc_now()
+        # Fetch active holds, excluding expired ready holds (position=0
+        # with end in the past). Non-ready holds are always included
+        # because their `end` is an estimated availability date, not an
+        # expiration. Results are ordered by position so ready holds are
+        # evaluated first.
+        existing_holds: list[Hold] = (
+            self._db.query(Hold)
+            .filter(
+                Hold.license_pool_id.in_(pool_ids),
+                Hold.patron == patron,
+                or_(
+                    Hold.position != 0,
+                    Hold.end.is_(None),
+                    Hold.end > now,
+                ),
+            )
+            .order_by(Hold.position)
+            .all()
+        )
+
+        for hold in existing_holds:
+            pool = hold.license_pool
+            mechanism = None
+            if mechanism_id:
+                mechanism_or_pd = self.load_licensepooldelivery(pool, mechanism_id)
+                if isinstance(mechanism_or_pd, ProblemDetail):
+                    # If this specific mechanism isn't available on
+                    # this pool, fall through to normal selection.
+                    continue
+                mechanism = mechanism_or_pd
+            return pool, mechanism
+
         # Check library content filtering. This check comes after the existing
-        # loan check above so that patrons can still access works they already
-        # have on loan, even if filtering rules change after the loan was made.
+        # loan and hold checks above so that patrons can still access works
+        # they already have on loan or hold, even if filtering rules change
+        # after the loan or hold was created.
         work = next((pool.work for pool in pools if pool.work), None)
         if work and work.is_filtered_for_library(library):
             return FILTERED_BY_LIBRARY_POLICY
@@ -262,12 +303,29 @@ class LoanController(CirculationManagerController):
             # But there might be many such LicensePools, and we want
             # to pick the one that will get the book to the patron
             # with the shortest wait.
-            if (
-                not best
-                or pool.licenses_available > best.licenses_available
-                or pool.patrons_in_hold_queue < best.patrons_in_hold_queue
-            ):
+            if not best:
                 best = pool
+            elif pool.licenses_available > 0 and best.licenses_available == 0:
+                # Prefer a pool with available copies.
+                best = pool
+            elif pool.licenses_available == 0 and best.licenses_available > 0:
+                # Keep the pool that already has available copies.
+                pass
+            elif pool.licenses_available > 0:
+                # Both have available copies — prefer the one with more.
+                if pool.licenses_available > best.licenses_available:
+                    best = pool
+            else:
+                # Neither has available copies — compare hold queue ratio
+                # (queue length relative to owned licenses).
+                pool_ratio = (pool.patrons_in_hold_queue or 0) / max(
+                    pool.licenses_owned, 1
+                )
+                best_ratio = (best.patrons_in_hold_queue or 0) / max(
+                    best.licenses_owned, 1
+                )
+                if pool_ratio < best_ratio:
+                    best = pool
 
         if not best:
             # We were unable to find any LicensePool that fit the
