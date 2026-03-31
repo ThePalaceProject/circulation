@@ -382,6 +382,12 @@ class OPDS2WithODLApi(
                 ...
 
         if license_ is None or loan_status is None:
+            self.log.warning(
+                f"All license checkouts failed. "
+                f"hold={hold.id if hold else None}, "
+                f"patron={patron.authorization_identifier}, "
+                f"pool={licensepool!r}"
+            )
             if hold:
                 # If we have a hold, it means we thought the book was available, but it wasn't.
                 # So we need to update its position in the hold queue. We will put it at position
