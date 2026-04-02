@@ -4242,14 +4242,14 @@ tests = ["coverage[toml] (==7.10.7)", "pytest (>=8.4.2,<9.0.0)"]
 
 [[package]]
 name = "pyld"
-version = "2.0.4"
+version = "3.0.0"
 description = "Python implementation of the JSON-LD API"
 optional = false
 python-versions = "*"
 groups = ["main"]
 files = [
-    {file = "PyLD-2.0.4-py3-none-any.whl", hash = "sha256:6dab9905644616df33f8755489fc9b354ed7d832d387b7d1974b4fbd3b8d2a89"},
-    {file = "PyLD-2.0.4.tar.gz", hash = "sha256:311e350f0dbc964311c79c28e86f84e195a81d06fef5a6f6ac2a4f6391ceeacc"},
+    {file = "pyld-3.0.0-py3-none-any.whl", hash = "sha256:bfe0f5a476c67d8766d47c445ef2170b868a72654e535dbebc89c8e040b1fe88"},
+    {file = "pyld-3.0.0.tar.gz", hash = "sha256:b1913a06054f35a31e4d9916d184852909b2a3c5fea55c341bd00917cf8b22ef"},
 ]
 
 [package.dependencies]
@@ -6024,4 +6024,4 @@ lxml = ">=3.8"
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12,<4"
-content-hash = "145addc5afc42b4f05bbe5bf06b4271ba0dd66967d5b888bc536536b41990f84"
+content-hash = "9dbc8d428b90f730c79b2c993e6f305814940f9a18a669d6faa8fba638c1cfa5"
