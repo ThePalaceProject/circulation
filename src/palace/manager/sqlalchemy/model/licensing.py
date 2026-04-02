@@ -321,6 +321,9 @@ class LicensePool(Base):
     last_checked = Column(DateTime(timezone=True), index=True)
     last_updated = Column(DateTime(timezone=True), nullable=True)
 
+    # Hash of the CirculationData last used to create/update this LicensePool.
+    updated_at_data_hash = Column(String, default=None)
+
     # A LicensePool that seemingly looks fine may be manually suppressed
     # to be temporarily or permanently removed from the collection.
     suppressed: Mapped[bool] = Column(

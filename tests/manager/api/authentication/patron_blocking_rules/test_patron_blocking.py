@@ -441,6 +441,7 @@ class TestBasicAuthenticationProvider:
     def test_blocking_not_applied_when_do_authenticate_returns_none(self) -> None:
         """When _do_authenticate returns None (bad credentials), blocking rules
         are not evaluated — None is passed through."""
+
         provider = MagicMock(spec=BasicAuthenticationProvider)
         provider.patron_blocking_rules = [
             PatronBlockingRule(name="block-all", rule="True")
@@ -456,6 +457,7 @@ class TestBasicAuthenticationProvider:
     ) -> None:
         """When _do_authenticate itself returns a ProblemDetail (e.g. connection
         failure), blocking rules are not evaluated — the original error is returned."""
+
         provider = MagicMock(spec=BasicAuthenticationProvider)
         provider.patron_blocking_rules = [
             PatronBlockingRule(name="block-all", rule="True")
