@@ -1020,9 +1020,7 @@ class BibliographicData(BaseMutableData):
             # to detect metadata changes for Overdrive. This block should be removed once that problem is addressed.
             # if we have an edition update time but we don't have a source last updated time, assume no change unless
             # the minimum time between updates is exceeded
-            if utc_now() - edition.updated_at > datetime.timedelta(
-                seconds=self.minimum_time_between_updates_in_seconds
-            ):
+            if utc_now() - edition.updated_at > minimum_time_between_updates:
                 return True
             return False
         elif edition.updated_at is None:
