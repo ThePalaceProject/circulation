@@ -996,7 +996,12 @@ class BibliographicData(BaseMutableData):
 
         return contributors_changed
 
-    def has_changed(self, session: Session, edition: Edition | None = None) -> bool:
+    def has_changed(
+        self,
+        session: Session,
+        edition: Edition | None = None,
+        minimum_time_between_updates_in_seconds: int = 60 * 60 * 2,
+    ) -> bool:
         """
         Test if the bibliographic data has changed since the last import.
         """
@@ -1006,8 +1011,16 @@ class BibliographicData(BaseMutableData):
             # We don't have an edition, so we definitely need to create one.
             return True
 
-        # If we don't have any information about the last update time, assume we need to update.
-        if edition.updated_at is None or self.data_source_last_updated is None:
+        if self.data_source_last_updated is None and edition.updated_at is not None:
+            # if we have an edition update time but we don't have a source last updated time, assume no change unless
+            # the minimum time between updates is exceeded
+            if utc_now() - edition.updated_at > datetime.timedelta(
+                seconds=minimum_time_between_updates_in_seconds
+            ):
+                return True
+            return False
+        elif edition.updated_at is None:
+            # if we don't have an edition updated_at but we do have a source last updated time, assume change
             return True
 
         if self.data_source_last_updated > edition.updated_at:
