@@ -83,7 +83,7 @@ class BibliographicData(BaseMutableData):
 
     # FIXME: this parameter is a stopgap measure which should be removed once we sort out how to reasonably
     #  determine has_changed for overdrive.
-    minimum_time_between_updates_in_seconds: int = 0
+    minimum_time_between_updates = datetime.timedelta(0)
 
     @field_validator("language")
     @classmethod
