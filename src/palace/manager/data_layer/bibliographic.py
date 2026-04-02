@@ -4,7 +4,7 @@ import datetime
 from collections import defaultdict
 from typing import Any, Literal, Self, overload
 
-from pydantic import AwareDatetime, Field, field_validator, model_validator
+from pydantic import Field, field_validator, model_validator
 from sqlalchemy import and_
 from sqlalchemy.orm import Query, Session
 
@@ -76,7 +76,6 @@ class BibliographicData(BaseMutableData):
     contributors: list[ContributorData] = Field(default_factory=list)
     measurements: list[MeasurementData] = Field(default_factory=list)
     links: list[LinkData] = Field(default_factory=list)
-    data_source_last_updated: AwareDatetime | None = None
     duration: float | None = None
     permanent_work_id: str | None = None
     # Note: brought back to keep callers of bibliographic extraction process_one() methods simple.
@@ -103,6 +102,11 @@ class BibliographicData(BaseMutableData):
             self.identifiers.append(self.primary_identifier_data)
 
         return self
+
+    def fields_excluded_from_hash(self) -> set[str]:
+        # CirculationData is considered separate from bibliographic data, so
+        # we want to exclude it from the hash calculation.
+        return super().fields_excluded_from_hash().union({"circulation"})
 
     @classmethod
     def from_edition(cls, edition: Edition) -> BibliographicData:
@@ -611,7 +615,11 @@ class BibliographicData(BaseMutableData):
                 measurement.quantity_measured,
                 measurement.value,
                 measurement.weight,
-                measurement.taken_at,
+                (
+                    measurement.taken_at
+                    if measurement.taken_at is not None
+                    else self.as_of_timestamp
+                ),
             )
         return True
 
@@ -861,7 +869,7 @@ class BibliographicData(BaseMutableData):
             CoverageRecord.add_for(
                 edition,
                 data_source,
-                timestamp=self.data_source_last_updated,
+                timestamp=self.as_of_timestamp,
                 collection=None,
             )
 
@@ -997,25 +1005,6 @@ class BibliographicData(BaseMutableData):
 
         return contributors_changed
 
-    def has_changed(self, session: Session, edition: Edition | None = None) -> bool:
-        """
-        Test if the bibliographic data has changed since the last import.
-        """
-        if edition is None:
-            edition, _ = self.edition(session, autocreate=False)
-        if edition is None:
-            # We don't have an edition, so we definitely need to create one.
-            return True
-
-        # If we don't have any information about the last update time, assume we need to update.
-        if edition.updated_at is None or self.data_source_last_updated is None:
-            return True
-
-        if self.data_source_last_updated > edition.updated_at:
-            return True
-
-        self.log.info(
-            f"Publication {self.primary_identifier_data} is unchanged. Last updated at "
-            f"{edition.updated_at}, data source last updated at {self.data_source_last_updated}"
-        )
-        return False
+    def needs_apply(self, session: Session) -> bool:
+        edition, _ = self.edition(session, autocreate=False)
+        return self.should_apply_to(edition)
