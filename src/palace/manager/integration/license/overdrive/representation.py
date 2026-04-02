@@ -680,6 +680,8 @@ class OverdriveRepresentationExtractor(LoggerMixin):
                 measurements=measurements,
                 links=links,
                 duration=duration,
+                # FIXME - this parameter should be removed once we resolve the overdrive change detection issue.
+                minimum_time_between_updates_in_seconds=3 * 24 * 60 * 60,  # 3 DAYS
             )
         else:
             bibliographic = BibliographicData(

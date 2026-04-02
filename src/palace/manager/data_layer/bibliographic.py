@@ -81,6 +81,10 @@ class BibliographicData(BaseMutableData):
     # Note: brought back to keep callers of bibliographic extraction process_one() methods simple.
     circulation: CirculationData | None = None
 
+    # FIXME: this parameter is a stopgap measure which should be removed once we sort out how to reasonably
+    #  determine has_changed for overdrive.
+    minimum_time_between_updates_in_seconds: int = 0
+
     @field_validator("language")
     @classmethod
     def _convert_langage_alpha3(cls, value: str | None) -> str | None:
@@ -1000,7 +1004,6 @@ class BibliographicData(BaseMutableData):
         self,
         session: Session,
         edition: Edition | None = None,
-        minimum_time_between_updates_in_seconds: int = 60 * 60 * 2,
     ) -> bool:
         """
         Test if the bibliographic data has changed since the last import.
@@ -1012,10 +1015,13 @@ class BibliographicData(BaseMutableData):
             return True
 
         if self.data_source_last_updated is None and edition.updated_at is not None:
+
+            # FIXME:  This is a stopgap measure to deal with the fact that we don't have a good way
+            # to detect metadata changes for Overdrive. This block should be removed once that problem is addressed.
             # if we have an edition update time but we don't have a source last updated time, assume no change unless
             # the minimum time between updates is exceeded
             if utc_now() - edition.updated_at > datetime.timedelta(
-                seconds=minimum_time_between_updates_in_seconds
+                seconds=self.minimum_time_between_updates_in_seconds
             ):
                 return True
             return False
@@ -1023,7 +1029,10 @@ class BibliographicData(BaseMutableData):
             # if we don't have an edition updated_at but we do have a source last updated time, assume change
             return True
 
-        if self.data_source_last_updated > edition.updated_at:
+        if (
+            self.data_source_last_updated
+            and self.data_source_last_updated > edition.updated_at
+        ):
             return True
 
         self.log.info(

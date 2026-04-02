@@ -193,7 +193,6 @@ class TestBibliographicData:
         bibliographic = BibliographicData(
             links=[image], data_source_name=edition.data_source.name
         )
-        edition.updated_at = None
         bibliographic.apply(db.session, edition, None)
 
         # Only one Hyperlink was created for the image, because
@@ -207,7 +206,6 @@ class TestBibliographicData:
         bibliographic = BibliographicData(
             links=[image, not_a_thumbnail], data_source_name=edition.data_source.name
         )
-        edition.updated_at = None
         bibliographic.apply(db.session, edition, None)
         [hyperlink_image, description] = sorted(
             edition.primary_identifier.links, key=lambda x: x.rel
@@ -540,7 +538,6 @@ class TestBibliographicData:
             duration=10,
         )
 
-        edition_old.updated_at = None
         edition_new, changed = bibliographic.apply(
             db.session, edition_old, pool.collection
         )
@@ -566,7 +563,6 @@ class TestBibliographicData:
 
         # The series position can also be 0.
         bibliographic.series_position = 0
-        edition_new.updated_at = None
         edition_new, changed = bibliographic.apply(
             db.session, edition_new, pool.collection
         )
@@ -596,7 +592,6 @@ class TestBibliographicData:
 
         # After the refactoring, apply() calls work.calculate_presentation() directly
         with patch.object(Work, "calculate_presentation") as calculate:
-            edition.updated_at = None
             bibliographic.apply(db.session, edition, None)
             assert calculate.call_count == 1
             policy = calculate.call_args[1]["policy"]
@@ -610,7 +605,6 @@ class TestBibliographicData:
                 SubjectData(type=Subject.TAG, identifier="subject")
             ]
 
-            edition.updated_at = None
             bibliographic.apply(db.session, edition, None)
             # The work has now had its presentation recalculated directly.
             assert calculate.call_count == 2
@@ -625,7 +619,6 @@ class TestBibliographicData:
                 LinkData(rel=Hyperlink.DESCRIPTION, content="a description")
             ]
 
-            edition.updated_at = None
             bibliographic.apply(db.session, edition, None)
             # Full recalculation again for description changes.
             assert calculate.call_count == 3
@@ -637,7 +630,6 @@ class TestBibliographicData:
             bibliographic.subjects = []
             bibliographic.links = [LinkData(rel=Hyperlink.IMAGE, href="http://image/")]
 
-            edition.updated_at = None
             bibliographic.apply(db.session, edition, None)
             # Presentation edition recalculation for image changes.
             assert calculate.call_count == 4
@@ -728,7 +720,6 @@ class TestBibliographicData:
             data_source_name=DataSource.OVERDRIVE, title=db.fresh_str()
         )
 
-        edition.updated_at = None
         edition, changed = bibliographic.apply(db.session, edition, pool.collection)
 
         # One success was recorded.
@@ -745,7 +736,6 @@ class TestBibliographicData:
             data_source_name=DataSource.GUTENBERG, title=db.fresh_str()
         )
 
-        edition.updated_at = None
         edition, changed = bibliographic.apply(db.session, edition, pool.collection)
 
         # Another success record was created.
@@ -823,21 +813,11 @@ class TestBibliographicData:
         assert changed is True
         assert edition.title == "New title"
 
-        # If the stale bibliographic has no data_source_last_updated and the edition was
-        # recently updated (within the minimum update interval), no change is recorded.
+        # If the stale bibliographic has no data_source_last_updated, the change will be made.
         stale_bibliographic.data_source_last_updated = None
         edition.title = "Old title"
         edition.updated_at = utc_now()
 
-        edition, changed = stale_bibliographic.apply(
-            db.session, edition, pool.collection
-        )
-        assert changed == False
-        assert edition.title == "Old title"
-
-        # However, if the edition has not been updated recently (beyond the default 2-hour
-        # minimum), an update will be triggered even without a source timestamp.
-        edition.updated_at = utc_now() - datetime.timedelta(hours=3)
         edition, changed = stale_bibliographic.apply(
             db.session, edition, pool.collection
         )
@@ -1206,7 +1186,6 @@ class TestBibliographicData:
             title="Lowercase",
         )
         # This should not raise an error due to case-insensitive comparison
-        edition.updated_at = None
         updated_edition, changed = bibliographic_lower.apply(db.session, edition, None)
         assert updated_edition.title == "Lowercase"
 
@@ -1219,7 +1198,6 @@ class TestBibliographicData:
             ),
             title="Uppercase",
         )
-        edition.updated_at = None
         updated_edition, changed = bibliographic_upper.apply(db.session, edition, None)
         assert updated_edition.title == "Uppercase"
 
@@ -1232,7 +1210,6 @@ class TestBibliographicData:
             ),
             title="Mixed Case",
         )
-        edition.updated_at = None
         updated_edition, changed = bibliographic_mixed.apply(db.session, edition, None)
 
         # Test that an identifier with differences beyond case still raises an error.
@@ -1401,6 +1378,7 @@ class TestBibliographicData:
         bibliographic = BibliographicData(
             data_source_name=edition.data_source.name,
             data_source_last_updated=None,
+            minimum_time_between_updates_in_seconds=2 * 60 * 60,
         )
         with freeze_time(now):
             # Default minimum is 2 hours; edition is 3 hours old → changed.
@@ -1420,6 +1398,7 @@ class TestBibliographicData:
         bibliographic = BibliographicData(
             data_source_name=edition.data_source.name,
             data_source_last_updated=None,
+            minimum_time_between_updates_in_seconds=2 * 60 * 60,
         )
         with freeze_time(now):
             # Default minimum is 2 hours; edition is only 1 hour old → no change.
@@ -1434,12 +1413,12 @@ class TestBibliographicData:
         edition = db.edition()
         edition.updated_at = forty_five_minutes_ago
 
+        thirty_minutes = 30 * 60
         bibliographic = BibliographicData(
             data_source_name=edition.data_source.name,
             data_source_last_updated=None,
+            minimum_time_between_updates_in_seconds=thirty_minutes,
         )
-
-        thirty_minutes = 30 * 60
 
         with freeze_time(now):
             # Edition is 45 min old, minimum is 30 min → changed.
@@ -1447,12 +1426,12 @@ class TestBibliographicData:
                 bibliographic.has_changed(
                     db.session,
                     edition=edition,
-                    minimum_time_between_updates_in_seconds=thirty_minutes,
                 )
                 is True
             )
 
         one_hour = 60 * 60
+        bibliographic.minimum_time_between_updates_in_seconds = one_hour
 
         with freeze_time(now):
             # Edition is 45 min old, minimum is 60 min → no change.
@@ -1460,7 +1439,6 @@ class TestBibliographicData:
                 bibliographic.has_changed(
                     db.session,
                     edition=edition,
-                    minimum_time_between_updates_in_seconds=one_hour,
                 )
                 is False
             )
