@@ -70,7 +70,7 @@ def _canonicalize(
     *,
     sort_sequences: bool = True,
     round_float: bool = True,
-    float_precision=4,
+    float_precision: int = 4,
 ) -> Any:
     """
     Make sure that the data in this object is in a canonical form, so that
@@ -106,7 +106,7 @@ def json_canonical(
     *,
     sort_sequences: bool = True,
     round_float: bool = True,
-    float_precision=4,
+    float_precision: int = 4,
 ) -> str:
     """
     Convert data to a canonical JSON form.
@@ -141,7 +141,7 @@ def json_hash(
     *,
     sort_sequences: bool = True,
     round_float: bool = True,
-    float_precision=4,
+    float_precision: int = 4,
 ) -> str:
     return hashlib.sha256(
         json_canonical(

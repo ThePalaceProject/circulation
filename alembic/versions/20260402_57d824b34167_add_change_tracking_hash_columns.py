@@ -1,0 +1,52 @@
+"""Add content-hash change tracking columns to editions and licensepools
+
+Revision ID: 57d824b34167
+Revises: 9c3f2b3fba1b
+Create Date: 2026-04-02 00:00:00.000000+00:00
+
+"""
+
+import sqlalchemy as sa
+from alembic import op
+
+# revision identifiers, used by Alembic.
+revision = "57d824b34167"
+down_revision = "a5ee359c2d31"
+branch_labels = None
+depends_on = None
+
+
+def upgrade() -> None:
+    # Add hash column to editions: stores the SHA-256 hash of the last
+    # BibliographicData applied to this edition.
+    op.add_column(
+        "editions",
+        sa.Column("updated_at_data_hash", sa.String(), nullable=True),
+    )
+
+    # Add hash column to licensepools: stores the SHA-256 hash of the last
+    # CirculationData applied to this pool.
+    op.add_column(
+        "licensepools",
+        sa.Column("updated_at_data_hash", sa.String(), nullable=True),
+    )
+
+    # Add created_at and updated_at to licensepools: track when CirculationData
+    # was first and most recently imported for this pool. These complement the
+    # existing availability_time (search/feed ordering) and last_checked
+    # (event processing) timestamps.
+    op.add_column(
+        "licensepools",
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=True),
+    )
+    op.add_column(
+        "licensepools",
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=True),
+    )
+
+
+def downgrade() -> None:
+    op.drop_column("licensepools", "updated_at")
+    op.drop_column("licensepools", "created_at")
+    op.drop_column("licensepools", "updated_at_data_hash")
+    op.drop_column("editions", "updated_at_data_hash")

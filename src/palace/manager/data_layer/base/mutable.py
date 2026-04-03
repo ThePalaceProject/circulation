@@ -128,8 +128,8 @@ class BaseMutableData(BaseModel, LoggerMixin):
             # We should apply this data.
             return True
 
-        if self.as_of_timestamp <= db_object.updated_at:
-            # The data we have is stale, no update needed.
+        if self.as_of_timestamp < db_object.updated_at:
+            # The data we have is strictly older than what is stored, no update needed.
             return False
 
         return self.calculate_hash() != db_object.updated_at_data_hash

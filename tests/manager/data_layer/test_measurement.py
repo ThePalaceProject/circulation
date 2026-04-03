@@ -23,12 +23,13 @@ class TestMeasurementData:
             "2023-10-01T00:00:00+00:00"
         )
 
-        # It taken_at is not given, then it is set to the current time
-        with freeze_time():
-            measurement = MeasurementData.model_validate(
-                {"quantity_measured": "quality", "value": 25.0}
-            )
-            assert measurement.taken_at == utc_now()
+        # If taken_at is not given, it defaults to None.
+        # The timestamp will be filled in from the parent BibliographicData's
+        # as_of_timestamp when the measurement is applied to an edition.
+        measurement = MeasurementData.model_validate(
+            {"quantity_measured": "quality", "value": 25.0}
+        )
+        assert measurement.taken_at is None
 
     def test_hash(self) -> None:
         """Test that MeasurementData is hashable."""

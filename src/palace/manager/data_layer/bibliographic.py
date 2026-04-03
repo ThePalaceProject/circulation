@@ -149,7 +149,7 @@ class BibliographicData(BaseMutableData):
             primary_identifier_data=primary_identifier,
             contributors=contributors,
             links=links,
-            data_source_last_updated=edition.updated_at,
+            updated_at=edition.updated_at,
             **kwargs,
         )
 
@@ -672,21 +672,18 @@ class BibliographicData(BaseMutableData):
                 self.make_thumbnail(db, data_source, link, link_obj)
 
     def _update_edition_timestamp(self, edition: Edition) -> None:
-        """Update edition timestamp based on data source last updated time.
+        """Update edition timestamp and content hash based on the current data.
 
         :param edition: Edition to update.
         """
-        # If we don't have a last updated timestamp, we use the current time.
-        updated_at = (
-            utc_now()
-            if self.data_source_last_updated is None
-            else self.data_source_last_updated
-        )
+        updated_at = self.as_of_timestamp
 
         # If the edition was last updated before the data source was last updated,
         # we set the edition's updated_at to the data source's last updated time.
         if edition.updated_at is None or edition.updated_at < updated_at:
             edition.updated_at = updated_at
+
+        edition.updated_at_data_hash = self.calculate_hash()
 
     def _update_edition_fields(
         self,
@@ -761,8 +758,8 @@ class BibliographicData(BaseMutableData):
         self._validate_primary_identifier(edition)
 
         # Check whether we should do any work at all
-        if not replace.even_if_not_apparently_updated and not self.has_changed(
-            db, edition
+        if not replace.even_if_not_apparently_updated and not self.should_apply_to(
+            edition
         ):
             return edition, False
 
@@ -809,8 +806,8 @@ class BibliographicData(BaseMutableData):
         self._validate_primary_identifier(edition)
 
         # Check whether we should do any work at all
-        if not replace.even_if_not_apparently_updated and not self.has_changed(
-            db, edition
+        if not replace.even_if_not_apparently_updated and not self.should_apply_to(
+            edition
         ):
             # No need to update the bibliographic data, but we might have fresh
             # circulation data that we should apply.

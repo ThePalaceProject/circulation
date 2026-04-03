@@ -374,10 +374,10 @@ class OpdsImporter[FeedType, PublicationType](LoggerMixin):
         )
 
         for identifier, bibliographic in feed_bibliographic.items():
-            has_changed = bibliographic.has_changed(session)
+            needs_apply = bibliographic.needs_apply(session)
             called_bibliographic_apply = False
             called_circulation_apply = False
-            if import_even_if_unchanged or has_changed:
+            if import_even_if_unchanged or needs_apply:
                 # Queue task to import publication
                 apply_bibliographic(
                     bibliographic,
@@ -397,7 +397,7 @@ class OpdsImporter[FeedType, PublicationType](LoggerMixin):
                 called_circulation_apply = True
             results[identifier] = PublicationImportResult(
                 bibliographic=bibliographic,
-                changed=has_changed,
+                changed=needs_apply,
                 called_bibliographic_apply=called_bibliographic_apply,
                 called_circulation_apply=called_circulation_apply,
             )

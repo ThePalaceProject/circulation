@@ -35,7 +35,7 @@ class BoundlessFixture:
         licenses_available=8,
         licenses_reserved=0,
         patrons_in_hold_queue=0,
-        last_checked=datetime_utc(2015, 5, 20, 2, 9, 8),
+        updated_at=datetime_utc(2015, 5, 20, 2, 9, 8),
     )
 
     BIBLIOGRAPHIC_DATA = BibliographicData(

@@ -499,7 +499,7 @@ class TestOpdsImporter:
             type=Identifier.ISBN, identifier="978-3-16-148410-0"
         )
         mock_bibliographic = MagicMock(spec=BibliographicData)
-        mock_bibliographic.has_changed.return_value = True
+        mock_bibliographic.needs_apply.return_value = True
         mock_bibliographic.circulation = None
 
         # Mock the feed fetching and extraction
