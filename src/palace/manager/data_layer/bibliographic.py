@@ -1017,11 +1017,11 @@ class BibliographicData(BaseMutableData):
           any elapsed time triggers an update).
 
         Returns False (skip update) when ``data_source_last_updated`` is ``None`` and
-        ``edition.updated_at`` is within the ``minimum_time_between_updates_in_seconds``
+        ``edition.updated_at`` is within the ``minimum_time_between_updates``
         threshold.
 
         NOTE: this implementation is going to change soon.  The use of minimum_time_between_updates
-        is a stopgap measure to prevent over production of metadata update tasks in cases where
+        is a stopgap measure to prevent overproduction of metadata update tasks in cases where
         no data_source_last_updated is available.
 
         :param session: Database session used to look up the edition if not provided.
@@ -1052,8 +1052,8 @@ class BibliographicData(BaseMutableData):
             if not result:
                 self.log.info(
                     f"Publication {self.primary_identifier_data} has no source last updated timestamp so change is "
-                    f"indeterminate.  Since it has been updated in the last {self.minimum_time_between_updates}"
-                    f"ie on {edition.updated_at}, we will refrain from attempting to update it."
+                    f"indeterminate. Since it has been updated in the last {self.minimum_time_between_updates} "
+                    f"(i.e. on {edition.updated_at}), we will not attempt to update it."
                 )
 
             return result
