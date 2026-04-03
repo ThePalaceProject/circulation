@@ -1,6 +1,7 @@
 import json
 import re
 import typing
+from enum import StrEnum
 from functools import cached_property
 from typing import Protocol, Self, overload
 from urllib.parse import quote_plus
@@ -494,3 +495,49 @@ class PatronInformation(BaseOverdriveModel):
         default_factory=dict, alias="linkTemplates"
     )
     actions: list[dict[str, Action]] = Field(default_factory=list)
+
+
+class AvailabilityType(StrEnum):
+    """Availability type for a title in an Overdrive collection."""
+
+    NORMAL = "Normal"
+    ALWAYS_AVAILABLE = "AlwaysAvailable"
+    LIMITED_AVAILABILITY = "LimitedAvailability"
+
+
+class AvailabilityAccount(BaseOverdriveModel):
+    """
+    Per-library copy availability within an Overdrive availability document.
+
+    See: https://developer.overdrive.com/apis/library-availability-new
+    """
+
+    id: int
+    copies_owned: NonNegativeInt = Field(0, alias="copiesOwned")
+    copies_available: NonNegativeInt = Field(0, alias="copiesAvailable")
+    shared: bool = False
+
+
+class Availability(BaseOverdriveModel):
+    """
+    Availability information for a single title.
+
+    This model is used for both successful availability responses and error
+    responses (e.g. ``errorCode: "NotFound"``). Because error responses do not
+    include ``reserveId``, that field is optional. Callers that receive an error
+    response must supply the book ID from context via the ``book_id`` parameter
+    of :meth:`OverdriveRepresentationExtractor.book_info_to_circulation`.
+
+    See: https://developer.overdrive.com/apis/library-availability-new
+    """
+
+    reserve_id: str | None = Field(None, alias="reserveId")
+    accounts: list[AvailabilityAccount] = Field(default_factory=list)
+    availability_type: AvailabilityType | None = Field(None, alias="availabilityType")
+    available: bool = False
+    copies_available: NonNegativeInt | None = Field(None, alias="copiesAvailable")
+    copies_owned: NonNegativeInt | None = Field(None, alias="copiesOwned")
+    number_of_holds: NonNegativeInt = Field(0, alias="numberOfHolds")
+    is_owned_by_collections: bool | None = Field(None, alias="isOwnedByCollections")
+    error_code: str | None = Field(None, alias="errorCode")
+    links: dict[str, Link] = Field(default_factory=dict)

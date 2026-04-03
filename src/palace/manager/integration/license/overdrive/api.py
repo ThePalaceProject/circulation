@@ -78,6 +78,7 @@ from palace.manager.integration.license.overdrive.fulfillment import (
     OverdriveManifestFulfillment,
 )
 from palace.manager.integration.license.overdrive.model import (
+    Availability,
     BaseOverdriveModel,
     Checkout,
     Checkouts,
@@ -1692,25 +1693,31 @@ class OverdriveAPI(
                 status_code,
             )
             return None, None, False
-        book.update(json.loads(content))
 
-        # Update book_id now that we know we have new data.
-        book_id = book["id"]
+        availability = Availability.model_validate_json(content)
+
+        # Use the caller-provided ID for LicensePool lookup. This is always
+        # set because circulation_lookup creates dict(id=book_id) when called
+        # with a string, and book-list dicts always include "id".
+        resolved_book_id = cast(str, book.get("id"))
+
         license_pool, is_new = LicensePool.for_foreign_id(
             self._db,
             DataSource.OVERDRIVE,
             Identifier.OVERDRIVE_ID,
-            cast(str, book_id),
+            resolved_book_id,
             collection=self.collection,
         )
         if is_new or not license_pool.work:
-            # Either this is the first time we've seen this book or its doesn't
+            # Either this is the first time we've seen this book or it doesn't
             # have an associated work. Make sure its identifier has bibliographic coverage.
             self.overdrive_bibliographic_coverage_provider.ensure_coverage(
                 license_pool.identifier, force=True
             )
 
-        return self.update_licensepool_with_book_info(book, license_pool, is_new)
+        return self.update_licensepool_with_book_info(
+            availability, resolved_book_id, license_pool, is_new
+        )
 
     # Alias for the CirculationAPI interface
     def update_availability(self, licensepool: LicensePool) -> None:
@@ -1728,18 +1735,26 @@ class OverdriveAPI(
         )
 
     def update_licensepool_with_book_info(
-        self, book: dict[str, Any], license_pool: LicensePool, is_new_pool: bool
+        self,
+        availability: Availability,
+        book_id: str,
+        license_pool: LicensePool,
+        is_new_pool: bool,
     ) -> tuple[LicensePool, bool, bool]:
-        """Update a book's LicensePool with information from a JSON
-        representation of its circulation info.
+        """Update a book's LicensePool with information from an availability document.
 
         Then, create an Edition and make sure it has bibliographic
         coverage. If the new Edition is the only candidate for the
         pool's presentation_edition, promote it to presentation
         status.
+
+        :param availability: The parsed Overdrive availability document.
+        :param book_id: The Overdrive product ID for this book.
+        :param license_pool: The LicensePool to update.
+        :param is_new_pool: Whether this is a newly created LicensePool.
         """
         extractor = OverdriveRepresentationExtractor(self)
-        circulation = extractor.book_info_to_circulation(book)
+        circulation = extractor.book_info_to_circulation(availability, book_id=book_id)
         lp, circulation_changed = circulation.apply(self._db, license_pool.collection)
         if lp is not None:
             license_pool = lp
