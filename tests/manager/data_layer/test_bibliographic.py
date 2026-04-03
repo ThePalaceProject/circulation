@@ -1327,3 +1327,149 @@ class TestBibliographicData:
         )
         assert thumbnail.resource.representation is None
         assert [] == image.resource.representation.thumbnails
+
+    def test_has_changed_no_edition(self, db: DatabaseTransactionFixture):
+        """has_changed returns True when no matching edition exists."""
+        bibliographic = BibliographicData(
+            data_source_name=DataSource.FEEDBOOKS,
+            primary_identifier_data=IdentifierData(
+                type="any-identifier-type",
+                identifier="nonexistent-id-for-has-changed-test",
+            ),
+            data_source_last_updated=utc_now(),
+        )
+        # No edition exists in the DB for this identifier.
+        assert bibliographic.has_changed(db.session) is True
+
+    def test_has_changed_edition_updated_at_none(self, db: DatabaseTransactionFixture):
+        """has_changed returns True when the edition has no updated_at timestamp."""
+        edition = db.edition()
+        edition.updated_at = None
+
+        bibliographic = BibliographicData(
+            data_source_name=edition.data_source.name,
+            data_source_last_updated=utc_now(),
+        )
+        assert bibliographic.has_changed(db.session, edition=edition) is True
+
+    def test_has_changed_both_timestamps_none(self, db: DatabaseTransactionFixture):
+        """has_changed returns True when both edition.updated_at and
+        data_source_last_updated are None."""
+        edition = db.edition()
+        edition.updated_at = None
+
+        bibliographic = BibliographicData(
+            data_source_name=edition.data_source.name,
+            data_source_last_updated=None,
+        )
+        assert bibliographic.has_changed(db.session, edition=edition) is True
+
+    def test_has_changed_no_source_timestamp_edition_older_than_minimum(
+        self, db: DatabaseTransactionFixture
+    ):
+        """has_changed returns True when data_source_last_updated is None but the
+        edition was last updated longer ago than the minimum update interval."""
+        now = utc_now()
+        three_hours_ago = now - datetime.timedelta(hours=3)
+
+        edition = db.edition()
+        edition.updated_at = three_hours_ago
+
+        bibliographic = BibliographicData(
+            data_source_name=edition.data_source.name,
+            data_source_last_updated=None,
+            minimum_time_between_updates=datetime.timedelta(hours=2),
+        )
+        with freeze_time(now):
+            # Minimum is 2 hours; edition is 3 hours old → changed.
+            assert bibliographic.has_changed(db.session, edition=edition) is True
+
+    def test_has_changed_no_source_timestamp_edition_within_minimum(
+        self, db: DatabaseTransactionFixture
+    ):
+        """has_changed returns False when data_source_last_updated is None and the
+        edition was updated more recently than the minimum update interval."""
+        now = utc_now()
+        one_hour_ago = now - datetime.timedelta(hours=1)
+
+        edition = db.edition()
+        edition.updated_at = one_hour_ago
+
+        bibliographic = BibliographicData(
+            data_source_name=edition.data_source.name,
+            data_source_last_updated=None,
+            minimum_time_between_updates=datetime.timedelta(hours=2),
+        )
+        with freeze_time(now):
+            # Minimum is 2 hours; edition is only 1 hour old → no change.
+            assert bibliographic.has_changed(db.session, edition=edition) is False
+
+    def test_has_changed_custom_minimum_time(self, db: DatabaseTransactionFixture):
+        """minimum_time_between_updates is respected when data_source_last_updated is None."""
+        now = utc_now()
+        forty_five_minutes_ago = now - datetime.timedelta(minutes=45)
+
+        edition = db.edition()
+        edition.updated_at = forty_five_minutes_ago
+
+        bibliographic = BibliographicData(
+            data_source_name=edition.data_source.name,
+            data_source_last_updated=None,
+            minimum_time_between_updates=datetime.timedelta(minutes=30),
+        )
+
+        with freeze_time(now):
+            # Edition is 45 min old, minimum is 30 min → changed.
+            assert (
+                bibliographic.has_changed(
+                    db.session,
+                    edition=edition,
+                )
+                is True
+            )
+
+        bibliographic.minimum_time_between_updates = datetime.timedelta(hours=1)
+
+        with freeze_time(now):
+            # Edition is 45 min old, minimum is 60 min → no change.
+            assert (
+                bibliographic.has_changed(
+                    db.session,
+                    edition=edition,
+                )
+                is False
+            )
+
+    def test_has_changed_source_newer_than_edition(
+        self, db: DatabaseTransactionFixture
+    ):
+        """has_changed returns True when data_source_last_updated is newer than
+        edition.updated_at."""
+        now = utc_now()
+        one_day_ago = now - datetime.timedelta(days=1)
+
+        edition = db.edition()
+        edition.updated_at = one_day_ago
+
+        bibliographic = BibliographicData(
+            data_source_name=edition.data_source.name,
+            data_source_last_updated=now,
+        )
+        assert bibliographic.has_changed(db.session, edition=edition) is True
+
+    def test_has_changed_source_older_than_edition(
+        self, db: DatabaseTransactionFixture
+    ):
+        """has_changed returns False when data_source_last_updated is older than or
+        equal to edition.updated_at."""
+        now = utc_now()
+        one_day_ago = now - datetime.timedelta(days=1)
+
+        edition = db.edition()
+        edition.updated_at = now
+
+        bibliographic = BibliographicData(
+            data_source_name=edition.data_source.name,
+            data_source_last_updated=one_day_ago,
+        )
+        assert bibliographic.has_changed(db.session, edition=edition) is False
