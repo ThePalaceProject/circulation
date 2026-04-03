@@ -81,6 +81,10 @@ class BibliographicData(BaseMutableData):
     # Note: brought back to keep callers of bibliographic extraction process_one() methods simple.
     circulation: CirculationData | None = None
 
+    # FIXME: this parameter is a stopgap measure which should be removed once we sort out how to reasonably
+    #  determine has_changed for overdrive.
+    minimum_time_between_updates: datetime.timedelta = datetime.timedelta(0)
+
     @field_validator("language")
     @classmethod
     def _convert_langage_alpha3(cls, value: str | None) -> str | None:
@@ -996,25 +1000,72 @@ class BibliographicData(BaseMutableData):
 
         return contributors_changed
 
-    def has_changed(self, session: Session, edition: Edition | None = None) -> bool:
+    def has_changed(
+        self,
+        session: Session,
+        edition: Edition | None = None,
+    ) -> bool:
         """
         Test if the bibliographic data has changed since the last import.
+        Returns True (needs update) in the following cases:
+        - No existing edition is found for this identifier.
+        - Both ``data_source_last_updated`` and ``edition.updated_at`` are ``None``.
+        - ``edition.updated_at`` is ``None`` but ``data_source_last_updated`` is set.
+        - ``data_source_last_updated`` is newer than ``edition.updated_at``.
+        - ``data_source_last_updated`` is ``None`` but ``edition.updated_at`` is older
+          than ``minimum_time_between_updates`` (default ``0 seconds``, meaning
+          any elapsed time triggers an update).
+
+        Returns False (skip update) when ``data_source_last_updated`` is ``None`` and
+        ``edition.updated_at`` is within the ``minimum_time_between_updates``
+        threshold.
+
+        NOTE: this implementation is going to change soon.  The use of minimum_time_between_updates
+        is a stopgap measure to prevent overproduction of metadata update tasks in cases where
+        no data_source_last_updated is available.
+
+        :param session: Database session used to look up the edition if not provided.
+        :param edition: The Edition to compare against. If ``None``, the edition is
+            looked up from the database using this object's primary identifier.
+        :return: ``True`` if an update is needed, ``False`` otherwise.
+
         """
         if edition is None:
             edition, _ = self.edition(session, autocreate=False)
         if edition is None:
-            # We don't have an edition, so we definitely need to create one.
+            # No edition exists yet: always create one.
             return True
 
-        # If we don't have any information about the last update time, assume we need to update.
-        if edition.updated_at is None or self.data_source_last_updated is None:
+        if edition.updated_at is None:
+            # No edition timestamp: always re-import.
+            # Covers both "edition.updated_at is None" and "both timestamps None".
             return True
 
-        if self.data_source_last_updated > edition.updated_at:
+        elif self.data_source_last_updated is None:
+            # FIXME:  This is a stopgap measure to deal with the fact that we don't have a good way
+            # to detect metadata changes for Overdrive. This block should be removed once that problem is addressed.
+            # if we have an edition update time but we don't have a source last updated time, assume no change unless
+            # the minimum time between updates is exceeded
+            # No source timestamp: re-import only if the edition is older than the minimum interval.
+            result = utc_now() - edition.updated_at > self.minimum_time_between_updates
+
+            if not result:
+                self.log.info(
+                    f"Publication {self.primary_identifier_data} has no source last updated timestamp so change is "
+                    f"indeterminate. Since it has been updated in the last {self.minimum_time_between_updates} "
+                    f"(i.e. on {edition.updated_at}), we will not attempt to update it."
+                )
+
+            return result
+
+        elif self.data_source_last_updated > edition.updated_at:
+            # Source has a newer timestamp than the edition: re-import.
             return True
 
-        self.log.info(
-            f"Publication {self.primary_identifier_data} is unchanged. Last updated at "
-            f"{edition.updated_at}, data source last updated at {self.data_source_last_updated}"
-        )
-        return False
+        else:
+            # Source timestamp is not newer than the edition: skip.
+            self.log.info(
+                f"Publication {self.primary_identifier_data} is unchanged. Last updated at "
+                f"{edition.updated_at}, data source last updated at {self.data_source_last_updated}"
+            )
+            return False
