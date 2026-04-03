@@ -272,9 +272,9 @@ class TestOverdriveImporter:
 
         # Mock extractor methods
         mock_bibliographic = Mock(spec=BibliographicData)
-        mock_bibliographic.has_changed.return_value = True
+        mock_bibliographic.needs_apply.return_value = True
         mock_circulation = Mock(spec=CirculationData)
-        mock_circulation.has_changed.return_value = True
+        mock_circulation.needs_apply.return_value = True
 
         importer._extractor.book_info_to_bibliographic = Mock(
             return_value=mock_bibliographic
@@ -380,9 +380,9 @@ class TestOverdriveImporter:
 
         # Mock extractor
         mock_bibliographic = Mock(spec=BibliographicData)
-        mock_bibliographic.has_changed.return_value = True
+        mock_bibliographic.needs_apply.return_value = True
         mock_circulation = Mock(spec=CirculationData)
-        mock_circulation.has_changed.return_value = True
+        mock_circulation.needs_apply.return_value = True
 
         importer._extractor.book_info_to_bibliographic = Mock(
             return_value=mock_bibliographic
@@ -434,9 +434,9 @@ class TestOverdriveImporter:
 
         # Mock extractor - bibliographic hasn't changed
         mock_bibliographic = Mock(spec=BibliographicData)
-        mock_bibliographic.has_changed.return_value = False  # Not changed
+        mock_bibliographic.needs_apply.return_value = False  # Not changed
         mock_circulation = Mock(spec=CirculationData)
-        mock_circulation.has_changed.return_value = True
+        mock_circulation.needs_apply.return_value = True
 
         importer._extractor.book_info_to_bibliographic = Mock(
             return_value=mock_bibliographic
@@ -509,9 +509,9 @@ class TestOverdriveImporter:
 
         # Mock extractor
         mock_bibliographic = Mock(spec=BibliographicData)
-        mock_bibliographic.has_changed.return_value = False
+        mock_bibliographic.needs_apply.return_value = False
         mock_circulation = Mock(spec=CirculationData)
-        mock_circulation.has_changed.return_value = False
+        mock_circulation.needs_apply.return_value = False
 
         importer._extractor.book_info_to_bibliographic = Mock(
             return_value=mock_bibliographic
@@ -585,9 +585,9 @@ class TestOverdriveImporter:
 
         # Mock extractor - no changes
         mock_bibliographic = Mock(spec=BibliographicData)
-        mock_bibliographic.has_changed.return_value = False
+        mock_bibliographic.needs_apply.return_value = False
         mock_circulation = Mock(spec=CirculationData)
-        mock_circulation.has_changed.return_value = False
+        mock_circulation.needs_apply.return_value = False
 
         importer._extractor.book_info_to_bibliographic = Mock(
             return_value=mock_bibliographic
@@ -660,9 +660,9 @@ class TestOverdriveImporter:
 
         # Mock extractor - books HAVE changed despite being old
         mock_bibliographic = Mock(spec=BibliographicData)
-        mock_bibliographic.has_changed.return_value = True
+        mock_bibliographic.needs_apply.return_value = True
         mock_circulation = Mock(spec=CirculationData)
-        mock_circulation.has_changed.return_value = True
+        mock_circulation.needs_apply.return_value = True
 
         importer._extractor.book_info_to_bibliographic = Mock(
             return_value=mock_bibliographic
@@ -717,7 +717,7 @@ class TestOverdriveImporter:
         api.fetch_book_info_list = AsyncMock(return_value=(mock_book_data, None))
 
         mock_circulation = Mock(spec=CirculationData)
-        mock_circulation.has_changed.return_value = True
+        mock_circulation.needs_apply.return_value = True
 
         importer._extractor.book_info_to_circulation = Mock(
             return_value=mock_circulation
@@ -772,9 +772,9 @@ class TestOverdriveImporter:
         api.metadata_lookup = Mock(return_value={"title": "New Book"})
         # Mock extractor
         mock_bibliographic = Mock(spec=BibliographicData)
-        mock_bibliographic.has_changed.return_value = True
+        mock_bibliographic.needs_apply.return_value = True
         mock_circulation = Mock(spec=CirculationData)
-        mock_circulation.has_changed.return_value = True
+        mock_circulation.needs_apply.return_value = True
 
         importer._extractor.book_info_to_bibliographic = Mock(
             return_value=mock_bibliographic
@@ -857,9 +857,9 @@ class TestOverdriveImporter:
 
         # Mock extractor
         mock_bibliographic = Mock(spec=BibliographicData)
-        mock_bibliographic.has_changed.return_value = True
+        mock_bibliographic.needs_apply.return_value = True
         mock_circulation = Mock(spec=CirculationData)
-        mock_circulation.has_changed.return_value = True
+        mock_circulation.needs_apply.return_value = True
 
         importer._extractor.book_info_to_bibliographic = Mock(
             return_value=mock_bibliographic

@@ -220,8 +220,14 @@ class CirculationData(BaseMutableData):
         pool = None
         if collection:
             pool, ignore = self.license_pool(_db, collection)
-            if not replace.even_if_not_apparently_updated and not self.should_apply_to(
-                pool
+            # Skip circulation data update if the content hasn't changed, UNLESS we
+            # have individual license objects that may have expired since the last
+            # import (ODL-style pools). License expiry is time-dependent and cannot
+            # be detected by content hashing alone.
+            if (
+                not replace.even_if_not_apparently_updated
+                and self.licenses is None
+                and not self.should_apply_to(pool)
             ):
                 self.log.info(
                     f"Publication {self.primary_identifier_data} has newer data or has not been updated since "
@@ -302,8 +308,13 @@ class CirculationData(BaseMutableData):
         changed_availability = False
         changed_lp_type = False
         changed_lp_status = False
+        # Always process individual licenses (e.g. ODL) even when the content
+        # hash matches, because license availability can change over time as
+        # licenses expire independently of any feed content change.
         if pool and (
-            replace.even_if_not_apparently_updated or self.has_changed(_db, pool=pool)
+            replace.even_if_not_apparently_updated
+            or self.licenses is not None
+            or self.should_apply_to(pool)
         ):
             # Update availability information. This may result in
             # the issuance of additional circulation events.
@@ -346,7 +357,7 @@ class CirculationData(BaseMutableData):
                     new_licenses_available=0,
                     new_licenses_reserved=0,
                     new_patrons_in_hold_queue=0,
-                    as_of=self.last_checked,
+                    as_of=self.as_of_timestamp,
                 )
             elif pool.type == LicensePoolType.METERED:
                 # This is a metered pool, update the availability counts directly.
@@ -358,6 +369,7 @@ class CirculationData(BaseMutableData):
                     as_of=self.as_of_timestamp,
                 )
 
+            pool.updated_at = self.as_of_timestamp
             pool.updated_at_data_hash = self.calculate_hash()
 
         # If this is the first time we've seen this pool, or we never
