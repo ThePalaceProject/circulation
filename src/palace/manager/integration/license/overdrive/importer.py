@@ -152,7 +152,7 @@ class OverdriveImporter(LoggerMixin):
             # book dictionary.  Mypy complains without an assertion or type hints.
             assert bibliographic
 
-            if bibliographic.has_changed(self._db):
+            if bibliographic.needs_apply(self._db):
                 changed = True
                 apply_bibliographic(
                     bibliographic,
@@ -176,7 +176,7 @@ class OverdriveImporter(LoggerMixin):
             # book dictionary.  Mypy complains without an assertion or type hints.
             assert circulation
 
-            if circulation.has_changed(session=self._db, collection=self._collection):
+            if circulation.needs_apply(self._db, self._collection):
                 changed = True
                 apply_circulation(circulation, collection_id=self._collection.id)
 

@@ -162,6 +162,7 @@ class TestCirculationData:
         # have the one format we manually created.
         replace = ReplacementPolicy(
             formats=True,
+            even_if_not_apparently_updated=True,
         )
         circulation_data.apply(db.session, pool.collection, replace=replace)
         [pdf] = pool.delivery_mechanisms
@@ -203,7 +204,9 @@ class TestCirculationData:
 
         # If we apply the new CirculationData with formats false in the policy,
         # we'll add the new format, but keep the old one as well.
-        replacement_policy = ReplacementPolicy(formats=False)
+        replacement_policy = ReplacementPolicy(
+            formats=False, even_if_not_apparently_updated=True
+        )
         circulation_data.apply(db.session, pool.collection, replacement_policy)
 
         assert 2 == len(pool.delivery_mechanisms)
@@ -214,7 +217,9 @@ class TestCirculationData:
 
         # But if we make formats true in the policy, we'll delete the old format
         # and remove it from its loan.
-        replacement_policy = ReplacementPolicy(formats=True)
+        replacement_policy = ReplacementPolicy(
+            formats=True, even_if_not_apparently_updated=True
+        )
         circulation_data.apply(db.session, pool.collection, replacement_policy)
 
         assert 1 == len(pool.delivery_mechanisms)
@@ -414,52 +419,71 @@ class TestCirculationData:
         assert edition == pool2.presentation_edition
         assert pool.work == pool2.work
 
-    def test_apply_respects_last_checked_timestamp(
+    def test_apply_wont_overwrite_if_its_data_is_stale(
         self, db: DatabaseTransactionFixture
     ) -> None:
         identifier = IdentifierData(type="test identifier", identifier="1")
         circulation = CirculationData(
             data_source_name="Test data source",
             primary_identifier_data=identifier,
-            last_checked=utc_now() - datetime.timedelta(days=5),
+            updated_at=utc_now() - datetime.timedelta(minutes=5),
             licenses_owned=100,
         )
 
         collection = db.collection()
+
+        # The licensepool doesn't currently exist
         pool, new = circulation.license_pool(
             db.session, db.default_collection(), autocreate=False
         )
         assert pool is None
         assert new is False
 
-        # Even though the last_checked value is 5 days ago, we still apply this data because
-        # the license pool does not exist yet.
+        # The licensepool is created when we apply the circulation data, and its
+        # updated_at and created_at values are set to the values from the circulation data.
         pool, changes = circulation.apply(db.session, collection)
         assert changes is True
         assert pool is not None
-        assert pool.last_checked == circulation.last_checked
-        assert pool.availability_time == pool.last_checked
+        assert pool.updated_at == circulation.updated_at
+        assert pool.created_at == circulation.created_at
+        assert pool.updated_at_data_hash == circulation.calculate_hash()
         assert pool.licenses_owned == 100
 
-        # If we try to apply the same data again, nothing will change because
-        # the last_checked value is older than the current last_checked value on the pool.
-        circulation.licenses_owned = 10
-        pool, changes = circulation.apply(db.session, collection)
+        # This circulation data is stale, its updated_at value is 5 days older than
+        # the current time.
+        stale_circulation = CirculationData(
+            data_source_name="Test data source",
+            primary_identifier_data=identifier,
+            updated_at=utc_now() - datetime.timedelta(days=5),
+            licenses_owned=10,
+        )
+
+        # If we try to apply the stale circulation data, nothing happens because
+        # its updated_at value is older than the updated_at value on the pool.
+        pool, changes = stale_circulation.apply(db.session, collection)
         assert changes is False
         assert pool is not None
-        assert pool.last_checked == circulation.last_checked
+        assert pool.updated_at == circulation.updated_at
+        assert pool.created_at == circulation.created_at
+        assert pool.updated_at_data_hash == circulation.calculate_hash()
         assert pool.licenses_owned == 100
 
         # Unless the replacement policy forces it.
-        pool, changes = circulation.apply(
+        pool, changes = stale_circulation.apply(
             db.session,
             collection,
             replace=ReplacementPolicy(even_if_not_apparently_updated=True),
         )
         assert changes is True
         assert pool is not None
-        assert pool.last_checked == circulation.last_checked
         assert pool.licenses_owned == 10
+
+        # The pools updated_at value is set to the value from the stale circulation data
+        assert pool.updated_at == stale_circulation.updated_at
+        assert pool.updated_at_data_hash == stale_circulation.calculate_hash()
+
+        # But its created_at value is unchanged.
+        assert pool.created_at == circulation.created_at
 
     def test_license_pool_sets_default_license_values(
         self, db: DatabaseTransactionFixture
@@ -884,13 +908,13 @@ class TestCirculationData:
         assert pool_looked_up.identifier.type == identifier.type
         assert pool_looked_up.identifier.identifier == identifier.identifier
 
-    def test_has_changed(self, db: DatabaseTransactionFixture):
+    def test_needs_apply(self, db: DatabaseTransactionFixture):
         collection = db.collection()
         identifier = IdentifierData(type="test identifier", identifier="2")
         circulation = CirculationData(
             data_source_name="Test data source",
             primary_identifier_data=identifier,
-            last_checked=None,
+            updated_at=None,
         )
 
         today = utc_now()
@@ -898,26 +922,31 @@ class TestCirculationData:
         two_days_ago = today - datetime.timedelta(days=2)
 
         # Since last_updated is None, we always consider the data to have changed
-        assert circulation.has_changed(db.session, collection=collection) is True
+        assert circulation.needs_apply(db.session, collection) is True
 
         # The licensepool does not exist, so we consider the data to have changed
-        circulation.last_checked = one_day_ago
-        assert circulation.has_changed(db.session, collection=collection) is True
+        circulation.updated_at = one_day_ago
+        assert circulation.needs_apply(db.session, collection) is True
 
         # Create the pool
         pool, _ = circulation.license_pool(db.session, collection, autocreate=True)
-        pool.last_checked = None
+        pool.updated_at = None
+        pool.updated_at_data_hash = None
 
-        # The pool exists but last_checked is None, so we consider the data to have changed
-        assert circulation.has_changed(db.session, collection=collection) is True
-
-        # Set last_checked to 2 days ago
-        pool.last_checked = two_days_ago
-        assert circulation.has_changed(db.session, collection=collection) is True
+        # The pool exists but updated_at and data_hash are None, so we consider the data to have changed
+        assert circulation.needs_apply(db.session, collection) is True
 
         # But if the pool was checked more recently than the data, nothing has changed
-        pool.last_checked = today
-        assert circulation.has_changed(db.session, collection=collection) is False
+        pool.updated_at = today
+        pool.updated_at_data_hash = "hash"
+        assert circulation.needs_apply(db.session, collection) is False
+
+        # If the data is newer then the pool, then we check to see if the data hash has changed
+        pool.updated_at = two_days_ago
+        assert circulation.needs_apply(db.session, collection) is True
+
+        pool.updated_at_data_hash = circulation.calculate_hash()
+        assert circulation.needs_apply(db.session, collection) is False
 
     @pytest.mark.parametrize(
         "initial_type,new_type,expected_type",

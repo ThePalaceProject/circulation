@@ -172,6 +172,9 @@ class Edition(Base, EditionConstants):
     created_at = Column(DateTime(timezone=True), default=utc_now)
     updated_at = Column(DateTime(timezone=True), default=None)
 
+    # Hash of the BibliographicData last used to create/update this Edition.
+    updated_at_data_hash = Column(String, default=None)
+
     def __repr__(self) -> str:
         id_repr = repr(self.primary_identifier)
         return "Edition {} [{!r}] ({}/{}/{})".format(

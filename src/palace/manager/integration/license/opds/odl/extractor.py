@@ -914,7 +914,7 @@ class OPDS2WithODLExtractor[PublicationType: opds2.BasePublication](
             series=series,
             series_position=series_position,
             links=links,
-            data_source_last_updated=last_opds_update,
+            updated_at=last_opds_update,
             duration=duration,
         )
 

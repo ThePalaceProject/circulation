@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import base64
 from functools import cached_property
 from typing import Annotated, Self
 
 from frozendict import frozendict
-from pydantic import Field, constr, field_validator, model_validator
+from pydantic import Field, constr, field_serializer, field_validator, model_validator
 
 from palace.manager.data_layer.base.frozen import BaseFrozenData
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
@@ -24,6 +25,17 @@ class LinkData(BaseFrozenData, LoggerMixin):
     transformation_settings: FrozenDict[str, str] = Field(
         default_factory=frozendict, repr=False
     )
+
+    @field_serializer("content", when_used="json")
+    def _serialize_content(self, value: bytes | str | None) -> str | None:
+        """Base64-encode binary content for JSON serialization.
+
+        Pydantic's JSON mode fails to serialize raw bytes in ``bytes | str``
+        union fields, so we encode them as base64 strings here.
+        """
+        if isinstance(value, bytes):
+            return base64.b64encode(value).decode("ascii")
+        return value
 
     @model_validator(mode="after")
     def _check_href_or_content(self) -> Self:

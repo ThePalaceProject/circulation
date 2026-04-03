@@ -131,7 +131,7 @@ class BoundlessImporter(LoggerMixin):
             for bibliographic, circulation in BibliographicParser.parse(
                 availability_response
             ):
-                if self._import_all or bibliographic.has_changed(self._db):
+                if self._import_all or bibliographic.needs_apply(self._db):
                     apply_bibliographic(
                         bibliographic, collection_id=self._collection.id, replace=policy
                     )
