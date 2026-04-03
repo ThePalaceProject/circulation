@@ -46,6 +46,8 @@ through mobile and web applications.
   in src/palace/manager/core/exceptions.py. There are some Palace versions of common exceptions defined in that file like
   `PalaceValueError` or `PalaceTypeError`.
 - Whenever possible use immutable datastructures for global and class constants.
+- Whenever creating an alembic revision, always use `alembic revision` to create the revision file with the
+  upgrade/downgrade stubs.
 
 ## Project Structure
 
