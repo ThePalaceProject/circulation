@@ -52,7 +52,7 @@ supplied `fmt`, or `dateutil`). At runtime this causes the rule to
 ### Examples
 
 ```python
-# Block patrons under 18 (field returned verbatim from the SIP2 server)
+# Block patrons under 18 (field returned verbatim from the remote patron_information call)
 age_in_years({polaris_patron_birthdate}) < 18
 
 # Block patrons under 18 using an explicit strptime format
@@ -66,9 +66,10 @@ age_in_years({polaris_patron_birthdate}) >= 65
 
 ## `int`
 
-Converts a value to a Python `int`. Useful when the SIP2 server returns
-a numeric field as a string (a common occurrence) and you need to compare
-it numerically rather than lexicographically.
+Converts a value to a Python `int`. Useful when the remote
+patron_information call returns a numeric field as a string (a common
+occurrence) and you need to compare it numerically rather than
+lexicographically.
 
 ### Signature
 
@@ -102,7 +103,7 @@ this causes the rule to **fail open**.
 ### Examples
 
 ```python
-# Block patron class codes above 2 (SIP2 returns the code as a string)
+# Block patron class codes above 2 (returned as a string by the remote patron_information call)
 int({sipserver_patron_class}) > 2
 
 # Block if a numeric expiry-year field indicates an expired account
@@ -133,7 +134,7 @@ int({expire_year}) < 2025
   functions, request them via the standard feature-request process so they
   can be reviewed and added to `DEFAULT_ALLOWED_FUNCTIONS` in
   `rule_engine.py`.
-- **Placeholder syntax** — field values from the SIP2 response are
-  referenced as `{field_name}`. All fields returned by the SIP2
+- **Placeholder syntax** — field values from the remote patron_information
+  call are referenced as `{field_name}`. All fields returned by the
   `patron_information` command are available, plus the normalised `{fines}`
   key (a `float` derived from `fee_amount`).
