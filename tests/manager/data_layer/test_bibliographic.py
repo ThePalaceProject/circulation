@@ -1331,9 +1331,9 @@ class TestBibliographicData:
     def test_has_changed_no_edition(self, db: DatabaseTransactionFixture):
         """has_changed returns True when no matching edition exists."""
         bibliographic = BibliographicData(
-            data_source_name=DataSource.OVERDRIVE,
+            data_source_name=DataSource.FEEDBOOKS,
             primary_identifier_data=IdentifierData(
-                type=Identifier.OVERDRIVE_ID,
+                type="any-identifier-type",
                 identifier="nonexistent-id-for-has-changed-test",
             ),
             data_source_last_updated=utc_now(),
@@ -1378,10 +1378,10 @@ class TestBibliographicData:
         bibliographic = BibliographicData(
             data_source_name=edition.data_source.name,
             data_source_last_updated=None,
-            minimum_time_between_updates_in_seconds=2 * 60 * 60,
+            minimum_time_between_updates=datetime.timedelta(hours=2),
         )
         with freeze_time(now):
-            # Default minimum is 2 hours; edition is 3 hours old → changed.
+            # Minimum is 2 hours; edition is 3 hours old → changed.
             assert bibliographic.has_changed(db.session, edition=edition) is True
 
     def test_has_changed_no_source_timestamp_edition_within_minimum(
@@ -1398,26 +1398,24 @@ class TestBibliographicData:
         bibliographic = BibliographicData(
             data_source_name=edition.data_source.name,
             data_source_last_updated=None,
-            minimum_time_between_updates_in_seconds=2 * 60 * 60,
+            minimum_time_between_updates=datetime.timedelta(hours=2),
         )
         with freeze_time(now):
-            # Default minimum is 2 hours; edition is only 1 hour old → no change.
+            # Minimum is 2 hours; edition is only 1 hour old → no change.
             assert bibliographic.has_changed(db.session, edition=edition) is False
 
     def test_has_changed_custom_minimum_time(self, db: DatabaseTransactionFixture):
-        """minimum_time_between_updates_in_seconds is respected when
-        data_source_last_updated is None."""
+        """minimum_time_between_updates is respected when data_source_last_updated is None."""
         now = utc_now()
         forty_five_minutes_ago = now - datetime.timedelta(minutes=45)
 
         edition = db.edition()
         edition.updated_at = forty_five_minutes_ago
 
-        thirty_minutes = 30 * 60
         bibliographic = BibliographicData(
             data_source_name=edition.data_source.name,
             data_source_last_updated=None,
-            minimum_time_between_updates_in_seconds=thirty_minutes,
+            minimum_time_between_updates=datetime.timedelta(minutes=30),
         )
 
         with freeze_time(now):
@@ -1430,8 +1428,7 @@ class TestBibliographicData:
                 is True
             )
 
-        one_hour = 60 * 60
-        bibliographic.minimum_time_between_updates_in_seconds = one_hour
+        bibliographic.minimum_time_between_updates = datetime.timedelta(hours=1)
 
         with freeze_time(now):
             # Edition is 45 min old, minimum is 60 min → no change.
