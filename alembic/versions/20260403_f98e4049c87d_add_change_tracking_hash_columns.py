@@ -1,8 +1,8 @@
-"""Add content-hash change tracking columns to editions and licensepools
+"""Add change tracking hash columns
 
-Revision ID: 57d824b34167
-Revises: 9c3f2b3fba1b
-Create Date: 2026-04-02 00:00:00.000000+00:00
+Revision ID: f98e4049c87d
+Revises: a5ee359c2d31
+Create Date: 2026-04-03 03:05:58.742988+00:00
 
 """
 
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision = "57d824b34167"
+revision = "f98e4049c87d"
 down_revision = "a5ee359c2d31"
 branch_labels = None
 depends_on = None
