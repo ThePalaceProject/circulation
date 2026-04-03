@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime
 import logging
 import re
 from typing import TYPE_CHECKING, Any
@@ -681,7 +682,7 @@ class OverdriveRepresentationExtractor(LoggerMixin):
                 links=links,
                 duration=duration,
                 # FIXME - this parameter should be removed once we resolve the overdrive change detection issue.
-                minimum_time_between_updates = datetime.timedelta(days=3)
+                minimum_time_between_updates=datetime.timedelta(days=3),
             )
         else:
             bibliographic = BibliographicData(
