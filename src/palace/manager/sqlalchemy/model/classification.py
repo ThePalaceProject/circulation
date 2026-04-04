@@ -425,6 +425,7 @@ class Classification(Base):
         # to use reading level as a proxy for age appropriateness in a
         # pinch. (But not outside of a pinch.)
         (DataSourceConstants.OVERDRIVE, Subject.GRADE_LEVEL): 0.35,
+        (DataSourceConstants.LEXILE_DB, Subject.LEXILE_SCORE): 0.95,
         Subject.LEXILE_SCORE: 0.1,
         Subject.ATOS_SCORE: 0.1,
     }
