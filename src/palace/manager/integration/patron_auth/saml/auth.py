@@ -120,7 +120,7 @@ class SAMLAuthenticationManager:
         # If server is behind proxys or balancers use the HTTP_X_FORWARDED fields
         url_data = urlparse(request.url)
 
-        return {
+        request_data = {
             "https": "on" if request.scheme == "https" else "off",
             "http_host": request.host,
             "server_port": url_data.port,
@@ -130,6 +130,15 @@ class SAMLAuthenticationManager:
             # 'lowercase_urlencoding': True,
             "post_data": request.form.copy(),
         }
+
+        # For HTTP-Redirect binding, pass the raw query string to OneLogin for exact
+        # signature validation to avoid potential encoding mismatches between what
+        # was signed and what we would otherwise reconstruct from decoded parameters.
+        if request.query_string:
+            request_data["query_string"] = request.query_string.decode("utf-8")
+            request_data["validate_signature_from_qs"] = True
+
+        return request_data
 
     def _create_auth_object(self, db, idp_entity_id, settings=None):
         """Create and initialize an OneLogin_Saml2_Auth object.
