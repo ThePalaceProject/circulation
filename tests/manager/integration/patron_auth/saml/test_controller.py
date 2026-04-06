@@ -1232,6 +1232,119 @@ class TestSAMLControllerLogout:
 
         assert result.uri == SAML_INVALID_REQUEST.uri
 
+    def test_saml_logout_redirect_provider_lookup_fails(
+        self, controller_fixture: ControllerFixture
+    ):
+        """saml_provider_lookup failure returns ProblemDetail."""
+        controller, mock_provider, mock_auth_manager, mock_credential_manager = (
+            self._make_controller_and_mocks(controller_fixture)
+        )
+        library = controller_fixture.db.default_library()
+
+        library_authenticator = controller._authenticator.library_authenticators[
+            "default"
+        ]
+        library_authenticator.decode_bearer_token = Mock(
+            return_value=(self.PROVIDER_NAME, "raw-token-value")
+        )
+        controller._authenticator.saml_provider_lookup = Mock(
+            return_value=SAML_INVALID_REQUEST.detailed("unknown provider")
+        )
+
+        params = {
+            SAMLController.PROVIDER_NAME: self.PROVIDER_NAME,
+            LOGOUT_REDIRECT_QUERY_PARAM: self.REDIRECT_URI,
+        }
+
+        with controller_fixture.app.test_request_context(
+            "/default/saml/logout",
+            headers={"Authorization": "Bearer valid.jwt.token"},
+        ):
+            request.library = library  # type: ignore[attr-defined]
+            with patch(
+                "palace.manager.integration.patron_auth.saml.controller.get_request_library",
+                return_value=library,
+            ):
+                result = controller.saml_logout_redirect(
+                    params, controller_fixture.db.session
+                )
+
+        assert isinstance(result, ProblemDetail)
+        assert result.uri == SAML_INVALID_REQUEST.uri
+
+    @pytest.mark.parametrize(
+        "missing_param",
+        [
+            pytest.param(SAMLController.LIBRARY_SHORT_NAME, id="missing-library"),
+            pytest.param(SAMLController.PROVIDER_NAME, id="missing-provider"),
+            pytest.param(SAMLController.IDP_ENTITY_ID, id="missing-idp"),
+        ],
+    )
+    def test_saml_logout_callback_missing_relay_state_param(
+        self, controller_fixture: ControllerFixture, missing_param: str
+    ):
+        """Missing required relay state parameter returns ProblemDetail."""
+        controller, *_ = self._make_controller_and_mocks(controller_fixture)
+
+        all_params = {
+            SAMLController.LIBRARY_SHORT_NAME: "default",
+            SAMLController.PROVIDER_NAME: self.PROVIDER_NAME,
+            SAMLController.IDP_ENTITY_ID: self.IDP_ENTITY_ID,
+        }
+        all_params.pop(missing_param)
+        relay_state_url = f"https://app.example.com/logout?{urlencode(all_params)}"
+        qs = urlencode({"SAMLResponse": "encoded", "RelayState": relay_state_url})
+
+        with controller_fixture.app.test_request_context(f"/saml/logout_callback?{qs}"):
+            result = controller.saml_logout_callback(
+                request, controller_fixture.db.session
+            )
+
+        assert isinstance(result, ProblemDetail)
+
+    @pytest.mark.parametrize(
+        "library_short_name, mock_provider_lookup",
+        [
+            pytest.param("nonexistent-library", None, id="invalid-library"),
+            pytest.param(
+                "default",
+                SAML_INVALID_REQUEST.detailed("unknown provider"),
+                id="provider-lookup-fails",
+            ),
+        ],
+    )
+    def test_saml_logout_callback_redirect_with_error(
+        self,
+        controller_fixture: ControllerFixture,
+        library_short_name: str,
+        mock_provider_lookup: ProblemDetail | None,
+    ):
+        """Invalid library or provider in relay state redirects with error."""
+        controller, *_ = self._make_controller_and_mocks(controller_fixture)
+
+        if mock_provider_lookup is not None:
+            controller._authenticator.saml_provider_lookup = Mock(
+                return_value=mock_provider_lookup
+            )
+
+        relay_state = urlencode(
+            {
+                SAMLController.LIBRARY_SHORT_NAME: library_short_name,
+                SAMLController.PROVIDER_NAME: self.PROVIDER_NAME,
+                SAMLController.IDP_ENTITY_ID: self.IDP_ENTITY_ID,
+            }
+        )
+        relay_state_url = f"https://app.example.com/logout?{relay_state}"
+        qs = urlencode({"SAMLResponse": "encoded", "RelayState": relay_state_url})
+
+        with controller_fixture.app.test_request_context(f"/saml/logout_callback?{qs}"):
+            result = controller.saml_logout_callback(
+                request, controller_fixture.db.session
+            )
+
+        assert result.status_code == 302
+        assert "error" in result.location
+
     def test_saml_logout_callback_success(self, controller_fixture: ControllerFixture):
         """Happy path: valid SAMLResponse → redirect with logout_status=success."""
         controller, mock_provider, mock_auth_manager, mock_credential_manager = (

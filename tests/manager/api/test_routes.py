@@ -1,5 +1,6 @@
 from unittest.mock import MagicMock, patch
 
+import flask
 import pytest
 from werkzeug.datastructures import ImmutableMultiDict
 
@@ -578,3 +579,28 @@ class TestSAMLRoutes:
     def test_saml_sp_metadata(self, fixture: RouteTestFixture, url: str):
         fixture.assert_request_calls(url, fixture.controller.saml_sp_metadata)
         fixture.assert_supported_methods(url, "GET")
+
+    def test_saml_logout(self, fixture: RouteTestFixture):
+        url = "/LIBSHORTNAME/saml/logout"
+        fixture.assert_request_calls(
+            url,
+            fixture.controller.saml_logout_redirect,
+            ImmutableMultiDict([]),
+            fixture.manager._db,
+        )
+        fixture.assert_supported_methods(url, "GET")
+
+    @pytest.mark.parametrize(
+        "http_method",
+        [pytest.param("GET", id="get"), pytest.param("POST", id="post")],
+    )
+    def test_saml_logout_callback(self, fixture: RouteTestFixture, http_method: str):
+        url = "/saml/logout_callback"
+        fixture.assert_request_calls(
+            url,
+            fixture.controller.saml_logout_callback,
+            flask.request,
+            fixture.manager._db,
+            http_method=http_method,
+        )
+        fixture.assert_supported_methods(url, "GET", "POST")
