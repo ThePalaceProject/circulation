@@ -376,7 +376,7 @@ class TestSAMLAuthenticationManager:
             SAMLService,
         )
 
-        slo_url = "http://idp1.hilbertteam.net/idp/profile/SAML2/Redirect/SLO"
+        slo_url = "http://idp.example.com/idp/profile/SAML2/Redirect/SLO"
         slo_binding = SAMLBinding.HTTP_REDIRECT
         idp_with_slo = IDP(
             saml_strings.IDP_1_ENTITY_ID,

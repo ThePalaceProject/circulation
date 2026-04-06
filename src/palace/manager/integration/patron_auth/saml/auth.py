@@ -10,6 +10,7 @@ from onelogin.saml2.auth import OneLogin_Saml2_Auth
 from onelogin.saml2.errors import OneLogin_Saml2_Error
 
 from palace.manager.integration.patron_auth.saml.configuration.model import (
+    SAMLConfigurationError,
     SAMLOneLoginConfiguration,
 )
 from palace.manager.integration.patron_auth.saml.configuration.service_provider import (
@@ -150,7 +151,7 @@ class SAMLAuthenticationManager:
         :type idp_entity_id: string
 
         :param settings: Optional pre-built settings dict. When provided, skips
-            ``get_settings`` so callers can supply custom settings (e.g. SLO settings).
+            `get_settings` so callers can supply custom settings (e.g. SLO settings).
         :type settings: dict | None
 
         :return: OneLogin_Saml2_Auth object
@@ -300,13 +301,14 @@ class SAMLAuthenticationManager:
                 name_id_format=name_id.name_format,
                 spnq=name_id.sp_name_qualifier,
             )
-            self._logger.info(
-                f"SLO initiated for IdP '{idp_entity_id}': redirecting to {redirect_url}"
-            )
-            return redirect_url
-        except OneLogin_Saml2_Error as exception:
+        except (OneLogin_Saml2_Error, SAMLConfigurationError) as exception:
             self._logger.exception("Unexpected error while initiating SAML SLO")
             return SAML_GENERIC_ERROR.detailed(str(exception))
+
+        self._logger.info(
+            f"SLO initiated for IdP '{idp_entity_id}': redirecting to {redirect_url}"
+        )
+        return redirect_url
 
     def finish_logout(
         self,
@@ -348,15 +350,16 @@ class SAMLAuthenticationManager:
                 reason = auth.get_last_error_reason()
                 self._logger.error(f"SLO validation errors: {errors} — {reason}")
                 return SAML_GENERIC_ERROR.detailed(f"SLO validation failed: {reason}")
-            self._logger.info(
-                f"SLO response validated successfully for IdP '{idp_entity_id}'"
-            )
-            return True
-        except OneLogin_Saml2_Error as exception:
+        except (OneLogin_Saml2_Error, SAMLConfigurationError) as exception:
             self._logger.exception(
                 "Unexpected error while processing SAML SLO response"
             )
             return SAML_GENERIC_ERROR.detailed(str(exception))
+
+        self._logger.info(
+            f"SLO response validated successfully for IdP '{idp_entity_id}'"
+        )
+        return True
 
     def finish_authentication(self, db, idp_entity_id):
         """Finish the SAML authentication workflow by validating AuthnResponse and extracting a SAML assertion from it.

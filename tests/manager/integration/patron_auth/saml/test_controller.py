@@ -802,7 +802,7 @@ class TestSAMLControllerLogout:
     """Tests for SP-Initiated SAML SLO."""
 
     IDP_ENTITY_ID = saml_strings.IDP_1_ENTITY_ID
-    SLO_URL = "http://idp1.hilbertteam.net/idp/profile/SAML2/Redirect/SLO"
+    SLO_URL = "http://idp.example.com/idp/profile/SAML2/Redirect/SLO"
     REDIRECT_URI = "https://app.example.com/after-logout"
     CALLBACK_URL = "https://cm.example.com/saml/logout_callback"
     PROVIDER_NAME = SAMLWebSSOAuthenticationProvider.label()
