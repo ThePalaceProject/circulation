@@ -241,6 +241,11 @@ class OverdriveAPI(
 
     EVENT_DELAY = datetime.timedelta(minutes=120)
 
+    # Maximum age of the cached library document before it is re-fetched.
+    # OverDrive periodically rotates collection tokens, so this ensures we
+    # always have a current token without manual intervention.
+    LIBRARY_MAX_AGE: datetime.timedelta = datetime.timedelta(days=30)
+
     TIME_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 
     NEXT_REL = "next"
@@ -531,6 +536,11 @@ class OverdriveAPI(
     def get_library(self) -> dict[str, Any]:
         """Get basic information about the collection, including
         a link to the titles in the collection.
+
+        The response is cached in the ``representations`` table and refreshed
+        at most once every :attr:`LIBRARY_MAX_AGE`. This ensures the
+        ``collectionToken`` embedded in the response stays current, since
+        OverDrive periodically rotates collection tokens.
         """
         url = self._library_endpoint
         with self.lock:
@@ -539,6 +549,7 @@ class OverdriveAPI(
                 url,
                 self.get,
                 exception_handler=Representation.reraise_exception,
+                max_age=self.LIBRARY_MAX_AGE,
             )
             return json.loads(representation.content)  # type: ignore[no-any-return]
 
@@ -561,6 +572,7 @@ class OverdriveAPI(
                 advantage_url,
                 self.get,
                 exception_handler=Representation.reraise_exception,
+                max_age=self.LIBRARY_MAX_AGE,
             )
             yield from OverdriveAdvantageAccount.from_representation(
                 representation.content
