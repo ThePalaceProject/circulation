@@ -6,7 +6,6 @@ from typing import Annotated, Any
 
 from annotated_types import Ge, Le
 from flask_babel import lazy_gettext as _
-from onelogin.saml2.constants import OneLogin_Saml2_Constants
 from onelogin.saml2.settings import OneLogin_Saml2_Settings
 from pydantic import PositiveInt, field_validator
 from sqlalchemy.orm import Session
@@ -831,14 +830,32 @@ class SAMLOneLoginConfiguration(LoggerMixin):
         ``singleLogoutService`` is included automatically by
         ``_get_identity_provider_settings`` when the IdP's metadata contains one.
 
+        The SP's SLO binding is set to match the IdP's SLO service binding if
+        available in the metadata. This ensures compatibility with IdPs that
+        support both HTTP-POST and HTTP-Redirect bindings.
+
         :param db: Database session
         :param idp_entity_id: IdP's entity ID
         :param sp_slo_url: Absolute URL for the SP's SLO callback endpoint
         :return: Settings dict suitable for ``OneLogin_Saml2_Auth``
         """
         logout_settings = self.get_settings(db, idp_entity_id)
-        logout_settings[self.SP][self.SINGLE_LOGOUT_SERVICE] = {
-            self.URL: sp_slo_url,
-            self.BINDING: OneLogin_Saml2_Constants.BINDING_HTTP_REDIRECT,
-        }
+
+        # Configure SP's SLO service only if IdP has declared an SLO service.
+        # Use the IdP's SLO service binding to ensure compatibility.
+        identity_providers = [
+            idp
+            for idp in self.get_identity_providers(db)
+            if idp.entity_id == idp_entity_id
+        ]
+        if identity_providers and identity_providers[0].slo_service:
+            slo_binding = identity_providers[0].slo_service.binding.value
+            logout_settings[self.SP][self.SINGLE_LOGOUT_SERVICE] = {
+                self.URL: sp_slo_url,
+                self.BINDING: slo_binding,
+            }
+        else:
+            # If IdP has no SLO service, remove the default SP SLO service configuration.
+            logout_settings[self.SP][self.SINGLE_LOGOUT_SERVICE] = {}
+
         return logout_settings

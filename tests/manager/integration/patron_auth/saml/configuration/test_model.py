@@ -16,6 +16,7 @@ from palace.manager.integration.patron_auth.saml.configuration.problem_details i
 )
 from palace.manager.integration.patron_auth.saml.metadata.federations import incommon
 from palace.manager.integration.patron_auth.saml.metadata.model import (
+    SAMLBinding,
     SAMLIdentityProviderMetadata,
     SAMLNameIDFormat,
     SAMLOrganization,
@@ -858,3 +859,74 @@ class TestSAMLOneLoginConfiguration:
         assert result == expected_result
         onelogin_configuration.get_service_provider.assert_called_with()
         onelogin_configuration.get_identity_providers.assert_called_with(db)
+
+    @pytest.mark.parametrize(
+        "slo_binding",
+        [SAMLBinding.HTTP_REDIRECT, SAMLBinding.HTTP_POST],
+        ids=["redirect-binding", "post-binding"],
+    )
+    def test_get_logout_settings_uses_idp_slo_binding(
+        self, slo_binding, create_saml_configuration
+    ):
+        """Test that get_logout_settings uses the IdP's SLO service binding."""
+        # Arrange
+        idp_with_slo = SAMLIdentityProviderMetadata(
+            saml_strings.IDP_1_ENTITY_ID,
+            SAMLUIInfo(),
+            SAMLOrganization(),
+            SAMLNameIDFormat.UNSPECIFIED.value,
+            SAMLService(saml_strings.IDP_1_SSO_URL, saml_strings.IDP_1_SSO_BINDING),
+            slo_service=SAMLService("http://idp.example.com/logout", slo_binding),
+        )
+
+        configuration = create_saml_configuration()
+        onelogin_configuration = SAMLOneLoginConfiguration(configuration)
+        onelogin_configuration.get_service_provider = MagicMock(
+            return_value=SERVICE_PROVIDER_WITH_CERTIFICATE
+        )
+        onelogin_configuration.get_identity_providers = MagicMock(
+            return_value=[idp_with_slo]
+        )
+        db = create_autospec(spec=sqlalchemy.orm.session.Session)
+        sp_slo_url = "https://cm.example.com/saml/logout_callback"
+
+        # Act
+        result = onelogin_configuration.get_logout_settings(
+            db, idp_with_slo.entity_id, sp_slo_url
+        )
+
+        # Assert
+        assert result["sp"]["singleLogoutService"]["url"] == sp_slo_url
+        assert result["sp"]["singleLogoutService"]["binding"] == slo_binding.value
+
+    def test_get_logout_settings_without_idp_slo_service(
+        self, create_saml_configuration
+    ):
+        """Test that get_logout_settings skips SP SLO when IdP has no SLO service."""
+        # Arrange
+        idp_without_slo = SAMLIdentityProviderMetadata(
+            saml_strings.IDP_1_ENTITY_ID,
+            SAMLUIInfo(),
+            SAMLOrganization(),
+            SAMLNameIDFormat.UNSPECIFIED.value,
+            SAMLService(saml_strings.IDP_1_SSO_URL, saml_strings.IDP_1_SSO_BINDING),
+        )
+
+        configuration = create_saml_configuration()
+        onelogin_configuration = SAMLOneLoginConfiguration(configuration)
+        onelogin_configuration.get_service_provider = MagicMock(
+            return_value=SERVICE_PROVIDER_WITH_CERTIFICATE
+        )
+        onelogin_configuration.get_identity_providers = MagicMock(
+            return_value=[idp_without_slo]
+        )
+        db = create_autospec(spec=sqlalchemy.orm.session.Session)
+        sp_slo_url = "https://cm.example.com/saml/logout_callback"
+
+        # Act
+        result = onelogin_configuration.get_logout_settings(
+            db, idp_without_slo.entity_id, sp_slo_url
+        )
+
+        # Assert
+        assert result["sp"]["singleLogoutService"] == {}
