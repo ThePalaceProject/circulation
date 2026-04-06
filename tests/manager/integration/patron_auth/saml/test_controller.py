@@ -1202,6 +1202,36 @@ class TestSAMLControllerLogout:
         assert result.status_code == 302
         assert "logout_status=partial" in result.location
 
+    def test_saml_logout_redirect_missing_library_authenticator(
+        self, controller_fixture: ControllerFixture
+    ):
+        """Missing library authenticator returns error."""
+        controller, _, _, _ = self._make_controller_and_mocks(controller_fixture)
+        library = controller_fixture.db.default_library()
+
+        # Remove the library authenticator for this library
+        controller._authenticator.library_authenticators.pop("default", None)
+
+        params = {
+            SAMLController.PROVIDER_NAME: self.PROVIDER_NAME,
+            LOGOUT_REDIRECT_QUERY_PARAM: self.REDIRECT_URI,
+        }
+
+        with controller_fixture.app.test_request_context(
+            "/default/saml/logout",
+            headers={"Authorization": "Bearer valid.jwt.token"},
+        ):
+            request.library = library  # type: ignore[attr-defined]
+            with patch(
+                "palace.manager.integration.patron_auth.saml.controller.get_request_library",
+                return_value=library,
+            ):
+                result = controller.saml_logout_redirect(
+                    params, controller_fixture.db.session
+                )
+
+        assert result.uri == SAML_INVALID_REQUEST.uri
+
     def test_saml_logout_callback_success(self, controller_fixture: ControllerFixture):
         """Happy path: valid SAMLResponse → redirect with logout_status=success."""
         controller, mock_provider, mock_auth_manager, mock_credential_manager = (

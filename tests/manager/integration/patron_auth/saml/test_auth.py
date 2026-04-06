@@ -513,6 +513,56 @@ class TestSAMLAuthenticationManager:
         assert result is True
         mock_auth.process_slo.assert_called_once_with(keep_local_session=True)
 
+    def test_finish_logout_validation_errors(
+        self,
+        controller_fixture: ControllerFixture,
+        create_mock_onelogin_configuration: Callable[..., SAMLOneLoginConfiguration],
+    ):
+        """finish_logout should return a ProblemDetail when the SAMLResponse contains errors."""
+        from unittest.mock import MagicMock, patch
+
+        from palace.manager.integration.patron_auth.saml.auth import SAML_GENERIC_ERROR
+
+        onelogin_configuration = create_mock_onelogin_configuration(
+            SERVICE_PROVIDER_WITH_UNSIGNED_REQUESTS, IDENTITY_PROVIDERS
+        )
+        subject_parser = SAMLSubjectParser()
+        parser = DSLParser()
+        visitor = DSLEvaluationVisitor()
+        evaluator = DSLEvaluator(parser, visitor)
+        subject_filter = SAMLSubjectFilter(evaluator)
+        authentication_manager = SAMLAuthenticationManager(
+            onelogin_configuration, subject_parser, subject_filter
+        )
+
+        mock_auth = MagicMock()
+        mock_auth.get_errors.return_value = ["invalid_logout_response"]
+        mock_auth.get_last_error_reason.return_value = "Signature validation failed"
+
+        with controller_fixture.app.test_request_context(
+            "/saml/logout_callback?SAMLResponse=dummyresponse"
+        ):
+            with patch.object(
+                authentication_manager,
+                "_create_auth_object",
+                return_value=mock_auth,
+            ):
+                with patch.object(
+                    authentication_manager._configuration,
+                    "get_logout_settings",
+                    return_value={},
+                ):
+                    result = authentication_manager.finish_logout(
+                        controller_fixture.db.session,
+                        saml_strings.IDP_1_ENTITY_ID,
+                        "https://cm.example.com/saml/logout_callback",
+                    )
+
+        assert isinstance(result, ProblemDetail)
+        assert result.uri == SAML_GENERIC_ERROR.uri
+        assert result.detail is not None
+        assert "Signature validation failed" in result.detail
+
     def test_finish_logout_no_saml_response(
         self,
         controller_fixture: ControllerFixture,
@@ -579,6 +629,97 @@ class TestSAMLAuthenticationManager:
                 side_effect=OneLogin_Saml2_Error(
                     "error", OneLogin_Saml2_Error.SETTINGS_INVALID
                 ),
+            ):
+                result = authentication_manager.finish_logout(
+                    controller_fixture.db.session,
+                    saml_strings.IDP_1_ENTITY_ID,
+                    "https://cm.example.com/saml/logout_callback",
+                )
+
+        assert isinstance(result, ProblemDetail)
+        assert result.uri == SAML_GENERIC_ERROR.uri
+
+    def test_start_logout_saml_configuration_error(
+        self,
+        controller_fixture: ControllerFixture,
+        create_mock_onelogin_configuration: Callable[..., SAMLOneLoginConfiguration],
+    ):
+        """start_logout should return ProblemDetail on SAMLConfigurationError."""
+        from unittest.mock import patch
+
+        from palace.manager.integration.patron_auth.saml.auth import SAML_GENERIC_ERROR
+        from palace.manager.integration.patron_auth.saml.configuration.model import (
+            SAMLConfigurationError,
+        )
+
+        onelogin_configuration = create_mock_onelogin_configuration(
+            SERVICE_PROVIDER_WITH_UNSIGNED_REQUESTS, IDENTITY_PROVIDERS
+        )
+        subject_parser = SAMLSubjectParser()
+        parser = DSLParser()
+        visitor = DSLEvaluationVisitor()
+        evaluator = DSLEvaluator(parser, visitor)
+        subject_filter = SAMLSubjectFilter(evaluator)
+        authentication_manager = SAMLAuthenticationManager(
+            onelogin_configuration, subject_parser, subject_filter
+        )
+
+        name_id = SAMLNameID(
+            SAMLNameIDFormat.PERSISTENT.value,
+            name_qualifier="",
+            sp_name_qualifier=None,
+            name_id="patron-name-id",
+        )
+
+        with controller_fixture.app.test_request_context("/"):
+            with patch.object(
+                authentication_manager._configuration,
+                "get_logout_settings",
+                side_effect=SAMLConfigurationError("Invalid IdP configuration"),
+            ):
+                result = authentication_manager.start_logout(
+                    controller_fixture.db.session,
+                    saml_strings.IDP_1_ENTITY_ID,
+                    name_id,
+                    "https://cm.example.com/saml/logout_callback",
+                    "https://app.example.com/logout",
+                )
+
+        assert isinstance(result, ProblemDetail)
+        assert result.uri == SAML_GENERIC_ERROR.uri
+
+    def test_finish_logout_saml_configuration_error(
+        self,
+        controller_fixture: ControllerFixture,
+        create_mock_onelogin_configuration: Callable[..., SAMLOneLoginConfiguration],
+    ):
+        """finish_logout should return ProblemDetail on SAMLConfigurationError."""
+        from unittest.mock import patch
+
+        from palace.manager.integration.patron_auth.saml.auth import SAML_GENERIC_ERROR
+        from palace.manager.integration.patron_auth.saml.configuration.model import (
+            SAMLConfigurationError,
+        )
+
+        onelogin_configuration = create_mock_onelogin_configuration(
+            SERVICE_PROVIDER_WITH_UNSIGNED_REQUESTS, IDENTITY_PROVIDERS
+        )
+        subject_parser = SAMLSubjectParser()
+        parser = DSLParser()
+        visitor = DSLEvaluationVisitor()
+        evaluator = DSLEvaluator(parser, visitor)
+        subject_filter = SAMLSubjectFilter(evaluator)
+        authentication_manager = SAMLAuthenticationManager(
+            onelogin_configuration, subject_parser, subject_filter
+        )
+
+        with controller_fixture.app.test_request_context(
+            "/saml/logout_callback?SAMLResponse=dummyresponse"
+        ):
+            with patch.object(
+                authentication_manager._configuration,
+                "get_logout_settings",
+                side_effect=SAMLConfigurationError("Invalid IdP configuration"),
             ):
                 result = authentication_manager.finish_logout(
                     controller_fixture.db.session,

@@ -269,6 +269,62 @@ class SAMLAuthenticationManager:
 
             return SAML_GENERIC_ERROR.detailed(str(exception))
 
+    def finish_authentication(self, db, idp_entity_id):
+        """Finish the SAML authentication workflow by validating AuthnResponse and extracting a SAML assertion from it.
+
+        :param db: Database session
+        :type db: sqlalchemy.orm.session.Session
+
+        :param idp_entity_id: IdP's entityID
+        :type idp_entity_id: string
+
+        :return: Subject object containing name ID and attributes in the case of a successful authentication
+            or ProblemDetail object otherwise
+        :rtype: Union[api.saml.metadata.model.SAMLSubject, core.util.problem_detail.ProblemDetail]
+        """
+        self._logger.info(
+            "Started finishing authentication workflow for IdP '{}'".format(
+                idp_entity_id
+            )
+        )
+
+        request_data = self._get_request_data()
+
+        if self._logger.isEnabledFor(logging.DEBUG):
+            self._logger.debug(f"Request data: {request_data}")
+
+        if (
+            "post_data" not in request_data
+            or "SAMLResponse" not in request_data["post_data"]
+        ):
+            return SAML_INCORRECT_RESPONSE.detailed(
+                "There is no SAMLResponse in the body of the response"
+            )
+
+        auth = self._get_auth_object(db, idp_entity_id)
+        auth.process_response()
+
+        if self._logger.isEnabledFor(logging.DEBUG):
+            self._logger.debug(f"SAML response: {auth.get_last_response_xml()}")
+
+        authenticated = auth.is_authenticated()
+
+        if authenticated:
+            subject = self._subject_parser.parse(auth)
+            subject = self._filter_subject(subject)
+
+            self._logger.info(
+                "Finished finishing authentication workflow for IdP '{}': {}".format(
+                    idp_entity_id, subject
+                )
+            )
+
+            return subject
+        else:
+            self._logger.error(auth.get_last_error_reason())
+
+            return SAML_AUTHENTICATION_ERROR.detailed(auth.get_last_error_reason())
+
     def start_logout(
         self,
         db: sqlalchemy.orm.session.Session,
@@ -360,62 +416,6 @@ class SAMLAuthenticationManager:
             f"SLO response validated successfully for IdP '{idp_entity_id}'"
         )
         return True
-
-    def finish_authentication(self, db, idp_entity_id):
-        """Finish the SAML authentication workflow by validating AuthnResponse and extracting a SAML assertion from it.
-
-        :param db: Database session
-        :type db: sqlalchemy.orm.session.Session
-
-        :param idp_entity_id: IdP's entityID
-        :type idp_entity_id: string
-
-        :return: Subject object containing name ID and attributes in the case of a successful authentication
-            or ProblemDetail object otherwise
-        :rtype: Union[api.saml.metadata.model.SAMLSubject, core.util.problem_detail.ProblemDetail]
-        """
-        self._logger.info(
-            "Started finishing authentication workflow for IdP '{}'".format(
-                idp_entity_id
-            )
-        )
-
-        request_data = self._get_request_data()
-
-        if self._logger.isEnabledFor(logging.DEBUG):
-            self._logger.debug(f"Request data: {request_data}")
-
-        if (
-            "post_data" not in request_data
-            or "SAMLResponse" not in request_data["post_data"]
-        ):
-            return SAML_INCORRECT_RESPONSE.detailed(
-                "There is no SAMLResponse in the body of the response"
-            )
-
-        auth = self._get_auth_object(db, idp_entity_id)
-        auth.process_response()
-
-        if self._logger.isEnabledFor(logging.DEBUG):
-            self._logger.debug(f"SAML response: {auth.get_last_response_xml()}")
-
-        authenticated = auth.is_authenticated()
-
-        if authenticated:
-            subject = self._subject_parser.parse(auth)
-            subject = self._filter_subject(subject)
-
-            self._logger.info(
-                "Finished finishing authentication workflow for IdP '{}': {}".format(
-                    idp_entity_id, subject
-                )
-            )
-
-            return subject
-        else:
-            self._logger.error(auth.get_last_error_reason())
-
-            return SAML_AUTHENTICATION_ERROR.detailed(auth.get_last_error_reason())
 
 
 class SAMLAuthenticationManagerFactory:
