@@ -825,10 +825,10 @@ class SAMLOneLoginConfiguration(LoggerMixin):
     ) -> dict[str, Any]:
         """Return settings for SAML SLO, extending base settings with SP SLO service URL.
 
-        The SP ``singleLogoutService`` is not part of the standard integration
+        The SP `singleLogoutService` is not part of the standard integration
         settings (it's a runtime URL), so it must be patched in here. The IdP
-        ``singleLogoutService`` is included automatically by
-        ``_get_identity_provider_settings`` when the IdP's metadata contains one.
+        `singleLogoutService` is included automatically by
+        `_get_identity_provider_settings` when the IdP's metadata contains one.
 
         The SP's SLO binding is set to match the IdP's SLO service binding if
         available in the metadata. This ensures compatibility with IdPs that
@@ -837,7 +837,7 @@ class SAMLOneLoginConfiguration(LoggerMixin):
         :param db: Database session
         :param idp_entity_id: IdP's entity ID
         :param sp_slo_url: Absolute URL for the SP's SLO callback endpoint
-        :return: Settings dict suitable for ``OneLogin_Saml2_Auth``
+        :return: Settings dict suitable for `OneLogin_Saml2_Auth`
         """
         logout_settings = self.get_settings(db, idp_entity_id)
 

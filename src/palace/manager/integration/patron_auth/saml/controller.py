@@ -541,7 +541,7 @@ class SAMLController:
         """Handle the IdP's LogoutResponse for SP-Initiated SAML SLO.
 
         Validates the SAMLResponse and redirects the patron back to the
-        client app's redirect URI with a ``logout_status`` query parameter.
+        client app's redirect URI with a `logout_status` query parameter.
 
         Supports both HTTP-Redirect (GET) and HTTP-POST binding.
 
