@@ -19,7 +19,9 @@ class MockOverdriveAPI(OverdriveAPI):
 
         # Initialize some variables that are normally set when they are first accessed,
         # since most tests will access them.
-        self._collection_token = "fake collection token"
+        self._cached_collection_token = OverdriveToken(
+            "fake collection token", utc_now() + timedelta(days=30)
+        )
         self._cached_client_oauth_token = OverdriveToken(
             "fake client oauth token", utc_now() + timedelta(hours=1)
         )
