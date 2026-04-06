@@ -1270,14 +1270,18 @@ class TestPatronAuth:
         monkeypatch: MonkeyPatch,
     ) -> None:
         """A valid rule that evaluates to True against live values returns 200."""
+        live_values = {"fines": 2.50, "patron_type": "adult"}
         monkeypatch.setattr(
             BlockingRulesFixture.FETCH_PATCH,
-            MagicMock(return_value={"fines": 2.50, "patron_type": "adult"}),
+            MagicMock(return_value=live_values),
         )
         service_id = blocking_rules_fixture.create_integration()
         response = blocking_rules_fixture.post_validate(service_id, "{fines} > 1.0")
         assert isinstance(response, Response)
         assert response.status_code == 200
+        response_data = response.get_json()
+        assert isinstance(response_data, dict)
+        assert response_data.get("available_fields") == live_values
 
     def test_rule_with_false_result_still_returns_200(
         self,
@@ -1289,14 +1293,18 @@ class TestPatronAuth:
         The boolean result (blocked vs. not blocked) is intentionally ignored —
         only parse/eval success or failure is reported.
         """
+        live_values = {"fines": 0.0, "patron_type": "adult"}
         monkeypatch.setattr(
             BlockingRulesFixture.FETCH_PATCH,
-            MagicMock(return_value={"fines": 0.0, "patron_type": "adult"}),
+            MagicMock(return_value=live_values),
         )
         service_id = blocking_rules_fixture.create_integration()
         response = blocking_rules_fixture.post_validate(service_id, "{fines} > 100.0")
         assert isinstance(response, Response)
         assert response.status_code == 200
+        response_data = response.get_json()
+        assert isinstance(response_data, dict)
+        assert response_data.get("available_fields") == live_values
 
     def test_invalid_expression_returns_error(
         self,
