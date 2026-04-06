@@ -314,8 +314,13 @@ class OverdriveAPI(
         # This is set by access to ._client_oauth_token
         self._cached_client_oauth_token: OverdriveToken | None = None
 
-        # This is set by access to .collection_token
-        self._collection_token: str | None = None
+        # In-memory cache for the collectionToken extracted from the library
+        # document. Uses the same OverdriveToken type and TTL pattern as
+        # _cached_client_oauth_token. The TTL matches LIBRARY_MAX_AGE so that
+        # long-lived instances (e.g. Flask workers, which hold one OverdriveAPI
+        # per collection for the process lifetime) transparently re-fetch the
+        # token when OverDrive rotates it. See the collection_token property.
+        self._cached_collection_token: OverdriveToken | None = None
         self.overdrive_bibliographic_coverage_provider = (
             OverdriveBibliographicCoverageProvider(collection, api=self)
         )
@@ -386,22 +391,41 @@ class OverdriveAPI(
     def collection_token(self) -> str:
         """Get the token representing this particular Overdrive collection.
 
-        As a side effect, this will verify that the Overdrive
-        credentials are working.
+        The token is fetched from :meth:`get_library` and cached in memory for
+        :attr:`LIBRARY_MAX_AGE` (30 days). On each access the in-memory TTL is
+        checked first; if the entry is still fresh the token is returned without
+        any database or network I/O. Once the TTL expires, :meth:`get_library`
+        is called again, which in turn uses the ``representations`` table as a
+        second cache layer — only reaching the network when that layer is also
+        stale.
+
+        This two-layer design means the token is refreshed correctly regardless
+        of how long the ``OverdriveAPI`` instance lives. In particular, Flask
+        workers keep one instance per collection alive for the process lifetime
+        (see ``CirculationManager.load_settings``), so the in-memory TTL is
+        essential for picking up rotated tokens without a process restart.
+
+        As a side effect of the first (or post-expiry) fetch, this verifies
+        that the OverDrive credentials are working.
         """
-        collection_token = self._collection_token
-        if not collection_token:
-            library = self.get_library()
-            error = library.get("errorCode")
-            if error:
-                message = library.get("message")
-                raise CannotLoadConfiguration(
-                    "Overdrive credentials are valid but could not fetch library: %s"
-                    % message
-                )
-            collection_token = cast(str, library["collectionToken"])
-            self._collection_token = collection_token
-        return collection_token
+        cached = self._cached_collection_token
+        if cached is not None and utc_now() < cached.expires:
+            return cached.token
+
+        library = self.get_library()
+        error = library.get("errorCode")
+        if error:
+            message = library.get("message")
+            raise CannotLoadConfiguration(
+                "Overdrive credentials are valid but could not fetch library: %s"
+                % message
+            )
+        token = cast(str, library["collectionToken"])
+        self._cached_collection_token = OverdriveToken(
+            token=token,
+            expires=utc_now() + self.LIBRARY_MAX_AGE,
+        )
+        return token
 
     @property
     def data_source(self) -> DataSource:
@@ -555,6 +579,12 @@ class OverdriveAPI(
 
     def get_advantage_accounts(self) -> Generator[OverdriveAdvantageAccount]:
         """Find all the Overdrive Advantage accounts managed by this library.
+
+        The advantage accounts response is cached in the ``representations``
+        table and refreshed at most once every :attr:`LIBRARY_MAX_AGE`, matching
+        the same cadence as :meth:`get_library`. This ensures that
+        ``collectionToken`` values embedded in child account responses stay
+        current as OverDrive periodically rotates them.
 
         :yield: A sequence of OverdriveAdvantageAccount objects.
         """

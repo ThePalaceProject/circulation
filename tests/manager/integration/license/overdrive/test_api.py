@@ -27,7 +27,10 @@ from palace.manager.api.circulation.fulfillment import (
 from palace.manager.api.config import Configuration
 from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.core.exceptions import BasePalaceException, IntegrationException
-from palace.manager.integration.license.overdrive.api import OverdriveAPI
+from palace.manager.integration.license.overdrive.api import (
+    OverdriveAPI,
+    OverdriveToken,
+)
 from palace.manager.integration.license.overdrive.constants import OverdriveConstants
 from palace.manager.integration.license.overdrive.exception import (
     OverdriveValidationError,
@@ -1619,19 +1622,52 @@ class TestOverdriveAPI:
         mock_get_library = MagicMock(return_value={"collectionToken": "abc"})
         api.get_library = mock_get_library
 
-        # If the collection token is set, we just return that
-        api._collection_token = "123"
-        assert api.collection_token == "123"
-        mock_get_library.assert_not_called()
-
-        # If its not we get it from the get_library method
-        api._collection_token = None
+        # Cache is empty on first access — get_library is called.
+        assert api._cached_collection_token is None
         assert api.collection_token == "abc"
         mock_get_library.assert_called_once()
 
-        # Calling again returns the cached value
+        # Subsequent calls within LIBRARY_MAX_AGE return the cached value
+        # without calling get_library again.
         assert api.collection_token == "abc"
         mock_get_library.assert_called_once()
+
+    def test_collection_token_cache_expires(
+        self, db: DatabaseTransactionFixture
+    ) -> None:
+        """After LIBRARY_MAX_AGE has elapsed the in-memory cache is bypassed
+        and get_library is called again to pick up a rotated token."""
+        api = OverdriveAPI(db.session, db.collection(protocol=OverdriveAPI))
+        mock_get_library = MagicMock(
+            side_effect=[
+                {"collectionToken": "old-token"},
+                {"collectionToken": "new-token"},
+            ]
+        )
+        api.get_library = mock_get_library
+
+        assert api.collection_token == "old-token"
+        mock_get_library.assert_called_once()
+
+        # Age the in-memory cache past LIBRARY_MAX_AGE.
+        assert api._cached_collection_token is not None
+        api._cached_collection_token = OverdriveToken(
+            token=api._cached_collection_token.token,
+            expires=utc_now() - timedelta(seconds=1),
+        )
+
+        # The next access should bypass the cache and call get_library again.
+        assert api.collection_token == "new-token"
+        assert mock_get_library.call_count == 2
+
+    def test_collection_token_error(self, db: DatabaseTransactionFixture) -> None:
+        """An errorCode in the library response raises CannotLoadConfiguration."""
+        api = OverdriveAPI(db.session, db.collection(protocol=OverdriveAPI))
+        api.get_library = MagicMock(
+            return_value={"errorCode": "NotFound", "message": "bad credentials"}
+        )
+        with pytest.raises(CannotLoadConfiguration, match="bad credentials"):
+            api.collection_token
 
     def test_circulation_lookup(
         self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
