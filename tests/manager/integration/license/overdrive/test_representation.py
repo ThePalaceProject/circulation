@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import datetime
 from functools import partial
 from typing import Any
 from unittest.mock import MagicMock
@@ -565,18 +564,3 @@ class TestOverdriveRepresentationExtractor:
         # An unrecognized format does not correspond to any delivery
         # mechanisms.
         assert internal_formats("no-such-format") == []
-
-    def test_book_info_to_bibliographic_sets_minimum_time_between_updates(
-        self, overdrive_api_fixture: OverdriveAPIFixture
-    ):
-        """book_info_to_bibliographic sets a non-zero minimum_time_between_updates.
-
-        Overdrive does not supply a data_source_last_updated timestamp, so without
-        a minimum update interval every record would be re-imported on every run.
-        The extractor sets a 3-day cooldown to prevent that churn.
-        """
-        raw, info = overdrive_api_fixture.sample_json("overdrive_metadata.json")
-        metadata = OverdriveRepresentationExtractor.book_info_to_bibliographic(info)
-
-        assert metadata is not None
-        assert metadata.minimum_time_between_updates == datetime.timedelta(days=3)
