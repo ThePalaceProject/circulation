@@ -865,10 +865,14 @@ class TestSAMLOneLoginConfiguration:
         [SAMLBinding.HTTP_REDIRECT, SAMLBinding.HTTP_POST],
         ids=["redirect-binding", "post-binding"],
     )
-    def test_get_logout_settings_uses_idp_slo_binding(
+    def test_get_logout_settings_sp_binding_is_always_http_redirect(
         self, slo_binding, create_saml_configuration
     ):
-        """Test that get_logout_settings uses the IdP's SLO service binding."""
+        """SP SLO binding is always HTTP-Redirect regardless of the IdP's binding.
+
+        HTTP-Redirect is preferred so the IdP sends its LogoutResponse via GET,
+        which the OneLogin toolkit can fully validate.
+        """
         # Arrange
         idp_with_slo = SAMLIdentityProviderMetadata(
             saml_strings.IDP_1_ENTITY_ID,
@@ -897,7 +901,10 @@ class TestSAMLOneLoginConfiguration:
 
         # Assert
         assert result["sp"]["singleLogoutService"]["url"] == sp_slo_url
-        assert result["sp"]["singleLogoutService"]["binding"] == slo_binding.value
+        assert (
+            result["sp"]["singleLogoutService"]["binding"]
+            == SAMLBinding.HTTP_REDIRECT.value
+        )
 
     def test_get_logout_settings_without_idp_slo_service(
         self, create_saml_configuration

@@ -730,6 +730,43 @@ class TestSAMLAuthenticationManager:
         assert isinstance(result, ProblemDetail)
         assert result.uri == SAML_GENERIC_ERROR.uri
 
+    def test_finish_logout_http_post_returns_success(
+        self,
+        controller_fixture: ControllerFixture,
+        create_mock_onelogin_configuration: Callable[..., SAMLOneLoginConfiguration],
+    ):
+        """HTTP-POST SLO responses return True without calling process_slo."""
+        from unittest.mock import patch
+
+        from onelogin.saml2.auth import OneLogin_Saml2_Auth
+
+        onelogin_configuration = create_mock_onelogin_configuration(
+            SERVICE_PROVIDER_WITH_UNSIGNED_REQUESTS, IDENTITY_PROVIDERS
+        )
+        subject_parser = SAMLSubjectParser()
+        parser = DSLParser()
+        visitor = DSLEvaluationVisitor()
+        evaluator = DSLEvaluator(parser, visitor)
+        subject_filter = SAMLSubjectFilter(evaluator)
+        authentication_manager = SAMLAuthenticationManager(
+            onelogin_configuration, subject_parser, subject_filter
+        )
+
+        with controller_fixture.app.test_request_context(
+            "/saml/logout_callback",
+            method="POST",
+            data={"SAMLResponse": "dummyresponse"},
+        ):
+            with patch.object(OneLogin_Saml2_Auth, "process_slo") as mock_process_slo:
+                result = authentication_manager.finish_logout(
+                    controller_fixture.db.session,
+                    saml_strings.IDP_1_ENTITY_ID,
+                    "https://cm.example.com/saml/logout_callback",
+                )
+
+        assert result is True
+        mock_process_slo.assert_not_called()
+
 
 class TestSAMLAuthenticationManagerFactory:
     def test_create(self):

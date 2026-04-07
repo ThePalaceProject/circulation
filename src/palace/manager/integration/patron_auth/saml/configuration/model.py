@@ -33,6 +33,7 @@ from palace.manager.integration.patron_auth.saml.metadata.filter import (
 )
 from palace.manager.integration.patron_auth.saml.metadata.model import (
     SAMLAttributeType,
+    SAMLBinding,
     SAMLIdentityProviderMetadata,
     SAMLServiceProviderMetadata,
     SAMLSubjectPatronIDExtractor,
@@ -830,9 +831,10 @@ class SAMLOneLoginConfiguration(LoggerMixin):
         `singleLogoutService` is included automatically by
         `_get_identity_provider_settings` when the IdP's metadata contains one.
 
-        The SP's SLO binding is set to match the IdP's SLO service binding if
-        available in the metadata. This ensures compatibility with IdPs that
-        support both HTTP-POST and HTTP-Redirect bindings.
+        The SP SLO binding is always set to HTTP-Redirect, which the OneLogin
+        toolkit can fully validate. HTTP-Redirect is preferred even when the
+        IdP also supports HTTP-POST; if the IdP supports only HTTP-POST its
+        response is accepted as best-effort in `finish_logout`.
 
         :param db: Database session
         :param idp_entity_id: IdP's entity ID
@@ -842,17 +844,19 @@ class SAMLOneLoginConfiguration(LoggerMixin):
         logout_settings = self.get_settings(db, idp_entity_id)
 
         # Configure SP's SLO service only if IdP has declared an SLO service.
-        # Use the IdP's SLO service binding to ensure compatibility.
+        # Always prefer HTTP-Redirect for the SP binding so the IdP sends its
+        # LogoutResponse via GET, which the OneLogin toolkit can fully validate.
+        # If the IdP only supports HTTP-POST, the response is handled as
+        # best-effort in finish_logout.
         identity_providers = [
             idp
             for idp in self.get_identity_providers(db)
             if idp.entity_id == idp_entity_id
         ]
         if identity_providers and identity_providers[0].slo_service:
-            slo_binding = identity_providers[0].slo_service.binding.value
             logout_settings[self.SP][self.SINGLE_LOGOUT_SERVICE] = {
                 self.URL: sp_slo_url,
-                self.BINDING: slo_binding,
+                self.BINDING: SAMLBinding.HTTP_REDIRECT.value,
             }
         else:
             # If IdP has no SLO service, remove the default SP SLO service configuration.

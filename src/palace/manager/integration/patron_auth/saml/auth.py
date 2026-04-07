@@ -399,6 +399,21 @@ class SAMLAuthenticationManager:
                 "SAMLResponse not found; IdP-Initiated SLO is not supported"
             )
 
+        # HTTP-POST binding: the OneLogin SAML toolkit's process_slo only
+        # handles HTTP-Redirect and would raise immediately for POST. Since we
+        # already invalidated the patron's local credential before initiating
+        # SLO, treat any POST response as a best-effort confirmation and return
+        # success without further validation.
+        # NOTE: In the future we could add partial validation here (e.g. status
+        # code and issuer checks), but full validation would require XML digital
+        # signature verification that the toolkit does not provide for this binding.
+        if not request_data.get("get_data", {}).get("SAMLResponse"):
+            self._logger.info(
+                f"HTTP-POST SLO response received for IdP '{idp_entity_id}'; "
+                "skipping validation (not supported by the OneLogin toolkit)"
+            )
+            return True
+
         self._logger.info(f"Processing SLO response for IdP '{idp_entity_id}'")
         try:
             logout_settings = self._configuration.get_logout_settings(
