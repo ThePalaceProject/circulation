@@ -16,6 +16,9 @@ from werkzeug.datastructures import Authorization
 from palace.manager.api.authentication.base import PatronData, PatronLookupNotSupported
 from palace.manager.api.authenticator import BaseOIDCAuthenticationProvider
 from palace.manager.core.exceptions import PalaceValueError
+from palace.manager.integration.patron_auth.constants import (
+    LOGOUT_REDIRECT_QUERY_PARAM,
+)
 from palace.manager.integration.patron_auth.oidc.auth import OIDCAuthenticationManager
 from palace.manager.integration.patron_auth.oidc.configuration.model import (
     OIDCAuthLibrarySettings,
@@ -23,7 +26,6 @@ from palace.manager.integration.patron_auth.oidc.configuration.model import (
 )
 from palace.manager.integration.patron_auth.oidc.credential import OIDCCredentialManager
 from palace.manager.integration.patron_auth.oidc.util import (
-    LOGOUT_REDIRECT_QUERY_PARAM,
     OIDCDiscoveryError,
 )
 from palace.manager.service.analytics.analytics import Analytics

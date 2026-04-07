@@ -15,10 +15,12 @@ from werkzeug.wrappers import Response as BaseResponse
 
 from palace.manager.api.authenticator import BaseOIDCAuthenticationProvider
 from palace.manager.api.util.flask import get_request_library
+from palace.manager.integration.patron_auth.constants import (
+    LOGOUT_REDIRECT_QUERY_PARAM,
+)
 from palace.manager.integration.patron_auth.oidc.auth import OIDCAuthenticationError
 from palace.manager.integration.patron_auth.oidc.credential import OIDCCredentialManager
 from palace.manager.integration.patron_auth.oidc.util import (
-    LOGOUT_REDIRECT_QUERY_PARAM,
     OIDCDiscoveryError,
     OIDCStateValidationError,
     OIDCUtility,
