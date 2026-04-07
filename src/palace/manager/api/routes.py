@@ -631,6 +631,26 @@ def saml_callback():
     )
 
 
+@library_route("/saml/logout", methods=["GET"])
+@has_library
+@returns_problem_detail
+def saml_logout():
+    return app.manager.saml_controller.saml_logout_redirect(
+        flask.request.args, app.manager._db
+    )
+
+
+# Constant URL registered in SP metadata — must not include library name.
+# Accepts both GET (HTTP-Redirect) and POST (HTTP-POST) since IdPs vary in
+# which binding they use when sending the LogoutResponse.
+@app.route("/saml/logout_callback", methods=["GET", "POST"])
+@returns_problem_detail
+def saml_logout_callback():
+    return app.manager.saml_controller.saml_logout_callback(
+        flask.request, app.manager._db
+    )
+
+
 @library_route("/saml/metadata/sp")
 @allows_library
 @raises_problem_detail

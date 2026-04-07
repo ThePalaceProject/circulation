@@ -5,6 +5,7 @@ from werkzeug.datastructures import Authorization
 
 from palace.manager.api.authentication.base import PatronData, PatronLookupNotSupported
 from palace.manager.api.authenticator import BaseSAMLAuthenticationProvider
+from palace.manager.integration.patron_auth.constants import LOGOUT_REDIRECT_QUERY_PARAM
 from palace.manager.integration.patron_auth.saml.auth import (
     SAMLAuthenticationManagerFactory,
 )
@@ -210,6 +211,21 @@ class SAMLWebSSOAuthenticationProvider(
             }
 
             flow_doc["links"].append(link)
+
+        library = self.library(db)
+        logout_url = url_for(
+            "saml_logout",
+            _external=True,
+            library_short_name=library.short_name,
+            provider=self.label(),
+        )
+        flow_doc["links"].append(
+            {
+                "rel": "logout",
+                "href": f"{logout_url}{{&{LOGOUT_REDIRECT_QUERY_PARAM}}}",
+                "templated": True,
+            }
+        )
 
         return flow_doc
 
