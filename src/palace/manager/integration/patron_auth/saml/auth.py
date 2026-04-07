@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
 from flask import request
@@ -112,7 +112,7 @@ class SAMLAuthenticationManager:
         self._logger = logging.getLogger(__name__)
 
     @staticmethod
-    def _get_request_data():
+    def _get_request_data() -> dict[str, Any]:
         """Map Flask request to what the SAML toolkit expects.
 
         :return: Dictionary containing information about the request in the format SAML toolkit expects
@@ -141,7 +141,12 @@ class SAMLAuthenticationManager:
 
         return request_data
 
-    def _create_auth_object(self, db, idp_entity_id, settings=None):
+    def _create_auth_object(
+        self,
+        db: sqlalchemy.orm.session.Session,
+        idp_entity_id: str,
+        settings: dict[str, Any] | None = None,
+    ) -> OneLogin_Saml2_Auth:
         """Create and initialize an OneLogin_Saml2_Auth object.
 
         :param db: Database session

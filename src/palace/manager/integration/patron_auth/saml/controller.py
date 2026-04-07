@@ -11,9 +11,12 @@ from urllib.parse import (
 )
 
 import jwt
-from flask import Response, redirect, request as flask_request, url_for
+import sqlalchemy.orm.session
+from flask import Request, Response, redirect, request as flask_request, url_for
 from flask_babel import lazy_gettext as _
 from lxml import etree
+from werkzeug import Response as wkResponse
+from werkzeug.datastructures import ImmutableMultiDict
 
 from palace.manager.api.util.flask import get_request_library
 from palace.manager.integration.patron_auth.constants import LOGOUT_REDIRECT_QUERY_PARAM
@@ -51,13 +54,6 @@ SAML_INVALID_RESPONSE = pd(
     status_code=401,
     title=_("SAML invalid response."),
     detail=_("SAML invalid response."),
-)
-
-SAML_LOGOUT_FAILED = pd(
-    "http://palaceproject.io/terms/problem/auth/recoverable/saml/logout-failed",
-    status_code=400,
-    title=_("SAML logout failed."),
-    detail=_("An error occurred during SAML Single Logout."),
 )
 
 
@@ -427,7 +423,11 @@ class SAMLController:
 
         return redirect(redirect_uri)
 
-    def saml_logout_redirect(self, params, db):
+    def saml_logout_redirect(
+        self,
+        params: ImmutableMultiDict[str, str],
+        db: sqlalchemy.orm.session.Session,
+    ) -> wkResponse | ProblemDetail:
         """Initiate SP-Initiated SAML SLO.
 
         Validates the patron's bearer token, immediately invalidates their local SAML
@@ -537,7 +537,11 @@ class SAMLController:
 
         return redirect(redirect_url)
 
-    def saml_logout_callback(self, request, db):
+    def saml_logout_callback(
+        self,
+        request: Request,
+        db: sqlalchemy.orm.session.Session,
+    ) -> wkResponse | ProblemDetail:
         """Handle the IdP's LogoutResponse for SP-Initiated SAML SLO.
 
         Validates the SAMLResponse and redirects the patron back to the

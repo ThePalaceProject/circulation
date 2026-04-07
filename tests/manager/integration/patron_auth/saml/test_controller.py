@@ -86,6 +86,12 @@ def create_patron_data_mock():
 
 
 class TestSAMLController:
+    IDP_ENTITY_ID = saml_strings.IDP_1_ENTITY_ID
+    SLO_URL = "http://idp.example.com/idp/profile/SAML2/Redirect/SLO"
+    REDIRECT_URI = "https://app.example.com/after-logout"
+    CALLBACK_URL = "https://cm.example.com/saml/logout_callback"
+    PROVIDER_NAME = SAMLWebSSOAuthenticationProvider.label()
+
     @pytest.mark.parametrize(
         "provider_name, idp_entity_id, redirect_uri, expected_problem, expected_relay_state",
         [
@@ -797,17 +803,8 @@ class TestSAMLController:
 
         assert exc_info.value.problem_detail.uri == SAML_METADATA_NOT_CONFIGURED.uri
 
-
-class TestSAMLControllerLogout:
-    """Tests for SP-Initiated SAML SLO."""
-
-    IDP_ENTITY_ID = saml_strings.IDP_1_ENTITY_ID
-    SLO_URL = "http://idp.example.com/idp/profile/SAML2/Redirect/SLO"
-    REDIRECT_URI = "https://app.example.com/after-logout"
-    CALLBACK_URL = "https://cm.example.com/saml/logout_callback"
-    PROVIDER_NAME = SAMLWebSSOAuthenticationProvider.label()
-
-    def _make_name_id(self) -> SAMLNameID:
+    @staticmethod
+    def _make_name_id() -> SAMLNameID:
         return SAMLNameID(
             SAMLNameIDFormat.PERSISTENT.value,
             name_qualifier="",
