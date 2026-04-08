@@ -721,6 +721,31 @@ class TestImportCollectionGroup:
         assert call_args["modified_since"] == modified_since
         assert call_args["start_time"] == start_time
 
+    @patch("palace.manager.celery.tasks.overdrive.chain")
+    @patch("palace.manager.celery.tasks.overdrive.import_collection")
+    @patch("palace.manager.celery.tasks.overdrive.import_result_router")
+    def test_import_collection_group_skips_when_lock_held(
+        self,
+        mock_router: MagicMock,
+        mock_import_collection: MagicMock,
+        mock_chain: MagicMock,
+        overdrive_import_fixture: OverdriveImportFixture,
+        redis_fixture: RedisFixture,
+    ):
+        """When the workflow lock is held, import_collection_group skips chain creation."""
+        collection = overdrive_import_fixture.collection
+        lock_value = str(uuid4())
+        workflow_lock = import_workflow_lock(
+            redis_fixture.client, collection.id, lock_value
+        )
+        workflow_lock.acquire()
+
+        result = overdrive.import_collection_group.delay(collection.id).wait()
+
+        mock_chain.assert_not_called()
+        assert result == overdrive._import_skipped_payload()
+        workflow_lock.release()
+
 
 class TestImportResultRouter:
     """Tests for the import_result_router Celery task."""
