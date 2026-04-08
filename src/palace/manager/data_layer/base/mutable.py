@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal, overload
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, PrivateAttr
 from sqlalchemy.orm import Session
 
 from palace.util.exceptions import PalaceValueError
@@ -30,8 +30,11 @@ class BaseMutableData(BaseModel, LoggerMixin):
         validate_assignment=True,
     )
 
-    _data_source: DataSource | None = None
-    _primary_identifier: Identifier | None = None
+    _data_source: DataSource | None = PrivateAttr(default=None)
+    _primary_identifier: Identifier | None = PrivateAttr(default=None)
+    # Lazily computed and cached for the lifetime of this object. Cleared by
+    # __setattr__ whenever a public field is mutated so the hash stays consistent.
+    _hash_cache: str | None = PrivateAttr(default=None)
 
     data_source_name: str
     primary_identifier_data: IdentifierData | None = None
@@ -101,18 +104,33 @@ class BaseMutableData(BaseModel, LoggerMixin):
 
         This is useful for fields that are expected to change frequently but do not
         represent a meaningful change in the data, such as timestamps.
+
+        ``updated_at`` is excluded because it is already used in the timestamp comparison
+        inside :meth:`should_apply_to`, and including it in the hash would cause spurious
+        re-imports when the content is identical but the source timestamp advances.
         """
-        return {"created_at"}
+        return {"created_at", "updated_at"}
+
+    def __setattr__(self, name: str, value: object) -> None:
+        """Invalidate the cached hash whenever a public field is mutated."""
+        super().__setattr__(name, value)
+        if not name.startswith("_"):
+            self._hash_cache = None
 
     def calculate_hash(self) -> str:
         """Calculate a hash of the data in this object.
 
-        This is used to determine if the data has changed since the last time
-        it was processed.
+        The result is cached on the instance and reused across multiple calls
+        within the same import cycle. The cache is invalidated automatically
+        whenever a public field is mutated via attribute assignment.
+
+        :return: A lowercase hex-encoded SHA-256 digest string.
         """
-        return json_hash(
-            self.model_dump(mode="json", exclude=self.fields_excluded_from_hash())
-        )
+        if self._hash_cache is None:
+            self._hash_cache = json_hash(
+                self.model_dump(mode="json", exclude=self.fields_excluded_from_hash())
+            )
+        return self._hash_cache
 
     def should_apply_to(self, db_object: Edition | LicensePool | None = None) -> bool:
         """

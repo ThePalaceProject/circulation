@@ -1155,18 +1155,29 @@ class TestBibliographicData:
         assert edition.updated_at == last_updated
         assert edition.updated_at != past
 
-        # If updated_at is None, as_of_timestamp falls back to created_at (utc_now()),
-        # which is newer than the edition's updated_at, so the update proceeds.
-        bibliographic_no_ts = BibliographicData(
-            data_source_name=DataSource.OVERDRIVE,
-        )
+        # If updated_at is None, as_of_timestamp falls back to created_at (utc_now()).
+        # Even though that is newer than the edition's updated_at, the content hash is
+        # compared first; if the content is identical the apply is still skipped.
         now = utc_now()
         with freeze_time(now):
-            bibliographic_no_ts = BibliographicData(
+            bibliographic_same_content = BibliographicData(
                 data_source_name=DataSource.OVERDRIVE,
             )
-            bibliographic_no_ts.apply(db.session, edition, None)
+            bibliographic_same_content.apply(db.session, edition, None)
+        # Content is the same as before (only updated_at differs, which is excluded from
+        # the hash), so the edition is not updated.
+        assert edition.updated_at == last_updated
+
+        # But if the content has actually changed, the apply proceeds even when
+        # updated_at is None.
+        with freeze_time(now):
+            bibliographic_changed = BibliographicData(
+                data_source_name=DataSource.OVERDRIVE,
+                title="A brand new title",
+            )
+            bibliographic_changed.apply(db.session, edition, None)
         assert edition.updated_at == now
+        assert edition.updated_at_data_hash == bibliographic_changed.calculate_hash()
 
     def test_validate_primary_identifier_case_insensitive(
         self, db: DatabaseTransactionFixture

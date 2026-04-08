@@ -1003,5 +1003,14 @@ class BibliographicData(BaseMutableData):
         return contributors_changed
 
     def needs_apply(self, session: Session) -> bool:
+        """Return ``True`` if this data should be applied to the corresponding Edition.
+
+        Looks up the existing :class:`~palace.manager.sqlalchemy.model.edition.Edition`
+        for this object's primary identifier and delegates to
+        :meth:`~palace.manager.data_layer.base.mutable.BaseMutableData.should_apply_to`.
+
+        :param session: Active database session used to look up the edition.
+        :return: ``True`` if the data needs to be applied, ``False`` if it can be skipped.
+        """
         edition, _ = self.edition(session, autocreate=False)
         return self.should_apply_to(edition)

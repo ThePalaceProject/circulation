@@ -4,6 +4,18 @@ Revision ID: f98e4049c87d
 Revises: a5ee359c2d31
 Create Date: 2026-04-03 03:05:58.742988+00:00
 
+NOTE: First-import performance after this migration
+---------------------------------------------------
+All new columns are added as nullable with no default values, so every existing
+Edition and LicensePool starts with ``updated_at_data_hash = NULL``. The change
+detection logic in ``BaseMutableData.should_apply_to`` treats a NULL hash as
+"never imported", which means **every record will be re-applied on the first
+import run after this migration is deployed**. This is intentional – it
+establishes the baseline hashes – but operators should expect that initial
+import job to take longer than usual.
+
+Subsequent imports will benefit from hash-based skipping and will be
+significantly faster.
 """
 
 import sqlalchemy as sa

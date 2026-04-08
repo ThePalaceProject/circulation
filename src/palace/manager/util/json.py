@@ -31,24 +31,35 @@ def json_serializer(obj: Any, **kwargs: Unpack[_JsonDumpsKwargs]) -> str:
     return json.dumps(obj, default=json_encoder, **kwargs)
 
 
-def _canonicalize_sort_key(value: Any) -> tuple[int, Any]:
-    """Define a sort key based on type precedence and natural ordering."""
-    # Type precedence: smaller = comes first
-    type_order = {
-        bool: 0,
-        int: 1,
-        float: 1,
-        str: 2,
-        tuple: 3,
-        dict: 4,
-        type(None): 5,
-    }
+# Type precedence for canonicalization sort keys: smaller value = sorted first.
+# bool must come before int because bool is a subclass of int in Python.
+_CANONICALIZE_TYPE_ORDER: dict[type, int] = {
+    bool: 0,
+    int: 1,
+    float: 1,
+    str: 2,
+    tuple: 3,
+    dict: 4,
+    type(None): 5,
+}
 
+
+def _canonicalize_sort_key(value: Any) -> tuple[int, Any]:
+    """Return a stable sort key based on type precedence and natural ordering.
+
+    ``None`` values are given a sentinel second element (``""``) because
+    ``None < None`` raises ``TypeError`` in Python, which would crash
+    ``sorted()`` when a sequence contains more than one ``None``.
+    """
     value_type = type(value)
-    if value_type not in type_order:
+    if value_type not in _CANONICALIZE_TYPE_ORDER:
         raise TypeError(f"Unsupported type for canonicalization: {value_type}")
 
-    precedence = type_order[value_type]
+    precedence = _CANONICALIZE_TYPE_ORDER[value_type]
+
+    if value is None:
+        # Use a stable sentinel -- None itself is not comparable.
+        return precedence, ""
 
     # Dicts are sorted like lists of (key, value) pairs
     if isinstance(value, dict):
@@ -58,7 +69,7 @@ def _canonicalize_sort_key(value: Any) -> tuple[int, Any]:
         )
 
     # Tuples are sorted by their items
-    elif isinstance(value, tuple):
+    if isinstance(value, tuple):
         return precedence, tuple(_canonicalize_sort_key(item) for item in value)
 
     # For scalars, use natural ordering
@@ -143,6 +154,22 @@ def json_hash(
     round_float: bool = True,
     float_precision: int = 4,
 ) -> str:
+    """Return a stable SHA-256 hex digest of *data*.
+
+    The input is first converted to canonical JSON via :func:`json_canonical`
+    so that two structurally equivalent objects (e.g. lists in different orders,
+    floats that differ only past *float_precision* decimal places) always produce
+    the same hash.
+
+    :param data: The data to hash. Must contain only JSON-serialisable types.
+    :param sort_sequences: Whether to sort lists and tuples before hashing.
+        Default is ``True``.
+    :param round_float: Whether to round floating-point numbers before hashing.
+        Default is ``True``.
+    :param float_precision: Decimal places to round floats to. Default is 4.
+
+    :return: A lowercase hex-encoded SHA-256 digest string.
+    """
     return hashlib.sha256(
         json_canonical(
             data,

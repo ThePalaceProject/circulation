@@ -1,7 +1,9 @@
 import json
 from functools import partial
 
-from palace.manager.util.json import json_canonical
+import pytest
+
+from palace.manager.util.json import json_canonical, json_hash
 
 
 def test_json_canonical() -> None:
@@ -106,3 +108,46 @@ def test_json_canonical() -> None:
             {"a": 1, "b": 2, "c": 4},
         ]
     )
+
+    # Multiple None values in a sequence must not crash (None is not comparable).
+    # None has the highest precedence (5 = last), so it sorts after ints and strings.
+    assert json_canonical([None, None, None]) == dumps([None, None, None])
+    assert json_canonical([None, 1, None, "a", None]) == dumps(
+        [1, "a", None, None, None]
+    )
+
+
+def test_json_canonical_unsupported_type_raises() -> None:
+    """Passing an unsupported type inside a sequence should raise TypeError.
+
+    Unsupported types are detected by ``_canonicalize_sort_key`` when it is
+    called during sorting; they are not detected at the top level (which would
+    just produce a json.dumps error).  Wrapping the value in a list triggers
+    the sort path and therefore our custom error message.
+    """
+    with pytest.raises(TypeError, match="Unsupported type for canonicalization"):
+        json_canonical([{1, 2, 3}])
+
+    with pytest.raises(TypeError, match="Unsupported type for canonicalization"):
+        json_canonical([1, object()])
+
+
+def test_json_hash() -> None:
+    """json_hash should be deterministic and sensitive to content differences."""
+    # Same content always produces the same hash.
+    assert json_hash({"a": 1, "b": 2}) == json_hash({"b": 2, "a": 1})
+    assert json_hash([3, 2, 1]) == json_hash([1, 2, 3])
+
+    # Different content produces different hashes.
+    assert json_hash({"a": 1}) != json_hash({"a": 2})
+    assert json_hash([1, 2]) != json_hash([1, 2, 3])
+
+    # The result is a 64-character lowercase hex string (SHA-256).
+    digest = json_hash("hello")
+    assert len(digest) == 64
+    assert digest == digest.lower()
+    assert all(c in "0123456789abcdef" for c in digest)
+
+    # Floats that are equal up to float_precision round to the same hash.
+    assert json_hash(0.1 + 0.2) == json_hash(0.3)
+    assert json_hash(0.1 + 0.2, round_float=False) != json_hash(0.3, round_float=False)
