@@ -386,10 +386,16 @@ class OpdsImporter[FeedType, PublicationType](LoggerMixin):
                 )
                 called_bibliographic_apply = True
             elif (
-                bibliographic.circulation is not None and apply_circulation is not None
+                bibliographic.circulation is not None
+                and apply_circulation is not None
+                and (
+                    import_even_if_unchanged
+                    or bibliographic.circulation.needs_apply(session, collection)
+                )
             ):
                 circulation_data = bibliographic.circulation
-                # If the bibliographic data is unchanged, we still want to apply the circulation data
+                # Bibliographic data is unchanged but circulation data has changed
+                # (e.g. availability state flipped); apply only the circulation update.
                 apply_circulation(
                     circulation_data,
                     collection_id=collection.id,
