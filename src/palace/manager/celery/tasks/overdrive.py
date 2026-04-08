@@ -240,7 +240,7 @@ def import_collection_group(
     import_all: bool = False,
     modified_since: datetime.datetime | None = None,
     start_time: datetime.datetime | None = None,
-) -> dict[str, Any]:
+) -> dict[str, Any] | ImportSkippedPayload:
     """Import an Overdrive collection and all its child (Advantage) collections.
 
     This task orchestrates the import of a parent Overdrive collection and chains
