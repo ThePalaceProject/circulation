@@ -397,9 +397,16 @@ class CirculationData(BaseMutableData):
         for this object's primary identifier in *collection* and delegates to
         :meth:`~palace.manager.data_layer.base.mutable.BaseMutableData.should_apply_to`.
 
+        ODL-style pools that carry individual :attr:`licenses` are always considered to
+        need application because license availability can change over time as licenses expire
+        independently of any feed content change, and that expiry cannot be detected by
+        content hashing alone.
+
         :param session: Active database session used to look up the pool.
         :param collection: The collection the pool belongs to.
         :return: ``True`` if the data needs to be applied, ``False`` if it can be skipped.
         """
+        if self.licenses is not None:
+            return True
         pool, _ = self.license_pool(session, collection, autocreate=False)
         return self.should_apply_to(pool)
