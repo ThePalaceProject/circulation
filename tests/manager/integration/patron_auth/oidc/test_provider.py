@@ -9,6 +9,9 @@ from freezegun import freeze_time
 
 from palace.manager.api.authentication.base import PatronData, PatronLookupNotSupported
 from palace.manager.core.exceptions import PalaceValueError
+from palace.manager.integration.patron_auth.constants import (
+    LOGOUT_REDIRECT_QUERY_PARAM,
+)
 from palace.manager.integration.patron_auth.oidc.configuration.model import (
     OIDCAuthLibrarySettings,
     OIDCAuthSettings,
@@ -19,7 +22,6 @@ from palace.manager.integration.patron_auth.oidc.provider import (
     OIDCAuthenticationProvider,
 )
 from palace.manager.integration.patron_auth.oidc.util import (
-    LOGOUT_REDIRECT_QUERY_PARAM,
     OIDCDiscoveryError,
 )
 from palace.manager.sqlalchemy.model.datasource import DataSource

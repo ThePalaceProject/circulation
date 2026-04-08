@@ -22,14 +22,10 @@ from pydantic import HttpUrl
 from requests import RequestException
 
 from palace.manager.core.exceptions import BasePalaceException
-from palace.manager.integration.patron_auth.constants import LOGOUT_REDIRECT_QUERY_PARAM
 from palace.manager.service.redis.redis import Redis
 from palace.manager.util.http.exception import RequestNetworkException
 from palace.manager.util.http.http import HTTP
 from palace.manager.util.log import LoggerMixin
-
-# Re-exported for backwards compatibility with existing callers.
-__all__ = ["LOGOUT_REDIRECT_QUERY_PARAM"]
 
 
 class OIDCUtilityError(BasePalaceException):
