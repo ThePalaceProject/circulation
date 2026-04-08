@@ -1,7 +1,7 @@
 """Add change tracking hash columns
 
 Revision ID: f98e4049c87d
-Revises: a5ee359c2d31
+Revises: 23795e50c915
 Create Date: 2026-04-03 03:05:58.742988+00:00
 
 NOTE: First-import performance after this migration
@@ -23,7 +23,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "f98e4049c87d"
-down_revision = "a5ee359c2d31"
+down_revision = "23795e50c915"
 branch_labels = None
 depends_on = None
 
