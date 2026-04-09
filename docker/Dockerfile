@@ -13,8 +13,9 @@ FROM ${BASE_IMAGE} AS common
 # Copy startup scripts
 COPY docker/startup /etc/my_init.d/
 
-# Setup logrotate
+# Setup logrotate and run it hourly instead of daily
 COPY --chmod=644 docker/services/logrotate /etc/
+RUN mv /etc/cron.daily/logrotate /etc/cron.hourly/logrotate
 
 # Copy our poetry files into the image and install our dependencies.
 COPY --chown=palace:palace poetry.lock pyproject.toml /var/www/circulation/
