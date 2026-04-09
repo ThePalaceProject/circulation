@@ -241,10 +241,18 @@ class OverdriveAPI(
 
     EVENT_DELAY = datetime.timedelta(minutes=120)
 
-    # Maximum age of the cached library document before it is re-fetched.
-    # OverDrive periodically rotates collection tokens, so this ensures we
-    # always have a current token without manual intervention.
+    # Maximum age of the cached library document before it is re-fetched
+    # from the OverDrive API. OverDrive periodically rotates collection tokens,
+    # so this ensures the representations table cache doesn't serve a stale
+    # token indefinitely.
     LIBRARY_MAX_AGE: datetime.timedelta = datetime.timedelta(days=30)
+
+    # How long to keep the collection token in the in-memory cache before
+    # re-checking the representations table. Kept short so that long-lived
+    # Flask worker processes (which hold one OverdriveAPI instance per
+    # collection for the process lifetime) pick up rotated tokens within a
+    # reasonable window without hitting the DB on every request.
+    COLLECTION_TOKEN_MAX_AGE: datetime.timedelta = datetime.timedelta(minutes=5)
 
     TIME_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 
@@ -315,11 +323,9 @@ class OverdriveAPI(
         self._cached_client_oauth_token: OverdriveToken | None = None
 
         # In-memory cache for the collectionToken extracted from the library
-        # document. Uses the same OverdriveToken type and TTL pattern as
-        # _cached_client_oauth_token. The TTL matches LIBRARY_MAX_AGE so that
-        # long-lived instances (e.g. Flask workers, which hold one OverdriveAPI
-        # per collection for the process lifetime) transparently re-fetch the
-        # token when OverDrive rotates it. See the collection_token property.
+        # document. Expires after COLLECTION_TOKEN_MAX_AGE so that long-lived
+        # instances (e.g. Flask workers) transparently re-fetch a rotated token
+        # without a process restart. See the collection_token property.
         self._cached_collection_token: OverdriveToken | None = None
         self.overdrive_bibliographic_coverage_provider = (
             OverdriveBibliographicCoverageProvider(collection, api=self)
@@ -391,22 +397,14 @@ class OverdriveAPI(
     def collection_token(self) -> str:
         """Get the token representing this particular Overdrive collection.
 
-        The token is fetched from :meth:`get_library` and cached in memory for
-        :attr:`LIBRARY_MAX_AGE` (30 days). On each access the in-memory TTL is
-        checked first; if the entry is still fresh the token is returned without
-        any database or network I/O. Once the TTL expires, :meth:`get_library`
-        is called again, which in turn uses the ``representations`` table as a
-        second cache layer — only reaching the network when that layer is also
-        stale.
+        The token is cached in memory for :attr:`COLLECTION_TOKEN_MAX_AGE`
+        (5 minutes) to avoid a DB lookup on every request. Once that expires,
+        :meth:`get_library` is called, which uses the ``representations`` table
+        as a second cache layer refreshed at most once every
+        :attr:`LIBRARY_MAX_AGE` (30 days).
 
-        This two-layer design means the token is refreshed correctly regardless
-        of how long the ``OverdriveAPI`` instance lives. In particular, Flask
-        workers keep one instance per collection alive for the process lifetime
-        (see ``CirculationManager.load_settings``), so the in-memory TTL is
-        essential for picking up rotated tokens without a process restart.
-
-        As a side effect of the first (or post-expiry) fetch, this verifies
-        that the OverDrive credentials are working.
+        As a side effect of a cache miss, this verifies that the OverDrive
+        credentials are working.
         """
         cached = self._cached_collection_token
         if cached is not None and utc_now() < cached.expires:
@@ -423,7 +421,7 @@ class OverdriveAPI(
         token = cast(str, library["collectionToken"])
         self._cached_collection_token = OverdriveToken(
             token=token,
-            expires=utc_now() + self.LIBRARY_MAX_AGE,
+            expires=utc_now() + self.COLLECTION_TOKEN_MAX_AGE,
         )
         return token
 
@@ -581,10 +579,8 @@ class OverdriveAPI(
         """Find all the Overdrive Advantage accounts managed by this library.
 
         The advantage accounts response is cached in the ``representations``
-        table and refreshed at most once every :attr:`LIBRARY_MAX_AGE`, matching
-        the same cadence as :meth:`get_library`. This ensures that
-        ``collectionToken`` values embedded in child account responses stay
-        current as OverDrive periodically rotates them.
+        table and refreshed at most once every :attr:`LIBRARY_MAX_AGE`,
+        matching the same cadence as :meth:`get_library`.
 
         :yield: A sequence of OverdriveAdvantageAccount objects.
         """

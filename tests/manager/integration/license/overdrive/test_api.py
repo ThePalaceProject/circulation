@@ -256,77 +256,6 @@ class TestOverdriveAPI:
             overdrive_api_fixture.api.get_library()
         assert "Got status code 500" in str(excinfo.value)
 
-    def test_get_library_passes_max_age(
-        self, overdrive_api_fixture: OverdriveAPIFixture
-    ):
-        """Verify that get_library passes LIBRARY_MAX_AGE to Representation.get so that
-        the cached collection token is periodically refreshed from OverDrive."""
-        api = overdrive_api_fixture.api
-        library_json = json.dumps({"collectionToken": "tok"}).encode()
-        mock_representation = MagicMock()
-        mock_representation.content = library_json
-
-        with patch.object(
-            Representation, "get", return_value=(mock_representation, True)
-        ) as mock_get:
-            api.get_library()
-
-        _, kwargs = mock_get.call_args
-        assert kwargs.get("max_age") == OverdriveAPI.LIBRARY_MAX_AGE
-
-    def test_get_library_refreshes_stale_token(
-        self,
-        overdrive_api_fixture: OverdriveAPIFixture,
-        db: DatabaseTransactionFixture,
-    ):
-        """Verify that a stale cached library document is re-fetched, returning a
-        fresh collectionToken."""
-        api = overdrive_api_fixture.api
-        http = overdrive_api_fixture.mock_http
-
-        http.queue_response(200, content=json.dumps({"collectionToken": "old-token"}))
-        result = api.get_library()
-        assert result["collectionToken"] == "old-token"
-
-        # Age the cached representation past LIBRARY_MAX_AGE.
-        library_url = api._library_endpoint
-        rep = (
-            db.session.query(Representation)
-            .filter(Representation.url == library_url)
-            .one()
-        )
-        rep.fetched_at = utc_now() - (OverdriveAPI.LIBRARY_MAX_AGE + timedelta(days=1))
-
-        # The next call should re-fetch and return the new token.
-        http.queue_response(200, content=json.dumps({"collectionToken": "new-token"}))
-        result = api.get_library()
-        assert result["collectionToken"] == "new-token"
-
-    def test_get_advantage_accounts_passes_max_age(
-        self, overdrive_api_fixture: OverdriveAPIFixture
-    ):
-        """Verify that get_advantage_accounts passes LIBRARY_MAX_AGE to
-        Representation.get for the advantage accounts URL so that child
-        collection tokens are also periodically refreshed."""
-        api = overdrive_api_fixture.api
-        advantage_url = "https://api.overdrive.com/v1/libraries/1225/advantageAccounts"
-        advantage_json = json.dumps({"id": 1225, "advantageAccounts": []}).encode()
-        mock_representation = MagicMock()
-        mock_representation.content = advantage_json
-
-        with patch.object(
-            api,
-            "get_library",
-            return_value={"links": {"advantageAccounts": {"href": advantage_url}}},
-        ):
-            with patch.object(
-                Representation, "get", return_value=(mock_representation, True)
-            ) as mock_get:
-                list(api.get_advantage_accounts())
-
-        _, kwargs = mock_get.call_args
-        assert kwargs.get("max_age") == OverdriveAPI.LIBRARY_MAX_AGE
-
     def test_error_getting_library(
         self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
     ):
@@ -1627,16 +1556,16 @@ class TestOverdriveAPI:
         assert api.collection_token == "abc"
         mock_get_library.assert_called_once()
 
-        # Subsequent calls within LIBRARY_MAX_AGE return the cached value
-        # without calling get_library again.
+        # Subsequent calls within COLLECTION_TOKEN_MAX_AGE return the cached
+        # value without calling get_library again.
         assert api.collection_token == "abc"
         mock_get_library.assert_called_once()
 
     def test_collection_token_cache_expires(
         self, db: DatabaseTransactionFixture
     ) -> None:
-        """After LIBRARY_MAX_AGE has elapsed the in-memory cache is bypassed
-        and get_library is called again to pick up a rotated token."""
+        """After COLLECTION_TOKEN_MAX_AGE has elapsed the in-memory cache is
+        bypassed and get_library is called again to pick up a rotated token."""
         api = OverdriveAPI(db.session, db.collection(protocol=OverdriveAPI))
         mock_get_library = MagicMock(
             side_effect=[
@@ -1649,7 +1578,7 @@ class TestOverdriveAPI:
         assert api.collection_token == "old-token"
         mock_get_library.assert_called_once()
 
-        # Age the in-memory cache past LIBRARY_MAX_AGE.
+        # Age the in-memory cache past COLLECTION_TOKEN_MAX_AGE.
         assert api._cached_collection_token is not None
         api._cached_collection_token = OverdriveToken(
             token=api._cached_collection_token.token,

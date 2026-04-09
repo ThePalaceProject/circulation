@@ -76,7 +76,7 @@ class TestGenerateOverdriveAdvantageAccountList:
         ]
         overdrive_api.get_advantage_accounts = mock_get_advantage_accounts
         overdrive_api._cached_collection_token = OverdriveToken(
-            library_token, utc_now() + timedelta(days=30)
+            library_token, utc_now() + timedelta(hours=1)
         )
 
         with patch.object(
