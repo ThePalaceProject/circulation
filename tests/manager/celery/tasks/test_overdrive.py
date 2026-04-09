@@ -1191,7 +1191,15 @@ class TestIntegration:
             # Wait for the import chain to complete. The import_collection_group task
             # starts an async chain and returns immediately with the chain_id. We need
             # to wait for that chain to finish before processing apply tasks.
-            AsyncResult(result["chain_id"]).wait()
+            chain_result = AsyncResult(result["chain_id"]).wait()
+
+            # The chain's last task (import_result_router) fires off
+            # import_children_and_cleanup_chord asynchronously. We must wait for
+            # that chord to finish as well, otherwise its worker thread may still
+            # hold a savepoint on the shared test session when we call
+            # process_apply_queue(), causing a ResourceClosedError.
+            if chord_id := chain_result.get("chord_id"):
+                AsyncResult(chord_id).wait()
 
             # Process the queued apply tasks synchronously. The import task fires off
             # bibliographic_apply and circulation_apply tasks asynchronously, which are
