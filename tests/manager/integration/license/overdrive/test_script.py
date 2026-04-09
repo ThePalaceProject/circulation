@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import os
+from datetime import timedelta
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
@@ -9,13 +10,17 @@ import pytest
 from palace.manager.integration.license.overdrive.advantage import (
     OverdriveAdvantageAccount,
 )
-from palace.manager.integration.license.overdrive.api import OverdriveAPI
+from palace.manager.integration.license.overdrive.api import (
+    OverdriveAPI,
+    OverdriveToken,
+)
 from palace.manager.integration.license.overdrive.script import (
     GenerateOverdriveAdvantageAccountList,
     ImportCollection,
     ImportCollectionGroup,
 )
 from palace.manager.sqlalchemy.model.collection import Collection
+from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.overdrive import OverdriveAPIFixture
 
@@ -70,7 +75,9 @@ class TestGenerateOverdriveAdvantageAccountList:
             ),
         ]
         overdrive_api.get_advantage_accounts = mock_get_advantage_accounts
-        overdrive_api._collection_token = library_token
+        overdrive_api._cached_collection_token = OverdriveToken(
+            library_token, utc_now() + timedelta(hours=1)
+        )
 
         with patch.object(
             GenerateOverdriveAdvantageAccountList, "_create_overdrive_api"
