@@ -379,7 +379,7 @@ class AsyncClient(LoggerMixin):
         """
         try:
             response = await self._httpx_client.request(method, url, **kwargs)
-            self.log.info(
+            self.log.debug(
                 f"Request time for {url} took {response.elapsed.total_seconds():.2f} seconds"
             )
 

@@ -483,7 +483,7 @@ class OverdriveRepresentationExtractor(LoggerMixin):
                 overdrive_medium
                 and overdrive_medium not in cls.overdrive_medium_to_simplified_medium
             ):
-                cls.logger().error(
+                cls.logger().debug(
                     "Could not process medium %s for %s", overdrive_medium, overdrive_id
                 )
 
