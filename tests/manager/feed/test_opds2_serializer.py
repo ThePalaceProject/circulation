@@ -557,8 +557,8 @@ class TestOPDS2Serializer:
         assert "http://no-rel" not in link_hrefs
         assert "http://acq" in link_hrefs
 
-    def test_publication_links_skip_without_type(self):
-        """Other links without a type attribute are skipped."""
+    def test_publication_links_without_type(self):
+        """Other links without a type attribute are still serialized."""
         serializer = OPDS2Serializer()
         data = WorkEntryData(
             title="Test",
@@ -577,7 +577,7 @@ class TestOPDS2Serializer:
         )
         entry = serializer.serialize_work_entry(data)
         link_hrefs = [link["href"] for link in entry["links"]]
-        assert "http://no-type" not in link_hrefs
+        assert "http://no-type" in link_hrefs
 
     def test_acquisition_link_without_type(self):
         """An acquisition link with no type is still serialized."""

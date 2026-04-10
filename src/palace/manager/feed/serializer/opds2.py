@@ -227,15 +227,11 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]], LoggerMixin):
             if link.rel is None:
                 self.log.warning(f"Skipping OPDS2 link without rel: {link.href}")
                 continue
-            resolved_type = self._resolve_type(link.type)
-            if resolved_type is None:
-                self.log.error(f"Skipping OPDS2 link without type: {link.href}")
-                continue
             links.append(
                 self._link(
                     href=link.href,
                     rel=link.rel,
-                    type=resolved_type,
+                    type=self._resolve_type(link.type),
                     title=link.title,
                     properties=self._link_properties(),
                 )
