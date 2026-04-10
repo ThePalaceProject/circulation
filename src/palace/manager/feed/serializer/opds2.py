@@ -242,9 +242,7 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]], LoggerMixin):
             )
 
         for acquisition in data.acquisition_links:
-            acq_link = self._serialize_acquisition_link(acquisition)
-            if acq_link is not None:
-                links.append(acq_link)
+            links.append(self._serialize_acquisition_link(acquisition))
         return links
 
     def _serialize_link(self, link: Link) -> opds2.Link:
@@ -255,14 +253,11 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]], LoggerMixin):
             title=link.title,
         )
 
-    def _serialize_acquisition_link(self, link: Acquisition) -> opds2.Link | None:
-        link_type = self._acquisition_link_type(link)
-        if link_type is None:
-            return None
+    def _serialize_acquisition_link(self, link: Acquisition) -> opds2.Link:
         return self._link(
             href=link.href,
             rel=link.rel or opds2.AcquisitionLinkRelations.acquisition,
-            type=link_type,
+            type=self._resolve_type(link.type),
             title=link.title,
             properties=self._serialize_acquisition_properties(link),
             templated=link.templated,
@@ -479,16 +474,6 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]], LoggerMixin):
             )
         return groups
 
-    def _acquisition_link_type(self, link: Acquisition) -> str | None:
-        if link.type:
-            return self._resolve_type(link.type)
-        for indirect in link.indirect_acquisitions:
-            indirect_type = self._resolve_type(indirect.type)
-            if indirect_type:
-                return indirect_type
-        self.log.error(f"Skipping acquisition link without type: {link.href}")
-        return None
-
     def _availability_state(self, link: Acquisition) -> opds2.AvailabilityState | None:
         if link.is_loan:
             return opds2.AvailabilityState.ready
@@ -542,7 +527,7 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]], LoggerMixin):
         *,
         href: str,
         rel: str,
-        type: str,
+        type: str | None = None,
         title: str | None = None,
         properties: opds2.LinkProperties,
         templated: bool = False,
