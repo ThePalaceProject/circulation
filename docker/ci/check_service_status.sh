@@ -16,11 +16,20 @@ function check_service_status()
   # The location of the runit service should be passed.
   service="$2"
 
-  # Wait up to 15 seconds for the service file to exist
+  # Wait up to 15 seconds for the service directory to exist
   timeout --foreground 15s docker compose exec "$container" bash -c "until test -e $service; do sleep 1; done"
   file_status=$?
   if [[ "$file_status" != 0 ]]; then
-    echo "  FAIL: $service file does not exist after waiting"
+    echo "  FAIL: $service does not exist after waiting"
+    exit 1
+  fi
+
+  # Wait up to 15 seconds for runit to finish initializing the service
+  # (the supervise/ok control file is created after the service directory)
+  timeout --foreground 15s docker compose exec "$container" bash -c "until test -e $service/supervise/ok; do sleep 1; done"
+  supervise_status=$?
+  if [[ "$supervise_status" != 0 ]]; then
+    echo "  FAIL: $service/supervise/ok does not exist after waiting"
     exit 1
   fi
 
