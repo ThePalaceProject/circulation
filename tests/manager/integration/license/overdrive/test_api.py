@@ -2899,14 +2899,12 @@ class TestSyncBookshelf:
         overdrive_api_fixture: OverdriveAPIFixture,
     ):
         """When the Overdrive API returns a response without a 'products' key,
-        we log a warning and return an empty list rather than raising a KeyError."""
+        a BadResponseException is raised so the Celery task can retry."""
         api = overdrive_api_fixture.api
         mock_async_client = overdrive_api_fixture.mock_async_client
 
         mock_async_client.queue_response(200, content={"no_products_key": True})
 
         initial_endpoint = api.book_info_initial_endpoint(start=None, page_size=1)
-        data, next_endpoint = await api.fetch_book_info_list(initial_endpoint)
-
-        assert data == []
-        assert next_endpoint is None
+        with pytest.raises(BadResponseException, match="missing 'products' key"):
+            await api.fetch_book_info_list(initial_endpoint)
