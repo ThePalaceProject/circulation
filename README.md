@@ -91,6 +91,39 @@ uv can install and manage Python versions for you. To install the version used b
 uv python install 3.12
 ```
 
+#### direnv (optional, recommended)
+
+[direnv](https://direnv.net/) automatically activates the project's virtual environment when you `cd`
+into the directory, so you can run commands like `tox`, `pre-commit`, and `mypy` directly without the
+`uv run` prefix.
+
+Install direnv:
+
+```sh
+# OSX
+brew install direnv
+
+# Linux (Arch)
+pacman -S direnv
+```
+
+Add the shell hook to your profile (`~/.zshrc` or `~/.bashrc`):
+
+```sh
+eval "$(direnv hook zsh)"   # or: eval "$(direnv hook bash)"
+```
+
+Create a `.envrc` file in the project root:
+
+```sh
+echo 'source .venv/bin/activate' > .envrc
+direnv allow
+```
+
+Now whenever you enter the project directory the `.venv` is activated automatically, and it deactivates
+when you leave. If you use direnv, the `uv run` prefix in the commands below is not needed — you can
+call `python`, `tox`, `pre-commit`, etc. directly.
+
 ### OpenSearch
 
 Palace now uses OpenSearch for search functionality. Elasticsearch is no longer supported.
@@ -362,10 +395,10 @@ uv manages the project's virtual environment for you. The first time you run `uv
 `uv run` command) uv will create a `.venv/` directory in the project root using the Python version
 specified in `pyproject.toml`, and install the project's dependencies into it.
 
-Install the dependencies (including the `dev` group, which is the default):
+Install all dependencies (including both `dev` and `ci` groups):
 
 ```sh
-uv sync
+uv sync --all-groups
 ```
 
 Install only the production dependencies (no dev group, plus the `pg` extra for psycopg2):
@@ -674,8 +707,8 @@ You need to have the Python versions you are testing against installed on your l
 for installed Python versions, but does not install new Python versions. If `tox` doesn't find the Python version its
 looking for it will give an `InterpreterNotFound` errror.
 
-[Pyenv](#pyenv) is a useful tool to install multiple Python versions, if you need to install
-missing Python versions in your system for local testing.
+If you need to install missing Python versions, you can use `uv python install <version>` or
+[pyenv](https://github.com/pyenv/pyenv) to manage multiple Python installations.
 
 #### Docker
 
