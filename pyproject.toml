@@ -17,7 +17,6 @@ dev = [
     "google-api-python-client-stubs>=1.29.0,<2",
     "Jinja2>=3.1.2,<4",
     "mypy>=1.4.1,<2",
-    "psycopg2-binary>=2.9.5,<2.10",
     "pyfakefs>=6.0,<7",
     "pytest-alembic>=0.12.0,<0.13",
     "pytest-asyncio>=1.1.0,<2",
@@ -75,6 +74,7 @@ dependencies = [
     "openpyxl>=3.1,<4",
     "opensearch-py>=3.0,<4",
     "pillow>=12.0.0,<13",
+    "psycopg2-binary>=2.9.5,<2.10",
     "pycountry>=26.2.16,<27",
     "pycryptodome>=3.18,<4",
     "pydantic-settings>=2.5.2,<3",
@@ -118,9 +118,6 @@ name = "palace-manager"
 readme = "README.md"
 requires-python = ">=3.12,<4"
 version = "0"  # Version number is managed with tags in git; dunamai populates _version.py at build time.
-
-[project.optional-dependencies]
-pg = ["psycopg2>=2.9.5,<2.10"]
 
 [project.scripts]
 palace-startup-task = "palace.manager.scripts.startup:create_startup_task"

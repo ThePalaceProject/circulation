@@ -401,10 +401,10 @@ Install all dependencies (including both `dev` and `ci` groups):
 uv sync --all-groups
 ```
 
-Install only the production dependencies (no dev group, plus the `pg` extra for psycopg2):
+Install only the production dependencies (no dev group):
 
 ```sh
-uv sync --no-dev --extra pg
+uv sync --no-dev
 ```
 
 Run the application with:

@@ -67,7 +67,7 @@ RUN python3 -m venv env && \
     SIMPLIFIED_ENVIRONMENT=/var/www/circulation/environment.sh && \
     echo "if [ -f $SIMPLIFIED_ENVIRONMENT ]; then source $SIMPLIFIED_ENVIRONMENT; fi" >> env/bin/activate && \
     UV_PROJECT_ENVIRONMENT=/var/www/circulation/env \
-      uv sync --frozen --no-dev --extra pg --no-install-project && \
+      uv sync --frozen --no-dev --no-install-project && \
     . env/bin/activate && \
     # TODO: This can be removed once NLTK merges https://github.com/sloria/TextBlob/pull/469
     python3 -m nltk.downloader punkt_tab && \

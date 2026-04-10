@@ -20,7 +20,7 @@ RUN mv /etc/cron.daily/logrotate /etc/cron.hourly/logrotate
 # Copy our uv files into the image and install our dependencies.
 COPY --chown=palace:palace uv.lock pyproject.toml /var/www/circulation/
 RUN UV_PROJECT_ENVIRONMENT=/var/www/circulation/env \
-      uv sync --frozen --no-dev --extra pg --no-install-project
+      uv sync --frozen --no-dev --no-install-project
 
 COPY --chown=palace:palace . /var/www/circulation
 
@@ -28,7 +28,7 @@ COPY --chown=palace:palace . /var/www/circulation
 # --no-install-project (and passing --no-editable) is the recommended
 # pattern for production Docker builds with uv.
 RUN UV_PROJECT_ENVIRONMENT=/var/www/circulation/env \
-      uv sync --frozen --no-dev --extra pg --no-editable
+      uv sync --frozen --no-dev --no-editable
 
 ###############################################################################
 ## Circ-exec Image

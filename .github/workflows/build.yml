@@ -361,7 +361,7 @@ jobs:
           bash -c "
             cat src/palace/manager/_version.py &&
             source env/bin/activate &&
-            UV_PROJECT_ENVIRONMENT=/var/www/circulation/env uv sync --frozen --extra pg &&
+            UV_PROJECT_ENVIRONMENT=/var/www/circulation/env uv sync --frozen &&
             pytest --no-cov tests
           "
 
