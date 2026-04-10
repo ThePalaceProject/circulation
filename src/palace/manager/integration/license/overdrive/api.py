@@ -709,7 +709,15 @@ class OverdriveAPI(
                 BookInfoEndpoint(next_url) if next_url else None
             )
             async_task_list = list()
-            response_products = data["products"]
+            response_products = data.get("products")
+            if response_products is None:
+                self.log.warning(
+                    "Overdrive response missing 'products' key for endpoint %s. "
+                    "Response data: %s",
+                    endpoint.url,
+                    data,
+                )
+                return [], next_endpoint
             for product in response_products:
                 identifier = product["id"].lower()
                 books[identifier] = product
