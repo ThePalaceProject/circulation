@@ -240,7 +240,7 @@ def import_collection_group(
     import_all: bool = False,
     modified_since: datetime.datetime | None = None,
     start_time: datetime.datetime | None = None,
-) -> dict[str, Any]:
+) -> dict[str, Any] | ImportSkippedPayload:
     """Import an Overdrive collection and all its child (Advantage) collections.
 
     This task orchestrates the import of a parent Overdrive collection and chains
@@ -261,8 +261,20 @@ def import_collection_group(
                           See import_collection docstring for detailed behavior.
     :param start_time: The datetime when this import began. Used to update the
                       collection's timestamp. If None, uses current time.
-    :return: Dictionary containing the chain_id for tracking the async import chain.
+    :return: Dictionary containing the chain_id for tracking the async import chain,
+             or an import-skipped payload if another workflow is already in progress.
     """
+    redis = task.services.redis().client()
+    # Defense-in-depth: skip chain creation if a workflow is already running.
+    # This prevents redundant chains from being queued when the workflow lock
+    # expires between pages and a new Beat tick fires before import_collection
+    # can re-acquire and enforce the first-page guard itself.
+    if import_workflow_lock(redis, collection_id, str(uuid4())).locked():
+        task.log.info(
+            f"OverDrive import skipped for collection {collection_id}: "
+            "another import is already in progress (skipping at group level)."
+        )
+        return _import_skipped_payload()
 
     result = chain(
         import_collection.s(
