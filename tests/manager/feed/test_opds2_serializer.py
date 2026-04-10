@@ -533,8 +533,8 @@ class TestOPDS2Serializer:
         result = json.loads(serialized)
         assert result["metadata"]["title"] == "Feed"
 
-    def test_publication_links_skip_without_rel(self):
-        """Other links without a rel attribute are skipped."""
+    def test_publication_links_without_rel(self):
+        """Other links without a rel attribute are still serialized."""
         serializer = OPDS2Serializer()
         data = WorkEntryData(
             title="Test",
@@ -552,9 +552,8 @@ class TestOPDS2Serializer:
             ],
         )
         entry = serializer.serialize_work_entry(data)
-        # The other_link without rel should be skipped; only the acquisition link remains
         link_hrefs = [link["href"] for link in entry["links"]]
-        assert "http://no-rel" not in link_hrefs
+        assert "http://no-rel" in link_hrefs
         assert "http://acq" in link_hrefs
 
     def test_publication_links_without_type(self):
@@ -610,7 +609,7 @@ class TestOPDS2Serializer:
         assert "indirectAcquisition" not in result.get("properties", {})
 
     def test_feed_link_without_rel(self):
-        """Feed links without a rel attribute are skipped."""
+        """Feed links without a rel attribute are still serialized."""
         feed = FeedData(
             metadata=FeedMetadata(title="Feed", id="http://feed"),
         )
@@ -623,7 +622,7 @@ class TestOPDS2Serializer:
         result = json.loads(serialized)
         link_hrefs = [link["href"] for link in result["links"]]
         assert "http://feed" in link_hrefs
-        assert "http://no-rel" not in link_hrefs
+        assert "http://no-rel" in link_hrefs
 
     def test_facet_group_with_single_link_skipped(self):
         """A facet group with fewer than 2 links is skipped."""
