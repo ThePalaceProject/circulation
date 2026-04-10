@@ -77,11 +77,12 @@ class TestIntegrationTest:
             assert decrypted_data == content
 
     def test__run_test(self, integration_test: IntegrationTestFixture):
-        with patch(
-            "palace.manager.scripts.integration_test.HTTP.request_with_timeout"
-        ) as request, patch.object(
-            integration_test.script, "_test_ssl_validity"
-        ) as test_ssl:
+        with (
+            patch(
+                "palace.manager.scripts.integration_test.HTTP.request_with_timeout"
+            ) as request,
+            patch.object(integration_test.script, "_test_ssl_validity") as test_ssl,
+        ):
             request.return_value = Mock(
                 status_code=204, json=lambda: dict(status="created")
             )
@@ -141,13 +142,16 @@ class TestIntegrationTest:
 
     def test_encrypt(self, integration_test: IntegrationTestFixture):
         script = integration_test.script
-        with patch.object(script, "_read_config") as read_config, patch(
-            "palace.manager.scripts.integration_test.read_file_bytes"
-        ) as read_file_bytes, patch(
-            "palace.manager.scripts.integration_test.CryptAESCBC", spec=CryptAESCBC
-        ) as aes, patch(
-            "palace.manager.scripts.integration_test.open"
-        ) as open:
+        with (
+            patch.object(script, "_read_config") as read_config,
+            patch(
+                "palace.manager.scripts.integration_test.read_file_bytes"
+            ) as read_file_bytes,
+            patch(
+                "palace.manager.scripts.integration_test.CryptAESCBC", spec=CryptAESCBC
+            ) as aes,
+            patch("palace.manager.scripts.integration_test.open") as open,
+        ):
             read_file_bytes.return_value = b"filebytes"
             read_config.return_value = b"7 bytes"
             aes().encrypt.return_value = b"encrypted bytes"
@@ -190,9 +194,10 @@ class TestIntegrationTest:
             generate_key_file=None,
             encrypt_file=None,
         )
-        with patch.object(script, "_run_test") as run_test, patch.object(
-            script, "_read_config"
-        ) as read_config:
+        with (
+            patch.object(script, "_run_test") as run_test,
+            patch.object(script, "_read_config") as read_config,
+        ):
             read_config.return_value = BASIC_YAML_DICT
             script.do_run()
 
@@ -210,11 +215,14 @@ class TestIntegrationTest:
             script.do_run()
 
     def test__test_ssl_validity(self, integration_test: IntegrationTestFixture):
-        with patch(
-            "palace.manager.scripts.integration_test.get_server_certificate"
-        ) as get_cert, patch(
-            "palace.manager.scripts.integration_test.load_certificate"
-        ) as load_cert:
+        with (
+            patch(
+                "palace.manager.scripts.integration_test.get_server_certificate"
+            ) as get_cert,
+            patch(
+                "palace.manager.scripts.integration_test.load_certificate"
+            ) as load_cert,
+        ):
             test = IntegrationTestDetails("Test", endpoint="https://localhost:543/path")
 
             load_cert.return_value = Mock(get_notAfter=lambda: b"21000101000000Z")

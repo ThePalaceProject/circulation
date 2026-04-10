@@ -218,7 +218,7 @@ class AnnotationParser:
             identifier=identifier,
             motivation=motivation,
             on_multiple="interchangeable",
-            **extra_kwargs
+            **extra_kwargs,
         )
         annotation.target = target
         if content:

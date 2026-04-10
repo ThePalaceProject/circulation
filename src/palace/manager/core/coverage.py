@@ -300,7 +300,7 @@ class BaseCoverageProvider:
             self.service_name,
             Timestamp.COVERAGE_PROVIDER_TYPE,
             collection=self.collection,
-            **kwargs
+            **kwargs,
         )
         timestamp.apply(self._db)
         self._db.commit()
@@ -615,7 +615,7 @@ class IdentifierCoverageProvider(BaseCoverageProvider):
         collection=None,
         input_identifiers=None,
         replacement_policy=None,
-        **kwargs
+        **kwargs,
     ):
         """Constructor.
 
@@ -1016,7 +1016,7 @@ class IdentifierCoverageProvider(BaseCoverageProvider):
             operation=self.operation,
             identifiers=self.input_identifiers,
             collection=self.collection_or_not,
-            **kwargs
+            **kwargs,
         )
 
         if identifiers:
