@@ -224,27 +224,18 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]], LoggerMixin):
     def _serialize_publication_links(self, data: WorkEntryData) -> list[opds2.Link]:
         links: list[opds2.Link] = []
         for link in data.other_links:
-            if link.rel is None:
-                self.log.warning(f"Skipping OPDS2 link without rel: {link.href}")
-                continue
-            resolved_type = self._resolve_type(link.type)
-            if resolved_type is None:
-                self.log.error(f"Skipping OPDS2 link without type: {link.href}")
-                continue
             links.append(
                 self._link(
                     href=link.href,
                     rel=link.rel,
-                    type=resolved_type,
+                    type=self._resolve_type(link.type),
                     title=link.title,
                     properties=self._link_properties(),
                 )
             )
 
         for acquisition in data.acquisition_links:
-            acq_link = self._serialize_acquisition_link(acquisition)
-            if acq_link is not None:
-                links.append(acq_link)
+            links.append(self._serialize_acquisition_link(acquisition))
         return links
 
     def _serialize_link(self, link: Link) -> opds2.Link:
@@ -255,14 +246,11 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]], LoggerMixin):
             title=link.title,
         )
 
-    def _serialize_acquisition_link(self, link: Acquisition) -> opds2.Link | None:
-        link_type = self._acquisition_link_type(link)
-        if link_type is None:
-            return None
+    def _serialize_acquisition_link(self, link: Acquisition) -> opds2.Link:
         return self._link(
             href=link.href,
             rel=link.rel or opds2.AcquisitionLinkRelations.acquisition,
-            type=link_type,
+            type=self._resolve_type(link.type),
             title=link.title,
             properties=self._serialize_acquisition_properties(link),
             templated=link.templated,
@@ -362,18 +350,9 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]], LoggerMixin):
         return json.dumps(data, indent=2)
 
     def _serialize_feed_links(self, feed: FeedData) -> list[opds2.Link]:
-        links: list[opds2.Link] = []
-        for link in feed.links:
-            strict = self._serialize_feed_link(link)
-            if strict is not None:
-                links.append(strict)
+        return [self._serialize_feed_link(link) for link in feed.links]
 
-        return links
-
-    def _serialize_feed_link(self, link: Link) -> opds2.Link | None:
-        if link.rel is None:
-            self.log.warning(f"Skipping OPDS2 feed link without rel: {link.href}")
-            return None
+    def _serialize_feed_link(self, link: Link) -> opds2.Link:
         resolved_type = self._resolve_type(link.type)
         return self._link(
             href=link.href,
@@ -479,16 +458,6 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]], LoggerMixin):
             )
         return groups
 
-    def _acquisition_link_type(self, link: Acquisition) -> str | None:
-        if link.type:
-            return self._resolve_type(link.type)
-        for indirect in link.indirect_acquisitions:
-            indirect_type = self._resolve_type(indirect.type)
-            if indirect_type:
-                return indirect_type
-        self.log.error(f"Skipping acquisition link without type: {link.href}")
-        return None
-
     def _availability_state(self, link: Acquisition) -> opds2.AvailabilityState | None:
         if link.is_loan:
             return opds2.AvailabilityState.ready
@@ -541,8 +510,8 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]], LoggerMixin):
         self,
         *,
         href: str,
-        rel: str,
-        type: str,
+        rel: str | None = None,
+        type: str | None = None,
         title: str | None = None,
         properties: opds2.LinkProperties,
         templated: bool = False,

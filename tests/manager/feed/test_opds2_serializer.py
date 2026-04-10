@@ -533,8 +533,8 @@ class TestOPDS2Serializer:
         result = json.loads(serialized)
         assert result["metadata"]["title"] == "Feed"
 
-    def test_publication_links_skip_without_rel(self):
-        """Other links without a rel attribute are skipped."""
+    def test_publication_links_without_rel(self):
+        """Other links without a rel attribute are still serialized."""
         serializer = OPDS2Serializer()
         data = WorkEntryData(
             title="Test",
@@ -552,13 +552,12 @@ class TestOPDS2Serializer:
             ],
         )
         entry = serializer.serialize_work_entry(data)
-        # The other_link without rel should be skipped; only the acquisition link remains
         link_hrefs = [link["href"] for link in entry["links"]]
-        assert "http://no-rel" not in link_hrefs
+        assert "http://no-rel" in link_hrefs
         assert "http://acq" in link_hrefs
 
-    def test_publication_links_skip_without_type(self):
-        """Other links without a type attribute are skipped."""
+    def test_publication_links_without_type(self):
+        """Other links without a type attribute are still serialized."""
         serializer = OPDS2Serializer()
         data = WorkEntryData(
             title="Test",
@@ -577,10 +576,10 @@ class TestOPDS2Serializer:
         )
         entry = serializer.serialize_work_entry(data)
         link_hrefs = [link["href"] for link in entry["links"]]
-        assert "http://no-type" not in link_hrefs
+        assert "http://no-type" in link_hrefs
 
-    def test_acquisition_link_type_returns_none(self):
-        """An acquisition link with no type and no indirect types returns None."""
+    def test_acquisition_link_without_type(self):
+        """An acquisition link with no type is still serialized."""
         serializer = OPDS2Serializer()
         acquisition = Acquisition(
             href="http://no-type",
@@ -589,39 +588,9 @@ class TestOPDS2Serializer:
             indirect_acquisitions=[],
         )
         result = serializer._serialize_acquisition_link(acquisition)
-        assert result is None
-
-    def test_acquisition_link_type_fallback_to_indirect(self):
-        """When an acquisition link has no direct type, falls back to the first indirect type."""
-        serializer = OPDS2Serializer()
-        acquisition = Acquisition(
-            href="http://indirect-type",
-            rel="acquisition",
-            type=None,
-            indirect_acquisitions=[
-                IndirectAcquisition(type="application/epub+zip"),
-            ],
-        )
-        result = serializer._serialize_acquisition_link(acquisition)
-        assert result is not None
         dumped = result.serialize()
-        assert dumped["type"] == "application/epub+zip"
-
-    def test_acquisition_link_type_fallback_to_semantic_indirect(self):
-        """Semantic indirect types are resolved when direct type is missing."""
-        serializer = OPDS2Serializer()
-        acquisition = Acquisition(
-            href="http://indirect-type",
-            rel="acquisition",
-            type=None,
-            indirect_acquisitions=[
-                IndirectAcquisition(type=LinkContentType.OPDS_ENTRY),
-            ],
-        )
-        result = serializer._serialize_acquisition_link(acquisition)
-        assert result is not None
-        dumped = result.serialize()
-        assert dumped["type"] == opds2.BasePublication.content_type()
+        assert dumped["href"] == "http://no-type"
+        assert "type" not in dumped
 
     def test_indirect_acquisition_without_type(self):
         """An indirect acquisition with type=None is skipped."""
@@ -640,7 +609,7 @@ class TestOPDS2Serializer:
         assert "indirectAcquisition" not in result.get("properties", {})
 
     def test_feed_link_without_rel(self):
-        """Feed links without a rel attribute are skipped."""
+        """Feed links without a rel attribute are still serialized."""
         feed = FeedData(
             metadata=FeedMetadata(title="Feed", id="http://feed"),
         )
@@ -653,7 +622,7 @@ class TestOPDS2Serializer:
         result = json.loads(serialized)
         link_hrefs = [link["href"] for link in result["links"]]
         assert "http://feed" in link_hrefs
-        assert "http://no-rel" not in link_hrefs
+        assert "http://no-rel" in link_hrefs
 
     def test_facet_group_with_single_link_skipped(self):
         """A facet group with fewer than 2 links is skipped."""
@@ -832,23 +801,22 @@ class TestOPDS2Serializer:
         entry = serializer.serialize_work_entry(data)
         assert entry["metadata"]["@type"] == "http://schema.org/Book"
 
-    def test_acquisition_link_skipped_returns_none_in_publication_links(self):
-        """When _serialize_acquisition_link returns None, no link is appended."""
+    def test_acquisition_link_without_type_in_publication_links(self):
+        """Acquisition links without a type are still included in publication links."""
         serializer = OPDS2Serializer()
         data = WorkEntryData(
             title="Test",
             identifier="urn:id",
             image_links=[Link(href="http://image", rel="image", type="image/png")],
             acquisition_links=[
-                # This acquisition has no type and no indirect type, so it returns None
                 Acquisition(
-                    href="http://bad-acq",
+                    href="http://no-type-acq",
                     rel="acquisition",
                     type=None,
                     indirect_acquisitions=[],
                 ),
                 Acquisition(
-                    href="http://good-acq",
+                    href="http://typed-acq",
                     rel=OPDSFeed.OPEN_ACCESS_REL,
                     type="application/epub+zip",
                 ),
@@ -856,8 +824,8 @@ class TestOPDS2Serializer:
         )
         entry = serializer.serialize_work_entry(data)
         link_hrefs = [link["href"] for link in entry["links"]]
-        assert "http://bad-acq" not in link_hrefs
-        assert "http://good-acq" in link_hrefs
+        assert "http://no-type-acq" in link_hrefs
+        assert "http://typed-acq" in link_hrefs
 
     def test_facet_link_without_title_is_skipped(self):
         """Facet links without a title are skipped and an error is logged."""
@@ -1028,13 +996,13 @@ class TestOPDS2Serializer:
     def test_acquisition_link_resolves_link_content_type(self):
         """Acquisition links with LinkContentType.OPDS_ENTRY are resolved."""
         serializer = OPDS2Serializer()
-        link = Acquisition(
+        acquisition = Acquisition(
             href="http://example.com/borrow",
             rel="http://opds-spec.org/acquisition/borrow",
             type=LinkContentType.OPDS_ENTRY,
         )
-        result = serializer._acquisition_link_type(link)
-        assert result == opds2.BasePublication.content_type()
+        result = serializer._serialize_acquisition_link(acquisition)
+        assert result.type == opds2.BasePublication.content_type()
 
     def test_publication_links_resolve_link_content_type(self):
         """Publication other_links with LinkContentType are resolved."""
