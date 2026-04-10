@@ -711,6 +711,13 @@ class OverdriveAPI(
             async_task_list = list()
             response_products = data.get("products")
             if response_products is None:
+                self.log.warning(
+                    f"Overdrive response missing 'products' key for endpoint {endpoint.url}.",
+                    extra={
+                        "palace_response_data": data,
+                        "palace_response_status_code": response.status_code,
+                    },
+                )
                 raise BadResponseException(
                     endpoint.url,
                     f"Overdrive response missing 'products' key. Response data: {data}",
