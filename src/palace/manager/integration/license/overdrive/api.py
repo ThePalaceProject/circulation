@@ -712,10 +712,8 @@ class OverdriveAPI(
             response_products = data.get("products")
             if response_products is None:
                 self.log.warning(
-                    "Overdrive response missing 'products' key for endpoint %s. "
-                    "Response data: %s",
-                    endpoint.url,
-                    data,
+                    f"Overdrive response missing 'products' key for endpoint {endpoint.url}. "
+                    f"Response data: {data}"
                 )
                 return [], next_endpoint
             for product in response_products:
