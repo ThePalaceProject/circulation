@@ -1224,7 +1224,7 @@ class LicensePool(Base):
                 lp.work = None
                 if lp.presentation_edition:
                     lp.presentation_edition.work = None
-        else:
+        elif len(existing_works) == 1:
             # There is a consensus Work for this Identifier.
             [self.work] = existing_works
 

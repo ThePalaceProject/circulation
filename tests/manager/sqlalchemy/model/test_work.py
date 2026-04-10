@@ -2146,6 +2146,36 @@ class TestWorkConsolidation:
         assert p.presentation_edition == work.presentation_edition
         assert True == new
 
+    def test_calculate_work_does_not_raise_when_licensed_through_is_empty(
+        self, db: DatabaseTransactionFixture
+    ):
+        """Regression test: calculate_work() must not raise ValueError when
+        licensed_through is transiently empty (no existing works to unpack).
+
+        This could happen when the relationship collection is stale or has not
+        yet been populated, resulting in an empty ``existing_works`` set.  The
+        original code used a bare destructuring assignment
+        ``[self.work] = existing_works`` which raised
+        ``ValueError: not enough values to unpack (expected 1, got 0)``.
+        """
+        from unittest.mock import PropertyMock
+
+        edition, pool = db.edition(with_license_pool=True)
+
+        # Temporarily replace the licensed_through descriptor on the Identifier
+        # class so that it returns an empty list, simulating a transient state
+        # where the relationship collection has not yet been populated.
+        with patch.object(
+            type(pool.identifier),
+            "licensed_through",
+            new_callable=PropertyMock,
+            return_value=[],
+        ):
+            work, created = pool.calculate_work()
+
+        assert work is not None
+        assert created is True
+
     def test_calculate_work_bails_out_if_no_title(self, db: DatabaseTransactionFixture):
         e, p = db.edition(with_license_pool=True)
         e.title = None
