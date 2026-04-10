@@ -48,24 +48,18 @@ jobs:
           fetch-depth: 0
 
       # Creates version files we use to track the version of code in the container
-      - name: Set up Python
-        uses: actions/setup-python@v6
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
         with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
           python-version: "3.12"
-
-      - name: Install Poetry
-        uses: ./.github/actions/poetry
-
-      - name: Setup Dunamai
-        run: poetry install --only ci --no-root
-        env:
-          POETRY_VIRTUALENVS_CREATE: false
 
       - name: Create version file
         run: |
-          echo "__version__ = '$(dunamai from git --style semver)'" >> src/palace/manager/_version.py
-          echo "__commit__ = '$(dunamai from git --format {commit} --full-commit)'" >> src/palace/manager/_version.py
-          echo "__branch__ = '$(dunamai from git --format {branch})'" >> src/palace/manager/_version.py
+          echo "__version__ = '$(uv run --only-group ci dunamai from git --style semver)'" >> src/palace/manager/_version.py
+          echo "__commit__ = '$(uv run --only-group ci dunamai from git --format {commit} --full-commit)'" >> src/palace/manager/_version.py
+          echo "__branch__ = '$(uv run --only-group ci dunamai from git --format {branch})'" >> src/palace/manager/_version.py
           cat src/palace/manager/_version.py
 
       # Docker doesn't support uppercase letters in repo names, so we need to lowercase the owner
@@ -367,7 +361,7 @@ jobs:
           bash -c "
             cat src/palace/manager/_version.py &&
             source env/bin/activate &&
-            poetry sync --without ci --no-root &&
+            UV_PROJECT_ENVIRONMENT=/var/www/circulation/env uv sync --frozen --extra pg &&
             pytest --no-cov tests
           "
 

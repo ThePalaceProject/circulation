@@ -27,14 +27,14 @@ through mobile and web applications.
 
 **Development & Testing:**
 - pytest, tox
-- Poetry (package management)
+- uv (package management)
 - pre-commit (linting/formatting)
 - mypy (type checking)
 
 ## Code Conventions
 
 - Pre-commit for linting/formatting code
-- Poetry for package management
+- uv for package management
 - `pyproject.toml` for project configuration
 - Doc comments use reStructuredText style
 - Type hint all code with mypy validation

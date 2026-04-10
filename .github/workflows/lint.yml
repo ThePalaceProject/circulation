@@ -13,22 +13,15 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
         with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Install Poetry
-        uses: ./.github/actions/poetry
-        with:
-          cache: true
-          cache-restore-only: true
-
       - name: Install Pre-commit
-        run: |
-          poetry install --only ci --no-root
-        env:
-          POETRY_VIRTUALENVS_CREATE: false
+        run: uv sync --only-group ci
 
       - name: Restore pre-commit cache
         uses: actions/cache@v5
@@ -38,4 +31,4 @@ jobs:
           restore-keys: pre-commit-${{ runner.os }}-py${{ env.PYTHON_VERSION }}
 
       - name: Lint
-        run: pre-commit run --all-files --show-diff-on-failure
+        run: uv run pre-commit run --all-files --show-diff-on-failure
