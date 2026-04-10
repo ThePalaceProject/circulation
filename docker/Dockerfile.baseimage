@@ -66,15 +66,11 @@ COPY --chown=palace:palace uv.lock pyproject.toml /var/www/circulation/
 # image is built. These may get out of date, but we always rerun this step when
 # building the final image, so it will be up to date then. This gives is a base
 # to work from which speeds up the final image build.
-RUN python3 -m venv env && \
+RUN uv sync --frozen --no-dev --no-install-project && \
     SIMPLIFIED_ENVIRONMENT=/var/www/circulation/environment.sh && \
     echo "if [ -f $SIMPLIFIED_ENVIRONMENT ]; then source $SIMPLIFIED_ENVIRONMENT; fi" >> env/bin/activate && \
-      uv sync --frozen --no-dev --no-install-project && \
     . env/bin/activate && \
-    # TODO: This can be removed once NLTK merges https://github.com/sloria/TextBlob/pull/469
-    python3 -m nltk.downloader punkt_tab && \
     python3 -m textblob.download_corpora lite && \
-    rm -rf /root/nltk_data/tokenizers/punkt && \
     mv /root/nltk_data /usr/lib/ && \
     find /usr/lib/nltk_data -name *.zip -delete && \
     rm -Rf /root/.cache && \
