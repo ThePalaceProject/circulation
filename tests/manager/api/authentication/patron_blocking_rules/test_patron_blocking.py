@@ -420,15 +420,18 @@ class TestBasicAuthenticationProvider:
             )
         ]
 
-        with patch.object(
-            _ConcreteBlockingProvider,
-            "log",
-            new_callable=PropertyMock,
-            return_value=mock_log,
-        ), patch.object(
-            _ConcreteBlockingProvider,
-            "_do_authenticate",
-            return_value=(mock_patron, {}),
+        with (
+            patch.object(
+                _ConcreteBlockingProvider,
+                "log",
+                new_callable=PropertyMock,
+                return_value=mock_log,
+            ),
+            patch.object(
+                _ConcreteBlockingProvider,
+                "_do_authenticate",
+                return_value=(mock_patron, {}),
+            ),
         ):
             result = provider.authenticate(MagicMock(), {})
 
@@ -439,8 +442,10 @@ class TestBasicAuthenticationProvider:
         mock_log.info.assert_any_call("Patron blocking rules evaluation attempted")
 
     def test_blocking_not_applied_when_do_authenticate_returns_none(self) -> None:
-        """When _do_authenticate returns None (bad credentials), blocking rules
-        are not evaluated — None is passed through."""
+        """
+        When _do_authenticate returns None (bad credentials), blocking rules
+        are not evaluated — None is passed through.
+        """
         provider = MagicMock(spec=BasicAuthenticationProvider)
         provider.patron_blocking_rules = [
             PatronBlockingRule(name="block-all", rule="True")
@@ -454,8 +459,10 @@ class TestBasicAuthenticationProvider:
     def test_blocking_not_applied_when_do_authenticate_returns_problem_detail(
         self,
     ) -> None:
-        """When _do_authenticate itself returns a ProblemDetail (e.g. connection
-        failure), blocking rules are not evaluated — the original error is returned."""
+        """
+        When _do_authenticate itself returns a ProblemDetail (e.g. connection
+        failure), blocking rules are not evaluated — the original error is returned.
+        """
         provider = MagicMock(spec=BasicAuthenticationProvider)
         provider.patron_blocking_rules = [
             PatronBlockingRule(name="block-all", rule="True")
@@ -478,15 +485,18 @@ class TestBasicAuthenticationProvider:
             PatronBlockingRule(name="never-block", rule="False")
         ]
 
-        with patch.object(
-            _ConcreteBlockingProvider,
-            "log",
-            new_callable=PropertyMock,
-            return_value=mock_log,
-        ), patch.object(
-            _ConcreteBlockingProvider,
-            "_do_authenticate",
-            return_value=(mock_patron, {}),
+        with (
+            patch.object(
+                _ConcreteBlockingProvider,
+                "log",
+                new_callable=PropertyMock,
+                return_value=mock_log,
+            ),
+            patch.object(
+                _ConcreteBlockingProvider,
+                "_do_authenticate",
+                return_value=(mock_patron, {}),
+            ),
         ):
             result = provider.authenticate(MagicMock(), {})
 

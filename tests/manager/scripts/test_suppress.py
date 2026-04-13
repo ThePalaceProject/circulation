@@ -528,9 +528,10 @@ class TestSuppressWorkForLibraryScript:
         )
 
         script = SuppressWorkForLibraryScript(db.session)
-        with patch.object(
-            db.session, "commit", side_effect=Exception("DB error")
-        ), patch.object(db.session, "rollback") as mock_rollback:
+        with (
+            patch.object(db.session, "commit", side_effect=Exception("DB error")),
+            patch.object(db.session, "rollback") as mock_rollback,
+        ):
             with pytest.raises(Exception, match="DB error"):
                 script.do_run(
                     ["--library", test_library.short_name, "--file", str(csv_file)]
@@ -545,9 +546,12 @@ class TestSuppressWorkForLibraryScript:
         identifier = work.presentation_edition.primary_identifier
 
         script = SuppressWorkForLibraryScript(db.session)
-        with patch.object(
-            script, "suppress_work", side_effect=RuntimeError("unexpected")
-        ), patch.object(db.session, "rollback") as mock_rollback:
+        with (
+            patch.object(
+                script, "suppress_work", side_effect=RuntimeError("unexpected")
+            ),
+            patch.object(db.session, "rollback") as mock_rollback,
+        ):
             with pytest.raises(RuntimeError, match="unexpected"):
                 script.do_run(
                     [

@@ -132,7 +132,7 @@ class FindawayManifest(AudiobookManifest):
                 title=item.title,
                 duration=item.duration,
                 type=item.media_type,
-                **kwargs
+                **kwargs,
             )
             total_duration += item.duration
 

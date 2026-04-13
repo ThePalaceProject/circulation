@@ -95,7 +95,7 @@ class MarcExporterFixture:
         collection: Collection | None | Literal[False] = False,
         library: Library | None | Literal[False] = False,
         created: datetime.datetime | None = None,
-        since: datetime.datetime | None = None
+        since: datetime.datetime | None = None,
     ) -> MarcFile:
         collection = collection if collection is not False else self.collection1
         library = library if library is not False else self.library1
