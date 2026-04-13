@@ -61,7 +61,6 @@ This repository is a [`uv` workspace](https://docs.astral.sh/uv/concepts/project
   - `/data_layer` - Pydantic models for content import and validation
   - `/feed` - OPDS (Open Publication Distribution System) feed generation
   - `/integration` - Third-party service integrations and content provider APIs
-  - `/opds` - Pydantic models for OPDS feed parsing and validation
   - `/scripts` - Legacy CLI utilities (**deprecated - no new code**)
   - `/search` - OpenSearch integration and indexing logic
   - `/service` - Dependency injection container and service layer
@@ -71,12 +70,16 @@ This repository is a [`uv` workspace](https://docs.astral.sh/uv/concepts/project
   - `/palace-util` - Shared utilities under the `palace.util` namespace: exceptions
     (`BasePalaceException`, `PalaceValueError`, `PalaceTypeError`), datetime helpers, and the full
     logging toolkit. Import from `palace.util.*` directly.
+  - `/palace-opds` - Pydantic models for the OPDS / Readium specifications (OPDS 2.0, RWPM, ODL,
+    LCP, Authentication for OPDS, Palace extensions) under the `palace.opds` namespace. Import
+    from `palace.opds.*` directly. Depends on `palace-util`; depends on no other Palace package.
 - `/tests` - Test files for the whole repository (both `palace-manager` and workspace-member packages)
   - `/files` - Test fixture files
   - `/fixtures` - pytest fixtures shared across test functions
   - `/manager` - pytest test files for `palace-manager` (should mirror `src/palace/manager` structure)
   - `/migration` - Database migration tests
   - `/mocks` - Test mocks (**being phased out - avoid in new code**)
+  - `/palace_opds` - pytest test files for the `palace-opds` workspace package
   - `/palace_util` - pytest test files for the `palace-util` workspace package
 - Workspace-member tests live under the root `tests/<package_name>/` rather than
   `packages/<name>/tests/` so they share the repo's pytest fixtures and conftest plugins and

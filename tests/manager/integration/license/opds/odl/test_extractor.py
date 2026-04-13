@@ -5,19 +5,19 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from palace.opds import opds2, rwpm
+from palace.opds.lcp.status import LoanStatus
+from palace.opds.odl.info import Checkouts, LicenseInfo, LicenseStatus
+from palace.opds.odl.odl import License, LicenseMetadata, Publication
+from palace.opds.odl.protection import Protection
+from palace.opds.odl.terms import Terms
+from palace.opds.opds2 import Link, PublicationFeedNoValidation
+from palace.opds.schema_org import Audience
 from palace.util.datetime_helpers import utc_now
 
 from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.integration.license.opds.odl.constants import FEEDBOOKS_AUDIO
 from palace.manager.integration.license.opds.odl.extractor import OPDS2WithODLExtractor
-from palace.manager.opds import opds2, rwpm
-from palace.manager.opds.lcp.status import LoanStatus
-from palace.manager.opds.odl.info import Checkouts, LicenseInfo, LicenseStatus
-from palace.manager.opds.odl.odl import License, LicenseMetadata, Publication
-from palace.manager.opds.odl.protection import Protection
-from palace.manager.opds.odl.terms import Terms
-from palace.manager.opds.opds2 import Link, PublicationFeedNoValidation
-from palace.manager.opds.schema_org import Audience
 from palace.manager.sqlalchemy.constants import EditionConstants, MediaTypes
 from palace.manager.sqlalchemy.model.contributor import Contributor
 from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism, RightsStatus

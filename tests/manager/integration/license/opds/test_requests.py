@@ -11,6 +11,12 @@ from unittest.mock import MagicMock
 import pytest
 from freezegun import freeze_time
 
+from palace.opds.authentication import AuthenticationDocument
+from palace.opds.opds2 import (
+    FeedMetadata,
+    Link,
+    PublicationFeedNoValidation,
+)
 from palace.util.exceptions import PalaceValueError
 
 from palace.manager.api.model.token import OAuthTokenResponse
@@ -22,12 +28,6 @@ from palace.manager.integration.license.opds.requests import (
     OAuthOpdsRequest,
     OpdsAuthType,
     get_opds_requests,
-)
-from palace.manager.opds.authentication import AuthenticationDocument
-from palace.manager.opds.opds2 import (
-    FeedMetadata,
-    Link,
-    PublicationFeedNoValidation,
 )
 from tests.fixtures.http import MockHttpClientFixture
 from tests.mocks.mock import MockRequestsResponse

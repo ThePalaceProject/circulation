@@ -13,6 +13,7 @@ from pytest import LogCaptureFixture
 from sqlalchemy import literal, select
 from sqlalchemy.sql import Select
 
+from palace.opds.odl.info import LicenseStatus
 from palace.util.datetime_helpers import utc_now
 from palace.util.log import LogLevel
 
@@ -29,7 +30,6 @@ from palace.manager.celery.tasks.generate_inventory_and_hold_reports import (
 )
 from palace.manager.integration.license.opds.opds1.settings import OPDSImporterSettings
 from palace.manager.integration.license.overdrive.api import OverdriveAPI
-from palace.manager.opds.odl.info import LicenseStatus
 from palace.manager.sqlalchemy.model.classification import Genre, Subject
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.library import Library

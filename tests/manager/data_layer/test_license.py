@@ -1,5 +1,6 @@
+from palace.opds.odl.info import LicenseStatus
+
 from palace.manager.data_layer.license import LicenseData
-from palace.manager.opds.odl.info import LicenseStatus
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

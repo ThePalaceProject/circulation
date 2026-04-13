@@ -4,7 +4,8 @@ from functools import partial
 import pytest
 from kombu.utils.json import dumps, loads
 
-from palace.manager.opds.opds2 import Publication, PublicationFeed
+from palace.opds.opds2 import Publication, PublicationFeed
+
 from palace.manager.service.celery.configuration import CeleryConfiguration
 from tests.fixtures.files import OPDS2FilesFixture
 

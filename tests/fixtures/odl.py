@@ -9,13 +9,13 @@ from unittest.mock import MagicMock
 import pytest
 from jwcrypto.jwk import JWK
 
+from palace.opds.lcp.license import LicenseDocument
+from palace.opds.lcp.status import LoanStatus
 from palace.util.datetime_helpers import utc_now
 
 from palace.manager.api.circulation.data import HoldInfo, LoanInfo
 from palace.manager.integration.license.opds.odl.api import OPDS2WithODLApi
 from palace.manager.integration.license.opds.odl.demarque import DeMarqueWebReader
-from palace.manager.opds.lcp.license import LicenseDocument
-from palace.manager.opds.lcp.status import LoanStatus
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.licensing import (

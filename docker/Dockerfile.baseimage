@@ -64,6 +64,7 @@ COPY --chown=palace:palace uv.lock pyproject.toml /var/www/circulation/
 # workspace; we copy just the manifests (not the source) so this layer doesn't
 # get invalidated by source changes.
 COPY --chown=palace:palace packages/palace-util/pyproject.toml /var/www/circulation/packages/palace-util/
+COPY --chown=palace:palace packages/palace-opds/pyproject.toml /var/www/circulation/packages/palace-opds/
 
 # Setup virtualenv and install our python dependencies.
 # What we install is based on the uv.lock file in the repo at the time this

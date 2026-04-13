@@ -23,6 +23,8 @@ live under `packages/`:
 
 - [`palace-util`](packages/palace-util/README.md) — shared utilities (exceptions, datetime helpers,
   `LoggerMixin`) under the `palace.util` namespace.
+- [`palace-opds`](packages/palace-opds/README.md) — Pydantic models for OPDS 2.0, RWPM, ODL, LCP, and
+  Palace extensions under the `palace.opds` namespace.
 
 ## Installation
 

@@ -1,6 +1,8 @@
 import json
 from unittest.mock import patch
 
+from palace.opds import opds2
+
 from palace.manager.feed.serializer.opds2 import (
     PALACE_PROPERTIES_DEFAULT,
     PALACE_REL_SORT,
@@ -25,7 +27,6 @@ from palace.manager.feed.types import (
     WorkEntry,
     WorkEntryData,
 )
-from palace.manager.opds import opds2
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.work import Work

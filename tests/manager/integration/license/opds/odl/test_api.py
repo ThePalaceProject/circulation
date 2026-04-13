@@ -13,6 +13,7 @@ from freezegun import freeze_time
 from jwcrypto.jwt import JWT
 from sqlalchemy import delete
 
+from palace.opds.lcp.status import LoanStatus
 from palace.util.datetime_helpers import datetime_utc, utc_now
 from palace.util.log import LogLevel
 
@@ -45,7 +46,6 @@ from palace.manager.integration.license.opds.odl.demarque import (
     DEMARQUE_WEBREADER_REL,
 )
 from palace.manager.integration.license.opds.requests import OAuthOpdsRequest
-from palace.manager.opds.lcp.status import LoanStatus
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.licensing import (
     DeliveryMechanism,

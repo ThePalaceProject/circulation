@@ -3,7 +3,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict
 from pydantic.alias_generators import to_camel
 
-from palace.manager.opds.types.link import BaseLink
+from palace.opds.types.link import BaseLink
 
 
 class KdrmFulfillmentResponse(BaseModel):

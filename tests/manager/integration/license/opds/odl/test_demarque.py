@@ -13,6 +13,7 @@ from freezegun import freeze_time
 from jwcrypto.jwk import JWK
 from jwcrypto.jwt import JWT
 
+from palace.opds.lcp.status import Link as LsdLink
 from palace.util.log import LogLevel
 
 from palace.manager.api.circulation.exceptions import CannotFulfill
@@ -21,7 +22,6 @@ from palace.manager.integration.license.opds.odl.demarque import (
     DeMarqueWebReader,
     DeMarqueWebReaderConfiguration,
 )
-from palace.manager.opds.lcp.status import Link as LsdLink
 
 
 class JwtKeysFixture:

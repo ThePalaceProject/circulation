@@ -1,6 +1,7 @@
 from celery import chain, shared_task
 from celery.canvas import Signature
 
+from palace.opds.opds2 import PublicationFeedNoValidation
 from palace.util.datetime_helpers import utc_now
 from palace.util.log import pluralize
 
@@ -13,7 +14,6 @@ from palace.manager.integration.license.opds.opds2.api import OPDS2API
 from palace.manager.integration.license.opds.opds2.importer import (
     importer_from_collection,
 )
-from palace.manager.opds.opds2 import PublicationFeedNoValidation
 from palace.manager.service.celery.celery import QueueNames
 from palace.manager.service.redis.models.set import IdentifierSet
 from palace.manager.sqlalchemy.model.collection import Collection

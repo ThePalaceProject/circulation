@@ -5,6 +5,9 @@ from typing import Any
 from frozendict import frozendict
 from pydantic import ValidationError
 
+from palace.opds import opds2, rwpm, schema_org
+from palace.opds.palace import DrmMetadata, LinkActions
+from palace.opds.util import StrModelOrTuple
 from palace.util.log import LoggerMixin
 
 from palace.manager.feed.serializer.base import SerializerInterface
@@ -20,9 +23,6 @@ from palace.manager.feed.types import (
     LinkType,
     WorkEntryData,
 )
-from palace.manager.opds import opds2, rwpm, schema_org
-from palace.manager.opds.palace import DrmMetadata, LinkActions
-from palace.manager.opds.util import StrModelOrTuple
 from palace.manager.sqlalchemy.constants import EditionConstants
 from palace.manager.sqlalchemy.model.contributor import Contributor
 from palace.manager.util.opds_writer import AtomFeed, OPDSMessage

@@ -1,13 +1,13 @@
 from abc import ABC, abstractmethod
 from collections.abc import Iterable
 
+from palace.opds.odl.info import LicenseInfo
+from palace.opds.odl.odl import License
 from palace.util.log import LoggerMixin
 
 from palace.manager.data_layer.bibliographic import BibliographicData
 from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.integration.license.opds.data import FailedPublication
-from palace.manager.opds.odl.info import LicenseInfo
-from palace.manager.opds.odl.odl import License
 
 
 class OpdsExtractor[FeedType, PublicationType](LoggerMixin, ABC):

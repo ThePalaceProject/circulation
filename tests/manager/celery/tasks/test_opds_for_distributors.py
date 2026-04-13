@@ -3,6 +3,8 @@ from unittest.mock import call, patch
 import pytest
 from freezegun import freeze_time
 
+from palace.opds.authentication import Authentication, AuthenticationDocument
+from palace.opds.opds2 import Link
 from palace.util.datetime_helpers import utc_now
 
 from palace.manager.api.model.token import OAuthTokenResponse
@@ -17,8 +19,6 @@ from palace.manager.integration.license.opds.for_distributors.utils import (
     STREAMING_MEDIA_LINK_TYPE,
 )
 from palace.manager.integration.license.opds.opds2.api import OPDS2API
-from palace.manager.opds.authentication import Authentication, AuthenticationDocument
-from palace.manager.opds.opds2 import Link
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.licensing import (
     DeliveryMechanism,

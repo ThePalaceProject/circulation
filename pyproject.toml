@@ -73,6 +73,7 @@ dependencies = [
     "nameparser>=1.1,<2",  # nameparser is for author name manipulations
     "openpyxl>=3.1,<4",
     "opensearch-py>=3.0,<4",
+    "palace-opds",
     "palace-util",
     "pillow>=12.0.0,<13",
     "psycopg2-binary>=2.9.5,<2.10",
@@ -148,7 +149,7 @@ concurrency = ["multiprocessing", "thread"]
 omit = ["src/dependency_injector/providers.pxd", "src/dependency_injector/providers.pyx"]
 parallel = true
 relative_files = true
-source = ["packages/palace-util/src", "src"]
+source = ["packages/palace-opds/src", "packages/palace-util/src", "src"]
 
 [tool.hatch.build]
 # node_modules directories only exist for local admin-client development
@@ -174,12 +175,14 @@ disallow_untyped_calls = false
 explicit_package_bases = true
 files = [
     "alembic",
+    "packages/palace-opds/src/palace",
     "packages/palace-util/src/palace",
     "src/palace",
     "tests",
 ]
 mypy_path = [
     "alembic",
+    "packages/palace-opds/src",
     "packages/palace-util/src",
     "src",
 ]
@@ -401,7 +404,8 @@ spaces_indent_inline_array = 4
 trailing_comma_inline_array = true
 
 [tool.uv.sources]
+palace-opds = {workspace = true}
 palace-util = {workspace = true}
 
 [tool.uv.workspace]
-members = ["packages/palace-util"]
+members = ["packages/palace-opds", "packages/palace-util"]

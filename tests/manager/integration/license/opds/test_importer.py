@@ -7,6 +7,14 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from palace.opds.odl.info import Checkouts, LicenseInfo, LicenseStatus
+from palace.opds.odl.odl import (
+    License,
+    Opds2OrOpds2WithOdlPublication,
+    Publication,
+)
+from palace.opds.odl.terms import Terms
+from palace.opds.opds2 import PublicationFeedNoValidation
 from palace.util.datetime_helpers import utc_now
 
 from palace.manager.data_layer.bibliographic import BibliographicData
@@ -16,14 +24,6 @@ from palace.manager.integration.license.opds.odl.api import OPDS2WithODLApi
 from palace.manager.integration.license.opds.odl.importer import (
     importer_from_collection,
 )
-from palace.manager.opds.odl.info import Checkouts, LicenseInfo, LicenseStatus
-from palace.manager.opds.odl.odl import (
-    License,
-    Opds2OrOpds2WithOdlPublication,
-    Publication,
-)
-from palace.manager.opds.odl.terms import Terms
-from palace.manager.opds.opds2 import PublicationFeedNoValidation
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.util.http.exception import BadResponseException
 from tests.fixtures.database import DatabaseTransactionFixture
