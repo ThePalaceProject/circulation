@@ -13,6 +13,8 @@ from sqlalchemy import select
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.scripts.startup import (
     _slugify,
     create_startup_task,
@@ -21,7 +23,6 @@ from palace.manager.scripts.startup import (
 )
 from palace.manager.service.container import Services
 from palace.manager.sqlalchemy.model.startup_task import StartupTask, StartupTaskState
-from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseFixture
 
 

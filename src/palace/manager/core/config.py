@@ -7,10 +7,11 @@ from enum import Enum
 from sqlalchemy.engine.url import make_url
 from sqlalchemy.exc import ArgumentError
 
+from palace.util.datetime_helpers import to_utc, utc_now
+
 # It's convenient for other modules import IntegrationException
 # from this module, alongside CannotLoadConfiguration.
 from palace.manager.core.exceptions import IntegrationException
-from palace.manager.util.datetime_helpers import to_utc, utc_now
 from palace.manager.util.languages import LanguageCodes
 
 

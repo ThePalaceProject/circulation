@@ -10,8 +10,9 @@ from typing import Self, cast
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Mapped, Session
 
+from palace.util.log import LoggerMixin
+
 from palace.manager.sqlalchemy.util import get_one
-from palace.manager.util.log import LoggerMixin
 
 CacheTuple = namedtuple("CacheTuple", ["id", "key", "stats"])
 

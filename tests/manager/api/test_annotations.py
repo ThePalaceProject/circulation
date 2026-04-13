@@ -5,6 +5,8 @@ from typing import Any
 import pytest
 from pyld import jsonld
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.api.annotations import AnnotationParser, AnnotationWriter
 from palace.manager.api.problem_details import (
     INVALID_ANNOTATION_FORMAT,
@@ -13,7 +15,6 @@ from palace.manager.api.problem_details import (
 )
 from palace.manager.sqlalchemy.model.patron import Annotation
 from palace.manager.sqlalchemy.util import create
-from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.api_controller import ControllerFixture
 
 

@@ -8,8 +8,8 @@ from uuid import UUID
 import flask
 from pydantic import AwareDatetime, BaseModel, ConfigDict, computed_field
 
-from palace.manager.util.datetime_helpers import utc_now
-from palace.manager.util.log import LoggerMixin
+from palace.util.datetime_helpers import utc_now
+from palace.util.log import LoggerMixin
 
 if TYPE_CHECKING:
     from palace.manager.sqlalchemy.model.library import Library

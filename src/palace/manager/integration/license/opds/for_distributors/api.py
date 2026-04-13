@@ -9,6 +9,8 @@ from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 from celery.canvas import Signature
 from sqlalchemy.orm import Session
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.api.circulation.base import BaseCirculationAPI, SupportsImport
 from palace.manager.api.circulation.data import HoldInfo, LoanInfo
 from palace.manager.api.circulation.exceptions import (
@@ -40,7 +42,6 @@ from palace.manager.sqlalchemy.model.licensing import (
 )
 from palace.manager.sqlalchemy.model.patron import Loan, Patron
 from palace.manager.sqlalchemy.util import get_one
-from palace.manager.util.datetime_helpers import utc_now
 
 
 class OPDSForDistributorsAPI(

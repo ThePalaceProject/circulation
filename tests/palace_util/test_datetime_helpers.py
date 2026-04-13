@@ -4,7 +4,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from palace.manager.util.datetime_helpers import (
+from palace.util.datetime_helpers import (
     datetime_utc,
     from_timestamp,
     minute_timestamp,
@@ -266,7 +266,7 @@ class TestPreviousMonths:
     def test_boundaries_at_different_current_times(
         self, current_datetime, expected_start, expected_until, months
     ):
-        with patch("palace.manager.util.datetime_helpers.utc_now") as mock_utc_now:
+        with patch("palace.util.datetime_helpers.utc_now") as mock_utc_now:
             mock_utc_now.return_value = current_datetime
             computed_start, computed_until = previous_months(number_of_months=months)
             assert computed_start == expected_start

@@ -8,6 +8,8 @@ from urllib import parse
 
 import pytest
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.api.authentication.base import PatronData
 from palace.manager.api.authentication.basic import Keyboards
 from palace.manager.core.selftest import SelfTestResult
@@ -18,7 +20,6 @@ from palace.manager.integration.patron_auth.millenium_patron import (
     MilleniumPatronSettings,
 )
 from palace.manager.sqlalchemy.model.patron import Patron
-from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import FilesFixture
 

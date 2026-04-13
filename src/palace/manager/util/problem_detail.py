@@ -12,7 +12,7 @@ from abc import ABC, abstractmethod
 from flask_babel import LazyString
 from pydantic import BaseModel
 
-from palace.manager.core.exceptions import BasePalaceException
+from palace.util.exceptions import BasePalaceException
 
 JSON_MEDIA_TYPE = "application/api-problem+json"
 

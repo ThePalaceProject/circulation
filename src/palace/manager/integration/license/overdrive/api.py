@@ -16,6 +16,8 @@ from requests import Response
 from requests.structures import CaseInsensitiveDict
 from sqlalchemy.orm import Session
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.api.circulation.base import (
     BaseCirculationAPI,
     CirculationInternalFormatsMixin,
@@ -115,7 +117,6 @@ from palace.manager.sqlalchemy.model.patron import Hold, Patron
 from palace.manager.sqlalchemy.model.resource import Representation
 from palace.manager.sqlalchemy.util import get_one
 from palace.manager.util import base64
-from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.http.async_http import WORKER_DEFAULT_BACKOFF, AsyncClient
 from palace.manager.util.http.exception import BadResponseException
 from palace.manager.util.http.http import HTTP, RequestKwargs

@@ -5,7 +5,8 @@ from typing import TYPE_CHECKING, Any, Literal, overload
 import flask
 from sqlalchemy.orm import Session
 
-from palace.manager.core.exceptions import PalaceValueError
+from palace.util.exceptions import PalaceValueError
+
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.util.sentinel import SentinelType

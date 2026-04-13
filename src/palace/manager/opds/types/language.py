@@ -8,7 +8,7 @@ import pycountry
 from pydantic import GetCoreSchemaHandler
 from pydantic_core import core_schema
 
-from palace.manager.util.log import LoggerMixin
+from palace.util.log import LoggerMixin
 
 
 class LanguageTag(str, LoggerMixin):

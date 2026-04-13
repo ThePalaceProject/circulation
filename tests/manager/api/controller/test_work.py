@@ -11,6 +11,8 @@ import feedparser
 import pytest
 from flask import url_for
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.api.circulation.data import LoanInfo
 from palace.manager.api.circulation.fulfillment import Fulfillment
 from palace.manager.api.problem_details import (
@@ -42,7 +44,6 @@ from palace.manager.sqlalchemy.model.licensing import LicensePool
 from palace.manager.sqlalchemy.model.resource import Resource
 from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.sqlalchemy.util import get_one, tuple_to_numericrange
-from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.flask_util import Response
 from palace.manager.util.opds_writer import AtomFeed, OPDSFeed
 from palace.manager.util.problem_detail import ProblemDetail

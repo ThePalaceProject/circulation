@@ -3,6 +3,8 @@ import datetime
 import pytest
 from pydantic import TypeAdapter, ValidationError
 
+from palace.util.datetime_helpers import datetime_utc
+
 from palace.manager.integration.license.boundless.model.validators import (
     BoundlessJsonDateTime,
     BoundlessRuntime,
@@ -10,7 +12,6 @@ from palace.manager.integration.license.boundless.model.validators import (
     BoundlessXmlDate,
     BoundlessXmlDateTime,
 )
-from palace.manager.util.datetime_helpers import datetime_utc
 
 
 class TestBoundlessValidators:

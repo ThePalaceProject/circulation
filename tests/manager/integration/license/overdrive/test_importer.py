@@ -8,7 +8,9 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from palace.manager.core.exceptions import PalaceValueError
+from palace.util.datetime_helpers import datetime_utc
+from palace.util.exceptions import PalaceValueError
+
 from palace.manager.data_layer.bibliographic import BibliographicData
 from palace.manager.data_layer.circulation import CirculationData
 from palace.manager.data_layer.identifier import IdentifierData
@@ -27,7 +29,6 @@ from palace.manager.integration.license.overdrive.representation import (
 from palace.manager.service.redis.models.set import IdentifierSet
 from palace.manager.sqlalchemy.model.coverage import Timestamp
 from palace.manager.sqlalchemy.model.identifier import Identifier
-from palace.manager.util.datetime_helpers import datetime_utc
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import OverdriveFilesFixture
 from tests.fixtures.overdrive import OverdriveAPIFixture

@@ -8,18 +8,19 @@ import pytest
 from dependency_injector import providers
 from freezegun import freeze_time
 
+from palace.util.datetime_helpers import utc_now
+from palace.util.log import LogLevel
+
 from palace.manager.celery.tasks import notifications
 from palace.manager.celery.tasks.notifications import (
     NotificationType,
     RemovedItemNotificationData,
 )
 from palace.manager.service.fcm.fcm import send_notifications
-from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.devicetokens import DeviceToken, DeviceTokenTypes
 from palace.manager.sqlalchemy.model.patron import Hold, Loan, Patron
 from palace.manager.sqlalchemy.util import get_one_or_create
-from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.celery import CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.redis import RedisFixture

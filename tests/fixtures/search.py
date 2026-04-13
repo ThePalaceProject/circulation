@@ -9,6 +9,8 @@ import pytest
 from opensearchpy import OpenSearch
 from pydantic_settings import SettingsConfigDict
 
+from palace.util.log import LoggerMixin
+
 from palace.manager.celery.tasks.search import get_work_search_documents
 from palace.manager.search.external_search import ExternalSearchIndex
 from palace.manager.search.revision import SearchSchemaRevision
@@ -16,7 +18,6 @@ from palace.manager.search.service import SearchServiceOpensearch1
 from palace.manager.service.container import Services
 from palace.manager.service.search.container import Search
 from palace.manager.sqlalchemy.model.work import Work
-from palace.manager.util.log import LoggerMixin
 from palace.manager.util.pydantic import HttpUrl
 from tests.fixtures.config import FixtureTestUrlConfiguration
 from tests.fixtures.database import DatabaseTransactionFixture, IdFixture

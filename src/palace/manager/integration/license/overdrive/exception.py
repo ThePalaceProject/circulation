@@ -4,7 +4,8 @@ from collections.abc import Iterable
 
 from requests import Response
 
-from palace.manager.core.exceptions import BasePalaceException
+from palace.util.exceptions import BasePalaceException
+
 from palace.manager.util.http.exception import BadResponseException, ResponseData
 from palace.manager.util.problem_detail import ProblemDetail
 

@@ -5,6 +5,8 @@ import pytest
 from pymarc import MARCReader
 from sqlalchemy import select
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.celery.tasks import marc
 from palace.manager.celery.tasks.marc import marc_export_collection_lock
 from palace.manager.integration.catalog.marc.exporter import MarcExporter
@@ -13,7 +15,6 @@ from palace.manager.service.redis.models.lock import LockNotAcquired, RedisLock
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.marcfile import MarcFile
 from palace.manager.sqlalchemy.model.work import Work
-from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.celery import CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.marc import MarcExporterFixture

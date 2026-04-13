@@ -5,6 +5,8 @@ import pytest
 from freezegun import freeze_time
 from sqlalchemy.exc import InvalidRequestError
 
+from palace.util.datetime_helpers import datetime_utc, utc_now
+
 from palace.manager.core.classifier import Classifier
 from palace.manager.integration.catalog.marc.exporter import LibraryInfo, MarcExporter
 from palace.manager.integration.catalog.marc.settings import MarcExporterLibrarySettings
@@ -15,7 +17,6 @@ from palace.manager.sqlalchemy.model.discovery_service_registration import (
 from palace.manager.sqlalchemy.model.marcfile import MarcFile
 from palace.manager.sqlalchemy.model.work import WorkGenre
 from palace.manager.sqlalchemy.util import create, get_one_or_create
-from palace.manager.util.datetime_helpers import datetime_utc, utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.library import LibraryFixture
 from tests.fixtures.marc import MarcExporterFixture

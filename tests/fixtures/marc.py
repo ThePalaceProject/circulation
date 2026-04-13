@@ -4,6 +4,8 @@ from typing import Literal
 
 import pytest
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.integration.catalog.marc.exporter import LibraryInfo, MarcExporter
 from palace.manager.integration.catalog.marc.settings import MarcExporterLibrarySettings
 from palace.manager.integration.goals import Goals
@@ -13,7 +15,6 @@ from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.marcfile import MarcFile
 from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.sqlalchemy.util import create
-from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.services import ServicesFixture
 

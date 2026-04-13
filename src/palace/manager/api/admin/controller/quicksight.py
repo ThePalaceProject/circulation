@@ -3,6 +3,8 @@ import flask
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from palace.util.log import LoggerMixin
+
 from palace.manager.api.admin.model.quicksight import (
     QuicksightDashboardNamesResponse,
     QuicksightGenerateUrlRequest,
@@ -13,7 +15,6 @@ from palace.manager.api.problem_details import NOT_FOUND_ON_REMOTE
 from palace.manager.core.problem_details import INTERNAL_SERVER_ERROR, INVALID_INPUT
 from palace.manager.sqlalchemy.model.admin import Admin
 from palace.manager.sqlalchemy.model.library import Library
-from palace.manager.util.log import LoggerMixin
 from palace.manager.util.problem_detail import ProblemDetailException
 
 

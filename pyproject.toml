@@ -73,6 +73,7 @@ dependencies = [
     "nameparser>=1.1,<2",  # nameparser is for author name manipulations
     "openpyxl>=3.1,<4",
     "opensearch-py>=3.0,<4",
+    "palace-util",
     "pillow>=12.0.0,<13",
     "psycopg2-binary>=2.9.5,<2.10",
     "pycountry>=26.2.16,<27",
@@ -147,7 +148,7 @@ concurrency = ["multiprocessing", "thread"]
 omit = ["src/dependency_injector/providers.pxd", "src/dependency_injector/providers.pyx"]
 parallel = true
 relative_files = true
-source = ["src"]
+source = ["packages/palace-util/src", "src"]
 
 [tool.hatch.build]
 # node_modules directories only exist for local admin-client development
@@ -160,17 +161,28 @@ packages = ["src/palace"]
 
 [tool.isort]
 combine_as_imports = true
-known_first_party = ["palace"]
+known_first_party = ["palace.manager"]
+known_palace = ["palace"]
 known_third_party = ["alembic"]
 profile = "black"
+sections = "FUTURE,STDLIB,THIRDPARTY,PALACE,FIRSTPARTY,LOCALFOLDER"
 
 [tool.mypy]
 # This is the main mypy configuration for the project.
 # All new code should aim to pass mypy with strict settings.
 disallow_untyped_calls = false
 explicit_package_bases = true
-files = ["alembic", "src/palace", "tests"]
-mypy_path = ["alembic", "src"]
+files = [
+    "alembic",
+    "packages/palace-util/src/palace",
+    "src/palace",
+    "tests",
+]
+mypy_path = [
+    "alembic",
+    "packages/palace-util/src",
+    "src",
+]
 plugins = ["pydantic.mypy", "sqlalchemy.ext.mypy.plugin"]
 strict = true
 warn_redundant_casts = true
@@ -387,3 +399,9 @@ sort_table_keys = true
 spaces_before_inline_comment = 2
 spaces_indent_inline_array = 4
 trailing_comma_inline_array = true
+
+[tool.uv.sources]
+palace-util = {workspace = true}
+
+[tool.uv.workspace]
+members = ["packages/palace-util"]

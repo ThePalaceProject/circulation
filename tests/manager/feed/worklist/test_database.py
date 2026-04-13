@@ -2,6 +2,8 @@ import datetime
 
 from sqlalchemy import and_, text
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.core.classifier import Classifier
 from palace.manager.feed.facets.database import DatabaseBackedFacets
 from palace.manager.feed.facets.feed import Facets
@@ -17,7 +19,6 @@ from palace.manager.sqlalchemy.model.licensing import (
 )
 from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.sqlalchemy.util import tuple_to_numericrange
-from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.library import LibraryFixture
 

@@ -4,7 +4,8 @@ from unittest.mock import MagicMock
 import pytest
 from sqlalchemy.sql.operators import eq, in_op
 
-from palace.manager.core.exceptions import PalaceValueError
+from palace.util.exceptions import PalaceValueError
+
 from palace.manager.integration.goals import Goals
 from palace.manager.service.integration_registry.base import (
     IntegrationRegistry,

@@ -6,6 +6,8 @@ from freezegun import freeze_time
 from sqlalchemy.exc import InvalidRequestError
 from sqlalchemy.orm.exc import ObjectDeletedError, StaleDataError
 
+from palace.util.datetime_helpers import datetime_utc, utc_now
+
 from palace.manager.core.monitor import (
     CollectionMonitor,
     IdentifierSweepMonitor,
@@ -22,7 +24,6 @@ from palace.manager.sqlalchemy.model.collection import CollectionMissing
 from palace.manager.sqlalchemy.model.coverage import Timestamp
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.util import get_one
-from palace.manager.util.datetime_helpers import datetime_utc, utc_now
 from palace.manager.util.sentinel import SentinelType
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.time import Time

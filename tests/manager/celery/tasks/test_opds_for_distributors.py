@@ -3,6 +3,8 @@ from unittest.mock import call, patch
 import pytest
 from freezegun import freeze_time
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.api.model.token import OAuthTokenResponse
 from palace.manager.celery.tasks import identifiers, opds_for_distributors
 from palace.manager.integration.license.opds.for_distributors.api import (
@@ -26,7 +28,6 @@ from palace.manager.sqlalchemy.model.licensing import (
     RightsStatus,
 )
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
-from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.celery import ApplyTaskFixture, CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import OPDSForDistributorsFilesFixture

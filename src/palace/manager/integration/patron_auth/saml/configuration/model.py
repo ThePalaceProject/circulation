@@ -10,12 +10,14 @@ from onelogin.saml2.settings import OneLogin_Saml2_Settings
 from pydantic import PositiveInt, field_validator
 from sqlalchemy.orm import Session
 
+from palace.util.exceptions import BasePalaceException
+from palace.util.log import LoggerMixin
+
 from palace.manager.api.admin.problem_details import INCOMPLETE_CONFIGURATION
 from palace.manager.api.authentication.base import (
     AuthProviderLibrarySettings,
     AuthProviderSettings,
 )
-from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.integration.patron_auth.saml.configuration.problem_details import (
     SAML_GENERIC_PARSING_ERROR,
     SAML_INCORRECT_FILTRATION_EXPRESSION,
@@ -59,7 +61,6 @@ from palace.manager.sqlalchemy.model.saml import (
     SAMLFederatedIdentityProvider,
     SAMLFederation,
 )
-from palace.manager.util.log import LoggerMixin
 
 
 class SAMLConfigurationError(BasePalaceException):

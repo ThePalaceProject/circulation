@@ -1,7 +1,8 @@
 import pytest
 
+from palace.util.exceptions import PalaceTypeError
+
 from palace.manager.celery.tasks import apply
-from palace.manager.core.exceptions import PalaceTypeError
 from palace.manager.data_layer.bibliographic import BibliographicData
 from palace.manager.data_layer.circulation import CirculationData
 from palace.manager.data_layer.identifier import IdentifierData

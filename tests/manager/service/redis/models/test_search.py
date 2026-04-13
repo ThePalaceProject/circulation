@@ -1,6 +1,7 @@
 import pytest
 
-from palace.manager.service.logging.configuration import LogLevel
+from palace.util.log import LogLevel
+
 from palace.manager.service.redis.models.search import WaitingForIndexing
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.redis import RedisFixture

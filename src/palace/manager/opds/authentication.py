@@ -5,7 +5,8 @@ https://drafts.opds.io/authentication-for-opds-1.0
 
 from pydantic import BaseModel, Field, field_validator
 
-from palace.manager.core.exceptions import PalaceValueError
+from palace.util.exceptions import PalaceValueError
+
 from palace.manager.opds.rwpm import Link
 from palace.manager.opds.types.link import CompactCollection
 

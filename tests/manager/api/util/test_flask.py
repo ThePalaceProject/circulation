@@ -1,7 +1,8 @@
 import pytest
 
+from palace.util.exceptions import PalaceValueError
+
 from palace.manager.api.util.flask import get_request_var
-from palace.manager.core.exceptions import PalaceValueError
 from tests.fixtures.flask import FlaskAppFixture
 
 

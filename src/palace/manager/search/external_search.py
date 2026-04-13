@@ -9,6 +9,8 @@ from opensearchpy.helpers.query import (
 )
 from opensearchpy.helpers.response import Hit
 
+from palace.util.log import LoggerMixin
+
 from palace.manager.search.filter import Filter
 from palace.manager.search.pagination import Pagination
 from palace.manager.search.query import JSONQuery, Query
@@ -18,7 +20,6 @@ from palace.manager.search.service import (
     SearchServiceFailedDocument,
 )
 from palace.manager.sqlalchemy.model.work import Work
-from palace.manager.util.log import LoggerMixin
 
 
 class ExternalSearchIndex(LoggerMixin):

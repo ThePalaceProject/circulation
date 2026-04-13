@@ -3,6 +3,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.api.circulation.data import HoldInfo, LoanInfo
 from palace.manager.data_layer.format import FormatData
 from palace.manager.integration.license.bibliotheca import BibliothecaAPI
@@ -11,7 +13,6 @@ from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism
 from palace.manager.sqlalchemy.model.patron import Loan
 from palace.manager.sqlalchemy.model.resource import Representation
-from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.library import LibraryFixture
 from tests.mocks.circulation import (

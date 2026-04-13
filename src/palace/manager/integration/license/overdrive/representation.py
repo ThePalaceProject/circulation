@@ -7,7 +7,10 @@ from typing import TYPE_CHECKING, Any
 
 import isbnlib
 
-from palace.manager.core.exceptions import PalaceValueError
+from palace.util.datetime_helpers import strptime_utc
+from palace.util.exceptions import PalaceValueError
+from palace.util.log import LoggerMixin
+
 from palace.manager.data_layer.bibliographic import BibliographicData
 from palace.manager.data_layer.circulation import CirculationData
 from palace.manager.data_layer.contributor import ContributorData
@@ -32,8 +35,6 @@ from palace.manager.sqlalchemy.model.licensing import (
 )
 from palace.manager.sqlalchemy.model.measurement import Measurement
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
-from palace.manager.util.datetime_helpers import strptime_utc
-from palace.manager.util.log import LoggerMixin
 
 if TYPE_CHECKING:
     from palace.manager.integration.license.overdrive.api import OverdriveAPI

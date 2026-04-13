@@ -7,10 +7,11 @@ from unittest.mock import MagicMock
 import pytest
 from freezegun import freeze_time
 
+from palace.util.datetime_helpers import datetime_utc, utc_now
+
 from palace.manager.scripts.playtime_entries import (
     PlaytimeEntriesReportsScript,
 )
-from palace.manager.util.datetime_helpers import datetime_utc, utc_now
 
 
 class TestPlaytimeEntriesReportScript:

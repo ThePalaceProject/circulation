@@ -9,6 +9,8 @@ from flask import Response
 from sqlalchemy.orm import Session
 from werkzeug.datastructures import ImmutableMultiDict
 
+from palace.util.log import LoggerMixin
+
 from palace.manager.api.admin.problem_details import (
     CANNOT_CHANGE_PROTOCOL,
     FAILED_TO_RUN_SELF_TESTS,
@@ -37,7 +39,6 @@ from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.util import create, get_one
 from palace.manager.util.cache import memoize
 from palace.manager.util.json import json_serializer
-from palace.manager.util.log import LoggerMixin
 from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
 
 

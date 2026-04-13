@@ -2,6 +2,8 @@ from unittest.mock import MagicMock, create_autospec, patch
 
 from pytest import LogCaptureFixture, MonkeyPatch
 
+from palace.util.log import LogLevel
+
 from palace.manager.api.admin.problem_details import INCOMPLETE_CONFIGURATION
 from palace.manager.api.authenticator import LibraryAuthenticator
 from palace.manager.api.circulation_manager import CirculationManager
@@ -13,7 +15,6 @@ from palace.manager.feed.annotator.circulation import (
 from palace.manager.feed.facets.feed import Facets
 from palace.manager.feed.worklist.base import WorkList
 from palace.manager.integration.patron_auth.saml.controller import SAMLController
-from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.sqlalchemy.model.discovery_service_registration import (
     DiscoveryServiceRegistration,
 )

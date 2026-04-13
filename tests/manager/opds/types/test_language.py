@@ -3,8 +3,9 @@ import json
 import pytest
 from pydantic import TypeAdapter, ValidationError
 
+from palace.util.log import LogLevel
+
 from palace.manager.opds.types.language import LanguageMap, LanguageTag
-from palace.manager.service.logging.configuration import LogLevel
 
 
 class TestLanguageTag:

@@ -30,6 +30,8 @@ from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.orm import Mapped, relationship
 from sqlalchemy.orm.session import Session
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.sqlalchemy.constants import (
     DataSourceConstants,
     IdentifierConstants,
@@ -47,7 +49,6 @@ from palace.manager.sqlalchemy.util import (
     get_one,
     get_one_or_create,
 )
-from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.http.http import HTTP
 
 if TYPE_CHECKING:

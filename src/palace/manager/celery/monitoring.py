@@ -15,10 +15,11 @@ from celery.events.state import State, Task
 from kombu.transport.redis import PrefixedStrictRedis
 from redis import ConnectionPool
 
-from palace.manager.core.exceptions import PalaceValueError
+from palace.util.datetime_helpers import utc_now
+from palace.util.exceptions import PalaceValueError
+from palace.util.log import logger_for_cls
+
 from palace.manager.util import chunks
-from palace.manager.util.datetime_helpers import utc_now
-from palace.manager.util.log import logger_for_cls
 
 if TYPE_CHECKING:
     from mypy_boto3_cloudwatch.literals import StandardUnitType

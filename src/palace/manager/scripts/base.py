@@ -7,11 +7,12 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from palace.util.datetime_helpers import strptime_utc, utc_now
+
 from palace.manager.core.monitor import TimestampData
 from palace.manager.service.container import Services, container_instance
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.session import production_session
-from palace.manager.util.datetime_helpers import strptime_utc, utc_now
 
 
 def _normalize_cmd_args(

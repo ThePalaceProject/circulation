@@ -2,8 +2,9 @@ from unittest.mock import patch
 
 import pytest
 
+from palace.util.log import LogLevel
+
 from palace.manager.core.config import Configuration
-from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.sqlalchemy.model.coverage import Timestamp
 from palace.manager.sqlalchemy.session import (
     SessionManager,

@@ -15,6 +15,8 @@ from tenacity import (
     wait_exponential,
 )
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.service.container import container_instance
 from palace.manager.sqlalchemy.model.base import Base
 from palace.manager.sqlalchemy.model.collection import Collection, CollectionMissing
@@ -22,7 +24,6 @@ from palace.manager.sqlalchemy.model.coverage import Timestamp
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import LicensePool
 from palace.manager.sqlalchemy.util import get_one, get_one_or_create
-from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.sentinel import SentinelType
 
 if TYPE_CHECKING:

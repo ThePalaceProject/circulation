@@ -7,6 +7,8 @@ from uuid import uuid4
 import pytest
 from httpx import Headers
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.api.circulation.exceptions import (
     AlreadyCheckedOut,
     AlreadyOnHold,
@@ -35,7 +37,6 @@ from palace.manager.integration.license.overdrive.model import (
     LinkTemplate,
     PatronInformation,
 )
-from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.http.exception import ResponseData
 from tests.fixtures.files import OverdriveFilesFixture
 

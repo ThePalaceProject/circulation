@@ -15,8 +15,9 @@ from freezegun import freeze_time
 from sqlalchemy.exc import SQLAlchemyError
 from watchtower import CloudWatchLogHandler
 
+from palace.util.log import LogLevel
+
 from palace.manager.celery.task import Task
-from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.service.logging.log import (
     JSONFormatter,
     LogLoopPreventionFilter,

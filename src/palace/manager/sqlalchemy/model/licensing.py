@@ -30,8 +30,10 @@ from sqlalchemy.orm import Mapped, Query, lazyload, relationship
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql import ColumnElement
 
+from palace.util.datetime_helpers import utc_now
+from palace.util.exceptions import BasePalaceException
+
 from palace.manager.api.circulation.exceptions import CannotHold, CannotLoan
-from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.opds.odl.info import LicenseStatus
 from palace.manager.sqlalchemy.constants import (
     DataSourceConstants,
@@ -44,7 +46,6 @@ from palace.manager.sqlalchemy.model.base import Base
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.patron import Hold, Loan, Patron
 from palace.manager.sqlalchemy.util import flush, get_one, get_one_or_create
-from palace.manager.util.datetime_helpers import utc_now
 
 if TYPE_CHECKING:
     from palace.manager.sqlalchemy.model.collection import Collection

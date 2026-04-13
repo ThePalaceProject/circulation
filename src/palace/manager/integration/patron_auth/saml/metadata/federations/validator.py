@@ -5,9 +5,10 @@ from abc import ABCMeta
 from onelogin.saml2.utils import OneLogin_Saml2_Utils
 from onelogin.saml2.xmlparser import fromstring
 
-from palace.manager.core.exceptions import BasePalaceException
+from palace.util.datetime_helpers import from_timestamp, utc_now
+from palace.util.exceptions import BasePalaceException
+
 from palace.manager.sqlalchemy.model.saml import SAMLFederation
-from palace.manager.util.datetime_helpers import from_timestamp, utc_now
 
 
 class SAMLFederatedMetadataValidationError(BasePalaceException):

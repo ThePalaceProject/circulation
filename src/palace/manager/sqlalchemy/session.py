@@ -7,6 +7,9 @@ from sqlalchemy.engine import Connection, Engine, make_url
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import Pool
 
+from palace.util.datetime_helpers import utc_now
+from palace.util.log import LoggerMixin
+
 from palace.manager.core import classifier
 from palace.manager.core.config import Configuration
 from palace.manager.sqlalchemy.before_flush_decorator import Listener
@@ -15,9 +18,7 @@ from palace.manager.sqlalchemy.model.base import Base
 from palace.manager.sqlalchemy.model.coverage import Timestamp
 from palace.manager.sqlalchemy.model.key import Key
 from palace.manager.sqlalchemy.util import get_one_or_create
-from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.json import json_serializer
-from palace.manager.util.log import LoggerMixin
 from palace.manager.util.resources import resources_dir
 
 DEBUG = False

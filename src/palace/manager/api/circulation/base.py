@@ -12,11 +12,14 @@ from flask_babel import lazy_gettext as _
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from palace.util.datetime_helpers import utc_now
+from palace.util.exceptions import PalaceValueError
+from palace.util.log import LoggerMixin
+
 from palace.manager.api.circulation.data import HoldInfo, LoanInfo
 from palace.manager.api.circulation.exceptions import DeliveryMechanismError
 from palace.manager.api.circulation.fulfillment import Fulfillment
 from palace.manager.api.circulation.settings import BaseCirculationApiSettings
-from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.integration.base import HasLibraryIntegrationConfiguration
 from palace.manager.integration.settings import BaseSettings
 from palace.manager.sqlalchemy.model.collection import Collection
@@ -29,8 +32,6 @@ from palace.manager.sqlalchemy.model.licensing import (
 )
 from palace.manager.sqlalchemy.model.patron import Hold, Loan, Patron
 from palace.manager.sqlalchemy.util import get_one
-from palace.manager.util.datetime_helpers import utc_now
-from palace.manager.util.log import LoggerMixin
 
 
 class CirculationInternalFormatsMixin:

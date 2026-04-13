@@ -12,6 +12,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Query
 from sqlalchemy.orm.session import Session
 
+from palace.util.datetime_helpers import datetime_utc, utc_now
+from palace.util.log import LoggerMixin
+
 from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.integration.discovery.opds_registration import (
     OpdsRegistrationService,
@@ -27,8 +30,6 @@ from palace.manager.sqlalchemy.model.discovery_service_registration import (
 from palace.manager.sqlalchemy.model.integration import IntegrationConfiguration
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.patron import Patron
-from palace.manager.util.datetime_helpers import datetime_utc, utc_now
-from palace.manager.util.log import LoggerMixin
 
 
 class AuthdataUtility(LoggerMixin):

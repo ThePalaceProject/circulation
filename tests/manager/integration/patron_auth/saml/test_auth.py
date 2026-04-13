@@ -8,6 +8,8 @@ from freezegun import freeze_time
 from onelogin.saml2.utils import OneLogin_Saml2_Utils, OneLogin_Saml2_XML
 from onelogin.saml2.xmlparser import fromstring
 
+from palace.util.datetime_helpers import datetime_utc
+
 from palace.manager.integration.patron_auth.saml.auth import (
     SAML_NO_ACCESS_ERROR,
     SAMLAuthenticationManager,
@@ -44,7 +46,6 @@ from palace.manager.integration.patron_auth.saml.python_expression_dsl.parser im
     DSLParser,
 )
 from palace.manager.util import base64
-from palace.manager.util.datetime_helpers import datetime_utc
 from palace.manager.util.problem_detail import ProblemDetail
 from tests.fixtures.api_controller import ControllerFixture
 from tests.mocks import saml_strings

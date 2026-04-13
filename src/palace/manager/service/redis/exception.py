@@ -1,4 +1,4 @@
-from palace.manager.core.exceptions import BasePalaceException
+from palace.util.exceptions import BasePalaceException
 
 
 class RedisKeyError(BasePalaceException, TypeError): ...

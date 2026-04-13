@@ -2,6 +2,8 @@ from unittest.mock import create_autospec, patch
 
 import pytest
 
+from palace.util.log import LogLevel
+
 from palace.manager.celery.tasks.novelist import (
     update_novelists_by_library,
     update_novelists_for_all_libraries,
@@ -11,7 +13,6 @@ from palace.manager.integration.metadata.novelist import (
     NoveListAPI,
     NoveListApiSettings,
 )
-from palace.manager.service.logging.configuration import LogLevel
 from tests.fixtures.celery import CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 

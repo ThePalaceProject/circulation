@@ -9,9 +9,10 @@ from _pytest.logging import LogCaptureFixture
 from alembic.util import CommandError
 from opensearchpy.exceptions import OpenSearchException
 
+from palace.util.log import LogLevel
+
 from palace.manager.scripts.initialization import InstanceInitializationScript
 from palace.manager.search.revision_directory import SearchRevisionDirectory
-from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.sqlalchemy.session import SessionManager
 from palace.manager.sqlalchemy.util import LOCK_ID_DB_INIT
 from tests.fixtures.database import DatabaseTransactionFixture

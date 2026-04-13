@@ -9,12 +9,13 @@ from uuid import uuid4
 
 from pydantic import BaseModel
 
-from palace.manager.core.exceptions import PalaceValueError
+from palace.util.exceptions import PalaceValueError
+from palace.util.log import LoggerMixin
+
 from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.service.redis.key import RedisKeyType
 from palace.manager.service.redis.redis import Redis
 from palace.manager.sqlalchemy.model.identifier import Identifier
-from palace.manager.util.log import LoggerMixin
 
 
 class RedisSetKwargs(TypedDict):

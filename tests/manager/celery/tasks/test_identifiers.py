@@ -4,11 +4,12 @@ from unittest.mock import MagicMock, patch
 import pytest
 from celery import shared_task
 
+from palace.util.exceptions import PalaceValueError
+from palace.util.log import LogLevel
+
 from palace.manager.celery.task import Task
 from palace.manager.celery.tasks import identifiers
-from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.data_layer.identifier import IdentifierData
-from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.service.redis.models.set import IdentifierSet, RedisSetKwargs
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.licensing import LicensePool

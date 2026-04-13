@@ -6,6 +6,8 @@ import flask
 from flask import Request, Response
 from sqlalchemy.orm import Session
 
+from palace.util.log import LoggerMixin
+
 from palace.manager.api.admin.controller.util import (
     required_admin_from_request,
     required_library_from_request,
@@ -34,7 +36,6 @@ from palace.manager.service.integration_registry.license_providers import (
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.admin import Admin
 from palace.manager.sqlalchemy.model.library import Library
-from palace.manager.util.log import LoggerMixin
 from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
 from palace.manager.util.uuid import uuid_encode
 

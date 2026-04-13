@@ -4,6 +4,8 @@ from tempfile import TemporaryFile
 
 from celery import shared_task
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.celery.task import Task
 from palace.manager.integration.catalog.marc.exporter import LibraryInfo, MarcExporter
 from palace.manager.integration.catalog.marc.uploader import (
@@ -20,7 +22,6 @@ from palace.manager.sqlalchemy.model.identifier import (
 )
 from palace.manager.sqlalchemy.model.marcfile import MarcFile
 from palace.manager.sqlalchemy.util import create
-from palace.manager.util.datetime_helpers import utc_now
 
 
 @shared_task(queue=QueueNames.default, bind=True)

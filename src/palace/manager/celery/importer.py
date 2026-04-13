@@ -2,10 +2,11 @@ from datetime import timedelta
 
 from celery.canvas import Signature
 
+from palace.util.log import LoggerType, pluralize
+
 from palace.manager.service.redis.models.lock import RedisLock
 from palace.manager.service.redis.redis import Redis
 from palace.manager.sqlalchemy.model.collection import Collection
-from palace.manager.util.log import LoggerType, pluralize
 
 
 def import_all(

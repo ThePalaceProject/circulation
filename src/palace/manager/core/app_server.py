@@ -14,6 +14,8 @@ from psycopg2 import OperationalError
 from werkzeug.exceptions import HTTPException
 
 from palace import manager
+from palace.util.log import LoggerMixin
+
 from palace.manager.api.admin.config import Configuration as AdminUiConfig
 from palace.manager.api.problem_details import FILTERED_BY_LIBRARY_POLICY
 from palace.manager.api.util.flask import PalaceFlask, get_request_library
@@ -22,7 +24,6 @@ from palace.manager.feed.acquisition import LookupAcquisitionFeed, OPDSAcquisiti
 from palace.manager.feed.facets.feed import Facets
 from palace.manager.search.pagination import Pagination
 from palace.manager.sqlalchemy.model.identifier import Identifier
-from palace.manager.util.log import LoggerMixin
 from palace.manager.util.opds_writer import OPDSMessage
 from palace.manager.util.problem_detail import BaseProblemDetailException, ProblemDetail
 

@@ -18,8 +18,11 @@ COPY --chmod=644 docker/services/logrotate /etc/
 RUN mv /etc/cron.daily/logrotate /etc/cron.hourly/logrotate
 
 # Copy our uv files into the image and install our dependencies.
+# We copy the workspace-member pyproject.toml files (but not their source) so that
+# uv can resolve workspace members without invalidating this layer on source changes.
 COPY --chown=palace:palace uv.lock pyproject.toml /var/www/circulation/
-RUN uv sync --frozen --no-dev --no-install-project
+COPY --chown=palace:palace packages/palace-util/pyproject.toml /var/www/circulation/packages/palace-util/
+RUN uv sync --frozen --no-dev --no-install-workspace
 
 COPY --chown=palace:palace . /var/www/circulation
 

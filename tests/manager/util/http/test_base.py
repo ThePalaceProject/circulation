@@ -3,8 +3,9 @@ from datetime import timedelta
 import pytest
 from freezegun import freeze_time
 
-from palace.manager.service.logging.configuration import LogLevel
-from palace.manager.util.datetime_helpers import utc_now
+from palace.util.datetime_helpers import utc_now
+from palace.util.log import LogLevel
+
 from palace.manager.util.http.base import get_series, parse_retry_after
 
 

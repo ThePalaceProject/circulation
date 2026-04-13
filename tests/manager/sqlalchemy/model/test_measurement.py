@@ -1,9 +1,10 @@
 import pytest
 
+from palace.util.datetime_helpers import datetime_utc
+
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.measurement import Measurement
 from palace.manager.sqlalchemy.util import get_one_or_create
-from palace.manager.util.datetime_helpers import datetime_utc
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

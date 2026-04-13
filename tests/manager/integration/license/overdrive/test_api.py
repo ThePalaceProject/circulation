@@ -6,6 +6,9 @@ from unittest.mock import MagicMock, create_autospec, patch
 
 import pytest
 
+from palace.util.datetime_helpers import utc_now
+from palace.util.exceptions import BasePalaceException
+
 from palace.manager.api.circulation.data import HoldInfo, LoanInfo
 from palace.manager.api.circulation.exceptions import (
     CannotFulfill,
@@ -26,7 +29,7 @@ from palace.manager.api.circulation.fulfillment import (
 )
 from palace.manager.api.config import Configuration
 from palace.manager.core.config import CannotLoadConfiguration
-from palace.manager.core.exceptions import BasePalaceException, IntegrationException
+from palace.manager.core.exceptions import IntegrationException
 from palace.manager.integration.license.overdrive.api import (
     OverdriveAPI,
     OverdriveToken,
@@ -55,7 +58,6 @@ from palace.manager.sqlalchemy.model.licensing import (
 from palace.manager.sqlalchemy.model.patron import Hold
 from palace.manager.sqlalchemy.model.resource import Representation
 from palace.manager.util import base64
-from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.http.exception import BadResponseException
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.library import LibraryFixture

@@ -18,12 +18,13 @@ from jwcrypto.jwk import JWK, InvalidJWKValue
 from jwcrypto.jwt import JWT
 from pydantic_settings import SettingsConfigDict
 
+from palace.util.log import LoggerMixin
+
 from palace.manager.api.circulation.exceptions import CannotFulfill
 from palace.manager.opds.lcp.status import Link as LsdLink
 from palace.manager.service.configuration.service_configuration import (
     ServiceConfiguration,
 )
-from palace.manager.util.log import LoggerMixin
 
 # DeMarque WebReader URL pattern used in LSD link relations
 DEMARQUE_WEBREADER_REL = "https://r.cantook.com"

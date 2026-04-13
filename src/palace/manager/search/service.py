@@ -9,9 +9,10 @@ from typing import Any, Self
 import opensearchpy.helpers
 from opensearchpy import MultiSearch, NotFoundError, OpenSearch, RequestError, Search
 
-from palace.manager.core.exceptions import BasePalaceException
+from palace.util.exceptions import BasePalaceException
+from palace.util.log import LoggerMixin
+
 from palace.manager.search.revision import SearchSchemaRevision
-from palace.manager.util.log import LoggerMixin
 
 
 @dataclass(frozen=True)

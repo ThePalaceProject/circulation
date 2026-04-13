@@ -3,9 +3,10 @@ from unittest.mock import patch
 import pytest
 from bidict import frozenbidict
 
+from palace.util.exceptions import PalaceValueError
+
 from palace.manager.core.config import Configuration
 from palace.manager.core.entrypoint import AudiobooksEntryPoint, EbooksEntryPoint
-from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.core.problem_details import INVALID_INPUT
 from palace.manager.feed.facets.feed import (
     DefaultSortOrderFacets,

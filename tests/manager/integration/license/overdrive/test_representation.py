@@ -7,7 +7,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from palace.manager.core.exceptions import PalaceValueError
+from palace.util.exceptions import PalaceValueError
+
 from palace.manager.data_layer.format import FormatData
 from palace.manager.data_layer.link import LinkData
 from palace.manager.integration.license.overdrive.representation import (

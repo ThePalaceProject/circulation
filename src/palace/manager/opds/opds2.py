@@ -18,6 +18,8 @@ from pydantic import (
 )
 from pydantic_core import PydanticCustomError
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.opds import palace, rwpm, schema_org
 from palace.manager.opds.base import BaseOpdsModel
 from palace.manager.opds.types.currency import CurrencyCode
@@ -29,7 +31,6 @@ from palace.manager.opds.types.link import (
     validate_unique_links,
 )
 from palace.manager.opds.util import drop_if_falsy, obj_or_tuple_to_tuple
-from palace.manager.util.datetime_helpers import utc_now
 
 
 def validate_self_link[LinkT: BaseLink](

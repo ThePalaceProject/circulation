@@ -5,6 +5,8 @@ from sqlalchemy import delete, select
 from sqlalchemy.exc import NoResultFound
 from sqlalchemy.orm import Session
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.celery import importer
 from palace.manager.celery.importer import import_lock
 from palace.manager.celery.task import Task
@@ -23,7 +25,6 @@ from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.licensing import License, LicensePool
 from palace.manager.sqlalchemy.model.patron import Hold
-from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.http.exception import (
     BadResponseException,
     RemoteIntegrationException,

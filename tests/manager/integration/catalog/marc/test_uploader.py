@@ -6,12 +6,13 @@ from uuid import UUID, uuid4
 
 import pytest
 
+from palace.util.datetime_helpers import datetime_utc
+
 from palace.manager.integration.catalog.marc.uploader import (
     MarcUploadException,
     MarcUploadManager,
     UploadContext,
 )
-from palace.manager.util.datetime_helpers import datetime_utc
 from tests.fixtures.s3 import S3ServiceFixture
 
 

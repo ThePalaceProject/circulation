@@ -8,7 +8,7 @@ from typing import Any
 
 from onelogin.saml2.constants import OneLogin_Saml2_Constants
 
-from palace.manager.util.datetime_helpers import from_timestamp, utc_now
+from palace.util.datetime_helpers import from_timestamp, utc_now
 
 
 class SAMLLocalizedMetadataItem:

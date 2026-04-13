@@ -49,7 +49,10 @@ through mobile and web applications.
 
 ## Project Structure
 
-- `/src/palace/manager` - Main application source code
+This repository is a [`uv` workspace](https://docs.astral.sh/uv/concepts/projects/workspaces/). The main
+`palace-manager` application is at the repo root; reusable namespace packages live under `/packages`.
+
+- `/src/palace/manager` - Main application source code (`palace-manager`)
   - `/api` - REST API endpoints for mobile applications
     - `/admin` - Administrative API endpoints for the web dashboard
   - `/celery` - Background worker processes and task definitions
@@ -64,12 +67,21 @@ through mobile and web applications.
   - `/service` - Dependency injection container and service layer
   - `/sqlalchemy` - Database models and schema definitions
   - `/util` - Reusable utility functions and helpers
-- `/tests` - Test files
+- `/packages` - Workspace member packages (each is independently buildable/publishable)
+  - `/palace-util` - Shared utilities under the `palace.util` namespace: exceptions
+    (`BasePalaceException`, `PalaceValueError`, `PalaceTypeError`), datetime helpers, and the full
+    logging toolkit. Import from `palace.util.*` directly.
+- `/tests` - Test files for the whole repository (both `palace-manager` and workspace-member packages)
   - `/files` - Test fixture files
   - `/fixtures` - pytest fixtures shared across test functions
-  - `/manager` - pytest test files (should mirror `src/palace/manager` structure)
+  - `/manager` - pytest test files for `palace-manager` (should mirror `src/palace/manager` structure)
   - `/migration` - Database migration tests
   - `/mocks` - Test mocks (**being phased out - avoid in new code**)
+  - `/palace_util` - pytest test files for the `palace-util` workspace package
+- Workspace-member tests live under the root `tests/<package_name>/` rather than
+  `packages/<name>/tests/` so they share the repo's pytest fixtures and conftest plugins and
+  tooling (mypy, coverage, `testpaths`) has a single tests tree to reason about. When adding a
+  new workspace package, create its test tree as `tests/<package_name>/` alongside the others.
 
 ## Architecture Overview
 

@@ -4,6 +4,8 @@ from unittest.mock import MagicMock, call, patch
 import pytest
 from freezegun import freeze_time
 
+from palace.util.datetime_helpers import datetime_utc, utc_now
+
 from palace.manager.core.classifier import Classifier
 from palace.manager.sqlalchemy.constants import LinkRelations
 from palace.manager.sqlalchemy.model.credential import Credential
@@ -21,7 +23,6 @@ from palace.manager.sqlalchemy.util import (
     get_one_or_create,
     tuple_to_numericrange,
 )
-from palace.manager.util.datetime_helpers import datetime_utc, utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.library import LibraryFixture
 from tests.fixtures.services import ServicesFixture

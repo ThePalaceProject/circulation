@@ -12,10 +12,11 @@ import yaml
 from OpenSSL.crypto import FILETYPE_PEM, X509, load_certificate
 from sqlalchemy.orm import Session
 
-from palace.manager.core.exceptions import BasePalaceException, PalaceValueError
+from palace.util.datetime_helpers import utc_now
+from palace.util.exceptions import BasePalaceException, PalaceValueError
+
 from palace.manager.scripts.base import Script
 from palace.manager.util.aes import CryptAESCBC
-from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.http.exception import (
     BadResponseException,
     RequestNetworkException,

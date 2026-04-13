@@ -3,6 +3,9 @@ from logging import Logger
 from celery import shared_task
 from sqlalchemy.orm import Session
 
+from palace.util.datetime_helpers import utc_now
+from palace.util.log import LoggerAdapterType
+
 from palace.manager.celery.task import Task
 from palace.manager.integration.patron_auth.saml.metadata.federations.loader import (
     SAMLFederatedIdentityProviderLoader,
@@ -18,8 +21,6 @@ from palace.manager.integration.patron_auth.saml.metadata.parser import (
 )
 from palace.manager.service.celery.celery import QueueNames
 from palace.manager.sqlalchemy.model.saml import SAMLFederation
-from palace.manager.util.datetime_helpers import utc_now
-from palace.manager.util.log import LoggerAdapterType
 
 
 def _update_saml_federation_idps_metadata(

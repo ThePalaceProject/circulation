@@ -7,13 +7,14 @@ from enum import Enum
 from functools import wraps
 from typing import IO, Any
 
+from palace.util.log import ExtraDataLoggerAdapter
+
 from palace.manager.reporting.model import (
     TTabularDataProcessor,
     TTabularHeadings,
     TTabularRows,
 )
 from palace.manager.util.iteration_helpers import CountingIterator
-from palace.manager.util.log import ExtraDataLoggerAdapter
 
 type TCounterWrappedResult[TTabularDataProcessorReturn] = tuple[
     CountingIterator[Any], TTabularDataProcessorReturn

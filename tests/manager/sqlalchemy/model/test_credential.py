@@ -5,11 +5,12 @@ import pytest
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.credential import Credential
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.patron import Patron
-from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

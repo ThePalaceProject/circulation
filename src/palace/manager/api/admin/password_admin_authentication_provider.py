@@ -1,6 +1,8 @@
 from flask import render_template, url_for
 from sqlalchemy.orm.session import Session
 
+from palace.util.log import LoggerMixin
+
 from palace.manager.api.admin.admin_authentication_provider import (
     AdminAuthenticationProvider,
 )
@@ -14,7 +16,6 @@ from palace.manager.api.admin.template_styles import (
 from palace.manager.service.email.email import SendEmailCallable
 from palace.manager.sqlalchemy.model.admin import Admin
 from palace.manager.sqlalchemy.model.key import Key, KeyType
-from palace.manager.util.log import LoggerMixin
 from palace.manager.util.problem_detail import ProblemDetail
 
 

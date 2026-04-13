@@ -8,6 +8,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import StaleDataError
 
+from palace.util.datetime_helpers import utc_now
+from palace.util.log import LoggerMixin
+
 from palace.manager.api.problem_details import (
     INVALID_LOAN_FOR_ODL_NOTIFICATION,
     NO_ACTIVE_LOAN,
@@ -21,8 +24,6 @@ from palace.manager.service.integration_registry.license_providers import (
 from palace.manager.sqlalchemy.model.credential import Credential
 from palace.manager.sqlalchemy.model.licensing import License
 from palace.manager.sqlalchemy.model.patron import Loan, Patron
-from palace.manager.util.datetime_helpers import utc_now
-from palace.manager.util.log import LoggerMixin
 from palace.manager.util.problem_detail import ProblemDetailException
 
 

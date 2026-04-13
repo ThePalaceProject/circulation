@@ -32,9 +32,12 @@ from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import and_, case, literal_column, select
 from sqlalchemy.sql.functions import func
 
+from palace.util.datetime_helpers import utc_now
+from palace.util.exceptions import BasePalaceException
+from palace.util.log import LoggerMixin
+
 from palace.manager.core.classifier import Classifier
 from palace.manager.core.classifier.work import WorkClassifier
-from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.data_layer.policy.presentation import (
     PresentationCalculationPolicy,
 )
@@ -66,9 +69,7 @@ from palace.manager.sqlalchemy.util import (
     numericrange_to_tuple,
     tuple_to_numericrange,
 )
-from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.languages import LanguageCodes
-from palace.manager.util.log import LoggerMixin
 
 if TYPE_CHECKING:
     from palace.manager.search.external_search import ExternalSearchIndex

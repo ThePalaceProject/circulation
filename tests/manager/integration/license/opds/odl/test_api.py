@@ -13,6 +13,9 @@ from freezegun import freeze_time
 from jwcrypto.jwt import JWT
 from sqlalchemy import delete
 
+from palace.util.datetime_helpers import datetime_utc, utc_now
+from palace.util.log import LogLevel
+
 from palace.manager.api.circulation.exceptions import (
     AlreadyCheckedOut,
     AlreadyOnHold,
@@ -43,7 +46,6 @@ from palace.manager.integration.license.opds.odl.demarque import (
 )
 from palace.manager.integration.license.opds.requests import OAuthOpdsRequest
 from palace.manager.opds.lcp.status import LoanStatus
-from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.licensing import (
     DeliveryMechanism,
@@ -54,7 +56,6 @@ from palace.manager.sqlalchemy.model.licensing import (
 from palace.manager.sqlalchemy.model.patron import Hold, Loan
 from palace.manager.sqlalchemy.model.resource import Hyperlink
 from palace.manager.sqlalchemy.model.work import Work
-from palace.manager.util.datetime_helpers import datetime_utc, utc_now
 from palace.manager.util.http.exception import (
     BadResponseException,
     RemoteIntegrationException,

@@ -24,6 +24,14 @@ from pymarc import Record, parse_xml_to_array
 from requests import Response
 from sqlalchemy.orm import Session
 
+from palace.util.datetime_helpers import (
+    datetime_utc,
+    strptime_utc,
+    to_utc,
+    utc_now,
+)
+from palace.util.log import LoggerMixin
+
 from palace.manager.api.circulation.base import (
     BaseCirculationAPI,
     PatronActivityCirculationAPI,
@@ -97,15 +105,8 @@ from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
 from palace.manager.sqlalchemy.util import get_one
 from palace.manager.util import base64
-from palace.manager.util.datetime_helpers import (
-    datetime_utc,
-    strptime_utc,
-    to_utc,
-    utc_now,
-)
 from palace.manager.util.http.exception import RemoteIntegrationException
 from palace.manager.util.http.http import HTTP, RequestKwargs
-from palace.manager.util.log import LoggerMixin
 from palace.manager.util.problem_detail import BaseProblemDetailException
 from palace.manager.util.xmlparser import XMLParser, XMLProcessor
 

@@ -6,6 +6,8 @@ import feedparser
 import pytest
 from bidict import frozenbidict
 
+from palace.util.datetime_helpers import datetime_utc, utc_now
+
 from palace.manager.api.circulation.base import CirculationApiType
 from palace.manager.core.classifier import Classifier
 from palace.manager.feed.acquisition import OPDSAcquisitionFeed
@@ -35,7 +37,6 @@ from palace.manager.sqlalchemy.model.measurement import Measurement
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation, Resource
 from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.sqlalchemy.util import get_one_or_create, tuple_to_numericrange
-from palace.manager.util.datetime_helpers import datetime_utc, utc_now
 from tests.fixtures.database import DatabaseTransactionFixture, DBStatementCounter
 from tests.fixtures.services import ServicesFixture
 from tests.manager.feed.conftest import PatchedUrlFor

@@ -4,10 +4,11 @@ from io import StringIO
 
 import pytest
 
+from palace.util.datetime_helpers import datetime_utc
+
 from palace.manager.api.adobe_vendor_id import AuthdataUtility
 from palace.manager.scripts.short_token import GenerateShortTokenScript
 from palace.manager.sqlalchemy.model.datasource import DataSource
-from palace.manager.util.datetime_helpers import datetime_utc
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

@@ -4,6 +4,8 @@ import datetime
 import json
 from typing import TYPE_CHECKING, Any
 
+from palace.util.log import LoggerMixin
+
 from palace.manager.api.admin.problem_details import (
     CUSTOMLIST_ENTRY_NOT_VALID_FOR_LIBRARY,
     CUSTOMLIST_SOURCE_COLLECTION_MISSING,
@@ -15,7 +17,6 @@ from palace.manager.search.pagination import SortKeyPagination
 from palace.manager.sqlalchemy.model.customlist import CustomList, CustomListEntry
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.licensing import LicensePool
-from palace.manager.util.log import LoggerMixin
 from palace.manager.util.problem_detail import ProblemDetail
 
 if TYPE_CHECKING:

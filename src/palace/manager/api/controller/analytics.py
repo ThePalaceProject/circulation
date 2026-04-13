@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from flask import Response
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.api.controller.circulation_manager import (
     CirculationManagerController,
 )
 from palace.manager.api.problem_details import INVALID_ANALYTICS_EVENT_TYPE
 from palace.manager.api.util.flask import get_request_library, get_request_patron
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
-from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.problem_detail import ProblemDetail
 
 

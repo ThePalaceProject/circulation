@@ -1,11 +1,12 @@
 import pytest
 
+from palace.util.exceptions import PalaceTypeError
+
 from palace.manager.celery.utils import (
     ModelNotFoundError,
     load_from_id,
     validate_not_none,
 )
-from palace.manager.core.exceptions import PalaceTypeError
 from palace.manager.sqlalchemy.model.collection import Collection
 from tests.fixtures.database import DatabaseTransactionFixture
 

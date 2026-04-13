@@ -9,12 +9,14 @@ from psycopg2.extras import NumericRange
 from pytest import LogCaptureFixture
 from sqlalchemy import select
 
+from palace.util.datetime_helpers import datetime_utc, from_timestamp, utc_now
+from palace.util.exceptions import BasePalaceException
+from palace.util.log import LogLevel
+
 from palace.manager.core.classifier import Classifier, Fantasy, Romance, Science_Fiction
 from palace.manager.core.equivalents_coverage import (
     EquivalentIdentifiersCoverageProvider,
 )
-from palace.manager.core.exceptions import BasePalaceException
-from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.service.redis.models.search import WaitingForIndexing
 from palace.manager.sqlalchemy.model.classification import Genre, Subject
 from palace.manager.sqlalchemy.model.contributor import Contributor
@@ -40,7 +42,6 @@ from palace.manager.sqlalchemy.util import (
     numericrange_to_tuple,
     tuple_to_numericrange,
 )
-from palace.manager.util.datetime_helpers import datetime_utc, from_timestamp, utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import SampleCoversFixture
 from tests.fixtures.library import LibraryFixture

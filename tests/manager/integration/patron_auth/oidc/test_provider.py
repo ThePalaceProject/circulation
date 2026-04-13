@@ -7,8 +7,9 @@ from unittest.mock import MagicMock, patch
 import pytest
 from freezegun import freeze_time
 
+from palace.util.exceptions import PalaceValueError
+
 from palace.manager.api.authentication.base import PatronData, PatronLookupNotSupported
-from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.integration.patron_auth.constants import (
     LOGOUT_REDIRECT_QUERY_PARAM,
 )

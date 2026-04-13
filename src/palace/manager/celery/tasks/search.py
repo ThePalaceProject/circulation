@@ -10,15 +10,16 @@ from opensearchpy import OpenSearchException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from palace.util.exceptions import BasePalaceException
+from palace.util.log import elapsed_time_logging
+
 from palace.manager.celery.task import Task
-from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.search.external_search import ExternalSearchIndex
 from palace.manager.service.celery.celery import QueueNames
 from palace.manager.service.redis.models.lock import TaskLock
 from palace.manager.service.redis.models.search import WaitingForIndexing
 from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.util.backoff import exponential_backoff
-from palace.manager.util.log import elapsed_time_logging
 
 
 def get_work_search_documents(

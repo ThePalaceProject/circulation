@@ -7,6 +7,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from palace.util.datetime_helpers import datetime_utc
+
 from palace.manager.api.circulation.exceptions import (
     AlreadyCheckedOut,
     AlreadyOnHold,
@@ -34,7 +36,6 @@ from palace.manager.integration.license.boundless.model.xml import (
 )
 from palace.manager.integration.license.boundless.requests import BoundlessRequests
 from palace.manager.integration.license.boundless.settings import BoundlessSettings
-from palace.manager.util.datetime_helpers import datetime_utc
 from palace.manager.util.http.exception import RemoteIntegrationException
 from tests.fixtures.files import BoundlessFilesFixture
 from tests.fixtures.http import MockHttpClientFixture

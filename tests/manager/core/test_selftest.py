@@ -12,11 +12,12 @@ from unittest.mock import MagicMock, create_autospec
 from pytest import MonkeyPatch
 from sqlalchemy.orm import Session
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.core.exceptions import IntegrationException
 from palace.manager.core.selftest import HasSelfTests, SelfTestResult
 from palace.manager.integration.goals import Goals
 from palace.manager.sqlalchemy.model.integration import IntegrationConfiguration
-from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

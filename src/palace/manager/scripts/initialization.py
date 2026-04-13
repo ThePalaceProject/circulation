@@ -10,6 +10,8 @@ from sqlalchemy import inspect
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
+from palace.util.log import LoggerMixin
+
 from palace.manager.celery.tasks.search import get_migrate_search_chain
 from palace.manager.scripts.startup import run_startup_tasks as _run_startup_tasks
 from palace.manager.search.revision import SearchSchemaRevision
@@ -17,7 +19,6 @@ from palace.manager.search.service import SearchService
 from palace.manager.service.container import container_instance
 from palace.manager.sqlalchemy.session import SessionManager
 from palace.manager.sqlalchemy.util import LOCK_ID_DB_INIT, pg_advisory_lock
-from palace.manager.util.log import LoggerMixin
 
 
 class InstanceInitializationScript(LoggerMixin):

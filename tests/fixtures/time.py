@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from palace.manager.util.datetime_helpers import datetime_utc
+from palace.util.datetime_helpers import datetime_utc
 
 
 class Time:

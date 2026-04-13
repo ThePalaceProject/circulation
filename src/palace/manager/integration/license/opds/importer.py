@@ -10,6 +10,8 @@ from urllib.parse import urljoin
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
+from palace.util.log import LoggerMixin, elapsed_time_logging
+
 from palace.manager.celery.tasks.apply import (
     ApplyBibliographicCallable,
     ApplyCirculationCallable,
@@ -29,7 +31,6 @@ from palace.manager.service.redis.models.set import IdentifierSet
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.util.http.async_http import AsyncClient
 from palace.manager.util.http.exception import BadResponseException
-from palace.manager.util.log import LoggerMixin, elapsed_time_logging
 
 
 class OpdsImporter[FeedType, PublicationType](LoggerMixin):

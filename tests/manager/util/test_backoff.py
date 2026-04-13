@@ -1,6 +1,7 @@
 import pytest
 
-from palace.manager.core.exceptions import PalaceValueError
+from palace.util.exceptions import PalaceValueError
+
 from palace.manager.util.backoff import exponential_backoff
 
 

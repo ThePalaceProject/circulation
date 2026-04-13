@@ -5,7 +5,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, PositiveInt
 
-from palace.manager.util.datetime_helpers import utc_now
+from palace.util.datetime_helpers import utc_now
 
 
 class OAuthTokenResponse(BaseModel):

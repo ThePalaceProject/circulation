@@ -14,7 +14,8 @@ from pyparsing import (
     alphas,
 )
 
-from palace.manager.core.exceptions import BasePalaceException
+from palace.util.exceptions import BasePalaceException
+
 from palace.manager.integration.patron_auth.saml.python_expression_dsl.ast import (
     Node,
     Operator,

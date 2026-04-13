@@ -7,6 +7,8 @@ from opensearchpy.helpers.query import (
 )
 from psycopg2.extras import NumericRange
 
+from palace.util.datetime_helpers import datetime_utc
+
 from palace.manager.core.classifier import Classifier
 from palace.manager.feed.facets.feed import Facets
 from palace.manager.feed.facets.search import SearchFacets
@@ -24,7 +26,6 @@ from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.licensing import LicensePool, LicensePoolStatus
 from palace.manager.sqlalchemy.model.work import Work
-from palace.manager.util.datetime_helpers import datetime_utc
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.search import (
     EndToEndSearchFixture,

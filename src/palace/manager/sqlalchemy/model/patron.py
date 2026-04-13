@@ -25,6 +25,8 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, relationship
 from sqlalchemy.orm.session import Session
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.core.classifier import Classifier
 from palace.manager.core.user_profile import ProfileStorage
 from palace.manager.service.redis.key import RedisKeyMixin
@@ -35,7 +37,6 @@ from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.credential import Credential
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.util import NumericRangeTuple, numericrange_to_tuple
-from palace.manager.util.datetime_helpers import utc_now
 
 if TYPE_CHECKING:
     from palace.manager.service.analytics.analytics import Analytics

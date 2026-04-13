@@ -2,7 +2,8 @@ from typing import Annotated
 
 from flask_babel import lazy_gettext as _
 
-from palace.manager.core.exceptions import BasePalaceException
+from palace.util.exceptions import BasePalaceException
+
 from palace.manager.integration.settings import (
     BaseSettings,
     FormFieldType,

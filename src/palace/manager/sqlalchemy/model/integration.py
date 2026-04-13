@@ -18,7 +18,8 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.associationproxy import association_proxy
 from sqlalchemy.orm import Mapped, Query, Session, relationship
 
-from palace.manager.core.exceptions import PalaceValueError
+from palace.util.exceptions import PalaceValueError
+
 from palace.manager.integration.goals import Goals
 from palace.manager.sqlalchemy.model.base import Base
 

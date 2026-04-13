@@ -2,6 +2,8 @@ from functools import partial
 
 import pytest
 
+from palace.util.datetime_helpers import datetime_utc
+
 from palace.manager.data_layer.bibliographic import BibliographicData
 from palace.manager.data_layer.circulation import CirculationData
 from palace.manager.data_layer.contributor import ContributorData
@@ -14,7 +16,6 @@ from palace.manager.sqlalchemy.model.contributor import Contributor
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
-from palace.manager.util.datetime_helpers import datetime_utc
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import BoundlessFilesFixture
 from tests.fixtures.http import MockHttpClientFixture

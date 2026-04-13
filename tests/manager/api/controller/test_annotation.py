@@ -5,10 +5,11 @@ from wsgiref.handlers import format_date_time
 
 import pytest
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.api.annotations import AnnotationWriter
 from palace.manager.sqlalchemy.model.patron import Annotation, Patron
 from palace.manager.sqlalchemy.util import create
-from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.api_controller import CirculationControllerFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.services import ServicesFixture

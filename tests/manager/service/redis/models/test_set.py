@@ -4,7 +4,8 @@ from unittest.mock import MagicMock
 import pytest
 from kombu.utils.json import dumps, loads
 
-from palace.manager.core.exceptions import PalaceValueError
+from palace.util.exceptions import PalaceValueError
+
 from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.service.redis.models.set import IdentifierSet
 from tests.fixtures.database import DatabaseTransactionFixture

@@ -11,6 +11,8 @@ from pydantic import ValidationError
 from pydantic_xml import ParsingError
 from requests import Response as RequestsResponse
 
+from palace.util.log import LoggerMixin
+
 from palace.manager.api.model.token import OAuthTokenResponse
 from palace.manager.integration.license.boundless.constants import (
     API_BASE_URLS,
@@ -40,7 +42,6 @@ from palace.manager.integration.license.boundless.model.xml import (
 )
 from palace.manager.util.http.exception import BadResponseException
 from palace.manager.util.http.http import HTTP, RequestKwargs
-from palace.manager.util.log import LoggerMixin
 from palace.manager.util.sentinel import SentinelType
 
 if TYPE_CHECKING:

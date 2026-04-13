@@ -1,8 +1,9 @@
 from collections.abc import Sequence
 
+from palace.util.log import LoggerMixin
+
 from palace.manager.service.redis.redis import Redis
 from palace.manager.sqlalchemy.model.work import Work
-from palace.manager.util.log import LoggerMixin
 
 
 class WaitingForIndexing(LoggerMixin):

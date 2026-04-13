@@ -6,7 +6,8 @@ import httpx
 import pytest
 from freezegun import freeze_time
 
-from palace.manager.util.datetime_helpers import utc_now
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.util.http.async_http import (
     WEB_DEFAULT_BACKOFF,
     WEB_DEFAULT_MAX_REDIRECTS,

@@ -17,6 +17,8 @@ from opensearchpy.helpers.query import (
     Terms,
 )
 
+from palace.util.datetime_helpers import from_timestamp
+
 from palace.manager.core.classifier import Classifier
 from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.feed.facets.constants import FacetConstants
@@ -27,7 +29,6 @@ from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.licensing import LicensePoolStatus
 from palace.manager.sqlalchemy.util import numericrange_to_tuple
-from palace.manager.util.datetime_helpers import from_timestamp
 
 
 class _DeterministicSentinel:

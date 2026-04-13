@@ -8,7 +8,8 @@ from typing import cast
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from palace.manager.core.exceptions import PalaceValueError
+from palace.util.exceptions import PalaceValueError
+
 from palace.manager.scripts.base import Script, _normalize_cmd_args
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.library import Library

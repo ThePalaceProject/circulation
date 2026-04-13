@@ -8,6 +8,8 @@ from typing import IO, Any, Self, TypedDict, Union, Unpack, cast
 
 import httpx
 
+from palace.util.log import LoggerMixin
+
 from palace.manager.util.backoff import exponential_backoff
 from palace.manager.util.http.base import (
     ResponseCodesTypes,
@@ -21,7 +23,6 @@ from palace.manager.util.http.exception import (
     RequestNetworkException,
     RequestTimedOut,
 )
-from palace.manager.util.log import LoggerMixin
 
 # Most of these type aliases are adapted from httpx._types. I would
 # prefer to import them directly, but they are not part of the public API.

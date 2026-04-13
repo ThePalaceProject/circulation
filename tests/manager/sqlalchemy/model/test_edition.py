@@ -5,10 +5,12 @@ from datetime import timedelta
 import pytest
 from freezegun import freeze_time
 
+from palace.util.datetime_helpers import utc_now
+from palace.util.log import LogLevel
+
 from palace.manager.data_layer.policy.presentation import (
     PresentationCalculationPolicy,
 )
-from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.contributor import Contributor
 from palace.manager.sqlalchemy.model.datasource import DataSource
@@ -17,7 +19,6 @@ from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
 from palace.manager.sqlalchemy.util import get_one_or_create
-from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

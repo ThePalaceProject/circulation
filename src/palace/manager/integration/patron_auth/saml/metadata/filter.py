@@ -1,6 +1,7 @@
 import logging
 
-from palace.manager.core.exceptions import BasePalaceException
+from palace.util.exceptions import BasePalaceException
+
 from palace.manager.integration.patron_auth.saml.metadata.model import (
     SAMLAttribute,
     SAMLAttributeStatement,

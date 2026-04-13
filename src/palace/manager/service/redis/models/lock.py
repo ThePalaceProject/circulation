@@ -8,8 +8,9 @@ from functools import cached_property
 from typing import cast
 from uuid import uuid4
 
+from palace.util.exceptions import BasePalaceException
+
 from palace.manager.celery.task import Task
-from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.service.redis.key import RedisKeyType
 from palace.manager.service.redis.redis import Redis
 

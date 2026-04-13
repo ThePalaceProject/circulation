@@ -11,6 +11,8 @@ from flask_babel import lazy_gettext as _
 from pydantic import StringConstraints, TypeAdapter, ValidationError
 from sqlalchemy.orm import Session
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.api.circulation.base import (
     BaseCirculationAPI,
     PatronActivityCirculationAPI,
@@ -72,7 +74,6 @@ from palace.manager.sqlalchemy.model.licensing import (
 )
 from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.sqlalchemy.model.resource import Representation
-from palace.manager.util.datetime_helpers import utc_now
 
 
 class BoundlessApi(

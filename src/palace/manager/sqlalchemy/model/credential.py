@@ -10,10 +10,11 @@ from sqlalchemy.orm import Mapped, relationship
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import and_
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.sqlalchemy.model.base import Base
 from palace.manager.sqlalchemy.util import get_one, get_one_or_create
 from palace.manager.util import is_session
-from palace.manager.util.datetime_helpers import utc_now
 
 if TYPE_CHECKING:
     from palace.manager.sqlalchemy.model.collection import Collection

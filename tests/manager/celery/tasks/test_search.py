@@ -7,6 +7,8 @@ import pytest
 from celery.exceptions import MaxRetriesExceededError
 from opensearchpy import OpenSearchException
 
+from palace.util.exceptions import BasePalaceException
+
 from palace.manager.celery.tasks.search import (
     get_migrate_search_chain,
     get_work_search_documents,
@@ -15,7 +17,6 @@ from palace.manager.celery.tasks.search import (
     search_reindex,
     update_read_pointer,
 )
-from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.scripts.initialization import InstanceInitializationScript
 from palace.manager.search.filter import Filter
 from palace.manager.service.redis.models.lock import LockNotAcquired, TaskLock

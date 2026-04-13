@@ -13,6 +13,8 @@ import pytest
 from flask import Response as FlaskResponse, url_for
 from werkzeug import Response as wkResponse
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.api.circulation.base import BaseCirculationAPI
 from palace.manager.api.circulation.data import HoldInfo, LoanInfo
 from palace.manager.api.circulation.dispatcher import CirculationApiDispatcher
@@ -66,7 +68,6 @@ from palace.manager.sqlalchemy.model.patron import Hold, Loan, Patron
 from palace.manager.sqlalchemy.model.resource import Representation
 from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.sqlalchemy.util import get_one, get_one_or_create
-from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.flask_util import OPDSEntryResponse, Response
 from palace.manager.util.http.exception import RemoteIntegrationException
 from palace.manager.util.opds_writer import OPDSFeed

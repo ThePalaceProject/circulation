@@ -15,6 +15,8 @@ from pydantic_core.core_schema import ValidationInfo
 from sqlalchemy.orm import Session
 from werkzeug.datastructures import Authorization
 
+from palace.util.log import elapsed_time_logging
+
 from palace.manager.api.admin.problem_details import (
     INVALID_CONFIGURATION_OPTION,
     INVALID_LIBRARY_IDENTIFIER_RESTRICTION_REGULAR_EXPRESSION,
@@ -56,7 +58,6 @@ from palace.manager.integration.settings import (
 )
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.sqlalchemy.model.patron import Patron
-from palace.manager.util.log import elapsed_time_logging
 from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
 
 

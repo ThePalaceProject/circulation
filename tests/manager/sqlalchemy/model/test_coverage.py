@@ -4,6 +4,8 @@ from unittest.mock import MagicMock
 import pytest
 from freezegun import freeze_time
 
+from palace.util.datetime_helpers import datetime_utc, utc_now
+
 from palace.manager.core.monitor import TimestampData
 from palace.manager.sqlalchemy.model.coverage import (
     BaseCoverageRecord,
@@ -14,7 +16,6 @@ from palace.manager.sqlalchemy.model.coverage import (
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Equivalency, Identifier
-from palace.manager.util.datetime_helpers import datetime_utc, utc_now
 from palace.manager.util.sentinel import SentinelType
 from tests.fixtures.database import DatabaseTransactionFixture
 

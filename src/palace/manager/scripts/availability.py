@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from palace.manager.core.exceptions import PalaceValueError
+from palace.util.exceptions import PalaceValueError
+
 from palace.manager.integration.license.bibliotheca import BibliothecaCirculationSweep
 from palace.manager.integration.license.overdrive.api import OverdriveAPI
 from palace.manager.scripts.input import IdentifierInputScript

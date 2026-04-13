@@ -11,7 +11,9 @@ import feedparser
 from lxml import etree
 from lxml.etree import ElementTree, _Element as Element
 
-from palace.manager.core.exceptions import PalaceValueError
+from palace.util.datetime_helpers import datetime_utc, utc_now
+from palace.util.exceptions import PalaceValueError
+
 from palace.manager.data_layer.bibliographic import BibliographicData
 from palace.manager.data_layer.circulation import CirculationData
 from palace.manager.data_layer.contributor import ContributorData
@@ -42,7 +44,6 @@ from palace.manager.sqlalchemy.model.licensing import (
 from palace.manager.sqlalchemy.model.measurement import Measurement
 from palace.manager.sqlalchemy.model.resource import Hyperlink
 from palace.manager.util import first_or_default
-from palace.manager.util.datetime_helpers import datetime_utc, utc_now
 from palace.manager.util.opds_writer import OPDSFeed
 
 

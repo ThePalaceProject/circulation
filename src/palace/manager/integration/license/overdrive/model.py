@@ -15,6 +15,8 @@ from pydantic import (
 )
 from pydantic.alias_generators import to_camel
 
+from palace.util.log import LoggerMixin
+
 from palace.manager.api.circulation.exceptions import (
     AlreadyCheckedOut,
     AlreadyOnHold,
@@ -37,7 +39,6 @@ from palace.manager.integration.license.overdrive.exception import (
     OverdriveResponseException,
 )
 from palace.manager.util.http.exception import ResponseData
-from palace.manager.util.log import LoggerMixin
 
 
 class BaseOverdriveModel(BaseModel):

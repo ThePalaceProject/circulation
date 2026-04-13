@@ -2,9 +2,10 @@ from unittest.mock import PropertyMock, patch
 
 import pytest
 
+from palace.util.log import LogLevel
+
 from palace.manager.service.analytics import eventdata
 from palace.manager.service.analytics.eventdata import AnalyticsEventData
-from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.flask import FlaskAppFixture

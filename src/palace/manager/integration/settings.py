@@ -12,11 +12,12 @@ from pydantic.fields import FieldInfo
 from pydantic_core import ErrorDetails, PydanticUndefined
 from sqlalchemy.orm import Session
 
+from palace.util.log import LoggerMixin
+
 from palace.manager.api.admin.problem_details import (
     INCOMPLETE_CONFIGURATION,
     INVALID_CONFIGURATION_OPTION,
 )
-from palace.manager.util.log import LoggerMixin
 from palace.manager.util.problem_detail import (
     BaseProblemDetailException,
     ProblemDetail,

@@ -7,6 +7,8 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.integration.license.overdrive.advantage import (
     OverdriveAdvantageAccount,
 )
@@ -20,7 +22,6 @@ from palace.manager.integration.license.overdrive.script import (
     ImportCollectionGroup,
 )
 from palace.manager.sqlalchemy.model.collection import Collection
-from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.overdrive import OverdriveAPIFixture
 

@@ -13,7 +13,9 @@ from requests.adapters import HTTPAdapter, Response
 from requests.auth import AuthBase
 from urllib3 import Retry
 
-from palace.manager.core.exceptions import PalaceValueError
+from palace.util.exceptions import PalaceValueError
+from palace.util.log import LoggerMixin
+
 from palace.manager.core.problem_details import INTEGRATION_ERROR
 from palace.manager.util.http.base import (
     ResponseCodesTypes,
@@ -25,7 +27,6 @@ from palace.manager.util.http.exception import (
     RequestNetworkException,
     RequestTimedOut,
 )
-from palace.manager.util.log import LoggerMixin
 from palace.manager.util.problem_detail import (
     JSON_MEDIA_TYPE as PROBLEM_DETAIL_JSON_MEDIA_TYPE,
     ProblemDetailException,

@@ -1,9 +1,10 @@
 import datetime
 import logging
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.core.monitor import Monitor
 from palace.manager.sqlalchemy.model.saml import SAMLFederation
-from palace.manager.util.datetime_helpers import utc_now
 
 
 class SAMLMetadataMonitor(Monitor):

@@ -3,8 +3,9 @@ from unittest.mock import MagicMock, patch
 from pytest import LogCaptureFixture
 from sqlalchemy.pool import NullPool
 
+from palace.util.log import LogLevel
+
 from palace.manager.celery.task import Task
-from palace.manager.service.logging.configuration import LogLevel
 
 
 def test_task_session_maker() -> None:

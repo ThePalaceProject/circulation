@@ -7,8 +7,9 @@ import pytest
 from freezegun import freeze_time
 from sqlalchemy import delete, select
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.sqlalchemy.model.key import Key, KeyType
-from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.uuid import uuid_encode
 from tests.fixtures.database import DatabaseTransactionFixture
 

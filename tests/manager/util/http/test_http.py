@@ -12,9 +12,10 @@ from requests import Response, Session
 from requests.adapters import HTTPAdapter
 from requests_mock import Mocker
 
-from palace.manager.core.exceptions import PalaceValueError
+from palace.util.exceptions import PalaceValueError
+from palace.util.log import LogLevel
+
 from palace.manager.core.problem_details import INTEGRATION_ERROR, INVALID_INPUT
-from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.util.http.base import raise_for_bad_response
 from palace.manager.util.http.exception import (
     BadResponseException,

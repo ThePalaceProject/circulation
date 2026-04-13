@@ -3,6 +3,8 @@ from copy import deepcopy
 
 import pytest
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.data_layer.circulation import CirculationData
 from palace.manager.data_layer.contributor import ContributorData
 from palace.manager.data_layer.format import FormatData
@@ -23,7 +25,6 @@ from palace.manager.sqlalchemy.model.licensing import (
     RightsStatus,
 )
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
-from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

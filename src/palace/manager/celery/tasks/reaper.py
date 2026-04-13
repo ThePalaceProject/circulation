@@ -8,6 +8,9 @@ from sqlalchemy.orm import Session, defer, lazyload, raiseload, selectinload
 from sqlalchemy.sql import Delete
 from sqlalchemy.sql.elements import or_
 
+from palace.util.datetime_helpers import utc_now
+from palace.util.log import pluralize
+
 from palace.manager.celery.task import Task
 from palace.manager.celery.tasks.collection_delete import collection_delete
 from palace.manager.celery.tasks.notifications import (
@@ -30,8 +33,6 @@ from palace.manager.sqlalchemy.model.licensing import (
 from palace.manager.sqlalchemy.model.measurement import Measurement
 from palace.manager.sqlalchemy.model.patron import Annotation, Hold, Loan, Patron
 from palace.manager.sqlalchemy.model.work import Work
-from palace.manager.util.datetime_helpers import utc_now
-from palace.manager.util.log import pluralize
 
 
 def _execute_delete(session: Session, deletion_query: Delete) -> int:

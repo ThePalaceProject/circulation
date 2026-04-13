@@ -12,6 +12,8 @@ import pytest
 from pymarc import parse_xml_to_array
 from pymarc.record import Record
 
+from palace.util.datetime_helpers import datetime_utc, utc_now
+
 from palace.manager.api.circulation.data import HoldInfo, LoanInfo
 from palace.manager.api.circulation.dispatcher import CirculationApiDispatcher
 from palace.manager.api.circulation.exceptions import (
@@ -61,7 +63,6 @@ from palace.manager.sqlalchemy.model.licensing import (
 from palace.manager.sqlalchemy.model.measurement import Measurement
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
 from palace.manager.sqlalchemy.model.work import Work
-from palace.manager.util.datetime_helpers import datetime_utc, utc_now
 from palace.manager.util.http.exception import (
     BadResponseException,
     RemoteIntegrationException,

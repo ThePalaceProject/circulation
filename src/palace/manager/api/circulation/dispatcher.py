@@ -9,6 +9,9 @@ import flask
 from flask_babel import lazy_gettext as _
 from sqlalchemy.orm import Session
 
+from palace.util.datetime_helpers import utc_now
+from palace.util.log import LoggerMixin
+
 from palace.manager.api.circulation.base import (
     BaseCirculationAPI,
     CirculationApiType,
@@ -45,8 +48,6 @@ from palace.manager.sqlalchemy.model.licensing import (
 )
 from palace.manager.sqlalchemy.model.patron import Hold, Loan, Patron
 from palace.manager.sqlalchemy.util import get_one
-from palace.manager.util.datetime_helpers import utc_now
-from palace.manager.util.log import LoggerMixin
 
 
 class CirculationApiDispatcher(LoggerMixin):

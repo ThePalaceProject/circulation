@@ -8,13 +8,14 @@ import pytest
 from jwt import DecodeError, ExpiredSignatureError, InvalidIssuedAtError
 from sqlalchemy import select
 
+from palace.util.datetime_helpers import datetime_utc, utc_now
+
 from palace.manager.api.adobe_vendor_id import AuthdataUtility
 from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.sqlalchemy.model.discovery_service_registration import (
     DiscoveryServiceRegistration,
     RegistrationStatus,
 )
-from palace.manager.util.datetime_helpers import datetime_utc, utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.library import LibraryFixture
 from tests.fixtures.vendor_id import VendorIDFixture

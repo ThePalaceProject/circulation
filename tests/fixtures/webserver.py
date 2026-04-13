@@ -5,7 +5,7 @@ from typing import Any
 
 import pytest
 
-from palace.manager.util.log import LoggerMixin
+from palace.util.log import LoggerMixin
 
 
 class MockAPIServerRequest:

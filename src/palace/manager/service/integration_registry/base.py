@@ -8,7 +8,8 @@ from typing import Generic, Literal, TypeVar, overload
 from sqlalchemy import select
 from sqlalchemy.sql import Select
 
-from palace.manager.core.exceptions import BasePalaceException, PalaceValueError
+from palace.util.exceptions import BasePalaceException, PalaceValueError
+
 from palace.manager.integration.goals import Goals
 from palace.manager.sqlalchemy.model.integration import IntegrationConfiguration
 from palace.manager.util.sentinel import SentinelType
