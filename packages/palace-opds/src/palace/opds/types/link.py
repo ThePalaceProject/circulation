@@ -13,9 +13,10 @@ from pydantic import (
 from pydantic_core import core_schema
 from uritemplate import URITemplate, variable
 
+from palace.util.exceptions import PalaceValueError
+
 from palace.opds.base import BaseOpdsModel
 from palace.opds.util import StrOrTuple, drop_if_falsy, obj_or_tuple_to_tuple
-from palace.util.exceptions import PalaceValueError
 
 
 class BaseLink(BaseOpdsModel):

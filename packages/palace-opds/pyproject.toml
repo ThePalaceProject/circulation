@@ -25,5 +25,12 @@ Repository = "https://github.com/ThePalaceProject/circulation"
 [tool.hatch.build.targets.wheel]
 packages = ["src/palace"]
 
+[tool.isort]
+combine_as_imports = true
+known_first_party = ["palace.opds"]
+known_palace = ["palace.util"]
+profile = "black"
+sections = "FUTURE,STDLIB,THIRDPARTY,PALACE,FIRSTPARTY,LOCALFOLDER"
+
 [tool.uv.sources]
 palace-util = {workspace = true}

@@ -5,9 +5,10 @@ https://drafts.opds.io/authentication-for-opds-1.0
 
 from pydantic import BaseModel, Field, field_validator
 
+from palace.util.exceptions import PalaceValueError
+
 from palace.opds.rwpm import Link
 from palace.opds.types.link import CompactCollection
-from palace.util.exceptions import PalaceValueError
 
 
 class AuthenticationLabels(BaseModel):

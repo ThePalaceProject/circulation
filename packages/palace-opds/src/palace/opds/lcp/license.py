@@ -6,10 +6,11 @@ from pydantic import (
     field_validator,
 )
 
+from palace.util.exceptions import PalaceValueError
+
 from palace.opds.base import BaseOpdsModel
 from palace.opds.types.date import Iso8601AwareDatetime
 from palace.opds.types.link import BaseLink, CompactCollection
-from palace.util.exceptions import PalaceValueError
 
 
 class Link(BaseLink):

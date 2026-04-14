@@ -48,6 +48,12 @@ repos:
     hooks:
       - id: isort
         name: Run isort
+        # --resolve-all-configs forces per-file config discovery so workspace
+        # packages with their own [tool.isort] block (palace-opds) get applied
+        # correctly. Without this, pre-commit's batched invocation would use a
+        # single config (whichever isort happens to discover first) for all
+        # files in the batch, defeating the per-package configs.
+        args: [--resolve-all-configs, --config-root, .]
 
   - repo: https://github.com/sirosen/check-jsonschema
     rev: 0.33.3

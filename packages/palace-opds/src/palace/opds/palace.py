@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from pydantic import Field, field_validator
 
+from palace.util.log import LoggerMixin
+
 from palace.opds.base import BaseOpdsModel
 from palace.opds.schema_org import PublicationTypes
-from palace.util.log import LoggerMixin
 
 
 class PublicationMetadata(BaseOpdsModel, LoggerMixin):
