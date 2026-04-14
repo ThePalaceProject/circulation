@@ -2157,7 +2157,7 @@ requires-dist = [
     { name = "psycopg2-binary", specifier = ">=2.9.5,<2.10" },
     { name = "pycountry", specifier = ">=26.2.16,<27" },
     { name = "pycryptodome", specifier = ">=3.18,<4" },
-    { name = "pydantic", extras = ["email"], specifier = ">=2.12,<3" },
+    { name = "pydantic", extras = ["email"], specifier = ">=2.12.5,<3" },
     { name = "pydantic-settings", specifier = ">=2.5.2,<3" },
     { name = "pydantic-xml", specifier = ">=2.17.0,<3" },
     { name = "pyinstrument", specifier = ">=5.0,<6" },
