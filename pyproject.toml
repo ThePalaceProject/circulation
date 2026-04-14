@@ -162,7 +162,7 @@ packages = ["src/palace"]
 [tool.isort]
 combine_as_imports = true
 known_first_party = ["palace.manager"]
-known_palace = ["palace"]
+known_palace = ["palace.opds", "palace.util"]
 known_third_party = ["alembic"]
 profile = "black"
 sections = "FUTURE,STDLIB,THIRDPARTY,PALACE,FIRSTPARTY,LOCALFOLDER"

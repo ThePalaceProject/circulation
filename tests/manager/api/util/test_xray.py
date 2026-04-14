@@ -3,7 +3,6 @@ from unittest.mock import MagicMock, call, patch
 import pytest
 
 from palace import manager
-
 from palace.manager.api.util.xray import PalaceXrayMiddleware
 
 

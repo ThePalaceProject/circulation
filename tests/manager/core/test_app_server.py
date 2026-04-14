@@ -12,9 +12,9 @@ from freezegun import freeze_time
 from psycopg2 import OperationalError
 from pytest import LogCaptureFixture
 
-from palace import manager
 from palace.util.log import LogLevel
 
+from palace import manager
 from palace.manager.api.admin.config import Configuration as AdminUiConfig
 from palace.manager.api.util.flask import PalaceFlask
 from palace.manager.core.app_server import (
