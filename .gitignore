@@ -89,3 +89,6 @@ celerybeat-schedule.db
 .claude/
 !.claude/settings.json
 CLAUDE.local.md
+
+# direnv
+.envrc

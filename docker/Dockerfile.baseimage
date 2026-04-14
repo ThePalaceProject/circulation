@@ -22,10 +22,14 @@ RUN apt-get update && \
     apt-get upgrade -y --no-install-recommends -o Dpkg::Options::="--force-confold" && \
     /bd_build/cleanup.sh
 
-ARG POETRY_VERSION=2.1.1
+ENV UV_PROJECT_ENVIRONMENT=/var/www/circulation/env
 
-# Install required packages including python, pip, compiliers and libraries needed
-# to build the python wheels we need and poetry.
+# Install uv (pinned to a specific minor for reproducibility).
+# https://docs.astral.sh/uv/guides/integration/docker/#installing-uv
+COPY --from=ghcr.io/astral-sh/uv:0.11 /uv /uvx /usr/local/bin/
+
+# Install required packages including python, pip, and libraries/compilers
+# needed to build the python wheels we need.
 RUN install_clean \
       nginx \
       python3.12 \
@@ -42,8 +46,6 @@ RUN install_clean \
     update-alternatives --set python3 /usr/bin/python3.12 && \
     update-alternatives --install /usr/bin/python python /usr/bin/python3.12 1 && \
     update-alternatives --set python /usr/bin/python3.12 && \
-    curl -sSL https://install.python-poetry.org | POETRY_HOME="/opt/poetry" python3 - --yes --version $POETRY_VERSION && \
-    ln -s /opt/poetry/bin/poetry /usr/local/bin/poetry && \
     rm -rf /etc/logrotate.d/dpkg && \
     rm /etc/nginx/sites-enabled/default && \
     rm -rf /root/.cache && \
@@ -57,27 +59,22 @@ RUN useradd -ms /bin/bash -U palace && \
     mkdir /var/log/simplified
 
 WORKDIR /var/www/circulation
-COPY --chown=palace:palace poetry.lock pyproject.toml /var/www/circulation/
+COPY --chown=palace:palace uv.lock pyproject.toml /var/www/circulation/
 
 # Setup virtualenv and install our python dependencies.
-# What we install is based on the poetry.lock file in the repo at the time this
+# What we install is based on the uv.lock file in the repo at the time this
 # image is built. These may get out of date, but we always rerun this step when
 # building the final image, so it will be up to date then. This gives is a base
 # to work from which speeds up the final image build.
-RUN python3 -m venv env && \
+RUN uv sync --frozen --no-dev --no-install-project && \
     SIMPLIFIED_ENVIRONMENT=/var/www/circulation/environment.sh && \
     echo "if [ -f $SIMPLIFIED_ENVIRONMENT ]; then source $SIMPLIFIED_ENVIRONMENT; fi" >> env/bin/activate && \
     . env/bin/activate && \
-    pip install --upgrade pip && \
-    poetry sync --only main,pg --no-root && \
-    # TODO: This can be removed once NLTK merges https://github.com/sloria/TextBlob/pull/469
-    python3 -m nltk.downloader punkt_tab && \
     python3 -m textblob.download_corpora lite && \
-    rm -rf /root/nltk_data/tokenizers/punkt && \
     mv /root/nltk_data /usr/lib/ && \
     find /usr/lib/nltk_data -name *.zip -delete && \
     rm -Rf /root/.cache && \
     rm pyproject.toml && \
-    rm poetry.lock && \
+    rm uv.lock && \
     rm -rf /root/.cache && \
     /bd_build/cleanup.sh

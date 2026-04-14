@@ -17,15 +17,16 @@ COPY docker/startup /etc/my_init.d/
 COPY --chmod=644 docker/services/logrotate /etc/
 RUN mv /etc/cron.daily/logrotate /etc/cron.hourly/logrotate
 
-# Copy our poetry files into the image and install our dependencies.
-COPY --chown=palace:palace poetry.lock pyproject.toml /var/www/circulation/
-RUN . env/bin/activate && \
-    poetry sync --only main,pg --no-root
+# Copy our uv files into the image and install our dependencies.
+COPY --chown=palace:palace uv.lock pyproject.toml /var/www/circulation/
+RUN uv sync --frozen --no-dev --no-install-project
 
 COPY --chown=palace:palace . /var/www/circulation
 
-RUN . env/bin/activate && \
-    poetry install --only-root
+# Install the project itself as a non-editable install. Omitting
+# --no-install-project (and passing --no-editable) is the recommended
+# pattern for production Docker builds with uv.
+RUN uv sync --frozen --no-dev --no-editable
 
 ###############################################################################
 ## Circ-exec Image

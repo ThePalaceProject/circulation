@@ -14,6 +14,7 @@ repos:
       - id: check-executables-have-shebangs
       - id: check-merge-conflict
       - id: check-added-large-files
+        exclude: ^uv\.lock$
       - id: mixed-line-ending
 
   - repo: https://github.com/asottile/pyupgrade
@@ -41,13 +42,6 @@ repos:
     hooks:
       - id: black
         name: Run black
-        args:
-          - -t
-          - py312
-          - -t
-          - py313
-          - -t
-          - py314
 
   - repo: https://github.com/PyCQA/isort
     rev: 6.0.1

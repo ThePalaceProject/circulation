@@ -71,38 +71,58 @@ Most distributions will offer Python packages. On Arch Linux, the following comm
 pacman -S python
 ```
 
-#### pyenv
+#### uv
 
-[pyenv](https://github.com/pyenv/pyenv) lets you easily switch between multiple versions of Python. It can be
-[installed](https://github.com/pyenv/pyenv-installer) using the command `curl https://pyenv.run | bash`. You can then
-install the version of Python you want to work with.
+This project uses [uv](https://docs.astral.sh/uv/) for Python version management, virtual environment
+management, and dependency management.
 
-It is recommended that [pyenv-virtualenv](https://github.com/pyenv/pyenv-virtualenv) be used to allow `pyenv`
-to manage _virtual environments_ in a manner that can be used by the [poetry](#poetry) tool. The `pyenv-virtualenv`
-plugin can be installed by cloning the relevant repository into the `plugins` subdirectory of your `$PYENV_ROOT`:
+uv can be installed using the command:
 
 ```sh
-mkdir -p $PYENV_ROOT/plugins
-cd $PYENV_ROOT/plugins
-git clone https://github.com/pyenv/pyenv-virtualenv
+curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
-
-After cloning the repository, `pyenv` now has a new `virtualenv` command:
-
-```sh
-$ pyenv virtualenv
-pyenv-virtualenv: no virtualenv name given.
-```
-
-#### Poetry
-
-You will need to set up a local virtual environment to install packages and run the project. This project uses
-[poetry](https://python-poetry.org/) for dependency management.
-
-Poetry can be installed using the command `curl -sSL https://install.python-poetry.org | python3 -`.
 
 More information about installation options can be found in the
-[poetry documentation](https://python-poetry.org/docs/master/#installation).
+[uv documentation](https://docs.astral.sh/uv/getting-started/installation/).
+
+uv can install and manage Python versions for you. To install the version used by this project:
+
+```sh
+uv python install 3.12
+```
+
+#### direnv (optional, recommended)
+
+[direnv](https://direnv.net/) automatically activates the project's virtual environment when you `cd`
+into the directory, so you can run commands like `tox`, `pre-commit`, and `mypy` directly without the
+`uv run` prefix.
+
+Install direnv:
+
+```sh
+# OSX
+brew install direnv
+
+# Linux (Arch)
+pacman -S direnv
+```
+
+Add the shell hook to your profile (`~/.zshrc` or `~/.bashrc`):
+
+```sh
+eval "$(direnv hook zsh)"   # or: eval "$(direnv hook bash)"
+```
+
+Create a `.envrc` file in the project root:
+
+```sh
+echo 'source .venv/bin/activate' > .envrc
+direnv allow
+```
+
+Now whenever you enter the project directory the `.venv` is activated automatically, and it deactivates
+when you leave. If you use direnv, the `uv run` prefix in the commands below is not needed — you can
+call `python`, `tox`, `pre-commit`, etc. directly.
 
 ### OpenSearch
 
@@ -371,51 +391,26 @@ Optional display settings for the WebReader:
 
 ## Running the Application
 
-As mentioned in the [pyenv](#pyenv) section, the `poetry` tool should be executed within a virtual environment
-to ensure it uses the expected Python version. To use a particular Python version,
-create a local virtual environment in the cloned `circulation` repository directory. For example, to use Python 3.12.1:
+uv manages the project's virtual environment for you. The first time you run `uv sync` (or any
+`uv run` command) uv will create a `.venv/` directory in the project root using the Python version
+specified in `pyproject.toml`, and install the project's dependencies into it.
+
+Install all dependencies (including both `dev` and `ci` groups):
 
 ```sh
-pyenv virtualenv 3.12.1 circ
+uv sync --all-groups
 ```
 
-This will create a new local virtual environment called `circ` that uses Python 3.12.1. Switch to that environment:
+Install only the production dependencies (no dev group):
 
 ```sh
-pyenv local circ
-```
-
-On most systems, using `pyenv` will adjust your shell prompt to indicate which virtual environment you
-are now in. For example, the version of Python installed in your operating system might be `3.11.0`, but
-using a virtual environment can substitute, for example, `3.12.1`:
-
-```sh
-$ python --version
-Python 3.11.0
-
-$ pyenv local circ
-(circ) $ python --version
-Python 3.12.1
-```
-
-For brevity, these instructions assume that all shell commands will be executed within a virtual environment.
-
-Install the dependencies (including dev and CI):
-
-```sh
-poetry install
-```
-
-Install only the production dependencies:
-
-```sh
-poetry install --only main,pg
+uv sync --no-dev
 ```
 
 Run the application with:
 
 ```sh
-poetry run python app.py
+uv run python app.py
 ```
 
 Check that there is now a web server listening on port `6500`:
@@ -427,7 +422,7 @@ curl http://localhost:6500/
 You can start a celery worker with:
 
 ```sh
-poetry run celery -A "palace.manager.celery.app" worker --concurrency 1 --pool solo --beat
+uv run celery -A "palace.manager.celery.app" worker --concurrency 1 --pool solo --beat
 ```
 
 ### The Admin Interface
@@ -674,7 +669,7 @@ testing the branch, or deploying hotfixes.
 To install the tools used by CI run:
 
 ```sh
-poetry install --only ci
+uv sync --only-group ci
 ```
 
 ## Testing
@@ -712,8 +707,8 @@ You need to have the Python versions you are testing against installed on your l
 for installed Python versions, but does not install new Python versions. If `tox` doesn't find the Python version its
 looking for it will give an `InterpreterNotFound` errror.
 
-[Pyenv](#pyenv) is a useful tool to install multiple Python versions, if you need to install
-missing Python versions in your system for local testing.
+If you need to install missing Python versions, you can use `uv python install <version>` or
+[pyenv](https://github.com/pyenv/pyenv) to manage multiple Python installations.
 
 #### Docker
 
