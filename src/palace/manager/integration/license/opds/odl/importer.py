@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pydantic import TypeAdapter
 
+from palace.opds.odl.odl import Opds2OrOpds2WithOdlPublication
+from palace.opds.opds2 import PublicationFeedNoValidation
 from palace.util.exceptions import PalaceValueError
 
 from palace.manager.integration.base import integration_settings_load
@@ -12,8 +14,6 @@ from palace.manager.integration.license.opds.requests import (
     OpdsAuthType,
     get_opds_requests,
 )
-from palace.manager.opds.odl.odl import Opds2OrOpds2WithOdlPublication
-from palace.manager.opds.opds2 import PublicationFeedNoValidation
 from palace.manager.service.integration_registry.license_providers import (
     LicenseProvidersRegistry,
 )

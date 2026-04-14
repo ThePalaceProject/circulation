@@ -11,6 +11,7 @@ from flask_babel import lazy_gettext as _
 from pydantic import StringConstraints, TypeAdapter, ValidationError
 from sqlalchemy.orm import Session
 
+from palace.opds.types.link import BaseLink
 from palace.util.datetime_helpers import utc_now
 
 from palace.manager.api.circulation.base import (
@@ -61,7 +62,6 @@ from palace.manager.integration.license.boundless.settings import (
     BoundlessLibrarySettings,
     BoundlessSettings,
 )
-from palace.manager.opds.types.link import BaseLink
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition

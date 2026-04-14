@@ -18,10 +18,10 @@ from jwcrypto.jwk import JWK, InvalidJWKValue
 from jwcrypto.jwt import JWT
 from pydantic_settings import SettingsConfigDict
 
+from palace.opds.lcp.status import Link as LsdLink
 from palace.util.log import LoggerMixin
 
 from palace.manager.api.circulation.exceptions import CannotFulfill
-from palace.manager.opds.lcp.status import Link as LsdLink
 from palace.manager.service.configuration.service_configuration import (
     ServiceConfiguration,
 )

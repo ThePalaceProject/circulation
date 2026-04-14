@@ -11,6 +11,8 @@ import feedparser
 from lxml import etree
 from lxml.etree import ElementTree, _Element as Element
 
+from palace.opds.odl.info import LicenseInfo
+from palace.opds.odl.odl import License
 from palace.util.datetime_helpers import datetime_utc, utc_now
 from palace.util.exceptions import PalaceValueError
 
@@ -33,8 +35,6 @@ from palace.manager.integration.license.opds.opds1.settings import (
     IdentifierSource,
 )
 from palace.manager.integration.license.opds.opds1.xml_parser import OPDSXMLParser
-from palace.manager.opds.odl.info import LicenseInfo
-from palace.manager.opds.odl.odl import License
 from palace.manager.sqlalchemy.model.classification import Subject
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.licensing import (

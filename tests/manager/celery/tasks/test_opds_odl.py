@@ -12,6 +12,8 @@ from freezegun import freeze_time
 from jinja2 import Template
 from sqlalchemy import func, select
 
+from palace.opds.odl.info import Checkouts, LicenseInfo, LicenseStatus
+from palace.opds.odl.terms import Terms
 from palace.util import datetime_helpers
 from palace.util.datetime_helpers import utc_now
 from palace.util.log import LogLevel
@@ -38,8 +40,6 @@ from palace.manager.integration.license.opds.requests import (
     OpdsAuthType,
 )
 from palace.manager.integration.license.overdrive.api import OverdriveAPI
-from palace.manager.opds.odl.info import Checkouts, LicenseInfo, LicenseStatus
-from palace.manager.opds.odl.terms import Terms
 from palace.manager.service.redis.models.lock import LockNotAcquired
 from palace.manager.sqlalchemy.constants import (
     EditionConstants,

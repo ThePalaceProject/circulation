@@ -25,6 +25,7 @@ from sqlalchemy.engine import Connection, Engine, Transaction, make_url
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.orm.attributes import flag_modified
 
+from palace.opds.odl.info import LicenseStatus
 from palace.util.datetime_helpers import utc_now
 from palace.util.exceptions import BasePalaceException, PalaceValueError
 
@@ -73,7 +74,6 @@ from palace.manager.integration.patron_auth.simple_authentication import (
     SimpleAuthSettings,
 )
 from palace.manager.integration.settings import BaseSettings
-from palace.manager.opds.odl.info import LicenseStatus
 from palace.manager.service.integration_registry.base import IntegrationRegistry
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.admin import Admin, AdminRole

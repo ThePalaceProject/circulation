@@ -14,6 +14,9 @@ from pydantic import ValidationError
 from sqlalchemy.orm import Session
 from uritemplate import URITemplate
 
+from palace.opds.lcp.license import LicenseDocument
+from palace.opds.lcp.status import LoanStatus
+from palace.opds.types.link import BaseLink
 from palace.util.datetime_helpers import utc_now
 
 from palace.manager.api.circulation.base import BaseCirculationAPI, SupportsImport
@@ -62,9 +65,6 @@ from palace.manager.integration.license.opds.requests import (
 from palace.manager.integration.license.opds.settings.format_priority import (
     FormatPriorities,
 )
-from palace.manager.opds.lcp.license import LicenseDocument
-from palace.manager.opds.lcp.status import LoanStatus
-from palace.manager.opds.types.link import BaseLink
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.licensing import (

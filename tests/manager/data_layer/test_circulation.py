@@ -3,6 +3,7 @@ from copy import deepcopy
 
 import pytest
 
+from palace.opds.odl.info import LicenseStatus
 from palace.util.datetime_helpers import utc_now
 
 from palace.manager.data_layer.circulation import CirculationData
@@ -13,7 +14,6 @@ from palace.manager.data_layer.license import LicenseData
 from palace.manager.data_layer.link import LinkData
 from palace.manager.data_layer.policy.replacement import ReplacementPolicy
 from palace.manager.data_layer.subject import SubjectData
-from palace.manager.opds.odl.info import LicenseStatus
 from palace.manager.sqlalchemy.model.classification import Subject
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.identifier import Identifier

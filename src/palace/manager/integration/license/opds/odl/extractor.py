@@ -9,6 +9,15 @@ from urllib.parse import urljoin
 from frozendict import frozendict
 from pydantic import ValidationError
 
+from palace.opds import opds2, rwpm
+from palace.opds.lcp.status import LoanStatus
+from palace.opds.odl import odl
+from palace.opds.odl.info import LicenseInfo, LicenseStatus
+from palace.opds.opds2 import (
+    AcquisitionObject,
+    BasePublicationFeed,
+    PublicationFeedNoValidation,
+)
 from palace.util.exceptions import PalaceValueError
 
 from palace.manager.data_layer.bibliographic import BibliographicData
@@ -25,15 +34,6 @@ from palace.manager.integration.license.opds.extractor import (
     OpdsExtractor,
 )
 from palace.manager.integration.license.opds.odl.constants import FEEDBOOKS_AUDIO
-from palace.manager.opds import opds2, rwpm
-from palace.manager.opds.lcp.status import LoanStatus
-from palace.manager.opds.odl import odl
-from palace.manager.opds.odl.info import LicenseInfo, LicenseStatus
-from palace.manager.opds.opds2 import (
-    AcquisitionObject,
-    BasePublicationFeed,
-    PublicationFeedNoValidation,
-)
 from palace.manager.sqlalchemy.constants import LinkRelations, MediaTypes
 from palace.manager.sqlalchemy.model.classification import Subject
 from palace.manager.sqlalchemy.model.contributor import Contributor

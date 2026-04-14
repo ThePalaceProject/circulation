@@ -1,0 +1,35 @@
+[build-system]
+build-backend = "hatchling.build"
+requires = ["hatchling"]
+
+[project]
+authors = [{name = "The Palace Project", email = "info@thepalaceproject.org"}]
+dependencies = [
+    "palace-util",
+    "pycountry>=26.2.16,<27",
+    "pydantic[email]>=2.12,<3",
+    "uritemplate==4.2.0",
+]
+description = "Pydantic models for OPDS 2.0, RWPM, ODL, LCP, and Palace Project extensions."
+license = "Apache-2.0"
+name = "palace-opds"
+readme = "README.md"
+requires-python = ">=3.12,<4"
+version = "0"
+
+[project.urls]
+Homepage = "https://thepalaceproject.org"
+Repository = "https://github.com/ThePalaceProject/circulation"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/palace"]
+
+[tool.isort]
+combine_as_imports = true
+known_first_party = ["palace.opds"]
+known_palace = ["palace.util"]
+profile = "black"
+sections = "FUTURE,STDLIB,THIRDPARTY,PALACE,FIRSTPARTY,LOCALFOLDER"
+
+[tool.uv.sources]
+palace-util = {workspace = true}

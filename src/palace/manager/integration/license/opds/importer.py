@@ -10,6 +10,9 @@ from urllib.parse import urljoin
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
+from palace.opds import rwpm
+from palace.opds.odl.info import LicenseInfo
+from palace.opds.odl.odl import License
 from palace.util.log import LoggerMixin, elapsed_time_logging
 
 from palace.manager.celery.tasks.apply import (
@@ -24,9 +27,6 @@ from palace.manager.integration.license.opds.extractor import (
     OpdsExtractor,
 )
 from palace.manager.integration.license.opds.requests import BaseOpdsHttpRequest
-from palace.manager.opds import rwpm
-from palace.manager.opds.odl.info import LicenseInfo
-from palace.manager.opds.odl.odl import License
 from palace.manager.service.redis.models.set import IdentifierSet
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.util.http.async_http import AsyncClient

@@ -9,10 +9,10 @@ from bidict import frozenbidict
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
+from palace.opds.odl.info import LicenseStatus
 from palace.util.datetime_helpers import utc_now
 
 from palace.manager.api.circulation.exceptions import CannotHold, CannotLoan
-from palace.manager.opds.odl.info import LicenseStatus
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.collection import CollectionMissing

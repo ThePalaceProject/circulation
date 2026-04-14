@@ -22,6 +22,7 @@ RUN mv /etc/cron.daily/logrotate /etc/cron.hourly/logrotate
 # uv can resolve workspace members without invalidating this layer on source changes.
 COPY --chown=palace:palace uv.lock pyproject.toml /var/www/circulation/
 COPY --chown=palace:palace packages/palace-util/pyproject.toml /var/www/circulation/packages/palace-util/
+COPY --chown=palace:palace packages/palace-opds/pyproject.toml /var/www/circulation/packages/palace-opds/
 RUN uv sync --frozen --no-dev --no-install-workspace
 
 COPY --chown=palace:palace . /var/www/circulation

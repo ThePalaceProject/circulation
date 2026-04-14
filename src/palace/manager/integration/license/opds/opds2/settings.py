@@ -6,6 +6,8 @@ from croniter import CroniterBadCronError, CroniterBadDateError, croniter
 from flask_babel import lazy_gettext as _
 from pydantic import Field, field_validator
 
+from palace.opds import opds2
+
 from palace.manager.integration.license.opds.opds1.settings import (
     OPDSImporterLibrarySettings,
     OPDSImporterSettings,
@@ -14,7 +16,6 @@ from palace.manager.integration.settings import (
     FormFieldType,
     FormMetadata,
 )
-from palace.manager.opds import opds2
 from palace.manager.sqlalchemy.constants import IdentifierType
 
 
