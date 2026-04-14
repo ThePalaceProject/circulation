@@ -4,12 +4,13 @@ from unittest.mock import patch
 import pytest
 from freezegun import freeze_time
 
+from palace.util.datetime_helpers import datetime_utc, utc_now
+
 from palace.manager.service.redis.models.patron_activity import (
     PatronActivity,
     PatronActivityError,
     PatronActivityStatus,
 )
-from palace.manager.util.datetime_helpers import datetime_utc, utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.redis import RedisFixture
 

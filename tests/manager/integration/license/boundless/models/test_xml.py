@@ -4,6 +4,8 @@ from typing import Literal
 
 import pytest
 
+from palace.util.datetime_helpers import datetime_utc
+
 from palace.manager.api.circulation.exceptions import (
     AlreadyCheckedOut,
     AlreadyOnHold,
@@ -19,7 +21,6 @@ from palace.manager.integration.license.boundless.model.xml import (
     Hold,
     RemoveHoldResponse,
 )
-from palace.manager.util.datetime_helpers import datetime_utc
 from tests.fixtures.files import BoundlessFilesFixture
 
 

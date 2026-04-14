@@ -1,7 +1,8 @@
 import pytest
 from sqlalchemy.orm import Session
 
-from palace.manager.core.exceptions import PalaceValueError
+from palace.util.exceptions import PalaceValueError
+
 from palace.manager.integration.goals import Goals
 from palace.manager.sqlalchemy.model.integration import IntegrationConfiguration
 from tests.fixtures.database import DatabaseFixture, DatabaseTransactionFixture

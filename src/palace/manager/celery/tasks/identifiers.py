@@ -5,10 +5,11 @@ from celery.canvas import Signature, chord
 from sqlalchemy import select
 from sqlalchemy.orm import raiseload
 
+from palace.util.exceptions import PalaceValueError
+
 from palace.manager.celery.task import Task
 from palace.manager.celery.tasks.apply import circulation_apply
 from palace.manager.celery.utils import load_from_id, validate_not_none
-from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.data_layer.circulation import CirculationData
 from palace.manager.service.celery.celery import QueueNames
 from palace.manager.service.redis.models.set import (

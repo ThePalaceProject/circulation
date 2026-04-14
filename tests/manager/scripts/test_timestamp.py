@@ -3,11 +3,12 @@ from __future__ import annotations
 import pytest
 from sqlalchemy.orm import Session
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.scripts.base import Script
 from palace.manager.scripts.timestamp import TimestampScript
 from palace.manager.sqlalchemy.model.coverage import Timestamp
 from palace.manager.sqlalchemy.util import get_one
-from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

@@ -11,8 +11,9 @@ from typing import TYPE_CHECKING, Any, NamedTuple, cast
 from frozendict import frozendict
 from sqlalchemy.orm import Session
 
+from palace.util.exceptions import PalaceValueError
+
 from palace.manager.core.classifier import Classifier
-from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.data_layer.policy.presentation import PresentationCalculationPolicy
 from palace.manager.scripts.base import Script
 from palace.manager.sqlalchemy.model.classification import Classification, Subject

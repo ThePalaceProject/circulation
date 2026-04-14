@@ -10,10 +10,11 @@ from typing import TYPE_CHECKING, Any
 from sqlalchemy.exc import SQLAlchemyError
 from watchtower import CloudWatchLogHandler
 
+from palace.util.datetime_helpers import from_timestamp
+from palace.util.log import LogLevel
+
 from palace.manager.api.admin.util.flask import get_request_admin
 from palace.manager.api.util.flask import get_request_library, get_request_patron
-from palace.manager.service.logging.configuration import LogLevel
-from palace.manager.util.datetime_helpers import from_timestamp
 from palace.manager.util.json import json_serializer
 
 if TYPE_CHECKING:

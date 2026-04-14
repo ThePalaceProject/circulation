@@ -8,9 +8,10 @@ from flask_babel import lazy_gettext as _
 from sqlalchemy import and_, or_, true
 from sqlalchemy.orm import Query, Session
 
+from palace.util.exceptions import PalaceValueError
+
 from palace.manager.core.config import Configuration
 from palace.manager.core.entrypoint import EntryPoint
-from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.core.problem_details import INVALID_INPUT
 from palace.manager.feed.facets.base import FacetGroup, FacetsWithEntryPoint
 from palace.manager.feed.facets.constants import FacetConfig

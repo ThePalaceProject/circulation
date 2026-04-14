@@ -3,6 +3,9 @@ from unittest.mock import call, patch
 
 import pytest
 
+from palace.util.datetime_helpers import utc_now
+from palace.util.log import LogLevel
+
 from palace.manager.celery.tasks.notifications import (
     NotificationType,
     RemovedItemNotificationData,
@@ -24,7 +27,6 @@ from palace.manager.celery.tasks.reaper import (
     work_reaper,
 )
 from palace.manager.integration.license.opds.opds2.api import OPDS2API
-from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.classification import Genre
 from palace.manager.sqlalchemy.model.collection import Collection
@@ -40,7 +42,6 @@ from palace.manager.sqlalchemy.model.measurement import Measurement
 from palace.manager.sqlalchemy.model.patron import Annotation, Hold, Loan, Patron
 from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.sqlalchemy.util import get_one_or_create
-from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.celery import CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.services import ServicesFixture

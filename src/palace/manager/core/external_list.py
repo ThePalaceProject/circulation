@@ -4,13 +4,14 @@ from collections import defaultdict
 from sqlalchemy import or_
 from sqlalchemy.orm.session import Session
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.data_layer.policy.replacement import ReplacementPolicy
 from palace.manager.sqlalchemy.model.classification import Classification, Subject
 from palace.manager.sqlalchemy.model.customlist import CustomListEntry
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.util import get_one_or_create
-from palace.manager.util.datetime_helpers import utc_now
 
 
 class TitleFromExternalList:

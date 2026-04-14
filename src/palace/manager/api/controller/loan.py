@@ -7,6 +7,8 @@ from pydantic import TypeAdapter
 from sqlalchemy import or_
 from werkzeug import Response as wkResponse
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.api.circulation.exceptions import (
     CirculationException,
     RemoteInitiatedServerError,
@@ -37,7 +39,6 @@ from palace.manager.sqlalchemy.model.licensing import (
     LicensePoolDeliveryMechanism,
 )
 from palace.manager.sqlalchemy.model.patron import Hold, Loan, Patron
-from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.flask_util import OPDSEntryResponse
 from palace.manager.util.problem_detail import BaseProblemDetailException, ProblemDetail
 

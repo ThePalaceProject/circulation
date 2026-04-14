@@ -9,6 +9,8 @@ import pytest
 from flask import Flask
 from freezegun import freeze_time
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.api.circulation.base import BaseCirculationAPI
 from palace.manager.api.circulation.data import HoldInfo, LoanInfo
 from palace.manager.api.circulation.dispatcher import CirculationApiDispatcher
@@ -33,7 +35,6 @@ from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import LicensePool, LicensePoolType
 from palace.manager.sqlalchemy.model.patron import Loan
-from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.library import LibraryFixture
 from tests.mocks.analytics_provider import MockAnalyticsProvider

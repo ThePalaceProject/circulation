@@ -9,6 +9,8 @@ from unittest.mock import MagicMock
 import pytest
 from jwcrypto.jwk import JWK
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.api.circulation.data import HoldInfo, LoanInfo
 from palace.manager.integration.license.opds.odl.api import OPDS2WithODLApi
 from palace.manager.integration.license.opds.odl.demarque import DeMarqueWebReader
@@ -22,7 +24,6 @@ from palace.manager.sqlalchemy.model.licensing import (
 )
 from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.sqlalchemy.model.work import Work
-from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import FilesFixture, OPDS2WithODLFilesFixture
 from tests.fixtures.http import MockHttpClientFixture

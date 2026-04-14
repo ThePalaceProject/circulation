@@ -1,7 +1,9 @@
 import pytest
 
+from palace.util.log import LogLevel
+
 from palace.manager.core.config import CannotLoadConfiguration
-from palace.manager.service.logging.configuration import LoggingConfiguration, LogLevel
+from palace.manager.service.logging.configuration import LoggingConfiguration
 
 
 def test_cloudwatch_region_none() -> None:

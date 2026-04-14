@@ -7,6 +7,8 @@ from bidict import frozenbidict
 from flask import Response
 from werkzeug.datastructures import Authorization
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.api.circulation.exceptions import RemoteInitiatedServerError
 from palace.manager.api.controller.base import BaseCirculationManagerController
 from palace.manager.api.problem_details import (
@@ -30,7 +32,6 @@ from palace.manager.sqlalchemy.model.licensing import (
 from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.sqlalchemy.model.resource import Representation
 from palace.manager.sqlalchemy.util import create, tuple_to_numericrange
-from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
 from tests.fixtures.api_controller import CirculationControllerFixture
 from tests.fixtures.library import LibraryFixture

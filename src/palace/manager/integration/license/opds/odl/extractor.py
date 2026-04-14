@@ -9,7 +9,8 @@ from urllib.parse import urljoin
 from frozendict import frozendict
 from pydantic import ValidationError
 
-from palace.manager.core.exceptions import PalaceValueError
+from palace.util.exceptions import PalaceValueError
+
 from palace.manager.data_layer.bibliographic import BibliographicData
 from palace.manager.data_layer.circulation import CirculationData
 from palace.manager.data_layer.contributor import ContributorData

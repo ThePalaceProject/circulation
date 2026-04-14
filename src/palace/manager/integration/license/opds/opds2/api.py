@@ -10,6 +10,8 @@ from croniter import croniter
 from sqlalchemy.orm import Session
 from uritemplate import URITemplate
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.api.circulation.base import BaseCirculationAPI, SupportsImport
 from palace.manager.api.circulation.exceptions import CannotFulfill
 from palace.manager.api.circulation.fulfillment import RedirectFulfillment
@@ -30,7 +32,6 @@ from palace.manager.sqlalchemy.model.licensing import (
     LicensePoolDeliveryMechanism,
 )
 from palace.manager.sqlalchemy.model.patron import Patron
-from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.http.exception import BadResponseException
 
 

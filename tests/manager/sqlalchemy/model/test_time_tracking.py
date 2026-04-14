@@ -3,13 +3,14 @@ import datetime
 import pytest
 from sqlalchemy.exc import IntegrityError
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.sqlalchemy.model.time_tracking import (
     PlaytimeEntry,
     PlaytimeSummary,
     _title_for_identifier,
 )
 from palace.manager.sqlalchemy.util import create
-from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

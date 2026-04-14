@@ -2,6 +2,8 @@ import datetime
 
 import dateutil
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.api.circulation.exceptions import (
     AuthorizationBlocked,
     AuthorizationExpired,
@@ -11,7 +13,6 @@ from palace.manager.api.circulation.exceptions import (
 from palace.manager.api.config import Configuration
 from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.util import MoneyUtility
-from palace.manager.util.datetime_helpers import utc_now
 
 
 class PatronUtility:

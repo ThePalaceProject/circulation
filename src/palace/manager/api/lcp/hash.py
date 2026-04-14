@@ -2,7 +2,7 @@ import hashlib
 from abc import ABC, abstractmethod
 from enum import Enum
 
-from palace.manager.core.exceptions import BasePalaceException
+from palace.util.exceptions import BasePalaceException
 
 
 class HashingAlgorithm(Enum):

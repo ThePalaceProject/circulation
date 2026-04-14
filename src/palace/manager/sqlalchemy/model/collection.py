@@ -23,7 +23,8 @@ from sqlalchemy.sql import Select
 from sqlalchemy.sql.expression import and_, or_, true
 from sqlalchemy.sql.functions import count
 
-from palace.manager.core.exceptions import BasePalaceException
+from palace.util.exceptions import BasePalaceException
+
 from palace.manager.integration.goals import Goals
 from palace.manager.service.integration_registry.license_providers import (
     LicenseProvidersRegistry,

@@ -3,9 +3,12 @@ from unittest.mock import call, create_autospec, patch
 
 import pytest
 
+from palace.util.datetime_helpers import utc_now
+from palace.util.exceptions import PalaceValueError
+from palace.util.log import LogLevel
+
 from palace.manager.celery.importer import import_lock
 from palace.manager.celery.tasks import boundless
-from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.integration.license.boundless.api import BoundlessApi
 from palace.manager.integration.license.boundless.importer import (
     BoundlessImporter,
@@ -17,12 +20,10 @@ from palace.manager.integration.license.boundless.model.json import (
     Title,
     TitleLicenseResponse,
 )
-from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.service.redis.models.lock import LockNotAcquired
 from palace.manager.sqlalchemy.model.coverage import Timestamp
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.util import get_one
-from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.http.exception import BadResponseException, RequestTimedOut
 from tests.fixtures.celery import ApplyTaskFixture, CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture

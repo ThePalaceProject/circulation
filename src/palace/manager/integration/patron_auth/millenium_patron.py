@@ -10,6 +10,8 @@ from flask_babel import lazy_gettext as _
 from lxml import etree
 from sqlalchemy.orm import Session
 
+from palace.util.datetime_helpers import datetime_utc, utc_now
+
 from palace.manager.api.authentication.base import PatronAuthResult, PatronData
 from palace.manager.api.authentication.basic import (
     BasicAuthenticationProvider,
@@ -26,7 +28,6 @@ from palace.manager.integration.settings import (
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.util import MoneyUtility
-from palace.manager.util.datetime_helpers import datetime_utc, utc_now
 from palace.manager.util.http.http import HTTP
 from palace.manager.util.network_diagnostics import run_network_diagnostics_url
 from palace.manager.util.pydantic import HttpUrl

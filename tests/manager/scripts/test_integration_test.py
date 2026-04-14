@@ -5,13 +5,14 @@ from unittest.mock import Mock, call, patch
 
 import pytest
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.scripts.integration_test import (
     FailedIntegrationTest,
     IntegrationTest,
     IntegrationTestDetails,
 )
 from palace.manager.util.aes import CryptAESCBC
-from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 
 BASIC_YAML = """

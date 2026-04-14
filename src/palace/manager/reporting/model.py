@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.sql import Select
 from sqlalchemy.sql.selectable import TextualSelect
 
-from palace.manager.core.exceptions import PalaceValueError
+from palace.util.exceptions import PalaceValueError
 
 TTabularRowData = Sequence[Any]
 TTabularRows = Iterable[TTabularRowData]

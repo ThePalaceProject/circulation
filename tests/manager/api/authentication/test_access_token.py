@@ -13,14 +13,15 @@ from jwcrypto import jwe, jwk
 from pytest import LogCaptureFixture
 from sqlalchemy import delete
 
+from palace.util.datetime_helpers import utc_now
+from palace.util.log import LogLevel
+
 from palace.manager.api.authentication.access_token import PatronJWEAccessTokenProvider
 from palace.manager.api.problem_details import (
     PATRON_AUTH_ACCESS_TOKEN_EXPIRED,
     PATRON_AUTH_ACCESS_TOKEN_INVALID,
 )
-from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.sqlalchemy.model.key import Key, KeyType
-from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.problem_detail import ProblemDetailException
 from palace.manager.util.uuid import uuid_encode
 from tests.fixtures.database import DatabaseTransactionFixture

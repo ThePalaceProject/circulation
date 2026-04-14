@@ -19,6 +19,8 @@ from sqlalchemy.ext.associationproxy import association_proxy
 from sqlalchemy.orm import Mapped, relationship
 from sqlalchemy.orm.session import Session
 
+from palace.util.log import LoggerMixin
+
 from palace.manager.core import classifier
 from palace.manager.core.classifier import (
     Classifier,
@@ -36,7 +38,6 @@ from palace.manager.sqlalchemy.util import (
     numericrange_to_tuple,
     tuple_to_numericrange,
 )
-from palace.manager.util.log import LoggerMixin
 
 if TYPE_CHECKING:
     # This is needed during type checking so we have the

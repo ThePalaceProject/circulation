@@ -13,6 +13,8 @@ from sqlalchemy.engine import Row
 from sqlalchemy.orm import Session, aliased
 from sqlalchemy.sql import and_, join, or_, select
 
+from palace.util.log import LoggerMixin
+
 from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.integration.base import HasLibraryIntegrationConfiguration
@@ -37,7 +39,6 @@ from palace.manager.sqlalchemy.model.resource import (
     Representation,
 )
 from palace.manager.util.http.http import HTTP
-from palace.manager.util.log import LoggerMixin
 
 
 class NoveListApiSettings(MetadataServiceSettings):

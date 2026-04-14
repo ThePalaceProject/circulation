@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+from palace.util.datetime_helpers import datetime_utc
+
 from palace.manager.scripts.coverage_provider import (
     RunCoverageProviderScript,
 )
-from palace.manager.util.datetime_helpers import datetime_utc
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.mocks.stdin import MockStdin
 

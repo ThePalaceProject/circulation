@@ -3,13 +3,14 @@ from unittest.mock import MagicMock, patch
 import pytest
 from flask import Response
 
+from palace.util.log import LogLevel
+
 from palace.manager.api.circulation.fulfillment import (
     DirectFulfillment,
     FetchFulfillment,
     RedirectFulfillment,
     StreamingFulfillment,
 )
-from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism
 from palace.manager.util.http.exception import BadResponseException
 from tests.fixtures.http import MockHttpClientFixture

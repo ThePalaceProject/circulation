@@ -5,6 +5,8 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from pydantic import ValidationError
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.opds.opds2 import (
     Availability,
     Facet,
@@ -19,7 +21,6 @@ from palace.manager.opds.opds2 import (
     PublicationsGroup,
     TitleLink,
 )
-from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.files import OPDS2FilesFixture
 
 

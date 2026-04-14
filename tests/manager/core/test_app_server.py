@@ -12,6 +12,8 @@ from freezegun import freeze_time
 from psycopg2 import OperationalError
 from pytest import LogCaptureFixture
 
+from palace.util.log import LogLevel
+
 from palace import manager
 from palace.manager.api.admin.config import Configuration as AdminUiConfig
 from palace.manager.api.util.flask import PalaceFlask
@@ -38,7 +40,6 @@ from palace.manager.feed.facets.feed import Facets
 from palace.manager.feed.facets.search import SearchFacets
 from palace.manager.feed.worklist.base import WorkList
 from palace.manager.search.pagination import Pagination
-from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.util.opds_writer import OPDSFeed, OPDSMessage
 from palace.manager.util.problem_detail import (

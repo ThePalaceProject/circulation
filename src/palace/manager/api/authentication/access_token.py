@@ -7,14 +7,15 @@ from typing import TYPE_CHECKING
 
 from jwcrypto import jwe, jwk
 
+from palace.util.datetime_helpers import utc_now
+from palace.util.log import LoggerMixin
+
 from palace.manager.api.problem_details import (
     PATRON_AUTH_ACCESS_TOKEN_EXPIRED,
     PATRON_AUTH_ACCESS_TOKEN_INVALID,
 )
 from palace.manager.sqlalchemy.model.key import Key, KeyType
 from palace.manager.sqlalchemy.model.patron import Patron
-from palace.manager.util.datetime_helpers import utc_now
-from palace.manager.util.log import LoggerMixin
 from palace.manager.util.problem_detail import ProblemDetailException
 from palace.manager.util.uuid import uuid_encode
 

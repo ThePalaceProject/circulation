@@ -8,8 +8,9 @@ from typing import Literal
 import httpx
 import requests
 
+from palace.util.datetime_helpers import utc_now
+
 from palace import manager
-from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.http.exception import BadResponseException
 
 # In case an app version is not present, we can use this version as a fallback

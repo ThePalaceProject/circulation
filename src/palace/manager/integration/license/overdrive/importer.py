@@ -7,11 +7,13 @@ from typing import Any
 import dateutil
 from sqlalchemy.orm import Session
 
+from palace.util.exceptions import PalaceValueError
+from palace.util.log import LoggerMixin
+
 from palace.manager.celery.tasks.apply import (
     ApplyBibliographicCallable,
     ApplyCirculationCallable,
 )
-from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.data_layer.policy.replacement import ReplacementPolicy
 from palace.manager.integration.license.overdrive.api import (
@@ -29,7 +31,6 @@ from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.coverage import Timestamp
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.util import get_one_or_create
-from palace.manager.util.log import LoggerMixin
 
 
 @dataclass(frozen=True)

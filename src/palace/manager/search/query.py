@@ -21,9 +21,10 @@ from opensearchpy.helpers.query import (
 )
 from spellchecker import SpellChecker
 
+from palace.util.exceptions import BasePalaceException
+
 from palace.manager.core.classifier.age import AgeClassifier, GradeLevelClassifier
 from palace.manager.core.classifier.keyword import KeywordBasedClassifier
-from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.search.filter import Filter
 from palace.manager.search.query_helpers import (
     boost as boost_query,

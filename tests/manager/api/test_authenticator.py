@@ -21,6 +21,9 @@ from freezegun import freeze_time
 from sqlalchemy.orm import Session
 from werkzeug.datastructures import Authorization
 
+from palace.util.datetime_helpers import utc_now
+from palace.util.log import LogLevel
+
 from palace.manager.api.admin.problem_details import INCOMPLETE_CONFIGURATION
 from palace.manager.api.annotations import AnnotationWriter
 from palace.manager.api.authentication.access_token import PatronJWEAccessTokenProvider
@@ -80,7 +83,6 @@ from palace.manager.integration.patron_auth.sip2.provider import (
 )
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.service.integration_registry.base import IntegrationRegistry
-from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.sqlalchemy.constants import LinkRelations
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.integration import (
@@ -91,7 +93,6 @@ from palace.manager.sqlalchemy.model.library import Library, LibraryLogo
 from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.util import MoneyUtility
 from palace.manager.util.authentication_for_opds import AuthenticationForOPDSDocument
-from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.http.exception import RemoteIntegrationException
 from palace.manager.util.opds_writer import OPDSFeed
 from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException

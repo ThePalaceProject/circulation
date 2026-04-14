@@ -21,11 +21,12 @@ from typing import Any, cast
 from pydantic import HttpUrl
 from requests import RequestException
 
-from palace.manager.core.exceptions import BasePalaceException
+from palace.util.exceptions import BasePalaceException
+from palace.util.log import LoggerMixin
+
 from palace.manager.service.redis.redis import Redis
 from palace.manager.util.http.exception import RequestNetworkException
 from palace.manager.util.http.http import HTTP
-from palace.manager.util.log import LoggerMixin
 
 
 class OIDCUtilityError(BasePalaceException):

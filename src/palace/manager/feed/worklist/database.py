@@ -5,11 +5,12 @@ import datetime
 from sqlalchemy import and_, exists, not_, or_, select
 from sqlalchemy.orm import Session, aliased, contains_eager, joinedload, query
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.core.classifier import Classifier
 from palace.manager.core.config import ConfigurationAttributeValue
 from palace.manager.feed.worklist.base import WorkList
 from palace.manager.sqlalchemy.util import tuple_to_numericrange
-from palace.manager.util.datetime_helpers import utc_now
 
 
 class DatabaseBackedWorkList(WorkList):

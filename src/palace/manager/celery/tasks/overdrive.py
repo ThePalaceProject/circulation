@@ -5,6 +5,8 @@ from uuid import uuid4
 from celery import chain, chord, group, shared_task
 from celery.exceptions import Ignore
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.celery.importer import (
     import_all as create_import_tasks,
     import_key,
@@ -21,7 +23,6 @@ from palace.manager.integration.license.overdrive.importer import OverdriveImpor
 from palace.manager.service.celery.celery import QueueNames
 from palace.manager.service.redis.models.set import IdentifierSet
 from palace.manager.sqlalchemy.model.collection import Collection
-from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.http.exception import (
     BadResponseException,
     RemoteIntegrationException,

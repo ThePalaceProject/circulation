@@ -6,6 +6,8 @@ from copy import deepcopy
 import sqlalchemy
 from sqlalchemy import and_, exists
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.integration.patron_auth.saml.metadata.model import (
     SAMLNameIDFormat,
     SAMLSubject,
@@ -16,7 +18,6 @@ from palace.manager.sqlalchemy.model.credential import Credential
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.sqlalchemy.util import get_one_or_create
-from palace.manager.util.datetime_helpers import utc_now
 
 
 class SAMLCredentialManager:

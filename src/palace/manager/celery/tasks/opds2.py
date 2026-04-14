@@ -1,6 +1,9 @@
 from celery import chain, shared_task
 from celery.canvas import Signature
 
+from palace.util.datetime_helpers import utc_now
+from palace.util.log import pluralize
+
 from palace.manager.celery.opds import opds_import_task
 from palace.manager.celery.task import Task
 from palace.manager.celery.tasks import identifiers
@@ -15,13 +18,11 @@ from palace.manager.service.celery.celery import QueueNames
 from palace.manager.service.redis.models.set import IdentifierSet
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.resource import Hyperlink
-from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.http.exception import (
     BadResponseException,
     RemoteIntegrationException,
     RequestTimedOut,
 )
-from palace.manager.util.log import pluralize
 
 
 @shared_task(queue=QueueNames.default, bind=True)

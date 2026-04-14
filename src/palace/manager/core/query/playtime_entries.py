@@ -4,6 +4,8 @@ from typing import TypedDict
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.api.model.time_tracking import (
     PlaytimeEntriesPost,
     PlaytimeEntriesPostSummary,
@@ -13,7 +15,6 @@ from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.time_tracking import PlaytimeEntry
 from palace.manager.sqlalchemy.util import create
-from palace.manager.util.datetime_helpers import utc_now
 
 
 class PlaytimeEntryResponseDict(TypedDict):

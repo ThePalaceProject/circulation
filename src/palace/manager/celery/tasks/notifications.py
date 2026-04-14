@@ -9,9 +9,12 @@ from celery import shared_task
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
+from palace.util.datetime_helpers import utc_now
+from palace.util.exceptions import PalaceValueError
+from palace.util.log import LoggerMixin
+
 from palace.manager.celery.task import Task
 from palace.manager.celery.utils import load_from_id
-from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.data_layer.base.frozen import BaseFrozenData
 from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.service.celery.celery import QueueNames
@@ -20,8 +23,6 @@ from palace.manager.service.redis.models.lock import TaskLock
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.licensing import LicensePool
 from palace.manager.sqlalchemy.model.patron import Hold, Loan, Patron
-from palace.manager.util.datetime_helpers import utc_now
-from palace.manager.util.log import LoggerMixin
 
 log = logging.getLogger(__name__)
 

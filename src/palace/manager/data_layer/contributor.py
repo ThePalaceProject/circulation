@@ -8,9 +8,10 @@ from sqlalchemy import Boolean, or_
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import ColumnElement
 
+from palace.util.log import LoggerMixin
+
 from palace.manager.data_layer.base.frozen import BaseFrozenData
 from palace.manager.sqlalchemy.model.contributor import Contribution, Contributor
-from palace.manager.util.log import LoggerMixin
 from palace.manager.util.personal_names import display_name_to_sort_name
 from palace.manager.util.pydantic import FrozenDict
 from palace.manager.util.sentinel import SentinelType

@@ -11,7 +11,10 @@ from sqlalchemy.exc import NoResultFound
 from sqlalchemy.orm import Session
 from werkzeug.datastructures import Authorization
 
-from palace.manager.core.exceptions import BasePalaceException
+from palace.util.datetime_helpers import utc_now
+from palace.util.exceptions import BasePalaceException
+from palace.util.log import LoggerMixin
+
 from palace.manager.core.selftest import HasSelfTests
 from palace.manager.integration.base import HasLibraryIntegrationConfiguration
 from palace.manager.integration.settings import BaseSettings
@@ -23,8 +26,6 @@ from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.sqlalchemy.util import get_one, get_one_or_create
 from palace.manager.util.authentication_for_opds import OPDSAuthenticationFlow
-from palace.manager.util.datetime_helpers import utc_now
-from palace.manager.util.log import LoggerMixin
 from palace.manager.util.problem_detail import ProblemDetail
 
 type ResultDetails = (

@@ -5,7 +5,8 @@ from sqlalchemy import bindparam, case, func, lateral, select, true
 from sqlalchemy.orm import Session, aliased
 from sqlalchemy.sql import Select
 
-from palace.manager.core.exceptions import PalaceValueError
+from palace.util.exceptions import PalaceValueError
+
 from palace.manager.reporting.model import (
     TabularQueryDefinition,
     TTabularDataProcessor,

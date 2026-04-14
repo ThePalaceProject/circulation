@@ -5,6 +5,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 from sqlalchemy.exc import IntegrityError
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.api.controller.playtime_entries import (
     MISSING_LOAN_IDENTIFIER,
     PlaytimeEntriesController,
@@ -13,7 +15,6 @@ from palace.manager.api.controller.playtime_entries import (
 from palace.manager.sqlalchemy.model.patron import Loan
 from palace.manager.sqlalchemy.model.time_tracking import PlaytimeEntry
 from palace.manager.sqlalchemy.util import get_one
-from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.problem_detail import ProblemDetail
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.flask import FlaskAppFixture

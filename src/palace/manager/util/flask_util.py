@@ -13,7 +13,8 @@ from pydantic import BaseModel, ConfigDict
 from pydantic.alias_generators import to_camel
 from werkzeug.datastructures import MultiDict
 
-from palace.manager.util.datetime_helpers import utc_now
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.util.opds_writer import OPDSFeed
 
 

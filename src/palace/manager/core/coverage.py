@@ -4,6 +4,8 @@ import traceback
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.functions import func
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.core.monitor import TimestampData
 from palace.manager.data_layer.policy.replacement import ReplacementPolicy
 from palace.manager.service.container import container_instance
@@ -19,7 +21,6 @@ from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import LicensePool
 from palace.manager.sqlalchemy.util import get_one
-from palace.manager.util.datetime_helpers import utc_now
 
 
 class CoverageFailure:

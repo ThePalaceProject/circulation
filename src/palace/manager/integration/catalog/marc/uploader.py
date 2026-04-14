@@ -5,10 +5,11 @@ from typing import IO, Literal, Self
 
 from pydantic import BaseModel
 
-from palace.manager.core.exceptions import BasePalaceException
+from palace.util.exceptions import BasePalaceException
+from palace.util.log import LoggerMixin
+
 from palace.manager.service.storage.s3 import MultipartS3UploadPart, S3Service
 from palace.manager.sqlalchemy.model.resource import Representation
-from palace.manager.util.log import LoggerMixin
 from palace.manager.util.uuid import uuid_encode
 
 

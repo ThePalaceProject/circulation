@@ -3,15 +3,16 @@ from unittest.mock import MagicMock, create_autospec
 
 import pytest
 
+from palace.util.datetime_helpers import datetime_utc
+from palace.util.exceptions import PalaceValueError
+
 from palace.manager.celery.tasks.apply import (
     ApplyBibliographicCallable,
     ApplyCirculationCallable,
 )
-from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.integration.license.boundless.api import BoundlessApi
 from palace.manager.integration.license.boundless.importer import BoundlessImporter
 from palace.manager.sqlalchemy.model.licensing import LicensePoolStatus
-from palace.manager.util.datetime_helpers import datetime_utc
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.manager.integration.license.boundless.conftest import BoundlessFixture
 

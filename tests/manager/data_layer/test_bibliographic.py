@@ -8,8 +8,10 @@ import pytest
 from freezegun import freeze_time
 from sqlalchemy import select
 
+from palace.util.datetime_helpers import utc_now
+from palace.util.exceptions import PalaceValueError
+
 from palace.manager.core.classifier import NO_NUMBER, NO_VALUE
-from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.data_layer.bibliographic import (
     _BASIC_EDITION_FIELDS,
     BibliographicData,
@@ -31,7 +33,6 @@ from palace.manager.sqlalchemy.model.licensing import RightsStatus
 from palace.manager.sqlalchemy.model.measurement import Measurement
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
 from palace.manager.sqlalchemy.model.work import Work
-from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.mocks.mock import LogCaptureHandler
 

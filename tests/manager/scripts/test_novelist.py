@@ -4,13 +4,14 @@ from unittest.mock import patch
 
 import pytest
 
+from palace.util.log import LogLevel
+
 from palace.manager.integration.goals import Goals
 from palace.manager.integration.metadata.novelist import (
     NoveListAPI,
     NoveListApiSettings,
 )
 from palace.manager.scripts.novelist import NovelistSnapshotScript
-from palace.manager.service.logging.configuration import LogLevel
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.services import ServicesFixture
 

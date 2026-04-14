@@ -17,7 +17,10 @@ from typing import Any, cast
 from sqlalchemy import and_, exists
 from sqlalchemy.orm import Session
 
-from palace.manager.core.exceptions import PalaceValueError
+from palace.util.datetime_helpers import utc_now
+from palace.util.exceptions import PalaceValueError
+from palace.util.log import LoggerMixin
+
 from palace.manager.integration.patron_auth.oidc.auth import (
     OIDCAuthenticationManager,
     OIDCRefreshTokenError,
@@ -26,8 +29,6 @@ from palace.manager.sqlalchemy.model.credential import Credential
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.sqlalchemy.util import get_one_or_create
-from palace.manager.util.datetime_helpers import utc_now
-from palace.manager.util.log import LoggerMixin
 
 
 class OIDCCredentialManager(LoggerMixin):

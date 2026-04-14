@@ -4,12 +4,13 @@ from functools import cached_property
 from types import TracebackType
 from typing import Any, Literal, NamedTuple, Self
 
-from palace.manager.core.exceptions import BasePalaceException
+from palace.util.datetime_helpers import utc_now
+from palace.util.exceptions import BasePalaceException
+from palace.util.log import LoggerMixin
+
 from palace.manager.service.redis.redis import Redis
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.patron import Patron
-from palace.manager.util.datetime_helpers import utc_now
-from palace.manager.util.log import LoggerMixin
 
 
 class PatronActivityError(BasePalaceException, RuntimeError): ...

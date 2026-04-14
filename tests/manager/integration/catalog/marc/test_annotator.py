@@ -8,6 +8,8 @@ import pytest
 from freezegun import freeze_time
 from pymarc import Indicators, MARCReader, Record
 
+from palace.util.datetime_helpers import datetime_utc, utc_now
+
 from palace.manager.integration.catalog.marc.annotator import Annotator
 from palace.manager.sqlalchemy.model.classification import Genre
 from palace.manager.sqlalchemy.model.contributor import Contributor
@@ -21,7 +23,6 @@ from palace.manager.sqlalchemy.model.licensing import (
 )
 from palace.manager.sqlalchemy.model.resource import Representation
 from palace.manager.sqlalchemy.model.work import Work
-from palace.manager.util.datetime_helpers import datetime_utc, utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

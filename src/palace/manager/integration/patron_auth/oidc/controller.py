@@ -13,6 +13,8 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from werkzeug.wrappers import Response as BaseResponse
 
+from palace.util.log import LoggerMixin
+
 from palace.manager.api.authenticator import BaseOIDCAuthenticationProvider
 from palace.manager.api.util.flask import get_request_library
 from palace.manager.integration.patron_auth.constants import (
@@ -25,7 +27,6 @@ from palace.manager.integration.patron_auth.oidc.util import (
     OIDCStateValidationError,
     OIDCUtility,
 )
-from palace.manager.util.log import LoggerMixin
 from palace.manager.util.problem_detail import (
     ProblemDetail,
     ProblemDetail as pd,

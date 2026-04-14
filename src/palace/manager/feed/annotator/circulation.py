@@ -16,6 +16,8 @@ from flask import url_for
 from frozendict import frozendict
 from sqlalchemy.orm import Session
 
+from palace.util.exceptions import BasePalaceException, PalaceValueError
+
 from palace.manager.api.adobe_vendor_id import AuthdataUtility
 from palace.manager.api.annotations import AnnotationWriter
 from palace.manager.api.circulation.base import BaseCirculationAPI
@@ -25,7 +27,6 @@ from palace.manager.api.config import Configuration
 from palace.manager.core.classifier import Classifier
 from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.core.entrypoint import EverythingEntryPoint
-from palace.manager.core.exceptions import BasePalaceException, PalaceValueError
 from palace.manager.core.lcp.credential import LCPCredentialFactory, LCPHashedPassphrase
 from palace.manager.core.lcp.exceptions import LCPError
 from palace.manager.feed.annotator.base import Annotator

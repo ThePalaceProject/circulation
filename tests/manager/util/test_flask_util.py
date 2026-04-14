@@ -7,7 +7,8 @@ from wsgiref.handlers import format_date_time
 import pytest
 from flask import Response as FlaskResponse
 
-from palace.manager.util.datetime_helpers import utc_now
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.util.flask_util import (
     OPDSEntryResponse,
     OPDSFeedResponse,

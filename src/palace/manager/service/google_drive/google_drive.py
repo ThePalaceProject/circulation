@@ -5,7 +5,7 @@ from typing import IO, TYPE_CHECKING, cast
 
 from googleapiclient.http import MediaIoBaseUpload
 
-from palace.manager.util.log import LoggerMixin
+from palace.util.log import LoggerMixin
 
 if TYPE_CHECKING:
     from googleapiclient._apis.drive.v3 import DriveResource, File

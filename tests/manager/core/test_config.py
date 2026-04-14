@@ -1,8 +1,9 @@
 import pytest
 from sqlalchemy.exc import ArgumentError
 
+from palace.util.log import LogLevel
+
 from palace.manager.core.config import CannotLoadConfiguration, Configuration
-from palace.manager.service.logging.configuration import LogLevel
 
 
 class TestConfiguration:

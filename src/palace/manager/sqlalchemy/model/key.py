@@ -8,8 +8,9 @@ from sqlalchemy import Column, DateTime, Enum as SaEnum, Unicode, delete, select
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, Session
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.sqlalchemy.model.base import Base
-from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.string_helpers import random_key
 from palace.manager.util.uuid import uuid_decode
 

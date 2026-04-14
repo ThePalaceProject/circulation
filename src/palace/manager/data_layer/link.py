@@ -6,9 +6,10 @@ from typing import Annotated, Self
 from frozendict import frozendict
 from pydantic import Field, constr, field_validator, model_validator
 
+from palace.util.log import LoggerMixin
+
 from palace.manager.data_layer.base.frozen import BaseFrozenData
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
-from palace.manager.util.log import LoggerMixin
 from palace.manager.util.pydantic import FrozenDict
 
 

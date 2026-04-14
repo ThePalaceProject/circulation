@@ -16,6 +16,8 @@ from pydantic import (
 )
 from pydantic_core.core_schema import ValidationInfo
 
+from palace.util.log import LoggerMixin
+
 from palace.manager.api.admin.problem_details import (
     INCOMPLETE_CONFIGURATION,
     INVALID_CONFIGURATION_OPTION,
@@ -29,7 +31,6 @@ from palace.manager.integration.settings import (
     FormMetadata,
     SettingsValidationError,
 )
-from palace.manager.util.log import LoggerMixin
 
 PRODUCTION_AUTH_ADAPTER: TypeAdapter[
     Annotated[HttpUrl, UrlConstraints(allowed_schemes=["https"])]

@@ -14,6 +14,8 @@ from pydantic import ValidationError
 from sqlalchemy.orm import Session
 from uritemplate import URITemplate
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.api.circulation.base import BaseCirculationAPI, SupportsImport
 from palace.manager.api.circulation.data import HoldInfo, LoanInfo
 from palace.manager.api.circulation.exceptions import (
@@ -75,7 +77,6 @@ from palace.manager.sqlalchemy.model.patron import Hold, Loan, Patron
 from palace.manager.sqlalchemy.model.resource import Resource
 from palace.manager.sqlalchemy.util import get_one
 from palace.manager.util import base64
-from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.http.exception import (
     BadResponseException,
     RemoteIntegrationException,

@@ -1,10 +1,11 @@
 import pytest
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.api.admin.exceptions import AdminNotAuthorized
 from palace.manager.sqlalchemy.model.admin import AdminRole
 from palace.manager.sqlalchemy.model.coverage import Timestamp
 from palace.manager.sqlalchemy.util import create
-from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.api_admin import AdminControllerFixture
 
 

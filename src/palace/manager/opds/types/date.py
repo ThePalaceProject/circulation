@@ -4,7 +4,7 @@ from typing import Annotated, Any
 from pydantic import AwareDatetime, BeforeValidator
 from pydantic_core import PydanticCustomError
 
-from palace.manager.util.datetime_helpers import to_utc
+from palace.util.datetime_helpers import to_utc
 
 
 def _numeric_string(value: str) -> bool:

@@ -4,7 +4,7 @@ from typing import Any, cast
 from lxml import builder, etree
 from lxml.etree import _Element
 
-from palace.manager.util.datetime_helpers import utc_now
+from palace.util.datetime_helpers import utc_now
 
 
 class ElementMaker(builder.ElementMaker):  # type: ignore[misc]

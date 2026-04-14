@@ -15,6 +15,15 @@ Palace Manager is a backend service for digital library systems, maintained by [
 - [Patron Blocking Rules — Allowed Functions](docs/FUNCTIONS.md) —
   Reference for the functions available in patron blocking rule expressions.
 
+## Repository Layout
+
+This repository is a [`uv` workspace](https://docs.astral.sh/uv/concepts/projects/workspaces/). The main
+`palace-manager` application lives at the repo root (`src/palace/manager/`). Reusable namespace packages
+live under `packages/`:
+
+- [`palace-util`](packages/palace-util/README.md) — shared utilities (exceptions, datetime helpers,
+  `LoggerMixin`) under the `palace.util` namespace.
+
 ## Installation
 
 Docker images created from this code are available at:

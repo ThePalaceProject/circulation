@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import flask
 
+from palace.util.log import LoggerMixin
+
 from palace.manager.api.authentication.access_token import PatronJWEAccessTokenProvider
 from palace.manager.api.controller.circulation_manager import (
     CirculationManagerController,
@@ -9,7 +11,6 @@ from palace.manager.api.controller.circulation_manager import (
 from palace.manager.api.model.patron_auth import PatronAuthAccessToken
 from palace.manager.api.problem_details import PATRON_AUTH_ACCESS_TOKEN_NOT_POSSIBLE
 from palace.manager.api.util.flask import get_request_patron
-from palace.manager.util.log import LoggerMixin
 from palace.manager.util.problem_detail import ProblemDetailException
 
 

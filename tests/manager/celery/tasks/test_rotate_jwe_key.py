@@ -3,10 +3,11 @@ from datetime import timedelta
 from freezegun import freeze_time
 from sqlalchemy import delete, select
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.api.authentication.access_token import PatronJWEAccessTokenProvider
 from palace.manager.celery.tasks.rotate_jwe_key import rotate_jwe_key
 from palace.manager.sqlalchemy.model.key import Key, KeyType
-from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.celery import CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 

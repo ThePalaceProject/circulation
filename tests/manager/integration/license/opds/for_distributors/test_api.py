@@ -3,6 +3,8 @@ from unittest.mock import MagicMock, create_autospec, patch
 
 import pytest
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.api.circulation.exceptions import (
     CannotFulfill,
     DeliveryMechanismError,
@@ -32,7 +34,6 @@ from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism, RightsStatus
 from palace.manager.sqlalchemy.model.patron import Loan
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
-from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import OPDSForDistributorsFilesFixture
 from tests.fixtures.http import MockHttpClientFixture

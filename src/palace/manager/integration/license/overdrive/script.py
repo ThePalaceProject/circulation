@@ -7,8 +7,9 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from palace.util.exceptions import PalaceValueError
+
 from palace.manager.celery.tasks import overdrive
-from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.integration.license.overdrive.advantage import (
     OverdriveAdvantageAccount,
 )

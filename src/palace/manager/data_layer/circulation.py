@@ -6,6 +6,8 @@ from typing import Literal, Self, overload
 from pydantic import model_validator
 from sqlalchemy.orm import Session
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.data_layer.base.mutable import BaseMutableData
 from palace.manager.data_layer.format import FormatData
 from palace.manager.data_layer.license import LicenseData
@@ -21,7 +23,6 @@ from palace.manager.sqlalchemy.model.licensing import (
     RightsStatus,
 )
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
-from palace.manager.util.datetime_helpers import utc_now
 
 
 class CirculationData(BaseMutableData):

@@ -33,6 +33,8 @@ from sqlalchemy.sql import Select, Subquery
 from sqlalchemy.sql.elements import BindParameter, ColumnElement
 from sqlalchemy.sql.selectable import Lateral
 
+from palace.util.log import elapsed_time_logging
+
 from palace.manager.celery.task import Task
 from palace.manager.integration.goals import Goals
 from palace.manager.integration.license.opds.opds1.settings import OPDSImporterSettings
@@ -60,7 +62,6 @@ from palace.manager.sqlalchemy.model.licensing import License, LicensePool
 from palace.manager.sqlalchemy.model.patron import Hold, Loan, Patron
 from palace.manager.sqlalchemy.model.work import Work, WorkGenre
 from palace.manager.sqlalchemy.util import get_one, numericrange_to_string
-from palace.manager.util.log import elapsed_time_logging
 from palace.manager.util.uuid import uuid_encode
 
 

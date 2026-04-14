@@ -9,6 +9,8 @@ from bidict import frozenbidict
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.api.circulation.exceptions import CannotHold, CannotLoan
 from palace.manager.opds.odl.info import LicenseStatus
 from palace.manager.sqlalchemy.constants import MediaTypes
@@ -31,7 +33,6 @@ from palace.manager.sqlalchemy.model.patron import Hold, Loan
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
 from palace.manager.sqlalchemy.util import create
 from palace.manager.util import first_or_default
-from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

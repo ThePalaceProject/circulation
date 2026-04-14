@@ -21,10 +21,11 @@ from sqlalchemy import select
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.service.container import Services
 from palace.manager.sqlalchemy.model.startup_task import StartupTask, StartupTaskState
 from palace.manager.sqlalchemy.util import create
-from palace.manager.util.datetime_helpers import utc_now
 
 logger = logging.getLogger(__name__)
 

@@ -12,6 +12,8 @@ from typing import IO, Any, ClassVar, TypedDict, Unpack
 
 from sqlalchemy.orm import Session
 
+from palace.util.log import LoggerAdapterType, LoggerMixin
+
 from palace.manager.celery.task import Task
 from palace.manager.core.exceptions import IntegrationException
 from palace.manager.reporting.model import ReportTable, TTabularDataProcessor
@@ -27,7 +29,6 @@ from palace.manager.service.storage.s3 import S3Service
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.util import get_one
-from palace.manager.util.log import LoggerAdapterType, LoggerMixin
 
 
 class LibraryReportKwargs(TypedDict, total=False):

@@ -8,6 +8,8 @@ import pytest
 from freezegun import freeze_time
 from werkzeug.datastructures import Authorization
 
+from palace.util.datetime_helpers import datetime_utc, utc_now
+
 from palace.manager.api.authentication.base import PatronData, PatronLookupNotSupported
 from palace.manager.integration.patron_auth.saml import provider as saml_provider
 from palace.manager.integration.patron_auth.saml.auth import (
@@ -53,7 +55,6 @@ from palace.manager.integration.patron_auth.saml.python_expression_dsl.parser im
     DSLParser,
 )
 from palace.manager.sqlalchemy.model.credential import Credential
-from palace.manager.util.datetime_helpers import datetime_utc, utc_now
 from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
 from tests.fixtures.api_controller import ControllerFixture
 from tests.fixtures.database import DatabaseTransactionFixture

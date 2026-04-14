@@ -9,7 +9,8 @@ from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.exc import MultipleResultsFound
 
-from palace.manager.service.logging.configuration import LogLevel
+from palace.util.log import LogLevel
+
 from palace.manager.sqlalchemy import util
 from palace.manager.sqlalchemy.model.credential import Credential
 from palace.manager.sqlalchemy.model.datasource import DataSource

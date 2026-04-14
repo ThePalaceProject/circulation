@@ -10,8 +10,9 @@ from urllib.parse import quote
 from botocore.exceptions import BotoCoreError, ClientError
 from pydantic import BaseModel, ConfigDict, Field
 
+from palace.util.log import LoggerMixin
+
 from palace.manager.core.config import CannotLoadConfiguration
-from palace.manager.util.log import LoggerMixin
 
 if TYPE_CHECKING:
     from mypy_boto3_s3 import S3Client

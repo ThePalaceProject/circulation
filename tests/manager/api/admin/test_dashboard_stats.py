@@ -5,6 +5,8 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.api.admin.dashboard_stats import generate_statistics
 from palace.manager.api.admin.model.dashboard_statistics import (
     InventoryStatistics,
@@ -14,7 +16,6 @@ from palace.manager.sqlalchemy.model.admin import Admin, AdminRole
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.licensing import LicensePoolStatus
 from palace.manager.sqlalchemy.util import create
-from palace.manager.util.datetime_helpers import utc_now
 
 if TYPE_CHECKING:
     from palace.manager.sqlalchemy.model.collection import Collection

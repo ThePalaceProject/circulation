@@ -3,6 +3,8 @@ from __future__ import annotations
 import re
 from collections.abc import Generator
 
+from palace.util.log import LoggerMixin
+
 from palace.manager.data_layer.bibliographic import BibliographicData
 from palace.manager.data_layer.circulation import CirculationData
 from palace.manager.data_layer.contributor import ContributorData
@@ -29,7 +31,6 @@ from palace.manager.sqlalchemy.model.licensing import (
     LicensePoolStatus,
 )
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
-from palace.manager.util.log import LoggerMixin
 
 
 class BibliographicParser(LoggerMixin):

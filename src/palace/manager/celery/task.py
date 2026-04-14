@@ -4,10 +4,11 @@ import celery
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import NullPool
 
+from palace.util.log import LoggerMixin
+
 from palace.manager.celery.session import SessionMixin
 from palace.manager.service.container import Services, container_instance
 from palace.manager.sqlalchemy.session import SessionManager
-from palace.manager.util.log import LoggerMixin
 
 
 class Task(celery.Task, LoggerMixin, SessionMixin):

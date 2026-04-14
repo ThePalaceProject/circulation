@@ -5,6 +5,8 @@ from typing import Self
 from pydantic import model_validator
 from sqlalchemy.orm import Session
 
+from palace.util.log import LoggerMixin
+
 from palace.manager.data_layer.base.frozen import BaseFrozenData
 from palace.manager.data_layer.link import LinkData
 from palace.manager.sqlalchemy.model.datasource import DataSource
@@ -15,7 +17,6 @@ from palace.manager.sqlalchemy.model.licensing import (
 )
 from palace.manager.sqlalchemy.model.patron import Loan
 from palace.manager.sqlalchemy.model.resource import Resource
-from palace.manager.util.log import LoggerMixin
 
 
 class FormatData(BaseFrozenData, LoggerMixin):

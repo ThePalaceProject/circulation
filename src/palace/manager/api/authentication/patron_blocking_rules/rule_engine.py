@@ -13,7 +13,7 @@ from simpleeval import (
     NameNotDefined,
 )
 
-from palace.manager.core.exceptions import BasePalaceException
+from palace.util.exceptions import BasePalaceException
 
 MAX_RULE_LENGTH = 1000
 MAX_MESSAGE_LENGTH = 1000

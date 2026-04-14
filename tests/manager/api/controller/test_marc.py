@@ -6,6 +6,8 @@ from unittest.mock import MagicMock
 import pytest
 from flask import Response
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.api.controller.marc import MARCRecordController
 from palace.manager.integration.catalog.marc.exporter import MarcExporter
 from palace.manager.integration.goals import Goals
@@ -17,7 +19,6 @@ from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.marcfile import MarcFile
 from palace.manager.sqlalchemy.util import create
-from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.services import ServicesFixture
 

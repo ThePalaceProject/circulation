@@ -14,6 +14,8 @@ from flask_babel import lazy_gettext as _
 from sqlalchemy.orm import Session
 from werkzeug.datastructures import Authorization, Headers
 
+from palace.util.log import LoggerMixin, elapsed_time_logging
+
 from palace.manager.api.adobe_vendor_id import AuthdataUtility
 from palace.manager.api.annotations import AnnotationWriter
 from palace.manager.api.authentication.base import (
@@ -49,7 +51,6 @@ from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.patron import Patron, PatronProfileStorage
 from palace.manager.util.authentication_for_opds import AuthenticationForOPDSDocument
 from palace.manager.util.http.exception import RemoteIntegrationException
-from palace.manager.util.log import LoggerMixin, elapsed_time_logging
 from palace.manager.util.opds_writer import OPDSFeed
 from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
 

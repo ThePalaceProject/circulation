@@ -4,7 +4,8 @@ Helper functions for use in Celery tasks
 
 from sqlalchemy.orm import Session
 
-from palace.manager.core.exceptions import PalaceTypeError, PalaceValueError
+from palace.util.exceptions import PalaceTypeError, PalaceValueError
+
 from palace.manager.sqlalchemy.util import get_one
 
 

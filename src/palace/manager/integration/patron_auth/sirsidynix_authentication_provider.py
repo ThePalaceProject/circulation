@@ -10,6 +10,8 @@ from urllib.parse import urljoin
 
 from sqlalchemy.orm import Session
 
+from palace.util.exceptions import PalaceValueError
+
 from palace.manager.api.authentication.base import PatronData
 from palace.manager.api.authentication.basic import (
     BasicAuthenticationProvider,
@@ -20,7 +22,6 @@ from palace.manager.api.authentication.basic import (
 from palace.manager.core.config import Configuration
 from palace.manager.core.exceptions import (
     IntegrationException,
-    PalaceValueError,
 )
 from palace.manager.core.selftest import SelfTestResult
 from palace.manager.integration.settings import (

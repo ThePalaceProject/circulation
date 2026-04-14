@@ -1,11 +1,12 @@
 from pytest import LogCaptureFixture
 from sqlalchemy import select
 
+from palace.util.log import LogLevel
+
 from palace.manager.celery.tasks.collection_delete import (
     _collection_name,
     collection_delete,
 )
-from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.licensing import LicensePool
 from palace.manager.sqlalchemy.model.patron import Hold, Loan

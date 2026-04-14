@@ -6,9 +6,10 @@ from boto3.exceptions import Boto3Error
 from celery.events.state import State, Task
 from freezegun import freeze_time
 
+from palace.util.log import LogLevel
+
 from palace.manager.celery.celery import Celery
 from palace.manager.celery.monitoring import Cloudwatch, QueueStats, TaskStats
-from palace.manager.service.logging.configuration import LogLevel
 
 
 class CloudwatchCameraFixture:

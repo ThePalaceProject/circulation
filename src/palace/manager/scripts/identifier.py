@@ -4,7 +4,8 @@ from collections.abc import Sequence
 
 from sqlalchemy.orm import Session
 
-from palace.manager.core.exceptions import PalaceValueError
+from palace.util.exceptions import PalaceValueError
+
 from palace.manager.data_layer.policy.presentation import (
     PresentationCalculationPolicy,
 )

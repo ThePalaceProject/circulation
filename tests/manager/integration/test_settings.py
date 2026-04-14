@@ -13,6 +13,8 @@ from pydantic import (
 )
 from sqlalchemy.orm import Session
 
+from palace.util.log import LogLevel
+
 from palace.manager.integration.settings import (
     BaseSettings,
     FormFieldType,
@@ -20,7 +22,6 @@ from palace.manager.integration.settings import (
     SettingsValidationError,
     _get_form_metadata,
 )
-from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
 from tests.fixtures.problem_detail import raises_problem_detail
 

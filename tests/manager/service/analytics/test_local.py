@@ -5,10 +5,11 @@ from typing import TYPE_CHECKING
 import pytest
 from freezegun import freeze_time
 
+from palace.util.datetime_helpers import datetime_utc, utc_now
+
 from palace.manager.service.analytics.eventdata import AnalyticsEventData
 from palace.manager.service.analytics.local import LocalAnalyticsProvider
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
-from palace.manager.util.datetime_helpers import datetime_utc, utc_now
 
 if TYPE_CHECKING:
     from tests.fixtures.database import DatabaseTransactionFixture

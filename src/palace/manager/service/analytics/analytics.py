@@ -5,11 +5,12 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy.orm import Session
 
+from palace.util.log import LoggerMixin
+
 from palace.manager.service.analytics.eventdata import AnalyticsEventData
 from palace.manager.service.analytics.local import LocalAnalyticsProvider
 from palace.manager.service.analytics.provider import AnalyticsProvider
 from palace.manager.service.analytics.s3 import S3AnalyticsProvider
-from palace.manager.util.log import LoggerMixin
 
 if TYPE_CHECKING:
     from palace.manager.service.storage.s3 import S3Service

@@ -6,11 +6,11 @@ from unittest.mock import Mock
 import pytest
 from pytest import LogCaptureFixture
 
-from palace.manager.service.logging.configuration import LogLevel
-from palace.manager.util.log import (
+from palace.util.log import (
     ExtraDataLoggerAdapter,
     LoggerAdapterType,
     LoggerMixin,
+    LogLevel,
     elapsed_time_logging,
     log_elapsed_time,
     pluralize,
@@ -37,11 +37,11 @@ def test_log_elapsed_time_cls(caplog: LogCaptureFixture):
     assert len(caplog.records) == 2
 
     [first, second] = caplog.records
-    assert first.name == "tests.manager.util.test_log.MockClass"
+    assert first.name == "tests.palace_util.test_log.MockClass"
     assert first.message == "Test: Starting..."
     assert first.levelname == LogLevel.info
 
-    assert second.name == "tests.manager.util.test_log.MockClass"
+    assert second.name == "tests.palace_util.test_log.MockClass"
     assert "Test: Completed. (elapsed time:" in second.message
     assert second.levelname == LogLevel.info
 
@@ -52,7 +52,7 @@ def test_log_elapsed_time_instance(caplog: LogCaptureFixture):
     MockClass().test_method_2()
     assert len(caplog.records) == 1
     [record] = caplog.records
-    assert record.name == "tests.manager.util.test_log.MockClass"
+    assert record.name == "tests.palace_util.test_log.MockClass"
     assert "Test 12345: Completed. (elapsed time:" in record.message
     assert record.levelname == LogLevel.debug
 
@@ -100,7 +100,7 @@ class ClassThatUsesExtraDataAdapter:
 class TestExtraDataLoggerAdapter:
     @pytest.fixture
     def log_capture(self, caplog):
-        caplog.set_level(logging.INFO)
+        caplog.set_level(LogLevel.info)
         return caplog
 
     @pytest.mark.parametrize(
@@ -236,7 +236,7 @@ class TestElapsedTimeLogging:
         assert elapsed_time < 0.1
 
     def test_with_actual_logger(self, caplog: LogCaptureFixture):
-        caplog.set_level(logging.INFO)
+        caplog.set_level(LogLevel.info)
         logger = logging.getLogger("test_elapsed_time")
 
         with elapsed_time_logging(log_method=logger.info, message_prefix="Logger Test"):

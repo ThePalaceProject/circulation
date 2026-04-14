@@ -5,7 +5,8 @@ from copy import copy, deepcopy
 
 from multipledispatch import dispatch
 
-from palace.manager.core.exceptions import BasePalaceException
+from palace.util.exceptions import BasePalaceException
+
 from palace.manager.integration.patron_auth.saml.python_expression_dsl.ast import (
     BinaryArithmeticExpression,
     BinaryBooleanExpression,

@@ -7,6 +7,8 @@ from opensearchpy.helpers.function import FieldValueFactor, RandomScore, ScriptS
 from opensearchpy.helpers.query import Bool, Query as opensearch_dsl_query, Term, Terms
 from psycopg2._range import NumericRange
 
+from palace.util.datetime_helpers import datetime_utc, from_timestamp
+
 from palace.manager.core.classifier import Classifier
 from palace.manager.data_layer.contributor import ContributorData
 from palace.manager.data_layer.identifier import IdentifierData
@@ -23,7 +25,6 @@ from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.licensing import LicensePool, LicensePoolStatus
 from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.sqlalchemy.util import get_one_or_create
-from palace.manager.util.datetime_helpers import datetime_utc, from_timestamp
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.library import LibraryFixture
 from tests.fixtures.search import EndToEndSearchFixture

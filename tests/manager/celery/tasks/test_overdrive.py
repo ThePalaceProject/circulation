@@ -8,6 +8,9 @@ from uuid import uuid4
 import pytest
 from celery.result import AsyncResult
 
+from palace.util.datetime_helpers import datetime_utc
+from palace.util.log import LogLevel
+
 from palace.manager.celery.importer import import_workflow_lock
 from palace.manager.celery.tasks import overdrive
 from palace.manager.celery.tasks.overdrive import import_collection_group
@@ -20,13 +23,11 @@ from palace.manager.integration.license.overdrive.importer import (
     FeedImportResult,
     OverdriveImporter,
 )
-from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.service.redis.models.set import IdentifierSet
 from palace.manager.sqlalchemy.constants import IdentifierType
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.coverage import Timestamp
 from palace.manager.sqlalchemy.model.identifier import Identifier
-from palace.manager.util.datetime_helpers import datetime_utc
 from tests.fixtures.celery import ApplyTaskFixture, CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.overdrive import OverdriveAPIFixture

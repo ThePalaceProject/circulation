@@ -7,11 +7,12 @@ from typing import TYPE_CHECKING
 import requests
 from flask import Response
 
+from palace.util.log import LoggerMixin
+
 from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism
 from palace.manager.util.http.base import ResponseCodesTypes
 from palace.manager.util.http.exception import BadResponseException
 from palace.manager.util.http.http import HTTP
-from palace.manager.util.log import LoggerMixin
 from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
 
 if TYPE_CHECKING:

@@ -18,7 +18,9 @@ from urllib.parse import urlencode
 from pydantic import HttpUrl
 from requests import RequestException
 
-from palace.manager.core.exceptions import BasePalaceException
+from palace.util.exceptions import BasePalaceException
+from palace.util.log import LoggerMixin
+
 from palace.manager.integration.patron_auth.oidc.configuration.model import (
     OIDCAuthSettings,
 )
@@ -33,7 +35,6 @@ from palace.manager.integration.patron_auth.oidc.validator import (
 from palace.manager.service.redis.redis import Redis
 from palace.manager.util.http.exception import RequestNetworkException
 from palace.manager.util.http.http import HTTP
-from palace.manager.util.log import LoggerMixin
 
 
 class OIDCAuthenticationError(BasePalaceException):

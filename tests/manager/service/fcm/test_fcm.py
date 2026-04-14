@@ -9,9 +9,10 @@ from firebase_admin.exceptions import FirebaseError
 from firebase_admin.messaging import UnregisteredError
 from requests_mock import Mocker
 
+from palace.util.log import LogLevel
+
 from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.service.fcm import fcm
-from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.sqlalchemy.model.devicetokens import DeviceToken, DeviceTokenTypes
 from palace.manager.sqlalchemy.util import get_one
 from tests.fixtures.database import DatabaseTransactionFixture

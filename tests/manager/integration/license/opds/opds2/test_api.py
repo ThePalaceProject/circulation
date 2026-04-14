@@ -4,6 +4,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.api.circulation.exceptions import CannotFulfill
 from palace.manager.api.circulation.fulfillment import Fulfillment, RedirectFulfillment
 from palace.manager.celery.tasks import opds2 as opds2_celery
@@ -24,7 +26,6 @@ from palace.manager.sqlalchemy.model.licensing import (
     LicensePool,
     LicensePoolDeliveryMechanism,
 )
-from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.http import MockHttpClientFixture
 

@@ -15,6 +15,8 @@ from sqlalchemy import and_, distinct, false, select, true, union
 from sqlalchemy.orm import Query, Session, joinedload
 from sqlalchemy.sql.functions import coalesce, count, max as sql_max, sum
 
+from palace.util.datetime_helpers import previous_months, utc_now
+
 from palace.manager.api.config import Configuration
 from palace.manager.celery.task import Task
 from palace.manager.integration.license.opds.for_distributors.api import (
@@ -30,7 +32,6 @@ from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.integration import IntegrationConfiguration
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.time_tracking import PlaytimeEntry, PlaytimeSummary
-from palace.manager.util.datetime_helpers import previous_months, utc_now
 from palace.manager.util.uuid import uuid_encode
 
 

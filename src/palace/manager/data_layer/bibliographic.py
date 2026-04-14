@@ -8,8 +8,10 @@ from pydantic import AwareDatetime, Field, field_validator, model_validator
 from sqlalchemy import and_
 from sqlalchemy.orm import Query, Session
 
+from palace.util.datetime_helpers import utc_now
+from palace.util.exceptions import PalaceValueError
+
 from palace.manager.core.classifier import NO_NUMBER, NO_VALUE
-from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.data_layer.base.mutable import BaseMutableData
 from palace.manager.data_layer.circulation import CirculationData
 from palace.manager.data_layer.contributor import ContributorData
@@ -30,7 +32,6 @@ from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import LicensePool, RightsStatus
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Resource
 from palace.manager.sqlalchemy.util import get_one, get_one_or_create
-from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.languages import LanguageCodes
 from palace.manager.util.median import median
 

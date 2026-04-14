@@ -4,7 +4,8 @@ from sqlalchemy import Column, Enum, ForeignKey, Index, Integer, Unicode
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Mapped, Session, relationship
 
-from palace.manager.core.exceptions import BasePalaceException
+from palace.util.exceptions import BasePalaceException
+
 from palace.manager.sqlalchemy.model.base import Base
 from palace.manager.sqlalchemy.model.patron import Patron
 

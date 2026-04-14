@@ -13,7 +13,8 @@ from pydantic import (
 from pydantic_core import core_schema
 from uritemplate import URITemplate, variable
 
-from palace.manager.core.exceptions import PalaceValueError
+from palace.util.exceptions import PalaceValueError
+
 from palace.manager.opds.base import BaseOpdsModel
 from palace.manager.opds.util import StrOrTuple, drop_if_falsy, obj_or_tuple_to_tuple
 

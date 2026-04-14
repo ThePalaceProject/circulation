@@ -8,6 +8,8 @@ from unittest.mock import MagicMock, create_autospec
 import pytest
 from pydantic import TypeAdapter
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.core.classifier import Classifier
 from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.service.analytics.eventdata import AnalyticsEventData
@@ -16,7 +18,6 @@ from palace.manager.service.storage.s3 import S3Service
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.datasource import DataSource
-from palace.manager.util.datetime_helpers import utc_now
 
 if TYPE_CHECKING:
     from tests.fixtures.database import DatabaseTransactionFixture

@@ -23,6 +23,8 @@ from sqlalchemy.ext.mutable import MutableDict
 from sqlalchemy.orm import Mapped, Query, relationship
 from sqlalchemy.orm.session import Session
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.data_layer.policy.presentation import (
     PresentationCalculationPolicy,
 )
@@ -39,7 +41,6 @@ from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism, LicensePool
 from palace.manager.sqlalchemy.util import get_one, get_one_or_create
 from palace.manager.util import TitleProcessor
-from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.languages import LanguageCodes
 from palace.manager.util.permanent_work_id import WorkIDCalculator
 

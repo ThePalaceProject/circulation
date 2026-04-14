@@ -15,8 +15,8 @@ from typing import Any, cast
 from authlib.jose import JsonWebKey, JsonWebToken
 from authlib.jose.errors import JoseError
 
-from palace.manager.core.exceptions import BasePalaceException
-from palace.manager.util.log import LoggerMixin
+from palace.util.exceptions import BasePalaceException
+from palace.util.log import LoggerMixin
 
 
 class OIDCTokenValidationError(BasePalaceException):

@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import pytest
 
+from palace.util.datetime_helpers import datetime_utc
+
 from palace.manager.scripts.base import Script
-from palace.manager.util.datetime_helpers import datetime_utc
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

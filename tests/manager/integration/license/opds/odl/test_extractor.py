@@ -5,6 +5,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.integration.license.opds.odl.constants import FEEDBOOKS_AUDIO
 from palace.manager.integration.license.opds.odl.extractor import OPDS2WithODLExtractor
@@ -19,7 +21,6 @@ from palace.manager.opds.schema_org import Audience
 from palace.manager.sqlalchemy.constants import EditionConstants, MediaTypes
 from palace.manager.sqlalchemy.model.contributor import Contributor
 from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism, RightsStatus
-from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.files import OPDS2FilesFixture
 
 

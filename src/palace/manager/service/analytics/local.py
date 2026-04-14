@@ -1,10 +1,11 @@
 from sqlalchemy.orm.session import Session
 
+from palace.util.log import LoggerMixin
+
 from palace.manager.service.analytics.eventdata import AnalyticsEventData
 from palace.manager.service.analytics.provider import AnalyticsProvider
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.util import get_one_or_create
-from palace.manager.util.log import LoggerMixin
 
 
 class LocalAnalyticsProvider(AnalyticsProvider, LoggerMixin):

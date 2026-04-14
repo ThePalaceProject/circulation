@@ -7,7 +7,8 @@ from onelogin.saml2.constants import OneLogin_Saml2_Constants
 from onelogin.saml2.utils import OneLogin_Saml2_XML
 from onelogin.saml2.xmlparser import RestrictedElement, fromstring
 
-from palace.manager.core.exceptions import BasePalaceException
+from palace.util.exceptions import BasePalaceException
+
 from palace.manager.integration.patron_auth.saml.metadata.model import (
     SAMLAttribute,
     SAMLAttributeStatement,

@@ -6,15 +6,16 @@ from collections.abc import Mapping, Sequence
 
 from pymarc import Field, Indicators, Record, Subfield
 
+from palace.util.datetime_helpers import utc_now
+from palace.util.log import LoggerMixin
+
 from palace.manager.core.classifier import Classifier
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism, LicensePool
 from palace.manager.sqlalchemy.model.resource import Representation
 from palace.manager.sqlalchemy.model.work import Work
-from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.languages import LanguageCodes
-from palace.manager.util.log import LoggerMixin
 
 
 class Annotator(LoggerMixin):

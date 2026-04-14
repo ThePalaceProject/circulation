@@ -4,11 +4,12 @@ from flask_babel import lazy_gettext as _
 from frozendict import frozendict
 from werkzeug.datastructures import Authorization
 
+from palace.util.log import LoggerMixin
+
 from palace.manager.api.circulation.exceptions import RemoteInitiatedServerError
 from palace.manager.api.problem_details import INVALID_CREDENTIALS, LIBRARY_NOT_FOUND
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.patron import Patron
-from palace.manager.util.log import LoggerMixin
 from palace.manager.util.problem_detail import BaseProblemDetailException, ProblemDetail
 
 

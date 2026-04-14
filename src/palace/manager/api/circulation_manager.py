@@ -9,6 +9,13 @@ from flask_babel import lazy_gettext as _
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from palace.util.log import (
+    LoggerMixin,
+    LogLevel,
+    elapsed_time_logging,
+    log_elapsed_time,
+)
+
 from palace.manager.api.authenticator import Authenticator
 from palace.manager.api.circulation.base import CirculationApiType
 from palace.manager.api.circulation.dispatcher import CirculationApiDispatcher
@@ -51,14 +58,12 @@ from palace.manager.service.integration_registry.base import LookupException
 from palace.manager.service.integration_registry.license_providers import (
     LicenseProvidersRegistry,
 )
-from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.discovery_service_registration import (
     DiscoveryServiceRegistration,
 )
 from palace.manager.sqlalchemy.model.lane import Lane
 from palace.manager.sqlalchemy.model.library import Library
-from palace.manager.util.log import LoggerMixin, elapsed_time_logging, log_elapsed_time
 from palace.manager.util.problem_detail import ProblemDetailException
 
 if TYPE_CHECKING:

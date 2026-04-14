@@ -13,6 +13,9 @@ from pytest import LogCaptureFixture
 from sqlalchemy import literal, select
 from sqlalchemy.sql import Select
 
+from palace.util.datetime_helpers import utc_now
+from palace.util.log import LogLevel
+
 from palace.manager.celery.tasks.generate_inventory_and_hold_reports import (
     _inventory_report_row_transform,
     generate_csv_report,
@@ -27,7 +30,6 @@ from palace.manager.celery.tasks.generate_inventory_and_hold_reports import (
 from palace.manager.integration.license.opds.opds1.settings import OPDSImporterSettings
 from palace.manager.integration.license.overdrive.api import OverdriveAPI
 from palace.manager.opds.odl.info import LicenseStatus
-from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.sqlalchemy.model.classification import Genre, Subject
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.library import Library
@@ -37,7 +39,6 @@ from palace.manager.sqlalchemy.util import (
     get_one_or_create,
     tuple_to_numericrange,
 )
-from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.celery import CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.services import ServicesFixture

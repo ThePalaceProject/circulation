@@ -12,6 +12,10 @@ from freezegun import freeze_time
 from jinja2 import Template
 from sqlalchemy import func, select
 
+from palace.util import datetime_helpers
+from palace.util.datetime_helpers import utc_now
+from palace.util.log import LogLevel
+
 from palace.manager.celery.tasks import apply, opds_odl
 from palace.manager.celery.tasks.opds_odl import (
     _licensepool_ids_with_holds,
@@ -36,7 +40,6 @@ from palace.manager.integration.license.opds.requests import (
 from palace.manager.integration.license.overdrive.api import OverdriveAPI
 from palace.manager.opds.odl.info import Checkouts, LicenseInfo, LicenseStatus
 from palace.manager.opds.odl.terms import Terms
-from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.service.redis.models.lock import LockNotAcquired
 from palace.manager.sqlalchemy.constants import (
     EditionConstants,
@@ -58,8 +61,6 @@ from palace.manager.sqlalchemy.model.patron import Hold, Patron
 from palace.manager.sqlalchemy.model.resource import Hyperlink
 from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.sqlalchemy.util import create
-from palace.manager.util import datetime_helpers
-from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.celery import ApplyTaskFixture, CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import OPDS2WithODLFilesFixture

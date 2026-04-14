@@ -1,10 +1,11 @@
+from palace.util.datetime_helpers import datetime_utc
+
 from palace.manager.core.external_list import (
     ClassificationBasedMembershipManager,
     MembershipManager,
 )
 from palace.manager.sqlalchemy.model.classification import Subject
 from palace.manager.sqlalchemy.model.edition import Edition
-from palace.manager.util.datetime_helpers import datetime_utc
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

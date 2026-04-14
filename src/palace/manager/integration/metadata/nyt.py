@@ -13,6 +13,8 @@ from dateutil import tz
 from sqlalchemy import select
 from sqlalchemy.orm.session import Session
 
+from palace.util.log import LoggerMixin
+
 from palace.manager.core.exceptions import IntegrationException
 from palace.manager.core.external_list import TitleFromExternalList
 from palace.manager.core.selftest import HasSelfTests, SelfTestResult
@@ -32,7 +34,6 @@ from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.integration import IntegrationConfiguration
 from palace.manager.sqlalchemy.model.resource import HttpResponseTuple, Representation
 from palace.manager.sqlalchemy.util import get_one_or_create
-from palace.manager.util.log import LoggerMixin
 
 
 class NytBestSellerApiSettings(MetadataServiceSettings):

@@ -15,11 +15,12 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Session, relationship
 
+from palace.util.datetime_helpers import minute_timestamp
+
 from palace.manager.sqlalchemy.model.base import Base
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier, isbn_for_identifier
 from palace.manager.sqlalchemy.util import get_one_or_create
-from palace.manager.util.datetime_helpers import minute_timestamp
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Mapped

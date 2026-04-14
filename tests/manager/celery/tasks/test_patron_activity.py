@@ -3,6 +3,8 @@ from unittest.mock import MagicMock, create_autospec, patch
 import pytest
 from sqlalchemy.orm.exc import StaleDataError
 
+from palace.util.log import LogLevel
+
 from palace.manager.api.circulation.base import PatronActivityCirculationAPI
 from palace.manager.api.circulation.data import HoldInfo, LoanInfo
 from palace.manager.api.circulation.exceptions import PatronAuthorizationFailedException
@@ -12,7 +14,6 @@ from palace.manager.service.integration_registry.base import LookupException
 from palace.manager.service.integration_registry.license_providers import (
     LicenseProvidersRegistry,
 )
-from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.service.redis.models.patron_activity import (
     PatronActivity,
     PatronActivityStatus,

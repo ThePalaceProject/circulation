@@ -6,10 +6,11 @@ from unittest.mock import patch
 
 import pytest
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.core.config import Configuration
 from palace.manager.sqlalchemy.listeners import site_configuration_has_changed
 from palace.manager.sqlalchemy.model.coverage import Timestamp
-from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.search import WorkQueueIndexingFixture
 

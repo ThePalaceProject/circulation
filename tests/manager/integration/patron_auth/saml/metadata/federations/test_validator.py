@@ -3,6 +3,8 @@ import datetime
 import pytest
 from freezegun import freeze_time
 
+from palace.util.datetime_helpers import datetime_utc, utc_now
+
 import tests.mocks.saml_strings as fixtures
 from palace.manager.integration.patron_auth.saml.metadata.federations import incommon
 from palace.manager.integration.patron_auth.saml.metadata.federations.validator import (
@@ -11,7 +13,6 @@ from palace.manager.integration.patron_auth.saml.metadata.federations.validator 
     SAMLMetadataSignatureValidator,
 )
 from palace.manager.sqlalchemy.model.saml import SAMLFederation
-from palace.manager.util.datetime_helpers import datetime_utc, utc_now
 from tests.fixtures.files import FilesFixture
 
 SamlFilesFixture = FilesFixture("saml")

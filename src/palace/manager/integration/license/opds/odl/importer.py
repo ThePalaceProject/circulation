@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from pydantic import TypeAdapter
 
-from palace.manager.core.exceptions import PalaceValueError
+from palace.util.exceptions import PalaceValueError
+
 from palace.manager.integration.base import integration_settings_load
 from palace.manager.integration.license.opds.importer import OpdsImporter
 from palace.manager.integration.license.opds.odl.api import OPDS2WithODLApi

@@ -5,6 +5,8 @@ from flask import Response
 from freezegun import freeze_time
 from sqlalchemy.orm.exc import StaleDataError
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.api.controller.odl_notification import ODLNotificationController
 from palace.manager.api.problem_details import (
     INVALID_LOAN_FOR_ODL_NOTIFICATION,
@@ -16,7 +18,6 @@ from palace.manager.integration.license.opds.odl.api import OPDS2WithODLApi
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.licensing import License
 from palace.manager.sqlalchemy.model.patron import Loan, Patron
-from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.flask import FlaskAppFixture
 from tests.fixtures.odl import OPDS2WithODLApiFixture

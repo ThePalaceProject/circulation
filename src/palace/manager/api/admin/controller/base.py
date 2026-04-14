@@ -6,6 +6,8 @@ from typing import TYPE_CHECKING, Any
 
 import flask
 
+from palace.util.log import LoggerMixin
+
 from palace.manager.api.admin.exceptions import AdminNotAuthorized
 from palace.manager.api.admin.password_admin_authentication_provider import (
     PasswordAdminAuthenticationProvider,
@@ -20,7 +22,6 @@ from palace.manager.api.admin.util.flask import get_request_admin
 from palace.manager.sqlalchemy.model.admin import Admin, AdminRole
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.util import get_one, get_one_or_create
-from palace.manager.util.log import LoggerMixin
 from palace.manager.util.problem_detail import ProblemDetail
 
 if TYPE_CHECKING:

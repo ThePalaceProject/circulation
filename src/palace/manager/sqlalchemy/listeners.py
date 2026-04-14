@@ -8,6 +8,8 @@ from sqlalchemy import event, text
 from sqlalchemy.engine import Connection
 from sqlalchemy.orm import Mapper, Session
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.core.config import Configuration
 from palace.manager.core.query.coverage import EquivalencyCoverageQueries
 from palace.manager.sqlalchemy.before_flush_decorator import Listener, ListenerState
@@ -28,7 +30,6 @@ from palace.manager.sqlalchemy.model.work import (
     Work,
     add_work_to_customlists_for_collection,
 )
-from palace.manager.util.datetime_helpers import utc_now
 
 site_configuration_has_changed_lock = RLock()
 

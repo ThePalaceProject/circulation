@@ -6,6 +6,8 @@ from typing import TYPE_CHECKING, NamedTuple
 
 from lxml import etree
 
+from palace.util.exceptions import BasePalaceException
+
 from palace.manager.api.circulation.exceptions import (
     AlreadyCheckedOut,
     CannotFulfill,
@@ -23,7 +25,6 @@ from palace.manager.api.circulation.exceptions import (
     PatronLoanLimitReached,
     RemoteInitiatedServerError,
 )
-from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.util.http.exception import BadResponseException
 from palace.manager.util.problem_detail import BaseProblemDetailException, ProblemDetail
 

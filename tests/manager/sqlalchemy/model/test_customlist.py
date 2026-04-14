@@ -1,5 +1,7 @@
 import pytest
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.sqlalchemy.model.customlist import (
     CustomList,
     CustomListEntry,
@@ -7,7 +9,6 @@ from palace.manager.sqlalchemy.model.customlist import (
 )
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.util import get_one_or_create
-from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.search import WorkQueueIndexingFixture
 

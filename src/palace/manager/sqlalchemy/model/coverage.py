@@ -21,10 +21,11 @@ from sqlalchemy.orm import Mapped, relationship
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import and_, literal, literal_column, or_
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.sqlalchemy.bulk_operation import SessionBulkOperation
 from palace.manager.sqlalchemy.model.base import Base
 from palace.manager.sqlalchemy.util import get_one, get_one_or_create
-from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.sentinel import SentinelType
 
 if TYPE_CHECKING:

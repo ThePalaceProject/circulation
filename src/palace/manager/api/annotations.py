@@ -4,6 +4,8 @@ import os
 from flask import url_for
 from pyld import jsonld
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.api.problem_details import (
     INVALID_ANNOTATION_FORMAT,
     INVALID_ANNOTATION_MOTIVATION,
@@ -12,7 +14,6 @@ from palace.manager.api.problem_details import (
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.patron import Annotation
 from palace.manager.sqlalchemy.util import get_one_or_create
-from palace.manager.util.datetime_helpers import utc_now
 
 
 def load_document(url, *args, **kargs):

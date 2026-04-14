@@ -10,8 +10,10 @@ import feedparser
 from pydantic import ValidationError
 from requests import Response
 
+from palace.util.exceptions import PalaceValueError
+
 from palace.manager.api.model.token import OAuthTokenResponse
-from palace.manager.core.exceptions import IntegrationException, PalaceValueError
+from palace.manager.core.exceptions import IntegrationException
 from palace.manager.integration.license.opds.exception import OpdsResponseException
 from palace.manager.opds.authentication import AuthenticationDocument
 from palace.manager.opds.opds2 import PublicationFeedNoValidation

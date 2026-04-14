@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import random
 
-from palace.manager.core.exceptions import PalaceValueError
+from palace.util.exceptions import PalaceValueError
 
 
 def exponential_backoff(

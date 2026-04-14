@@ -3,7 +3,8 @@ import logging
 from onelogin.saml2.idp_metadata_parser import OneLogin_Saml2_IdPMetadataParser
 from onelogin.saml2.xmlparser import tostring
 
-from palace.manager.core.exceptions import BasePalaceException
+from palace.util.exceptions import BasePalaceException
+
 from palace.manager.integration.patron_auth.saml.metadata.federations.validator import (
     SAMLFederatedMetadataValidator,
 )

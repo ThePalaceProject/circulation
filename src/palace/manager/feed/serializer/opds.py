@@ -9,6 +9,8 @@ from typing import Any, cast
 from frozendict import frozendict
 from lxml import etree
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.core.user_profile import ProfileController
 from palace.manager.feed.serializer.base import SerializerInterface
 from palace.manager.feed.types import (
@@ -29,7 +31,6 @@ from palace.manager.feed.types import (
     WorkEntryData,
 )
 from palace.manager.sqlalchemy.constants import EditionConstants, LinkRelations
-from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.opds_writer import AtomFeed, OPDSFeed, OPDSMessage
 
 TAG_MAPPING = {

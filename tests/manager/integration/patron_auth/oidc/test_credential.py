@@ -8,11 +8,12 @@ from unittest.mock import Mock
 
 import pytest
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.integration.patron_auth.oidc.auth import OIDCRefreshTokenError
 from palace.manager.integration.patron_auth.oidc.credential import OIDCCredentialManager
 from palace.manager.sqlalchemy.model.credential import Credential
 from palace.manager.sqlalchemy.model.datasource import DataSource
-from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 
 
