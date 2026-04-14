@@ -1,49 +1,71 @@
 # palace-opds
 
-Pydantic models for the OPDS / Readium specifications used across [Palace
-Project](https://thepalaceproject.org) Python packages — OPDS 2.0, Readium Web Publication
-Manifest, ODL, LCP, Authentication for OPDS, plus Palace-specific extensions. Lives in the
-`palace.opds` namespace.
+Pydantic models for the [OPDS](https://opds.io/) and [Readium](https://readium.org/) family of
+specifications used in digital-library publishing — read, validate, and emit feed and license
+documents with type-safe Python objects.
 
-This package exists so that the OPDS schema models — which are inherently shared between the
-Palace Manager application, ingestion tools, and any other Palace service that talks OPDS — can be
-depended on without pulling in the heavier `palace-manager` application (databases, Flask, Celery,
-and friends). Packages that need to parse, validate, or emit OPDS payloads depend on `palace-opds`
-directly; `palace-manager` is also just a consumer.
+## What's covered
 
-## Scope
+- **OPDS 2.0** publication and feed documents, including facets, navigation groups, and
+  publication groups.
+- **Readium Web Publication Manifest (RWPM)** — link models, presentation hints,
+  encryption metadata.
+- **OPDS for Distributors / Authentication for OPDS 1.0** — authentication documents and
+  link relations.
+- **ODL 1.0** (Open Distribution to Libraries) — license metadata, terms, protection,
+  loan/checkout status.
+- **LCP** (Readium Licensed Content Protection) — license documents and loan-status
+  (LSD) documents.
+- **W3C accessibility metadata** and **schema.org publication vocabulary** for the slices
+  that OPDS feeds reference.
+- **Palace-specific extensions** to the publication metadata vocabulary (under
+  `palace.opds.palace`) — these can be safely ignored if you don't need them.
 
-`palace-opds` sits near the bottom of the Palace dependency graph alongside `palace-util`: **other
-Palace packages depend on `palace-opds`; `palace-opds` depends only on `palace-util` (no other
-`palace-*` package).** This is a hard rule — introducing a dependency on `palace-manager` (or any
-other downstream Palace package) defeats the whole point of extracting the package.
+## Installation
 
-If a model is only useful inside the Palace Manager application, it does not belong here — keep it
-under `src/palace/manager/`. Candidates for `palace-opds` should be:
+```bash
+pip install palace-opds   # or: uv add palace-opds
+```
 
-- **Faithful to a published spec or widely-shared OPDS extension.** Models in this package
-  describe formats that are exchanged across system boundaries, so they have an external contract
-  and should change carefully.
-- **Reusable** outside the manager application (e.g., by other Palace services, ingestion CLIs,
-  or future extracted packages).
-- **Runtime-dependency-light** — only the validation/serialization libraries that the OPDS models
-  genuinely need (Pydantic, pydantic-xml, pycountry, uritemplate). Anything that would drag in
-  Flask, SQLAlchemy, boto3, Celery, or similar heavyweights does not belong here.
-- **Workspace-internal palace deps only via `palace-util`** — see the hard rule above.
-- **Stable** enough that the wider ecosystem can rely on it without expecting frequent breaking
-  changes.
+Requires Python 3.12+.
 
-## Stability
+## Quick example
 
-Versioned alongside the rest of the monorepo via `dunamai` at build time. The API is considered
-internal-to-Palace for now: breaking changes are allowed but should be called out in commit
-messages and ideally coordinated with consumers.
+```python
+from palace.opds.opds2 import PublicationFeed
 
-## Development
+feed = PublicationFeed.model_validate_json(raw_feed_bytes)
+for publication in feed.publications:
+    print(publication.metadata.title, publication.metadata.identifier)
+```
 
-This package is a [`uv` workspace](https://docs.astral.sh/uv/concepts/projects/workspaces/) member
-of the main [`circulation`](../../README.md) repository. Work on it from the repo root — `uv sync`
-picks up all workspace members automatically; `tox -e py312-docker` runs the full test suite.
-Tests for this package live at the repository root under `tests/palace_opds/` (workspace-member
-tests are kept under the root `tests/` tree so they share the repo's pytest fixtures and conftest
-plugins).
+Models live under the `palace.opds` namespace and follow Pydantic v2 conventions, so they
+serialize to/from JSON and dictionaries with `.model_dump()` / `.model_validate()`.
+
+## Design
+
+- **Spec-faithful**, not opinionated. Where the OPDS / Readium specs allow flexibility, the
+  models accept it; we don't impose application-specific constraints.
+- **Lean dependencies.** Only the validation and serialization libraries the models actually
+  need (`pydantic`, `pycountry`, `uritemplate`) — no web framework, ORM, or cloud SDK is
+  pulled in transitively.
+- **Stable, documented breakage.** Breaking changes follow semver and are called out in
+  release notes; minor releases are additive.
+
+## Project context
+
+`palace-opds` is developed and maintained as part of the [Palace
+Project](https://thepalaceproject.org), where it powers OPDS ingestion and feed generation
+for the [Palace Manager](https://github.com/ThePalaceProject/circulation) digital-library
+backend. It's published as a standalone package because the OPDS specs are widely shared —
+other library systems, ingestion pipelines, or research tools that work with OPDS feeds can
+use these models without taking on Palace Manager as a dependency.
+
+Outside contributions and bug reports are welcome via the
+[ThePalaceProject/circulation](https://github.com/ThePalaceProject/circulation) repository,
+where this package is developed as a [`uv`
+workspace](https://docs.astral.sh/uv/concepts/projects/workspaces/) member.
+
+## License
+
+Apache 2.0.
