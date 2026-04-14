@@ -94,7 +94,7 @@ dependencies = [
     "redmail>=0.6.0,<0.7",
     "requests>=2.29,<3",
     "simpleeval>=1.0.3,<2",
-    "sqlalchemy[mypy]>=1.4,<2",
+    "sqlalchemy[mypy]>=2.0.49,<3",
     "tenacity>=9.0.0,<10",
     "textblob==0.20.0",
     "types-pyopenssl>=24.0.0.20240130,<25",
