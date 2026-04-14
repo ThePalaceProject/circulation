@@ -2228,7 +2228,6 @@ dev = [
 
 [[package]]
 name = "palace-opds"
-version = "0"
 source = { editable = "packages/palace-opds" }
 dependencies = [
     { name = "palace-util" },
@@ -2247,7 +2246,6 @@ requires-dist = [
 
 [[package]]
 name = "palace-util"
-version = "0"
 source = { editable = "packages/palace-util" }
 dependencies = [
     { name = "python-dateutil" },

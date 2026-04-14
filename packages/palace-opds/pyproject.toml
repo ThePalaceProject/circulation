@@ -11,11 +11,11 @@ dependencies = [
     "uritemplate==4.2.0",
 ]
 description = "Pydantic models for OPDS 2.0, RWPM, ODL, LCP, and Palace Project extensions."
+dynamic = ["version"]
 license = "Apache-2.0"
 name = "palace-opds"
 readme = "README.md"
 requires-python = ">=3.12,<4"
-version = "0"
 
 [project.urls]
 Homepage = "https://thepalaceproject.org"
@@ -23,6 +23,9 @@ Repository = "https://github.com/ThePalaceProject/circulation"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/palace"]
+
+[tool.hatch.version]
+path = "src/palace/opds/_version.py"
 
 [tool.isort]
 combine_as_imports = true
