@@ -5,8 +5,6 @@ from typing import Literal, Self, overload
 from pydantic import model_validator
 from sqlalchemy.orm import Session
 
-from palace.util.datetime_helpers import utc_now
-
 from palace.manager.data_layer.base.mutable import BaseMutableData
 from palace.manager.data_layer.format import FormatData
 from palace.manager.data_layer.license import LicenseData

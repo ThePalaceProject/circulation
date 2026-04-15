@@ -1,9 +1,5 @@
 import datetime
 
-from freezegun import freeze_time
-
-from palace.util.datetime_helpers import utc_now
-
 from palace.manager.data_layer.measurement import MeasurementData
 
 

@@ -8,7 +8,6 @@ from pydantic import Field, field_validator, model_validator
 from sqlalchemy import and_
 from sqlalchemy.orm import Query, Session
 
-from palace.util.datetime_helpers import utc_now
 from palace.util.exceptions import PalaceValueError
 
 from palace.manager.core.classifier import NO_NUMBER, NO_VALUE
