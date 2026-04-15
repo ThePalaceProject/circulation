@@ -2233,7 +2233,7 @@ source = { editable = "packages/palace-opds" }
 dependencies = [
     { name = "palace-util" },
     { name = "pycountry" },
-    { name = "pydantic", extra = ["email"] },
+    { name = "pydantic" },
     { name = "uritemplate" },
 ]
 
@@ -2241,7 +2241,7 @@ dependencies = [
 requires-dist = [
     { name = "palace-util", editable = "packages/palace-util" },
     { name = "pycountry", specifier = ">=26.2.16,<27" },
-    { name = "pydantic", extras = ["email"], specifier = ">=2.12,<3" },
+    { name = "pydantic", specifier = ">=2.12,<3" },
     { name = "uritemplate", specifier = "==4.2.0" },
 ]
 

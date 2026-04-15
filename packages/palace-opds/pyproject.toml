@@ -7,7 +7,7 @@ authors = [{name = "The Palace Project", email = "info@thepalaceproject.org"}]
 dependencies = [
     "palace-util",
     "pycountry>=26.2.16,<27",
-    "pydantic[email]>=2.12,<3",
+    "pydantic>=2.12,<3",
     "uritemplate==4.2.0",
 ]
 description = "Pydantic models for OPDS 2.0, RWPM, ODL, LCP, and Palace Project extensions."
