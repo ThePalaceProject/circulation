@@ -193,7 +193,7 @@ class PatronAuthServicesController(
             mimetype="application/json",
         )
 
-    def process_delete(self, service_id: int) -> Response | ProblemDetail:
+    def process_delete(self, service_id: int | str) -> Response | ProblemDetail:
         self.require_system_admin()
         try:
             sid = int(service_id) if isinstance(service_id, str) else service_id
