@@ -2177,7 +2177,7 @@ requires-dist = [
     { name = "redmail", specifier = ">=0.6.0,<0.7" },
     { name = "requests", specifier = ">=2.29,<3" },
     { name = "simpleeval", specifier = ">=1.0.3,<2" },
-    { name = "sqlalchemy", extras = ["mypy"], specifier = ">=1.4,<2" },
+    { name = "sqlalchemy", extras = ["mypy"], specifier = ">=1.4.54,<2" },
     { name = "tenacity", specifier = ">=9.0.0,<10" },
     { name = "textblob", specifier = "==0.20.0" },
     { name = "types-pyopenssl", specifier = ">=24.0.0.20240130,<25" },
