@@ -8,11 +8,11 @@ dependencies = [
     "python-dateutil>=2.8,<3",
 ]
 description = "Shared utilities for Palace Project packages."
+dynamic = ["version"]
 license = "Apache-2.0"
 name = "palace-util"
 readme = "README.md"
 requires-python = ">=3.12,<4"
-version = "0"
 
 [project.urls]
 Homepage = "https://thepalaceproject.org"
@@ -20,6 +20,9 @@ Repository = "https://github.com/ThePalaceProject/circulation"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/palace"]
+
+[tool.hatch.version]
+path = "src/palace/util/_version.py"
 
 [tool.isort]
 combine_as_imports = true
