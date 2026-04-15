@@ -27,10 +27,8 @@ RUN uv sync --frozen --no-dev --no-install-workspace
 
 COPY --chown=palace:palace . /var/www/circulation
 
-# Install the project itself as a non-editable install. Omitting
-# --no-install-project (and passing --no-editable) is the recommended
-# pattern for production Docker builds with uv.
-RUN uv sync --frozen --no-dev --no-editable
+# Install the project itself as an editable install.
+RUN uv sync --frozen --no-dev
 
 ###############################################################################
 ## Circ-exec Image
