@@ -39,7 +39,7 @@ dev = [
 [project]
 authors = [{name = "The Palace Project", email = "info@thepalaceproject.org"}]
 dependencies = [
-    "alembic[tz]>=1.8.1,<2",
+    "alembic[tz]>=1.18.4,<2",
     "annotated-types>=0.7.0,<0.8",
     "authlib>=1.6.6,<2",
     "aws-xray-sdk>=2.15,<2.16",
