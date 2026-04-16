@@ -416,8 +416,8 @@ class OverdriveAPI(
         if error:
             message = library.get("message")
             raise CannotLoadConfiguration(
-                "Overdrive credentials are valid but could not fetch library: %s"
-                % message
+                f"Overdrive credentials are valid but could not fetch library: {message}"
+                f' - collection: "{self.collection.name}"'
             )
         token = cast(str, library["collectionToken"])
         self._cached_collection_token = OverdriveToken(
