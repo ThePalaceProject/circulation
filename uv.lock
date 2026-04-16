@@ -2162,7 +2162,7 @@ requires-dist = [
     { name = "pycryptodome", specifier = ">=3.18,<4" },
     { name = "pydantic", extras = ["email"], specifier = ">=2.12.5,<3" },
     { name = "pydantic-settings", specifier = ">=2.5.2,<3" },
-    { name = "pydantic-xml", specifier = ">=2.17.0,<3" },
+    { name = "pydantic-xml", specifier = ">=2.20.0,<3" },
     { name = "pyinstrument", specifier = ">=5.0,<6" },
     { name = "pyjwt", specifier = ">=2.8,<3" },
     { name = "pyld", specifier = "==3.0.0" },
@@ -2646,15 +2646,15 @@ wheels = [
 
 [[package]]
 name = "pydantic-xml"
-version = "2.19.0"
+version = "2.20.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pydantic" },
     { name = "pydantic-core" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/b8/cb/5f80b61d73a8d6171ee4611bfd2b944c036c6f6e5f6e01d9fb02f29d7bfc/pydantic_xml-2.19.0.tar.gz", hash = "sha256:b7acba5a0966cbbbc9bf88d0d870b2bc875da063fe1bbe62d83939b549224730", size = 26228, upload-time = "2026-02-14T17:33:53.368Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/cf/ab/5589aac52a5601bc91122625043034898c66fbe9fedce6785bfc6ef6e69e/pydantic_xml-2.20.0.tar.gz", hash = "sha256:38eb71fb66c05c31c632a50e964c273f67dafddc5aa7c64cd6bd2b487dc2eeaf", size = 26440, upload-time = "2026-04-11T21:24:23.967Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/27/2d/dce0dc471fade04829c2948462d79c9bc4991305b0f73889f70c9645e540/pydantic_xml-2.19.0-py3-none-any.whl", hash = "sha256:42854bf962758bec338c112c2de984723708262793e108416f33aa4d6c11b3b4", size = 42536, upload-time = "2026-02-14T17:33:54.206Z" },
+    { url = "https://files.pythonhosted.org/packages/7d/e0/e0baac028479a09b2b46d09c8f0b2a32d4991e7c7bd13c544e64c6ff86d0/pydantic_xml-2.20.0-py3-none-any.whl", hash = "sha256:b492819830ff368124c9f8b53ea23953373422eebded2393e9d99008a086e07a", size = 42882, upload-time = "2026-04-11T21:24:25.096Z" },
 ]
 
 [[package]]
