@@ -1,6 +1,7 @@
 import json
 import re
 import typing
+from enum import StrEnum
 from functools import cached_property
 from typing import Protocol, Self, overload
 from urllib.parse import quote_plus
@@ -495,3 +496,97 @@ class PatronInformation(BaseOverdriveModel):
         default_factory=dict, alias="linkTemplates"
     )
     actions: list[dict[str, Action]] = Field(default_factory=list)
+
+
+class LibraryResponse(BaseOverdriveModel):
+    """
+    Response from the Overdrive library endpoint.
+
+    See: https://developer.overdrive.com/apis/library
+
+    A successful response contains a ``collectionToken`` and optionally
+    a ``links`` dict (which may include an ``advantageAccounts`` entry).
+    An error response contains an ``errorCode`` and ``message`` instead.
+    """
+
+    collection_token: str | None = Field(None, alias="collectionToken")
+    links: dict[str, Link] = Field(default_factory=dict)
+    error_code: str | None = Field(None, alias="errorCode")
+    message: str | None = None
+
+    @property
+    def advantage_accounts_url(self) -> str | None:
+        """Return the href for the advantageAccounts link, or None if absent."""
+        link = self.links.get("advantageAccounts")
+        return link.href if link else None
+
+
+class AdvantageAccountEntry(BaseOverdriveModel):
+    """
+    A single Overdrive Advantage account entry within an advantage accounts response.
+
+    See: https://developer.overdrive.com/apis/advantage-accounts
+    """
+
+    id: int
+    name: str
+    collection_token: str = Field(..., alias="collectionToken")
+
+
+class AdvantageAccountsResponse(BaseOverdriveModel):
+    """
+    Response from the Overdrive advantage accounts endpoint.
+
+    See: https://developer.overdrive.com/apis/advantage-accounts
+    """
+
+    id: int
+    advantage_accounts: list[AdvantageAccountEntry] = Field(
+        default_factory=list, alias="advantageAccounts"
+    )
+
+
+class AvailabilityType(StrEnum):
+    """Availability type for a title in an Overdrive collection."""
+
+    NORMAL = "Normal"
+    ALWAYS_AVAILABLE = "AlwaysAvailable"
+    LIMITED_AVAILABILITY = "LimitedAvailability"
+
+
+class AvailabilityAccount(BaseOverdriveModel):
+    """
+    Per-library copy availability within an Overdrive availability document.
+
+    See: https://developer.overdrive.com/apis/library-availability-new
+    """
+
+    id: int
+    copies_owned: NonNegativeInt = Field(0, alias="copiesOwned")
+    copies_available: NonNegativeInt = Field(0, alias="copiesAvailable")
+    shared: bool = False
+
+
+class Availability(BaseOverdriveModel):
+    """
+    Availability information for a single title.
+
+    This model is used for both successful availability responses and error
+    responses (e.g. ``errorCode: "NotFound"``). Because error responses do not
+    include ``reserveId``, that field is optional. Callers that receive an error
+    response must supply the book ID from context via the ``book_id`` parameter
+    of :meth:`OverdriveRepresentationExtractor.book_info_to_circulation`.
+
+    See: https://developer.overdrive.com/apis/library-availability-new
+    """
+
+    reserve_id: str | None = Field(None, alias="reserveId")
+    accounts: list[AvailabilityAccount] = Field(default_factory=list)
+    availability_type: AvailabilityType | None = Field(None, alias="availabilityType")
+    available: bool = False
+    copies_available: NonNegativeInt | None = Field(None, alias="copiesAvailable")
+    copies_owned: NonNegativeInt | None = Field(None, alias="copiesOwned")
+    number_of_holds: NonNegativeInt = Field(0, alias="numberOfHolds")
+    is_owned_by_collections: bool | None = Field(None, alias="isOwnedByCollections")
+    error_code: str | None = Field(None, alias="errorCode")
+    links: dict[str, Link] = Field(default_factory=dict)

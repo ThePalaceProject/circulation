@@ -28,12 +28,18 @@ from palace.manager.integration.license.overdrive.exception import (
 from palace.manager.integration.license.overdrive.model import (
     Action,
     ActionField,
+    AdvantageAccountEntry,
+    AdvantageAccountsResponse,
+    Availability,
+    AvailabilityAccount,
+    AvailabilityType,
     Checkout,
     Checkouts,
     ErrorResponse,
     Format,
     Hold,
     Holds,
+    LibraryResponse,
     LinkTemplate,
     PatronInformation,
 )
@@ -600,3 +606,180 @@ class TestPatronInformation:
 
         assert "checkouts" in patron_information.links
         assert "search" in patron_information.link_templates
+
+
+class TestAvailability:
+    def test_normal_availability(
+        self, overdrive_files_fixture: OverdriveFilesFixture
+    ) -> None:
+        availability = Availability.model_validate_json(
+            overdrive_files_fixture.sample_data(
+                "overdrive_availability_information.json"
+            )
+        )
+
+        assert availability.reserve_id == "2a005d55-a417-4053-b90d-7a38ca6d2065"
+        assert availability.availability_type == AvailabilityType.NORMAL
+        assert availability.available is False
+        assert availability.copies_available == 1
+        assert availability.copies_owned == 5
+        assert availability.number_of_holds == 0
+        assert availability.error_code is None
+        assert availability.is_owned_by_collections is None
+        assert len(availability.accounts) == 1
+
+        account = availability.accounts[0]
+        assert account.id == -1
+        assert account.copies_available == 1
+        assert account.copies_owned == 5
+        assert account.shared is False
+
+        assert "self" in availability.links
+
+    def test_availability_with_holds(
+        self, overdrive_files_fixture: OverdriveFilesFixture
+    ) -> None:
+        availability = Availability.model_validate_json(
+            overdrive_files_fixture.sample_data(
+                "overdrive_availability_information_holds.json"
+            )
+        )
+
+        assert availability.number_of_holds == 10
+        assert availability.copies_available == 0
+        assert availability.copies_owned == 5
+
+    def test_advantage_availability(
+        self, overdrive_files_fixture: OverdriveFilesFixture
+    ) -> None:
+        availability = Availability.model_validate_json(
+            overdrive_files_fixture.sample_data("overdrive_availability_advantage.json")
+        )
+
+        assert availability.available is True
+        assert len(availability.accounts) == 3
+
+        accounts_by_id = {a.id: a for a in availability.accounts}
+        assert accounts_by_id[61].copies_owned == 1
+        assert accounts_by_id[61].copies_available == 1
+        assert accounts_by_id[61].shared is False
+        assert accounts_by_id[63].copies_owned == 8
+        assert accounts_by_id[63].copies_available == 8
+        assert accounts_by_id[63].shared is True
+        assert accounts_by_id[-1].copies_owned == 2
+        assert accounts_by_id[-1].copies_available == 2
+
+    def test_not_found_error(
+        self, overdrive_files_fixture: OverdriveFilesFixture
+    ) -> None:
+        # A NotFound error response has no reserveId or accounts — it parses
+        # cleanly with all availability fields defaulted.
+        availability = Availability.model_validate_json(
+            overdrive_files_fixture.sample_data("overdrive_availability_not_found.json")
+        )
+
+        assert availability.reserve_id is None
+        assert availability.error_code == "NotFound"
+        assert availability.accounts == []
+        assert availability.copies_owned is None
+        assert availability.copies_available is None
+
+    def test_availability_type_enum(self) -> None:
+        for value in ("Normal", "AlwaysAvailable", "LimitedAvailability"):
+            availability = Availability.model_validate(
+                {"reserveId": "abc", "availabilityType": value}
+            )
+            assert availability.availability_type == AvailabilityType(value)
+
+    def test_availability_account_defaults(self) -> None:
+        account = AvailabilityAccount.model_validate({"id": 5})
+        assert account.copies_owned == 0
+        assert account.copies_available == 0
+        assert account.shared is False
+
+
+class TestLibraryResponse:
+    def test_successful_response(self) -> None:
+        """A successful response with a collectionToken and links parses correctly."""
+        library = LibraryResponse.model_validate(
+            {
+                "collectionToken": "abc123",
+                "links": {
+                    "advantageAccounts": {
+                        "href": "https://example.com/advantageAccounts",
+                        "type": "application/json",
+                    }
+                },
+            }
+        )
+
+        assert library.collection_token == "abc123"
+        assert library.error_code is None
+        assert library.message is None
+        assert library.advantage_accounts_url == "https://example.com/advantageAccounts"
+
+    def test_no_links(self) -> None:
+        """A response with no links returns None for advantage_accounts_url."""
+        library = LibraryResponse.model_validate({"collectionToken": "token"})
+
+        assert library.collection_token == "token"
+        assert library.links == {}
+        assert library.advantage_accounts_url is None
+
+    def test_error_response(self) -> None:
+        """An error response parses errorCode and message correctly."""
+        library = LibraryResponse.model_validate(
+            {"errorCode": "NotFound", "message": "Library not found"}
+        )
+
+        assert library.error_code == "NotFound"
+        assert library.message == "Library not found"
+        assert library.collection_token is None
+        assert library.advantage_accounts_url is None
+
+    def test_advantage_accounts_url_missing_key(self) -> None:
+        """Links dict without an advantageAccounts key returns None."""
+        library = LibraryResponse.model_validate(
+            {
+                "collectionToken": "tok",
+                "links": {"self": {"href": "https://example.com", "type": "text/html"}},
+            }
+        )
+
+        assert library.advantage_accounts_url is None
+
+
+class TestAdvantageAccountsResponse:
+    def test_from_json_fixture(
+        self, overdrive_files_fixture: OverdriveFilesFixture
+    ) -> None:
+        """Parse the advantage_accounts.json fixture into the pydantic model."""
+        response = AdvantageAccountsResponse.model_validate_json(
+            overdrive_files_fixture.sample_data("advantage_accounts.json")
+        )
+
+        assert response.id == 1225
+        assert len(response.advantage_accounts) == 2
+
+        by_id = {a.id: a for a in response.advantage_accounts}
+        assert by_id[3].name == "The Other Side of Town Library"
+        assert by_id[3].collection_token == "v1L2B2gAAAK8BAAA1x"
+        assert by_id[9].name == "The Common Community Library"
+        assert by_id[9].collection_token == "v1L2B2gAAAKoBAAA1B"
+
+    def test_empty_advantage_accounts(self) -> None:
+        """An advantage accounts response with no accounts defaults to empty list."""
+        response = AdvantageAccountsResponse.model_validate({"id": 42})
+
+        assert response.id == 42
+        assert response.advantage_accounts == []
+
+    def test_advantage_account_entry(self) -> None:
+        """AdvantageAccountEntry parses id, name, and collectionToken."""
+        entry = AdvantageAccountEntry.model_validate(
+            {"id": 7, "name": "My Library", "collectionToken": "tok789"}
+        )
+
+        assert entry.id == 7
+        assert entry.name == "My Library"
+        assert entry.collection_token == "tok789"

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from collections.abc import Generator
 from typing import Self
 
@@ -10,6 +9,7 @@ from sqlalchemy.orm import Session
 from palace.manager.integration.base import integration_settings_update
 from palace.manager.integration.goals import Goals
 from palace.manager.integration.license.overdrive.constants import OVERDRIVE_LABEL
+from palace.manager.integration.license.overdrive.model import AdvantageAccountsResponse
 from palace.manager.integration.license.overdrive.settings import OverdriveChildSettings
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.integration import IntegrationConfiguration
@@ -35,7 +35,7 @@ class OverdriveAdvantageAccount:
         self.token = token
 
     @classmethod
-    def from_representation(cls, content: str) -> Generator[Self]:
+    def from_representation(cls, content: str | bytes) -> Generator[Self]:
         """Turn the representation of an advantageAccounts link into a list of
         OverdriveAdvantageAccount objects.
 
@@ -43,20 +43,14 @@ class OverdriveAdvantageAccount:
             link.
         :yield: A sequence of OverdriveAdvantageAccount objects.
         """
-        data = json.loads(content)
-        parent_id = str(data.get("id"))
-        accounts = data.get("advantageAccounts", {})
-        for account in accounts:
-            name = account["name"]
-            products_link = account["links"]["products"]["href"]
-            library_id = str(account.get("id"))
-            name = account.get("name")
-            token = account.get("collectionToken")
+        data = AdvantageAccountsResponse.model_validate_json(content)
+        parent_id = str(data.id)
+        for account in data.advantage_accounts:
             yield cls(
                 parent_library_id=parent_id,
-                library_id=library_id,
-                name=name,
-                token=token,
+                library_id=str(account.id),
+                name=account.name,
+                token=account.collection_token,
             )
 
     def to_collection(self, _db: Session) -> tuple[Collection, Collection]:

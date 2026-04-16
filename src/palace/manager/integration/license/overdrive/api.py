@@ -7,7 +7,7 @@ from collections.abc import Generator, Iterable
 from dataclasses import dataclass
 from functools import partial
 from threading import RLock
-from typing import Any, NamedTuple, Unpack, cast, overload
+from typing import Any, NamedTuple, Unpack, overload
 from urllib.parse import urlsplit
 
 import flask
@@ -80,6 +80,7 @@ from palace.manager.integration.license.overdrive.fulfillment import (
     OverdriveManifestFulfillment,
 )
 from palace.manager.integration.license.overdrive.model import (
+    Availability,
     BaseOverdriveModel,
     Checkout,
     Checkouts,
@@ -87,6 +88,7 @@ from palace.manager.integration.license.overdrive.model import (
     Format,
     Hold as HoldResponse,
     Holds as HoldsResponse,
+    LibraryResponse,
     PatronInformation,
     PatronRequestCallable,
     _overdrive_field_request,
@@ -412,19 +414,21 @@ class OverdriveAPI(
             return cached.token
 
         library = self.get_library()
-        error = library.get("errorCode")
-        if error:
-            message = library.get("message")
+        if library.error_code:
             raise CannotLoadConfiguration(
-                f"Overdrive credentials are valid but could not fetch library: {message}"
+                f"Overdrive credentials are valid but could not fetch library: {library.message}"
                 f' - collection: "{self.collection.name}"'
             )
-        token = cast(str, library["collectionToken"])
+        if library.collection_token is None:
+            raise CannotLoadConfiguration(
+                f"Overdrive library response missing collectionToken"
+                f' - collection: "{self.collection.name}"'
+            )
         self._cached_collection_token = OverdriveToken(
-            token=token,
+            token=library.collection_token,
             expires=utc_now() + self.COLLECTION_TOKEN_MAX_AGE,
         )
-        return token
+        return library.collection_token
 
     @property
     def data_source(self) -> DataSource:
@@ -556,7 +560,7 @@ class OverdriveAPI(
             endpoint = self.LIBRARY_ENDPOINT
         return self.endpoint(endpoint, **args)
 
-    def get_library(self) -> dict[str, Any]:
+    def get_library(self) -> LibraryResponse:
         """Get basic information about the collection, including
         a link to the titles in the collection.
 
@@ -574,7 +578,7 @@ class OverdriveAPI(
                 exception_handler=Representation.reraise_exception,
                 max_age=self.LIBRARY_MAX_AGE,
             )
-            return json.loads(representation.content)  # type: ignore[no-any-return]
+            return LibraryResponse.model_validate_json(representation.content)
 
     def get_advantage_accounts(self) -> Generator[OverdriveAdvantageAccount]:
         """Find all the Overdrive Advantage accounts managed by this library.
@@ -586,14 +590,10 @@ class OverdriveAPI(
         :yield: A sequence of OverdriveAdvantageAccount objects.
         """
         library = self.get_library()
-        links = library.get("links", {})
-        advantage = links.get("advantageAccounts")
-        if advantage:
+        advantage_url = library.advantage_accounts_url
+        if advantage_url:
             # This library has Overdrive Advantage accounts, or at
             # least a link where some may be found.
-            advantage_url = advantage.get("href")
-            if not advantage_url:
-                return
             representation, cached = Representation.get(
                 self._db,
                 advantage_url,
@@ -1744,25 +1744,34 @@ class OverdriveAPI(
                 status_code,
             )
             return None, None, False
-        book.update(json.loads(content))
 
-        # Update book_id now that we know we have new data.
-        book_id = book["id"]
+        availability = Availability.model_validate_json(content)
+
+        # Use the caller-provided ID for LicensePool lookup. This is always
+        # set because circulation_lookup creates dict(id=book_id) when called
+        # with a string, and book-list dicts always include "id".
+        resolved_book_id = book.get("id")
+        assert (
+            resolved_book_id is not None
+        ), f"Book dict missing required 'id' key: {book}"
+
         license_pool, is_new = LicensePool.for_foreign_id(
             self._db,
             DataSource.OVERDRIVE,
             Identifier.OVERDRIVE_ID,
-            cast(str, book_id),
+            resolved_book_id,
             collection=self.collection,
         )
         if is_new or not license_pool.work:
-            # Either this is the first time we've seen this book or its doesn't
+            # Either this is the first time we've seen this book or it doesn't
             # have an associated work. Make sure its identifier has bibliographic coverage.
             self.overdrive_bibliographic_coverage_provider.ensure_coverage(
                 license_pool.identifier, force=True
             )
 
-        return self.update_licensepool_with_book_info(book, license_pool, is_new)
+        return self.update_licensepool_with_book_info(
+            availability, resolved_book_id, license_pool, is_new
+        )
 
     # Alias for the CirculationAPI interface
     def update_availability(self, licensepool: LicensePool) -> None:
@@ -1780,18 +1789,26 @@ class OverdriveAPI(
         )
 
     def update_licensepool_with_book_info(
-        self, book: dict[str, Any], license_pool: LicensePool, is_new_pool: bool
+        self,
+        availability: Availability,
+        book_id: str,
+        license_pool: LicensePool,
+        is_new_pool: bool,
     ) -> tuple[LicensePool, bool, bool]:
-        """Update a book's LicensePool with information from a JSON
-        representation of its circulation info.
+        """Update a book's LicensePool with information from an availability document.
 
         Then, create an Edition and make sure it has bibliographic
         coverage. If the new Edition is the only candidate for the
         pool's presentation_edition, promote it to presentation
         status.
+
+        :param availability: The parsed Overdrive availability document.
+        :param book_id: The Overdrive product ID for this book.
+        :param license_pool: The LicensePool to update.
+        :param is_new_pool: Whether this is a newly created LicensePool.
         """
         extractor = OverdriveRepresentationExtractor(self)
-        circulation = extractor.book_info_to_circulation(book)
+        circulation = extractor.book_info_to_circulation(availability, book_id=book_id)
         lp, circulation_changed = circulation.apply(self._db, license_pool.collection)
         if lp is not None:
             license_pool = lp
