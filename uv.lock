@@ -2127,7 +2127,7 @@ requires-dist = [
     { name = "bcrypt", specifier = ">=5.0.0,<6" },
     { name = "bidict", specifier = ">=0.23.1,<0.24" },
     { name = "boto3", specifier = ">=1.28,<2" },
-    { name = "celery", extras = ["redis", "sqs", "tblib"], specifier = ">=5.3.6,<6" },
+    { name = "celery", extras = ["redis", "sqs", "tblib"], specifier = ">=5.6.3,<6" },
     { name = "certifi" },
     { name = "click", specifier = ">=8.1.3,<9" },
     { name = "croniter", specifier = ">=6.0.0,<7" },
