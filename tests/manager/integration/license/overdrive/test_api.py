@@ -45,6 +45,7 @@ from palace.manager.integration.license.overdrive.model import (
     Availability,
     Checkout,
     Format,
+    LibraryResponse,
     Link,
 )
 from palace.manager.integration.license.overdrive.representation import (
@@ -273,11 +274,10 @@ class TestOverdriveAPI:
         with patch.object(
             OverdriveAPI,
             "get_library",
-            return_value={
-                "errorCode": "Some error",
-                "message": "Some message.",
-                "token": "abc-def-ghi",
-            },
+            return_value=LibraryResponse(
+                errorCode="Some error",
+                message="Some message.",
+            ),
         ):
             # Just instantiating the API doesn't cause this error.
             api = OverdriveAPI(db.session, collection)
@@ -1555,7 +1555,9 @@ class TestOverdriveAPI:
 
     def test_collection_token(self, db: DatabaseTransactionFixture) -> None:
         api = OverdriveAPI(db.session, db.collection(protocol=OverdriveAPI))
-        mock_get_library = MagicMock(return_value={"collectionToken": "abc"})
+        mock_get_library = MagicMock(
+            return_value=LibraryResponse(collectionToken="abc")
+        )
         api.get_library = mock_get_library
 
         # Cache is empty on first access — get_library is called.
@@ -1576,8 +1578,8 @@ class TestOverdriveAPI:
         api = OverdriveAPI(db.session, db.collection(protocol=OverdriveAPI))
         mock_get_library = MagicMock(
             side_effect=[
-                {"collectionToken": "old-token"},
-                {"collectionToken": "new-token"},
+                LibraryResponse(collectionToken="old-token"),
+                LibraryResponse(collectionToken="new-token"),
             ]
         )
         api.get_library = mock_get_library
@@ -1600,7 +1602,9 @@ class TestOverdriveAPI:
         """An errorCode in the library response raises CannotLoadConfiguration."""
         api = OverdriveAPI(db.session, db.collection(protocol=OverdriveAPI))
         api.get_library = MagicMock(
-            return_value={"errorCode": "NotFound", "message": "bad credentials"}
+            return_value=LibraryResponse(
+                errorCode="NotFound", message="bad credentials"
+            )
         )
         with pytest.raises(CannotLoadConfiguration, match="bad credentials"):
             api.collection_token

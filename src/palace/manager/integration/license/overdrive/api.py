@@ -88,6 +88,7 @@ from palace.manager.integration.license.overdrive.model import (
     Format,
     Hold as HoldResponse,
     Holds as HoldsResponse,
+    LibraryResponse,
     PatronInformation,
     PatronRequestCallable,
     _overdrive_field_request,
@@ -413,19 +414,21 @@ class OverdriveAPI(
             return cached.token
 
         library = self.get_library()
-        error = library.get("errorCode")
-        if error:
-            message = library.get("message")
+        if library.error_code:
             raise CannotLoadConfiguration(
-                f"Overdrive credentials are valid but could not fetch library: {message}"
+                f"Overdrive credentials are valid but could not fetch library: {library.message}"
                 f' - collection: "{self.collection.name}"'
             )
-        token = cast(str, library["collectionToken"])
+        if library.collection_token is None:
+            raise CannotLoadConfiguration(
+                f"Overdrive library response missing collectionToken"
+                f' - collection: "{self.collection.name}"'
+            )
         self._cached_collection_token = OverdriveToken(
-            token=token,
+            token=library.collection_token,
             expires=utc_now() + self.COLLECTION_TOKEN_MAX_AGE,
         )
-        return token
+        return library.collection_token
 
     @property
     def data_source(self) -> DataSource:
@@ -557,7 +560,7 @@ class OverdriveAPI(
             endpoint = self.LIBRARY_ENDPOINT
         return self.endpoint(endpoint, **args)
 
-    def get_library(self) -> dict[str, Any]:
+    def get_library(self) -> LibraryResponse:
         """Get basic information about the collection, including
         a link to the titles in the collection.
 
@@ -575,7 +578,7 @@ class OverdriveAPI(
                 exception_handler=Representation.reraise_exception,
                 max_age=self.LIBRARY_MAX_AGE,
             )
-            return json.loads(representation.content)  # type: ignore[no-any-return]
+            return LibraryResponse.model_validate_json(representation.content)
 
     def get_advantage_accounts(self) -> Generator[OverdriveAdvantageAccount]:
         """Find all the Overdrive Advantage accounts managed by this library.
@@ -587,14 +590,10 @@ class OverdriveAPI(
         :yield: A sequence of OverdriveAdvantageAccount objects.
         """
         library = self.get_library()
-        links = library.get("links", {})
-        advantage = links.get("advantageAccounts")
-        if advantage:
+        advantage_url = library.advantage_accounts_url
+        if advantage_url:
             # This library has Overdrive Advantage accounts, or at
             # least a link where some may be found.
-            advantage_url = advantage.get("href")
-            if not advantage_url:
-                return
             representation, cached = Representation.get(
                 self._db,
                 advantage_url,

@@ -498,6 +498,54 @@ class PatronInformation(BaseOverdriveModel):
     actions: list[dict[str, Action]] = Field(default_factory=list)
 
 
+class LibraryResponse(BaseOverdriveModel):
+    """
+    Response from the Overdrive library endpoint.
+
+    See: https://developer.overdrive.com/apis/library
+
+    A successful response contains a ``collectionToken`` and optionally
+    a ``links`` dict (which may include an ``advantageAccounts`` entry).
+    An error response contains an ``errorCode`` and ``message`` instead.
+    """
+
+    collection_token: str | None = Field(None, alias="collectionToken")
+    links: dict[str, Link] = Field(default_factory=dict)
+    error_code: str | None = Field(None, alias="errorCode")
+    message: str | None = None
+
+    @property
+    def advantage_accounts_url(self) -> str | None:
+        """Return the href for the advantageAccounts link, or None if absent."""
+        link = self.links.get("advantageAccounts")
+        return link.href if link else None
+
+
+class AdvantageAccountEntry(BaseOverdriveModel):
+    """
+    A single Overdrive Advantage account entry within an advantage accounts response.
+
+    See: https://developer.overdrive.com/apis/advantage-accounts
+    """
+
+    id: int
+    name: str
+    collection_token: str = Field(..., alias="collectionToken")
+
+
+class AdvantageAccountsResponse(BaseOverdriveModel):
+    """
+    Response from the Overdrive advantage accounts endpoint.
+
+    See: https://developer.overdrive.com/apis/advantage-accounts
+    """
+
+    id: int
+    advantage_accounts: list[AdvantageAccountEntry] = Field(
+        default_factory=list, alias="advantageAccounts"
+    )
+
+
 class AvailabilityType(StrEnum):
     """Availability type for a title in an Overdrive collection."""
 

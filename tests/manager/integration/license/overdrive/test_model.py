@@ -28,6 +28,8 @@ from palace.manager.integration.license.overdrive.exception import (
 from palace.manager.integration.license.overdrive.model import (
     Action,
     ActionField,
+    AdvantageAccountEntry,
+    AdvantageAccountsResponse,
     Availability,
     AvailabilityAccount,
     AvailabilityType,
@@ -37,6 +39,7 @@ from palace.manager.integration.license.overdrive.model import (
     Format,
     Hold,
     Holds,
+    LibraryResponse,
     LinkTemplate,
     PatronInformation,
 )
@@ -693,3 +696,90 @@ class TestAvailability:
         assert account.copies_owned == 0
         assert account.copies_available == 0
         assert account.shared is False
+
+
+class TestLibraryResponse:
+    def test_successful_response(self) -> None:
+        """A successful response with a collectionToken and links parses correctly."""
+        library = LibraryResponse.model_validate(
+            {
+                "collectionToken": "abc123",
+                "links": {
+                    "advantageAccounts": {
+                        "href": "https://example.com/advantageAccounts",
+                        "type": "application/json",
+                    }
+                },
+            }
+        )
+
+        assert library.collection_token == "abc123"
+        assert library.error_code is None
+        assert library.message is None
+        assert library.advantage_accounts_url == "https://example.com/advantageAccounts"
+
+    def test_no_links(self) -> None:
+        """A response with no links returns None for advantage_accounts_url."""
+        library = LibraryResponse.model_validate({"collectionToken": "token"})
+
+        assert library.collection_token == "token"
+        assert library.links == {}
+        assert library.advantage_accounts_url is None
+
+    def test_error_response(self) -> None:
+        """An error response parses errorCode and message correctly."""
+        library = LibraryResponse.model_validate(
+            {"errorCode": "NotFound", "message": "Library not found"}
+        )
+
+        assert library.error_code == "NotFound"
+        assert library.message == "Library not found"
+        assert library.collection_token is None
+        assert library.advantage_accounts_url is None
+
+    def test_advantage_accounts_url_missing_key(self) -> None:
+        """Links dict without an advantageAccounts key returns None."""
+        library = LibraryResponse.model_validate(
+            {
+                "collectionToken": "tok",
+                "links": {"self": {"href": "https://example.com", "type": "text/html"}},
+            }
+        )
+
+        assert library.advantage_accounts_url is None
+
+
+class TestAdvantageAccountsResponse:
+    def test_from_json_fixture(
+        self, overdrive_files_fixture: OverdriveFilesFixture
+    ) -> None:
+        """Parse the advantage_accounts.json fixture into the pydantic model."""
+        response = AdvantageAccountsResponse.model_validate_json(
+            overdrive_files_fixture.sample_data("advantage_accounts.json")
+        )
+
+        assert response.id == 1225
+        assert len(response.advantage_accounts) == 2
+
+        by_id = {a.id: a for a in response.advantage_accounts}
+        assert by_id[3].name == "The Other Side of Town Library"
+        assert by_id[3].collection_token == "v1L2B2gAAAK8BAAA1x"
+        assert by_id[9].name == "The Common Community Library"
+        assert by_id[9].collection_token == "v1L2B2gAAAKoBAAA1B"
+
+    def test_empty_advantage_accounts(self) -> None:
+        """An advantage accounts response with no accounts defaults to empty list."""
+        response = AdvantageAccountsResponse.model_validate({"id": 42})
+
+        assert response.id == 42
+        assert response.advantage_accounts == []
+
+    def test_advantage_account_entry(self) -> None:
+        """AdvantageAccountEntry parses id, name, and collectionToken."""
+        entry = AdvantageAccountEntry.model_validate(
+            {"id": 7, "name": "My Library", "collectionToken": "tok789"}
+        )
+
+        assert entry.id == 7
+        assert entry.name == "My Library"
+        assert entry.collection_token == "tok789"
