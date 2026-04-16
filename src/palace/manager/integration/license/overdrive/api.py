@@ -7,7 +7,7 @@ from collections.abc import Generator, Iterable
 from dataclasses import dataclass
 from functools import partial
 from threading import RLock
-from typing import Any, NamedTuple, Unpack, cast, overload
+from typing import Any, NamedTuple, Unpack, overload
 from urllib.parse import urlsplit
 
 import flask
@@ -1750,7 +1750,10 @@ class OverdriveAPI(
         # Use the caller-provided ID for LicensePool lookup. This is always
         # set because circulation_lookup creates dict(id=book_id) when called
         # with a string, and book-list dicts always include "id".
-        resolved_book_id = cast(str, book.get("id"))
+        resolved_book_id = book.get("id")
+        assert (
+            resolved_book_id is not None
+        ), f"Book dict missing required 'id' key: {book}"
 
         license_pool, is_new = LicensePool.for_foreign_id(
             self._db,
