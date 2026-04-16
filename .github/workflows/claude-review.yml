@@ -20,17 +20,13 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
 
       - name: Load review prompt
         id: load_prompt
-        env:
-          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           {
             echo 'prompt<<PROMPT_EOF'
-            sed "s/{{PR_NUMBER}}/${PR_NUMBER}/g" .github/pr_review_prompt.md
+            cat .github/pr_review_prompt.md
             echo 'PROMPT_EOF'
           } >> "$GITHUB_OUTPUT"
 
