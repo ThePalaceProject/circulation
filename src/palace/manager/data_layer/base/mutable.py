@@ -6,6 +6,7 @@ from typing import Literal, overload
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, PrivateAttr
 from sqlalchemy.orm import Session
 
+from palace.util.datetime_helpers import utc_now
 from palace.util.exceptions import PalaceValueError
 from palace.util.log import LoggerMixin
 
@@ -14,9 +15,7 @@ from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import LicensePool
-from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.json import json_hash
-from palace.manager.util.log import LoggerMixin
 
 
 class BaseMutableData(BaseModel, LoggerMixin):
