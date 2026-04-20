@@ -441,12 +441,14 @@ class TestCirculationData:
         assert new is False
 
         # The licensepool is created when we apply the circulation data, and its
-        # updated_at and created_at values are set to the values from the circulation data.
+        # updated_at is set to circulation.updated_at; created_at is set to
+        # as_of_timestamp (updated_at when present, else created_at) so it reflects
+        # when the data source says the title was made available.
         pool, changes = circulation.apply(db.session, collection)
         assert changes is True
         assert pool is not None
         assert pool.updated_at == circulation.updated_at
-        assert pool.created_at == circulation.created_at
+        assert pool.created_at == circulation.as_of_timestamp
         assert pool.updated_at_data_hash == circulation.calculate_hash()
         assert pool.licenses_owned == 100
 
@@ -465,7 +467,7 @@ class TestCirculationData:
         assert changes is False
         assert pool is not None
         assert pool.updated_at == circulation.updated_at
-        assert pool.created_at == circulation.created_at
+        assert pool.created_at == circulation.as_of_timestamp
         assert pool.updated_at_data_hash == circulation.calculate_hash()
         assert pool.licenses_owned == 100
 
@@ -483,8 +485,8 @@ class TestCirculationData:
         assert pool.updated_at == stale_circulation.updated_at
         assert pool.updated_at_data_hash == stale_circulation.calculate_hash()
 
-        # But its created_at value is unchanged.
-        assert pool.created_at == circulation.created_at
+        # created_at is set once at pool creation and never overwritten.
+        assert pool.created_at == circulation.as_of_timestamp
 
     def test_license_pool_sets_default_license_values(
         self, db: DatabaseTransactionFixture
