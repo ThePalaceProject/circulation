@@ -365,6 +365,13 @@ class CirculationData(BaseMutableData):
                     as_of=self.as_of_timestamp,
                 )
 
+            # Unconditional: roll both fields forward (or back for stale force-applies).
+            # Keeping updated_at and updated_at_data_hash in sync ensures that future
+            # imports at any timestamp after as_of_timestamp are not blocked by the
+            # strict-less-than check in should_apply_to() and can reach the hash
+            # comparison. This is intentionally different from the Edition path, which
+            # leaves both fields unchanged when as_of_timestamp does not advance
+            # updated_at.
             pool.updated_at = self.as_of_timestamp
             pool.updated_at_data_hash = self.calculate_hash()
 
