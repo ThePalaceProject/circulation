@@ -673,16 +673,22 @@ class BibliographicData(BaseMutableData):
     def _update_edition_timestamp(self, edition: Edition) -> None:
         """Update edition timestamp and content hash based on the current data.
 
+        Both fields are updated together to preserve the invariant that
+        ``updated_at_data_hash`` reflects the content as of ``updated_at``.
+        When the incoming data is stale (``as_of_timestamp <= edition.updated_at``),
+        neither field is touched — the edition's last-known state is already newer.
+
         :param edition: Edition to update.
         """
         updated_at = self.as_of_timestamp
 
         # If the edition was last updated before the data source was last updated,
         # we set the edition's updated_at to the data source's last updated time.
+        # Both fields are updated together so updated_at_data_hash always reflects
+        # the content as of updated_at.
         if edition.updated_at is None or edition.updated_at < updated_at:
             edition.updated_at = updated_at
-
-        edition.updated_at_data_hash = self.calculate_hash()
+            edition.updated_at_data_hash = self.calculate_hash()
 
     def _update_edition_fields(
         self,

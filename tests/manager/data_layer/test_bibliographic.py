@@ -817,6 +817,7 @@ class TestBibliographicData:
         # replacement policy has even_if_not_apparently_updated set to True.
         edition.title = "Old title"
         edition.updated_at = utc_now()
+        pre_force_hash = edition.updated_at_data_hash
         edition, changed = stale_bibliographic.apply(
             db.session,
             edition,
@@ -825,6 +826,12 @@ class TestBibliographicData:
         )
         assert changed is True
         assert edition.title == "New title"
+        # Even though the content was force-applied, updated_at_data_hash must NOT
+        # be overwritten with the stale hash — the timestamp did not advance, so
+        # the hash invariant (hash reflects content as of updated_at) requires both
+        # fields to stay unchanged together.
+        assert edition.updated_at_data_hash == pre_force_hash
+        assert edition.updated_at_data_hash != stale_bibliographic.calculate_hash()
 
         # Even if we don't need to update the BibliographicData, we still check to see if the CirculationData
         # needs to be updated.
@@ -1154,6 +1161,9 @@ class TestBibliographicData:
         past_bibliographic.apply(db.session, edition, None)
         assert edition.updated_at == last_updated
         assert edition.updated_at != past
+        # The hash must also be unchanged — updated_at_data_hash and updated_at
+        # are always kept in sync, so stale data must not overwrite the hash.
+        assert edition.updated_at_data_hash == bibliographic.calculate_hash()
 
         # If updated_at is None, as_of_timestamp falls back to created_at (utc_now()).
         # Even though that is newer than the edition's updated_at, the content hash is
