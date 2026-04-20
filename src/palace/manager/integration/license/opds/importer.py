@@ -390,6 +390,8 @@ class OpdsImporter[FeedType, PublicationType](LoggerMixin):
                 and apply_circulation is not None
                 and (
                     import_even_if_unchanged
+                    # ODL pools (licenses is not None) always return True here;
+                    # license expiry is time-dependent and undetectable by hashing.
                     or bibliographic.circulation.needs_apply(session, collection)
                 )
             ):
