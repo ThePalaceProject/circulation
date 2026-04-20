@@ -405,7 +405,7 @@ class OpdsImporter[FeedType, PublicationType](LoggerMixin):
                 called_circulation_apply = True
             results[identifier] = PublicationImportResult(
                 bibliographic=bibliographic,
-                changed=needs_apply,
+                changed=needs_apply or called_circulation_apply,
                 called_bibliographic_apply=called_bibliographic_apply,
                 called_circulation_apply=called_circulation_apply,
             )
