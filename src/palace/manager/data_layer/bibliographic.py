@@ -675,18 +675,23 @@ class BibliographicData(BaseMutableData):
 
         Both fields are updated together to preserve the invariant that
         ``updated_at_data_hash`` reflects the content as of ``updated_at``.
-        When the incoming data is stale (``as_of_timestamp <= edition.updated_at``),
-        neither field is touched — the edition's last-known state is already newer.
+        When the incoming data is strictly older than what is stored
+        (``as_of_timestamp < edition.updated_at``), neither field is touched —
+        the edition's last-known state is already newer.
+
+        The comparison is ``<=`` (not ``<``) so that equal-timestamp imports
+        with changed content still store the new hash. Using ``<`` would leave
+        ``updated_at_data_hash`` out of sync when the timestamp does not advance,
+        causing every subsequent re-import to see a hash mismatch and re-apply.
 
         :param edition: Edition to update.
         """
         updated_at = self.as_of_timestamp
 
-        # If the edition was last updated before the data source was last updated,
-        # we set the edition's updated_at to the data source's last updated time.
         # Both fields are updated together so updated_at_data_hash always reflects
-        # the content as of updated_at.
-        if edition.updated_at is None or edition.updated_at < updated_at:
+        # the content as of updated_at. The <= comparison ensures equal-timestamp
+        # imports with changed content still record the new hash.
+        if edition.updated_at is None or edition.updated_at <= updated_at:
             edition.updated_at = updated_at
             edition.updated_at_data_hash = self.calculate_hash()
 

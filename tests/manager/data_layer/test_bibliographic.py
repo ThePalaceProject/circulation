@@ -1189,6 +1189,19 @@ class TestBibliographicData:
         assert edition.updated_at == now
         assert edition.updated_at_data_hash == bibliographic_changed.calculate_hash()
 
+        # When the incoming timestamp equals the stored timestamp but content has
+        # changed, the hash must still be updated — otherwise every re-import sees
+        # a hash mismatch and re-applies indefinitely without ever recording the
+        # new hash.
+        same_time_changed = BibliographicData(
+            data_source_name=DataSource.OVERDRIVE,
+            updated_at=now,
+            title="A title changed at the same timestamp",
+        )
+        same_time_changed.apply(db.session, edition, None)
+        assert edition.updated_at == now
+        assert edition.updated_at_data_hash == same_time_changed.calculate_hash()
+
     def test_validate_primary_identifier_case_insensitive(
         self, db: DatabaseTransactionFixture
     ):
