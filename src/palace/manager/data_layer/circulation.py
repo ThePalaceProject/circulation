@@ -164,7 +164,7 @@ class CirculationData(BaseMutableData):
         )
 
         if license_pool is not None and is_new:
-            license_pool.created_at = self.created_at
+            license_pool.created_at = self.as_of_timestamp
             license_pool.open_access = self.has_open_access_link
             license_pool.should_track_playtime = self.should_track_playtime
 
