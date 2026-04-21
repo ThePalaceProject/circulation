@@ -4,7 +4,6 @@ from collections.abc import Set
 from dataclasses import dataclass
 from typing import Any
 
-import dateutil
 from sqlalchemy.orm import Session
 
 from palace.util.exceptions import PalaceValueError
@@ -185,36 +184,6 @@ class OverdriveImporter(LoggerMixin):
 
         return identifier, changed
 
-    def _all_books_out_of_scope(
-        self,
-        modified_since: datetime.datetime,
-        book_data: list[dict[str, Any]],
-    ) -> bool:
-        """Check if all books in the book_data are out of scope in terms of the date they were added.
-
-        This method is used to determine if we should continue to fetch the next page of books.
-        Overdrive does not provide a way to retrieve books that were added or modified since a given date.
-        They do however give us the "date_added" value for each book which we can use to determine
-        if the book was added before the modified_since date.
-
-        :param modified_since: The datetime to check if the books are out of scope.
-        :param book_data: The book data to check if the books are out of scope.
-        :return: True if all books are out of scope, False otherwise.
-        """
-        out_of_scope_count = 0
-
-        for book in book_data:
-            date_added = book.get("date_added", None)
-            if not date_added:
-                # this should not happen, but if it does, we'll assume the book is not out of scope.
-                continue
-
-            date_added = dateutil.parser.parse(date_added)
-            if date_added < modified_since:
-                out_of_scope_count += 1
-
-        return out_of_scope_count == len(book_data)
-
     def import_collection(
         self,
         *,
@@ -234,12 +203,7 @@ class OverdriveImporter(LoggerMixin):
            - For advantage collections (with parent_identifier_set): Fetches metadata lazily,
              skipping books that are already in the parent collection
 
-        2. **Out-of-Scope Optimization**:
-           - If all books in the current page were added before modified_since and there were no changes detected,
-             stops pagination early to avoid processing old data
-           - Can be disabled when modified_since is None.
-
-        3. **Change Detection**:
+        2. **Change Detection**:
            - Only applies bibliographic updates if metadata has changed
            - Always checks circulation data as availability changes frequently and applies changes only if changed.
 
@@ -250,7 +214,7 @@ class OverdriveImporter(LoggerMixin):
                          starting from modified_since
         :param page_size: Number of items to fetch per page
         :return: FeedImportResult containing current_page (the endpoint that was processed),
-                 next_page (the next endpoint to process, None if done or all books out of scope),
+                 next_page (the next endpoint to process, None if done),
                  and processed_count (number of books processed in this call)
 
         .. note::
@@ -288,7 +252,6 @@ class OverdriveImporter(LoggerMixin):
             )
 
         timestamp = self.get_timestamp()
-        changed_books_count = 0
         # Fetch metadata upfront if no parent identifier set is provided.  Practically speaking,
         # if there is no parent identifier set, then the collection being imported is a
         # main rather than an advantage collection.  We always fetch availability because we do not gain
@@ -302,11 +265,9 @@ class OverdriveImporter(LoggerMixin):
             )
         )
         for book in book_data:
-            identifier, changed = self._process_book(
+            identifier, _ = self._process_book(
                 book, fetch_metadata, policy, apply_bibliographic, apply_circulation
             )
-            if changed:
-                changed_books_count += 1
             identifiers.append(identifier)
 
         achievements = [f"Total items queued for import: {len(identifiers)}."]
@@ -322,15 +283,6 @@ class OverdriveImporter(LoggerMixin):
             f"Finished import of {len(identifiers)} for collection {self._collection.name} (id={self._collection.id}). "
             f"{' '.join(achievements)}"
         )
-        # if we are not in import all mode and all books are both out of scope and no books were changed, we can assume that
-        # were are done importing and therefore we don't need to fetch the next page.
-        if (
-            modified_since is not None
-            and changed_books_count == 0
-            and self._all_books_out_of_scope(modified_since, book_data)
-        ):
-            next_endpoint = None
-
         return FeedImportResult(
             next_page=next_endpoint,
             current_page=endpoint,
