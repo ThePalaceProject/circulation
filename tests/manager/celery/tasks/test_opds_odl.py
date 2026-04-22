@@ -823,7 +823,7 @@ class TestImportCollection:
         assert 10 == moby_dick_license_pool.licenses_owned
         assert 10 == moby_dick_license_pool.licenses_available
 
-        assert 2 == len(moby_dick_license_pool.delivery_mechanisms)
+        assert 3 == len(moby_dick_license_pool.delivery_mechanisms)
 
         moby_dick_epub_adobe_drm_delivery_mechanism = opds2_with_odl_import_fixture.get_delivery_mechanism_by_drm_scheme_and_content_type(
             moby_dick_license_pool.delivery_mechanisms,
@@ -838,6 +838,13 @@ class TestImportCollection:
             DeliveryMechanism.LCP_DRM,
         )
         assert moby_dick_epub_lcp_drm_delivery_mechanism is not None
+
+        moby_dick_streaming_delivery_mechanism = opds2_with_odl_import_fixture.get_delivery_mechanism_by_drm_scheme_and_content_type(
+            moby_dick_license_pool.delivery_mechanisms,
+            DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE,
+            DeliveryMechanism.STREAMING_DRM,
+        )
+        assert moby_dick_streaming_delivery_mechanism is not None
 
         assert 1 == len(moby_dick_license_pool.licenses)
         [moby_dick_license] = moby_dick_license_pool.licenses
@@ -910,7 +917,7 @@ class TestImportCollection:
         assert 1 == license_pool.licenses_owned
         assert 1 == license_pool.licenses_available
 
-        assert 2 == len(license_pool.delivery_mechanisms)
+        assert 3 == len(license_pool.delivery_mechanisms)
 
         lcp_delivery_mechanism = opds2_with_odl_import_fixture.get_delivery_mechanism_by_drm_scheme_and_content_type(
             license_pool.delivery_mechanisms,
@@ -925,6 +932,13 @@ class TestImportCollection:
             DeliveryMechanism.FEEDBOOKS_AUDIOBOOK_DRM,
         )
         assert feedbooks_delivery_mechanism is not None
+
+        streaming_delivery_mechanism = opds2_with_odl_import_fixture.get_delivery_mechanism_by_drm_scheme_and_content_type(
+            license_pool.delivery_mechanisms,
+            DeliveryMechanism.STREAMING_AUDIO_CONTENT_TYPE,
+            DeliveryMechanism.STREAMING_DRM,
+        )
+        assert streaming_delivery_mechanism is not None
 
     @freeze_time("2016-01-01T00:00:00+00:00")
     def test_import_audiobook_no_streaming(

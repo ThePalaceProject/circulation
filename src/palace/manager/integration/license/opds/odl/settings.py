@@ -99,7 +99,7 @@ class OPDS2WithODLSettings(OPDS2ImporterSettings):
             type=FormFieldType.LIST,
             required=False,
         ),
-    ] = ["text/html"]
+    ] = []
 
     loan_limit: Annotated[
         PositiveInt | None,
