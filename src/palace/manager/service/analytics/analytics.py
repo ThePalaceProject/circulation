@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from palace.util.log import LoggerMixin
 
 from palace.manager.service.analytics.eventdata import AnalyticsEventData
+from palace.manager.service.analytics.geo import resolve_geo
 from palace.manager.service.analytics.local import LocalAnalyticsProvider
 from palace.manager.service.analytics.provider import AnalyticsProvider
 from palace.manager.service.analytics.s3 import S3AnalyticsProvider
@@ -56,6 +57,15 @@ class Analytics(LoggerMixin, AnalyticsProvider):
         patron: Patron | None = None,
     ) -> None:
         session = Session.object_session(library)
+        country, state = "US", "All"
+        if session is not None:
+            try:
+                country, state = resolve_geo(library, session)
+            except Exception as e:
+                self.log.warning(
+                    f"Unable to resolve geographic settings, using defaults: {repr(e)}",
+                    exc_info=e,
+                )
         event = AnalyticsEventData.create(
             library,
             license_pool,
@@ -64,6 +74,8 @@ class Analytics(LoggerMixin, AnalyticsProvider):
             old_value,
             new_value,
             patron,
+            country=country,
+            state=state,
         )
         self.collect(event, session=session)
 
