@@ -385,6 +385,14 @@ def get_quicksight_names():
     return app.manager.admin_quicksight_controller.get_dashboard_names()
 
 
+@app.route("/admin/global_settings", methods=["GET", "POST"])
+@returns_json_or_response_or_problem_detail
+@requires_admin
+@requires_csrf_token
+def global_settings():
+    return app.manager.admin_global_settings_controller.process_global_settings()
+
+
 @app.route("/admin/libraries", methods=["GET", "POST"])
 @returns_json_or_response_or_problem_detail
 @requires_admin
