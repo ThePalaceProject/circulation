@@ -405,11 +405,14 @@ class LibrarySettings(BaseSettings):
             level=Level.SYS_ADMIN_OR_MANAGER,
         ),
     ] = []
+    # UI label says "Filtered categories" (renamed in PP-4074), but the variable stays
+    # `filtered_genres` because the values it matches against are called genres elsewhere
+    # in the codebase.
     filtered_genres: Annotated[
         list[str],
         LibraryFormMetadata(
-            label="Filtered genres",
-            description="Content in these genres will be hidden from catalog browse and search results.",
+            label="Filtered categories",
+            description="Content in these categories (genres) will be hidden from catalog browse and search results.",
             type=FormFieldType.MENU,
             options=lambda _db: {name: name for name in sorted(genres.keys())},
             category="Content Filtering",
