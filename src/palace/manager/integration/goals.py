@@ -11,3 +11,4 @@ class Goals(Enum):
     DISCOVERY_GOAL = "discovery"
     CATALOG_GOAL = "catalog"
     METADATA_GOAL = "metadata"
+    SITEWIDE_SETTINGS = "sitewide_settings"
