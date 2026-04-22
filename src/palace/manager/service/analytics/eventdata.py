@@ -91,6 +91,8 @@ class AnalyticsEventData(BaseModel, LoggerMixin):
     open_access: bool | None
     user_agent: str | None
     patron_uuid: UUID | None
+    country: str
+    state: str
 
     model_config = ConfigDict(
         frozen=True,
@@ -107,6 +109,8 @@ class AnalyticsEventData(BaseModel, LoggerMixin):
         new_value: int | None = None,
         patron: Patron | None = None,
         user_agent: str | None = None,
+        country: str = "US",
+        state: str = "All",
     ) -> Self:
         if user_agent is None:
             try:
@@ -189,4 +193,6 @@ class AnalyticsEventData(BaseModel, LoggerMixin):
             open_access=license_pool.open_access if license_pool else None,
             user_agent=user_agent,
             patron_uuid=patron.uuid if patron else None,
+            country=country,
+            state=state,
         )

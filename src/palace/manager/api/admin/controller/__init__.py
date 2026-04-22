@@ -30,6 +30,9 @@ def setup_admin_controllers(manager: CirculationManager) -> None:
         DiscoveryServicesController,
     )
     from palace.manager.api.admin.controller.feed import FeedController
+    from palace.manager.api.admin.controller.global_settings import (
+        GlobalSettingsController,
+    )
     from palace.manager.api.admin.controller.individual_admin_settings import (
         IndividualAdminSettingsController,
     )
@@ -81,6 +84,7 @@ def setup_admin_controllers(manager: CirculationManager) -> None:
         manager._db, manager.services.integration_registry.license_providers()
     )
     manager.admin_library_settings_controller = LibrarySettingsController(manager)
+    manager.admin_global_settings_controller = GlobalSettingsController(manager._db)
     manager.admin_individual_admin_settings_controller = (
         IndividualAdminSettingsController(manager._db)
     )

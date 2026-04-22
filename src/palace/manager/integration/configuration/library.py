@@ -560,6 +560,31 @@ class LibrarySettings(BaseSettings):
             level=Level.SYS_ADMIN_OR_MANAGER,
         ),
     ] = False
+    country: Annotated[
+        str | None,
+        LibraryFormMetadata(
+            label="Country",
+            description=(
+                "The country for this library's circulation events. "
+                "Use ISO 3166-1 alpha-2 codes (e.g. 'US' for United States, 'CA' for Canada). "
+                "Leave blank to inherit the global default."
+            ),
+            category="Geographic Information",
+            level=Level.SYS_ADMIN_ONLY,
+        ),
+    ] = None
+    state: Annotated[
+        str | None,
+        LibraryFormMetadata(
+            label="State/Province",
+            description=(
+                "The state or province for this library's circulation events "
+                "(e.g. 'New York', 'Ontario'). Leave blank to inherit the global default."
+            ),
+            category="Geographic Information",
+            level=Level.SYS_ADMIN_ONLY,
+        ),
+    ] = None
 
     @model_validator(mode="after")
     def validate_require_help_email_or_website(self) -> Self:
