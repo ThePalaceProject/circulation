@@ -344,6 +344,24 @@ class TestBISACClassifier:
         subject = self._subject("FSHUM000000N", "Human Science")
         assert "Social Sciences" == subject.genre.name
 
+    def test_palace_marketplace_juvenile_nonfiction_n_suffix_codes(self):
+        """Palace Marketplace sends Juvenile Nonfiction BISAC codes with an
+        FB prefix and N suffix (e.g. FBJUV000000N). These are absent from
+        the official BISAC list but must classify as Children / Nonfiction.
+        """
+        children = Classifier.AUDIENCE_CHILDREN
+        codes = [
+            ("FBJUV000000N", "Themes"),
+            ("FBJUV009000N", "Tales"),
+            ("FBJUV009001N", "Family"),
+            ("FBJUV022000N", "Lifestyles"),
+            ("FBJUV038000N", "Social situations"),
+        ]
+        for identifier, stored_name in codes:
+            subject = self._subject(identifier, stored_name)
+            assert subject.audience == children, f"{identifier} should be Children"
+            assert subject.fiction is False, f"{identifier} should be Nonfiction"
+
     def test_scrub_identifier(self):
         # FeedBooks prefixes are removed.
         assert "abc" == BISACClassifier.scrub_identifier("FBabc")
