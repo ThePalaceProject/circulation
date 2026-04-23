@@ -51,7 +51,7 @@ class TestAnalytics:
 
         collected: list = []
         analytics = Analytics()
-        analytics.collect = lambda event, session=None: collected.append(event)  # type: ignore[method-assign]
+        analytics.collect = lambda event, session=None: collected.append(event)
         analytics.collect_event(library, pool, CirculationEvent.CM_CHECKOUT)
 
         assert len(collected) == 1
@@ -69,7 +69,7 @@ class TestAnalytics:
 
         collected: list = []
         analytics = Analytics()
-        analytics.collect = lambda event, session=None: collected.append(event)  # type: ignore[method-assign]
+        analytics.collect = lambda event, session=None: collected.append(event)
 
         with patch.object(
             analytics_module, "resolve_geo", side_effect=RuntimeError("boom")
