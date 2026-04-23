@@ -4,11 +4,10 @@ import datetime
 from collections import defaultdict
 from typing import Any, Literal, Self, overload
 
-from pydantic import AwareDatetime, Field, field_validator, model_validator
+from pydantic import Field, field_validator, model_validator
 from sqlalchemy import and_
 from sqlalchemy.orm import Query, Session
 
-from palace.util.datetime_helpers import utc_now
 from palace.util.exceptions import PalaceValueError
 
 from palace.manager.core.classifier import NO_NUMBER, NO_VALUE
@@ -76,15 +75,10 @@ class BibliographicData(BaseMutableData):
     contributors: list[ContributorData] = Field(default_factory=list)
     measurements: list[MeasurementData] = Field(default_factory=list)
     links: list[LinkData] = Field(default_factory=list)
-    data_source_last_updated: AwareDatetime | None = None
     duration: float | None = None
     permanent_work_id: str | None = None
     # Note: brought back to keep callers of bibliographic extraction process_one() methods simple.
     circulation: CirculationData | None = None
-
-    # FIXME: this parameter is a stopgap measure which should be removed once we sort out how to reasonably
-    #  determine has_changed for overdrive.
-    minimum_time_between_updates: datetime.timedelta = datetime.timedelta(0)
 
     @field_validator("language")
     @classmethod
@@ -107,6 +101,11 @@ class BibliographicData(BaseMutableData):
             self.identifiers.append(self.primary_identifier_data)
 
         return self
+
+    def fields_excluded_from_hash(self) -> set[str]:
+        # CirculationData is considered separate from bibliographic data, so
+        # we want to exclude it from the hash calculation.
+        return super().fields_excluded_from_hash().union({"circulation"})
 
     @classmethod
     def from_edition(cls, edition: Edition) -> BibliographicData:
@@ -149,7 +148,7 @@ class BibliographicData(BaseMutableData):
             primary_identifier_data=primary_identifier,
             contributors=contributors,
             links=links,
-            data_source_last_updated=edition.updated_at,
+            updated_at=edition.updated_at,
             **kwargs,
         )
 
@@ -615,7 +614,11 @@ class BibliographicData(BaseMutableData):
                 measurement.quantity_measured,
                 measurement.value,
                 measurement.weight,
-                measurement.taken_at,
+                (
+                    measurement.taken_at
+                    if measurement.taken_at is not None
+                    else self.as_of_timestamp
+                ),
             )
         return True
 
@@ -668,21 +671,29 @@ class BibliographicData(BaseMutableData):
                 self.make_thumbnail(db, data_source, link, link_obj)
 
     def _update_edition_timestamp(self, edition: Edition) -> None:
-        """Update edition timestamp based on data source last updated time.
+        """Update edition timestamp and content hash based on the current data.
+
+        Both fields are updated together to preserve the invariant that
+        ``updated_at_data_hash`` reflects the content as of ``updated_at``.
+        When the incoming data is strictly older than what is stored
+        (``as_of_timestamp < edition.updated_at``), neither field is touched —
+        the edition's last-known state is already newer.
+
+        The comparison is ``<=`` (not ``<``) so that equal-timestamp imports
+        with changed content still store the new hash. Using ``<`` would leave
+        ``updated_at_data_hash`` out of sync when the timestamp does not advance,
+        causing every subsequent re-import to see a hash mismatch and re-apply.
 
         :param edition: Edition to update.
         """
-        # If we don't have a last updated timestamp, we use the current time.
-        updated_at = (
-            utc_now()
-            if self.data_source_last_updated is None
-            else self.data_source_last_updated
-        )
+        updated_at = self.as_of_timestamp
 
-        # If the edition was last updated before the data source was last updated,
-        # we set the edition's updated_at to the data source's last updated time.
-        if edition.updated_at is None or edition.updated_at < updated_at:
+        # Both fields are updated together so updated_at_data_hash always reflects
+        # the content as of updated_at. The <= comparison ensures equal-timestamp
+        # imports with changed content still record the new hash.
+        if edition.updated_at is None or edition.updated_at <= updated_at:
             edition.updated_at = updated_at
+            edition.updated_at_data_hash = self.calculate_hash()
 
     def _update_edition_fields(
         self,
@@ -757,8 +768,8 @@ class BibliographicData(BaseMutableData):
         self._validate_primary_identifier(edition)
 
         # Check whether we should do any work at all
-        if not replace.even_if_not_apparently_updated and not self.has_changed(
-            db, edition
+        if not replace.even_if_not_apparently_updated and not self.should_apply_to(
+            edition
         ):
             return edition, False
 
@@ -805,8 +816,8 @@ class BibliographicData(BaseMutableData):
         self._validate_primary_identifier(edition)
 
         # Check whether we should do any work at all
-        if not replace.even_if_not_apparently_updated and not self.has_changed(
-            db, edition
+        if not replace.even_if_not_apparently_updated and not self.should_apply_to(
+            edition
         ):
             # No need to update the bibliographic data, but we might have fresh
             # circulation data that we should apply.
@@ -865,7 +876,7 @@ class BibliographicData(BaseMutableData):
             CoverageRecord.add_for(
                 edition,
                 data_source,
-                timestamp=self.data_source_last_updated,
+                timestamp=self.as_of_timestamp,
                 collection=None,
             )
 
@@ -1001,72 +1012,15 @@ class BibliographicData(BaseMutableData):
 
         return contributors_changed
 
-    def has_changed(
-        self,
-        session: Session,
-        edition: Edition | None = None,
-    ) -> bool:
+    def needs_apply(self, session: Session) -> bool:
+        """Return ``True`` if this data should be applied to the corresponding Edition.
+
+        Looks up the existing :class:`~palace.manager.sqlalchemy.model.edition.Edition`
+        for this object's primary identifier and delegates to
+        :meth:`~palace.manager.data_layer.base.mutable.BaseMutableData.should_apply_to`.
+
+        :param session: Active database session used to look up the edition.
+        :return: ``True`` if the data needs to be applied, ``False`` if it can be skipped.
         """
-        Test if the bibliographic data has changed since the last import.
-        Returns True (needs update) in the following cases:
-        - No existing edition is found for this identifier.
-        - Both ``data_source_last_updated`` and ``edition.updated_at`` are ``None``.
-        - ``edition.updated_at`` is ``None`` but ``data_source_last_updated`` is set.
-        - ``data_source_last_updated`` is newer than ``edition.updated_at``.
-        - ``data_source_last_updated`` is ``None`` but ``edition.updated_at`` is older
-          than ``minimum_time_between_updates`` (default ``0 seconds``, meaning
-          any elapsed time triggers an update).
-
-        Returns False (skip update) when ``data_source_last_updated`` is ``None`` and
-        ``edition.updated_at`` is within the ``minimum_time_between_updates``
-        threshold.
-
-        NOTE: this implementation is going to change soon.  The use of minimum_time_between_updates
-        is a stopgap measure to prevent overproduction of metadata update tasks in cases where
-        no data_source_last_updated is available.
-
-        :param session: Database session used to look up the edition if not provided.
-        :param edition: The Edition to compare against. If ``None``, the edition is
-            looked up from the database using this object's primary identifier.
-        :return: ``True`` if an update is needed, ``False`` otherwise.
-
-        """
-        if edition is None:
-            edition, _ = self.edition(session, autocreate=False)
-        if edition is None:
-            # No edition exists yet: always create one.
-            return True
-
-        if edition.updated_at is None:
-            # No edition timestamp: always re-import.
-            # Covers both "edition.updated_at is None" and "both timestamps None".
-            return True
-
-        elif self.data_source_last_updated is None:
-            # FIXME:  This is a stopgap measure to deal with the fact that we don't have a good way
-            # to detect metadata changes for Overdrive. This block should be removed once that problem is addressed.
-            # if we have an edition update time but we don't have a source last updated time, assume no change unless
-            # the minimum time between updates is exceeded
-            # No source timestamp: re-import only if the edition is older than the minimum interval.
-            result = utc_now() - edition.updated_at > self.minimum_time_between_updates
-
-            if not result:
-                self.log.info(
-                    f"Publication {self.primary_identifier_data} has no source last updated timestamp so change is "
-                    f"indeterminate. Since it has been updated in the last {self.minimum_time_between_updates} "
-                    f"(i.e. on {edition.updated_at}), we will not attempt to update it."
-                )
-
-            return result
-
-        elif self.data_source_last_updated > edition.updated_at:
-            # Source has a newer timestamp than the edition: re-import.
-            return True
-
-        else:
-            # Source timestamp is not newer than the edition: skip.
-            self.log.info(
-                f"Publication {self.primary_identifier_data} is unchanged. Last updated at "
-                f"{edition.updated_at}, data source last updated at {self.data_source_last_updated}"
-            )
-            return False
+        edition, _ = self.edition(session, autocreate=False)
+        return self.should_apply_to(edition)

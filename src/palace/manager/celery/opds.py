@@ -52,6 +52,7 @@ def opds_import_task[FeedType](
             collection,
             url,
             apply_bibliographic=apply.bibliographic_apply.delay,
+            apply_circulation=apply.circulation_apply.delay,
             identifier_set=identifier_set,
             import_even_if_unchanged=force,
         )

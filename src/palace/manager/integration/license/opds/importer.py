@@ -374,10 +374,10 @@ class OpdsImporter[FeedType, PublicationType](LoggerMixin):
         )
 
         for identifier, bibliographic in feed_bibliographic.items():
-            has_changed = bibliographic.has_changed(session)
+            needs_apply = bibliographic.needs_apply(session)
             called_bibliographic_apply = False
             called_circulation_apply = False
-            if import_even_if_unchanged or has_changed:
+            if import_even_if_unchanged or needs_apply:
                 # Queue task to import publication
                 apply_bibliographic(
                     bibliographic,
@@ -386,10 +386,18 @@ class OpdsImporter[FeedType, PublicationType](LoggerMixin):
                 )
                 called_bibliographic_apply = True
             elif (
-                bibliographic.circulation is not None and apply_circulation is not None
+                bibliographic.circulation is not None
+                and apply_circulation is not None
+                and (
+                    import_even_if_unchanged
+                    # ODL pools (licenses is not None) always return True here;
+                    # license expiry is time-dependent and undetectable by hashing.
+                    or bibliographic.circulation.needs_apply(session, collection)
+                )
             ):
                 circulation_data = bibliographic.circulation
-                # If the bibliographic data is unchanged, we still want to apply the circulation data
+                # Bibliographic data is unchanged but circulation data has changed
+                # (e.g. availability state flipped); apply only the circulation update.
                 apply_circulation(
                     circulation_data,
                     collection_id=collection.id,
@@ -397,7 +405,7 @@ class OpdsImporter[FeedType, PublicationType](LoggerMixin):
                 called_circulation_apply = True
             results[identifier] = PublicationImportResult(
                 bibliographic=bibliographic,
-                changed=has_changed,
+                changed=needs_apply or called_circulation_apply,
                 called_bibliographic_apply=called_bibliographic_apply,
                 called_circulation_apply=called_circulation_apply,
             )

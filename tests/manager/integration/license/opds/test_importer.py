@@ -499,7 +499,7 @@ class TestOpdsImporter:
             type=Identifier.ISBN, identifier="978-3-16-148410-0"
         )
         mock_bibliographic = MagicMock(spec=BibliographicData)
-        mock_bibliographic.has_changed.return_value = True
+        mock_bibliographic.needs_apply.return_value = True
         mock_bibliographic.circulation = None
 
         # Mock the feed fetching and extraction
@@ -529,3 +529,61 @@ class TestOpdsImporter:
             replacement_policy.even_if_not_apparently_updated
             is import_even_if_unchanged
         )
+
+    def test_import_feed_odl_circulation_counts_as_changed(
+        self,
+        db: DatabaseTransactionFixture,
+        services_fixture: ServicesFixture,
+        opds2_files_fixture: OPDS2FilesFixture,
+    ) -> None:
+        """ODL circulation tasks count as changed so pagination is not halted prematurely.
+
+        For ODL pools, circulation.needs_apply() always returns True (license expiry is
+        time-dependent). When bibliographic data is unchanged but a circulation task is
+        queued, PublicationImportResult.changed must be True so that
+        FeedImportResult.found_unchanged_publication stays False and the importer
+        continues to subsequent pages.
+        """
+        collection = db.collection(
+            protocol=OPDS2WithODLApi,
+            settings=db.opds2_odl_settings(data_source="test collection"),
+        )
+        registry = services_fixture.services.integration_registry().license_providers()
+        importer = importer_from_collection(collection, registry)
+
+        opds2_feed = json.loads(opds2_files_fixture.sample_text("feed.json"))
+        opds2_feed["publications"] = [opds2_feed["publications"][0]]
+        feed = PublicationFeedNoValidation.model_validate(opds2_feed)
+
+        mock_identifier = IdentifierData(
+            type=Identifier.ISBN, identifier="978-3-16-148410-0"
+        )
+        mock_bibliographic = MagicMock(spec=BibliographicData)
+        # Bibliographic data has not changed.
+        mock_bibliographic.needs_apply.return_value = False
+        # Circulation data is an ODL pool: needs_apply always returns True.
+        mock_circulation = MagicMock()
+        mock_circulation.needs_apply.return_value = True
+        mock_bibliographic.circulation = mock_circulation
+
+        with (
+            patch.object(importer, "_fetch_feed", return_value=feed),
+            patch.object(
+                importer,
+                "_extract_publications_from_feed",
+                return_value=({mock_identifier: mock_bibliographic}, []),
+            ),
+        ):
+            mock_apply_circulation = MagicMock()
+            result = importer.import_feed(
+                collection,
+                apply_bibliographic=MagicMock(),
+                apply_circulation=mock_apply_circulation,
+            )
+
+        assert result is not False
+        assert mock_apply_circulation.call_count == 1
+        pub_result = result.results[mock_identifier]
+        assert pub_result.called_circulation_apply is True
+        assert pub_result.changed is True
+        assert result.found_unchanged_publication is False

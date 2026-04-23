@@ -484,7 +484,7 @@ class TestBibliographicData:
         m_link = bibliographic.links[0]
         assert e_link.rel == m_link.rel
         assert e_link.resource.url == m_link.href
-        assert edition.updated_at == bibliographic.data_source_last_updated
+        assert edition.updated_at == bibliographic.updated_at
 
         # The series position can also be 0.
         edition.series_position = 0
@@ -769,42 +769,55 @@ class TestBibliographicData:
     def test_apply_no_changes_needed(self, db: DatabaseTransactionFixture):
         edition, pool = db.edition(with_license_pool=True)
         edition.title = "Old title"
-        edition.updated_at = utc_now()
 
-        # Create a bibliographic data object that is slightly out of date.
-        # It has a different title, but its data_source_last_updated is
-        # earlier than the Edition's updated_at, so no changes will be made.
+        # Create a stale bibliographic data object: updated_at is 1 day ago.
         stale_bibliographic = BibliographicData(
             data_source_name=edition.data_source.name,
             primary_identifier_data=IdentifierData.from_identifier(
                 edition.primary_identifier
             ),
             title="New title",
-            data_source_last_updated=utc_now() - datetime.timedelta(days=1),
+            updated_at=utc_now() - datetime.timedelta(days=1),
         )
 
-        # Applying a BibliographicData object created from an
-        # Edition to that same Edition results in no changes.
+        # The first time we apply the data, it always applies (no hash stored yet).
         edition, changed = stale_bibliographic.apply(
             db.session, edition, pool.collection
         )
-        assert changed == False
-        assert edition.title != "New title"
-
-        # If we roll back the edition's updated_at to before the
-        # bibliographic's data_source_last_updated, the change will
-        # be made.
-        edition.updated_at = utc_now() - datetime.timedelta(days=2)
-        edition, changed = stale_bibliographic.apply(
-            db.session, edition, pool.collection
-        )
-        assert changed == True
+        assert changed is True
         assert edition.title == "New title"
+        assert edition.updated_at_data_hash == stale_bibliographic.calculate_hash()
 
-        # We will apply the changes even if we don't think its necessary when the replacement policy has
-        # even_if_not_apparently_updated set to True
+        # Applying the same stale data again results in no changes: the content hash
+        # matches what is already stored.
+        edition.title = "Old title"
+        edition, changed = stale_bibliographic.apply(
+            db.session, edition, pool.collection
+        )
+        assert changed is False
+        assert edition.title == "Old title"
+
+        # If the content changes (different title), the new data IS applied even
+        # though the timestamp is still stale, because the content hash differs.
+        changed_bibliographic = BibliographicData(
+            data_source_name=edition.data_source.name,
+            primary_identifier_data=IdentifierData.from_identifier(
+                edition.primary_identifier
+            ),
+            title="Changed title",
+            updated_at=utc_now() - datetime.timedelta(days=1),
+        )
+        edition, changed = changed_bibliographic.apply(
+            db.session, edition, pool.collection
+        )
+        assert changed is True
+        assert edition.title == "Changed title"
+
+        # We will apply the changes even when we don't think it's necessary if the
+        # replacement policy has even_if_not_apparently_updated set to True.
         edition.title = "Old title"
         edition.updated_at = utc_now()
+        pre_force_hash = edition.updated_at_data_hash
         edition, changed = stale_bibliographic.apply(
             db.session,
             edition,
@@ -813,23 +826,15 @@ class TestBibliographicData:
         )
         assert changed is True
         assert edition.title == "New title"
-
-        # If the stale bibliographic has no data_source_last_updated, the change will be made.
-        stale_bibliographic.data_source_last_updated = None
-        edition.title = "Old title"
-        edition.updated_at = utc_now()
-
-        edition, changed = stale_bibliographic.apply(
-            db.session, edition, pool.collection
-        )
-        assert changed == True
-        assert edition.title == "New title"
+        # Even though the content was force-applied, updated_at_data_hash must NOT
+        # be overwritten with the stale hash — the timestamp did not advance, so
+        # the hash invariant (hash reflects content as of updated_at) requires both
+        # fields to stay unchanged together.
+        assert edition.updated_at_data_hash == pre_force_hash
+        assert edition.updated_at_data_hash != stale_bibliographic.calculate_hash()
 
         # Even if we don't need to update the BibliographicData, we still check to see if the CirculationData
         # needs to be updated.
-        stale_bibliographic.data_source_last_updated = utc_now() - datetime.timedelta(
-            days=1
-        )
         stale_bibliographic.circulation = CirculationData(
             data_source_name=stale_bibliographic.data_source_name,
             primary_identifier_data=stale_bibliographic.primary_identifier_data,
@@ -998,7 +1003,7 @@ class TestBibliographicData:
             issued=utc_now().date(),
             published=utc_now().date(),
             identifiers=[primary_as_data, other_data],
-            data_source_last_updated=utc_now(),
+            updated_at=utc_now(),
         )
 
         bibliographic_copy = deepcopy(bibliographic)
@@ -1125,11 +1130,9 @@ class TestBibliographicData:
 
         assert bibliographic == deserialized
 
-    def test_data_source_last_updated_updates_timestamp(
-        self, db: DatabaseTransactionFixture
-    ):
-        # Test that data_source_last_updated updates the timestamp
-        # when a BibliographicData object is applied.
+    def test_updated_at_updates_timestamp(self, db: DatabaseTransactionFixture):
+        # Test that updated_at updates the edition's timestamp when a BibliographicData
+        # object is applied.
         last_updated = datetime.datetime(2023, 1, 1, 12, 0, 0, tzinfo=datetime.UTC)
         past = last_updated - datetime.timedelta(days=5)
 
@@ -1140,28 +1143,64 @@ class TestBibliographicData:
         db.session.flush()
 
         # When we apply the bibliographic data, the updated_at timestamp gets
-        # set to the data_source_last_updated value.
+        # set to the updated_at value from BibliographicData.
         bibliographic = BibliographicData(
             data_source_name=DataSource.OVERDRIVE,
-            data_source_last_updated=last_updated,
+            updated_at=last_updated,
         )
         bibliographic.apply(db.session, edition, None)
         assert edition.updated_at == last_updated
+        assert edition.updated_at_data_hash == bibliographic.calculate_hash()
 
         # If we apply the bibliographic data again with a past timestamp,
-        # the updated_at timestamp should not change.
-        bibliographic.data_source_last_updated = past
-        bibliographic.apply(db.session, edition, None)
+        # the updated_at timestamp should not change (our data is stale).
+        past_bibliographic = BibliographicData(
+            data_source_name=DataSource.OVERDRIVE,
+            updated_at=past,
+        )
+        past_bibliographic.apply(db.session, edition, None)
         assert edition.updated_at == last_updated
         assert edition.updated_at != past
+        # The hash must also be unchanged — updated_at_data_hash and updated_at
+        # are always kept in sync, so stale data must not overwrite the hash.
+        assert edition.updated_at_data_hash == bibliographic.calculate_hash()
 
-        # If data_source_last_updated is None, updated_at will be updated to the
-        # current time.
-        bibliographic.data_source_last_updated = None
+        # If updated_at is None, as_of_timestamp falls back to created_at (utc_now()).
+        # Even though that is newer than the edition's updated_at, the content hash is
+        # compared first; if the content is identical the apply is still skipped.
         now = utc_now()
         with freeze_time(now):
-            bibliographic.apply(db.session, edition, None)
+            bibliographic_same_content = BibliographicData(
+                data_source_name=DataSource.OVERDRIVE,
+            )
+            bibliographic_same_content.apply(db.session, edition, None)
+        # Content is the same as before (only updated_at differs, which is excluded from
+        # the hash), so the edition is not updated.
+        assert edition.updated_at == last_updated
+
+        # But if the content has actually changed, the apply proceeds even when
+        # updated_at is None.
+        with freeze_time(now):
+            bibliographic_changed = BibliographicData(
+                data_source_name=DataSource.OVERDRIVE,
+                title="A brand new title",
+            )
+            bibliographic_changed.apply(db.session, edition, None)
         assert edition.updated_at == now
+        assert edition.updated_at_data_hash == bibliographic_changed.calculate_hash()
+
+        # When the incoming timestamp equals the stored timestamp but content has
+        # changed, the hash must still be updated — otherwise every re-import sees
+        # a hash mismatch and re-applies indefinitely without ever recording the
+        # new hash.
+        same_time_changed = BibliographicData(
+            data_source_name=DataSource.OVERDRIVE,
+            updated_at=now,
+            title="A title changed at the same timestamp",
+        )
+        same_time_changed.apply(db.session, edition, None)
+        assert edition.updated_at == now
+        assert edition.updated_at_data_hash == same_time_changed.calculate_hash()
 
     def test_validate_primary_identifier_case_insensitive(
         self, db: DatabaseTransactionFixture
@@ -1328,149 +1367,3 @@ class TestBibliographicData:
         )
         assert thumbnail.resource.representation is None
         assert [] == image.resource.representation.thumbnails
-
-    def test_has_changed_no_edition(self, db: DatabaseTransactionFixture):
-        """has_changed returns True when no matching edition exists."""
-        bibliographic = BibliographicData(
-            data_source_name=DataSource.FEEDBOOKS,
-            primary_identifier_data=IdentifierData(
-                type="any-identifier-type",
-                identifier="nonexistent-id-for-has-changed-test",
-            ),
-            data_source_last_updated=utc_now(),
-        )
-        # No edition exists in the DB for this identifier.
-        assert bibliographic.has_changed(db.session) is True
-
-    def test_has_changed_edition_updated_at_none(self, db: DatabaseTransactionFixture):
-        """has_changed returns True when the edition has no updated_at timestamp."""
-        edition = db.edition()
-        edition.updated_at = None
-
-        bibliographic = BibliographicData(
-            data_source_name=edition.data_source.name,
-            data_source_last_updated=utc_now(),
-        )
-        assert bibliographic.has_changed(db.session, edition=edition) is True
-
-    def test_has_changed_both_timestamps_none(self, db: DatabaseTransactionFixture):
-        """has_changed returns True when both edition.updated_at and
-        data_source_last_updated are None."""
-        edition = db.edition()
-        edition.updated_at = None
-
-        bibliographic = BibliographicData(
-            data_source_name=edition.data_source.name,
-            data_source_last_updated=None,
-        )
-        assert bibliographic.has_changed(db.session, edition=edition) is True
-
-    def test_has_changed_no_source_timestamp_edition_older_than_minimum(
-        self, db: DatabaseTransactionFixture
-    ):
-        """has_changed returns True when data_source_last_updated is None but the
-        edition was last updated longer ago than the minimum update interval."""
-        now = utc_now()
-        three_hours_ago = now - datetime.timedelta(hours=3)
-
-        edition = db.edition()
-        edition.updated_at = three_hours_ago
-
-        bibliographic = BibliographicData(
-            data_source_name=edition.data_source.name,
-            data_source_last_updated=None,
-            minimum_time_between_updates=datetime.timedelta(hours=2),
-        )
-        with freeze_time(now):
-            # Minimum is 2 hours; edition is 3 hours old → changed.
-            assert bibliographic.has_changed(db.session, edition=edition) is True
-
-    def test_has_changed_no_source_timestamp_edition_within_minimum(
-        self, db: DatabaseTransactionFixture
-    ):
-        """has_changed returns False when data_source_last_updated is None and the
-        edition was updated more recently than the minimum update interval."""
-        now = utc_now()
-        one_hour_ago = now - datetime.timedelta(hours=1)
-
-        edition = db.edition()
-        edition.updated_at = one_hour_ago
-
-        bibliographic = BibliographicData(
-            data_source_name=edition.data_source.name,
-            data_source_last_updated=None,
-            minimum_time_between_updates=datetime.timedelta(hours=2),
-        )
-        with freeze_time(now):
-            # Minimum is 2 hours; edition is only 1 hour old → no change.
-            assert bibliographic.has_changed(db.session, edition=edition) is False
-
-    def test_has_changed_custom_minimum_time(self, db: DatabaseTransactionFixture):
-        """minimum_time_between_updates is respected when data_source_last_updated is None."""
-        now = utc_now()
-        forty_five_minutes_ago = now - datetime.timedelta(minutes=45)
-
-        edition = db.edition()
-        edition.updated_at = forty_five_minutes_ago
-
-        bibliographic = BibliographicData(
-            data_source_name=edition.data_source.name,
-            data_source_last_updated=None,
-            minimum_time_between_updates=datetime.timedelta(minutes=30),
-        )
-
-        with freeze_time(now):
-            # Edition is 45 min old, minimum is 30 min → changed.
-            assert (
-                bibliographic.has_changed(
-                    db.session,
-                    edition=edition,
-                )
-                is True
-            )
-
-        bibliographic.minimum_time_between_updates = datetime.timedelta(hours=1)
-
-        with freeze_time(now):
-            # Edition is 45 min old, minimum is 60 min → no change.
-            assert (
-                bibliographic.has_changed(
-                    db.session,
-                    edition=edition,
-                )
-                is False
-            )
-
-    def test_has_changed_source_newer_than_edition(
-        self, db: DatabaseTransactionFixture
-    ):
-        """has_changed returns True when data_source_last_updated is newer than
-        edition.updated_at."""
-        now = utc_now()
-        one_day_ago = now - datetime.timedelta(days=1)
-
-        edition = db.edition()
-        edition.updated_at = one_day_ago
-
-        bibliographic = BibliographicData(
-            data_source_name=edition.data_source.name,
-            data_source_last_updated=now,
-        )
-        assert bibliographic.has_changed(db.session, edition=edition) is True
-
-    def test_has_changed_source_older_than_edition(
-        self, db: DatabaseTransactionFixture
-    ):
-        """has_changed returns False when data_source_last_updated is older than or
-        equal to edition.updated_at."""
-        now = utc_now()
-        one_day_ago = now - datetime.timedelta(days=1)
-
-        edition = db.edition()
-        edition.updated_at = now
-
-        bibliographic = BibliographicData(
-            data_source_name=edition.data_source.name,
-            data_source_last_updated=one_day_ago,
-        )
-        assert bibliographic.has_changed(db.session, edition=edition) is False

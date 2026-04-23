@@ -1,12 +1,9 @@
 from __future__ import annotations
 
-import datetime
 from typing import Literal, Self, overload
 
 from pydantic import model_validator
 from sqlalchemy.orm import Session
-
-from palace.util.datetime_helpers import utc_now
 
 from palace.manager.data_layer.base.mutable import BaseMutableData
 from palace.manager.data_layer.format import FormatData
@@ -44,7 +41,6 @@ class CirculationData(BaseMutableData):
     links: list[LinkData] = []
     formats: list[FormatData] = []
     licenses: list[LicenseData] | None = None
-    last_checked: datetime.datetime | None = None
     should_track_playtime: bool = False
 
     # The licensing model for the pool (see enum for details).
@@ -168,10 +164,7 @@ class CirculationData(BaseMutableData):
         )
 
         if license_pool is not None and is_new:
-            license_pool.availability_time = (
-                self.last_checked if self.last_checked else utc_now()
-            )
-            license_pool.last_checked = None
+            license_pool.created_at = self.as_of_timestamp
             license_pool.open_access = self.has_open_access_link
             license_pool.should_track_playtime = self.should_track_playtime
 
@@ -227,6 +220,20 @@ class CirculationData(BaseMutableData):
         pool = None
         if collection:
             pool, ignore = self.license_pool(_db, collection)
+            # Skip circulation data update if the content hasn't changed, UNLESS we
+            # have individual license objects that may have expired since the last
+            # import (ODL-style pools). License expiry is time-dependent and cannot
+            # be detected by content hashing alone.
+            if (
+                not replace.even_if_not_apparently_updated
+                and self.licenses is None
+                and not self.should_apply_to(pool)
+            ):
+                self.log.info(
+                    f"Publication {self.primary_identifier_data} circulation data has not changed since "
+                    f"last import, skipping update."
+                )
+                return pool, False
 
         data_source = self.load_data_source(_db)
         identifier = self.load_primary_identifier(_db)
@@ -301,9 +308,10 @@ class CirculationData(BaseMutableData):
         changed_availability = False
         changed_lp_type = False
         changed_lp_status = False
-        if pool and (
-            replace.even_if_not_apparently_updated or self.has_changed(_db, pool=pool)
-        ):
+        # The early return above already filtered out pools whose content hash has
+        # not changed (for non-ODL pools when a collection is provided). If we reach
+        # this point with a pool, we know we need to apply the availability data.
+        if pool:
             # Update availability information. This may result in
             # the issuance of additional circulation events.
 
@@ -337,7 +345,7 @@ class CirculationData(BaseMutableData):
                             f"License {license.identifier} has been removed from feed."
                         )
                 changed_availability = pool.update_availability_from_licenses(
-                    as_of=self.last_checked,
+                    as_of=self.as_of_timestamp,
                 )
             elif pool.type == LicensePoolType.UNLIMITED:
                 changed_availability = pool.update_availability(
@@ -345,7 +353,7 @@ class CirculationData(BaseMutableData):
                     new_licenses_available=0,
                     new_licenses_reserved=0,
                     new_patrons_in_hold_queue=0,
-                    as_of=self.last_checked,
+                    as_of=self.as_of_timestamp,
                 )
             elif pool.type == LicensePoolType.METERED:
                 # This is a metered pool, update the availability counts directly.
@@ -354,8 +362,18 @@ class CirculationData(BaseMutableData):
                     new_licenses_available=self.licenses_available,
                     new_licenses_reserved=self.licenses_reserved,
                     new_patrons_in_hold_queue=self.patrons_in_hold_queue,
-                    as_of=self.last_checked,
+                    as_of=self.as_of_timestamp,
                 )
+
+            # Unconditional: roll both fields forward (or back for stale force-applies).
+            # Keeping updated_at and updated_at_data_hash in sync ensures that future
+            # imports at any timestamp after as_of_timestamp are not blocked by the
+            # strict-less-than check in should_apply_to() and can reach the hash
+            # comparison. This is intentionally different from the Edition path, which
+            # leaves both fields unchanged when as_of_timestamp does not advance
+            # updated_at.
+            pool.updated_at = self.as_of_timestamp
+            pool.updated_at_data_hash = self.calculate_hash()
 
         # If this is the first time we've seen this pool, or we never
         # made a Work for it, make one now.
@@ -377,47 +395,23 @@ class CirculationData(BaseMutableData):
 
         return pool, made_changes
 
-    @overload
-    def has_changed(
-        self,
-        session: Session,
-        *,
-        collection: Collection,
-    ) -> bool: ...
+    def needs_apply(self, session: Session, collection: Collection) -> bool:
+        """Return ``True`` if this data should be applied to the corresponding LicensePool.
 
-    @overload
-    def has_changed(
-        self,
-        session: Session,
-        *,
-        pool: LicensePool,
-    ) -> bool: ...
+        Looks up the existing :class:`~palace.manager.sqlalchemy.model.licensing.LicensePool`
+        for this object's primary identifier in *collection* and delegates to
+        :meth:`~palace.manager.data_layer.base.mutable.BaseMutableData.should_apply_to`.
 
-    def has_changed(
-        self,
-        session: Session,
-        *,
-        collection: Collection | None = None,
-        pool: LicensePool | None = None,
-    ) -> bool:
+        ODL-style pools that carry individual :attr:`licenses` are always considered to
+        need application because license availability can change over time as licenses expire
+        independently of any feed content change, and that expiry cannot be detected by
+        content hashing alone.
+
+        :param session: Active database session used to look up the pool.
+        :param collection: The collection the pool belongs to.
+        :return: ``True`` if the data needs to be applied, ``False`` if it can be skipped.
         """
-        Does this CirculationData represent information more recent than
-        what we have for the given LicensePool?
-
-        One of `collection` or `pool` must be provided.
-        """
-        if not self.last_checked:
-            # Assume that our data represents the state of affairs right now.
+        if self.licenses is not None:
             return True
-
-        if pool is None:
-            pool, _ = self.license_pool(session, collection, autocreate=False)
-        if pool is None:
-            # We don't have an existing license pool, so we need to create one.
-            return True
-
-        if not pool.last_checked:
-            # It looks like the LicensePool has never been checked.
-            return True
-
-        return self.last_checked > pool.last_checked
+        pool, _ = self.license_pool(session, collection, autocreate=False)
+        return self.should_apply_to(pool)

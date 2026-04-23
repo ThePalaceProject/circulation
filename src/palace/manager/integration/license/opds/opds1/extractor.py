@@ -736,7 +736,7 @@ class Opds1Extractor(OpdsExtractor[OPDS1Feed, OPDS1Publication], BearerTokenDrmM
             publisher=publisher,
             links=links,
             # refers to when was updated in opds feed, not our db
-            data_source_last_updated=last_opds_update,
+            updated_at=last_opds_update,
             data_source_name=self._data_source,
             primary_identifier_data=identifier,
             identifiers=identifiers,
