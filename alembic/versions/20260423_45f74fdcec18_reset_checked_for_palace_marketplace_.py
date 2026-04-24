@@ -21,7 +21,7 @@ from palace.manager.util.migration.helpers import migration_logger
 
 # revision identifiers, used by Alembic.
 revision = "45f74fdcec18"
-down_revision = "23795e50c915"
+down_revision = "f98e4049c87d"
 branch_labels = None
 depends_on = None
 
