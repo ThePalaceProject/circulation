@@ -702,6 +702,16 @@ class BISACClassifier(Classifier):
     # human-readable note, which is not part of the official name.
     see_also = re.compile(r"\(see also .*")
 
+    # Maps non-standard codes (after FB-prefix and N-suffix stripping) to the
+    # nearest canonical BISAC equivalent. Add entries here when a distributor
+    # uses a code that does not exist in the official BISAC list.
+    NON_STANDARD_CODE_ALIASES: dict[str, str] = {
+        # Palace Marketplace sub-code for Juvenile Fiction / Family.
+        # JUV009001 is not an official BISAC code; map it to JUV013000
+        # ("Juvenile Fiction / Family / General").
+        "JUV009001": "JUV013000",
+    }
+
     @classmethod
     def scrub_identifier(cls, identifier):
         if not identifier:
@@ -715,6 +725,8 @@ class BISACClassifier(Classifier):
         # resolves to its canonical entry.
         if identifier.endswith("N"):
             identifier = identifier[:-1]
+        # Remap any remaining non-standard codes to their canonical equivalents.
+        identifier = cls.NON_STANDARD_CODE_ALIASES.get(identifier, identifier)
         if identifier in cls.NAMES:
             # We know the canonical name for this BISAC identifier,
             # and we are better equipped to classify the canonical

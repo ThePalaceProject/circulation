@@ -352,10 +352,9 @@ class TestBISACClassifier:
         JUV codes are Juvenile Fiction, so these must classify as
         Children / Fiction.
 
-        Note: FBJUV009001N (stripped: JUV009001) is excluded because JUV009001
-        is not an official BISAC code and cannot be resolved to a canonical
-        entry. It falls back to keyword classification of its stored name
-        ("Family") with no audience context.
+        FBJUV009001N is a non-standard sub-code not present in the official
+        BISAC list; it is remapped via NON_STANDARD_CODE_ALIASES to JUV013000
+        ("Juvenile Fiction / Family / General").
         """
         children = Classifier.AUDIENCE_CHILDREN
         codes = [
@@ -364,6 +363,10 @@ class TestBISACClassifier:
                 "FBJUV009000N",
                 "Tales",
             ),  # → JUV009000 "Juvenile Fiction / Concepts / General"
+            (
+                "FBJUV009001N",
+                "Family",
+            ),  # → JUV009001 → alias → JUV013000 "Juvenile Fiction / Family / General"
             (
                 "FBJUV022000N",
                 "Lifestyles",
@@ -406,6 +409,13 @@ class TestBISACClassifier:
             "JUV000000",
             "Juvenile Fiction / General",
         ) == BISACClassifier.scrub_identifier("JUV000000N")
+
+        # Non-standard codes are remapped to their canonical equivalents via
+        # NON_STANDARD_CODE_ALIASES after N-suffix stripping.
+        assert (
+            "JUV013000",
+            "Juvenile Fiction / Family / General",
+        ) == BISACClassifier.scrub_identifier("FBJUV009001N")
 
     def test_scrub_name(self):
         """Sometimes a data provider sends BISAC names that contain extra or
