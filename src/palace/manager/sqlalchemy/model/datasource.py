@@ -320,6 +320,7 @@ class DataSource(Base, HasSessionCache, DataSourceConstants):
                 None,
             ),
             (cls.PROQUEST, True, False, IdentifierConstants.PROQUEST_ID, None),
+            (cls.LEXILE_DB, False, True, IdentifierConstants.ISBN, None),
         ):
             obj = DataSource.lookup(
                 _db,
