@@ -708,6 +708,13 @@ class BISACClassifier(Classifier):
             return identifier
         if identifier.startswith("FB"):
             identifier = identifier[2:]
+        # Some distributors (e.g. Palace Marketplace) append an "N" suffix to
+        # standard BISAC codes (e.g. "FBJUV000000N" becomes "JUV000000N" after
+        # FB-stripping). Official BISAC codes always end with digits, so a
+        # trailing "N" is always a non-standard extension; strip it so the code
+        # resolves to its canonical entry.
+        if identifier.endswith("N"):
+            identifier = identifier[:-1]
         if identifier in cls.NAMES:
             # We know the canonical name for this BISAC identifier,
             # and we are better equipped to classify the canonical

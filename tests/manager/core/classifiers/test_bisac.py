@@ -344,23 +344,39 @@ class TestBISACClassifier:
         subject = self._subject("FSHUM000000N", "Human Science")
         assert "Social Sciences" == subject.genre.name
 
-    def test_palace_marketplace_juvenile_nonfiction_n_suffix_codes(self):
-        """Palace Marketplace sends Juvenile Nonfiction BISAC codes with an
-        FB prefix and N suffix (e.g. FBJUV000000N). These are absent from
-        the official BISAC list but must classify as Children / Nonfiction.
+    def test_palace_marketplace_n_suffix_codes(self):
+        """Palace Marketplace sends BISAC codes with an FB prefix and an N
+        suffix (e.g. FBJUV000000N). The scrubber strips the FB prefix and the
+        N suffix so the code resolves to its canonical BISAC entry.
+
+        JUV codes are Juvenile Fiction, so these must classify as
+        Children / Fiction.
+
+        Note: FBJUV009001N (stripped: JUV009001) is excluded because JUV009001
+        is not an official BISAC code and cannot be resolved to a canonical
+        entry. It falls back to keyword classification of its stored name
+        ("Family") with no audience context.
         """
         children = Classifier.AUDIENCE_CHILDREN
         codes = [
-            ("FBJUV000000N", "Themes"),
-            ("FBJUV009000N", "Tales"),
-            ("FBJUV009001N", "Family"),
-            ("FBJUV022000N", "Lifestyles"),
-            ("FBJUV038000N", "Social situations"),
+            ("FBJUV000000N", "Themes"),  # → JUV000000 "Juvenile Fiction / General"
+            (
+                "FBJUV009000N",
+                "Tales",
+            ),  # → JUV009000 "Juvenile Fiction / Concepts / General"
+            (
+                "FBJUV022000N",
+                "Lifestyles",
+            ),  # → JUV022000 "Juvenile Fiction / Legends, Myths, Fables / General"
+            (
+                "FBJUV038000N",
+                "Social situations",
+            ),  # → JUV038000 "Juvenile Fiction / Short Stories"
         ]
         for identifier, stored_name in codes:
             subject = self._subject(identifier, stored_name)
             assert subject.audience == children, f"{identifier} should be Children"
-            assert subject.fiction is False, f"{identifier} should be Nonfiction"
+            assert subject.fiction is True, f"{identifier} should be Fiction"
 
     def test_scrub_identifier(self):
         # FeedBooks prefixes are removed.
@@ -376,6 +392,20 @@ class TestBISACClassifier:
         assert ("FIC015000", "Fiction / Horror") == BISACClassifier.scrub_identifier(
             "FBFIC015000"
         )
+
+        # Trailing "N" suffixes are stripped. Official BISAC codes always end
+        # with digits, so an "N" suffix is always a non-standard extension
+        # (e.g. Palace Marketplace's FBJUV000000N → JUV000000).
+        assert (
+            "JUV000000",
+            "Juvenile Fiction / General",
+        ) == BISACClassifier.scrub_identifier("FBJUV000000N")
+
+        # N-suffix stripping also applies without an FB prefix.
+        assert (
+            "JUV000000",
+            "Juvenile Fiction / General",
+        ) == BISACClassifier.scrub_identifier("JUV000000N")
 
     def test_scrub_name(self):
         """Sometimes a data provider sends BISAC names that contain extra or

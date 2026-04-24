@@ -1,9 +1,12 @@
 """reset_checked_for_palace_marketplace_juvenile_nonfiction_subjects
 
-Palace Marketplace sends Juvenile Nonfiction BISAC codes with an FB prefix and
-N suffix (e.g. FBJUV000000N). These were absent from bisac.csv, causing them to
-be misclassified as Adult. Now that the codes are present in bisac.csv, reset
-checked=False so the classify_unchecked_subjects task reclassifies them.
+Palace Marketplace sends Juvenile Fiction BISAC codes with an FB prefix and
+N suffix (e.g. FBJUV000000N). The BISACClassifier.scrub_identifier() method
+now strips the trailing N so these codes resolve to their canonical BISAC
+entries (e.g. JUV000000 = "Juvenile Fiction / General") instead of falling
+through to the Adult catch-all. Reset checked=False so the
+classify_unchecked_subjects task reclassifies the affected subjects with the
+corrected scrubber.
 
 Revision ID: 45f74fdcec18
 Revises: 23795e50c915
