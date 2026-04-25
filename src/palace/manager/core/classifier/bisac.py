@@ -702,7 +702,7 @@ class BISACClassifier(Classifier):
 
     # A BISAC name copied from the BISAC website may end with this
     # human-readable note, which is not part of the official name.
-    see_also = re.compile(r"\(see also .*")
+    see_also = re.compile(r"\(\s*see also .*")
 
     # Maps non-standard codes (after FB-prefix and N-suffix stripping) to the
     # nearest canonical BISAC equivalent. Add entries here when a distributor
