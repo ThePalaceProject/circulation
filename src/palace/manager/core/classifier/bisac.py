@@ -1,6 +1,8 @@
 import csv
 import re
 
+from frozendict import frozendict
+
 from palace.manager.core import classifier
 from palace.manager.core.classifier import (
     Classifier,
@@ -702,12 +704,31 @@ class BISACClassifier(Classifier):
     # human-readable note, which is not part of the official name.
     see_also = re.compile(r"\(see also .*")
 
+    # Maps non-standard codes (after FB-prefix and N-suffix stripping) to the
+    # nearest canonical BISAC equivalent. Add entries here when a distributor
+    # uses a code that does not exist in the official BISAC list.
+    NON_STANDARD_CODE_ALIASES: frozendict[str, str] = frozendict(
+        {
+            # Palace Marketplace sub-code for Juvenile Fiction / Family.
+            # JUV009001 is not an official BISAC code; map it to JUV013000
+            # ("Juvenile Fiction / Family / General").
+            "JUV009001": "JUV013000",
+        }
+    )
+
     @classmethod
     def scrub_identifier(cls, identifier):
         if not identifier:
             return identifier
-        if identifier.startswith("FB"):
-            identifier = identifier[2:]
+        identifier = identifier.removeprefix("FB")
+        # Some distributors (e.g. Palace Marketplace) append an "N" suffix to
+        # standard BISAC codes (e.g. "FBJUV000000N" becomes "JUV000000N" after
+        # FB-stripping). Official BISAC codes always end with digits, so a
+        # trailing "N" is always a non-standard extension; strip it so the code
+        # resolves to its canonical entry.
+        identifier = identifier.removesuffix("N")
+        # Remap any remaining non-standard codes to their canonical equivalents.
+        identifier = cls.NON_STANDARD_CODE_ALIASES.get(identifier, identifier)
         if identifier in cls.NAMES:
             # We know the canonical name for this BISAC identifier,
             # and we are better equipped to classify the canonical

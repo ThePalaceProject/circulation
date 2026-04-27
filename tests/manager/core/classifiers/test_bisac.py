@@ -344,20 +344,91 @@ class TestBISACClassifier:
         subject = self._subject("FSHUM000000N", "Human Science")
         assert "Social Sciences" == subject.genre.name
 
-    def test_scrub_identifier(self):
-        # FeedBooks prefixes are removed.
-        assert "abc" == BISACClassifier.scrub_identifier("FBabc")
+    @pytest.mark.parametrize(
+        "identifier,stored_name",
+        [
+            pytest.param(
+                "FBJUV000000N",
+                "Themes",
+                id="FBJUV000000N_strips_to_JUV000000_general",
+            ),
+            pytest.param(
+                "FBJUV009000N",
+                "Tales",
+                id="FBJUV009000N_strips_to_JUV009000_concepts",
+            ),
+            pytest.param(
+                "FBJUV009001N",
+                "Family",
+                id="FBJUV009001N_alias_to_JUV013000_family",
+            ),
+            pytest.param(
+                "FBJUV022000N",
+                "Lifestyles",
+                id="FBJUV022000N_strips_to_JUV022000_legends",
+            ),
+            pytest.param(
+                "FBJUV038000N",
+                "Social situations",
+                id="FBJUV038000N_strips_to_JUV038000_short_stories",
+            ),
+        ],
+    )
+    def test_palace_marketplace_n_suffix_codes(
+        self, identifier: str, stored_name: str
+    ) -> None:
+        """Palace Marketplace sends BISAC codes with an FB prefix and an N
+        suffix (e.g. FBJUV000000N). The scrubber strips the FB prefix and the
+        N suffix so the code resolves to its canonical BISAC entry.
 
-        # Otherwise, the identifier is left alone.
-        assert "abc" == BISACClassifier.scrub_identifier("abc")
+        JUV codes are Juvenile Fiction, so these must classify as
+        Children / Fiction.
 
-        # If the identifier is recognized as an official BISAC identifier,
-        # the canonical name is also returned. This will override
-        # any other name associated with the subject for classification
-        # purposes.
-        assert ("FIC015000", "Fiction / Horror") == BISACClassifier.scrub_identifier(
-            "FBFIC015000"
-        )
+        FBJUV009001N is a non-standard sub-code not present in the official
+        BISAC list; it is remapped via NON_STANDARD_CODE_ALIASES to JUV013000
+        ("Juvenile Fiction / Family / General").
+        """
+        subject = self._subject(identifier, stored_name)
+        assert subject.audience == Classifier.AUDIENCE_CHILDREN
+        assert subject.fiction is True
+
+    @pytest.mark.parametrize(
+        "identifier,expected",
+        [
+            pytest.param(
+                "FBabc",
+                "abc",
+                id="fb_prefix_stripped",
+            ),
+            pytest.param(
+                "abc",
+                "abc",
+                id="no_prefix_unchanged",
+            ),
+            pytest.param(
+                "FBFIC015000",
+                ("FIC015000", "Fiction / Horror"),
+                id="fb_prefix_resolves_to_canonical_name",
+            ),
+            pytest.param(
+                "FBJUV000000N",
+                ("JUV000000", "Juvenile Fiction / General"),
+                id="fb_prefix_and_n_suffix_stripped_to_known_code",
+            ),
+            pytest.param(
+                "JUV000000N",
+                ("JUV000000", "Juvenile Fiction / General"),
+                id="n_suffix_stripped_without_fb_prefix",
+            ),
+            pytest.param(
+                "FBJUV009001N",
+                ("JUV013000", "Juvenile Fiction / Family / General"),
+                id="non_standard_code_remapped_via_aliases",
+            ),
+        ],
+    )
+    def test_scrub_identifier(self, identifier: str, expected: str | tuple) -> None:
+        assert expected == BISACClassifier.scrub_identifier(identifier)
 
     def test_scrub_name(self):
         """Sometimes a data provider sends BISAC names that contain extra or
