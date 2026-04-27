@@ -48,6 +48,7 @@ through mobile and web applications.
 - Whenever possible use immutable datastructures for global and class constants.
 - Whenever creating an alembic revision, always use `alembic revision` to create the revision file with the
   upgrade/downgrade stubs.
+- When creating immutable dictionaries, use `frozendict` unless directed otherwise.
 
 ## Project Structure
 
