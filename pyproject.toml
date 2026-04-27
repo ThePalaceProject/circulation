@@ -76,7 +76,7 @@ dependencies = [
     "palace-opds",
     "palace-util",
     "pillow>=12.0.0,<13",
-    "psycopg2-binary>=2.9.5,<2.10",
+    "psycopg2-binary>=2.9.12,<2.10",
     "pycountry>=26.2.16,<27",
     "pycryptodome>=3.18,<4",
     "pydantic-settings>=2.14.0,<3",
