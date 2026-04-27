@@ -1,7 +1,7 @@
 import csv
 import re
-from collections.abc import Mapping
-from types import MappingProxyType
+
+from frozendict import frozendict
 
 from palace.manager.core import classifier
 from palace.manager.core.classifier import (
@@ -707,7 +707,7 @@ class BISACClassifier(Classifier):
     # Maps non-standard codes (after FB-prefix and N-suffix stripping) to the
     # nearest canonical BISAC equivalent. Add entries here when a distributor
     # uses a code that does not exist in the official BISAC list.
-    NON_STANDARD_CODE_ALIASES: Mapping[str, str] = MappingProxyType(
+    NON_STANDARD_CODE_ALIASES: frozendict[str, str] = frozendict(
         {
             # Palace Marketplace sub-code for Juvenile Fiction / Family.
             # JUV009001 is not an official BISAC code; map it to JUV013000
