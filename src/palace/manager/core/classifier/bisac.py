@@ -64,6 +64,14 @@ body_mind_spirit = Interchangeable("Body, Mind & Spirit", "Mind & Spirit")
 psychology = Interchangeable("Psychology", "Psychology & Psychiatry")
 technology = Interchangeable("Technology & Engineering", "Technology")
 social_topics = Interchangeable("Social Situations", "Social Topics")
+african_american = Interchangeable("African American", "African American & Black")
+urban_street_lit = Interchangeable("Urban", "Urban & Street Lit")
+mermaids = Interchangeable("Mermaids", "Mermaids & Mermen")
+foreign_language = Interchangeable("Foreign Language Study", "Language Study")
+vegetarian_vegan = Interchangeable("Vegetarian & Vegan", "Vegetarian")
+fashion = Interchangeable("Fashion", "Fashion & Accessories")
+composers_musicians = Interchangeable("Composers & Musicians", "Music")
+film_video = Interchangeable("Film & Video", "Film")
 
 # This name change is _not_ cosmetic. The category was split into
 # two, and we're putting everything that was in the old category into
@@ -400,18 +408,16 @@ class BISACClassifier(Classifier):
         m(classifier.Humorous_Fiction, fiction, "Humorous"),
         m(classifier.Humorous_Fiction, fiction, "Satire"),
         m(classifier.Literary_Fiction, fiction, "Literary"),
-        m(classifier.LGBTQ_Fiction, fiction, "Gay"),
-        m(classifier.LGBTQ_Fiction, fiction, "Lesbian"),
-        m(classifier.LGBTQ_Fiction, fiction, "Gay & Lesbian"),
+        m(classifier.LGBTQ_Fiction, fiction, "LGBTQ+"),
         m(classifier.Religious_Fiction, fiction, "Religious"),
         m(classifier.Religious_Fiction, fiction, "Jewish"),
         m(classifier.Religious_Fiction, fiction, "Visionary & Metaphysical"),
-        m(classifier.Womens_Fiction, fiction, anything, "Contemporary Women"),
+        m(classifier.Womens_Fiction, fiction, anything, "Women"),
         m(classifier.Westerns, fiction, "Westerns"),
         # n.b. BISAC "Fiction / Urban" is distinct from "Fiction /
         # African-American / Urban", and does not map to any of our
         # genres.
-        m(classifier.Urban_Fiction, fiction, "African American", "Urban"),
+        m(classifier.Urban_Fiction, fiction, african_american, urban_street_lit),
         # BISAC classifies these genres at the top level, which we
         # treat as 'nonfiction', but we classify them as fiction. It
         # doesn't matter because they're neither, really.
@@ -427,7 +433,7 @@ class BISACClassifier(Classifier):
         m(classifier.Architecture, nonfiction, "Architecture"),
         m(classifier.Art_Criticism_Theory, nonfiction, "Art", "Criticism & Theory"),
         m(classifier.Art_History, nonfiction, "Art", "History"),
-        m(classifier.Fashion, nonfiction, "Design", "Fashion"),
+        m(classifier.Fashion, nonfiction, "Design", fashion),
         m(classifier.Design, nonfiction, "Design"),
         m(classifier.Art_Design, nonfiction, "Art"),
         m(classifier.Photography, nonfiction, "Photography"),
@@ -487,7 +493,7 @@ class BISACClassifier(Classifier):
         m(classifier.Bartending_Cocktails, nonfiction, "Cooking", "Beverages"),
         m(classifier.Health_Diet, nonfiction, "Cooking", "Health & Healing"),
         m(classifier.Health_Diet, nonfiction, "Health & Fitness"),
-        m(classifier.Vegetarian_Vegan, nonfiction, "Cooking", "Vegetarian & Vegan"),
+        m(classifier.Vegetarian_Vegan, nonfiction, "Cooking", vegetarian_vegan),
         m(classifier.Cooking, nonfiction, "Cooking"),
         # History
         m(classifier.African_History, nonfiction, "History", "Africa"),
@@ -531,13 +537,13 @@ class BISACClassifier(Classifier):
         m(classifier.House_Home, nonfiction, "House & Home"),
         m(classifier.Pets, nonfiction, "Pets"),
         # Entertainment
-        m(classifier.Film_TV, nonfiction, "Performing Arts", "Film & Video"),
+        m(classifier.Film_TV, nonfiction, "Performing Arts", film_video),
         m(classifier.Film_TV, nonfiction, "Performing Arts", "Television"),
         m(classifier.Music, nonfiction, "Music"),
         m(classifier.Performing_Arts, nonfiction, "Performing Arts"),
         # Reference & Study Aids
         m(classifier.Dictionaries, nonfiction, "Reference", "Dictionaries"),
-        m(classifier.Foreign_Language_Study, nonfiction, "Foreign Language Study"),
+        m(classifier.Foreign_Language_Study, nonfiction, foreign_language),
         m(classifier.Law, nonfiction, "Law"),
         m(classifier.Study_Aids, nonfiction, "Study Aids"),
         m(classifier.Reference_Study_Aids, nonfiction, "Reference"),
@@ -575,7 +581,7 @@ class BISACClassifier(Classifier):
             classifier.Music,
             nonfiction,
             "Biography & Autobiography",
-            "Composers & Musicians",
+            composers_musicians,
         ),
         m(
             classifier.Entertainment,
@@ -598,25 +604,21 @@ class BISACClassifier(Classifier):
         m(classifier.Cooking, nonfiction, "Cooking & Food"),
         m(classifier.Education, nonfiction, "School & Education"),
         m(classifier.Family_Relationships, nonfiction, "Family"),
-        m(classifier.Fantasy, fiction, "Fantasy & Magic"),
         m(classifier.Ghost_Stories, fiction, "Ghost Stories"),
         m(classifier.Fantasy, fiction, "Magical Realism"),
-        m(classifier.Fantasy, fiction, "Mermaids"),
+        m(classifier.Fantasy, fiction, mermaids),
         m(classifier.Fashion, nonfiction, "Fashion"),
         m(classifier.Folklore, fiction, "Fairy Tales & Folklore"),
         m(classifier.Folklore, fiction, "Legends, Myths, Fables"),
         m(classifier.Games, nonfiction, "Games & Activities"),
         m(classifier.Health_Diet, nonfiction, "Health & Daily Living"),
-        m(classifier.Horror, fiction, "Horror & Ghost Stories"),
         m(classifier.Horror, fiction, "Monsters"),
-        m(classifier.Horror, fiction, "Paranormal"),
         m(classifier.Horror, fiction, "Paranormal, Occult & Supernatural"),
         m(classifier.Horror, fiction, "Vampires"),
         m(classifier.Horror, fiction, "Werewolves & Shifters"),
         m(classifier.Horror, fiction, "Zombies"),
         m(classifier.Humorous_Fiction, fiction, "Humorous Stories"),
         m(classifier.Humorous_Nonfiction, "Young Adult Nonfiction", "Humor"),
-        m(classifier.LGBTQ_Fiction, fiction, "LGBT"),
         m(classifier.Law, nonfiction, "Law & Crime"),
         m(classifier.Mystery, fiction, "Mysteries & Detective Stories"),
         m(classifier.Nature, nonfiction, "Animals"),
@@ -702,7 +704,7 @@ class BISACClassifier(Classifier):
 
     # A BISAC name copied from the BISAC website may end with this
     # human-readable note, which is not part of the official name.
-    see_also = re.compile(r"\(see also .*")
+    see_also = re.compile(r"\(\s*see also .*")
 
     # Maps non-standard codes (after FB-prefix and N-suffix stripping) to the
     # nearest canonical BISAC equivalent. Add entries here when a distributor
