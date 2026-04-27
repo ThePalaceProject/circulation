@@ -71,6 +71,7 @@ horror_ghost = Interchangeable("Horror & Ghost Stories", "Horror")
 mermaids = Interchangeable("Mermaids", "Mermaids & Mermen")
 foreign_language = Interchangeable("Foreign Language Study", "Language Study")
 vegetarian_vegan = Interchangeable("Vegetarian & Vegan", "Vegetarian")
+fashion = Interchangeable("Fashion", "Fashion & Accessories")
 
 # This name change is _not_ cosmetic. The category was split into
 # two, and we're putting everything that was in the old category into
@@ -432,7 +433,7 @@ class BISACClassifier(Classifier):
         m(classifier.Architecture, nonfiction, "Architecture"),
         m(classifier.Art_Criticism_Theory, nonfiction, "Art", "Criticism & Theory"),
         m(classifier.Art_History, nonfiction, "Art", "History"),
-        m(classifier.Fashion, nonfiction, "Design", "Fashion"),
+        m(classifier.Fashion, nonfiction, "Design", fashion),
         m(classifier.Design, nonfiction, "Design"),
         m(classifier.Art_Design, nonfiction, "Art"),
         m(classifier.Photography, nonfiction, "Photography"),
@@ -576,12 +577,6 @@ class BISACClassifier(Classifier):
         # Then handle the less complicated genres of nonfiction.
         # n.b. no BISAC for Periodicals.
         # n.b. no BISAC for Humorous Nonfiction per se.
-        m(
-            classifier.Music,
-            nonfiction,
-            "Biography & Autobiography",
-            "Music",
-        ),
         m(
             classifier.Entertainment,
             nonfiction,

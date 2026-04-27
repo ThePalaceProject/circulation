@@ -386,7 +386,7 @@ class TestBISACClassifier:
 
         FBJUV009001N is a non-standard sub-code not present in the official
         BISAC list; it is remapped via NON_STANDARD_CODE_ALIASES to JUV013000
-        ("Juvenile Fiction / Family / General").
+        ("Juvenile Fiction / Family / General ( see also headings under Social Themes)").
         """
         subject = self._subject(identifier, stored_name)
         assert subject.audience == Classifier.AUDIENCE_CHILDREN
@@ -422,7 +422,10 @@ class TestBISACClassifier:
             ),
             pytest.param(
                 "FBJUV009001N",
-                ("JUV013000", "Juvenile Fiction / Family / General"),
+                (
+                    "JUV013000",
+                    "Juvenile Fiction / Family / General ( see also headings under Social Themes)",
+                ),
                 id="non_standard_code_remapped_via_aliases",
             ),
         ],
