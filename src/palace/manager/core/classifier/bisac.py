@@ -66,12 +66,12 @@ technology = Interchangeable("Technology & Engineering", "Technology")
 social_topics = Interchangeable("Social Situations", "Social Topics")
 african_american = Interchangeable("African American", "African American & Black")
 urban_street_lit = Interchangeable("Urban", "Urban & Street Lit")
-fantasy_magic = Interchangeable("Fantasy & Magic", "Fantasy")
-horror_ghost = Interchangeable("Horror & Ghost Stories", "Horror")
 mermaids = Interchangeable("Mermaids", "Mermaids & Mermen")
 foreign_language = Interchangeable("Foreign Language Study", "Language Study")
 vegetarian_vegan = Interchangeable("Vegetarian & Vegan", "Vegetarian")
 fashion = Interchangeable("Fashion", "Fashion & Accessories")
+composers_musicians = Interchangeable("Composers & Musicians", "Music")
+film_video = Interchangeable("Film & Video", "Film")
 
 # This name change is _not_ cosmetic. The category was split into
 # two, and we're putting everything that was in the old category into
@@ -537,7 +537,7 @@ class BISACClassifier(Classifier):
         m(classifier.House_Home, nonfiction, "House & Home"),
         m(classifier.Pets, nonfiction, "Pets"),
         # Entertainment
-        m(classifier.Film_TV, nonfiction, "Performing Arts", "Film & Video"),
+        m(classifier.Film_TV, nonfiction, "Performing Arts", film_video),
         m(classifier.Film_TV, nonfiction, "Performing Arts", "Television"),
         m(classifier.Music, nonfiction, "Music"),
         m(classifier.Performing_Arts, nonfiction, "Performing Arts"),
@@ -578,6 +578,12 @@ class BISACClassifier(Classifier):
         # n.b. no BISAC for Periodicals.
         # n.b. no BISAC for Humorous Nonfiction per se.
         m(
+            classifier.Music,
+            nonfiction,
+            "Biography & Autobiography",
+            composers_musicians,
+        ),
+        m(
             classifier.Entertainment,
             nonfiction,
             "Biography & Autobiography",
@@ -598,7 +604,6 @@ class BISACClassifier(Classifier):
         m(classifier.Cooking, nonfiction, "Cooking & Food"),
         m(classifier.Education, nonfiction, "School & Education"),
         m(classifier.Family_Relationships, nonfiction, "Family"),
-        m(classifier.Fantasy, fiction, fantasy_magic),
         m(classifier.Ghost_Stories, fiction, "Ghost Stories"),
         m(classifier.Fantasy, fiction, "Magical Realism"),
         m(classifier.Fantasy, fiction, mermaids),
@@ -607,9 +612,7 @@ class BISACClassifier(Classifier):
         m(classifier.Folklore, fiction, "Legends, Myths, Fables"),
         m(classifier.Games, nonfiction, "Games & Activities"),
         m(classifier.Health_Diet, nonfiction, "Health & Daily Living"),
-        m(classifier.Horror, fiction, horror_ghost),
         m(classifier.Horror, fiction, "Monsters"),
-        m(classifier.Horror, fiction, "Paranormal"),
         m(classifier.Horror, fiction, "Paranormal, Occult & Supernatural"),
         m(classifier.Horror, fiction, "Vampires"),
         m(classifier.Horror, fiction, "Werewolves & Shifters"),
