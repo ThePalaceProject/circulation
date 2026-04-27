@@ -723,8 +723,7 @@ class BISACClassifier(Classifier):
         # FB-stripping). Official BISAC codes always end with digits, so a
         # trailing "N" is always a non-standard extension; strip it so the code
         # resolves to its canonical entry.
-        if identifier.endswith("N"):
-            identifier = identifier[:-1]
+        identifier = identifier.removesuffix("N")
         # Remap any remaining non-standard codes to their canonical equivalents.
         identifier = cls.NON_STANDARD_CODE_ALIASES.get(identifier, identifier)
         if identifier in cls.NAMES:
