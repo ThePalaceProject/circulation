@@ -396,7 +396,7 @@ class WorkClassifier:
         audience = default_audience
 
         # A book will be classified as a young adult or childrens'
-        # book when the weight of that audience is more than twice the
+        # book when the weight of that audience is at least twice the
         # combined weight of the 'adult' and 'adults only' audiences.
         # If that combined weight is zero, then any amount of evidence
         # is sufficient.
@@ -418,11 +418,11 @@ class WorkClassifier:
             and all_ages_weight > total_juvenile_weight
         ):
             audience = Classifier.AUDIENCE_ALL_AGES
-        elif children_weight > threshold and children_weight > ya_weight:
+        elif children_weight >= threshold and children_weight > ya_weight:
             audience = Classifier.AUDIENCE_CHILDREN
-        elif ya_weight > threshold:
+        elif ya_weight >= threshold:
             audience = Classifier.AUDIENCE_YOUNG_ADULT
-        elif total_juvenile_weight > threshold:
+        elif total_juvenile_weight >= threshold:
             # Neither weight passes the threshold on its own, but
             # combined they do pass the threshold. Go with
             # 'Young Adult' to be safe.

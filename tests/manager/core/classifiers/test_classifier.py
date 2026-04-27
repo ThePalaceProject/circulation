@@ -557,13 +557,13 @@ class TestWorkClassifier:
         data.classifier.audience_weights = {
             Classifier.AUDIENCE_ADULT: 10,
             Classifier.AUDIENCE_ADULTS_ONLY: 1,
-            Classifier.AUDIENCE_CHILDREN: 22,
+            Classifier.AUDIENCE_CHILDREN: 21,
         }
         assert Classifier.AUDIENCE_ADULT == data.classifier.audience()
 
-        # Now it's overwhelming. (the 'children' weight is more than twice
+        # Now it's overwhelming. (the 'children' weight is at least twice
         # the combined 'adult' + 'adults only' weight.
-        data.classifier.audience_weights[Classifier.AUDIENCE_CHILDREN] = 23
+        data.classifier.audience_weights[Classifier.AUDIENCE_CHILDREN] = 22
         assert Classifier.AUDIENCE_CHILDREN == data.classifier.audience()
 
         # Now it's overwhelmingly likely to be a YA book.
