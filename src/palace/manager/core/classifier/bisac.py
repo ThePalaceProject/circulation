@@ -1,5 +1,7 @@
 import csv
 import re
+from collections.abc import Mapping
+from types import MappingProxyType
 
 from palace.manager.core import classifier
 from palace.manager.core.classifier import (
@@ -705,12 +707,14 @@ class BISACClassifier(Classifier):
     # Maps non-standard codes (after FB-prefix and N-suffix stripping) to the
     # nearest canonical BISAC equivalent. Add entries here when a distributor
     # uses a code that does not exist in the official BISAC list.
-    NON_STANDARD_CODE_ALIASES: dict[str, str] = {
-        # Palace Marketplace sub-code for Juvenile Fiction / Family.
-        # JUV009001 is not an official BISAC code; map it to JUV013000
-        # ("Juvenile Fiction / Family / General").
-        "JUV009001": "JUV013000",
-    }
+    NON_STANDARD_CODE_ALIASES: Mapping[str, str] = MappingProxyType(
+        {
+            # Palace Marketplace sub-code for Juvenile Fiction / Family.
+            # JUV009001 is not an official BISAC code; map it to JUV013000
+            # ("Juvenile Fiction / Family / General").
+            "JUV009001": "JUV013000",
+        }
+    )
 
     @classmethod
     def scrub_identifier(cls, identifier):

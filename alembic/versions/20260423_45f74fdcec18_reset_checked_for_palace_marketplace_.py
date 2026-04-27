@@ -9,7 +9,7 @@ classify_unchecked_subjects task reclassifies the affected subjects with the
 corrected scrubber.
 
 Revision ID: 45f74fdcec18
-Revises: 23795e50c915
+Revises: f98e4049c87d
 Create Date: 2026-04-23 21:41:11.984357+00:00
 
 """
