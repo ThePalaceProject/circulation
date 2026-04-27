@@ -716,8 +716,7 @@ class BISACClassifier(Classifier):
     def scrub_identifier(cls, identifier):
         if not identifier:
             return identifier
-        if identifier.startswith("FB"):
-            identifier = identifier[2:]
+        identifier = identifier.removeprefix("FB")
         # Some distributors (e.g. Palace Marketplace) append an "N" suffix to
         # standard BISAC codes (e.g. "FBJUV000000N" becomes "JUV000000N" after
         # FB-stripping). Official BISAC codes always end with digits, so a
