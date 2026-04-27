@@ -5,7 +5,7 @@ requires = ["hatchling"]
 [dependency-groups]
 ci = [
     "dunamai>=1.16,<2",
-    "pre-commit>=4.0,<5",
+    "pre-commit>=4.6.0,<5",
     "tox-docker>=5.0,<6",
     "tox-gh-actions>=3.0,<4",
     "tox-uv>=1.35.1,<2",
