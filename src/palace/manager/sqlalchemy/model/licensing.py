@@ -1235,9 +1235,20 @@ class LicensePool(Base):
                 lp.work = None
                 if lp.presentation_edition:
                     lp.presentation_edition.work = None
-        else:
+        elif existing_works:
             # There is a consensus Work for this Identifier.
             [self.work] = existing_works
+        else:
+            # licensed_through is empty — the session doesn't yet see any pools
+            # for this identifier. This is a transient race condition during
+            # parallel imports; raising here allows the Celery task to retry.
+            from palace.util.exceptions import InconsistentLicensePoolState
+
+            raise InconsistentLicensePoolState(
+                f"No LicensePools found for identifier {self.identifier!r} in "
+                "licensed_through — this is likely a transient session state "
+                "issue caused by a parallel import; the task should be retried."
+            )
 
         if self.work:
             # This pool is already associated with a Work. Use that

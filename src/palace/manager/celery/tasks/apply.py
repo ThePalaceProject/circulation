@@ -6,6 +6,8 @@ from typing import Any, Protocol
 
 from celery import shared_task
 
+from palace.util.exceptions import InconsistentLicensePoolState
+
 from palace.manager.celery.task import Task
 from palace.manager.celery.utils import load_from_id, validate_not_none
 from palace.manager.data_layer.bibliographic import BibliographicData
@@ -41,7 +43,7 @@ _validate_primary_identifier = partial(
 @shared_task(
     queue=QueueNames.apply,
     bind=True,
-    autoretry_for=(LockNotAcquired,),
+    autoretry_for=(LockNotAcquired, InconsistentLicensePoolState),
     max_retries=5,
     retry_backoff=60,
     retry_backoff_max=15 * 60,
@@ -72,7 +74,7 @@ def circulation_apply(
 @shared_task(
     queue=QueueNames.apply,
     bind=True,
-    autoretry_for=(LockNotAcquired,),
+    autoretry_for=(LockNotAcquired, InconsistentLicensePoolState),
     max_retries=5,
     retry_backoff=60,
     retry_backoff_max=15 * 60,

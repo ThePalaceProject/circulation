@@ -10,7 +10,7 @@ from pytest import LogCaptureFixture
 from sqlalchemy import select
 
 from palace.util.datetime_helpers import datetime_utc, from_timestamp, utc_now
-from palace.util.exceptions import BasePalaceException
+from palace.util.exceptions import BasePalaceException, InconsistentLicensePoolState
 from palace.util.log import LogLevel
 
 from palace.manager.core.classifier import Classifier, Fantasy, Romance, Science_Fiction
@@ -2146,6 +2146,20 @@ class TestWorkConsolidation:
         work, new = p.calculate_work()
         assert p.presentation_edition == work.presentation_edition
         assert True == new
+
+    def test_calculate_work_raises_on_empty_licensed_through(
+        self, db: DatabaseTransactionFixture
+    ):
+        """calculate_work raises InconsistentLicensePoolState when licensed_through is empty.
+
+        This guards against silently creating a duplicate Work when the session
+        hasn't yet seen the pool for this identifier (transient parallel-import state).
+        """
+        e, p = db.edition(with_license_pool=True)
+        # Simulate a session that sees no pools yet for this identifier
+        p.identifier.licensed_through = []
+        with pytest.raises(InconsistentLicensePoolState):
+            p.calculate_work()
 
     def test_calculate_work_bails_out_if_no_title(self, db: DatabaseTransactionFixture):
         e, p = db.edition(with_license_pool=True)

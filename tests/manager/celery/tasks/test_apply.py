@@ -1,6 +1,8 @@
+from unittest.mock import patch
+
 import pytest
 
-from palace.util.exceptions import PalaceTypeError
+from palace.util.exceptions import InconsistentLicensePoolState, PalaceTypeError
 
 from palace.manager.celery.tasks import apply
 from palace.manager.data_layer.bibliographic import BibliographicData
@@ -121,6 +123,37 @@ class TestBibliographicApply:
             apply.bibliographic_apply.delay(data, edition.id, None).wait()
 
         # Make sure the task was retried
+        assert (
+            retry_mock.retry_count == 5 + 1
+        )  # 5 retries + the final call before failing
+
+    def test_inconsistent_license_pool_state_retried(
+        self,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        redis_fixture: RedisFixture,
+    ) -> None:
+        edition = db.edition()
+        data = BibliographicData(
+            data_source_name="Test Data Source",
+            primary_identifier_data=IdentifierData.from_identifier(
+                edition.primary_identifier
+            ),
+        )
+
+        with (
+            patch.object(
+                data,
+                "apply",
+                side_effect=InconsistentLicensePoolState(
+                    "simulated empty licensed_through"
+                ),
+            ),
+            celery_fixture.patch_retry_backoff() as retry_mock,
+            pytest.raises(InconsistentLicensePoolState),
+        ):
+            apply.bibliographic_apply.delay(data, edition.id, None).wait()
+
         assert (
             retry_mock.retry_count == 5 + 1
         )  # 5 retries + the final call before failing
