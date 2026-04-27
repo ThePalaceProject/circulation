@@ -568,7 +568,7 @@ class TestWorkClassifier:
 
         # Now it's overwhelmingly likely to be a YA book.
         del data.classifier.audience_weights[Classifier.AUDIENCE_CHILDREN]
-        data.classifier.audience_weights[Classifier.AUDIENCE_YOUNG_ADULT] = 23
+        data.classifier.audience_weights[Classifier.AUDIENCE_YOUNG_ADULT] = 22
         assert Classifier.AUDIENCE_YOUNG_ADULT == data.classifier.audience()
 
     def test_ya_book_when_childrens_and_ya_combined_beat_adult(
