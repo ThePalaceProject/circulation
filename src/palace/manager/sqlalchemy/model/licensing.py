@@ -32,7 +32,7 @@ from sqlalchemy.sql import ColumnElement
 
 from palace.opds.odl.info import LicenseStatus
 from palace.util.datetime_helpers import utc_now
-from palace.util.exceptions import BasePalaceException
+from palace.util.exceptions import BasePalaceException, InconsistentLicensePoolState
 
 from palace.manager.api.circulation.exceptions import CannotHold, CannotLoan
 from palace.manager.sqlalchemy.constants import (
@@ -1242,8 +1242,6 @@ class LicensePool(Base):
             # licensed_through is empty — the session doesn't yet see any pools
             # for this identifier. This is a transient race condition during
             # parallel imports; raising here allows the Celery task to retry.
-            from palace.util.exceptions import InconsistentLicensePoolState
-
             raise InconsistentLicensePoolState(
                 f"No LicensePools found for identifier {self.identifier!r} in "
                 "licensed_through — this is likely a transient session state "
