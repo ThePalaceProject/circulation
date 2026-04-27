@@ -407,7 +407,7 @@ class TestBISACClassifier:
             ),
             pytest.param(
                 "FBFIC015000",
-                ("FIC015000", "Fiction / Horror"),
+                ("FIC015000", "Fiction / Horror / General"),
                 id="fb_prefix_resolves_to_canonical_name",
             ),
             pytest.param(
