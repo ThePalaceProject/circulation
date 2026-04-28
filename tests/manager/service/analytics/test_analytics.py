@@ -93,7 +93,7 @@ class TestAnalytics:
 
         collected: list = []
         analytics = Analytics()
-        analytics.collect = lambda event, session=None: collected.append(event)  # type: ignore[assignment]
+        analytics.collect = lambda event, session=None: collected.append(event)  # type: ignore[method-assign]
 
         with patch.dict(
             os.environ,
@@ -114,7 +114,7 @@ class TestAnalytics:
 
         collected: list = []
         analytics = Analytics()
-        analytics.collect = lambda event, session=None: collected.append(event)  # type: ignore[assignment]
+        analytics.collect = lambda event, session=None: collected.append(event)  # type: ignore[method-assign]
 
         env = {
             k: v
