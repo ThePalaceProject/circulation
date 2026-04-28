@@ -1,7 +1,7 @@
 """Add SITEWIDE_SETTINGS to Goals enum
 
 Revision ID: a1b2c3d4e5f6
-Revises: 23795e50c915
+Revises: 05a95c828149
 Create Date: 2026-04-22 00:00:00.000000+00:00
 
 """
@@ -12,7 +12,7 @@ from palace.manager.util.migration.helpers import pg_update_enum
 
 # revision identifiers, used by Alembic.
 revision = "a1b2c3d4e5f6"
-down_revision = "23795e50c915"
+down_revision = "05a95c828149"
 branch_labels = None
 depends_on = None
 
