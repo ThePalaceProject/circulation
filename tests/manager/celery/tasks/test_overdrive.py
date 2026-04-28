@@ -11,7 +11,7 @@ from celery.result import AsyncResult
 from palace.util.datetime_helpers import datetime_utc
 from palace.util.log import LogLevel
 
-from palace.manager.celery.importer import import_workflow_lock
+from palace.manager.celery.importer import import_workflow_lock, reap_workflow_lock
 from palace.manager.celery.tasks import overdrive
 from palace.manager.celery.tasks.overdrive import import_collection_group
 from palace.manager.data_layer.identifier import IdentifierData
@@ -1244,3 +1244,183 @@ class TestIntegration:
             autocreate=False,
         )
         return identifier
+
+
+class TestOverdriveReaper:
+    """Tests for the reap_all_collections and reap_collection Celery tasks."""
+
+    def test_reap_all_collections(
+        self,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+    ):
+        """reap_all_collections queues reap_collection for every Overdrive collection,
+        including child (Advantage) collections."""
+        db.default_collection()  # non-Overdrive, should be ignored
+        collection1 = db.collection(protocol=OverdriveAPI)
+        collection2 = db.collection(protocol=OverdriveAPI)
+        child_collection = db.collection(protocol=OverdriveAPI)
+        child_collection.parent = collection1
+
+        with patch.object(overdrive, "reap_collection") as mock_reap:
+            overdrive.reap_all_collections.delay().wait()
+
+        mock_reap.delay.assert_has_calls(
+            [
+                call(collection1.id),
+                call(collection2.id),
+                call(child_collection.id),
+            ],
+            any_order=True,
+        )
+        assert mock_reap.delay.call_count == 3
+
+    @patch("palace.manager.celery.tasks.overdrive.OverdriveAPI")
+    def test_reap_collection_empty(
+        self,
+        mock_api_class: MagicMock,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        """When no identifiers exist for a collection, reap_collection logs complete and returns."""
+        collection = overdrive_api_fixture.collection
+        caplog.set_level(LogLevel.info)
+
+        overdrive.reap_collection.delay(collection.id).wait()
+
+        mock_api_class.return_value.update_licensepool.assert_not_called()
+        assert "complete" in caplog.text
+
+    @patch("palace.manager.celery.tasks.overdrive.OverdriveAPI")
+    def test_reap_collection_processes_batch(
+        self,
+        mock_api_class: MagicMock,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+    ):
+        """reap_collection calls update_licensepool for each identifier in the batch."""
+        collection = overdrive_api_fixture.collection
+        edition1 = db.edition()
+        edition2 = db.edition()
+        pool1 = db.licensepool(edition1, collection=collection)
+        pool2 = db.licensepool(edition2, collection=collection)
+        db.session.flush()
+
+        overdrive.reap_collection.delay(collection.id, batch_size=50).wait()
+
+        mock_api = mock_api_class.return_value
+        identifiers_called = {
+            c.args[0] for c in mock_api.update_licensepool.call_args_list
+        }
+        assert pool1.identifier.identifier in identifiers_called
+        assert pool2.identifier.identifier in identifiers_called
+
+    @patch("palace.manager.celery.tasks.overdrive.OverdriveAPI")
+    def test_reap_collection_replaces_when_full_batch(
+        self,
+        mock_api_class: MagicMock,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+    ):
+        """When a full batch is processed, task.replace is raised with the next offset and same lock_value."""
+        collection = overdrive_api_fixture.collection
+        # Create exactly batch_size identifiers to trigger replace
+        batch_size = 3
+        pools = [
+            db.licensepool(db.edition(), collection=collection)
+            for _ in range(batch_size)
+        ]
+        db.session.flush()
+        last_id = max(p.identifier.id for p in pools)
+
+        with patch.object(overdrive.reap_collection, "replace") as mock_replace:
+            mock_replace.side_effect = Exception("replaced")
+            lock_value = str(uuid4())
+            with pytest.raises(Exception, match="replaced"):
+                overdrive.reap_collection.delay(
+                    collection.id, batch_size=batch_size, lock_value=lock_value
+                ).wait()
+
+            replace_sig = mock_replace.call_args[0][0]
+            assert replace_sig.kwargs["offset"] == last_id
+            assert replace_sig.kwargs["lock_value"] == lock_value
+
+    @patch("palace.manager.celery.tasks.overdrive.OverdriveAPI")
+    def test_reap_collection_stops_on_partial_batch(
+        self,
+        mock_api_class: MagicMock,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+    ):
+        """When fewer identifiers than batch_size exist, the task completes without replacing."""
+        collection = overdrive_api_fixture.collection
+        batch_size = 10
+        db.licensepool(db.edition(), collection=collection)
+        db.session.flush()
+
+        with patch.object(overdrive.reap_collection, "replace") as mock_replace:
+            overdrive.reap_collection.delay(collection.id, batch_size=batch_size).wait()
+
+        mock_replace.assert_not_called()
+
+    def test_reap_collection_skips_when_lock_held(
+        self,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        redis_fixture: RedisFixture,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        """On the first batch, if the workflow lock is already held, the task skips without processing."""
+        collection = overdrive_api_fixture.collection
+        db.licensepool(db.edition(), collection=collection)
+        db.session.flush()
+
+        lock_value = str(uuid4())
+        workflow_lock = reap_workflow_lock(
+            redis_fixture.client, collection.id, lock_value
+        )
+        workflow_lock.acquire()
+
+        caplog.set_level(LogLevel.warning)
+
+        with patch(
+            "palace.manager.celery.tasks.overdrive.OverdriveAPI"
+        ) as mock_api_class:
+            overdrive.reap_collection.delay(collection.id).wait()
+            mock_api_class.return_value.update_licensepool.assert_not_called()
+
+        assert "skipped" in caplog.text
+        assert "already in progress" in caplog.text
+        workflow_lock.release()
+
+    def test_reap_collection_lock_value_passed_through(
+        self,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+    ):
+        """The lock_value generated on the first batch is forwarded unchanged to the next batch."""
+        collection = overdrive_api_fixture.collection
+        batch_size = 2
+        for _ in range(batch_size):
+            db.licensepool(db.edition(), collection=collection)
+        db.session.flush()
+
+        with patch("palace.manager.celery.tasks.overdrive.OverdriveAPI"):
+            with patch.object(overdrive.reap_collection, "replace") as mock_replace:
+                mock_replace.side_effect = Exception("replaced")
+                with pytest.raises(Exception, match="replaced"):
+                    overdrive.reap_collection.delay(
+                        collection.id, batch_size=batch_size
+                    ).wait()
+
+                replace_sig = mock_replace.call_args[0][0]
+                lock_value = replace_sig.kwargs["lock_value"]
+                assert lock_value is not None
+                assert isinstance(lock_value, str)

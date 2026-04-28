@@ -4,6 +4,7 @@ from uuid import uuid4
 
 from celery import chain, chord, group, shared_task
 from celery.exceptions import Ignore
+from sqlalchemy import select
 
 from palace.util.datetime_helpers import utc_now
 
@@ -11,6 +12,7 @@ from palace.manager.celery.importer import (
     import_all as create_import_tasks,
     import_key,
     import_workflow_lock,
+    reap_workflow_lock,
 )
 from palace.manager.celery.task import Task
 from palace.manager.celery.tasks import apply
@@ -23,6 +25,8 @@ from palace.manager.integration.license.overdrive.importer import OverdriveImpor
 from palace.manager.service.celery.celery import QueueNames
 from palace.manager.service.redis.models.set import IdentifierSet
 from palace.manager.sqlalchemy.model.collection import Collection
+from palace.manager.sqlalchemy.model.identifier import Identifier
+from palace.manager.sqlalchemy.model.licensing import LicensePool
 from palace.manager.util.http.exception import (
     BadResponseException,
     RemoteIntegrationException,
@@ -483,3 +487,125 @@ def import_all_collections(task: Task, *, import_all: bool = False) -> None:
             ),
             task.log,
         )
+
+
+@shared_task(queue=QueueNames.default, bind=True)
+def reap_all_collections(task: Task) -> None:
+    """
+    Queue a reap task for every Overdrive collection.
+
+    Includes both parent collections and Advantage (child) collections, since titles
+    can be removed from either independently.
+    """
+    with task.session() as session:
+        registry = task.services.integration_registry().license_providers()
+        collection_query = Collection.select_by_protocol(
+            OverdriveAPI, registry=registry
+        )
+        for collection in session.scalars(collection_query):
+            reap_collection.delay(collection.id)
+
+
+@shared_task(
+    queue=QueueNames.default,
+    bind=True,
+    max_retries=4,
+    autoretry_for=(BadResponseException, RequestTimedOut),
+    throws=(RemoteIntegrationException,),
+    retry_backoff=60,
+)
+def reap_collection(
+    task: Task,
+    collection_id: int,
+    *,
+    offset: int = 0,
+    batch_size: int = 50,
+    lock_value: str | None = None,
+) -> None:
+    """
+    Check for books that are in the local collection but have left our Overdrive collection.
+
+    Processes identifiers in batches, re-queuing itself via task.replace() until all
+    identifiers have been checked. A Redis workflow lock prevents overlapping runs for
+    the same collection; the lock auto-expires after 2 hours if the process dies.
+
+    :param collection_id: The ID of the Overdrive collection to reap.
+    :param offset: The last Identifier.id processed; used to resume across batches.
+    :param batch_size: Number of identifiers to process per batch.
+    :param lock_value: UUID identifying this reap workflow. Generated on the first batch
+        when None, then passed to each subsequent batch to hold the lock across replacements.
+    """
+    redis = task.services.redis().client()
+
+    is_first_batch = lock_value is None
+    if lock_value is None:
+        lock_value = str(uuid4())
+
+    workflow_lock = reap_workflow_lock(redis, collection_id, lock_value)
+
+    with workflow_lock.lock(
+        raise_when_not_acquired=False,
+        ignored_exceptions=(Ignore, BadResponseException, RequestTimedOut),
+    ) as workflow_lock_acquired:
+        if not workflow_lock_acquired and is_first_batch:
+            task.log.warning(
+                f"Overdrive reaper skipped for collection {collection_id}: "
+                "another reap is already in progress."
+            )
+            return
+        if not workflow_lock_acquired and not is_first_batch:
+            task.log.warning(
+                f"Overdrive reaper for collection {collection_id}: workflow lock expired "
+                "between batches; continuing (another reap may be running)."
+            )
+
+        new_offset = 0
+        processed_count = 0
+        collection_name = None
+
+        with task.transaction() as session:
+            collection = load_from_id(session, Collection, collection_id)
+            collection_name = collection.name
+
+            identifiers = (
+                session.execute(
+                    select(Identifier)
+                    .join(Identifier.licensed_through)
+                    .where(
+                        LicensePool.collection_id == collection_id,
+                        Identifier.id > offset,
+                    )
+                    .order_by(Identifier.id)
+                    .limit(batch_size)
+                )
+                .scalars()
+                .all()
+            )
+
+            if not identifiers:
+                task.log.info(
+                    f"Overdrive reaper complete for collection '{collection_name}'."
+                )
+                return
+
+            api = OverdriveAPI(session, collection)
+            for identifier in identifiers:
+                api.update_licensepool(identifier.identifier)
+
+            new_offset = identifiers[-1].id
+            processed_count = len(identifiers)
+
+        task.log.info(
+            f"Overdrive reaper: processed {processed_count} identifiers for "
+            f"collection '{collection_name}' (offset: {offset} -> {new_offset})."
+        )
+
+        if processed_count == batch_size:
+            raise task.replace(
+                task.s(
+                    collection_id=collection_id,
+                    offset=new_offset,
+                    batch_size=batch_size,
+                    lock_value=lock_value,
+                )
+            )

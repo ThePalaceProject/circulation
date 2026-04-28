@@ -77,3 +77,30 @@ def import_lock(client: Redis, collection_id: int) -> RedisLock:
     at a time.
     """
     return RedisLock(client, import_key(collection_id), lock_timeout=timedelta(hours=1))
+
+
+def reap_workflow_key(collection_id: int) -> list[str]:
+    """
+    Generate a Redis key for the reap workflow-level lock for the given collection.
+    """
+    return [
+        "ReapCollectionWorkflow",
+        Collection.redis_key_from_id(collection_id),
+    ]
+
+
+def reap_workflow_lock(
+    client: Redis, collection_id: int, random_value: str
+) -> RedisLock:
+    """
+    Create a workflow-level lock spanning all batches of a single reap run.
+
+    Held across task.replace() calls so at most one reap runs per collection at a time.
+    Auto-expires after 2 hours if the process dies.
+    """
+    return RedisLock(
+        client,
+        reap_workflow_key(collection_id),
+        random_value=random_value,
+        lock_timeout=timedelta(hours=2),
+    )

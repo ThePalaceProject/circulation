@@ -264,6 +264,10 @@ def beat_schedule() -> dict[str, Any]:
             "task": overdrive.import_all_collections.name,
             "schedule": crontab(minute="*/15"),  # Run every 15 minutes
         },
+        "overdrive_reap_all_collections": {
+            "task": overdrive.reap_all_collections.name,
+            "schedule": crontab(minute="0"),  # Run every hour
+        },
     }
 
 
