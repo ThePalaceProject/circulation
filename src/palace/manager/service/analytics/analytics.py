@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from datetime import datetime
 from typing import TYPE_CHECKING
 
@@ -7,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from palace.util.log import LoggerMixin
 
+from palace.manager.core.config import Configuration
 from palace.manager.service.analytics.eventdata import AnalyticsEventData
 from palace.manager.service.analytics.geo import resolve_geo
 from palace.manager.service.analytics.local import LocalAnalyticsProvider
@@ -66,6 +68,9 @@ class Analytics(LoggerMixin, AnalyticsProvider):
                     f"Unable to resolve geographic settings, using defaults: {repr(e)}",
                     exc_info=e,
                 )
+        palace_manager_name = (
+            os.environ.get(Configuration.REPORTING_NAME_ENVIRONMENT_VARIABLE) or None
+        )
         event = AnalyticsEventData.create(
             library,
             license_pool,
@@ -76,6 +81,7 @@ class Analytics(LoggerMixin, AnalyticsProvider):
             patron,
             country=country,
             state=state,
+            palace_manager_name=palace_manager_name,
         )
         self.collect(event, session=session)
 

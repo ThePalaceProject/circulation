@@ -1,7 +1,9 @@
+import os
 from unittest.mock import MagicMock, patch
 
 import pytest
 
+from palace.manager.core.config import Configuration
 from palace.manager.service.analytics import analytics as analytics_module
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.service.analytics.local import LocalAnalyticsProvider
@@ -80,3 +82,47 @@ class TestAnalytics:
         assert collected[0].country == "US"
         assert collected[0].state == "All"
         assert "Unable to resolve geographic settings" in caplog.text
+
+    def test_collect_event_passes_palace_manager_name_from_env(
+        self,
+        db: DatabaseTransactionFixture,
+    ) -> None:
+        """collect_event() reads PALACE_REPORTING_NAME from env and embeds it in the event."""
+        library = db.default_library()
+        pool = db.licensepool(edition=db.edition())
+
+        collected: list = []
+        analytics = Analytics()
+        analytics.collect = lambda event, session=None: collected.append(event)  # type: ignore[assignment]
+
+        with patch.dict(
+            os.environ,
+            {Configuration.REPORTING_NAME_ENVIRONMENT_VARIABLE: "my-cm-instance"},
+        ):
+            analytics.collect_event(library, pool, CirculationEvent.CM_CHECKOUT)
+
+        assert len(collected) == 1
+        assert collected[0].palace_manager_name == "my-cm-instance"
+
+    def test_collect_event_palace_manager_name_none_when_env_absent(
+        self,
+        db: DatabaseTransactionFixture,
+    ) -> None:
+        """collect_event() sets palace_manager_name to None when env var is not set."""
+        library = db.default_library()
+        pool = db.licensepool(edition=db.edition())
+
+        collected: list = []
+        analytics = Analytics()
+        analytics.collect = lambda event, session=None: collected.append(event)  # type: ignore[assignment]
+
+        env = {
+            k: v
+            for k, v in os.environ.items()
+            if k != Configuration.REPORTING_NAME_ENVIRONMENT_VARIABLE
+        }
+        with patch.dict(os.environ, env, clear=True):
+            analytics.collect_event(library, pool, CirculationEvent.CM_CHECKOUT)
+
+        assert len(collected) == 1
+        assert collected[0].palace_manager_name is None
