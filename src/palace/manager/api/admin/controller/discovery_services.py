@@ -7,7 +7,10 @@ from palace.manager.api.admin.controller.integration_settings import (
     IntegrationSettingsController,
 )
 from palace.manager.api.admin.form_data import ProcessFormData
-from palace.manager.api.admin.problem_details import INTEGRATION_URL_ALREADY_IN_USE
+from palace.manager.api.admin.problem_details import (
+    INTEGRATION_URL_ALREADY_IN_USE,
+    MISSING_SERVICE,
+)
 from palace.manager.integration.discovery.opds_registration import (
     OpdsRegistrationService,
 )
@@ -78,10 +81,14 @@ class DiscoveryServicesController(
 
         return Response(str(service.id), response_code)
 
-    def process_delete(self, service_id: int) -> Response | ProblemDetail:
+    def process_delete(self, service_id: int | str) -> Response | ProblemDetail:
         self.require_system_admin()
         try:
-            return self.delete_service(service_id)
+            sid = int(service_id) if isinstance(service_id, str) else service_id
+        except ValueError:
+            return MISSING_SERVICE
+        try:
+            return self.delete_service(sid)
         except ProblemDetailException as e:
             self._db.rollback()
             return e.problem_detail
