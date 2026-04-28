@@ -33,12 +33,3 @@ class PalaceValueError(BasePalaceException, ValueError): ...
 
 
 class PalaceTypeError(BasePalaceException, TypeError): ...
-
-
-class InconsistentLicensePoolState(BasePalaceException):
-    """Raised when a LicensePool is in a transient inconsistent state.
-
-    For example, its Identifier has no associated pools visible in the current
-    session. This is typically caused by a parallel-import race condition and
-    the operation should be retried.
-    """

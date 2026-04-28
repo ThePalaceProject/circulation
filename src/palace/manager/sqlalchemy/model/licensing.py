@@ -32,9 +32,10 @@ from sqlalchemy.sql import ColumnElement
 
 from palace.opds.odl.info import LicenseStatus
 from palace.util.datetime_helpers import utc_now
-from palace.util.exceptions import BasePalaceException, InconsistentLicensePoolState
+from palace.util.exceptions import BasePalaceException
 
 from palace.manager.api.circulation.exceptions import CannotHold, CannotLoan
+from palace.manager.core.exceptions import InconsistentLicensePoolState
 from palace.manager.sqlalchemy.constants import (
     DataSourceConstants,
     EditionConstants,

@@ -6,10 +6,9 @@ from typing import Any, Protocol
 
 from celery import shared_task
 
-from palace.util.exceptions import InconsistentLicensePoolState
-
 from palace.manager.celery.task import Task
 from palace.manager.celery.utils import load_from_id, validate_not_none
+from palace.manager.core.exceptions import InconsistentLicensePoolState
 from palace.manager.data_layer.bibliographic import BibliographicData
 from palace.manager.data_layer.circulation import CirculationData
 from palace.manager.data_layer.identifier import IdentifierData

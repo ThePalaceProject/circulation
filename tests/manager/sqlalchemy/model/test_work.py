@@ -10,13 +10,14 @@ from pytest import LogCaptureFixture
 from sqlalchemy import select
 
 from palace.util.datetime_helpers import datetime_utc, from_timestamp, utc_now
-from palace.util.exceptions import BasePalaceException, InconsistentLicensePoolState
+from palace.util.exceptions import BasePalaceException
 from palace.util.log import LogLevel
 
 from palace.manager.core.classifier import Classifier, Fantasy, Romance, Science_Fiction
 from palace.manager.core.equivalents_coverage import (
     EquivalentIdentifiersCoverageProvider,
 )
+from palace.manager.core.exceptions import InconsistentLicensePoolState
 from palace.manager.service.redis.models.search import WaitingForIndexing
 from palace.manager.sqlalchemy.model.classification import Genre, Subject
 from palace.manager.sqlalchemy.model.contributor import Contributor

@@ -1,6 +1,15 @@
 from palace.util.exceptions import BasePalaceException
 
 
+class InconsistentLicensePoolState(BasePalaceException):
+    """Raised when a LicensePool is in a transient inconsistent state.
+
+    For example, its Identifier has no associated pools visible in the current
+    session. This is typically caused by a parallel-import race condition and
+    the operation should be retried.
+    """
+
+
 class IntegrationException(BasePalaceException):
     """An exception that happens when the site's connection to a
     third-party service is broken.
