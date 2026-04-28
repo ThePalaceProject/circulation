@@ -27,7 +27,6 @@ HOME=/var/www/circulation
 # Overdrive
 #
 */15 * * * * root bin/run overdrive_reaper >> /var/log/cron.log 2>&1
-0 4 * * * root bin/run overdrive_format_sweep >> /var/log/cron.log 2>&1
 
 # Auto update lists
 # Every hour between 7AM - 1AM
