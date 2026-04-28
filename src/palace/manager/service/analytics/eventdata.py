@@ -93,6 +93,7 @@ class AnalyticsEventData(BaseModel, LoggerMixin):
     patron_uuid: UUID | None
     country: str
     state: str
+    palace_manager_name: str | None = None
 
     model_config = ConfigDict(
         frozen=True,
@@ -111,6 +112,7 @@ class AnalyticsEventData(BaseModel, LoggerMixin):
         user_agent: str | None = None,
         country: str = "US",
         state: str = "All",
+        palace_manager_name: str | None = None,
     ) -> Self:
         if user_agent is None:
             try:
@@ -195,4 +197,5 @@ class AnalyticsEventData(BaseModel, LoggerMixin):
             patron_uuid=patron.uuid if patron else None,
             country=country,
             state=state,
+            palace_manager_name=palace_manager_name,
         )
