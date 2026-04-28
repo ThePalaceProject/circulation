@@ -1282,6 +1282,7 @@ class TestOverdriveReaper:
         db: DatabaseTransactionFixture,
         celery_fixture: CeleryFixture,
         overdrive_api_fixture: OverdriveAPIFixture,
+        redis_fixture: RedisFixture,
         caplog: pytest.LogCaptureFixture,
     ):
         """When no identifiers exist for a collection, reap_collection logs complete and returns."""
@@ -1300,6 +1301,7 @@ class TestOverdriveReaper:
         db: DatabaseTransactionFixture,
         celery_fixture: CeleryFixture,
         overdrive_api_fixture: OverdriveAPIFixture,
+        redis_fixture: RedisFixture,
     ):
         """reap_collection calls update_licensepool for each identifier in the batch."""
         collection = overdrive_api_fixture.collection
@@ -1325,6 +1327,7 @@ class TestOverdriveReaper:
         db: DatabaseTransactionFixture,
         celery_fixture: CeleryFixture,
         overdrive_api_fixture: OverdriveAPIFixture,
+        redis_fixture: RedisFixture,
     ):
         """When a full batch is processed, task.replace is raised with the next offset and same lock_value."""
         collection = overdrive_api_fixture.collection
@@ -1356,6 +1359,7 @@ class TestOverdriveReaper:
         db: DatabaseTransactionFixture,
         celery_fixture: CeleryFixture,
         overdrive_api_fixture: OverdriveAPIFixture,
+        redis_fixture: RedisFixture,
     ):
         """When fewer identifiers than batch_size exist, the task completes without replacing."""
         collection = overdrive_api_fixture.collection
@@ -1404,6 +1408,7 @@ class TestOverdriveReaper:
         db: DatabaseTransactionFixture,
         celery_fixture: CeleryFixture,
         overdrive_api_fixture: OverdriveAPIFixture,
+        redis_fixture: RedisFixture,
     ):
         """The lock_value generated on the first batch is forwarded unchanged to the next batch."""
         collection = overdrive_api_fixture.collection
