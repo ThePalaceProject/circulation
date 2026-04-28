@@ -16,6 +16,7 @@ from palace.manager.integration.configuration.global_settings import (
 from palace.manager.integration.goals import Goals
 from palace.manager.sqlalchemy.model.integration import IntegrationConfiguration
 from palace.manager.sqlalchemy.util import get_one
+from palace.manager.util.problem_detail import ProblemDetail
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.flask import FlaskAppFixture
 
@@ -71,11 +72,15 @@ class TestGlobalSettingsController:
         db: DatabaseTransactionFixture,
         flask_app_fixture: FlaskAppFixture,
     ) -> None:
-        # POST first to set values, then GET to verify
-        form = ImmutableMultiDict([("country", "CA"), ("state", "Ontario")])
+        # POST first to set values, then GET to verify.
+        # The FlaskAppFixture resets request.form to an empty ImmutableMultiDict before
+        # yielding, so we must set it explicitly inside the `with` block.
         with flask_app_fixture.test_request_context_system_admin(
-            "/", method="POST", data=form
-        ):
+            "/", method="POST"
+        ) as c:
+            c.request.form = ImmutableMultiDict(
+                [("country", "CA"), ("state", "Ontario")]
+            )
             controller.process_global_settings()
         with flask_app_fixture.test_request_context_system_admin("/"):
             response = controller.process_global_settings()
@@ -89,10 +94,14 @@ class TestGlobalSettingsController:
         db: DatabaseTransactionFixture,
         flask_app_fixture: FlaskAppFixture,
     ) -> None:
-        form = ImmutableMultiDict([("country", "GB"), ("state", "England")])
+        # The FlaskAppFixture resets request.form to an empty ImmutableMultiDict before
+        # yielding, so we must set it explicitly inside the `with` block.
         with flask_app_fixture.test_request_context_system_admin(
-            "/", method="POST", data=form
-        ):
+            "/", method="POST"
+        ) as c:
+            c.request.form = ImmutableMultiDict(
+                [("country", "GB"), ("state", "England")]
+            )
             response = controller.process_global_settings()
         assert response.status_code == 200
         integration = get_one(
@@ -115,6 +124,4 @@ class TestGlobalSettingsController:
         with flask_app_fixture.test_request_context("/"):
             result = controller.process_global_settings()
         # Returns a ProblemDetail, not a 200 Response
-        from palace.manager.util.problem_detail import ProblemDetail
-
         assert isinstance(result, ProblemDetail)

@@ -8,6 +8,7 @@ import flask
 from flask import Response
 
 from palace.manager.api.admin.controller.base import AdminPermissionsControllerMixin
+from palace.manager.api.admin.exceptions import AdminNotAuthorized
 from palace.manager.api.admin.form_data import ProcessFormData
 from palace.manager.integration.base import (
     integration_settings_load,
@@ -67,7 +68,7 @@ class GlobalSettingsController(AdminPermissionsControllerMixin):
                 return self._process_get()
             else:
                 return self._process_post()
-        except ProblemDetailException as e:
+        except (ProblemDetailException, AdminNotAuthorized) as e:
             self._db.rollback()
             return e.problem_detail
 
@@ -77,7 +78,7 @@ class GlobalSettingsController(AdminPermissionsControllerMixin):
         return Response(
             json_serializer(
                 {
-                    "settings": settings.model_dump(),
+                    "settings": settings.model_dump(exclude_defaults=False),
                     "schema": GlobalSettings.configuration_form(self._db),
                 }
             ),
