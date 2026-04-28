@@ -502,8 +502,9 @@ def reap_all_collections(task: Task) -> None:
         collection_query = Collection.select_by_protocol(
             OverdriveAPI, registry=registry
         )
-        for collection in session.scalars(collection_query):
-            reap_collection.delay(collection.id)
+        collections = session.scalars(collection_query).all()
+    for collection in collections:
+        reap_collection.delay(collection.id)
 
 
 @shared_task(

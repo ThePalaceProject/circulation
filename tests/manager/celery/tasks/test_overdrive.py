@@ -1372,6 +1372,43 @@ class TestOverdriveReaper:
 
         mock_replace.assert_not_called()
 
+    def test_reap_collection_lock_not_released_on_autoretry(
+        self,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        redis_fixture: RedisFixture,
+    ):
+        """When an autoretry exception is raised, the workflow lock is not released.
+
+        On the retry attempt, lock_value is None (fresh call), so a new UUID is generated
+        and fails to acquire the still-held lock, causing the retry to silently skip.
+        """
+        collection = overdrive_api_fixture.collection
+        db.licensepool(db.edition(), collection=collection)
+        db.session.flush()
+
+        from palace.manager.util.http.exception import BadResponseException
+
+        mock_response = MockRequestsResponse(500, content="Internal Server Error")
+
+        with patch(
+            "palace.manager.celery.tasks.overdrive.OverdriveAPI"
+        ) as mock_api_class:
+            mock_api_class.return_value.update_licensepool.side_effect = (
+                BadResponseException("http://test.com", "Bad response", mock_response)
+            )
+
+            with celery_fixture.patch_retry_backoff():
+                overdrive.reap_collection.delay(collection.id).wait()
+
+        # Lock is still held: first attempt raised BadResponseException (ignored),
+        # retry generated a new lock_value and skipped rather than releasing.
+        workflow_lock = reap_workflow_lock(
+            redis_fixture.client, collection.id, random_value="any"
+        )
+        assert workflow_lock.locked()
+
     def test_reap_collection_skips_when_lock_held(
         self,
         db: DatabaseTransactionFixture,
