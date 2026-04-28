@@ -1,7 +1,7 @@
 import datetime
 from contextlib import nullcontext
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, PropertyMock, patch
 
 import opensearchpy
 import pytest
@@ -17,6 +17,7 @@ from palace.manager.core.classifier import Classifier, Fantasy, Romance, Science
 from palace.manager.core.equivalents_coverage import (
     EquivalentIdentifiersCoverageProvider,
 )
+from palace.manager.core.exceptions import InconsistentLicensePoolState
 from palace.manager.service.redis.models.search import WaitingForIndexing
 from palace.manager.sqlalchemy.model.classification import Genre, Subject
 from palace.manager.sqlalchemy.model.contributor import Contributor
@@ -2146,6 +2147,24 @@ class TestWorkConsolidation:
         work, new = p.calculate_work()
         assert p.presentation_edition == work.presentation_edition
         assert True == new
+
+    def test_calculate_work_raises_on_empty_licensed_through(
+        self, db: DatabaseTransactionFixture
+    ):
+        """calculate_work raises InconsistentLicensePoolState when licensed_through is empty.
+
+        This guards against silently creating a duplicate Work when the session
+        hasn't yet seen the pool for this identifier (transient parallel-import state).
+        """
+        e, p = db.edition(with_license_pool=True)
+        p.set_presentation_edition()
+        # Patch via PropertyMock to avoid triggering SQLAlchemy's backref cascade,
+        # which would clear pool.identifier if we assigned [] directly.
+        with patch.object(
+            Identifier, "licensed_through", new_callable=PropertyMock, return_value=[]
+        ):
+            with pytest.raises(InconsistentLicensePoolState):
+                p.calculate_work(known_edition=p.presentation_edition)
 
     def test_calculate_work_bails_out_if_no_title(self, db: DatabaseTransactionFixture):
         e, p = db.edition(with_license_pool=True)
