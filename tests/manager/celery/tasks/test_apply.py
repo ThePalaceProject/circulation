@@ -142,8 +142,9 @@ class TestBibliographicApply:
         )
 
         with (
+            # BibliographicData is a frozen Pydantic model; patch the class, not the instance.
             patch.object(
-                data,
+                BibliographicData,
                 "apply",
                 side_effect=InconsistentLicensePoolState(
                     "simulated empty licensed_through"

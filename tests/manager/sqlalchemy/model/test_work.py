@@ -1,7 +1,7 @@
 import datetime
 from contextlib import nullcontext
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, PropertyMock, patch
 
 import opensearchpy
 import pytest
@@ -2156,10 +2156,14 @@ class TestWorkConsolidation:
         hasn't yet seen the pool for this identifier (transient parallel-import state).
         """
         e, p = db.edition(with_license_pool=True)
-        # Simulate a session that sees no pools yet for this identifier
-        p.identifier.licensed_through = []
-        with pytest.raises(InconsistentLicensePoolState):
-            p.calculate_work()
+        p.set_presentation_edition()
+        # Patch via PropertyMock to avoid triggering SQLAlchemy's backref cascade,
+        # which would clear pool.identifier if we assigned [] directly.
+        with patch.object(
+            Identifier, "licensed_through", new_callable=PropertyMock, return_value=[]
+        ):
+            with pytest.raises(InconsistentLicensePoolState):
+                p.calculate_work(known_edition=p.presentation_edition)
 
     def test_calculate_work_bails_out_if_no_title(self, db: DatabaseTransactionFixture):
         e, p = db.edition(with_license_pool=True)
