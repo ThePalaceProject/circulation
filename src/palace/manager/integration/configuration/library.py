@@ -412,7 +412,7 @@ class LibrarySettings(BaseSettings):
         list[str],
         LibraryFormMetadata(
             label="Filtered categories",
-            description="Content in these categories (genres) will be hidden from catalog browse and search results.",
+            description="Content in these categories (fiction genres and non-fiction subjects) will be hidden from catalog browse and search results.",
             type=FormFieldType.MENU,
             options=lambda _db: {name: name for name in sorted(genres.keys())},
             category="Content Filtering",
