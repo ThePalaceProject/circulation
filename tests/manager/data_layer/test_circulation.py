@@ -951,6 +951,51 @@ class TestCirculationData:
         pool.updated_at_data_hash = circulation.calculate_hash()
         assert circulation.needs_apply(db.session, collection) is False
 
+    def test_needs_apply_aggregated_pool_uses_hash(
+        self, db: DatabaseTransactionFixture
+    ):
+        """AGGREGATED (ODL-style) pools participate in change tracking like any other pool.
+
+        Previously, pools with individual licenses always returned True regardless of the
+        content hash. Now the hash check applies uniformly; license expiry is handled by
+        a dedicated Celery task instead.
+        """
+        collection = db.collection()
+        today = utc_now()
+        one_day_ago = today - datetime.timedelta(days=1)
+        two_days_ago = today - datetime.timedelta(days=2)
+
+        license_data = LicenseData(
+            identifier="license-1",
+            checkout_url="https://example.com/checkout",
+            status_url="https://example.com/status",
+            status=LicenseStatus.available,
+            checkouts_available=5,
+        )
+        circulation = CirculationData(
+            data_source_name="Test data source",
+            primary_identifier_data=IdentifierData(
+                type="test identifier", identifier="3"
+            ),
+            updated_at=one_day_ago,
+            licenses=[license_data],
+            type=LicensePoolType.AGGREGATED,
+        )
+
+        # Pool doesn't exist yet — should apply
+        assert circulation.needs_apply(db.session, collection) is True
+
+        pool, _ = circulation.license_pool(db.session, collection, autocreate=True)
+        pool.updated_at = two_days_ago
+        pool.updated_at_data_hash = circulation.calculate_hash()
+
+        # Hash matches even though pool has individual licenses — should skip
+        assert circulation.needs_apply(db.session, collection) is False
+
+        # Pool is older than the data and hash differs — should apply
+        pool.updated_at_data_hash = "stale-hash"
+        assert circulation.needs_apply(db.session, collection) is True
+
     @pytest.mark.parametrize(
         "initial_type,new_type,expected_type",
         [
