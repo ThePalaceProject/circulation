@@ -579,6 +579,7 @@ def reap_collection(
                     .order_by(Identifier.id)
                     .limit(batch_size)
                 )
+                .unique()
                 .scalars()
                 .all()
             )
