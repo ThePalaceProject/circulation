@@ -28,6 +28,7 @@ from palace.manager.sqlalchemy.constants import IdentifierType
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.coverage import Timestamp
 from palace.manager.sqlalchemy.model.identifier import Identifier
+from palace.manager.util.http.exception import BadResponseException
 from tests.fixtures.celery import ApplyTaskFixture, CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.overdrive import OverdriveAPIFixture
@@ -511,8 +512,6 @@ class TestImportCollection:
         celery_fixture: CeleryFixture,
     ):
         """When an autoretry exception is raised, the workflow lock is not released."""
-        from palace.manager.util.http.exception import BadResponseException
-
         collection = overdrive_import_fixture.collection
         mock_importer, _ = overdrive_import_fixture.create_mock_importer()
         mock_response = MockRequestsResponse(500, content="Internal Server Error")
@@ -1387,8 +1386,6 @@ class TestOverdriveReaper:
         collection = overdrive_api_fixture.collection
         db.licensepool(db.edition(), collection=collection)
         db.session.flush()
-
-        from palace.manager.util.http.exception import BadResponseException
 
         mock_response = MockRequestsResponse(500, content="Internal Server Error")
 
