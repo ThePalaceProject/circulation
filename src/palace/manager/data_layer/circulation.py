@@ -220,14 +220,9 @@ class CirculationData(BaseMutableData):
         pool = None
         if collection:
             pool, ignore = self.license_pool(_db, collection)
-            # Skip circulation data update if the content hasn't changed, UNLESS we
-            # have individual license objects that may have expired since the last
-            # import (ODL-style pools). License expiry is time-dependent and cannot
-            # be detected by content hashing alone.
-            if (
-                not replace.even_if_not_apparently_updated
-                and self.licenses is None
-                and not self.should_apply_to(pool)
+            # Skip circulation data update if the content hasn't changed.
+            if not replace.even_if_not_apparently_updated and not self.should_apply_to(
+                pool
             ):
                 self.log.info(
                     f"Publication {self.primary_identifier_data} circulation data has not changed since "
@@ -309,8 +304,7 @@ class CirculationData(BaseMutableData):
         changed_lp_type = False
         changed_lp_status = False
         # The early return above already filtered out pools whose content hash has
-        # not changed (for non-ODL pools when a collection is provided). If we reach
-        # this point with a pool, we know we need to apply the availability data.
+        # not changed. If we reach this point with a pool, we know we need to apply the availability data.
         if pool:
             # Update availability information. This may result in
             # the issuance of additional circulation events.
@@ -402,16 +396,9 @@ class CirculationData(BaseMutableData):
         for this object's primary identifier in *collection* and delegates to
         :meth:`~palace.manager.data_layer.base.mutable.BaseMutableData.should_apply_to`.
 
-        ODL-style pools that carry individual :attr:`licenses` are always considered to
-        need application because license availability can change over time as licenses expire
-        independently of any feed content change, and that expiry cannot be detected by
-        content hashing alone.
-
         :param session: Active database session used to look up the pool.
         :param collection: The collection the pool belongs to.
         :return: ``True`` if the data needs to be applied, ``False`` if it can be skipped.
         """
-        if self.licenses is not None:
-            return True
         pool, _ = self.license_pool(session, collection, autocreate=False)
         return self.should_apply_to(pool)
