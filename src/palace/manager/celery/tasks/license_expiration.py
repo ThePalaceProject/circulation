@@ -54,6 +54,7 @@ def expire_licenses(task: Task) -> None:
 
         for pool in pools:
             pool.update_availability_from_licenses(as_of=now)
+            pool.updated_at = now
 
     task.log.info(
         f"Updated availability for {pluralize(len(pools), 'license pool')} with expired licenses."
