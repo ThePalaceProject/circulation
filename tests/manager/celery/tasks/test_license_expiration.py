@@ -59,6 +59,7 @@ class TestExpireLicenses:
         db.session.refresh(pool)
         # Only the active license contributes to availability
         assert pool.licenses_available == 3
+        assert pool.updated_at == now
 
     @freeze_time()
     def test_already_processed_expiry_skipped(
