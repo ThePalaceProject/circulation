@@ -14,7 +14,7 @@ from palace.manager.sqlalchemy.model.licensing import License, LicensePool
 
 @shared_task(queue=QueueNames.default, bind=True)
 def expire_licenses(task: Task) -> None:
-    """Find AGGREGATED pools with newly-expired licenses and recalculate their availability.
+    """Find pools with newly-expired licenses and recalculate their availability.
 
     A pool is considered stale when any of its licenses has an ``expires`` timestamp at or
     before the current time AND the pool's ``updated_at`` predates that expiry — meaning
