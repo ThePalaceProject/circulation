@@ -1310,7 +1310,7 @@ class TestOverdriveReaper:
         pool2 = db.licensepool(edition2, collection=collection)
         db.session.flush()
 
-        overdrive.reap_collection.delay(collection.id, batch_size=50).wait()
+        overdrive.reap_collection.delay(collection.id).wait()
 
         mock_api = mock_api_class.return_value
         identifiers_called = {
