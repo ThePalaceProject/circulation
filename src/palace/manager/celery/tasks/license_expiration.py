@@ -42,11 +42,15 @@ def expire_licenses(task: Task) -> None:
             task.log.info("No pools with newly-expired licenses found.")
             return
 
-        pools = session.scalars(
-            select(LicensePool)
-            .where(LicensePool.id.in_(stale_pool_ids))
-            .options(selectinload(LicensePool.licenses))
-        ).all()
+        pools = (
+            session.scalars(
+                select(LicensePool)
+                .where(LicensePool.id.in_(stale_pool_ids))
+                .options(selectinload(LicensePool.licenses))
+            )
+            .unique()
+            .all()
+        )
 
         for pool in pools:
             pool.update_availability_from_licenses(as_of=now)
