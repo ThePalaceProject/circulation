@@ -83,11 +83,8 @@ def beat_schedule() -> dict[str, Any]:
             "task": license_expiration.expire_licenses.name,
             "schedule": crontab(
                 minute="30",
-                hour="1",
-            ),  # Run every day at 1:30 AM
-            "schedule": crontab(
-                minute="30",
             ),  # Run every hour at 30 minutes past the hour
+        },
         "opds2_odl_remove_expired_holds": {
             "task": opds_odl.remove_expired_holds.name,
             "schedule": crontab(
