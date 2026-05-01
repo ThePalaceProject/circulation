@@ -6,11 +6,8 @@ jobs:
   sync-to-jira:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
-
       - name: Sync release to Jira
-        uses: ./.github/actions/jira-release-sync
+        uses: ThePalaceProject/github-actions/jira-release-sync@v1
         with:
           jira-base-url: ${{ secrets.JIRA_BASE_URL }}
           jira-user-email: ${{ secrets.JIRA_USER_EMAIL }}
