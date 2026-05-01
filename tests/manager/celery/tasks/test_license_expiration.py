@@ -4,13 +4,13 @@ from freezegun import freeze_time
 
 from palace.util.datetime_helpers import utc_now
 
-from palace.manager.celery.tasks.license_expiration import expire_licenses
+from palace.manager.celery.tasks.license_expiration import update_expired_licenses
 from palace.manager.sqlalchemy.model.licensing import LicensePoolType
 from tests.fixtures.celery import CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 
 
-class TestExpireLicenses:
+class TestUpdateExpiredLicenses:
     def test_no_expired_licenses(
         self,
         db: DatabaseTransactionFixture,
@@ -26,7 +26,7 @@ class TestExpireLicenses:
 
         original_available = pool.licenses_available
 
-        expire_licenses.delay().wait()
+        update_expired_licenses.delay().wait()
 
         db.session.refresh(pool)
         assert pool.licenses_available == original_available
@@ -54,7 +54,7 @@ class TestExpireLicenses:
         pool.updated_at = last_updated
         pool.licenses_available = 5  # stale — includes the now-expired license
 
-        expire_licenses.delay().wait()
+        update_expired_licenses.delay().wait()
 
         db.session.refresh(pool)
         # Only the active license contributes to availability
@@ -81,7 +81,7 @@ class TestExpireLicenses:
         pool.updated_at = last_updated
         pool.licenses_available = 0
 
-        expire_licenses.delay().wait()
+        update_expired_licenses.delay().wait()
 
         db.session.refresh(pool)
         # updated_at is unchanged — proves the pool was skipped, not just that the
@@ -118,7 +118,7 @@ class TestExpireLicenses:
         current_pool.updated_at = after_expiry
         current_pool.licenses_available = 0  # already up to date
 
-        expire_licenses.delay().wait()
+        update_expired_licenses.delay().wait()
 
         db.session.refresh(stale_pool)
         db.session.refresh(current_pool)
