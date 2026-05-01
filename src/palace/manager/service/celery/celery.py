@@ -39,6 +39,7 @@ def beat_schedule() -> dict[str, Any]:
     """
     from palace.manager.celery.tasks import (
         boundless,
+        license_expiration,
         marc,
         notifications,
         novelist,
@@ -77,6 +78,12 @@ def beat_schedule() -> dict[str, Any]:
                 hour="1",
                 minute="0",
             ),  # Run every day at 1:00 AM
+        },
+        "update_expired_licenses": {
+            "task": license_expiration.update_expired_licenses.name,
+            "schedule": crontab(
+                minute="30",
+            ),  # Run every hour at 30 minutes past the hour
         },
         "opds2_odl_remove_expired_holds": {
             "task": opds_odl.remove_expired_holds.name,

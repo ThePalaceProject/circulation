@@ -1423,7 +1423,9 @@ class TestImportCollection:
             [imported_license] = imported_pool.licenses
             assert imported_license.is_inactive is False
 
-        # Reimport the license when it is expired
+        # Reimport the license when it is expired — the feed content is unchanged so the
+        # importer skips the update via hash-based change detection. Availability counts
+        # are recalculated by the update_expired_licenses Celery task, not by the importer.
         with freeze_time(license_expiry + timedelta(days=1)):
             # Import the test feed.
             (
@@ -1437,13 +1439,14 @@ class TestImportCollection:
             assert len(imported_works) == 1
             assert len(imported_pools) == 1
 
-            # Ensure that the license pool was successfully created, with no available copies.
+            # The import skipped the availability update because the feed hash is unchanged.
+            # The pool still reflects the pre-expiry state; update_expired_licenses will correct it.
             [imported_pool] = imported_pools
-            assert imported_pool.licenses_owned == 0
-            assert imported_pool.licenses_available == 0
+            assert imported_pool.licenses_owned == 1
+            assert imported_pool.licenses_available == 1
             assert len(imported_pool.licenses) == 1
 
-            # Ensure the license was imported and is expired.
+            # The license object itself correctly reports as inactive (time-based check).
             [imported_license] = imported_pool.licenses
             assert imported_license.is_inactive is True
 
