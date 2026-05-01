@@ -1,0 +1,8 @@
+#!/usr/bin/env python
+"""
+Queues the expire_licenses Celery task to process any license pools
+with licenses that have expired since the pool was last updated.
+"""
+from palace.manager.scripts.license_expiration import ExpireLicensesScript
+
+ExpireLicensesScript().run()
