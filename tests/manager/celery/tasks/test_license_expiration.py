@@ -84,8 +84,9 @@ class TestExpireLicenses:
         expire_licenses.delay().wait()
 
         db.session.refresh(pool)
-        # Still 0 — the task correctly skipped this pool
-        assert pool.licenses_available == 0
+        # updated_at is unchanged — proves the pool was skipped, not just that the
+        # result happened to be 0 (which an expired license would also produce).
+        assert pool.updated_at == last_updated
 
     @freeze_time()
     def test_multiple_pools_only_stale_updated(
