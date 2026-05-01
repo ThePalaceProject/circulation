@@ -50,8 +50,8 @@ class TestUpdateExpiredLicenses:
         db.license(pool, expires=None, checkouts_available=3, terms_concurrency=3)
         db.license(pool, expires=expired_at, checkouts_available=2, terms_concurrency=2)
 
-        # Simulate the pool being last updated before the expiry
-        pool.updated_at = last_updated
+        # Simulate the pool being last checked before the expiry
+        pool.last_checked = last_updated
         pool.licenses_available = 5  # stale — includes the now-expired license
 
         update_expired_licenses.delay().wait()
@@ -59,7 +59,7 @@ class TestUpdateExpiredLicenses:
         db.session.refresh(pool)
         # Only the active license contributes to availability
         assert pool.licenses_available == 3
-        assert pool.updated_at == now
+        assert pool.last_checked == now
 
     @freeze_time()
     def test_already_processed_expiry_skipped(
@@ -67,10 +67,10 @@ class TestUpdateExpiredLicenses:
         db: DatabaseTransactionFixture,
         celery_fixture: CeleryFixture,
     ) -> None:
-        """A pool whose updated_at is after the license's expiry is not re-processed."""
+        """A pool whose last_checked is after the license's expiry is not re-processed."""
         now = utc_now()
         expired_at = now - datetime.timedelta(hours=2)
-        last_updated = now - datetime.timedelta(hours=1)  # updated AFTER expiry
+        last_updated = now - datetime.timedelta(hours=1)  # checked AFTER expiry
 
         edition = db.edition()
         pool = db.licensepool(edition)
@@ -78,15 +78,15 @@ class TestUpdateExpiredLicenses:
         db.license(pool, expires=expired_at, checkouts_available=2, terms_concurrency=2)
 
         # Pool already accounts for the expiry
-        pool.updated_at = last_updated
+        pool.last_checked = last_updated
         pool.licenses_available = 0
 
         update_expired_licenses.delay().wait()
 
         db.session.refresh(pool)
-        # updated_at is unchanged — proves the pool was skipped, not just that the
+        # last_checked is unchanged — proves the pool was skipped, not just that the
         # result happened to be 0 (which an expired license would also produce).
-        assert pool.updated_at == last_updated
+        assert pool.last_checked == last_updated
 
     @freeze_time()
     def test_multiple_pools_only_stale_updated(
@@ -106,7 +106,7 @@ class TestUpdateExpiredLicenses:
         db.license(
             stale_pool, expires=expired_at, checkouts_available=3, terms_concurrency=3
         )
-        stale_pool.updated_at = before_expiry
+        stale_pool.last_checked = before_expiry
         stale_pool.licenses_available = 3  # stale
 
         edition2 = db.edition()
@@ -115,7 +115,7 @@ class TestUpdateExpiredLicenses:
         db.license(
             current_pool, expires=expired_at, checkouts_available=0, terms_concurrency=2
         )
-        current_pool.updated_at = after_expiry
+        current_pool.last_checked = after_expiry
         current_pool.licenses_available = 0  # already up to date
 
         update_expired_licenses.delay().wait()
