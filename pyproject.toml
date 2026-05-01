@@ -72,7 +72,7 @@ dependencies = [
     "multipledispatch>=1.0,<2",
     "nameparser>=1.1,<2",  # nameparser is for author name manipulations
     "openpyxl>=3.1,<4",
-    "opensearch-py>=3.0,<4",
+    "opensearch-py>=3.2.0,<4",
     "palace-opds",
     "palace-util",
     "pillow>=12.0.0,<13",
