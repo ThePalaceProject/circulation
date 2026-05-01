@@ -1425,7 +1425,7 @@ class TestImportCollection:
 
         # Reimport the license when it is expired — the feed content is unchanged so the
         # importer skips the update via hash-based change detection. Availability counts
-        # are recalculated by the expire_licenses Celery task, not by the importer.
+        # are recalculated by the update_expired_licenses Celery task, not by the importer.
         with freeze_time(license_expiry + timedelta(days=1)):
             # Import the test feed.
             (
@@ -1440,7 +1440,7 @@ class TestImportCollection:
             assert len(imported_pools) == 1
 
             # The import skipped the availability update because the feed hash is unchanged.
-            # The pool still reflects the pre-expiry state; expire_licenses will correct it.
+            # The pool still reflects the pre-expiry state; update_expired_licenses will correct it.
             [imported_pool] = imported_pools
             assert imported_pool.licenses_owned == 1
             assert imported_pool.licenses_available == 1

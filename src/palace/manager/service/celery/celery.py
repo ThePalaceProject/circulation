@@ -79,8 +79,8 @@ def beat_schedule() -> dict[str, Any]:
                 minute="0",
             ),  # Run every day at 1:00 AM
         },
-        "expire_odl_licenses": {
-            "task": license_expiration.expire_licenses.name,
+        "update_expired_licenses": {
+            "task": license_expiration.update_expired_licenses.name,
             "schedule": crontab(
                 minute="30",
             ),  # Run every hour at 30 minutes past the hour
