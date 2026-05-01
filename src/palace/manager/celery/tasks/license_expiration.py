@@ -17,9 +17,10 @@ def update_expired_licenses(task: Task) -> None:
     """Find pools with newly-expired licenses and recalculate their availability.
 
     A pool is considered stale when any of its licenses has an ``expires`` timestamp at or
-    before the current time AND the pool's ``updated_at`` predates that expiry — meaning
+    before the current time AND the pool's ``last_checked`` predates that expiry — meaning
     the expiry occurred after the last availability calculation and has not yet been
-    accounted for.
+    accounted for. ``update_availability_from_licenses(as_of=now)`` advances
+    ``last_checked`` to ``now``, so processed pools are automatically excluded on the next run.
     """
     now = utc_now()
 
@@ -31,8 +32,8 @@ def update_expired_licenses(task: Task) -> None:
             .where(License.expires <= now)
             .where(
                 or_(
-                    LicensePool.updated_at.is_(None),
-                    LicensePool.updated_at < License.expires,
+                    LicensePool.last_checked.is_(None),
+                    LicensePool.last_checked < License.expires,
                 )
             )
             .distinct()
@@ -54,7 +55,6 @@ def update_expired_licenses(task: Task) -> None:
 
         for pool in pools:
             pool.update_availability_from_licenses(as_of=now)
-            pool.updated_at = now
 
     task.log.info(
         f"Updated availability for {pluralize(len(pools), 'license pool')} with expired licenses."
