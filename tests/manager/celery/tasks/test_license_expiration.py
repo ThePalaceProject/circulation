@@ -125,5 +125,6 @@ class TestUpdateExpiredLicenses:
 
         # Stale pool recalculated — expired license contributes 0
         assert stale_pool.licenses_available == 0
-        # Current pool untouched
+        # Current pool untouched — last_checked unchanged proves it was skipped
         assert current_pool.licenses_available == 0
+        assert current_pool.last_checked == after_expiry
