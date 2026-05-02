@@ -12,6 +12,55 @@ from tests.fixtures.flask import FlaskAppFixture
 
 
 class TestAnalyticsEventData:
+    def test_palace_manager_name_default(
+        self,
+        db: DatabaseTransactionFixture,
+    ) -> None:
+        """create() sets palace_manager_name to None when not provided."""
+        pool = db.licensepool(edition=db.edition())
+        library = db.default_library()
+        event = AnalyticsEventData.create(library, pool, CirculationEvent.CM_CHECKOUT)
+        assert event.palace_manager_name is None
+
+    def test_palace_manager_name_explicit(
+        self,
+        db: DatabaseTransactionFixture,
+    ) -> None:
+        """create() propagates explicitly provided palace_manager_name."""
+        pool = db.licensepool(edition=db.edition())
+        library = db.default_library()
+        event = AnalyticsEventData.create(
+            library,
+            pool,
+            CirculationEvent.CM_CHECKOUT,
+            palace_manager_name="my-cm-instance",
+        )
+        assert event.palace_manager_name == "my-cm-instance"
+
+    def test_country_and_state_defaults(
+        self,
+        db: DatabaseTransactionFixture,
+    ) -> None:
+        """create() uses 'US'/'All' defaults when country/state are not provided."""
+        pool = db.licensepool(edition=db.edition())
+        library = db.default_library()
+        event = AnalyticsEventData.create(library, pool, CirculationEvent.CM_CHECKOUT)
+        assert event.country == "US"
+        assert event.state == "All"
+
+    def test_country_and_state_explicit(
+        self,
+        db: DatabaseTransactionFixture,
+    ) -> None:
+        """create() propagates explicitly provided country/state."""
+        pool = db.licensepool(edition=db.edition())
+        library = db.default_library()
+        event = AnalyticsEventData.create(
+            library, pool, CirculationEvent.CM_CHECKOUT, country="CA", state="Ontario"
+        )
+        assert event.country == "CA"
+        assert event.state == "Ontario"
+
     def test_user_agent(
         self,
         db: DatabaseTransactionFixture,
