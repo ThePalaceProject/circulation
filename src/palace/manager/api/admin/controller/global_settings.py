@@ -73,7 +73,28 @@ class GlobalSettingsController(AdminPermissionsControllerMixin):
             return e.problem_detail
 
     def _process_get(self) -> Response:
-        integration = self._get_or_create_integration()
+    def _process_get(self) -> Response:
+        integration = get_one(
+            self._db,
+            IntegrationConfiguration,
+            goal=Goals.SITEWIDE_SETTINGS,
+            protocol=GLOBAL_SETTINGS_PROTOCOL,
+        )
+        settings = (
+            integration_settings_load(GlobalSettings, integration)
+            if integration is not None
+            else GlobalSettings()
+        )
+        return Response(
+            json_serializer(
+                {
+                    "settings": settings.model_dump(),
+                    "schema": GlobalSettings.configuration_form(self._db),
+                }
+            ),
+            status=200,
+            mimetype="application/json",
+        )
         settings = integration_settings_load(GlobalSettings, integration)
         return Response(
             json_serializer(
