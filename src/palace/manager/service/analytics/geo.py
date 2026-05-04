@@ -53,10 +53,8 @@ def resolve_geo(library: Library, session: Session) -> tuple[str, str]:
     )
     if global_integration is not None:
         global_cfg = integration_settings_load(GlobalSettings, global_integration)
-        if global_cfg.country:
-            country = global_cfg.country
-        if global_cfg.state:
-            state = global_cfg.state
+        country = global_cfg.country
+        state = global_cfg.state
 
     # Tier 3 (highest priority): library-level settings
     lib_settings = library.settings
