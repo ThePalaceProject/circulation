@@ -123,8 +123,9 @@ class TestUpdateExpiredLicenses:
         db.session.refresh(stale_pool)
         db.session.refresh(current_pool)
 
-        # Stale pool recalculated — expired license contributes 0
+        # Stale pool recalculated — expired license contributes 0; last_checked advanced
         assert stale_pool.licenses_available == 0
+        assert stale_pool.last_checked == now
         # Current pool untouched — last_checked unchanged proves it was skipped
         assert current_pool.licenses_available == 0
         assert current_pool.last_checked == after_expiry
