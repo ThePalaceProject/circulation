@@ -41,12 +41,14 @@ class TestGlobalSettingsController:
         assert body["settings"]["state"] == "All"
         assert "schema" in body
 
-    def test_get_creates_integration_row_on_first_call(
+    def test_get_does_not_create_integration_row(
         self,
         controller: GlobalSettingsController,
         db: DatabaseTransactionFixture,
         flask_app_fixture: FlaskAppFixture,
     ) -> None:
+        with flask_app_fixture.test_request_context_system_admin("/"):
+            controller.process_global_settings()
         assert (
             get_one(
                 db.session,
@@ -56,15 +58,6 @@ class TestGlobalSettingsController:
             )
             is None
         )
-        with flask_app_fixture.test_request_context_system_admin("/"):
-            controller.process_global_settings()
-        integration = get_one(
-            db.session,
-            IntegrationConfiguration,
-            goal=Goals.SITEWIDE_SETTINGS,
-            protocol=GLOBAL_SETTINGS_PROTOCOL,
-        )
-        assert integration is not None
 
     def test_get_returns_existing_settings(
         self,
