@@ -87,7 +87,7 @@ class GlobalSettingsController(AdminPermissionsControllerMixin):
         return Response(
             json_serializer(
                 {
-                    "settings": settings.model_dump(),
+                    "settings": settings.model_dump(exclude_defaults=False),
                     "schema": GlobalSettings.configuration_form(self._db),
                 }
             ),
