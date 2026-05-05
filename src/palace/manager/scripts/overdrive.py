@@ -35,7 +35,7 @@ class OverdriveReaperScript(Script):
 
     def do_run(self, *args: Any, **kwargs: Any) -> None:
         parsed = self.parse_command_line(self._db, *args, **kwargs)
-        if parsed.collection_name:
+        if parsed.collection_name is not None:
             collection = Collection.by_name(self._db, parsed.collection_name)
             if collection is None:
                 raise PalaceValueError(
