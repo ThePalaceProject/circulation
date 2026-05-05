@@ -2,7 +2,7 @@ from functools import partial
 
 from celery import shared_task
 from celery.canvas import Signature, chord
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import raiseload
 
 from palace.util.exceptions import PalaceValueError
@@ -21,14 +21,20 @@ from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import (
     LicensePool,
     LicensePoolStatus,
+    LicensePoolType,
 )
 
 
 @shared_task(queue=QueueNames.default, bind=True)
 def existing_available_identifiers(task: Task, collection_id: int) -> IdentifierSet:
     """
-    Retrieves all identifiers that have available licensepools (where licenses_available > 0 and
-    licenses_owned > 0) in the specified collection and returns them as a Redis IdentifierSet.
+    Retrieves all identifiers in the specified collection whose license pools are
+    currently available, returning them as a Redis IdentifierSet.
+
+    A pool is considered available if it is an UNLIMITED pool with ACTIVE status,
+    or a metered/aggregated pool with non-zero owned and available license counts.
+    UNLIMITED pools always have licenses_owned and licenses_available set to 0,
+    so they need to be matched on status instead.
 
     This function is designed to be used as part of a chord operation that identifies and
     marks identifiers not present in a distributor's feed as unavailable.
@@ -46,8 +52,17 @@ def existing_available_identifiers(task: Task, collection_id: int) -> Identifier
                 .join(LicensePool)
                 .where(
                     LicensePool.collection_id == collection_id,
-                    LicensePool.licenses_available != 0,
-                    LicensePool.licenses_owned != 0,
+                    or_(
+                        and_(
+                            LicensePool.type == LicensePoolType.UNLIMITED,
+                            LicensePool.status == LicensePoolStatus.ACTIVE,
+                        ),
+                        and_(
+                            LicensePool.type != LicensePoolType.UNLIMITED,
+                            LicensePool.licenses_available != 0,
+                            LicensePool.licenses_owned != 0,
+                        ),
+                    ),
                 )
                 .options(raiseload("*"))
             )

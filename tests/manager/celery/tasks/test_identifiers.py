@@ -12,7 +12,11 @@ from palace.manager.celery.tasks import identifiers
 from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.service.redis.models.set import IdentifierSet, RedisSetKwargs
 from palace.manager.sqlalchemy.model.collection import Collection
-from palace.manager.sqlalchemy.model.licensing import LicensePool
+from palace.manager.sqlalchemy.model.licensing import (
+    LicensePool,
+    LicensePoolStatus,
+    LicensePoolType,
+)
 from tests.fixtures.celery import CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.redis import RedisFixture
@@ -98,6 +102,43 @@ class TestExistingAvailableIdentifiers:
         assert len(identifier_set) == len(license_pools)
         assert identifier_set.get() == identifier_tasks_fixture.identifiers(
             license_pools
+        )
+
+    def test_unlimited_pools_included(
+        self,
+        db: DatabaseTransactionFixture,
+        identifier_tasks_fixture: IdentifierTasksFixture,
+    ) -> None:
+        """
+        UNLIMITED license pools always have licenses_owned and licenses_available
+        set to 0, so they must be matched on status, not on license counts.
+        Without this, reaping is silently a no-op for OPDS for Distributors and
+        any other feed that produces UNLIMITED pools.
+        """
+        collection = db.collection()
+        active_pools = [
+            db.licensepool(edition=None, collection=collection, unlimited_access=True)
+            for _ in range(3)
+        ]
+        for pool in active_pools:
+            pool.status = LicensePoolStatus.ACTIVE
+            assert pool.type == LicensePoolType.UNLIMITED
+            assert pool.licenses_owned == 0
+            assert pool.licenses_available == 0
+
+        # A REMOVED unlimited pool should not be considered available.
+        removed_pool = db.licensepool(
+            edition=None, collection=collection, unlimited_access=True
+        )
+        removed_pool.status = LicensePoolStatus.REMOVED
+
+        response = identifiers.existing_available_identifiers.delay(
+            collection.id
+        ).wait()
+        identifier_set = identifier_tasks_fixture.set_from_response(response)
+
+        assert identifier_set.get() == identifier_tasks_fixture.identifiers(
+            active_pools
         )
 
     def test_cleanup_on_exception(
