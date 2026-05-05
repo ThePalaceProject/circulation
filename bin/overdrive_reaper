@@ -1,0 +1,10 @@
+#!/usr/bin/env python
+"""
+Manually kicks off the Overdrive reaper Celery task.
+
+Use --collection-name to reap a single collection, or --reap-all to fan out
+over every Overdrive collection.
+"""
+from palace.manager.scripts.overdrive import OverdriveReaperScript
+
+OverdriveReaperScript().run()
