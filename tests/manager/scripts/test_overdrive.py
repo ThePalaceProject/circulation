@@ -7,6 +7,7 @@ import pytest
 from palace.util.exceptions import PalaceValueError
 from palace.util.log import LogLevel
 
+from palace.manager.integration.license.overdrive.api import OverdriveAPI
 from palace.manager.scripts.overdrive import OverdriveReaperScript
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.services import ServicesFixture
@@ -35,13 +36,24 @@ class TestOverdriveReaperScript:
         caplog: pytest.LogCaptureFixture,
     ) -> None:
         caplog.set_level(LogLevel.info)
-        collection = db.collection()
+        collection = db.collection(protocol=OverdriveAPI)
         with patch("palace.manager.scripts.overdrive.reap_collection") as mock:
             OverdriveReaperScript(db.session, services_fixture.services).do_run(
                 ["--collection-name", collection.name]
             )
             mock.delay.assert_called_once_with(collection.id)
             assert '"reap_collection" task has been queued' in caplog.text
+
+    def test_reap_collection_wrong_protocol(
+        self,
+        db: DatabaseTransactionFixture,
+        services_fixture: ServicesFixture,
+    ) -> None:
+        collection = db.collection()  # defaults to a non-Overdrive protocol
+        with pytest.raises(PalaceValueError, match="not an Overdrive collection"):
+            OverdriveReaperScript(db.session, services_fixture.services).do_run(
+                ["--collection-name", collection.name]
+            )
 
     def test_reap_collection_not_found(
         self,

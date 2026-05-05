@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from palace.util.exceptions import PalaceValueError
 
 from palace.manager.celery.tasks.overdrive import reap_all_collections, reap_collection
+from palace.manager.integration.license.overdrive.api import OverdriveAPI
 from palace.manager.scripts.base import Script
 from palace.manager.sqlalchemy.model.collection import Collection
 
@@ -39,6 +40,11 @@ class OverdriveReaperScript(Script):
             if collection is None:
                 raise PalaceValueError(
                     f"No collection found with name '{parsed.collection_name}'."
+                )
+            if collection.protocol != OverdriveAPI.label():
+                raise PalaceValueError(
+                    f"Collection '{parsed.collection_name}' is not an Overdrive collection "
+                    f"(protocol: '{collection.protocol}')."
                 )
             reap_collection.delay(collection.id)
             self.log.info(
