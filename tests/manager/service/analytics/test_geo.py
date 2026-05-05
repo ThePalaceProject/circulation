@@ -6,15 +6,13 @@ import pytest
 
 from palace.manager.integration.base import integration_settings_update
 from palace.manager.integration.configuration.global_settings import (
+    ENV_DEFAULT_COUNTRY,
+    ENV_DEFAULT_STATE,
     GLOBAL_SETTINGS_PROTOCOL,
     GlobalSettings,
 )
 from palace.manager.integration.goals import Goals
-from palace.manager.service.analytics.geo import (
-    _ENV_DEFAULT_COUNTRY,
-    _ENV_DEFAULT_STATE,
-    resolve_geo,
-)
+from palace.manager.service.analytics.geo import resolve_geo
 from palace.manager.sqlalchemy.model.integration import IntegrationConfiguration
 from palace.manager.sqlalchemy.util import create
 from tests.fixtures.database import DatabaseTransactionFixture
@@ -44,8 +42,8 @@ class TestResolveGeo:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Returns env-var values when no DB rows exist."""
-        monkeypatch.setenv(_ENV_DEFAULT_COUNTRY, "CA")
-        monkeypatch.setenv(_ENV_DEFAULT_STATE, "Ontario")
+        monkeypatch.setenv(ENV_DEFAULT_COUNTRY, "CA")
+        monkeypatch.setenv(ENV_DEFAULT_STATE, "Ontario")
         library = db.default_library()
         country, state = resolve_geo(library, db.session)
         assert country == "CA"
@@ -57,8 +55,8 @@ class TestResolveGeo:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Falls back to 'US'/'All' when env vars are absent and no DB rows exist."""
-        monkeypatch.delenv(_ENV_DEFAULT_COUNTRY, raising=False)
-        monkeypatch.delenv(_ENV_DEFAULT_STATE, raising=False)
+        monkeypatch.delenv(ENV_DEFAULT_COUNTRY, raising=False)
+        monkeypatch.delenv(ENV_DEFAULT_STATE, raising=False)
         library = db.default_library()
         country, state = resolve_geo(library, db.session)
         assert country == "US"
@@ -70,8 +68,8 @@ class TestResolveGeo:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Sitewide GlobalSettings take precedence over env vars."""
-        monkeypatch.setenv(_ENV_DEFAULT_COUNTRY, "MX")
-        monkeypatch.setenv(_ENV_DEFAULT_STATE, "Jalisco")
+        monkeypatch.setenv(ENV_DEFAULT_COUNTRY, "MX")
+        monkeypatch.setenv(ENV_DEFAULT_STATE, "Jalisco")
         _make_global_integration(db, country="CA", state="British Columbia")
         library = db.default_library()
         country, state = resolve_geo(library, db.session)

@@ -2,12 +2,21 @@
 
 from __future__ import annotations
 
+import os
 from typing import Annotated
 
 from palace.manager.integration.settings import BaseSettings, FormMetadata
 
 # Protocol string used to identify the global settings IntegrationConfiguration row.
 GLOBAL_SETTINGS_PROTOCOL = "global_settings"
+
+# Env vars that seed Tier-1 (lowest-priority) defaults for country/state resolution.
+# Defined here so geo.py and the admin controller can share them without circular imports.
+ENV_DEFAULT_COUNTRY = "PALACE_DEFAULT_COUNTRY"
+ENV_DEFAULT_STATE = "PALACE_DEFAULT_STATE"
+
+_HARDCODED_DEFAULT_COUNTRY = "US"
+_HARDCODED_DEFAULT_STATE = "All"
 
 
 class GlobalSettings(BaseSettings):
@@ -29,7 +38,7 @@ class GlobalSettings(BaseSettings):
                 "'CA' for Canada). This default can be overridden per library."
             ),
         ),
-    ] = "US"
+    ] = os.environ.get(ENV_DEFAULT_COUNTRY, _HARDCODED_DEFAULT_COUNTRY)
 
     state: Annotated[
         str,
@@ -41,4 +50,4 @@ class GlobalSettings(BaseSettings):
                 "states/provinces. This default can be overridden per library."
             ),
         ),
-    ] = "All"
+    ] = os.environ.get(ENV_DEFAULT_STATE, _HARDCODED_DEFAULT_STATE)

@@ -9,6 +9,8 @@ from sqlalchemy.orm import Session
 
 from palace.manager.integration.base import integration_settings_load
 from palace.manager.integration.configuration.global_settings import (
+    ENV_DEFAULT_COUNTRY,
+    ENV_DEFAULT_STATE,
     GLOBAL_SETTINGS_PROTOCOL,
     GlobalSettings,
 )
@@ -18,9 +20,6 @@ from palace.manager.sqlalchemy.util import get_one
 
 if TYPE_CHECKING:
     from palace.manager.sqlalchemy.model.library import Library
-
-_ENV_DEFAULT_COUNTRY = "PALACE_DEFAULT_COUNTRY"
-_ENV_DEFAULT_STATE = "PALACE_DEFAULT_STATE"
 
 
 def resolve_geo(library: Library, session: Session) -> tuple[str, str]:
@@ -41,8 +40,8 @@ def resolve_geo(library: Library, session: Session) -> tuple[str, str]:
     :return: A ``(country, state)`` tuple; never ``None``.
     """
     # Tier 1 (lowest priority): env var defaults with hard-coded fallbacks
-    country: str = os.environ.get(_ENV_DEFAULT_COUNTRY, "US")
-    state: str = os.environ.get(_ENV_DEFAULT_STATE, "All")
+    country: str = os.environ.get(ENV_DEFAULT_COUNTRY, "US")
+    state: str = os.environ.get(ENV_DEFAULT_STATE, "All")
 
     # Tier 2: sitewide GlobalSettings stored in IntegrationConfiguration
     global_integration = get_one(
