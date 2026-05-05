@@ -9,6 +9,10 @@ from sqlalchemy.orm import Session
 from palace.util.log import LoggerMixin
 
 from palace.manager.core.config import Configuration
+from palace.manager.integration.configuration.global_settings import (
+    ENV_DEFAULT_COUNTRY,
+    ENV_DEFAULT_STATE,
+)
 from palace.manager.service.analytics.eventdata import AnalyticsEventData
 from palace.manager.service.analytics.geo import resolve_geo
 from palace.manager.service.analytics.local import LocalAnalyticsProvider

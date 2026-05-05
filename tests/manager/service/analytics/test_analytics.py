@@ -1,9 +1,14 @@
+import logging
 import os
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from palace.manager.core.config import Configuration
+from palace.manager.integration.configuration.global_settings import (
+    ENV_DEFAULT_COUNTRY,
+    ENV_DEFAULT_STATE,
+)
 from palace.manager.service.analytics import analytics as analytics_module
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.service.analytics.local import LocalAnalyticsProvider
@@ -64,8 +69,11 @@ class TestAnalytics:
         self,
         db: DatabaseTransactionFixture,
         caplog: pytest.LogCaptureFixture,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """collect_event() falls back to defaults and logs a warning when resolve_geo raises."""
+        """collect_event() falls back to env-var defaults and logs a warning when resolve_geo raises."""
+        monkeypatch.delenv(ENV_DEFAULT_COUNTRY, raising=False)
+        monkeypatch.delenv(ENV_DEFAULT_STATE, raising=False)
         library = db.default_library()
         pool = db.licensepool(edition=db.edition())
 
@@ -73,8 +81,11 @@ class TestAnalytics:
         analytics = Analytics()
         analytics.collect = lambda event, session=None: collected.append(event)
 
-        with patch.object(
-            analytics_module, "resolve_geo", side_effect=RuntimeError("boom")
+        with (
+            caplog.at_level(logging.WARNING),
+            patch.object(
+                analytics_module, "resolve_geo", side_effect=RuntimeError("boom")
+            ),
         ):
             analytics.collect_event(library, pool, CirculationEvent.CM_CHECKOUT)
 
