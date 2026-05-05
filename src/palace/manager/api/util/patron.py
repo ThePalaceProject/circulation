@@ -116,7 +116,8 @@ class PatronUtility:
         if patron.authorization_expires and cls._to_date(
             patron.authorization_expires
         ) < cls._to_date(now_local):
-            return False
+            if not patron.library.settings.allow_borrowing_with_expired_credentials:
+                return False
         return True
 
     @classmethod

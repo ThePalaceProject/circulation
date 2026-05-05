@@ -158,3 +158,40 @@ class TestPatronUtility:
             patron.fines = patron_fines
             settings.max_outstanding_fines = 0
             assert PatronUtility.has_excess_fines(patron) is False
+
+    def test_authorization_is_active_allow_borrowing_with_expired_credentials(
+        self, db: DatabaseTransactionFixture, library_fixture: LibraryFixture
+    ):
+        now = datetime.datetime.now(tz=dateutil.tz.tzlocal())
+        one_day_ago = now - datetime.timedelta(days=1)
+        one_day_from_now = now + datetime.timedelta(days=1)
+
+        library = library_fixture.library()
+        patron = db.patron(library=library)
+        settings = library_fixture.settings(library)
+
+        # Default: expired credentials are not allowed — expired patron is blocked.
+        settings.allow_borrowing_with_expired_credentials = False
+        patron.authorization_expires = one_day_ago
+        assert PatronUtility.authorization_is_active(patron) is False
+        pytest.raises(
+            AuthorizationExpired, PatronUtility.assert_borrowing_privileges, patron
+        )
+
+        # When the library opts in, an expired patron is no longer blocked.
+        settings.allow_borrowing_with_expired_credentials = True
+        assert PatronUtility.authorization_is_active(patron) is True
+        PatronUtility.assert_borrowing_privileges(patron)  # must not raise
+
+        # A non-expired patron is unaffected regardless of the setting.
+        patron.authorization_expires = one_day_from_now
+        settings.allow_borrowing_with_expired_credentials = False
+        assert PatronUtility.authorization_is_active(patron) is True
+
+        settings.allow_borrowing_with_expired_credentials = True
+        assert PatronUtility.authorization_is_active(patron) is True
+
+        # A patron with no expiry date set is also unaffected.
+        patron.authorization_expires = None
+        settings.allow_borrowing_with_expired_credentials = False
+        assert PatronUtility.authorization_is_active(patron) is True

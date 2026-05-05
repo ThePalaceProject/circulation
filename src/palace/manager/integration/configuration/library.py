@@ -546,6 +546,19 @@ class LibrarySettings(BaseSettings):
             level=Level.ALL_ACCESS,
         ),
     ] = None
+    allow_borrowing_with_expired_credentials: Annotated[
+        bool,
+        LibraryFormMetadata(
+            label="Allow borrowing with expired credentials?",
+            description="When enabled, patrons whose library cards have expired will still be permitted to borrow.",
+            type=FormFieldType.SELECT,
+            options={
+                True: "Yes",
+                False: "No",
+            },
+            category="Patron Authentication",
+        ),
+    ] = False
 
     @model_validator(mode="after")
     def validate_require_help_email_or_website(self) -> Self:
