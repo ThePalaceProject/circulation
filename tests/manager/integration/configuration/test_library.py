@@ -4,7 +4,11 @@ from functools import partial
 import pytest
 
 from palace.manager.core.classifier import Classifier
-from palace.manager.integration.configuration.library import LibrarySettings
+from palace.manager.integration.configuration.library import (
+    Level,
+    LibraryFormMetadata,
+    LibrarySettings,
+)
 from palace.manager.util.problem_detail import ProblemDetailException
 
 LibrarySettingsFixture = Callable[..., LibrarySettings]
@@ -95,6 +99,17 @@ def test_minimum_featured_quality_constraints(
         library_settings(minimum_featured_quality=1.1)
     assert excinfo.value.problem_detail.detail is not None
     assert "less than or equal to 1" in excinfo.value.problem_detail.detail
+
+
+def test_allow_borrowing_with_expired_credentials_level() -> None:
+    """allow_borrowing_with_expired_credentials requires SYS_ADMIN_OR_MANAGER access."""
+    field_info = LibrarySettings.model_fields[
+        "allow_borrowing_with_expired_credentials"
+    ]
+    metadata = next(
+        m for m in field_info.metadata if isinstance(m, LibraryFormMetadata)
+    )
+    assert metadata.level == Level.SYS_ADMIN_OR_MANAGER
 
 
 class TestFilteredAudiences:

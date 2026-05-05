@@ -557,6 +557,7 @@ class LibrarySettings(BaseSettings):
                 False: "No",
             },
             category="Patron Authentication",
+            level=Level.SYS_ADMIN_OR_MANAGER,
         ),
     ] = False
 
