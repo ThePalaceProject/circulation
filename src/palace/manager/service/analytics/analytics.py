@@ -59,7 +59,8 @@ class Analytics(LoggerMixin, AnalyticsProvider):
         patron: Patron | None = None,
     ) -> None:
         session = Session.object_session(library)
-        country, state = "US", "All"
+        country = os.environ.get(ENV_DEFAULT_COUNTRY, "US")
+        state = os.environ.get(ENV_DEFAULT_STATE, "All")
         if session is not None:
             try:
                 country, state = resolve_geo(library, session)
