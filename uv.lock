@@ -2216,7 +2216,7 @@ ci = [
     { name = "tox-uv", specifier = ">=1.35.1,<2" },
 ]
 dev = [
-    { name = "boto3-stubs", extras = ["boto3", "cloudwatch", "essential", "logs", "s3"], specifier = ">=1.42.96,<2" },
+    { name = "boto3-stubs", extras = ["boto3", "cloudwatch", "essential", "logs", "s3"], specifier = ">=1.43.1,<2" },
     { name = "freezegun", specifier = ">=1.5.0,<1.6" },
     { name = "google-api-python-client-stubs", specifier = ">=1.35.0,<2" },
     { name = "jinja2", specifier = ">=3.1.2,<4" },
