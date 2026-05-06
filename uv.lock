@@ -2140,7 +2140,7 @@ requires-dist = [
     { name = "aws-xray-sdk", specifier = ">=2.15,<2.16" },
     { name = "bcrypt", specifier = ">=5.0.0,<6" },
     { name = "bidict", specifier = ">=0.23.1,<0.24" },
-    { name = "boto3", specifier = ">=1.43.1,<2" },
+    { name = "boto3", specifier = ">=1.43.2,<2" },
     { name = "celery", extras = ["redis", "sqs", "tblib"], specifier = ">=5.6.3,<6" },
     { name = "certifi" },
     { name = "click", specifier = ">=8.3.3,<9" },
