@@ -7,15 +7,57 @@ https://readium.org/webpub-manifest/schema/a11y.schema.json
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Sequence
 from enum import StrEnum, auto
 from functools import cached_property
 from typing import Any, cast
 
-from pydantic import Field, SerializerFunctionWrapHandler, model_serializer
+from pydantic import (
+    Field,
+    SerializerFunctionWrapHandler,
+    field_validator,
+    model_serializer,
+)
 
 from palace.opds.base import BaseOpdsModel
 from palace.opds.util import StrOrTuple, drop_if_falsy, obj_or_tuple_to_tuple
+
+_logger = logging.getLogger(__name__)
+
+
+def _coerce_enum_list(value: Any, enum_cls: type[StrEnum], field_name: str) -> Any:
+    """Coerce a list of strings to enum members, logging and dropping unknown values.
+
+    Performs a case-insensitive match against ``enum_cls`` values so that
+    publications with miscased entries (e.g. ``"TaggedPDF"`` instead of
+    ``"taggedPDF"``) still import. Unknown values are dropped with a warning
+    so they can be reported upstream.
+    """
+    if not isinstance(value, list):
+        return value
+    lookup = {member.value.lower(): member for member in enum_cls}
+    coerced: list[Any] = []
+    for item in value:
+        if isinstance(item, enum_cls):
+            coerced.append(item)
+            continue
+        if isinstance(item, str):
+            match = lookup.get(item.lower())
+            if match is not None:
+                if match.value != item:
+                    _logger.warning(
+                        "Coerced %s value %r to canonical %r",
+                        field_name,
+                        item,
+                        match.value,
+                    )
+                coerced.append(match)
+                continue
+            _logger.warning("Dropping unknown %s value %r", field_name, item)
+            continue
+        coerced.append(item)
+    return coerced
 
 
 class AccessMode(StrEnum):
@@ -205,6 +247,16 @@ class Accessibility(BaseOpdsModel):
     hazard: list[AccessibilityHazard] = Field(default_factory=list)
     certification: Certification | None = None
     summary: str | None = None
+
+    @field_validator("feature", mode="before")
+    @classmethod
+    def _coerce_features(cls, value: Any) -> Any:
+        return _coerce_enum_list(value, AccessibilityFeature, "feature")
+
+    @field_validator("hazard", mode="before")
+    @classmethod
+    def _coerce_hazards(cls, value: Any) -> Any:
+        return _coerce_enum_list(value, AccessibilityHazard, "hazard")
 
     @model_serializer(mode="wrap")
     def _serialize(self, serializer: SerializerFunctionWrapHandler) -> dict[str, Any]:

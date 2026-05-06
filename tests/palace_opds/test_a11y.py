@@ -1,7 +1,12 @@
 """Tests for accessibility metadata models."""
 
+import logging
+
+import pytest
+
 from palace.opds.a11y import (
     Accessibility,
+    AccessibilityFeature,
     AccessibilityHazard,
     Certification,
     Exemption,
@@ -106,3 +111,47 @@ class TestAccessibility:
         a11y = Accessibility()
         data = a11y.serialize()
         assert "exemption" not in data
+
+    def test_feature_miscased_coerced_with_warning(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Miscased feature values are coerced to canonical form and logged."""
+        with caplog.at_level(logging.WARNING, logger="palace.opds.a11y"):
+            a11y = Accessibility.model_validate(
+                {"feature": ["TaggedPDF", "mathml", "ARIA"]}
+            )
+        assert a11y.feature == [
+            AccessibilityFeature.tagged_pdf,
+            AccessibilityFeature.math_ml,
+            AccessibilityFeature.ARIA,
+        ]
+        assert a11y.serialize()["feature"] == ["taggedPDF", "MathML", "ARIA"]
+        warnings = [r.getMessage() for r in caplog.records]
+        assert any("'TaggedPDF'" in m and "'taggedPDF'" in m for m in warnings)
+        assert any("'mathml'" in m and "'MathML'" in m for m in warnings)
+        # ARIA was already canonical, so no warning for it.
+        assert not any("'ARIA'" in m for m in warnings)
+
+    def test_feature_unknown_dropped_with_warning(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Unknown feature values are dropped and logged."""
+        with caplog.at_level(logging.WARNING, logger="palace.opds.a11y"):
+            a11y = Accessibility.model_validate(
+                {"feature": ["taggedPDF", "notARealFeature"]}
+            )
+        assert a11y.feature == [AccessibilityFeature.tagged_pdf]
+        warnings = [r.getMessage() for r in caplog.records]
+        assert any("Dropping" in m and "'notARealFeature'" in m for m in warnings)
+
+    def test_hazard_unknown_dropped_with_warning(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Unknown hazard values are dropped and logged."""
+        with caplog.at_level(logging.WARNING, logger="palace.opds.a11y"):
+            a11y = Accessibility.model_validate(
+                {"hazard": ["noFlashingHazard", "bogus"]}
+            )
+        assert a11y.hazard == [AccessibilityHazard.no_flashing_hazard]
+        warnings = [r.getMessage() for r in caplog.records]
+        assert any("Dropping" in m and "'bogus'" in m for m in warnings)
