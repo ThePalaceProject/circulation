@@ -118,7 +118,7 @@ class SAMLWebSSOAuthenticationProvider(
             "links": [
                 {
                     "rel" : "authenticate"
-                    "href": "https://circulation.library.org/saml_authenticate?provider=SAML+2.0?idp_entity_id=https%3A%2F%2Fidp.saml.net%2Fidp%2Fshibboleth",
+                    "href": "https://circulation.library.org/saml/authenticate?provider=SAML+2.0?idp_entity_id=https%3A%2F%2Fidp.saml.net%2Fidp%2Fshibboleth",
                     "display_names": [
                         {
                             "language": "en",
