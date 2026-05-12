@@ -40,7 +40,6 @@ if TYPE_CHECKING:
 
 class SirsiBlockReasons:
     NOT_APPROVED = _("Patron has not yet been approved")
-    EXPIRED = _("Patron membership has expired")
     PATRON_BLOCKED = _("Patron has been blocked.")
 
 
