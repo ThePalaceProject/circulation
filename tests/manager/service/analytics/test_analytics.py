@@ -63,11 +63,9 @@ class TestAnalytics:
         """collect_event() falls back to 'US'/'All' when library has no country/state configured."""
         library = db.default_library()
         pool = db.licensepool(edition=db.edition())
-        # Ensure no country/state in settings
-        settings = dict(library.settings_dict)
-        settings.pop("country", None)
-        settings.pop("state", None)
-        library.settings_dict = settings
+        library.update_settings(
+            library.settings.model_copy(update={"country": None, "state": None})
+        )
 
         collected: list = []
         analytics = Analytics()
