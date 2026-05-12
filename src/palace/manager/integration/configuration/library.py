@@ -567,7 +567,7 @@ class LibrarySettings(BaseSettings):
             description=(
                 "The country for this library's circulation events. "
                 "Use ISO 3166-1 alpha-2 codes (e.g. 'US' for United States, 'CA' for Canada). "
-                "Leave blank to inherit the global default."
+                "Leave blank to default to 'US'."
             ),
             category="Geographic Information",
             level=Level.SYS_ADMIN_ONLY,
@@ -578,8 +578,9 @@ class LibrarySettings(BaseSettings):
         LibraryFormMetadata(
             label="State/Province",
             description=(
-                "The state or province for this library's circulation events "
-                "(e.g. 'New York', 'Ontario'). Leave blank to inherit the global default."
+                "The state or province for this library's circulation events. "
+                "Two-letter codes are recommended (e.g. 'NY' for New York, 'ON' for Ontario). "
+                "Leave blank to default to 'All'."
             ),
             category="Geographic Information",
             level=Level.SYS_ADMIN_ONLY,
