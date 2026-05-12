@@ -9,12 +9,7 @@ from sqlalchemy.orm import Session
 from palace.util.log import LoggerMixin
 
 from palace.manager.core.config import Configuration
-from palace.manager.integration.configuration.global_settings import (
-    ENV_DEFAULT_COUNTRY,
-    ENV_DEFAULT_STATE,
-)
 from palace.manager.service.analytics.eventdata import AnalyticsEventData
-from palace.manager.service.analytics.geo import resolve_geo
 from palace.manager.service.analytics.local import LocalAnalyticsProvider
 from palace.manager.service.analytics.provider import AnalyticsProvider
 from palace.manager.service.analytics.s3 import S3AnalyticsProvider
@@ -62,17 +57,8 @@ class Analytics(LoggerMixin, AnalyticsProvider):
         new_value: int | None = None,
         patron: Patron | None = None,
     ) -> None:
-        session = Session.object_session(library)
-        country = os.environ.get(ENV_DEFAULT_COUNTRY, "US")
-        state = os.environ.get(ENV_DEFAULT_STATE, "All")
-        if session is not None:
-            try:
-                country, state = resolve_geo(library, session)
-            except Exception as e:
-                self.log.warning(
-                    f"Unable to resolve geographic settings, using defaults: {repr(e)}",
-                    exc_info=e,
-                )
+        country = library.settings.country or "US"
+        state = library.settings.state or "All"
         palace_manager_name = (
             os.environ.get(Configuration.REPORTING_NAME_ENVIRONMENT_VARIABLE) or None
         )
@@ -88,7 +74,7 @@ class Analytics(LoggerMixin, AnalyticsProvider):
             state=state,
             palace_manager_name=palace_manager_name,
         )
-        self.collect(event, session=session)
+        self.collect(event, session=Session.object_session(library))
 
     def is_configured(self) -> bool:
         return len(self.providers) > 0

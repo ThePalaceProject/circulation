@@ -86,9 +86,6 @@ if TYPE_CHECKING:
         DiscoveryServicesController,
     )
     from palace.manager.api.admin.controller.feed import FeedController
-    from palace.manager.api.admin.controller.global_settings import (
-        GlobalSettingsController,
-    )
     from palace.manager.api.admin.controller.individual_admin_settings import (
         IndividualAdminSettingsController,
     )
@@ -152,7 +149,6 @@ class CirculationManager(LoggerMixin):
     admin_patron_auth_services_controller: PatronAuthServicesController
     admin_collection_settings_controller: CollectionSettingsController
     admin_library_settings_controller: LibrarySettingsController
-    admin_global_settings_controller: GlobalSettingsController
     admin_individual_admin_settings_controller: IndividualAdminSettingsController
     admin_catalog_services_controller: CatalogServicesController
     admin_announcement_service: AnnouncementSettings

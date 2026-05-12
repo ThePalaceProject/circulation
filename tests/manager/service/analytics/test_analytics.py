@@ -1,15 +1,7 @@
-import logging
 import os
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from palace.manager.core.config import Configuration
-from palace.manager.integration.configuration.global_settings import (
-    ENV_DEFAULT_COUNTRY,
-    ENV_DEFAULT_STATE,
-)
-from palace.manager.service.analytics import analytics as analytics_module
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.service.analytics.local import LocalAnalyticsProvider
 from palace.manager.service.analytics.s3 import S3AnalyticsProvider
@@ -47,9 +39,8 @@ class TestAnalytics:
     def test_collect_event_passes_geo_to_event_data(
         self,
         db: DatabaseTransactionFixture,
-        caplog: pytest.LogCaptureFixture,
     ) -> None:
-        """collect_event() resolves geo and passes country/state to AnalyticsEventData."""
+        """collect_event() reads country/state from library settings and passes them to AnalyticsEventData."""
         library = db.default_library()
         pool = db.licensepool(edition=db.edition())
         library.settings_dict = dict(library.settings_dict)
@@ -65,34 +56,27 @@ class TestAnalytics:
         assert collected[0].country == "CA"
         assert collected[0].state == "Ontario"
 
-    def test_collect_event_uses_fallback_if_resolve_geo_fails(
+    def test_collect_event_uses_defaults_when_library_settings_absent(
         self,
         db: DatabaseTransactionFixture,
-        caplog: pytest.LogCaptureFixture,
-        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """collect_event() falls back to env-var defaults and logs a warning when resolve_geo raises."""
-        monkeypatch.delenv(ENV_DEFAULT_COUNTRY, raising=False)
-        monkeypatch.delenv(ENV_DEFAULT_STATE, raising=False)
+        """collect_event() falls back to 'US'/'All' when library has no country/state configured."""
         library = db.default_library()
         pool = db.licensepool(edition=db.edition())
+        # Ensure no country/state in settings
+        settings = dict(library.settings_dict)
+        settings.pop("country", None)
+        settings.pop("state", None)
+        library.settings_dict = settings
 
         collected: list = []
         analytics = Analytics()
         analytics.collect = lambda event, session=None: collected.append(event)
-
-        with (
-            caplog.at_level(logging.WARNING),
-            patch.object(
-                analytics_module, "resolve_geo", side_effect=RuntimeError("boom")
-            ),
-        ):
-            analytics.collect_event(library, pool, CirculationEvent.CM_CHECKOUT)
+        analytics.collect_event(library, pool, CirculationEvent.CM_CHECKOUT)
 
         assert len(collected) == 1
         assert collected[0].country == "US"
         assert collected[0].state == "All"
-        assert "Unable to resolve geographic settings" in caplog.text
 
     def test_collect_event_passes_palace_manager_name_from_env(
         self,
