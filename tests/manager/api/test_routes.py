@@ -654,3 +654,4 @@ class TestSAMLRoutes:
                 http_method="POST",
             )
         assert "Deprecated route /saml_callback" in caplog.text
+        fixture.assert_supported_methods(url, "POST")

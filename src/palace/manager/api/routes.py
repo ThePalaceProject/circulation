@@ -4,6 +4,7 @@ from functools import update_wrapper, wraps
 import flask
 from flask import Response, make_response, request
 from flask_cors.core import get_cors_options, set_cors_headers
+from werkzeug.exceptions import MethodNotAllowed
 
 from palace.manager.api.app import app
 from palace.manager.core.app_server import (
@@ -647,9 +648,15 @@ def saml_callback():
 
 # Deprecated: use /saml/callback instead.
 # NOTE: This route MUST remain registered as long as any IdP metadata references /saml_callback.
-@app.route("/saml_callback", methods=["POST"])
+# NOTE: Like `/saml/callback` for which this method is deprecated, this route supports only POST
+#  method. However, since it has only a single path segment, accessing it via GET or HEAD would fall
+#  back to the `@library_route("/", strict_slashes=False)` rule above, treating "saml_callback" as
+#  the library short name. To avoid that, we capture those methods and raise an exception for them.
+@app.route("/saml_callback", methods=["POST", "GET", "HEAD", "PATCH", "PUT", "DELETE"])
 @returns_problem_detail
 def saml_callback_deprecated():
+    if flask.request.method != "POST":
+        raise MethodNotAllowed(valid_methods=["POST"])
     log.warning(
         "Deprecated route /saml_callback called; update SP metadata to use /saml/callback."
     )
