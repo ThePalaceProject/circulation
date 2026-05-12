@@ -1,8 +1,10 @@
+import logging
 from functools import update_wrapper, wraps
 
 import flask
 from flask import Response, make_response, request
 from flask_cors.core import get_cors_options, set_cors_headers
+from werkzeug.exceptions import MethodNotAllowed
 
 from palace.manager.api.app import app
 from palace.manager.core.app_server import (
@@ -13,6 +15,8 @@ from palace.manager.core.app_server import (
 )
 from palace.manager.sqlalchemy.hassessioncache import HasSessionCache
 from palace.manager.util.problem_detail import ProblemDetail
+
+log = logging.getLogger(__name__)
 
 
 @app.before_request
@@ -605,7 +609,7 @@ def oidc_backchannel_logout():
 
 
 # Route that redirects to the authentication URL for a SAML provider
-@library_route("/saml_authenticate")
+@library_route("/saml/authenticate")
 @has_library
 @returns_problem_detail
 def saml_authenticate():
@@ -614,18 +618,48 @@ def saml_authenticate():
     )
 
 
-# Redirect URI for SAML providers
-# NOTE: we cannot use @has_library decorator and append a library's name to saml_calback route
-# (e.g. https://cm.org/LIBRARY_NAME/saml_callback).
-# The URL of the SP's assertion consumer service (saml_callback) should be constant:
-# SP's metadata is registered in the IdP and cannot change.
-# If we try to append a library's name to the ACS's URL sent as a part of the SAML request,
-# the IdP will fail this request because the URL mentioned in the request and
-# the URL saved in the SP's metadata configured in this IdP will differ.
-# Library's name is passed as a part of the relay state and processed in SAMLController.saml_authentication_callback
-@app.route("/saml_callback", methods=["POST"])
+# Deprecated: use /saml/authenticate instead.
+@library_route("/saml_authenticate")
+@has_library
+@returns_problem_detail
+def saml_authenticate_deprecated():
+    log.warning(
+        "Deprecated route /saml_authenticate called; use /saml/authenticate instead."
+    )
+    return app.manager.saml_controller.saml_authentication_redirect(
+        flask.request.args, app.manager._db
+    )
+
+
+# Assertion consumer service (ACS) endpoint for SAML providers.
+# NOTE: we cannot use @has_library decorator and append a library's name to this route
+# (e.g. https://cm.org/LIBRARY_NAME/saml/callback).
+# The ACS URL must be constant: it is registered in IdP metadata and cannot change.
+# If we try to append a library's name to the ACS URL sent as a part of the SAML request,
+# the IdP will reject it because the URL in the request and the URL in SP metadata will differ.
+# Library name is passed as part of the relay state and processed in SAMLController.saml_authentication_callback.
+@app.route("/saml/callback", methods=["POST"])
 @returns_problem_detail
 def saml_callback():
+    return app.manager.saml_controller.saml_authentication_callback(
+        request, app.manager._db
+    )
+
+
+# Deprecated: use /saml/callback instead.
+# NOTE: This route MUST remain registered as long as any IdP metadata references /saml_callback.
+# NOTE: Like `/saml/callback` for which this method is deprecated, this route supports only POST
+#  method. However, since it has only a single path segment, accessing it via GET or HEAD would fall
+#  back to the `@library_route("/", strict_slashes=False)` rule above, treating "saml_callback" as
+#  the library short name. To avoid that, we capture those methods and raise an exception for them.
+@app.route("/saml_callback", methods=["POST", "GET", "HEAD", "PATCH", "PUT", "DELETE"])
+@returns_problem_detail
+def saml_callback_deprecated():
+    if flask.request.method != "POST":
+        raise MethodNotAllowed(valid_methods=["POST"])
+    log.warning(
+        "Deprecated route /saml_callback called; update SP metadata to use /saml/callback."
+    )
     return app.manager.saml_controller.saml_authentication_callback(
         request, app.manager._db
     )

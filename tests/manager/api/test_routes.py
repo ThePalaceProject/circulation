@@ -1,3 +1,4 @@
+import logging
 from unittest.mock import MagicMock, patch
 
 import flask
@@ -604,3 +605,53 @@ class TestSAMLRoutes:
             http_method=http_method,
         )
         fixture.assert_supported_methods(url, "GET", "POST")
+
+    def test_saml_authenticate(self, fixture: RouteTestFixture):
+        url = "/LIBSHORTNAME/saml/authenticate"
+        fixture.assert_request_calls(
+            url,
+            fixture.controller.saml_authentication_redirect,
+            ImmutableMultiDict([]),
+            fixture.manager._db,
+        )
+        fixture.assert_supported_methods(url, "GET")
+
+    def test_saml_authenticate_deprecated(
+        self, fixture: RouteTestFixture, caplog: pytest.LogCaptureFixture
+    ):
+        url = "/LIBSHORTNAME/saml_authenticate"
+        with caplog.at_level(logging.WARNING, logger="palace.manager.api.routes"):
+            fixture.assert_request_calls(
+                url,
+                fixture.controller.saml_authentication_redirect,
+                ImmutableMultiDict([]),
+                fixture.manager._db,
+            )
+        assert "Deprecated route /saml_authenticate" in caplog.text
+        fixture.assert_supported_methods(url, "GET")
+
+    def test_saml_callback(self, fixture: RouteTestFixture):
+        url = "/saml/callback"
+        fixture.assert_request_calls(
+            url,
+            fixture.controller.saml_authentication_callback,
+            flask.request,
+            fixture.manager._db,
+            http_method="POST",
+        )
+        fixture.assert_supported_methods(url, "POST")
+
+    def test_saml_callback_deprecated(
+        self, fixture: RouteTestFixture, caplog: pytest.LogCaptureFixture
+    ):
+        url = "/saml_callback"
+        with caplog.at_level(logging.WARNING, logger="palace.manager.api.routes"):
+            fixture.assert_request_calls(
+                url,
+                fixture.controller.saml_authentication_callback,
+                flask.request,
+                fixture.manager._db,
+                http_method="POST",
+            )
+        assert "Deprecated route /saml_callback" in caplog.text
+        fixture.assert_supported_methods(url, "POST")

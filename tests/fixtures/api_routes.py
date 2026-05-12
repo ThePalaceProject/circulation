@@ -169,8 +169,9 @@ class RouteTestFixture:
         # Locate the corresponding function in our mock app.
         mock_function = getattr(self.routes, function_name)
 
-        # Call it in the context of the mock app.
-        with self.controller_fixture.app.test_request_context():
+        # Call it in the context of the mock app, using the same HTTP method so that
+        # route functions that inspect flask.request.method see the correct value.
+        with self.controller_fixture.app.test_request_context(url, method=method):
             return mock_function(**kwargs)
 
     def assert_request_calls(self, url, method, *args, **kwargs):

@@ -5,6 +5,7 @@ from contextlib import nullcontext
 from unittest.mock import MagicMock, create_autospec, patch
 
 import pytest
+from flask import url_for
 from freezegun import freeze_time
 from werkzeug.datastructures import Authorization
 
@@ -139,7 +140,7 @@ class TestSAMLWebSSOAuthenticationProvider:
                     "links": [
                         {
                             "rel": "authenticate",
-                            "href": "http://localhost/default/saml_authenticate?provider=SAML+2.0+Web+SSO&idp_entity_id=http://idp2.hilbertteam.net/idp/shibboleth",
+                            "href": "http://localhost/default/saml/authenticate?provider=SAML+2.0+Web+SSO&idp_entity_id=http://idp2.hilbertteam.net/idp/shibboleth",
                             "display_names": [
                                 {
                                     "value": saml_strings.IDP_1_UI_INFO_EN_DISPLAY_NAME,
@@ -208,7 +209,7 @@ class TestSAMLWebSSOAuthenticationProvider:
                     "links": [
                         {
                             "rel": "authenticate",
-                            "href": "http://localhost/default/saml_authenticate?provider=SAML+2.0+Web+SSO&idp_entity_id=http://idp2.hilbertteam.net/idp/shibboleth",
+                            "href": "http://localhost/default/saml/authenticate?provider=SAML+2.0+Web+SSO&idp_entity_id=http://idp2.hilbertteam.net/idp/shibboleth",
                             "display_names": [
                                 {
                                     "value": saml_strings.IDP_1_ORGANIZATION_EN_ORGANIZATION_DISPLAY_NAME,
@@ -244,7 +245,7 @@ class TestSAMLWebSSOAuthenticationProvider:
                     "links": [
                         {
                             "rel": "authenticate",
-                            "href": "http://localhost/default/saml_authenticate?provider=SAML+2.0+Web+SSO&idp_entity_id=http://idp1.hilbertteam.net/idp/shibboleth",
+                            "href": "http://localhost/default/saml/authenticate?provider=SAML+2.0+Web+SSO&idp_entity_id=http://idp1.hilbertteam.net/idp/shibboleth",
                             "display_names": [
                                 {
                                     "value": "Identity Provider #1",
@@ -258,7 +259,7 @@ class TestSAMLWebSSOAuthenticationProvider:
                         },
                         {
                             "rel": "authenticate",
-                            "href": "http://localhost/default/saml_authenticate?provider=SAML+2.0+Web+SSO&idp_entity_id=http://idp1.hilbertteam.net/idp/shibboleth",
+                            "href": "http://localhost/default/saml/authenticate?provider=SAML+2.0+Web+SSO&idp_entity_id=http://idp1.hilbertteam.net/idp/shibboleth",
                             "display_names": [
                                 {
                                     "value": "Identity Provider #2",
@@ -336,6 +337,50 @@ class TestSAMLWebSSOAuthenticationProvider:
 
             # Assert
             assert expected_result == result
+
+    @pytest.mark.parametrize(
+        "endpoint, expected_path",
+        [
+            pytest.param("saml_authenticate", "/saml/authenticate", id="canonical"),
+            pytest.param(
+                "saml_authenticate_deprecated", "/saml_authenticate", id="deprecated"
+            ),
+        ],
+    )
+    def test_authenticate_route_url(
+        self,
+        controller_fixture: ControllerFixture,
+        endpoint: str,
+        expected_path: str,
+    ):
+        controller_fixture.app.config["SERVER_NAME"] = "localhost"
+        with controller_fixture.app.test_request_context("/"):
+            url = url_for(
+                endpoint,
+                _external=True,
+                library_short_name=controller_fixture.db.default_library().short_name,
+                provider="test",
+                idp_entity_id="test-idp",
+            )
+        assert expected_path in url
+
+    @pytest.mark.parametrize(
+        "endpoint, expected_path",
+        [
+            pytest.param("saml_callback", "/saml/callback", id="canonical"),
+            pytest.param("saml_callback_deprecated", "/saml_callback", id="deprecated"),
+        ],
+    )
+    def test_callback_route_url(
+        self,
+        controller_fixture: ControllerFixture,
+        endpoint: str,
+        expected_path: str,
+    ):
+        controller_fixture.app.config["SERVER_NAME"] = "localhost"
+        with controller_fixture.app.test_request_context("/"):
+            url = url_for(endpoint, _external=True)
+        assert expected_path in url
 
     @pytest.mark.parametrize(
         "subject, expected_result, patron_id_use_name_id, patron_id_attributes, patron_id_regular_expression",
