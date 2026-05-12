@@ -43,9 +43,9 @@ class TestAnalytics:
         """collect_event() reads country/state from library settings and passes them to AnalyticsEventData."""
         library = db.default_library()
         pool = db.licensepool(edition=db.edition())
-        library.settings_dict = dict(library.settings_dict)
-        library.settings_dict["country"] = "CA"
-        library.settings_dict["state"] = "Ontario"
+        library.update_settings(
+            library.settings.model_copy(update={"country": "CA", "state": "Ontario"})
+        )
 
         collected: list = []
         analytics = Analytics()
