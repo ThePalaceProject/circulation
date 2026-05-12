@@ -159,7 +159,7 @@ class TestPatronUtility:
             settings.max_outstanding_fines = 0
             assert PatronUtility.has_excess_fines(patron) is False
 
-    def test_authorization_is_active_allow_borrowing_with_expired_credentials(
+    def test_assert_borrowing_privileges_allow_borrowing_with_expired_authorization(
         self, db: DatabaseTransactionFixture, library_fixture: LibraryFixture
     ):
         now = datetime.datetime.now(tz=dateutil.tz.tzlocal())
@@ -170,28 +170,53 @@ class TestPatronUtility:
         patron = db.patron(library=library)
         settings = library_fixture.settings(library)
 
-        # Default: expired credentials are not allowed — expired patron is blocked.
-        settings.allow_borrowing_with_expired_credentials = False
+        # authorization_is_active is a pure expiry check — it always returns
+        # False for expired patrons regardless of the library setting.
         patron.authorization_expires = one_day_ago
         assert PatronUtility.authorization_is_active(patron) is False
+
+        # Default: expired authorization is not allowed — expired patron is blocked.
+        settings.allow_borrowing_with_expired_authorization = False
         pytest.raises(
             AuthorizationExpired, PatronUtility.assert_borrowing_privileges, patron
         )
 
         # When the library opts in, an expired patron is no longer blocked.
-        settings.allow_borrowing_with_expired_credentials = True
-        assert PatronUtility.authorization_is_active(patron) is True
+        settings.allow_borrowing_with_expired_authorization = True
         PatronUtility.assert_borrowing_privileges(patron)  # must not raise
 
         # A non-expired patron is unaffected regardless of the setting.
         patron.authorization_expires = one_day_from_now
-        settings.allow_borrowing_with_expired_credentials = False
         assert PatronUtility.authorization_is_active(patron) is True
-
-        settings.allow_borrowing_with_expired_credentials = True
-        assert PatronUtility.authorization_is_active(patron) is True
+        for enabled in (False, True):
+            settings.allow_borrowing_with_expired_authorization = enabled
+            PatronUtility.assert_borrowing_privileges(patron)  # must not raise
 
         # A patron with no expiry date set is also unaffected.
         patron.authorization_expires = None
-        settings.allow_borrowing_with_expired_credentials = False
         assert PatronUtility.authorization_is_active(patron) is True
+        for enabled in (False, True):
+            settings.allow_borrowing_with_expired_authorization = enabled
+            PatronUtility.assert_borrowing_privileges(patron)  # must not raise
+
+    def test_assert_borrowing_privileges_allow_borrowing_with_expired_authorization_sirsi(
+        self, db: DatabaseTransactionFixture, library_fixture: LibraryFixture
+    ):
+        """Sirsi reports expiry via block_reason=PatronData.EXPIRED rather than
+        authorization_expires; the library setting must gate both paths.
+        """
+        library = library_fixture.library()
+        patron = db.patron(library=library)
+        settings = library_fixture.settings(library)
+
+        patron.block_reason = PatronData.EXPIRED
+
+        # Default: Sirsi-expired patron raises AuthorizationExpired.
+        settings.allow_borrowing_with_expired_authorization = False
+        pytest.raises(
+            AuthorizationExpired, PatronUtility.assert_borrowing_privileges, patron
+        )
+
+        # When the library opts in, the Sirsi-expired patron is also unblocked.
+        settings.allow_borrowing_with_expired_authorization = True
+        PatronUtility.assert_borrowing_privileges(patron)  # must not raise

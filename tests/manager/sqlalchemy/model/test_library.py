@@ -188,7 +188,7 @@ web_header_labels='[]'
 hidden_content_types='[]'
 filtered_audiences='[]'
 filtered_genres='[]'
-allow_borrowing_with_expired_credentials='False'
+allow_borrowing_with_expired_authorization='False'
 """
         actual = library.explain()
         assert expect == "\n".join(actual)

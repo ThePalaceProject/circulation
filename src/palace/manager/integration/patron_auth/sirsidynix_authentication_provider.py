@@ -302,7 +302,7 @@ class SirsiDynixHorizonAuthenticationProvider(
             patrondata.fines = float(fines.get("amount", 0))
 
         if status_fields.get("expired"):
-            patrondata.block_reason = SirsiBlockReasons.EXPIRED
+            patrondata.block_reason = PatronData.EXPIRED
         elif status_fields.get("hasMaxDaysWithFines") or status_fields.get(
             "hasMaxFines"
         ):
@@ -322,7 +322,7 @@ class SirsiDynixHorizonAuthenticationProvider(
 
         if not self.patron_blocks_enforced:
             # if blocks are ignored and patron is not expired, treat patron as unblocked.
-            if patrondata.block_reason != SirsiBlockReasons.EXPIRED:
+            if patrondata.block_reason != PatronData.EXPIRED:
                 patrondata.block_reason = PatronData.NO_VALUE
 
         return patrondata

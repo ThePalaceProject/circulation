@@ -546,7 +546,7 @@ class LibrarySettings(BaseSettings):
             level=Level.ALL_ACCESS,
         ),
     ] = None
-    allow_borrowing_with_expired_credentials: Annotated[
+    allow_borrowing_with_expired_authorization: Annotated[
         bool,
         LibraryFormMetadata(
             label="Allow borrowing with expired credentials?",
@@ -556,7 +556,7 @@ class LibrarySettings(BaseSettings):
                 True: "Yes",
                 False: "No",
             },
-            category="Patron Authentication",
+            category="Loans, Holds, & Fines",
             level=Level.SYS_ADMIN_OR_MANAGER,
         ),
     ] = False

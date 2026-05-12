@@ -67,11 +67,17 @@ class PatronUtility:
 
         :raises AuthorizationExpired: If the patron's authorization has expired.
         :raises OutstandingFines: If the patron has too many outstanding fines.
+        :raises AuthorizationBlocked: If the patron is blocked for another reason.
 
         """
+        allow_expired = (
+            patron.library.settings.allow_borrowing_with_expired_authorization
+        )
+
         if not cls.authorization_is_active(patron):
-            # The patron's card has expired.
-            raise AuthorizationExpired()
+            # authorization_expires path (SIP2/Millennium): card is past its expiry date.
+            if not allow_expired:
+                raise AuthorizationExpired()
 
         if cls.has_excess_fines(patron):
             raise OutstandingFines(fines=patron.fines)
@@ -86,6 +92,12 @@ class PatronUtility:
             # the patron has outstanding fines, even if the circulation
             # manager is not configured to make that deduction.
             raise OutstandingFines(fines=patron.fines)
+
+        if patron.block_reason is PatronData.EXPIRED:
+            # Sirsi reports expiry via block_reason rather than authorization_expires.
+            if not allow_expired:
+                raise AuthorizationExpired()
+            return
 
         raise AuthorizationBlocked()
 
@@ -116,8 +128,7 @@ class PatronUtility:
         if patron.authorization_expires and cls._to_date(
             patron.authorization_expires
         ) < cls._to_date(now_local):
-            if not patron.library.settings.allow_borrowing_with_expired_credentials:
-                return False
+            return False
         return True
 
     @classmethod
