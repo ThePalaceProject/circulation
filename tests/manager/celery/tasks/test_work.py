@@ -88,3 +88,33 @@ def test_subject_checked(
     with patch.object(Work, "calculate_presentation") as calc_pres:
         work_tasks.classify_unchecked_subjects.delay().wait()
     assert calc_pres.call_count == 0
+
+
+def test_reclassify_null_audience_works(
+    db: DatabaseTransactionFixture,
+    celery_fixture: CeleryFixture,
+):
+    """reclassify_null_audience_works calls calculate_presentation for works with NULL audience
+    and leaves works with a non-NULL audience untouched."""
+    null_works = []
+    for _ in range(3):
+        work: Work = db.work(with_license_pool=True)
+        work.audience = None
+        null_works.append(work)
+
+    adult_work: Work = db.work(with_license_pool=True)
+    # audience defaults to "Adult" in db.work()
+
+    db.session.commit()
+
+    with patch.object(Work, "calculate_presentation") as calc_pres:
+        work_tasks.reclassify_null_audience_works.delay().wait()
+
+    # Only the three null-audience works should trigger calculate_presentation.
+    assert calc_pres.call_count == 3
+
+    # Verify the recalculate_classification policy is used for each call.
+    for call_obj in calc_pres.call_args_list:
+        policy = call_obj[1]["policy"]
+        assert policy.classify is True
+        assert policy.choose_edition is False

@@ -16,6 +16,29 @@ from palace.manager.sqlalchemy.model.work import Work
 
 
 @shared_task(queue=QueueNames.default, bind=True)
+def reclassify_null_audience_works(task: Task) -> None:
+    """Reclassify all works whose audience was reset to NULL by a repair migration.
+
+    Iterates works with audience IS NULL in ascending id order and calls
+    calculate_presentation() on each, committing after every work so that
+    progress is preserved if the task is interrupted.
+    """
+    with task.session() as session:
+        policy = PresentationCalculationPolicy.recalculate_classification()
+        last_id: int | None = None
+        while True:
+            qu = session.query(Work).filter(Work.audience.is_(None)).order_by(Work.id)
+            if last_id is not None:
+                qu = qu.filter(Work.id > last_id)
+            work = qu.first()
+            if not work:
+                break
+            last_id = work.id
+            work.calculate_presentation(policy=policy)
+            session.commit()
+
+
+@shared_task(queue=QueueNames.default, bind=True)
 def classify_unchecked_subjects(task: Task) -> None:
     """Reclassify all Works whose current classifications appear to
     depend on Subjects in the 'unchecked' state.
