@@ -6,7 +6,7 @@ import gzip
 from collections.abc import Callable
 from functools import wraps
 from io import BytesIO
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ParamSpec, TypeVar
 
 import flask
 from flask import Response, make_response, url_for
@@ -87,9 +87,17 @@ def load_pagination_from_request(
     return base_class.from_request(get_arg, default_size, **kwargs)
 
 
-def returns_problem_detail(f):
+_P = ParamSpec("_P")
+_T = TypeVar("_T")
+
+
+def returns_problem_detail(
+    f: Callable[_P, _T],
+) -> Callable[_P, _T | tuple[str, int, dict[str, str]]]:
     @wraps(f)
-    def decorated(*args, **kwargs):
+    def decorated(
+        *args: _P.args, **kwargs: _P.kwargs
+    ) -> _T | tuple[str, int, dict[str, str]]:
         v = f(*args, **kwargs)
         if isinstance(v, ProblemDetail):
             return v.response
