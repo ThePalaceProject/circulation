@@ -91,8 +91,8 @@ class AnalyticsEventData(BaseModel, LoggerMixin):
     open_access: bool | None
     user_agent: str | None
     patron_uuid: UUID | None
-    country: str
-    state: str
+    country: str | None = None
+    state: str | None = None
     palace_manager_name: str | None = None
 
     model_config = ConfigDict(
@@ -110,8 +110,8 @@ class AnalyticsEventData(BaseModel, LoggerMixin):
         new_value: int | None = None,
         patron: Patron | None = None,
         user_agent: str | None = None,
-        country: str = "US",
-        state: str = "All",
+        country: str | None = None,
+        state: str | None = None,
         palace_manager_name: str | None = None,
     ) -> Self:
         if user_agent is None:

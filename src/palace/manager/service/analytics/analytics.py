@@ -57,8 +57,8 @@ class Analytics(LoggerMixin, AnalyticsProvider):
         new_value: int | None = None,
         patron: Patron | None = None,
     ) -> None:
-        country = library.settings.country or "US"
-        state = library.settings.state or "All"
+        country = library.settings.country
+        state = library.settings.state
         palace_manager_name = (
             os.environ.get(Configuration.REPORTING_NAME_ENVIRONMENT_VARIABLE) or None
         )

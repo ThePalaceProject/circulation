@@ -41,12 +41,12 @@ class TestAnalyticsEventData:
         self,
         db: DatabaseTransactionFixture,
     ) -> None:
-        """create() uses 'US'/'All' defaults when country/state are not provided."""
+        """create() uses None defaults when country/state are not provided."""
         pool = db.licensepool(edition=db.edition())
         library = db.default_library()
         event = AnalyticsEventData.create(library, pool, CirculationEvent.CM_CHECKOUT)
-        assert event.country == "US"
-        assert event.state == "All"
+        assert event.country is None
+        assert event.state is None
 
     def test_country_and_state_explicit(
         self,

@@ -56,16 +56,14 @@ class TestAnalytics:
         assert collected[0].country == "CA"
         assert collected[0].state == "Ontario"
 
-    def test_collect_event_uses_defaults_when_library_settings_absent(
+    def test_collect_event_country_state_none_when_library_settings_absent(
         self,
         db: DatabaseTransactionFixture,
     ) -> None:
-        """collect_event() falls back to 'US'/'All' when library has no country/state configured."""
+        """collect_event() passes None for country/state when library has no geo settings configured."""
         library = db.default_library()
         pool = db.licensepool(edition=db.edition())
-        library.update_settings(
-            library.settings.model_copy(update={"country": None, "state": None})
-        )
+        # Freshly-created libraries have country=None and state=None by default.
 
         collected: list = []
         analytics = Analytics()
@@ -73,8 +71,8 @@ class TestAnalytics:
         analytics.collect_event(library, pool, CirculationEvent.CM_CHECKOUT)
 
         assert len(collected) == 1
-        assert collected[0].country == "US"
-        assert collected[0].state == "All"
+        assert collected[0].country is None
+        assert collected[0].state is None
 
     def test_collect_event_passes_palace_manager_name_from_env(
         self,
