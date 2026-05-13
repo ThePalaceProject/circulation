@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import datetime
 from unittest.mock import MagicMock, Mock, call, patch
 from uuid import uuid4
 
 import pytest
 from celery.result import AsyncResult
 
-from palace.util.datetime_helpers import datetime_utc
+from palace.util.datetime_helpers import datetime_utc, utc_now
 from palace.util.log import LogLevel
 
 from palace.manager.celery.importer import import_workflow_lock, reap_workflow_lock
@@ -1318,6 +1319,40 @@ class TestOverdriveReaper:
         }
         assert pool1.identifier.identifier in identifiers_called
         assert pool2.identifier.identifier in identifiers_called
+
+    @patch("palace.manager.celery.tasks.overdrive.OverdriveAPI")
+    def test_reap_collection_skips_fresh_titles(
+        self,
+        mock_api_class: MagicMock,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        redis_fixture: RedisFixture,
+    ):
+        """Only LicensePools with last_checked older than REAP_STALE_THRESHOLD
+        (or unset) are checked against Overdrive."""
+        collection = overdrive_api_fixture.collection
+        fresh_pool = db.licensepool(db.edition(), collection=collection)
+        stale_pool = db.licensepool(db.edition(), collection=collection)
+        never_checked_pool = db.licensepool(db.edition(), collection=collection)
+
+        now = utc_now()
+        fresh_pool.last_checked = now
+        stale_pool.last_checked = (
+            now - overdrive.REAP_STALE_THRESHOLD - datetime.timedelta(minutes=1)
+        )
+        # never_checked_pool.last_checked stays None
+        db.session.flush()
+
+        overdrive.reap_collection.delay(collection.id).wait()
+
+        mock_api = mock_api_class.return_value
+        identifiers_called = {
+            c.args[0] for c in mock_api.update_licensepool.call_args_list
+        }
+        assert fresh_pool.identifier.identifier not in identifiers_called
+        assert stale_pool.identifier.identifier in identifiers_called
+        assert never_checked_pool.identifier.identifier in identifiers_called
 
     @patch("palace.manager.celery.tasks.overdrive.OverdriveAPI")
     def test_reap_collection_replaces_when_full_batch(

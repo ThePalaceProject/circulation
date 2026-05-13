@@ -4,7 +4,7 @@ from uuid import uuid4
 
 from celery import chain, chord, group, shared_task
 from celery.exceptions import Ignore
-from sqlalchemy import select
+from sqlalchemy import or_, select
 
 from palace.util.datetime_helpers import utc_now
 
@@ -34,6 +34,13 @@ from palace.manager.util.http.exception import (
 )
 
 IMPORT_SKIPPED: str = "import_skipped"
+
+# Reaper skips titles whose availability was refreshed more recently than this
+# (typically by the incremental import). Stale titles are checked against Overdrive,
+# which both refreshes their availability and detects collection removals via 404.
+# This caps removal-detection latency for any one title at roughly STALE_THRESHOLD
+# plus the reap interval.
+REAP_STALE_THRESHOLD: datetime.timedelta = datetime.timedelta(hours=24)
 
 
 class ImportSkippedPayload(TypedDict):
@@ -526,9 +533,15 @@ def reap_collection(
     """
     Check for books that are in the local collection but have left our Overdrive collection.
 
+    Only identifiers whose LicensePool.last_checked is older than REAP_STALE_THRESHOLD
+    (or unset) are checked against Overdrive — titles with circulation activity since the
+    threshold have already been refreshed by the incremental import. For each checked
+    identifier, ``api.update_licensepool`` refreshes availability and detects removals
+    (Overdrive returns 404 for titles no longer in the collection).
+
     Processes identifiers in batches, re-queuing itself via task.replace() until all
-    identifiers have been checked. A Redis workflow lock prevents overlapping runs for
-    the same collection; the lock auto-expires after 2 hours if the process dies.
+    stale identifiers have been checked. A Redis workflow lock prevents overlapping runs
+    for the same collection; the lock auto-expires after 2 hours if the process dies.
 
     :param collection_id: The ID of the Overdrive collection to reap.
     :param offset: The last Identifier.id processed; used to resume across batches.
@@ -568,6 +581,7 @@ def reap_collection(
             collection = load_from_id(session, Collection, collection_id)
             collection_name = collection.name
 
+            stale_cutoff = utc_now() - REAP_STALE_THRESHOLD
             identifiers = (
                 session.execute(
                     select(Identifier)
@@ -575,6 +589,10 @@ def reap_collection(
                     .where(
                         LicensePool.collection_id == collection_id,
                         Identifier.id > offset,
+                        or_(
+                            LicensePool.last_checked.is_(None),
+                            LicensePool.last_checked < stale_cutoff,
+                        ),
                     )
                     .order_by(Identifier.id)
                     .limit(batch_size)
