@@ -273,7 +273,7 @@ def beat_schedule() -> dict[str, Any]:
         },
         "overdrive_reap_all_collections": {
             "task": overdrive.reap_all_collections.name,
-            "schedule": crontab(minute="0"),  # Run every hour
+            "schedule": crontab(minute="0", hour="23"),  # Once a day at 11:00 PM
         },
     }
 
