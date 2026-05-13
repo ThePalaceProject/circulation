@@ -44,7 +44,7 @@ class TestAnalytics:
         library = db.default_library()
         pool = db.licensepool(edition=db.edition())
         library.update_settings(
-            library.settings.model_copy(update={"country": "CA", "state": "Ontario"})
+            library.settings.model_copy(update={"country": "CA", "state": "ON"})
         )
 
         collected: list = []
@@ -54,7 +54,7 @@ class TestAnalytics:
 
         assert len(collected) == 1
         assert collected[0].country == "CA"
-        assert collected[0].state == "Ontario"
+        assert collected[0].state == "ON"
 
     def test_collect_event_country_state_none_when_library_settings_absent(
         self,

@@ -56,10 +56,10 @@ class TestAnalyticsEventData:
         pool = db.licensepool(edition=db.edition())
         library = db.default_library()
         event = AnalyticsEventData.create(
-            library, pool, CirculationEvent.CM_CHECKOUT, country="CA", state="Ontario"
+            library, pool, CirculationEvent.CM_CHECKOUT, country="CA", state="ON"
         )
         assert event.country == "CA"
-        assert event.state == "Ontario"
+        assert event.state == "ON"
 
     def test_user_agent(
         self,
