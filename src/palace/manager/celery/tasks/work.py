@@ -19,6 +19,10 @@ def reclassify_null_audience_works(task: Task) -> None:
     Iterates works with audience IS NULL in ascending id order and calls
     calculate_presentation() on each, committing after every work so that
     progress is preserved if the task is interrupted.
+
+    TODO: Remove this task and its startup task
+    (startup_tasks/2026_05_12_reclassify_fb_misclassified_works.py) once the
+    startup task has been run on all deployments.
     """
     with task.session() as session:
         policy = PresentationCalculationPolicy.recalculate_classification()
