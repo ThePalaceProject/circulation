@@ -293,6 +293,10 @@ class PatronData:
     # but didn't return the item.
     RECALL_OVERDUE = "recall overdue"
 
+    # Patron's library card has expired (backend-agnostic; Sirsi uses this
+    # instead of setting authorization_expires).
+    EXPIRED = "expired"
+
     def __init__(
         self,
         *,

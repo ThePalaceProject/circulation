@@ -265,12 +265,12 @@ class TestSirsiDynixAuthenticationProvider:
             (
                 {"fields": {"expired": True}},
                 True,
-                SirsiBlockReasons.EXPIRED,
+                PatronData.EXPIRED,
             ),
             (
                 {"fields": {"expired": True}},
                 False,
-                SirsiBlockReasons.EXPIRED,
+                PatronData.EXPIRED,
             ),
             (
                 {"fields": {"expired": False}},
@@ -778,7 +778,7 @@ class TestSirsiDynixAuthenticationProvider:
             ({"hasMaxOverdueDays": True}, PatronData.TOO_MANY_OVERDUE),
             ({"hasMaxOverdueItem": True}, PatronData.TOO_MANY_OVERDUE),
             ({"hasMaxItemsCheckedOut": True}, PatronData.TOO_MANY_LOANS),
-            ({"expired": True}, SirsiBlockReasons.EXPIRED),
+            ({"expired": True}, PatronData.EXPIRED),
             ({}, PatronData.NO_VALUE),  # No bad data = not blocked
         ]
         ok_patron_resp = {
