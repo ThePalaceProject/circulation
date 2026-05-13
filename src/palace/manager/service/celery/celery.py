@@ -269,7 +269,10 @@ def beat_schedule() -> dict[str, Any]:
         },
         "overdrive_import_all_collections": {
             "task": overdrive.import_all_collections.name,
-            "schedule": crontab(minute="*/15"),  # Run every 15 minutes
+            # Run every 3 hours at minute 15, offset 1.5h from the OPDS2+ODL
+            # import (which runs at minute 45 every 3 hours) so the two
+            # large metadata syncs don't compete for the default queue.
+            "schedule": crontab(minute="15", hour="2-23/3"),
         },
         "overdrive_reap_all_collections": {
             "task": overdrive.reap_all_collections.name,
