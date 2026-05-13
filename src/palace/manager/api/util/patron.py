@@ -75,7 +75,8 @@ class PatronUtility:
         )
 
         if not cls.authorization_is_active(patron):
-            # authorization_expires path (SIP2/Millennium): card is past its expiry date.
+            # Covers authorization_expires (SIP2/Millennium) and
+            # block_reason=EXPIRED (SirsiDynix) in one place.
             if not allow_expired:
                 raise AuthorizationExpired()
 
@@ -93,10 +94,8 @@ class PatronUtility:
             # manager is not configured to make that deduction.
             raise OutstandingFines(fines=patron.fines)
 
-        if patron.block_reason is PatronData.EXPIRED:
-            # Sirsi reports expiry via block_reason rather than authorization_expires.
-            if not allow_expired:
-                raise AuthorizationExpired()
+        if patron.block_reason is PatronData.EXPIRED and allow_expired:
+            # Expiry was waived by the library; don't raise AuthorizationBlocked.
             return
 
         raise AuthorizationBlocked()
@@ -120,6 +119,14 @@ class PatronUtility:
     @classmethod
     def authorization_is_active(cls, patron: Patron) -> bool:
         """Return True unless the patron's authorization has expired."""
+        # Local import to avoid circular dependency.
+        from palace.manager.api.authentication.base import PatronData
+
+        # Some auth providers (e.g. SirsiDynix) signal expiry via block_reason
+        # rather than authorization_expires.
+        if patron.block_reason is PatronData.EXPIRED:
+            return False
+
         # Unlike pretty much every other place in this app, we use
         # (server) local time here instead of UTC. This is to make it
         # less likely that a patron's authorization will expire before
