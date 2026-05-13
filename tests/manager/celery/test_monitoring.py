@@ -1,3 +1,4 @@
+import json
 from unittest.mock import MagicMock, call, create_autospec, patch
 
 import pytest
@@ -66,7 +67,7 @@ def cloudwatch_camera():
 
 
 class TestQueueStats:
-    def test_metrics(self):
+    def test_metrics_without_age(self):
         stats = QueueStats(queued=2)
         timestamp = MagicMock()
         dimensions = {"key": "value", "key2": "value2"}
@@ -79,6 +80,24 @@ class TestQueueStats:
         assert metric["Timestamp"] == timestamp.isoformat()
         assert metric["Dimensions"] == expected_dimensions
         assert metric["Unit"] == "Count"
+
+    def test_metrics_with_age(self):
+        stats = QueueStats(queued=2, oldest_age_seconds=42)
+        timestamp = MagicMock()
+        dimensions = {"key": "value"}
+        expected_dimensions = [{"Name": "key", "Value": "value"}]
+
+        [waiting, oldest] = stats.metrics(timestamp, dimensions)
+
+        assert waiting["MetricName"] == "QueueWaiting"
+        assert waiting["Value"] == 2
+        assert waiting["Unit"] == "Count"
+
+        assert oldest["MetricName"] == "QueueOldestAge"
+        assert oldest["Value"] == 42
+        assert oldest["Timestamp"] == timestamp.isoformat()
+        assert oldest["Dimensions"] == expected_dimensions
+        assert oldest["Unit"] == "Seconds"
 
 
 class TestCloudwatch:
@@ -119,6 +138,7 @@ class TestCloudwatch:
         mock_publish = create_autospec(cloudwatch.publish)
         cloudwatch.publish = mock_publish
         cloudwatch_camera.mock_get_redis.return_value.llen.return_value = 10
+        cloudwatch_camera.mock_get_redis.return_value.lindex.return_value = None
         with freeze_time("2021-01-01"):
             cloudwatch.on_shutter(MagicMock())
         assert cloudwatch_camera.mock_get_redis.return_value.llen.call_count == 2
@@ -129,10 +149,93 @@ class TestCloudwatch:
         [queues, time] = mock_publish.call_args.args
 
         assert queues == {
-            "queue1": QueueStats(queued=10),
-            "queue2": QueueStats(queued=10),
+            "queue1": QueueStats(queued=10, oldest_age_seconds=None),
+            "queue2": QueueStats(queued=10, oldest_age_seconds=None),
         }
         assert time.isoformat() == "2021-01-01T00:00:00+00:00"
+
+    def test__oldest_message_age_happy_path(
+        self, cloudwatch_camera: CloudwatchCameraFixture
+    ):
+        cloudwatch = cloudwatch_camera.create_cloudwatch()
+        envelope = {"headers": {"enqueued_at": "2026-05-13T11:59:00+00:00"}}
+        cloudwatch_camera.mock_get_redis.return_value.lindex.return_value = json.dumps(
+            envelope
+        )
+        with freeze_time("2026-05-13T12:00:30+00:00"):
+            age = cloudwatch._oldest_message_age("queue1")
+        cloudwatch_camera.mock_get_redis.return_value.lindex.assert_called_once_with(
+            "queue1", -1
+        )
+        assert age == 90
+        assert isinstance(age, int)
+
+    def test__oldest_message_age_empty_queue(
+        self, cloudwatch_camera: CloudwatchCameraFixture
+    ):
+        cloudwatch = cloudwatch_camera.create_cloudwatch()
+        cloudwatch_camera.mock_get_redis.return_value.lindex.return_value = None
+        assert cloudwatch._oldest_message_age("queue1") is None
+
+    def test__oldest_message_age_future_timestamp_clamped(
+        self, cloudwatch_camera: CloudwatchCameraFixture
+    ):
+        # Future-dated enqueued_at (publisher clock ahead of camera) clamps to 0.
+        cloudwatch = cloudwatch_camera.create_cloudwatch()
+        envelope = {"headers": {"enqueued_at": "2026-05-13T12:01:00+00:00"}}
+        cloudwatch_camera.mock_get_redis.return_value.lindex.return_value = json.dumps(
+            envelope
+        )
+        with freeze_time("2026-05-13T12:00:00+00:00"):
+            age = cloudwatch._oldest_message_age("queue1")
+        assert age == 0
+
+    def test__oldest_message_age_missing_header(
+        self, cloudwatch_camera: CloudwatchCameraFixture
+    ):
+        # External publisher or pre-rollout message without our header — no signal, not an error.
+        cloudwatch = cloudwatch_camera.create_cloudwatch()
+        cloudwatch_camera.mock_get_redis.return_value.lindex.return_value = json.dumps(
+            {"headers": {}}
+        )
+        assert cloudwatch._oldest_message_age("queue1") is None
+
+        cloudwatch_camera.mock_get_redis.return_value.lindex.return_value = json.dumps(
+            {}
+        )
+        assert cloudwatch._oldest_message_age("queue1") is None
+
+    def test__oldest_message_age_malformed(
+        self,
+        cloudwatch_camera: CloudwatchCameraFixture,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        caplog.set_level(LogLevel.error)
+        cloudwatch = cloudwatch_camera.create_cloudwatch()
+        cloudwatch_camera.mock_get_redis.return_value.lindex.return_value = (
+            "not valid json"
+        )
+        assert cloudwatch._oldest_message_age("queue1") is None
+        assert "Failed to parse oldest message in queue 'queue1'" in caplog.text
+        # The raw redis value rides along under the palace_ prefix so it lands in
+        # structured logs and we can debug whatever weird thing was on the queue.
+        assert getattr(caplog.records[-1], "palace_raw_message") == "not valid json"
+
+        caplog.clear()
+        cloudwatch_camera.mock_get_redis.return_value.lindex.return_value = json.dumps(
+            {"headers": {"enqueued_at": "not-a-timestamp"}}
+        )
+        assert cloudwatch._oldest_message_age("queue1") is None
+        assert "Failed to parse oldest message in queue 'queue1'" in caplog.text
+
+        # `enqueued_at` is a non-string (e.g., an int) —
+        # fromisoformat raises TypeError. Still logged, still returns None.
+        caplog.clear()
+        cloudwatch_camera.mock_get_redis.return_value.lindex.return_value = json.dumps(
+            {"headers": {"enqueued_at": 1234567890}}
+        )
+        assert cloudwatch._oldest_message_age("queue1") is None
+        assert "Failed to parse oldest message in queue 'queue1'" in caplog.text
 
     def test_publish(
         self,

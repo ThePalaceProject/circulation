@@ -2,9 +2,26 @@ from enum import StrEnum, auto
 from typing import Any
 
 from celery.schedules import crontab
+from celery.signals import before_task_publish
 from kombu import Exchange, Queue
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.celery.celery import Celery
+
+
+@before_task_publish.connect
+def add_enqueued_at_header(headers: dict[str, Any], **kwargs: Any) -> None:
+    """Stamp outgoing task messages with the time they were first enqueued.
+
+    Used by the CloudWatch queue-statistics camera so we can report the age of
+    the oldest message still waiting in the queue.
+
+    ``setdefault`` preserves the original timestamp across ``replace()`` calls,
+    retries, and chained-task re-publishes, so the metric reflects how long the
+    work has actually been waiting rather than restarting on each republish.
+    """
+    headers.setdefault("enqueued_at", utc_now().isoformat())
 
 
 class QueueNames(StrEnum):

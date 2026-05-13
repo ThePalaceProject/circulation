@@ -325,6 +325,7 @@ disallow_subclassing_any = false
 disallow_untyped_decorators = false
 module = [
     "palace.manager.celery.*",
+    "palace.manager.service.celery.*",
 ]
 
 [[tool.mypy.overrides]]
