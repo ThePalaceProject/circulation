@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from datetime import datetime
 from typing import TYPE_CHECKING
 
@@ -7,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from palace.util.log import LoggerMixin
 
+from palace.manager.core.config import Configuration
 from palace.manager.service.analytics.eventdata import AnalyticsEventData
 from palace.manager.service.analytics.local import LocalAnalyticsProvider
 from palace.manager.service.analytics.provider import AnalyticsProvider
@@ -55,7 +57,11 @@ class Analytics(LoggerMixin, AnalyticsProvider):
         new_value: int | None = None,
         patron: Patron | None = None,
     ) -> None:
-        session = Session.object_session(library)
+        country = library.settings.country
+        state = library.settings.state
+        palace_manager_name = (
+            os.environ.get(Configuration.REPORTING_NAME_ENVIRONMENT_VARIABLE) or None
+        )
         event = AnalyticsEventData.create(
             library,
             license_pool,
@@ -64,8 +70,11 @@ class Analytics(LoggerMixin, AnalyticsProvider):
             old_value,
             new_value,
             patron,
+            country=country,
+            state=state,
+            palace_manager_name=palace_manager_name,
         )
-        self.collect(event, session=session)
+        self.collect(event, session=Session.object_session(library))
 
     def is_configured(self) -> bool:
         return len(self.providers) > 0
