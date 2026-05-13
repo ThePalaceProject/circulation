@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
@@ -54,18 +55,30 @@ def value_metric(
 @dataclass(frozen=True)
 class QueueStats:
     """
-    Tracks the number of tasks queued for a specific queue, so we can
-    report this out to Cloudwatch metrics.
+    Tracks the number of tasks queued for a specific queue and the age of the
+    oldest waiting task, so we can report these out to Cloudwatch metrics.
     """
 
     queued: int
+    oldest_age_seconds: int | None = None
 
     def metrics(
         self, timestamp: datetime, dimensions: dict[str, str]
     ) -> list[MetricDatumTypeDef]:
-        return [
+        metric_data = [
             value_metric("QueueWaiting", self.queued, timestamp, dimensions),
         ]
+        if self.oldest_age_seconds is not None:
+            metric_data.append(
+                value_metric(
+                    "QueueOldestAge",
+                    self.oldest_age_seconds,
+                    timestamp,
+                    dimensions,
+                    unit="Seconds",
+                )
+            )
+        return metric_data
 
 
 class Cloudwatch(Polaroid):
@@ -115,9 +128,37 @@ class Cloudwatch(Polaroid):
             connection_pool=connection_pool, global_keyprefix=global_keyprefix
         )
 
+    def _oldest_message_age(self, queue: str) -> int | None:
+        # Kombu uses LPUSH on publish and BRPOP on consume, so the oldest unconsumed
+        # message is at the tail of the list (index -1).
+        raw = self.redis_client.lindex(queue, -1)
+        if raw is None:
+            return None
+        try:
+            msg = json.loads(raw)
+            ts = msg.get("headers", {}).get("enqueued_at")
+            if not ts:
+                return None
+            # Clamp at 0; the publisher's clock may be ahead of the camera host.
+            return max(0, int((utc_now() - datetime.fromisoformat(ts)).total_seconds()))
+        except (ValueError, AttributeError, TypeError):
+            # ValueError: malformed JSON or non-ISO timestamp string.
+            # AttributeError: json envelope isn't a dict (.get fails).
+            # TypeError: enqueued_at is set to a non-string — fromisoformat raises.
+            self.logger.exception(
+                "Failed to parse oldest message in queue %r for age metric.",
+                queue,
+                extra={"palace_raw_message": raw},
+            )
+            return None
+
     def get_queue_stats(self) -> dict[str, QueueStats]:
         return {
-            queue: QueueStats(self.redis_client.llen(queue)) for queue in self.queues
+            queue: QueueStats(
+                queued=self.redis_client.llen(queue),
+                oldest_age_seconds=self._oldest_message_age(queue),
+            )
+            for queue in self.queues
         }
 
     def on_shutter(self, state: State) -> None:
