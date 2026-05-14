@@ -26,7 +26,7 @@ dev = [
     "pytest-xdist>=3.5.0,<4",
     "pytest>=7.2.0",
     "requests-mock==1.12.1",
-    "types-aws-xray-sdk==2.14.0.20250516",
+    "types-aws-xray-sdk==2.15.0.20260508",
     "types-croniter>=6.2.2.20260508,<7",
     "types-Flask-Cors>=6.0.0,<7",
     "types-openpyxl>=3.1.5.20260508,<4",
