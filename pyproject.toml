@@ -100,7 +100,7 @@ dependencies = [
     "tenacity>=9.0.0,<10",
     "textblob==0.20.0",
     "types-pyopenssl>=24.0.0.20240130,<25",
-    "types-pyyaml>=6.0.12.20260508,<7",
+    "types-pyyaml>=6.0.12.20260510,<7",
     "unicodecsv==0.14.1",  # this is used, but can probably be removed on py3
     "uritemplate==4.2.0",
     "urllib3>=2.7.0,<3",
