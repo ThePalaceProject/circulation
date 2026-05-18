@@ -2,6 +2,7 @@ import json
 from unittest.mock import MagicMock, call, create_autospec, patch
 
 import pytest
+import redis
 from boto3.exceptions import Boto3Error
 from freezegun import freeze_time
 
@@ -129,6 +130,20 @@ class TestCloudwatch:
         cloudwatch_camera.configure_app(dry_run=True)
         cloudwatch = cloudwatch_camera.create_cloudwatch()
         assert cloudwatch.cloudwatch_client is None
+
+    def test_get_redis_client_prefixes_lindex(self):
+        # kombu's PrefixedStrictRedis does not include LINDEX in its prefixed-command list,
+        # so we need to patch it to make sure we can read the timestamp on the oldest message.
+        client = Cloudwatch.get_redis_client("redis://localhost", "prefix")
+        with patch.object(redis.Redis, "execute_command") as mock_execute:
+            client.lindex("apply", -1)
+            client.llen("apply")
+        # Check positional args only; redis-py also passes a `keys=` routing
+        # kwarg whose contents are version-specific and not what we care about.
+        assert [c.args for c in mock_execute.call_args_list] == [
+            ("LINDEX", "prefixapply", -1),
+            ("LLEN", "prefixapply"),
+        ]
 
     def test_on_shutter(
         self,

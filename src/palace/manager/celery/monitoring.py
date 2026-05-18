@@ -81,6 +81,21 @@ class QueueStats:
         return metric_data
 
 
+class _PrefixedRedis(PrefixedStrictRedis):
+    """A ``PrefixedStrictRedis`` that also prefixes ``LINDEX``.
+
+    kombu's ``PrefixedStrictRedis`` only prefixes the Redis commands it needs
+    for its own broker operations, and ``LINDEX`` is not one of them. The
+    Cloudwatch camera uses ``LINDEX`` to read the oldest message in a queue, so
+    without this it would query an unprefixed key and always get ``None`` back.
+    """
+
+    PREFIXED_SIMPLE_COMMANDS = [
+        *PrefixedStrictRedis.PREFIXED_SIMPLE_COMMANDS,
+        "LINDEX",
+    ]
+
+
 class Cloudwatch(Polaroid):
     """
     Implements a Celery custom camera that sends queue statistics to Cloudwatch.
@@ -122,9 +137,9 @@ class Cloudwatch(Polaroid):
     @classmethod
     def get_redis_client(
         cls, broker_url: str, global_keyprefix: str | None
-    ) -> PrefixedStrictRedis:
+    ) -> _PrefixedRedis:
         connection_pool = ConnectionPool.from_url(broker_url)
-        return PrefixedStrictRedis(
+        return _PrefixedRedis(
             connection_pool=connection_pool, global_keyprefix=global_keyprefix
         )
 
