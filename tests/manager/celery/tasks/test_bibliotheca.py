@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, call, patch
 from uuid import uuid4
 
@@ -26,10 +25,6 @@ from tests.fixtures.files import BibliothecaFilesFixture
 from tests.fixtures.redis import RedisFixture
 from tests.mocks.bibliotheca import MockBibliothecaAPI
 from tests.mocks.mock import MockRequestsResponse
-
-if TYPE_CHECKING:
-    pass
-
 
 # ── Shared fixture ─────────────────────────────────────────────────────────────
 
@@ -56,8 +51,6 @@ class BibliothecaTaskFixture:
         self, finish: datetime | None = None, collection: Collection | None = None
     ) -> Timestamp:
         """Create (or update) the event-monitor Timestamp for the collection."""
-        from palace.util.datetime_helpers import utc_now
-
         return Timestamp.stamp(
             self.db.session,
             service=EVENT_MONITOR_SERVICE_NAME,
