@@ -26,12 +26,10 @@ from palace.util.datetime_helpers import utc_now
 from palace.util.log import LoggerType
 
 from palace.manager.celery.task import Task
+from palace.manager.celery.tasks import apply
 from palace.manager.celery.utils import load_from_id
 from palace.manager.data_layer.policy.replacement import ReplacementPolicy
-from palace.manager.integration.license.bibliotheca import (
-    BibliothecaAPI,
-    BibliothecaBibliographicCoverageProvider,
-)
+from palace.manager.integration.license.bibliotheca import BibliothecaAPI
 from palace.manager.service.celery.celery import QueueNames
 from palace.manager.service.redis.models.lock import RedisLock
 from palace.manager.service.redis.redis import Redis
@@ -87,7 +85,6 @@ def _event_monitor_workflow_lock(
 
 def _handle_event(
     api: BibliothecaAPI,
-    coverage_provider: BibliothecaBibliographicCoverageProvider,
     collection: Collection,
     bibliotheca_id: str,
     isbn: str,
@@ -100,12 +97,13 @@ def _handle_event(
     """Process a single Bibliotheca circulation event.
 
     Ported from ``BibliothecaEventMonitor.handle_event``.  Creates or updates
-    the ``LicensePool``, links the ISBN identifier, and adjusts availability
-    based on the event delta.
+    the ``LicensePool``, links the ISBN identifier, adjusts availability based
+    on the event delta, and queues a ``bibliographic_apply`` task when the
+    title's metadata has changed (hash-based deduplication).
     """
     session = api._db
 
-    license_pool, is_new = LicensePool.for_foreign_id(
+    license_pool, _ = LicensePool.for_foreign_id(
         session,
         api.data_source,
         Identifier.BIBLIOTHECA_ID,
@@ -113,11 +111,15 @@ def _handle_event(
         collection=collection,
     )
 
-    if is_new:
-        # New title — fetch bibliographic metadata immediately so the work
-        # becomes presentation-ready.  (TITLE_ADD events are handled by the
-        # purchase monitor; we don't record one here.)
-        coverage_provider.ensure_coverage(license_pool.identifier, force=True)
+    # Fetch bibliographic metadata and queue an apply task only if the
+    # content hash differs from what is already stored.
+    for bibliographic in api.bibliographic_lookup(bibliotheca_id):
+        if bibliographic.needs_apply(session):
+            apply.bibliographic_apply.delay(
+                bibliographic,
+                collection_id=collection.id,
+                replace=ReplacementPolicy.from_license_source(),
+            )
 
     bibliotheca_identifier = license_pool.identifier
     isbn_identifier, _ = Identifier.for_foreign_id(session, Identifier.ISBN, isbn)
@@ -251,10 +253,6 @@ def monitor_collection(
             slice_end = min(start + _EVENT_MONITOR_SLICE_SIZE, cutoff)
 
             api = BibliothecaAPI(session, collection)
-            replacement_policy = ReplacementPolicy.from_license_source()
-            coverage_provider = BibliothecaBibliographicCoverageProvider(
-                collection, api, replacement_policy=replacement_policy
-            )
 
             task.log.info(
                 f"Bibliotheca event monitor: requesting events for '{collection_name}' "
@@ -263,9 +261,7 @@ def monitor_collection(
             )
 
             for event_tuple in api.get_events_between(start, slice_end):
-                _handle_event(
-                    api, coverage_provider, collection, *event_tuple, logger=task.log
-                )
+                _handle_event(api, collection, *event_tuple, logger=task.log)
                 events_handled += 1
 
             Timestamp.stamp(

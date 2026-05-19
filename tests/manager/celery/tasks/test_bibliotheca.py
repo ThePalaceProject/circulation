@@ -12,7 +12,7 @@ import pytest
 from palace.util.datetime_helpers import utc_now
 from palace.util.log import LogLevel
 
-from palace.manager.celery.tasks import bibliotheca
+from palace.manager.celery.tasks import apply, bibliotheca
 from palace.manager.celery.tasks.bibliotheca import (
     EVENT_MONITOR_SERVICE_NAME,
     _event_monitor_workflow_lock,
@@ -131,14 +131,10 @@ class TestBibliothecaMonitorAllCollections:
 
 
 class TestBibliothecaMonitorCollection:
-    @patch(
-        "palace.manager.celery.tasks.bibliotheca.BibliothecaBibliographicCoverageProvider"
-    )
     @patch("palace.manager.celery.tasks.bibliotheca.BibliothecaAPI")
     def test_creates_timestamp_on_first_run(
         self,
         mock_api_cls: MagicMock,
-        mock_coverage_cls: MagicMock,
         bibliotheca_task_fixture: BibliothecaTaskFixture,
         celery_fixture: CeleryFixture,
         redis_fixture: RedisFixture,
@@ -153,14 +149,10 @@ class TestBibliothecaMonitorCollection:
         assert ts is not None
         assert ts.finish is not None
 
-    @patch(
-        "palace.manager.celery.tasks.bibliotheca.BibliothecaBibliographicCoverageProvider"
-    )
     @patch("palace.manager.celery.tasks.bibliotheca.BibliothecaAPI")
     def test_starts_from_stored_timestamp(
         self,
         mock_api_cls: MagicMock,
-        mock_coverage_cls: MagicMock,
         bibliotheca_task_fixture: BibliothecaTaskFixture,
         celery_fixture: CeleryFixture,
         redis_fixture: RedisFixture,
@@ -188,14 +180,10 @@ class TestBibliothecaMonitorCollection:
         expected_start = one_hour_ago - timedelta(minutes=5)
         assert abs((slice_start - expected_start).total_seconds()) < 2
 
-    @patch(
-        "palace.manager.celery.tasks.bibliotheca.BibliothecaBibliographicCoverageProvider"
-    )
     @patch("palace.manager.celery.tasks.bibliotheca.BibliothecaAPI")
     def test_already_up_to_date(
         self,
         mock_api_cls: MagicMock,
-        mock_coverage_cls: MagicMock,
         bibliotheca_task_fixture: BibliothecaTaskFixture,
         celery_fixture: CeleryFixture,
         redis_fixture: RedisFixture,
@@ -211,14 +199,10 @@ class TestBibliothecaMonitorCollection:
 
         mock_api_cls.return_value.get_events_between.assert_not_called()
 
-    @patch(
-        "palace.manager.celery.tasks.bibliotheca.BibliothecaBibliographicCoverageProvider"
-    )
     @patch("palace.manager.celery.tasks.bibliotheca.BibliothecaAPI")
     def test_replaces_when_more_slices_remain(
         self,
         mock_api_cls: MagicMock,
-        mock_coverage_cls: MagicMock,
         bibliotheca_task_fixture: BibliothecaTaskFixture,
         celery_fixture: CeleryFixture,
         redis_fixture: RedisFixture,
@@ -247,14 +231,10 @@ class TestBibliothecaMonitorCollection:
         # The next start should be approximately 5 minutes after the slice started.
         assert replace_sig.kwargs["start"] is not None
 
-    @patch(
-        "palace.manager.celery.tasks.bibliotheca.BibliothecaBibliographicCoverageProvider"
-    )
     @patch("palace.manager.celery.tasks.bibliotheca.BibliothecaAPI")
     def test_no_replace_on_last_slice(
         self,
         mock_api_cls: MagicMock,
-        mock_coverage_cls: MagicMock,
         bibliotheca_task_fixture: BibliothecaTaskFixture,
         celery_fixture: CeleryFixture,
         redis_fixture: RedisFixture,
@@ -273,14 +253,10 @@ class TestBibliothecaMonitorCollection:
 
         mock_replace.assert_not_called()
 
-    @patch(
-        "palace.manager.celery.tasks.bibliotheca.BibliothecaBibliographicCoverageProvider"
-    )
     @patch("palace.manager.celery.tasks.bibliotheca.BibliothecaAPI")
     def test_lock_value_passed_through_on_replace(
         self,
         mock_api_cls: MagicMock,
-        mock_coverage_cls: MagicMock,
         bibliotheca_task_fixture: BibliothecaTaskFixture,
         celery_fixture: CeleryFixture,
         redis_fixture: RedisFixture,
@@ -335,12 +311,8 @@ class TestBibliothecaMonitorCollection:
 
         workflow_lock.release()
 
-    @patch(
-        "palace.manager.celery.tasks.bibliotheca.BibliothecaBibliographicCoverageProvider"
-    )
     def test_lock_not_released_on_autoretry(
         self,
-        mock_coverage_cls: MagicMock,
         bibliotheca_task_fixture: BibliothecaTaskFixture,
         celery_fixture: CeleryFixture,
         redis_fixture: RedisFixture,
@@ -373,18 +345,15 @@ class TestBibliothecaMonitorCollection:
         )
         assert workflow_lock.locked()
 
-    @patch(
-        "palace.manager.celery.tasks.bibliotheca.BibliothecaBibliographicCoverageProvider"
-    )
     def test_events_processed_and_timestamp_updated(
         self,
-        mock_coverage_cls: MagicMock,
         bibliotheca_task_fixture: BibliothecaTaskFixture,
         celery_fixture: CeleryFixture,
         redis_fixture: RedisFixture,
     ) -> None:
         """Integration: events from the API are processed and create LicensePools;
-        the Timestamp is updated to reflect the processed time window."""
+        the Timestamp is updated; and a bibliographic_apply task is queued when the
+        content hash indicates the metadata has changed."""
         from datetime import timezone
 
         from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
@@ -406,12 +375,20 @@ class TestBibliothecaMonitorCollection:
             CirculationEvent.DISTRIBUTOR_LICENSE_ADD,
         )
 
-        # Patch get_events_between at the class level so the real BibliothecaAPI
-        # constructor runs (no HTTP calls there) but no network request is made for events.
-        with patch.object(
-            BibliothecaAPI,
-            "get_events_between",
-            return_value=iter([fake_event]),
+        # Return a fake BibliographicData that always reports needs_apply=True so
+        # the apply task is queued without making a real HTTP call.
+        mock_bib = MagicMock()
+        mock_bib.needs_apply.return_value = True
+
+        with (
+            # Patch at the class level so the real BibliothecaAPI constructor runs.
+            patch.object(
+                BibliothecaAPI, "get_events_between", return_value=iter([fake_event])
+            ),
+            patch.object(
+                BibliothecaAPI, "bibliographic_lookup", return_value=[mock_bib]
+            ),
+            patch.object(apply, "bibliographic_apply") as mock_apply,
         ):
             bibliotheca.monitor_collection.delay(collection_id=collection.id).wait()
 
@@ -421,20 +398,19 @@ class TestBibliothecaMonitorCollection:
         ]
         assert len(pools) == 1
 
+        # bibliographic_apply should have been queued once (for the single event).
+        mock_apply.delay.assert_called_once()
+
         # Timestamp should have been updated.
         ts = bibliotheca_task_fixture.get_event_monitor_timestamp()
         assert ts is not None
         assert ts.finish is not None
         assert ts.finish > ten_minutes_ago
 
-    @patch(
-        "palace.manager.celery.tasks.bibliotheca.BibliothecaBibliographicCoverageProvider"
-    )
     @patch("palace.manager.celery.tasks.bibliotheca.BibliothecaAPI")
     def test_timestamp_updated_after_each_slice(
         self,
         mock_api_cls: MagicMock,
-        mock_coverage_cls: MagicMock,
         bibliotheca_task_fixture: BibliothecaTaskFixture,
         celery_fixture: CeleryFixture,
         redis_fixture: RedisFixture,
@@ -465,14 +441,10 @@ class TestBibliothecaMonitorCollection:
         expected_finish = expected_start + timedelta(minutes=5)
         assert abs((ts.finish - expected_finish).total_seconds()) < 5
 
-    @patch(
-        "palace.manager.celery.tasks.bibliotheca.BibliothecaBibliographicCoverageProvider"
-    )
     @patch("palace.manager.celery.tasks.bibliotheca.BibliothecaAPI")
     def test_multiple_collections_each_get_own_lock(
         self,
         mock_api_cls: MagicMock,
-        mock_coverage_cls: MagicMock,
         db: DatabaseTransactionFixture,
         celery_fixture: CeleryFixture,
         redis_fixture: RedisFixture,
