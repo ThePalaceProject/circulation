@@ -14,6 +14,7 @@ from palace.util.datetime_helpers import utc_now
 from palace.util.exceptions import BasePalaceException
 
 from palace.manager.api.adobe_vendor_id import AuthdataUtility
+from palace.manager.api.app import app
 from palace.manager.api.circulation.base import BaseCirculationAPI
 from palace.manager.api.circulation.dispatcher import CirculationApiDispatcher
 from palace.manager.api.circulation.fulfillment import RedirectFulfillment
@@ -791,6 +792,11 @@ class TestLibraryAnnotator:
         result = annotator_fixture.annotator.language_and_audience_key_from_work(work)
         assert ("eng", "All+Ages,Children") == result
 
+        work = annotator_fixture.db.work(audience=Classifier.AUDIENCE_ADULT)
+        work.presentation_edition.language = None
+        result = annotator_fixture.annotator.language_and_audience_key_from_work(work)
+        assert (None, "Adult,Adults+Only,All+Ages,Children,Young+Adult") == result
+
     def test_work_entry_includes_contributor_links(
         self, annotator_fixture: LibraryAnnotatorFixture
     ):
@@ -834,6 +840,29 @@ class TestLibraryAnnotator:
         [entry] = self.get_parsed_feed(annotator_fixture, [work]).entries
         assert [] == [l.link for l in entry.computed.authors if l.link]
 
+    def test_add_author_links_when_language_is_none(
+        self, annotator_fixture: LibraryAnnotatorFixture
+    ):
+        # Regression: when work.language is None, language_and_audience_key_from_work
+        # returns (None, ...). Passing those Nones to Werkzeug's url_for raises
+        # BuildError because no route variant matches a None path kwarg.
+        # Verified against the real Flask routes via test_request_context.
+        work = annotator_fixture.db.work(with_open_access_download=True)
+        work.presentation_edition.language = None
+
+        with app.test_request_context("/"):
+            feed = self.get_parsed_feed(annotator_fixture, [work])
+            [entry] = feed.entries
+
+        [contributor_link] = [
+            l.link for l in entry.computed.authors if hasattr(l, "link") and l.link
+        ]
+        assert contributor_link.type == LinkContentType.OPDS_FEED
+        # The unfiltered route is `/works/contributor/<contributor_name>` with no
+        # trailing language/audience segments.
+        path = contributor_link.href.split("/works/contributor/", 1)[1].rstrip("/")
+        assert "/" not in path
+
     def test_work_entry_includes_series_link(
         self, annotator_fixture: LibraryAnnotatorFixture
     ):
@@ -855,6 +884,25 @@ class TestLibraryAnnotator:
         feed = self.get_parsed_feed(annotator_fixture, [work])
         [entry] = feed.entries
         assert None == entry.computed.series
+
+    def test_add_series_link_when_language_is_none(
+        self, annotator_fixture: LibraryAnnotatorFixture
+    ):
+        # Regression: same null-language case as test_add_author_links_when_language_is_none,
+        # but for the series link path.
+        work = annotator_fixture.db.work(
+            with_open_access_download=True, series="Serious Cereals Series"
+        )
+        work.presentation_edition.language = None
+
+        with app.test_request_context("/"):
+            feed = self.get_parsed_feed(annotator_fixture, [work])
+            [entry] = feed.entries
+
+        series_link = entry.computed.series.link
+        assert series_link.type == LinkContentType.OPDS_FEED
+        path = series_link.href.split("/works/series/", 1)[1].rstrip("/")
+        assert "/" not in path
 
     def test_work_entry_includes_recommendations_link(
         self, annotator_fixture: LibraryAnnotatorFixture
