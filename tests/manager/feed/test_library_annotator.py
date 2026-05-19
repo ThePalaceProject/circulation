@@ -863,6 +863,30 @@ class TestLibraryAnnotator:
         path = contributor_link.href.split("/works/contributor/", 1)[1].rstrip("/")
         assert "/" not in path
 
+    def test_add_author_links_when_audience_key_is_none(
+        self, annotator_fixture: LibraryAnnotatorFixture
+    ):
+        # The route hierarchy supports a language-only variant
+        # (`/works/contributor/<name>/<languages>` with audiences defaulted).
+        # When the work has a language but no recognized audience category
+        # (the `else: audiences = []` branch in language_and_audience_key_from_work),
+        # we should still emit the language-filtered URL rather than falling
+        # back to the fully unfiltered route.
+        work = annotator_fixture.db.work(with_open_access_download=True, language="eng")
+        work.audience = None
+
+        with app.test_request_context("/"):
+            feed = self.get_parsed_feed(annotator_fixture, [work])
+            [entry] = feed.entries
+
+        [contributor_link] = [
+            l.link for l in entry.computed.authors if hasattr(l, "link") and l.link
+        ]
+        path = contributor_link.href.split("/works/contributor/", 1)[1].rstrip("/")
+        # `<name>/<languages>` — one slash, with the language segment present.
+        name, languages = path.split("/")
+        assert languages == "eng"
+
     def test_work_entry_includes_series_link(
         self, annotator_fixture: LibraryAnnotatorFixture
     ):
@@ -903,6 +927,27 @@ class TestLibraryAnnotator:
         assert series_link.type == LinkContentType.OPDS_FEED
         path = series_link.href.split("/works/series/", 1)[1].rstrip("/")
         assert "/" not in path
+
+    def test_add_series_link_when_audience_key_is_none(
+        self, annotator_fixture: LibraryAnnotatorFixture
+    ):
+        # Mirrors test_add_author_links_when_audience_key_is_none for the
+        # series route, which has the same hierarchical variants.
+        work = annotator_fixture.db.work(
+            with_open_access_download=True,
+            language="eng",
+            series="Serious Cereals Series",
+        )
+        work.audience = None
+
+        with app.test_request_context("/"):
+            feed = self.get_parsed_feed(annotator_fixture, [work])
+            [entry] = feed.entries
+
+        series_link = entry.computed.series.link
+        path = series_link.href.split("/works/series/", 1)[1].rstrip("/")
+        series_segment, languages = path.split("/")
+        assert languages == "eng"
 
     def test_work_entry_includes_recommendations_link(
         self, annotator_fixture: LibraryAnnotatorFixture

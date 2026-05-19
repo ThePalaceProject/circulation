@@ -965,11 +965,14 @@ class LibraryAnnotator(CirculationManagerAnnotator):
         languages, audiences = self.language_and_audience_key_from_work(entry.work)
         # Werkzeug treats an explicit `None` kwarg as "present" and won't fall
         # back to the route variant whose `defaults` cover the missing values,
-        # so we drop the keys entirely when either is missing.
+        # so we drop the keys entirely when missing. The routes are hierarchical
+        # (`<name>`, `<name>/<languages>`, `<name>/<languages>/<audiences>`) so
+        # `audiences` is only meaningful when `languages` is also set.
         extra_kwargs: dict[str, str] = {}
-        if languages and audiences:
+        if languages is not None:
             extra_kwargs["languages"] = languages
-            extra_kwargs["audiences"] = audiences
+            if audiences is not None:
+                extra_kwargs["audiences"] = audiences
 
         for author_entry in entry.computed.authors:
             if not (name := author_entry.name):
@@ -1011,9 +1014,10 @@ class LibraryAnnotator(CirculationManagerAnnotator):
         languages, audiences = self.language_and_audience_key_from_work(work)
         # See add_author_links for why we omit these keys rather than passing None.
         extra_kwargs: dict[str, str] = {}
-        if languages and audiences:
+        if languages is not None:
             extra_kwargs["languages"] = languages
-            extra_kwargs["audiences"] = audiences
+            if audiences is not None:
+                extra_kwargs["audiences"] = audiences
 
         href = self.url_for(
             "series",
