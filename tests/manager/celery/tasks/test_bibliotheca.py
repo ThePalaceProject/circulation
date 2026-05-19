@@ -19,6 +19,7 @@ from palace.manager.celery.tasks.bibliotheca import (
 from palace.manager.integration.license.bibliotheca import BibliothecaAPI
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.coverage import Timestamp
+from palace.manager.util.http.exception import BadResponseException
 from tests.fixtures.celery import CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import BibliothecaFilesFixture
@@ -313,8 +314,6 @@ class TestBibliothecaMonitorCollection:
         """When an auto-retry exception is raised, the workflow lock is NOT released.
         The retry fires with lock_value=None (a fresh call), fails to acquire the
         still-held lock, and silently skips rather than double-processing."""
-        from palace.manager.util.http.exception import BadResponseException
-
         collection = bibliotheca_task_fixture.collection
         bibliotheca_task_fixture.stamp_event_monitor(
             finish=utc_now() - timedelta(minutes=10)
@@ -434,17 +433,14 @@ class TestBibliothecaMonitorCollection:
         expected_finish = expected_start + timedelta(minutes=5)
         assert abs((ts.finish - expected_finish).total_seconds()) < 5
 
-    @patch("palace.manager.celery.tasks.bibliotheca.BibliothecaAPI")
     def test_multiple_collections_each_get_own_lock(
         self,
-        mock_api_cls: MagicMock,
         db: DatabaseTransactionFixture,
         celery_fixture: CeleryFixture,
         redis_fixture: RedisFixture,
     ) -> None:
         """Each collection uses an independent workflow lock; two collections can
         run concurrently without interfering."""
-        mock_api_cls.return_value.get_events_between.return_value = iter([])
         c1 = MockBibliothecaAPI.mock_collection(
             db.session, db.default_library(), name="Col 1"
         )

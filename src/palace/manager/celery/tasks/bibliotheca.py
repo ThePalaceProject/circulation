@@ -21,6 +21,7 @@ from uuid import uuid4
 
 from celery import shared_task
 from celery.exceptions import Ignore
+from sqlalchemy.orm import Session
 
 from palace.util.datetime_helpers import utc_now
 from palace.util.log import LoggerType
@@ -84,6 +85,7 @@ def _event_monitor_workflow_lock(
 
 
 def _handle_event(
+    session: Session,
     api: BibliothecaAPI,
     collection: Collection,
     bibliotheca_id: str,
@@ -101,8 +103,6 @@ def _handle_event(
     on the event delta, and queues a ``bibliographic_apply`` task when the
     title's metadata has changed (hash-based deduplication).
     """
-    session = api._db
-
     license_pool, _ = LicensePool.for_foreign_id(
         session,
         api.data_source,
@@ -188,6 +188,16 @@ def monitor_collection(
     A Redis workflow lock keyed to ``collection_id`` ensures at most one chain
     runs per collection at a time.
 
+    .. note::
+
+        ``BadResponseException`` and ``RequestTimedOut`` are listed in
+        ``autoretry_for``, but the workflow lock is *not* released on those
+        exceptions (they appear in ``ignored_exceptions``).  Each retry fires
+        as a fresh first-slice invocation (``lock_value=None``), generates a
+        new UUID, fails to acquire the still-held lock, and silently skips.
+        In practice the 2-hour lock expiry is the only recovery path after a
+        persistent API failure.
+
     :param collection_id: Database ID of the Bibliotheca collection.
     :param start: Start of the slice to process.  ``None`` on the first
         invocation — the start is derived from the stored ``Timestamp``.
@@ -261,7 +271,7 @@ def monitor_collection(
             )
 
             for event_tuple in api.get_events_between(start, slice_end):
-                _handle_event(api, collection, *event_tuple, logger=task.log)
+                _handle_event(session, api, collection, *event_tuple, logger=task.log)
                 events_handled += 1
 
             Timestamp.stamp(
@@ -273,6 +283,9 @@ def monitor_collection(
                 finish=slice_end,
                 achievements=f"Events handled: {events_handled}.",
             )
+
+        # Control flow guarantees slice_end was assigned inside the transaction.
+        assert slice_end is not None
 
         task.log.info(
             f"Bibliotheca event monitor: handled {events_handled} event(s) for "
