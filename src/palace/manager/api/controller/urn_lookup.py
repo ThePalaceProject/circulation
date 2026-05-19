@@ -5,6 +5,7 @@ from palace.manager.core.app_server import (
     URNLookupController as CoreURNLookupController,
 )
 from palace.manager.feed.annotator.circulation import CirculationManagerAnnotator
+from palace.manager.feed.worklist.base import WorkList
 
 
 class URNLookupController(CoreURNLookupController):
@@ -21,6 +22,10 @@ class URNLookupController(CoreURNLookupController):
         (filtered_audiences and filtered_genres).
         """
         library = get_request_library()
-        top_level_worklist = self.manager.top_level_lanes[library.id]
+        top_level_worklist = WorkList.top_level_for_library(
+            self._db,
+            library,
+            collection_ids=[c.id for c in library.active_collections],
+        )
         annotator = CirculationManagerAnnotator(top_level_worklist)
         return super().work_lookup(annotator, route_name, library=library)

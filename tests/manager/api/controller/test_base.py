@@ -21,6 +21,8 @@ from palace.manager.api.problem_details import (
     REMOTE_INTEGRATION_FAILED,
 )
 from palace.manager.core.classifier import Classifier
+from palace.manager.feed.worklist.base import WorkList
+from palace.manager.feed.worklist.top_level import TopLevelWorkList
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.lane import Lane
@@ -630,23 +632,22 @@ class TestBaseController:
         # Verify that requests for specific lanes are mapped to
         # the appropriate lane.
 
-        # TODO: The case where the top-level lane is a WorkList rather
-        # than a Lane is not tested.
-
-        lanes = circulation_fixture.db.default_library().lanes
+        library = circulation_fixture.db.default_library()
+        lanes = library.lanes
 
         with circulation_fixture.request_context_with_library("/"):
             top_level = circulation_fixture.controller.load_lane(None)
-            expect = circulation_fixture.controller.manager.top_level_lanes[
-                circulation_fixture.db.default_library().id
-            ]
+            expect = WorkList.top_level_for_library(
+                circulation_fixture.db.session,
+                library,
+                collection_ids=[c.id for c in library.active_collections],
+            )
 
-            # expect and top_level are different ORM objects
-            # representing the same lane. (They're different objects
-            # because the lane stored across requests inside the
-            # CirculationManager object was merged into the request's
-            # database session.)
+            # The default library has a single top-level Lane, so
+            # load_lane returns that Lane directly, attached to the
+            # request session.
             assert isinstance(top_level, Lane)
+            assert isinstance(expect, Lane)
             assert expect.id == top_level.id
 
             # A lane can be looked up by ID.
@@ -689,3 +690,18 @@ class TestBaseController:
             lane.accessible_to.assert_called_once_with(
                 circulation_fixture.default_patron
             )
+
+    def test_load_lane_top_level_worklist(
+        self, circulation_fixture: CirculationControllerFixture
+    ):
+        # When a library has multiple top-level visible lanes,
+        # load_lane(None) returns a TopLevelWorkList wrapping them.
+        library = circulation_fixture.db.default_library()
+        extra = circulation_fixture.db.lane(library=library, display_name="Extra")
+
+        with circulation_fixture.request_context_with_library("/", library=library):
+            result = circulation_fixture.controller.load_lane(None)
+            assert isinstance(result, TopLevelWorkList)
+            child_ids = {c.id for c in result.children}
+            assert extra.id in child_ids
+            assert len(child_ids) >= 2

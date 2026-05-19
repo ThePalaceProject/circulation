@@ -15,11 +15,13 @@ from palace.manager.api.circulation.data import HoldInfo, LoanInfo
 from palace.manager.api.circulation.dispatcher import CirculationApiDispatcher
 from palace.manager.api.circulation.fulfillment import Fulfillment
 from palace.manager.api.circulation_manager import CirculationManager
+from palace.manager.feed.worklist.base import WorkList
 from palace.manager.integration.settings import BaseSettings
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.service.container import Services
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.datasource import DataSource
+from palace.manager.sqlalchemy.model.lane import Lane
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.licensing import (
     LicensePool,
@@ -232,6 +234,7 @@ class MockPatronActivityCirculationAPI(
 
 class MockCirculationManager(CirculationManager):
     d_circulation: MockCirculationApiDispatcher
+    d_top_level_lane: Lane | WorkList
 
     def __init__(self, db: Session, services: Services):
         super().__init__(db, services=services)
