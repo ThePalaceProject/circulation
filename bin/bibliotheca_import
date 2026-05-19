@@ -1,8 +1,8 @@
 #!/usr/bin/env python
-"""Manually kick off the Bibliotheca event monitor for one or all collections."""
+"""Manually kick off the Bibliotheca event import for one or all collections."""
 
 from palace.manager.integration.license.bibliotheca_scripts import (
-    MonitorEventCollection,
+    ImportEventCollection,
 )
 
-MonitorEventCollection().run()
+ImportEventCollection().run()

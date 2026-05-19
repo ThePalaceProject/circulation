@@ -2,7 +2,7 @@
 
 Three tasks handle different aspects of keeping a Bibliotheca collection in sync:
 
-- ``monitor_all_collections`` / ``monitor_collection``:  Near-real-time circulation
+- ``import_all_collections`` / ``import_collection``:  Near-real-time circulation
   events, processed in 5-minute slices.
 - ``purchase_monitor_all_collections`` / ``purchase_monitor_collection`` (PR 2):
   MARC-record-based purchase history, one day at a time.
@@ -45,27 +45,22 @@ from palace.manager.util.http.exception import (
     RequestTimedOut,
 )
 
-# ── Constants ─────────────────────────────────────────────────────────────────
-
-EVENT_MONITOR_SERVICE_NAME = "Bibliotheca Event Monitor"
+EVENT_IMPORT_SERVICE_NAME = "Bibliotheca Event Monitor"
 
 _LOG_DATE_FORMAT = "%Y-%m-%dT%H:%M:%S"
 
-# Amount of time to overlap between consecutive event-monitor runs to reduce
+# Amount of time to overlap between consecutive event-import runs to reduce
 # the risk of missing events at the boundary.
-_EVENT_MONITOR_OVERLAP = timedelta(minutes=5)
+_EVENT_IMPORT_OVERLAP = timedelta(minutes=5)
 
 # Maximum time window processed in a single task invocation.
-_EVENT_MONITOR_SLICE_SIZE = timedelta(minutes=5)
+_EVENT_IMPORT_SLICE_SIZE = timedelta(minutes=5)
 
 
-# ── Workflow lock helpers ─────────────────────────────────────────────────────
-
-
-def _event_monitor_workflow_lock(
+def _event_import_workflow_lock(
     client: Redis, collection_id: int, random_value: str
 ) -> RedisLock:
-    """Workflow-level lock spanning all slices of a single event-monitor run.
+    """Workflow-level lock spanning all slices of a single event-import run.
 
     Held across ``task.replace()`` calls so at most one run proceeds per
     collection.  Auto-expires after 2 hours if the worker dies mid-chain.
@@ -73,15 +68,12 @@ def _event_monitor_workflow_lock(
     return RedisLock(
         client,
         [
-            "BibliothecaEventMonitorWorkflow",
+            "BibliothecaEventImportWorkflow",
             Collection.redis_key_from_id(collection_id),
         ],
         random_value=random_value,
         lock_timeout=timedelta(hours=2),
     )
-
-
-# ── Internal helpers ──────────────────────────────────────────────────────────
 
 
 def _handle_event(
@@ -98,10 +90,10 @@ def _handle_event(
 ) -> None:
     """Process a single Bibliotheca circulation event.
 
-    Ported from ``BibliothecaEventMonitor.handle_event``.  Creates or updates
-    the ``LicensePool``, links the ISBN identifier, adjusts availability based
-    on the event delta, and queues a ``bibliographic_apply`` task when the
-    title's metadata has changed (hash-based deduplication).
+    Ported from ``BibliothecaEventMonitor.handle_event``.  Creates or updates the
+    ``LicensePool``, links the ISBN identifier, adjusts availability based on the
+    event delta, and queues a ``bibliographic_apply`` task when the title's metadata
+    has changed (hash-based deduplication).
     """
     license_pool, _ = LicensePool.for_foreign_id(
         session,
@@ -139,12 +131,9 @@ def _handle_event(
     )
 
 
-# ── Dispatcher task ───────────────────────────────────────────────────────────
-
-
 @shared_task(queue=QueueNames.default, bind=True)
-def monitor_all_collections(task: Task) -> None:
-    """Queue a ``monitor_collection`` task for every Bibliotheca collection."""
+def import_all_collections(task: Task) -> None:
+    """Queue an ``import_collection`` task for every Bibliotheca collection."""
     with task.session() as session:
         registry = task.services.integration_registry().license_providers()
         collection_query = Collection.select_by_protocol(
@@ -153,14 +142,11 @@ def monitor_all_collections(task: Task) -> None:
         collections = session.scalars(collection_query).all()
 
     for collection in collections:
-        monitor_collection.delay(collection_id=collection.id)
+        import_collection.delay(collection_id=collection.id)
 
     task.log.info(
-        f"Queued {len(collections)} Bibliotheca collection(s) for event monitoring."
+        f"Queued {len(collections)} Bibliotheca collection(s) for event import."
     )
-
-
-# ── Per-collection worker task ────────────────────────────────────────────────
 
 
 @shared_task(
@@ -171,7 +157,7 @@ def monitor_all_collections(task: Task) -> None:
     throws=(RemoteIntegrationException,),
     retry_backoff=60,
 )
-def monitor_collection(
+def import_collection(
     task: Task,
     collection_id: int,
     *,
@@ -211,7 +197,7 @@ def monitor_collection(
     if lock_value is None:
         lock_value = str(uuid4())
 
-    workflow_lock = _event_monitor_workflow_lock(redis, collection_id, lock_value)
+    workflow_lock = _event_import_workflow_lock(redis, collection_id, lock_value)
 
     with workflow_lock.lock(
         raise_when_not_acquired=False,
@@ -219,18 +205,18 @@ def monitor_collection(
     ) as workflow_lock_acquired:
         if not workflow_lock_acquired and is_first_slice:
             task.log.warning(
-                f"Bibliotheca event monitor skipped for collection {collection_id}: "
+                f"Bibliotheca event import skipped for collection {collection_id}: "
                 "another run is already in progress."
             )
             return
         if not workflow_lock_acquired and not is_first_slice:
             task.log.warning(
-                f"Bibliotheca event monitor for collection {collection_id}: "
+                f"Bibliotheca event import for collection {collection_id}: "
                 "workflow lock expired between slices; continuing "
                 "(another run may be active)."
             )
 
-        cutoff = utc_now() - _EVENT_MONITOR_OVERLAP
+        cutoff = utc_now() - _EVENT_IMPORT_OVERLAP
         slice_end: datetime | None = None
         events_handled = 0
         collection_name: str | None = None
@@ -240,32 +226,29 @@ def monitor_collection(
             collection_name = collection.name
 
             if start is None:
-                # First slice — determine the start time from the stored timestamp.
                 timestamp = Timestamp.lookup(
                     session,
-                    EVENT_MONITOR_SERVICE_NAME,
+                    EVENT_IMPORT_SERVICE_NAME,
                     Timestamp.MONITOR_TYPE,
                     collection,
                 )
                 if timestamp is None or timestamp.finish is None:
-                    # No prior run; start from the overlap window so we have
-                    # something to process on the very first invocation.
-                    start = cutoff - _EVENT_MONITOR_OVERLAP
+                    start = cutoff - _EVENT_IMPORT_OVERLAP
                 else:
-                    start = timestamp.finish - _EVENT_MONITOR_OVERLAP
+                    start = timestamp.finish - _EVENT_IMPORT_OVERLAP
 
             if start >= cutoff:
                 task.log.info(
-                    f"Bibliotheca event monitor: '{collection_name}' is already up to date."
+                    f"Bibliotheca event import: '{collection_name}' is already up to date."
                 )
                 return
 
-            slice_end = min(start + _EVENT_MONITOR_SLICE_SIZE, cutoff)
+            slice_end = min(start + _EVENT_IMPORT_SLICE_SIZE, cutoff)
 
             api = BibliothecaAPI(session, collection)
 
             task.log.info(
-                f"Bibliotheca event monitor: requesting events for '{collection_name}' "
+                f"Bibliotheca event import: requesting events for '{collection_name}' "
                 f"between {start.strftime(_LOG_DATE_FORMAT)} and "
                 f"{slice_end.strftime(_LOG_DATE_FORMAT)}."
             )
@@ -276,7 +259,7 @@ def monitor_collection(
 
             Timestamp.stamp(
                 session,
-                service=EVENT_MONITOR_SERVICE_NAME,
+                service=EVENT_IMPORT_SERVICE_NAME,
                 service_type=Timestamp.MONITOR_TYPE,
                 collection=collection,
                 start=start,
@@ -288,7 +271,7 @@ def monitor_collection(
         assert slice_end is not None
 
         task.log.info(
-            f"Bibliotheca event monitor: handled {events_handled} event(s) for "
+            f"Bibliotheca event import: handled {events_handled} event(s) for "
             f"'{collection_name}' ({start.strftime(_LOG_DATE_FORMAT)} -> "
             f"{slice_end.strftime(_LOG_DATE_FORMAT)})."
         )

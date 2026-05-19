@@ -296,8 +296,8 @@ def beat_schedule() -> dict[str, Any]:
             "task": overdrive.reap_all_collections.name,
             "schedule": crontab(minute="0", hour="23"),  # Once a day at 11:00 PM
         },
-        "bibliotheca_monitor_all_collections": {
-            "task": bibliotheca.monitor_all_collections.name,
+        "bibliotheca_import_all_collections": {
+            "task": bibliotheca.import_all_collections.name,
             "schedule": crontab(minute="*/15"),  # Every 15 minutes
         },
     }
