@@ -19,7 +19,6 @@ from palace.manager.api.controller.circulation_manager import (
 from palace.manager.api.lanes import create_default_lanes
 from palace.manager.api.util.flask import PalaceFlask
 from palace.manager.core.entrypoint import AudiobooksEntryPoint, EbooksEntryPoint
-from palace.manager.feed.worklist.base import WorkList
 from palace.manager.integration.configuration.library import LibrarySettings
 from palace.manager.integration.goals import Goals
 from palace.manager.integration.patron_auth.simple_authentication import (
@@ -163,14 +162,8 @@ class ControllerFixture:
         # Create mock CM instance
         self.manager = MockCirculationManager(session, self.services_fixture.services)
 
-        # Set CirculationAPI and top-level lane for the default
-        # library, for convenience in tests.
+        # Set CirculationAPI for the default library, for convenience in tests.
         self.manager.d_circulation = self.manager.circulation_apis[self.library.id]
-        self.manager.d_top_level_lane = WorkList.top_level_for_library(
-            session,
-            self.library,
-            collection_ids=[c.id for c in self.library.active_collections],
-        )
         self.controller = CirculationManagerController(self.manager)
 
         # Set a convenient default lane.
