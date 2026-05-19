@@ -82,7 +82,7 @@ def _handle_event(
     collection: Collection,
     bibliotheca_id: str,
     isbn: str,
-    foreign_patron_id: str | None,
+    foreign_patron_id: str | None,  # present in the API payload but not acted on here
     start_time: datetime,
     end_time: datetime | None,
     internal_event_type: str,
@@ -116,7 +116,7 @@ def _handle_event(
     bibliotheca_identifier = license_pool.identifier
     isbn_identifier, _ = Identifier.for_foreign_id(session, Identifier.ISBN, isbn)
 
-    Edition.for_foreign_id(
+    edition, _ = Edition.for_foreign_id(
         session, api.data_source, Identifier.BIBLIOTHECA_ID, bibliotheca_id
     )
 
@@ -125,8 +125,9 @@ def _handle_event(
     license_pool.update_availability_from_delta(internal_event_type, start_time, 1)
 
     logger.info(
-        "%s: %s",
+        "%s %s: %s",
         start_time.strftime(_LOG_DATE_FORMAT),
+        edition.title or "[no title]",
         internal_event_type,
     )
 
