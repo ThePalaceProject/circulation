@@ -27,6 +27,10 @@ _ALWAYS_SAFE_TYPES: frozenset[type[Any]] = frozenset(
     {float, int, str, dict, list, tuple}
 )
 
+# Named mutation methods for the mutable types in _ALWAYS_SAFE_TYPES (list and dict)
+# as of Python 3.12.  Dunder variants (__setitem__, __delitem__, etc.) are already
+# blocked by simpleeval's private-attribute guard.  If Python adds new named mutation
+# methods to list or dict in a future version, this set must be updated.
 _MUTATION_METHODS: frozenset[str] = frozenset(
     {
         "append",
@@ -115,6 +119,10 @@ class FilterExpression:
     :param extra_safe_types: Additional types whose non-mutating methods may be
         called in the expression. ``str``, ``int``, ``float``, ``dict``,
         ``list``, and ``tuple`` are always available and need not be listed.
+        Types listed here should be immutable or have no mutating methods
+        outside the names in ``_MUTATION_METHODS``; the blocklist only covers
+        the standard Python built-in mutation API and does not protect against
+        custom mutating methods on user-defined types.
     :param missing_attribute_returns_false: When ``True``, any attribute
         access that raises ``AttributeError`` — a missing dict sub-key via
         dot notation, or a missing object attribute — returns ``False``
