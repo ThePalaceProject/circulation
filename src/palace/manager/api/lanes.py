@@ -17,7 +17,6 @@ from palace.manager.core.classifier import (
     nonfiction_genres,
 )
 from palace.manager.core.config import CannotLoadConfiguration
-from palace.manager.feed.worklist.base import WorkList
 from palace.manager.integration.metadata.nyt import NYTBestSellerAPI
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
@@ -39,41 +38,6 @@ def _genre_name(genre: GenreInput) -> str:
     if isinstance(genre, Mapping):
         return cast(str, genre.get("name"))
     return genre
-
-
-def load_lanes(
-    _db: Session, library: Library, collection_ids: Sequence[int] | None
-) -> WorkList | Lane:
-    """Return a WorkList that reflects the current lane structure of the
-    Library.
-
-    If no top-level visible lanes are configured, the WorkList will be
-    configured to show every book in the collection.
-
-    If a single top-level Lane is configured, it will returned as the
-    WorkList.
-
-    Otherwise, a WorkList containing the visible top-level lanes is
-    returned.
-    """
-    top_level = cast(
-        WorkList | Lane,
-        WorkList.top_level_for_library(_db, library, collection_ids=collection_ids),
-    )
-
-    # It's likely this WorkList will be used across sessions, so
-    # expunge any data model objects from the database session.
-    #
-    # TODO: This is the cause of a lot of problems in the cached OPDS
-    # feed generator. There, these Lanes are used in a normal database
-    # session and we end up needing hacks to merge them back into the
-    # session.
-    if isinstance(top_level, Lane):
-        to_expunge = [top_level]
-    else:
-        to_expunge = [x for x in top_level.children if isinstance(x, Lane)]
-    list(map(_db.expunge, to_expunge))
-    return top_level
 
 
 def _lane_configuration_from_collection_sizes(

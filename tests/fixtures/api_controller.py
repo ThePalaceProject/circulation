@@ -162,10 +162,8 @@ class ControllerFixture:
         # Create mock CM instance
         self.manager = MockCirculationManager(session, self.services_fixture.services)
 
-        # Set CirculationAPI and top-level lane for the default
-        # library, for convenience in tests.
+        # Set CirculationAPI for the default library, for convenience in tests.
         self.manager.d_circulation = self.manager.circulation_apis[self.library.id]
-        self.manager.d_top_level_lane = self.manager.top_level_lanes[self.library.id]  # type: ignore
         self.controller = CirculationManagerController(self.manager)
 
         # Set a convenient default lane.

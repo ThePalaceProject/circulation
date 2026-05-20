@@ -12,6 +12,7 @@ from palace.manager.feed.facets.feed import Facets, FeaturedFacets
 from palace.manager.feed.facets.search import SearchFacets
 from palace.manager.feed.navigation import NavigationFeed
 from palace.manager.feed.opds import NavigationFacets
+from palace.manager.feed.worklist.base import WorkList
 from palace.manager.search.pagination import SortKeyPagination
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.util.flask_util import Response
@@ -243,7 +244,7 @@ class TestOPDSFeedController:
         settings.minimum_featured_quality = 0.15
         settings.featured_lane_size = 2
 
-        # Patron with root lane -> redirect to root lane
+        # Patron with root lane -> redirect to root lane.
         lane = circulation_fixture.db.lane()
         lane.root_for_patron_type = ["1"]
         circulation_fixture.default_patron.external_type = "1"
@@ -259,6 +260,11 @@ class TestOPDSFeedController:
                 _external=True,
             )
             assert response.headers["Location"] == expect_url
+
+        # Clean up the patron-root lane so subsequent blocks see only
+        # the "World Languages" top-level lane.
+        circulation_fixture.db.session.delete(lane)
+        circulation_fixture.db.session.flush()
 
         # Bad lane -> Problem detail
         with circulation_fixture.request_context_with_library("/"):
@@ -408,10 +414,12 @@ class TestOPDSFeedController:
         circulation_fixture.add_works(self._EXTRA_BOOKS)
 
         library = circulation_fixture.db.default_library()
-        lane = circulation_fixture.manager.top_level_lanes[library.id]
         session = circulation_fixture.db.session
-        lane = session.merge(lane)
-        session.expire_all()
+        lane = WorkList.top_level_for_library(
+            session,
+            library,
+            collection_ids=[c.id for c in library.active_collections],
+        )
 
         # Mock NavigationFeed.navigation so we can see the arguments going
         # into it.
@@ -452,10 +460,12 @@ class TestOPDSFeedController:
         circulation_fixture.add_works(self._EXTRA_BOOKS)
 
         library = circulation_fixture.db.default_library()
-        lane = circulation_fixture.manager.top_level_lanes[library.id]
         session = circulation_fixture.db.session
-        lane = session.merge(lane)
-        session.expire_all()
+        lane = WorkList.top_level_for_library(
+            session,
+            library,
+            collection_ids=[c.id for c in library.active_collections],
+        )
 
         helper = OPDSSerializationTestHelper(accept_header, expected_content_type)
         headers = helper.merge_accept_header({})

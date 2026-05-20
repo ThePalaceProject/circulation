@@ -71,9 +71,8 @@ class TestCirculationManager:
         # But some fields are _not_ about to be reloaded
         index_controller = manager.index_controller
 
-        # The CirculationManager has a top-level lane and a CirculationAPI,
-        # for the default library, but no others.
-        assert 1 == len(manager.top_level_lanes)
+        # The CirculationManager has a CirculationAPI for the default
+        # library, but no others.
         assert 1 == len(manager.circulation_apis)
 
         # Now let's create a brand new library, never before seen.
@@ -99,10 +98,7 @@ class TestCirculationManager:
         # Then reload the CirculationManager...
         circulation_fixture.manager.load_settings()
 
-        # Now the new library has a top-level lane.
-        assert library.id in manager.top_level_lanes
-
-        # And a circulation API.
+        # Now the new library has a circulation API.
         assert library.id in manager.circulation_apis
 
         # The Authenticator has been reloaded with information about

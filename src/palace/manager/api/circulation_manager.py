@@ -37,7 +37,6 @@ from palace.manager.api.controller.playtime_entries import PlaytimeEntriesContro
 from palace.manager.api.controller.profile import ProfileController
 from palace.manager.api.controller.urn_lookup import URNLookupController
 from palace.manager.api.controller.work import WorkController
-from palace.manager.api.lanes import load_lanes
 from palace.manager.api.problem_details import NO_SUCH_LANE
 from palace.manager.api.util.flask import get_request_library
 from palace.manager.core.app_server import (
@@ -311,20 +310,8 @@ class CirculationManager(LoggerMixin):
 
         self.auth = Authenticator(self._db, libraries, self.analytics)
 
-        # Track the Lane configuration for each library by mapping its
-        # short name to the top-level lane.
-        new_top_level_lanes = {}
         # Create a CirculationAPI for each library.
         new_circulation_apis = {}
-
-        with elapsed_time_logging(
-            log_method=self.log.debug,
-            message_prefix="load_settings - per-library lanes",
-        ):
-            for library in libraries:
-                new_top_level_lanes[library.id] = load_lanes(
-                    self._db, library, [c.id for c in libraries_collections[library.id]]
-                )
 
         with elapsed_time_logging(
             log_method=self.log.debug,
@@ -342,7 +329,6 @@ class CirculationManager(LoggerMixin):
                     )
                 )
 
-        self.top_level_lanes = new_top_level_lanes
         self.circulation_apis = new_circulation_apis
 
         self.patron_web_domains = self.get_patron_web_domains()

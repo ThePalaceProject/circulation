@@ -107,16 +107,16 @@ class CirculationManagerController(BaseCirculationManagerController):
 
     def load_lane(self, lane_identifier: int | None) -> Lane | WorkList | ProblemDetail:
         """Turn user input into a Lane object."""
-        library_id = get_request_library().id
+        library = get_request_library()
+        library_id = library.id
 
         lane = None
         if lane_identifier is None:
-            # Return the top-level lane.
-            lane = self.manager.top_level_lanes[library_id]
-            if isinstance(lane, Lane):
-                lane = self._db.merge(lane)
-            elif isinstance(lane, WorkList):
-                lane.children = [self._db.merge(child) for child in lane.children]
+            lane = WorkList.top_level_for_library(
+                self._db,
+                library,
+                collection_ids=[c.id for c in library.active_collections],
+            )
         else:
             try:
                 lane_identifier = int(lane_identifier)
