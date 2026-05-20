@@ -43,7 +43,7 @@ class OIDCTokenValidator(LoggerMixin):
     CLOCK_SKEW_TOLERANCE = 300  # 5 minutes
 
     # Signing algorithms accepted when verifying ID token signatures
-    ALLOWED_ALGORITHMS = ("RS256", "RS384", "RS512", "HS256")
+    ALLOWED_ALGORITHMS = frozenset(("RS256", "RS384", "RS512", "HS256"))
 
     def validate_signature(self, id_token: str, jwks: dict[str, Any]) -> dict[str, Any]:
         """Validate ID token signature using JWKS.
@@ -66,7 +66,9 @@ class OIDCTokenValidator(LoggerMixin):
             token = jwt.decode(
                 id_token,
                 key_set,
-                algorithms=list(self.ALLOWED_ALGORITHMS),
+                # This type ignore can go away if / when upstream merges
+                # https://github.com/authlib/joserfc/pull/98
+                algorithms=self.ALLOWED_ALGORITHMS,  # type: ignore
             )
 
             self.log.debug("ID token signature validated successfully")
