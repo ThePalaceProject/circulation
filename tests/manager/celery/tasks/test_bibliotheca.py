@@ -297,6 +297,38 @@ class TestBibliothecaImportCollection:
 
         workflow_lock.release()
 
+    def test_continues_with_warning_when_lock_expires_mid_chain(
+        self,
+        bibliotheca_task_fixture: BibliothecaTaskFixture,
+        celery_fixture: CeleryFixture,
+        redis_fixture: RedisFixture,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """When the workflow lock expires between slices (is_first_slice=False and lock
+        not acquired), the task logs a warning but still processes the slice rather than
+        silently returning."""
+        collection = bibliotheca_task_fixture.collection
+        bibliotheca_task_fixture.stamp_event_import(
+            finish=utc_now() - timedelta(minutes=3)
+        )
+
+        caplog.set_level(LogLevel.warning)
+
+        with patch(
+            "palace.manager.celery.tasks.bibliotheca.BibliothecaAPI"
+        ) as mock_api_cls:
+            mock_api_cls.return_value.get_events_between.return_value = iter([])
+            # Pass a lock_value that does NOT match any held lock so acquire fails,
+            # but is_first_slice is False (lock_value is not None).
+            bibliotheca.import_collection.delay(
+                collection_id=collection.id,
+                lock_value=str(uuid4()),
+            ).wait()
+            # Despite the lock not being acquired, the slice was still processed.
+            mock_api_cls.return_value.get_events_between.assert_called_once()
+
+        assert "workflow lock expired between slices" in caplog.text
+
     def test_lock_released_on_autoretry(
         self,
         bibliotheca_task_fixture: BibliothecaTaskFixture,
