@@ -12,8 +12,9 @@ import time
 from re import Pattern
 from typing import Any, cast
 
-from authlib.jose import JsonWebKey, JsonWebToken
-from authlib.jose.errors import JoseError
+from joserfc import jwt
+from joserfc.errors import JoseError
+from joserfc.jwk import KeySet, KeySetSerialization
 
 from palace.util.exceptions import BasePalaceException
 from palace.util.log import LoggerMixin
@@ -41,9 +42,8 @@ class OIDCTokenValidator(LoggerMixin):
     # Clock skew tolerance (seconds) - allows for time differences between servers
     CLOCK_SKEW_TOLERANCE = 300  # 5 minutes
 
-    def __init__(self) -> None:
-        """Initialize OIDC token validator."""
-        self._jwt = JsonWebToken(algorithms=["RS256", "RS384", "RS512", "HS256"])
+    # Signing algorithms accepted when verifying ID token signatures
+    ALLOWED_ALGORITHMS = ("RS256", "RS384", "RS512", "HS256")
 
     def validate_signature(self, id_token: str, jwks: dict[str, Any]) -> dict[str, Any]:
         """Validate ID token signature using JWKS.
@@ -54,26 +54,23 @@ class OIDCTokenValidator(LoggerMixin):
         :return: Decoded token claims
         """
         try:
-            # Create JWK from JWKS
-            jwk_set = JsonWebKey.import_key_set(jwks)
+            # Create key set from JWKS. The JWKS is arbitrary JSON fetched from
+            # the provider, so cast it to the structured type joserfc expects.
+            key_set = KeySet.import_key_set(cast(KeySetSerialization, jwks))
 
-            # Decode and verify signature
-            # authlib's decode will automatically:
-            # 1. Find the correct key from the set using 'kid' header
-            # 2. Verify the signature
-            # 3. Return the payload claims
-            claims = cast(
-                dict[str, Any],
-                self._jwt.decode(
-                    id_token,
-                    jwk_set,
-                    # We'll validate claims separately for better error messages
-                    claims_options={"iss": {"essential": False}},
-                ),
+            # Decode and verify signature. joserfc's decode will automatically:
+            # 1. Find the correct key from the set using the 'kid' header
+            # 2. Verify the signature using one of the allowed algorithms
+            # 3. Return a token whose 'claims' is the decoded payload
+            # We validate the claims separately for better error messages.
+            token = jwt.decode(
+                id_token,
+                key_set,
+                algorithms=list(self.ALLOWED_ALGORITHMS),
             )
 
             self.log.debug("ID token signature validated successfully")
-            return claims
+            return token.claims
 
         except JoseError as e:
             self.log.exception("ID token signature validation failed")
