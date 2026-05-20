@@ -297,15 +297,15 @@ class TestBibliothecaImportCollection:
 
         workflow_lock.release()
 
-    def test_lock_not_released_on_autoretry(
+    def test_lock_released_on_autoretry(
         self,
         bibliotheca_task_fixture: BibliothecaTaskFixture,
         celery_fixture: CeleryFixture,
         redis_fixture: RedisFixture,
     ) -> None:
-        """When an auto-retry exception is raised, the workflow lock is NOT released.
-        The retry fires with lock_value=None (a fresh call), fails to acquire the
-        still-held lock, and silently skips rather than double-processing."""
+        """When a retryable exception is raised the workflow lock is released so that
+        subsequent retries (and the next beat tick) can re-acquire it and resume from
+        the last committed Timestamp position."""
         collection = bibliotheca_task_fixture.collection
         bibliotheca_task_fixture.stamp_event_import(
             finish=utc_now() - timedelta(minutes=10)
@@ -323,11 +323,11 @@ class TestBibliothecaImportCollection:
             with celery_fixture.patch_retry_backoff():
                 bibliotheca.import_collection.delay(collection_id=collection.id).wait()
 
-        # Lock should still be held after all retries exhaust.
+        # Lock should be free after retries exhaust so the next run is not blocked.
         workflow_lock = _event_import_workflow_lock(
             redis_fixture.client, collection.id, random_value="any"
         )
-        assert workflow_lock.locked()
+        assert not workflow_lock.locked()
 
     def test_events_processed_and_timestamp_updated(
         self,

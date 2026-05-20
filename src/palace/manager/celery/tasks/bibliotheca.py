@@ -173,17 +173,9 @@ def import_collection(
     ``now - OVERLAP``.
 
     A Redis workflow lock keyed to ``collection_id`` ensures at most one chain
-    runs per collection at a time.
-
-    .. note::
-
-        ``BadResponseException`` and ``RequestTimedOut`` are listed in
-        ``autoretry_for``, but the workflow lock is *not* released on those
-        exceptions (they appear in ``ignored_exceptions``).  Each retry fires
-        as a fresh first-slice invocation (``lock_value=None``), generates a
-        new UUID, fails to acquire the still-held lock, and silently skips.
-        In practice the 2-hour lock expiry is the only recovery path after a
-        persistent API failure.
+    runs per collection at a time.  When a retryable exception (``BadResponseException``
+    or ``RequestTimedOut``) escapes, the lock is released so that each Celery retry can
+    re-acquire it and resume from the last committed ``Timestamp`` position.
 
     :param collection_id: Database ID of the Bibliotheca collection.
     :param start: Start of the slice to process.  ``None`` on the first
@@ -202,7 +194,7 @@ def import_collection(
 
     with workflow_lock.lock(
         raise_when_not_acquired=False,
-        ignored_exceptions=(Ignore, BadResponseException, RequestTimedOut),
+        ignored_exceptions=(Ignore,),
     ) as workflow_lock_acquired:
         if not workflow_lock_acquired and is_first_slice:
             task.log.warning(
