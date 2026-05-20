@@ -54,15 +54,41 @@ def parse_accept_language(
         return []
 
     if len(accept_language_str) > MAX_HEADER_LEN:
-        raise ValueError("Accept-Language too long, max length is 8192")
+        # Reject pathological input rather than spending CPU on it. We log
+        # the size + a prefix so we can see what's hitting us in metrics,
+        # but callers get an empty list — a malformed header from an
+        # external client should not break the request.
+        logger.warning(
+            "parse_accept_language: header exceeds max length %d (got %d); "
+            "returning no languages. Prefix: %r",
+            MAX_HEADER_LEN,
+            len(accept_language_str),
+            accept_language_str[:200],
+        )
+        return []
 
     parsed_langs = []
     for accept_lang_segment in accept_language_str.split(","):
         quality_value = default_quality or DEFAULT_QUALITY_VALUE
-        lang_code = accept_lang_segment.strip()
-        if ";" in accept_lang_segment:
-            lang_code, quality_value_string = accept_lang_segment.split(";")
-            quality_value = float(QUALITY_VAL_SUB_REGEX.sub("", quality_value_string))
+        # Scan all ';'-separated parameters for the q-value. The strict
+        # Accept-Language grammar (RFC 7231) only allows `q=` after the
+        # language code, but real-world clients send extra accept-params
+        # before or after q (e.g. `en;q=0.8;something`), so we don't
+        # assume q is first.
+        segment_parts = accept_lang_segment.split(";")
+        lang_code = segment_parts[0].strip()
+        for param in segment_parts[1:]:
+            if not QUALITY_VAL_SUB_REGEX.match(param.strip()):
+                continue
+            try:
+                quality_value = float(QUALITY_VAL_SUB_REGEX.sub("", param.strip()))
+            except ValueError:
+                logger.warning(
+                    "parse_accept_language: invalid quality value in "
+                    "segment %r; falling back to default quality",
+                    accept_lang_segment,
+                )
+            break
 
         lang_code_components = re.split("-|_", lang_code)
 
