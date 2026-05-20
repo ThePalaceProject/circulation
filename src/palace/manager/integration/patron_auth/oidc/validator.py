@@ -68,7 +68,7 @@ class OIDCTokenValidator(LoggerMixin):
                 key_set,
                 # This type ignore can go away if / when upstream merges
                 # https://github.com/authlib/joserfc/pull/98
-                algorithms=self.ALLOWED_ALGORITHMS,  # type: ignore
+                algorithms=self.ALLOWED_ALGORITHMS,  # type: ignore[arg-type]
             )
 
             self.log.debug("ID token signature validated successfully")
