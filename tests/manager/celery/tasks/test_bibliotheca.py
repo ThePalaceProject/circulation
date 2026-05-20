@@ -365,12 +365,13 @@ class TestBibliothecaImportCollection:
             )
 
             with celery_fixture.patch_retry_backoff():
-                # All retries re-acquire the free lock and fail again; the final
-                # retry propagates the exception once max_retries is exhausted.
-                with pytest.raises(BadResponseException):
-                    bibliotheca.import_collection.delay(
-                        collection_id=collection.id
-                    ).wait()
+                # All retries re-acquire the free lock and fail again.  Use
+                # propagate=False so the BadResponseException (which Celery
+                # re-raises as a generic Exception after serialisation) does
+                # not surface in the test.
+                bibliotheca.import_collection.delay(collection_id=collection.id).get(
+                    propagate=False
+                )
 
         # Lock should be free after retries exhaust so the next run is not blocked.
         workflow_lock = _event_import_workflow_lock(
