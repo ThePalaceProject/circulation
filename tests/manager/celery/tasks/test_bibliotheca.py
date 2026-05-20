@@ -314,13 +314,21 @@ class TestBibliothecaImportCollection:
             finish=utc_now() - timedelta(minutes=3)
         )
 
+        # Simulate the lock having expired and been re-acquired by a competing run.
+        # A free lock would be acquired successfully; we need another holder so that our
+        # task's lock_value (a different UUID) fails to acquire.
+        competing_lock = _event_import_workflow_lock(
+            redis_fixture.client, collection.id, str(uuid4())
+        )
+        competing_lock.acquire()
+
         caplog.set_level(LogLevel.warning)
 
         with patch(
             "palace.manager.celery.tasks.bibliotheca.BibliothecaAPI"
         ) as mock_api_cls:
             mock_api_cls.return_value.get_events_between.return_value = iter([])
-            # Pass a lock_value that does NOT match any held lock so acquire fails,
+            # Pass a lock_value that does not match the competing lock so acquire fails,
             # but is_first_slice is False (lock_value is not None).
             bibliotheca.import_collection.delay(
                 collection_id=collection.id,
@@ -330,6 +338,8 @@ class TestBibliothecaImportCollection:
             mock_api_cls.return_value.get_events_between.assert_called_once()
 
         assert "workflow lock expired between slices" in caplog.text
+
+        competing_lock.release()
 
     def test_lock_released_on_autoretry(
         self,
@@ -355,7 +365,12 @@ class TestBibliothecaImportCollection:
             )
 
             with celery_fixture.patch_retry_backoff():
-                bibliotheca.import_collection.delay(collection_id=collection.id).wait()
+                # All retries re-acquire the free lock and fail again; the final
+                # retry propagates the exception once max_retries is exhausted.
+                with pytest.raises(BadResponseException):
+                    bibliotheca.import_collection.delay(
+                        collection_id=collection.id
+                    ).wait()
 
         # Lock should be free after retries exhaust so the next run is not blocked.
         workflow_lock = _event_import_workflow_lock(
