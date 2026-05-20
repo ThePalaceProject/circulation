@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, call, patch
 from uuid import uuid4
 
@@ -17,8 +17,10 @@ from palace.manager.celery.tasks.bibliotheca import (
     _event_import_workflow_lock,
 )
 from palace.manager.integration.license.bibliotheca import BibliothecaAPI
+from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.coverage import Timestamp
+from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.util.http.exception import BadResponseException
 from tests.fixtures.celery import CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
@@ -369,11 +371,6 @@ class TestBibliothecaImportCollection:
     ) -> None:
         """Integration: events are processed end-to-end — LicensePool created, ISBN
         linked, availability updated, bibliographic_apply queued, Timestamp advanced."""
-        from datetime import timezone
-
-        from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
-        from palace.manager.sqlalchemy.model.identifier import Identifier
-
         collection = bibliotheca_task_fixture.collection
 
         # Stamp a timestamp 10 minutes ago so there is one slice to process.
