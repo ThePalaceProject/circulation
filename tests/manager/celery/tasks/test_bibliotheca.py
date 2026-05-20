@@ -367,12 +367,12 @@ class TestBibliothecaImportCollection:
         celery_fixture: CeleryFixture,
         redis_fixture: RedisFixture,
     ) -> None:
-        """Integration: events from the API are processed and create LicensePools;
-        the Timestamp is updated; and a bibliographic_apply task is queued when the
-        content hash indicates the metadata has changed."""
+        """Integration: events are processed end-to-end — LicensePool created, ISBN
+        linked, availability updated, bibliographic_apply queued, Timestamp advanced."""
         from datetime import timezone
 
         from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
+        from palace.manager.sqlalchemy.model.identifier import Identifier
 
         collection = bibliotheca_task_fixture.collection
 
@@ -413,6 +413,25 @@ class TestBibliothecaImportCollection:
             lp for lp in collection.licensepools if lp.identifier.identifier == "d5rf89"
         ]
         assert len(pools) == 1
+        pool = pools[0]
+
+        # The DISTRIBUTOR_LICENSE_ADD event should have incremented licenses_owned
+        # and licenses_available by 1.
+        assert pool.licenses_owned == 1
+        assert pool.licenses_available == 1
+
+        # The Bibliotheca identifier and ISBN should be marked equivalent.
+        isbn_identifier = (
+            bibliotheca_task_fixture.db.session.query(Identifier)
+            .filter_by(type=Identifier.ISBN, identifier="9781101190623")
+            .one_or_none()
+        )
+        assert isbn_identifier is not None
+        equivalencies = [
+            eq for eq in pool.identifier.equivalencies if eq.output == isbn_identifier
+        ]
+        assert len(equivalencies) == 1
+        assert equivalencies[0].strength == 1
 
         # bibliographic_apply should have been queued once (for the single event).
         mock_apply.delay.assert_called_once()
