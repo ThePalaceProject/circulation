@@ -116,19 +116,6 @@ wheels = [
 ]
 
 [[package]]
-name = "authlib"
-version = "1.7.2"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "cryptography" },
-    { name = "joserfc" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/36/98/7d93f30d029643c0275dbc0bd6d5a6f670661ee6c9a94d93af7ab4887600/authlib-1.7.2.tar.gz", hash = "sha256:2cea25fefcd4e7173bdf1372c0afc265c8034b23a8cd5dcb6a9164b826c64231", size = 176511, upload-time = "2026-05-06T08:10:23.116Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/fb/95/adcb68e20c34162e9135f370d6e31737719c2b6f94bc953fe7ed1f10fe21/authlib-1.7.2-py2.py3-none-any.whl", hash = "sha256:3e1faedc9d87e7d56a164eca3ccb6ace0d61b94abe83e92242f8dc8bba9b4a9f", size = 259548, upload-time = "2026-05-06T08:10:21.436Z" },
-]
-
-[[package]]
 name = "aws-xray-sdk"
 version = "2.15.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2067,7 +2054,6 @@ source = { editable = "." }
 dependencies = [
     { name = "alembic", extra = ["tz"] },
     { name = "annotated-types" },
-    { name = "authlib" },
     { name = "aws-xray-sdk" },
     { name = "bcrypt" },
     { name = "bidict" },
@@ -2091,6 +2077,7 @@ dependencies = [
     { name = "httpx", extra = ["http2"] },
     { name = "isbnlib" },
     { name = "itsdangerous" },
+    { name = "joserfc" },
     { name = "jsonschema" },
     { name = "jwcrypto" },
     { name = "levenshtein" },
@@ -2175,7 +2162,6 @@ dev = [
 requires-dist = [
     { name = "alembic", extras = ["tz"], specifier = ">=1.18.4,<2" },
     { name = "annotated-types", specifier = ">=0.7.0,<0.8" },
-    { name = "authlib", specifier = ">=1.7.2,<2" },
     { name = "aws-xray-sdk", specifier = ">=2.15,<2.16" },
     { name = "bcrypt", specifier = ">=5.0.0,<6" },
     { name = "bidict", specifier = ">=0.23.1,<0.24" },
@@ -2199,6 +2185,7 @@ requires-dist = [
     { name = "httpx", extras = ["http2"], specifier = ">=0.28.1,<0.29" },
     { name = "isbnlib", specifier = ">=3.10.14,<4" },
     { name = "itsdangerous", specifier = ">=2.1.2,<3" },
+    { name = "joserfc", specifier = ">=1.6.4,<2" },
     { name = "jsonschema", specifier = ">=4.22.0,<5" },
     { name = "jwcrypto", specifier = ">=1.4.2,<2" },
     { name = "levenshtein", specifier = ">=0.27,<0.28" },
