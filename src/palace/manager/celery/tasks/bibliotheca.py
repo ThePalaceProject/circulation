@@ -1,17 +1,11 @@
 """Celery tasks for Bibliotheca (3M Cloud) collection management.
 
-Three tasks handle different aspects of keeping a Bibliotheca collection in sync:
+Two tasks handle near-real-time event import for Bibliotheca collections:
 
-- ``import_all_collections`` / ``import_collection``:  Near-real-time circulation
-  events, processed in 5-minute slices.
-- ``purchase_monitor_all_collections`` / ``purchase_monitor_collection`` (PR 2):
-  MARC-record-based purchase history, one day at a time.
-- ``circulation_sweep_all_collections`` / ``circulation_sweep_collection`` (PR 3):
-  Full identifier sweep for ground-truth availability reconciliation.
-
-Each per-collection task processes one page of data then re-queues itself via
-``task.replace()``, holding a Redis workflow lock across the chain so at most one
-workflow runs per collection at a time.
+- ``import_all_collections``: Fans out to one ``import_collection`` task per collection.
+- ``import_collection``: Processes one 5-minute slice of circulation events, then
+  re-queues itself via ``task.replace()`` until the collection is caught up, holding
+  a Redis workflow lock across the chain so at most one run proceeds per collection.
 """
 
 from __future__ import annotations
@@ -26,14 +20,13 @@ from sqlalchemy.orm import Session
 from palace.util.datetime_helpers import utc_now
 from palace.util.log import LoggerType
 
+from palace.manager.celery.importer import import_workflow_lock
 from palace.manager.celery.task import Task
 from palace.manager.celery.tasks import apply
 from palace.manager.celery.utils import load_from_id
 from palace.manager.data_layer.policy.replacement import ReplacementPolicy
 from palace.manager.integration.license.bibliotheca import BibliothecaAPI
 from palace.manager.service.celery.celery import QueueNames
-from palace.manager.service.redis.models.lock import RedisLock
-from palace.manager.service.redis.redis import Redis
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.coverage import Timestamp
 from palace.manager.sqlalchemy.model.edition import Edition
@@ -57,25 +50,6 @@ _EVENT_IMPORT_OVERLAP = timedelta(minutes=5)
 _EVENT_IMPORT_SLICE_SIZE = timedelta(minutes=5)
 
 
-def _event_import_workflow_lock(
-    client: Redis, collection_id: int, random_value: str
-) -> RedisLock:
-    """Workflow-level lock spanning all slices of a single event-import run.
-
-    Held across ``task.replace()`` calls so at most one run proceeds per
-    collection.  Auto-expires after 2 hours if the worker dies mid-chain.
-    """
-    return RedisLock(
-        client,
-        [
-            "BibliothecaEventImportWorkflow",
-            Collection.redis_key_from_id(collection_id),
-        ],
-        random_value=random_value,
-        lock_timeout=timedelta(hours=2),
-    )
-
-
 def _handle_event(
     session: Session,
     api: BibliothecaAPI,
@@ -90,10 +64,9 @@ def _handle_event(
 ) -> None:
     """Process a single Bibliotheca circulation event.
 
-    Ported from ``BibliothecaEventMonitor.handle_event``.  Creates or updates the
-    ``LicensePool``, links the ISBN identifier, adjusts availability based on the
-    event delta, and queues a ``bibliographic_apply`` task when the title's metadata
-    has changed (hash-based deduplication).
+    Creates or updates the ``LicensePool``, links the ISBN identifier, adjusts
+    availability based on the event delta, and queues a ``bibliographic_apply``
+    task when the title's metadata has changed (hash-based deduplication).
     """
     license_pool, _ = LicensePool.for_foreign_id(
         session,
@@ -190,7 +163,7 @@ def import_collection(
     if lock_value is None:
         lock_value = str(uuid4())
 
-    workflow_lock = _event_import_workflow_lock(redis, collection_id, lock_value)
+    workflow_lock = import_workflow_lock(redis, collection_id, lock_value)
 
     with workflow_lock.lock(
         raise_when_not_acquired=False,

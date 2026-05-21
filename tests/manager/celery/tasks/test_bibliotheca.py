@@ -11,11 +11,9 @@ import pytest
 from palace.util.datetime_helpers import utc_now
 from palace.util.log import LogLevel
 
+from palace.manager.celery.importer import import_workflow_lock
 from palace.manager.celery.tasks import apply, bibliotheca
-from palace.manager.celery.tasks.bibliotheca import (
-    EVENT_IMPORT_SERVICE_NAME,
-    _event_import_workflow_lock,
-)
+from palace.manager.celery.tasks.bibliotheca import EVENT_IMPORT_SERVICE_NAME
 from palace.manager.integration.license.bibliotheca import BibliothecaAPI
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.collection import Collection
@@ -281,7 +279,7 @@ class TestBibliothecaImportCollection:
         collection = bibliotheca_task_fixture.collection
 
         existing_lock_value = str(uuid4())
-        workflow_lock = _event_import_workflow_lock(
+        workflow_lock = import_workflow_lock(
             redis_fixture.client, collection.id, existing_lock_value
         )
         workflow_lock.acquire()
@@ -317,7 +315,7 @@ class TestBibliothecaImportCollection:
         # Simulate the lock having expired and been re-acquired by a competing run.
         # A free lock would be acquired successfully; we need another holder so that our
         # task's lock_value (a different UUID) fails to acquire.
-        competing_lock = _event_import_workflow_lock(
+        competing_lock = import_workflow_lock(
             redis_fixture.client, collection.id, str(uuid4())
         )
         competing_lock.acquire()
@@ -374,7 +372,7 @@ class TestBibliothecaImportCollection:
                 )
 
         # Lock should be free after retries exhaust so the next run is not blocked.
-        workflow_lock = _event_import_workflow_lock(
+        workflow_lock = import_workflow_lock(
             redis_fixture.client, collection.id, random_value="any"
         )
         assert not workflow_lock.locked()
@@ -505,7 +503,7 @@ class TestBibliothecaImportCollection:
         )
 
         # Hold the lock for collection 1 only.
-        lock_c1 = _event_import_workflow_lock(redis_fixture.client, c1.id, str(uuid4()))
+        lock_c1 = import_workflow_lock(redis_fixture.client, c1.id, str(uuid4()))
         lock_c1.acquire()
 
         with patch(
