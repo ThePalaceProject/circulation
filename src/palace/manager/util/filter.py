@@ -211,7 +211,9 @@ class FilterExpression:
             TypeError,
             IndexError,
             KeyError,
+            OverflowError,
             SyntaxError,
+            ValueError,
             ZeroDivisionError,
         ) as exc:
             raise FilterExpressionError(str(exc)) from exc

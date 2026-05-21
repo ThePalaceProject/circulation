@@ -354,6 +354,22 @@ class TestFilterExpression:
                 True,
                 id="missing-context-key-raises",
             ),
+            pytest.param(
+                "int('not-a-number') == 1",
+                {},
+                None,
+                None,
+                True,
+                id="value-error-raises",
+            ),
+            pytest.param(
+                "int(float('inf')) == 1",
+                {},
+                None,
+                None,
+                True,
+                id="overflow-error-raises",
+            ),
         ],
     )
     def test_evaluate(self, expression, context, extra_safe_types, expected, raises):
