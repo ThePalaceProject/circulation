@@ -236,6 +236,15 @@ class TestFilterExpression:
                 True,
                 id="dict-dunder-setitem-blocked",
             ),
+            # Callable dict values are blocked (context-dict callable guard)
+            pytest.param(
+                "claim.action()",
+                {"claim": {"action": lambda: None}},
+                None,
+                None,
+                True,
+                id="callable-dict-value-blocked",
+            ),
             # Builtin functions
             pytest.param(
                 "min(x, y) == 1", {"x": 1, "y": 5}, None, True, False, id="builtin-min"
@@ -400,6 +409,15 @@ class TestFilterExpression:
                 False,
                 False,
                 id="missing-object-attr-returns-false",
+            ),
+            # Dunder access always raises even when missing_attribute_returns_false=True.
+            pytest.param(
+                "items.__class__ == list",
+                {"items": [1, 2]},
+                True,
+                None,
+                True,
+                id="dunder-blocked-overrides-missing-attr-fallback",
             ),
         ],
     )

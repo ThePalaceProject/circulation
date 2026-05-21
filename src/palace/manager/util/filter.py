@@ -5,7 +5,12 @@ from collections.abc import Callable, Sequence
 from typing import Any
 
 from frozendict import frozendict
-from simpleeval import EvalWithCompoundTypes, InvalidExpression, NameNotDefined
+from simpleeval import (
+    AttributeDoesNotExist,
+    EvalWithCompoundTypes,
+    InvalidExpression,
+    NameNotDefined,
+)
 
 from palace.util.exceptions import BasePalaceException
 
@@ -76,15 +81,22 @@ class _FilterEval(EvalWithCompoundTypes):  # type: ignore[misc]
         # `prop.subprop` instead of prop["subprop"].  This short-circuits
         # before super() so the key shadows any same-named dict method.
         if isinstance(obj, dict) and attr in obj:
-            return obj[attr]
-        # Delegate to parent for the prefix/method guards (DISALLOW_PREFIXES,
-        # DISALLOW_METHODS), getattr, module checks, and AttributeDoesNotExist,
-        # inheriting all simpleeval protections without reimplementing them.
+            value = obj[attr]
+            if callable(value):
+                raise FilterExpressionError(
+                    f"Callable value at key {attr!r} is not allowed"
+                )
+            return value
+        # Delegate to parent for prefix/method guards (DISALLOW_PREFIXES,
+        # DISALLOW_METHODS), getattr, module checks, and AttributeDoesNotExist.
         # node.value is evaluated a second time inside super(); that is harmless
         # because simpleeval expressions are pure.
+        # Only AttributeError and AttributeDoesNotExist (genuine "not found")
+        # are caught here; FeatureNotAvailable (security guards) propagates
+        # unconditionally regardless of missing_attribute_returns_false.
         try:
             value = super()._eval_attribute(node)
-        except (AttributeError, InvalidExpression):
+        except (AttributeError, AttributeDoesNotExist):
             if self._missing_attribute_returns_false:
                 return False
             raise
