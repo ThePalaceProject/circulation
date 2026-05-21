@@ -298,7 +298,7 @@ def beat_schedule() -> dict[str, Any]:
         },
         "bibliotheca_import_all_collections": {
             "task": bibliotheca.import_all_collections.name,
-            "schedule": crontab(minute="*/15"),  # Every 15 minutes
+            "schedule": crontab(minute="0"),  # Once an hour
         },
     }
 
