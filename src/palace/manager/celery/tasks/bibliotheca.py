@@ -3,106 +3,36 @@
 Two tasks handle near-real-time event import for Bibliotheca collections:
 
 - ``import_all_collections``: Fans out to one ``import_collection`` task per collection.
-- ``import_collection``: Processes one 5-minute slice of circulation events, then
+- ``import_collection``: Processes one time slice of circulation events, then
   re-queues itself via ``task.replace()`` until the collection is caught up, holding
   a Redis workflow lock across the chain so at most one run proceeds per collection.
 """
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from uuid import uuid4
 
 from celery import shared_task
 from celery.exceptions import Ignore
-from sqlalchemy.orm import Session
 
 from palace.util.datetime_helpers import utc_now
-from palace.util.log import LoggerType
 
 from palace.manager.celery.importer import import_workflow_lock
 from palace.manager.celery.task import Task
-from palace.manager.celery.tasks import apply
 from palace.manager.celery.utils import load_from_id
-from palace.manager.data_layer.policy.replacement import ReplacementPolicy
 from palace.manager.integration.license.bibliotheca import BibliothecaAPI
+from palace.manager.integration.license.bibliotheca_importer import (
+    EVENT_IMPORT_OVERLAP,
+    BibliothecaEventImporter,
+)
 from palace.manager.service.celery.celery import QueueNames
 from palace.manager.sqlalchemy.model.collection import Collection
-from palace.manager.sqlalchemy.model.coverage import Timestamp
-from palace.manager.sqlalchemy.model.edition import Edition
-from palace.manager.sqlalchemy.model.identifier import Identifier
-from palace.manager.sqlalchemy.model.licensing import LicensePool
 from palace.manager.util.http.exception import (
     BadResponseException,
     RemoteIntegrationException,
     RequestTimedOut,
 )
-
-EVENT_IMPORT_SERVICE_NAME = "Bibliotheca Event Import"
-
-_LOG_DATE_FORMAT = "%Y-%m-%dT%H:%M:%S"
-
-# Amount of time to overlap between consecutive event-import runs to reduce
-# the risk of missing events at the boundary.
-_EVENT_IMPORT_OVERLAP = timedelta(minutes=5)
-
-# Maximum time window processed in a single task invocation.
-_EVENT_IMPORT_SLICE_SIZE = timedelta(minutes=5)
-
-
-def _handle_event(
-    session: Session,
-    api: BibliothecaAPI,
-    collection: Collection,
-    bibliotheca_id: str,
-    isbn: str,
-    foreign_patron_id: str | None,  # present in the API payload but not acted on here
-    start_time: datetime,
-    end_time: datetime | None,
-    internal_event_type: str,
-    logger: LoggerType,
-) -> None:
-    """Process a single Bibliotheca circulation event.
-
-    Creates or updates the ``LicensePool``, links the ISBN identifier, adjusts
-    availability based on the event delta, and queues a ``bibliographic_apply``
-    task when the title's metadata has changed (hash-based deduplication).
-    """
-    license_pool, _ = LicensePool.for_foreign_id(
-        session,
-        api.data_source,
-        Identifier.BIBLIOTHECA_ID,
-        bibliotheca_id,
-        collection=collection,
-    )
-
-    # Fetch bibliographic metadata and queue an apply task only if the
-    # content hash differs from what is already stored.
-    for bibliographic in api.bibliographic_lookup(bibliotheca_id):
-        if bibliographic.needs_apply(session):
-            apply.bibliographic_apply.delay(
-                bibliographic,
-                collection_id=collection.id,
-                replace=ReplacementPolicy.from_license_source(),
-            )
-
-    bibliotheca_identifier = license_pool.identifier
-    isbn_identifier, _ = Identifier.for_foreign_id(session, Identifier.ISBN, isbn)
-
-    edition, _ = Edition.for_foreign_id(
-        session, api.data_source, Identifier.BIBLIOTHECA_ID, bibliotheca_id
-    )
-
-    bibliotheca_identifier.equivalent_to(api.data_source, isbn_identifier, strength=1)
-
-    license_pool.update_availability_from_delta(internal_event_type, start_time, 1)
-
-    logger.info(
-        "%s %s: %s",
-        start_time.strftime(_LOG_DATE_FORMAT),
-        edition.title or "[no title]",
-        internal_event_type,
-    )
 
 
 @shared_task(queue=QueueNames.default, bind=True)
@@ -138,12 +68,12 @@ def import_collection(
     start: datetime | None = None,
     lock_value: str | None = None,
 ) -> None:
-    """Process one 5-minute slice of Bibliotheca circulation events.
+    """Process one time slice of Bibliotheca circulation events.
 
     Fetches events from the Bibliotheca API for the window ``[start, slice_end]``,
     updates ``LicensePool`` availability, then re-queues itself for the next
     slice via ``task.replace()`` until the collection is caught up to
-    ``now - OVERLAP``.
+    ``now - EVENT_IMPORT_OVERLAP``.
 
     A Redis workflow lock keyed to ``collection_id`` ensures at most one chain
     runs per collection at a time.  The lock is held across both ``task.replace()``
@@ -154,8 +84,8 @@ def import_collection(
     :param start: Start of the slice to process.  ``None`` on the first
         invocation — the start is derived from the stored ``Timestamp``.
     :param lock_value: UUID identifying this workflow.  Generated on the first
-        invocation (``start is None``) and forwarded unchanged to every
-        subsequent slice so the lock is held across ``task.replace()`` calls.
+        invocation and forwarded unchanged to every subsequent slice so the
+        lock is held across ``task.replace()`` calls.
     """
     redis = task.services.redis().client()
 
@@ -185,26 +115,17 @@ def import_collection(
                 "(another run may be active)."
             )
 
-        cutoff = utc_now() - _EVENT_IMPORT_OVERLAP
-        slice_end: datetime | None = None
-        events_handled = 0
+        cutoff = utc_now() - EVENT_IMPORT_OVERLAP
+        result = None
         collection_name: str | None = None
 
         with task.transaction() as session:
             collection = load_from_id(session, Collection, collection_id)
             collection_name = collection.name
+            importer = BibliothecaEventImporter(session, collection)
 
             if start is None:
-                timestamp = Timestamp.lookup(
-                    session,
-                    EVENT_IMPORT_SERVICE_NAME,
-                    Timestamp.MONITOR_TYPE,
-                    collection,
-                )
-                if timestamp is None or timestamp.finish is None:
-                    start = cutoff - _EVENT_IMPORT_OVERLAP
-                else:
-                    start = timestamp.finish - _EVENT_IMPORT_OVERLAP
+                start = importer.get_start(cutoff)
 
             if start >= cutoff:
                 task.log.info(
@@ -212,44 +133,22 @@ def import_collection(
                 )
                 return
 
-            slice_end = min(start + _EVENT_IMPORT_SLICE_SIZE, cutoff)
+            result = importer.import_time_slice(start, cutoff)
 
-            api = BibliothecaAPI(session, collection)
-
-            task.log.info(
-                f"Bibliotheca event import: requesting events for '{collection_name}' "
-                f"between {start.strftime(_LOG_DATE_FORMAT)} and "
-                f"{slice_end.strftime(_LOG_DATE_FORMAT)}."
-            )
-
-            for event_tuple in api.get_events_between(start, slice_end):
-                _handle_event(session, api, collection, *event_tuple, logger=task.log)
-                events_handled += 1
-
-            Timestamp.stamp(
-                session,
-                service=EVENT_IMPORT_SERVICE_NAME,
-                service_type=Timestamp.MONITOR_TYPE,
-                collection=collection,
-                start=start,
-                finish=slice_end,
-                achievements=f"Events handled: {events_handled}.",
-            )
-
-        # Control flow guarantees slice_end was assigned inside the transaction.
-        assert slice_end is not None
+        assert result is not None
 
         task.log.info(
-            f"Bibliotheca event import: handled {events_handled} event(s) for "
-            f"'{collection_name}' ({start.strftime(_LOG_DATE_FORMAT)} -> "
-            f"{slice_end.strftime(_LOG_DATE_FORMAT)})."
+            f"Bibliotheca event import: handled {result.events_handled} event(s) for "
+            f"'{collection_name}' "
+            f"({result.slice_start.strftime('%Y-%m-%dT%H:%M:%S')} -> "
+            f"{result.slice_end.strftime('%Y-%m-%dT%H:%M:%S')})."
         )
 
-        if slice_end < cutoff:
+        if result.slice_end < cutoff:
             raise task.replace(
                 task.s(
                     collection_id=collection_id,
-                    start=slice_end,
+                    start=result.slice_end,
                     lock_value=lock_value,
                 )
             )

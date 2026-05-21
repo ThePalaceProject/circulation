@@ -13,8 +13,10 @@ from palace.util.log import LogLevel
 
 from palace.manager.celery.importer import import_workflow_lock
 from palace.manager.celery.tasks import apply, bibliotheca
-from palace.manager.celery.tasks.bibliotheca import EVENT_IMPORT_SERVICE_NAME
 from palace.manager.integration.license.bibliotheca import BibliothecaAPI
+from palace.manager.integration.license.bibliotheca_importer import (
+    EVENT_IMPORT_SERVICE_NAME,
+)
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.coverage import Timestamp
@@ -117,7 +119,7 @@ class TestBibliothecaImportAllCollections:
 
 
 class TestBibliothecaImportCollection:
-    @patch("palace.manager.celery.tasks.bibliotheca.BibliothecaAPI")
+    @patch("palace.manager.integration.license.bibliotheca_importer.BibliothecaAPI")
     def test_creates_timestamp_on_first_run(
         self,
         mock_api_cls: MagicMock,
@@ -135,7 +137,7 @@ class TestBibliothecaImportCollection:
         assert ts is not None
         assert ts.finish is not None
 
-    @patch("palace.manager.celery.tasks.bibliotheca.BibliothecaAPI")
+    @patch("palace.manager.integration.license.bibliotheca_importer.BibliothecaAPI")
     def test_starts_from_stored_timestamp(
         self,
         mock_api_cls: MagicMock,
@@ -166,7 +168,7 @@ class TestBibliothecaImportCollection:
         expected_start = one_hour_ago - timedelta(minutes=5)
         assert abs((slice_start - expected_start).total_seconds()) < 2
 
-    @patch("palace.manager.celery.tasks.bibliotheca.BibliothecaAPI")
+    @patch("palace.manager.integration.license.bibliotheca_importer.BibliothecaAPI")
     def test_already_up_to_date(
         self,
         mock_api_cls: MagicMock,
@@ -185,7 +187,7 @@ class TestBibliothecaImportCollection:
 
         mock_api_cls.return_value.get_events_between.assert_not_called()
 
-    @patch("palace.manager.celery.tasks.bibliotheca.BibliothecaAPI")
+    @patch("palace.manager.integration.license.bibliotheca_importer.BibliothecaAPI")
     def test_replaces_when_more_slices_remain(
         self,
         mock_api_cls: MagicMock,
@@ -217,7 +219,7 @@ class TestBibliothecaImportCollection:
         # The next start should be approximately 5 minutes after the slice started.
         assert replace_sig.kwargs["start"] is not None
 
-    @patch("palace.manager.celery.tasks.bibliotheca.BibliothecaAPI")
+    @patch("palace.manager.integration.license.bibliotheca_importer.BibliothecaAPI")
     def test_no_replace_on_last_slice(
         self,
         mock_api_cls: MagicMock,
@@ -239,7 +241,7 @@ class TestBibliothecaImportCollection:
 
         mock_replace.assert_not_called()
 
-    @patch("palace.manager.celery.tasks.bibliotheca.BibliothecaAPI")
+    @patch("palace.manager.integration.license.bibliotheca_importer.BibliothecaAPI")
     def test_lock_value_passed_through_on_replace(
         self,
         mock_api_cls: MagicMock,
@@ -287,7 +289,7 @@ class TestBibliothecaImportCollection:
         caplog.set_level(LogLevel.warning)
 
         with patch(
-            "palace.manager.celery.tasks.bibliotheca.BibliothecaAPI"
+            "palace.manager.integration.license.bibliotheca_importer.BibliothecaAPI"
         ) as mock_api_cls:
             bibliotheca.import_collection.delay(collection_id=collection.id).wait()
             mock_api_cls.return_value.get_events_between.assert_not_called()
@@ -323,7 +325,7 @@ class TestBibliothecaImportCollection:
         caplog.set_level(LogLevel.warning)
 
         with patch(
-            "palace.manager.celery.tasks.bibliotheca.BibliothecaAPI"
+            "palace.manager.integration.license.bibliotheca_importer.BibliothecaAPI"
         ) as mock_api_cls:
             mock_api_cls.return_value.get_events_between.return_value = iter([])
             # Pass a lock_value that does not match the competing lock so acquire fails,
@@ -356,7 +358,7 @@ class TestBibliothecaImportCollection:
         mock_response = MockRequestsResponse(500, content="Internal Server Error")
 
         with patch(
-            "palace.manager.celery.tasks.bibliotheca.BibliothecaAPI"
+            "palace.manager.integration.license.bibliotheca_importer.BibliothecaAPI"
         ) as mock_api_cls:
             mock_api_cls.return_value.get_events_between.side_effect = (
                 BadResponseException("http://test.com", "Bad response", mock_response)
@@ -450,7 +452,7 @@ class TestBibliothecaImportCollection:
         assert ts.finish is not None
         assert ts.finish > ten_minutes_ago
 
-    @patch("palace.manager.celery.tasks.bibliotheca.BibliothecaAPI")
+    @patch("palace.manager.integration.license.bibliotheca_importer.BibliothecaAPI")
     def test_timestamp_updated_after_each_slice(
         self,
         mock_api_cls: MagicMock,
@@ -504,7 +506,7 @@ class TestBibliothecaImportCollection:
         lock_c1.acquire()
 
         with patch(
-            "palace.manager.celery.tasks.bibliotheca.BibliothecaAPI"
+            "palace.manager.integration.license.bibliotheca_importer.BibliothecaAPI"
         ) as mock_api_cls2:
             mock_api_cls2.return_value.get_events_between.return_value = iter([])
             # Collection 2 should process normally.
