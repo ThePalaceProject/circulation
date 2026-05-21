@@ -143,8 +143,12 @@ class FilterExpression:
         access that raises ``AttributeError`` — a missing dict sub-key via
         dot notation, or a missing object attribute — returns ``False``
         instead of raising :class:`FilterExpressionError`. Defaults to
-        ``False`` (raise on missing attributes). Operators can also use
-        ``.get()`` with a default to handle optional attributes explicitly.
+        ``False`` (raise on missing attributes). Note that only the missing
+        access itself is suppressed; downstream operations on the resulting
+        ``False`` are evaluated normally. In particular, chained method calls
+        on a missing attribute (e.g. ``claim.role.lower() == 'student'``) will
+        raise because ``False`` is not callable. Use ``.get()`` with a default
+        to handle such cases: ``claim.get('role', '').lower() == 'student'``.
     """
 
     def __init__(

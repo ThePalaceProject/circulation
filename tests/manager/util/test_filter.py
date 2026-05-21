@@ -428,6 +428,16 @@ class TestFilterExpression:
                 True,
                 id="dunder-blocked-overrides-missing-attr-fallback",
             ),
+            # Chained method call on a missing attribute raises because the
+            # suppressed access returns False, and False is not callable.
+            pytest.param(
+                "claim.role.lower() == 'student'",
+                {"claim": {}},
+                True,
+                None,
+                True,
+                id="missing-attr-method-chain-raises",
+            ),
         ],
     )
     def test_evaluate_missing_attribute(
