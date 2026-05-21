@@ -42,28 +42,47 @@ def import_key(collection_id: int, *additional: str) -> list[str]:
     ]
 
 
-def import_workflow_key(collection_id: int) -> list[str]:
+def import_workflow_key(
+    collection_id: int, workflow_name: str | None = None
+) -> list[str]:
     """
     Generate a Redis key for the workflow-level lock for the given collection.
+
+    :param collection_id: Database ID of the collection.
+    :param workflow_name: Optional name that scopes the lock to a specific
+        workflow within the collection.  When omitted the key is
+        ``ImportCollectionWorkflow::<collection>``, which is the existing
+        behaviour used by Overdrive, Boundless, and OPDS-ODL.  Pass a name
+        (e.g. ``"EventImport"``) when the same collection participates in
+        multiple independent workflows that must not block each other.
     """
-    return [
-        "ImportCollectionWorkflow",
-        Collection.redis_key_from_id(collection_id),
-    ]
+    key: list[str] = ["ImportCollectionWorkflow"]
+    if workflow_name is not None:
+        key.append(workflow_name)
+    key.append(Collection.redis_key_from_id(collection_id))
+    return key
 
 
 def import_workflow_lock(
-    client: Redis, collection_id: int, random_value: str
+    client: Redis,
+    collection_id: int,
+    random_value: str,
+    workflow_name: str | None = None,
 ) -> RedisLock:
     """
     Create a workflow-level lock spanning all pages of a single import run.
 
     This lock is held across page boundaries (between task.replace() calls)
     to ensure at most one import runs per collection at a time.
+
+    :param client: Redis client.
+    :param collection_id: Database ID of the collection.
+    :param random_value: UUID that identifies this workflow instance.
+    :param workflow_name: Optional workflow scope; see :func:`import_workflow_key`.
     """
     return RedisLock(
         client,
-        import_workflow_key(collection_id),
+        import_workflow_key(collection_id, workflow_name),
         random_value=random_value,
         lock_timeout=timedelta(hours=2),
     )

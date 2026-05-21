@@ -163,7 +163,9 @@ def import_collection(
     if lock_value is None:
         lock_value = str(uuid4())
 
-    workflow_lock = import_workflow_lock(redis, collection_id, lock_value)
+    workflow_lock = import_workflow_lock(
+        redis, collection_id, lock_value, workflow_name="EventImport"
+    )
 
     with workflow_lock.lock(
         raise_when_not_acquired=False,
