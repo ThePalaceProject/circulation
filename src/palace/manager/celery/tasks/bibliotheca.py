@@ -38,7 +38,7 @@ from palace.manager.util.http.exception import (
     RequestTimedOut,
 )
 
-EVENT_IMPORT_SERVICE_NAME = "Bibliotheca Event Monitor"
+EVENT_IMPORT_SERVICE_NAME = "Bibliotheca Event Import"
 
 _LOG_DATE_FORMAT = "%Y-%m-%dT%H:%M:%S"
 
