@@ -17,8 +17,19 @@ class GoogleDriveService(LoggerMixin):
         self.api_client = api_client
 
     def get_file(self, name: str, parent_folder_id: str | None = None) -> File | None:
+        """
+        Return the first non-trashed file or folder with the given name.
 
-        query = f"name = '{name}'"
+        :param name: The exact name to search for.
+        :param parent_folder_id: If provided, restrict the search to items
+            whose parent is this folder/drive ID.
+        :return: The first matching, non-trashed ``File`` object, or ``None``
+            if no match is found.
+        """
+        # Explicitly exclude trashed items so that a folder moved to the
+        # Drive trash is not mistaken for a live folder, which would cause
+        # uploads to land inside a trashed (invisible) directory.
+        query = f"name = '{name}' and trashed = false"
 
         if parent_folder_id:
             query += f" and '{parent_folder_id}' in parents"
