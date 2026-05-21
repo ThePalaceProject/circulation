@@ -26,7 +26,9 @@ _LOG_DATE_FORMAT = "%Y-%m-%dT%H:%M:%S"
 # the risk of missing events at the boundary.
 EVENT_IMPORT_OVERLAP = timedelta(minutes=5)
 
-# Default slice size: one 5-minute window per task invocation.
+# Default slice size: one 5-minute window per task invocation.  Intentionally
+# equal to EVENT_IMPORT_OVERLAP so that each slice re-covers the tail of the
+# previous one, minimising the chance of missing events at the boundary.
 DEFAULT_SLICE_SIZE = timedelta(minutes=5)
 
 
@@ -76,6 +78,7 @@ class BibliothecaEventImporter(LoggerMixin):
 
         :param cutoff: The upper bound of the import window (typically
             ``utc_now() - EVENT_IMPORT_OVERLAP``).
+        :returns: The start datetime for the next import slice.
         """
         timestamp = Timestamp.lookup(
             self._session,
@@ -117,8 +120,15 @@ class BibliothecaEventImporter(LoggerMixin):
             f"{slice_end.strftime(_LOG_DATE_FORMAT)}."
         )
 
-        for event_tuple in self._api.get_events_between(start, slice_end):
-            self._handle_event(*event_tuple)
+        for (
+            bibliotheca_id,
+            isbn,
+            _foreign_patron_id,
+            start_time,
+            _end_time,
+            internal_event_type,
+        ) in self._api.get_events_between(start, slice_end):
+            self._handle_event(bibliotheca_id, isbn, start_time, internal_event_type)
             events_handled += 1
 
         Timestamp.stamp(
@@ -141,11 +151,7 @@ class BibliothecaEventImporter(LoggerMixin):
         self,
         bibliotheca_id: str,
         isbn: str,
-        foreign_patron_id: (
-            str | None
-        ),  # present in the API payload but not acted on here
         start_time: datetime,
-        end_time: datetime | None,
         internal_event_type: str,
     ) -> None:
         """Process a single Bibliotheca circulation event.
@@ -154,6 +160,12 @@ class BibliothecaEventImporter(LoggerMixin):
         adjusts availability based on the event delta, and queues a
         ``bibliographic_apply`` task when the title's metadata has changed
         (hash-based deduplication).
+
+        :param bibliotheca_id: Bibliotheca's identifier for the item.
+        :param isbn: ISBN of the item, used to create an equivalency link.
+        :param start_time: Timestamp of the event.
+        :param internal_event_type: Normalised circulation event type (e.g.
+            ``CirculationEvent.DISTRIBUTOR_LICENSE_ADD``).
         """
         license_pool, _ = LicensePool.for_foreign_id(
             self._session,

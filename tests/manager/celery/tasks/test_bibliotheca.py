@@ -20,11 +20,9 @@ from palace.manager.integration.license.bibliotheca_importer import (
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.coverage import Timestamp
-from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.util.http.exception import BadResponseException
 from tests.fixtures.celery import CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
-from tests.fixtures.files import BibliothecaFilesFixture
 from tests.fixtures.redis import RedisFixture
 from tests.mocks.bibliotheca import MockBibliothecaAPI
 from tests.mocks.mock import MockRequestsResponse
@@ -33,13 +31,8 @@ from tests.mocks.mock import MockRequestsResponse
 class BibliothecaTaskFixture:
     """Common setup for Bibliotheca Celery task tests."""
 
-    def __init__(
-        self,
-        db: DatabaseTransactionFixture,
-        files: BibliothecaFilesFixture,
-    ) -> None:
+    def __init__(self, db: DatabaseTransactionFixture) -> None:
         self.db = db
-        self.files = files
         self.collection = MockBibliothecaAPI.mock_collection(
             db.session, db.default_library()
         )
@@ -74,9 +67,8 @@ class BibliothecaTaskFixture:
 @pytest.fixture
 def bibliotheca_task_fixture(
     db: DatabaseTransactionFixture,
-    bibliotheca_files_fixture: BibliothecaFilesFixture,
 ) -> BibliothecaTaskFixture:
-    return BibliothecaTaskFixture(db, bibliotheca_files_fixture)
+    return BibliothecaTaskFixture(db)
 
 
 class TestBibliothecaImportAllCollections:
@@ -169,6 +161,35 @@ class TestBibliothecaImportCollection:
         assert abs((slice_start - expected_start).total_seconds()) < 2
 
     @patch("palace.manager.integration.license.bibliotheca_importer.BibliothecaAPI")
+    def test_explicit_start_used_directly(
+        self,
+        mock_api_cls: MagicMock,
+        bibliotheca_task_fixture: BibliothecaTaskFixture,
+        celery_fixture: CeleryFixture,
+        redis_fixture: RedisFixture,
+    ) -> None:
+        """When an explicit ``start`` is supplied (the chained-slice path), it is
+        passed directly to the API without consulting the stored Timestamp."""
+        mock_api = mock_api_cls.return_value
+        mock_api.get_events_between.return_value = iter([])
+        collection = bibliotheca_task_fixture.collection
+
+        explicit_start = utc_now() - timedelta(hours=2)
+        lock_value = str(uuid4())
+
+        with patch.object(bibliotheca.import_collection, "replace") as mock_replace:
+            mock_replace.side_effect = Exception("replaced")
+            with pytest.raises(Exception, match="replaced"):
+                bibliotheca.import_collection.delay(
+                    collection_id=collection.id,
+                    start=explicit_start,
+                    lock_value=lock_value,
+                ).wait()
+
+        slice_start, _ = mock_api.get_events_between.call_args.args
+        assert abs((slice_start - explicit_start).total_seconds()) < 1
+
+    @patch("palace.manager.integration.license.bibliotheca_importer.BibliothecaAPI")
     def test_already_up_to_date(
         self,
         mock_api_cls: MagicMock,
@@ -240,6 +261,7 @@ class TestBibliothecaImportCollection:
             bibliotheca.import_collection.delay(collection_id=collection.id).wait()
 
         mock_replace.assert_not_called()
+        mock_api_cls.return_value.get_events_between.assert_called_once()
 
     @patch("palace.manager.integration.license.bibliotheca_importer.BibliothecaAPI")
     def test_lock_value_passed_through_on_replace(
@@ -376,21 +398,20 @@ class TestBibliothecaImportCollection:
         )
         assert workflow_lock.locked()
 
-    def test_events_processed_and_timestamp_updated(
+    def test_events_processed_end_to_end(
         self,
         bibliotheca_task_fixture: BibliothecaTaskFixture,
         celery_fixture: CeleryFixture,
         redis_fixture: RedisFixture,
     ) -> None:
-        """Integration: events are processed end-to-end — LicensePool created, ISBN
-        linked, availability updated, bibliographic_apply queued, Timestamp advanced."""
+        """Smoke test: the full Celery task path processes an event and advances the
+        Timestamp.  Detailed event-handling assertions live in test_bibliotheca_importer.
+        """
         collection = bibliotheca_task_fixture.collection
 
-        # Stamp a timestamp 10 minutes ago so there is one slice to process.
         ten_minutes_ago = utc_now() - timedelta(minutes=10)
         bibliotheca_task_fixture.stamp_event_import(finish=ten_minutes_ago)
 
-        # Fake one PURCHASE event for item 'd5rf89'; PURCHASE → DISTRIBUTOR_LICENSE_ADD.
         event_time = datetime(2016, 4, 28, 11, 4, 6, tzinfo=timezone.utc)
         fake_event = (
             "d5rf89",
@@ -401,52 +422,27 @@ class TestBibliothecaImportCollection:
             CirculationEvent.DISTRIBUTOR_LICENSE_ADD,
         )
 
-        # Return a fake BibliographicData that always reports needs_apply=True so
-        # the apply task is queued without making a real HTTP call.
         mock_bib = MagicMock()
         mock_bib.needs_apply.return_value = True
 
         with (
-            # Patch at the class level so the real BibliothecaAPI constructor runs.
             patch.object(
                 BibliothecaAPI, "get_events_between", return_value=iter([fake_event])
             ),
             patch.object(
                 BibliothecaAPI, "bibliographic_lookup", return_value=[mock_bib]
             ),
-            patch.object(apply, "bibliographic_apply") as mock_apply,
+            patch.object(apply, "bibliographic_apply"),
         ):
             bibliotheca.import_collection.delay(collection_id=collection.id).wait()
 
-        # A LicensePool should exist for the event's item identifier.
+        # A LicensePool was created — the task reached the importer.
         pools = [
             lp for lp in collection.licensepools if lp.identifier.identifier == "d5rf89"
         ]
         assert len(pools) == 1
-        pool = pools[0]
 
-        # The DISTRIBUTOR_LICENSE_ADD event should have incremented licenses_owned
-        # and licenses_available by 1.
-        assert pool.licenses_owned == 1
-        assert pool.licenses_available == 1
-
-        # The Bibliotheca identifier and ISBN should be marked equivalent.
-        isbn_identifier = (
-            bibliotheca_task_fixture.db.session.query(Identifier)
-            .filter_by(type=Identifier.ISBN, identifier="9781101190623")
-            .one_or_none()
-        )
-        assert isbn_identifier is not None
-        equivalencies = [
-            eq for eq in pool.identifier.equivalencies if eq.output == isbn_identifier
-        ]
-        assert len(equivalencies) == 1
-        assert equivalencies[0].strength == 1
-
-        # bibliographic_apply should have been queued once (for the single event).
-        mock_apply.delay.assert_called_once()
-
-        # Timestamp should have been updated.
+        # Timestamp was advanced past the slice.
         ts = bibliotheca_task_fixture.get_event_import_timestamp()
         assert ts is not None
         assert ts.finish is not None
