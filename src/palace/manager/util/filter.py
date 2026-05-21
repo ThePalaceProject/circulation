@@ -28,9 +28,10 @@ _ALWAYS_SAFE_TYPES: frozenset[type[Any]] = frozenset(
 )
 
 # Named mutation methods for the mutable types in _ALWAYS_SAFE_TYPES (list and dict)
-# as of Python 3.12.  Dunder variants (__setitem__, __delitem__, etc.) are already
-# blocked by simpleeval's private-attribute guard.  If Python adds new named mutation
-# methods to list or dict in a future version, this set must be updated.
+# as of Python 3.12.  Dunder variants (__setitem__, __delitem__, etc.) are blocked by
+# simpleeval's DISALLOW_PREFIXES guard, which _eval_attribute delegates to via super().
+# If Python adds new named mutation methods to list or dict in a future version, this
+# set must be updated.
 _MUTATION_METHODS: frozenset[str] = frozenset(
     {
         "append",
@@ -72,12 +73,18 @@ class _FilterEval(EvalWithCompoundTypes):  # type: ignore[misc]
         obj = self._eval(node.value)
         attr = node.attr
         # For dicts, key lookup takes precedence so callers can write
-        # `prop.subprop` instead of prop["subprop"].
+        # `prop.subprop` instead of prop["subprop"].  This short-circuits
+        # before super() so the key shadows any same-named dict method.
         if isinstance(obj, dict) and attr in obj:
             return obj[attr]
+        # Delegate to parent for the prefix/method guards (DISALLOW_PREFIXES,
+        # DISALLOW_METHODS), getattr, module checks, and AttributeDoesNotExist,
+        # inheriting all simpleeval protections without reimplementing them.
+        # node.value is evaluated a second time inside super(); that is harmless
+        # because simpleeval expressions are pure.
         try:
-            value = getattr(obj, attr)
-        except AttributeError:
+            value = super()._eval_attribute(node)
+        except (AttributeError, InvalidExpression):
             if self._missing_attribute_returns_false:
                 return False
             raise

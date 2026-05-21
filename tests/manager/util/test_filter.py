@@ -219,6 +219,23 @@ class TestFilterExpression:
                 True,
                 id="dict-update-raises",
             ),
+            # Dunder attributes are blocked (simpleeval DISALLOW_PREFIXES guard)
+            pytest.param(
+                "items.__setitem__(0, 'evil')",
+                {"items": ["a", "b"]},
+                None,
+                None,
+                True,
+                id="dunder-setitem-blocked",
+            ),
+            pytest.param(
+                "d.__setitem__('k', 'v')",
+                {"d": {"a": 1}},
+                None,
+                None,
+                True,
+                id="dict-dunder-setitem-blocked",
+            ),
             # Builtin functions
             pytest.param(
                 "min(x, y) == 1", {"x": 1, "y": 5}, None, True, False, id="builtin-min"
