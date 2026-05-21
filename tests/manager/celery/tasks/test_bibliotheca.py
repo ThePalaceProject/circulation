@@ -280,10 +280,7 @@ class TestBibliothecaImportCollection:
 
         existing_lock_value = str(uuid4())
         workflow_lock = import_workflow_lock(
-            redis_fixture.client,
-            collection.id,
-            existing_lock_value,
-            workflow_name="EventImport",
+            redis_fixture.client, collection.id, existing_lock_value
         )
         workflow_lock.acquire()
 
@@ -319,10 +316,7 @@ class TestBibliothecaImportCollection:
         # A free lock would be acquired successfully; we need another holder so that our
         # task's lock_value (a different UUID) fails to acquire.
         competing_lock = import_workflow_lock(
-            redis_fixture.client,
-            collection.id,
-            str(uuid4()),
-            workflow_name="EventImport",
+            redis_fixture.client, collection.id, str(uuid4())
         )
         competing_lock.acquire()
 
@@ -379,10 +373,7 @@ class TestBibliothecaImportCollection:
 
         # Lock should be free after retries exhaust so the next run is not blocked.
         workflow_lock = import_workflow_lock(
-            redis_fixture.client,
-            collection.id,
-            random_value="any",
-            workflow_name="EventImport",
+            redis_fixture.client, collection.id, random_value="any"
         )
         assert not workflow_lock.locked()
 
@@ -512,9 +503,7 @@ class TestBibliothecaImportCollection:
         )
 
         # Hold the lock for collection 1 only.
-        lock_c1 = import_workflow_lock(
-            redis_fixture.client, c1.id, str(uuid4()), workflow_name="EventImport"
-        )
+        lock_c1 = import_workflow_lock(redis_fixture.client, c1.id, str(uuid4()))
         lock_c1.acquire()
 
         with patch(
