@@ -194,6 +194,8 @@ def import_collection(
 
     with workflow_lock.lock(
         raise_when_not_acquired=False,
+        # task.replace() raises Ignore; listing it here keeps the lock alive
+        # across the re-queue so the chain holds the lock for all its slices.
         ignored_exceptions=(Ignore,),
     ) as workflow_lock_acquired:
         if not workflow_lock_acquired and is_first_slice:
