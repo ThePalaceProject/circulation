@@ -91,9 +91,6 @@ class _FilterEval(EvalWithCompoundTypes):  # type: ignore[misc]
         # DISALLOW_METHODS), getattr, module checks, and AttributeDoesNotExist.
         # node.value is evaluated a second time inside super(); that is harmless
         # because simpleeval expressions are pure.
-        # Only AttributeError and AttributeDoesNotExist (genuine "not found")
-        # are caught here; FeatureNotAvailable (security guards) propagates
-        # unconditionally regardless of missing_attribute_returns_false.
         try:
             value = super()._eval_attribute(node)
         except (AttributeError, AttributeDoesNotExist):
@@ -186,6 +183,7 @@ class FilterExpression:
         """
         # A new evaluator is constructed per call rather than mutating a shared
         # instance, so FilterExpression is safe to call from multiple threads.
+        # Note: `functions` parameter requires a mutable mapping.
         evaluator = _FilterEval(
             extra_safe_types=self._extra_safe_types,
             missing_attribute_returns_false=self._missing_attribute_returns_false,

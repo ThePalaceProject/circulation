@@ -92,6 +92,14 @@ class TestFilterExpression:
                 False,
                 id="disjunction-true",
             ),
+            pytest.param(
+                "x == 9 or y == 9",
+                {"x": 1, "y": 2},
+                None,
+                False,
+                False,
+                id="disjunction-false",
+            ),
             # Dict dot-access (claim-style context)
             pytest.param(
                 "claim.ou == 'student'",
@@ -253,7 +261,8 @@ class TestFilterExpression:
                 "max(x, y) == 5", {"x": 1, "y": 5}, None, True, False, id="builtin-max"
             ),
             pytest.param("abs(x) == 5", {"x": -5}, None, True, False, id="builtin-abs"),
-            # in operator against a non-dict object attribute
+            # Non-callable object attributes are accessible on any type;
+            # the safe-type check only fires on callable (method) results.
             pytest.param(
                 "'eresources' in library.entitlements",
                 {
