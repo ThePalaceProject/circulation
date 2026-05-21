@@ -339,15 +339,15 @@ class TestBibliothecaImportCollection:
 
         competing_lock.release()
 
-    def test_lock_released_on_autoretry(
+    def test_lock_not_released_on_autoretry(
         self,
         bibliotheca_task_fixture: BibliothecaTaskFixture,
         celery_fixture: CeleryFixture,
         redis_fixture: RedisFixture,
     ) -> None:
-        """When a retryable exception is raised the workflow lock is released so that
-        subsequent retries (and the next beat tick) can re-acquire it and resume from
-        the last committed Timestamp position."""
+        """When a retryable exception is raised the workflow lock is held so that
+        a concurrent run cannot start on the same collection while retries are
+        in progress."""
         collection = bibliotheca_task_fixture.collection
         bibliotheca_task_fixture.stamp_event_import(
             finish=utc_now() - timedelta(minutes=10)
@@ -363,19 +363,16 @@ class TestBibliothecaImportCollection:
             )
 
             with celery_fixture.patch_retry_backoff():
-                # All retries re-acquire the free lock and fail again.  Use
-                # propagate=False so the BadResponseException (which Celery
-                # re-raises as a generic Exception after serialisation) does
-                # not surface in the test.
                 bibliotheca.import_collection.delay(collection_id=collection.id).get(
                     propagate=False
                 )
 
-        # Lock should be free after retries exhaust so the next run is not blocked.
+        # Lock should still be held after retries exhaust — it will expire via
+        # the 2-hour Redis TTL, preventing a concurrent run from starting.
         workflow_lock = import_workflow_lock(
             redis_fixture.client, collection.id, random_value="any"
         )
-        assert not workflow_lock.locked()
+        assert workflow_lock.locked()
 
     def test_events_processed_and_timestamp_updated(
         self,
