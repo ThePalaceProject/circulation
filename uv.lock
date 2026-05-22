@@ -1822,15 +1822,6 @@ wheels = [
 ]
 
 [[package]]
-name = "multipledispatch"
-version = "1.0.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/fe/3e/a62c3b824c7dec33c4a1578bcc842e6c30300051033a4e5975ed86cc2536/multipledispatch-1.0.0.tar.gz", hash = "sha256:5c839915465c68206c3e9c473357908216c28383b425361e5d144594bf85a7e0", size = 12385, upload-time = "2023-06-27T16:45:11.074Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/51/c0/00c9809d8b9346eb238a6bbd5f83e846a4ce4503da94a4c08cb7284c325b/multipledispatch-1.0.0-py3-none-any.whl", hash = "sha256:0c53cd8b077546da4e48869f49b13164bebafd0c2a5afceb6bb6a316e7fb46e4", size = 12818, upload-time = "2023-06-27T16:45:09.418Z" },
-]
-
-[[package]]
 name = "mypy"
 version = "2.1.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2082,7 +2073,6 @@ dependencies = [
     { name = "jwcrypto" },
     { name = "levenshtein" },
     { name = "lxml", extra = ["html-clean"] },
-    { name = "multipledispatch" },
     { name = "nameparser" },
     { name = "openpyxl" },
     { name = "opensearch-py" },
@@ -2100,7 +2090,6 @@ dependencies = [
     { name = "pyld" },
     { name = "pymarc" },
     { name = "pyopenssl" },
-    { name = "pyparsing" },
     { name = "pyspellchecker" },
     { name = "python-dateutil" },
     { name = "python3-saml" },
@@ -2190,7 +2179,6 @@ requires-dist = [
     { name = "jwcrypto", specifier = ">=1.4.2,<2" },
     { name = "levenshtein", specifier = ">=0.27,<0.28" },
     { name = "lxml", extras = ["html-clean"], specifier = "==6.1.1" },
-    { name = "multipledispatch", specifier = ">=1.0,<2" },
     { name = "nameparser", specifier = ">=1.1,<2" },
     { name = "openpyxl", specifier = ">=3.1,<4" },
     { name = "opensearch-py", specifier = ">=3.2.0,<4" },
@@ -2208,7 +2196,6 @@ requires-dist = [
     { name = "pyld", specifier = "==3.0.0" },
     { name = "pymarc", specifier = "==5.3.1" },
     { name = "pyopenssl", specifier = ">=26.0.0,<27" },
-    { name = "pyparsing", specifier = "==3.3.2" },
     { name = "pyspellchecker", specifier = "==0.9.0" },
     { name = "python-dateutil", specifier = "==2.9.0.post0" },
     { name = "python3-saml", specifier = ">=1.16,<2" },

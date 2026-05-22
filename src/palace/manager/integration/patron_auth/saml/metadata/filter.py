@@ -23,8 +23,11 @@ class SAMLSubjectFilterError(BasePalaceException):
 class SAMLSubjectFilter:
     """Executes filter expressions against SAML subjects using FilterExpression."""
 
-    _SAFE_TYPES: frozenset[type] = frozenset(
-        {SAMLSubject, SAMLNameID, SAMLAttributeStatement, SAMLAttribute}
+    _SAFE_TYPES: tuple[type, ...] = (
+        SAMLSubject,
+        SAMLNameID,
+        SAMLAttributeStatement,
+        SAMLAttribute,
     )
 
     def __init__(self) -> None:
@@ -46,7 +49,7 @@ class SAMLSubjectFilter:
 
         try:
             result = FilterExpression(
-                expression, extra_safe_types=list(self._SAFE_TYPES)
+                expression, extra_safe_types=self._SAFE_TYPES
             ).evaluate({"subject": subject})
         except FilterExpressionError as exc:
             raise SAMLSubjectFilterError(exc) from exc

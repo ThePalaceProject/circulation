@@ -69,7 +69,6 @@ dependencies = [
     "jwcrypto>=1.4.2,<2",
     "levenshtein>=0.27,<0.28",
     "lxml[html-clean]==6.1.1",
-    "multipledispatch>=1.0,<2",
     "nameparser>=1.1,<2",  # nameparser is for author name manipulations
     "openpyxl>=3.1,<4",
     "opensearch-py>=3.2.0,<4",
@@ -87,7 +86,6 @@ dependencies = [
     "PyLD==3.0.0",
     "pymarc==5.3.1",
     "pyOpenSSL>=26.0.0,<27",
-    "pyparsing==3.3.2",
     "pyspellchecker==0.9.0",
     "python-dateutil==2.9.0.post0",
     "python3-saml>=1.16,<2",  # python-saml is required for SAML authentication
@@ -349,7 +347,6 @@ module = [
     "jwcrypto.*",
     "kombu.*",
     "lxml.*",
-    "multipledispatch",
     "nameparser",
     "onelogin.saml2.*",
     # This is ignored because the file is created when building a container
