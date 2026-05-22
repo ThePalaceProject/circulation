@@ -19,11 +19,11 @@ from palace.manager.sqlalchemy.model.coverage import Timestamp
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import LicensePool
 
-PURCHASE_SERVICE_NAME = "Bibliotheca Purchase Monitor"
+PURCHASE_RECORD_SERVICE_NAME = "Bibliotheca Purchase Record Importer"
 
-# The purchase monitor starts from this date when no prior Timestamp exists.
+# The importer starts from this date when no prior Timestamp exists.
 # Bibliotheca collections typically go back to 2014-01-01.
-DEFAULT_PURCHASE_START_TIME = datetime_utc(2014, 1, 1)
+DEFAULT_PURCHASE_RECORD_START_TIME = datetime_utc(2014, 1, 1)
 
 _LOG_DATE_FORMAT = "%Y-%m-%dT%H:%M:%S"
 
@@ -51,7 +51,7 @@ class DayImportResult:
     next_offset: int | None
 
 
-class BibliothecaPurchaseImporter(LoggerMixin):
+class BibliothecaPurchaseRecordImporter(LoggerMixin):
     """Imports Bibliotheca MARC purchase records one page at a time.
 
     Each call to :meth:`import_day` processes one API page (up to
@@ -80,20 +80,20 @@ class BibliothecaPurchaseImporter(LoggerMixin):
     def get_start(self) -> datetime:
         """Return the start of the next day to import from the stored ``Timestamp``.
 
-        Falls back to :data:`DEFAULT_PURCHASE_START_TIME` (2014-01-01) when no
+        Falls back to :data:`DEFAULT_PURCHASE_RECORD_START_TIME` (2014-01-01) when no
         prior run has been recorded, so the first run begins a full historical
-        backfill from the earliest possible purchase date.
+        backfill from the earliest possible purchase record date.
 
         :returns: The start datetime for the next import day.
         """
         timestamp = Timestamp.lookup(
             self._session,
-            PURCHASE_SERVICE_NAME,
+            PURCHASE_RECORD_SERVICE_NAME,
             Timestamp.MONITOR_TYPE,
             self._collection,
         )
         if timestamp is None or timestamp.finish is None:
-            return DEFAULT_PURCHASE_START_TIME
+            return DEFAULT_PURCHASE_RECORD_START_TIME
         finish: datetime = timestamp.finish
         return finish
 
@@ -124,7 +124,7 @@ class BibliothecaPurchaseImporter(LoggerMixin):
         day_end = min(current_day + timedelta(days=1), cutoff)
 
         self.log.info(
-            f"Bibliotheca purchase import: requesting MARC records for "
+            f"Bibliotheca purchase record import: requesting MARC records for "
             f"'{self._collection.name}' between "
             f"{current_day.strftime(_LOG_DATE_FORMAT)} and "
             f"{day_end.strftime(_LOG_DATE_FORMAT)}, offset {offset}."
@@ -145,7 +145,7 @@ class BibliothecaPurchaseImporter(LoggerMixin):
         # crash resumes from this day rather than the previous one.
         Timestamp.stamp(
             self._session,
-            service=PURCHASE_SERVICE_NAME,
+            service=PURCHASE_RECORD_SERVICE_NAME,
             service_type=Timestamp.MONITOR_TYPE,
             collection=self._collection,
             start=current_day,
@@ -160,7 +160,7 @@ class BibliothecaPurchaseImporter(LoggerMixin):
             next_offset=next_offset,
         )
 
-    def _process_record(self, record: Record, purchase_time: datetime) -> None:
+    def _process_record(self, record: Record, purchase_record_time: datetime) -> None:
         """Process a single Bibliotheca MARC purchase record.
 
         Extracts the Bibliotheca ID from MARC field ``001``, creates or finds
@@ -168,7 +168,7 @@ class BibliothecaPurchaseImporter(LoggerMixin):
         the title's metadata has changed (hash-based deduplication).
 
         :param record: A pymarc ``Record`` representing one purchased title.
-        :param purchase_time: Timestamp of the purchase day.
+        :param purchase_record_time: Timestamp of the purchase record day.
         """
         control_numbers = [f for f in record.fields if f.tag == "001"]
         if not control_numbers:
@@ -201,5 +201,5 @@ class BibliothecaPurchaseImporter(LoggerMixin):
                 )
 
         self.log.info(
-            f"{purchase_time.strftime(_LOG_DATE_FORMAT)}: processed purchase record for Bibliotheca ID {bibliotheca_id}"
+            f"{purchase_record_time.strftime(_LOG_DATE_FORMAT)}: processed purchase record for Bibliotheca ID {bibliotheca_id}"
         )

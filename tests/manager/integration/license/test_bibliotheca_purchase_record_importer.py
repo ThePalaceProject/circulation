@@ -1,4 +1,4 @@
-"""Unit tests for BibliothecaPurchaseImporter."""
+"""Unit tests for BibliothecaPurchaseRecordImporter."""
 
 from __future__ import annotations
 
@@ -9,11 +9,11 @@ from palace.util.datetime_helpers import datetime_utc, utc_now
 
 from palace.manager.celery.tasks import apply
 from palace.manager.integration.license.bibliotheca import BibliothecaAPI
-from palace.manager.integration.license.bibliotheca_purchase_importer import (
+from palace.manager.integration.license.bibliotheca_purchase_record_importer import (
     _MARC_PAGE_SIZE,
-    DEFAULT_PURCHASE_START_TIME,
-    PURCHASE_SERVICE_NAME,
-    BibliothecaPurchaseImporter,
+    DEFAULT_PURCHASE_RECORD_START_TIME,
+    PURCHASE_RECORD_SERVICE_NAME,
+    BibliothecaPurchaseRecordImporter,
     DayImportResult,
 )
 from palace.manager.sqlalchemy.model.coverage import Timestamp
@@ -24,11 +24,11 @@ from tests.mocks.bibliotheca import MockBibliothecaAPI
 def _make_importer(
     db: DatabaseTransactionFixture,
     api: MockBibliothecaAPI | None = None,
-) -> tuple[BibliothecaPurchaseImporter, MockBibliothecaAPI]:
+) -> tuple[BibliothecaPurchaseRecordImporter, MockBibliothecaAPI]:
     """Return an importer and its bound API for the default test collection."""
     collection = MockBibliothecaAPI.mock_collection(db.session, db.default_library())
     mock_api = api or MockBibliothecaAPI(db.session, collection)
-    importer = BibliothecaPurchaseImporter(db.session, collection, api=mock_api)
+    importer = BibliothecaPurchaseRecordImporter(db.session, collection, api=mock_api)
     return importer, mock_api
 
 
@@ -42,14 +42,14 @@ def _fake_marc_record(bibliotheca_id: str = "d5rf89") -> MagicMock:
     return record
 
 
-class TestBibliothecaPurchaseImporterGetStart:
+class TestBibliothecaPurchaseRecordImporterGetStart:
     def test_no_prior_timestamp_returns_default_start(
         self, db: DatabaseTransactionFixture
     ) -> None:
-        """With no stored Timestamp, get_start returns DEFAULT_PURCHASE_START_TIME."""
+        """With no stored Timestamp, get_start returns DEFAULT_PURCHASE_RECORD_START_TIME."""
         importer, _ = _make_importer(db)
         start = importer.get_start()
-        assert start == DEFAULT_PURCHASE_START_TIME
+        assert start == DEFAULT_PURCHASE_RECORD_START_TIME
 
     def test_prior_timestamp_returns_its_finish(
         self, db: DatabaseTransactionFixture
@@ -60,7 +60,7 @@ class TestBibliothecaPurchaseImporterGetStart:
         finish = utc_now() - timedelta(days=30)
         Timestamp.stamp(
             db.session,
-            service=PURCHASE_SERVICE_NAME,
+            service=PURCHASE_RECORD_SERVICE_NAME,
             service_type=Timestamp.MONITOR_TYPE,
             collection=collection,
             finish=finish,
@@ -70,7 +70,7 @@ class TestBibliothecaPurchaseImporterGetStart:
         assert abs((start - finish).total_seconds()) < 1
 
 
-class TestBibliothecaPurchaseImporterImportDay:
+class TestBibliothecaPurchaseRecordImporterImportDay:
     def test_returns_day_result_with_correct_bounds(
         self, db: DatabaseTransactionFixture
     ) -> None:
@@ -113,7 +113,7 @@ class TestBibliothecaPurchaseImporterImportDay:
             result = importer.import_day(current_day, cutoff)
 
         ts = Timestamp.lookup(
-            db.session, PURCHASE_SERVICE_NAME, Timestamp.MONITOR_TYPE, collection
+            db.session, PURCHASE_RECORD_SERVICE_NAME, Timestamp.MONITOR_TYPE, collection
         )
         assert ts is not None
         assert ts.finish is not None
@@ -139,7 +139,7 @@ class TestBibliothecaPurchaseImporterImportDay:
         assert result.next_offset is not None  # day not yet complete
 
         ts = Timestamp.lookup(
-            db.session, PURCHASE_SERVICE_NAME, Timestamp.MONITOR_TYPE, collection
+            db.session, PURCHASE_RECORD_SERVICE_NAME, Timestamp.MONITOR_TYPE, collection
         )
         assert ts is not None
         assert ts.finish is not None
@@ -219,7 +219,7 @@ class TestBibliothecaPurchaseImporterImportDay:
         assert args[2] == 101
 
 
-class TestBibliothecaPurchaseImporterProcessRecord:
+class TestBibliothecaPurchaseRecordImporterProcessRecord:
     """Tests for _process_record logic, exercised via import_day."""
 
     def test_creates_license_pool_for_valid_record(

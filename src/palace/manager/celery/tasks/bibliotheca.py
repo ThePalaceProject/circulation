@@ -1,16 +1,17 @@
 """Celery tasks for Bibliotheca (3M Cloud) collection management.
 
-Four tasks handle near-real-time event import and historical purchase import:
+Four tasks handle near-real-time event import and historical purchase record import:
 
 - ``import_all_collections``: Fans out to one ``import_collection`` task per collection.
 - ``import_collection``: Processes one time slice of circulation events, then
   re-queues itself via ``task.replace()`` until the collection is caught up, holding
   a Redis workflow lock across the chain so at most one run proceeds per collection.
-- ``purchase_all_collections``: Fans out to one ``purchase_collection`` task per collection.
-- ``purchase_collection``: Processes one day of MARC purchase records, then re-queues
-  itself via ``task.replace()`` until the collection is caught up to ``utc_now()``,
-  holding a separate Redis workflow lock so at most one purchase run proceeds per
-  collection at a time.
+- ``import_purchase_records_for_all_collections``: Fans out to one
+  ``import_purchase_records_by_collection`` task per collection.
+- ``import_purchase_records_by_collection``: Processes one page of MARC purchase
+  records, then re-queues itself via ``task.replace()`` until the collection is
+  caught up to ``utc_now()``, holding a separate Redis workflow lock so at most one
+  purchase record import run proceeds per collection at a time.
 """
 
 from __future__ import annotations
@@ -31,8 +32,8 @@ from palace.manager.integration.license.bibliotheca_importer import (
     EVENT_IMPORT_OVERLAP,
     BibliothecaEventImporter,
 )
-from palace.manager.integration.license.bibliotheca_purchase_importer import (
-    BibliothecaPurchaseImporter,
+from palace.manager.integration.license.bibliotheca_purchase_record_importer import (
+    BibliothecaPurchaseRecordImporter,
 )
 from palace.manager.service.celery.celery import QueueNames
 from palace.manager.service.redis.models.lock import RedisLock
@@ -162,29 +163,32 @@ def import_collection(
 
 
 # ---------------------------------------------------------------------------
-# Purchase monitor
+# Purchase record importer
 # ---------------------------------------------------------------------------
 
 
-def _purchase_workflow_lock(
+def _purchase_record_workflow_lock(
     client: Redis, collection_id: int, random_value: str
 ) -> RedisLock:
-    """Create a workflow-level lock for the purchase monitor.
+    """Create a workflow-level lock for the purchase record importer.
 
     Uses a key distinct from ``import_workflow_lock`` so that event-import
-    and purchase-import runs for the same collection do not block each other.
+    and purchase-record-import runs for the same collection do not block each other.
     """
     return RedisLock(
         client,
-        ["PurchaseCollectionWorkflow", Collection.redis_key_from_id(collection_id)],
+        [
+            "PurchaseRecordCollectionWorkflow",
+            Collection.redis_key_from_id(collection_id),
+        ],
         random_value=random_value,
         lock_timeout=timedelta(hours=2),
     )
 
 
 @shared_task(queue=QueueNames.default, bind=True)
-def purchase_all_collections(task: Task) -> None:
-    """Queue a ``purchase_collection`` task for every Bibliotheca collection."""
+def import_purchase_records_for_all_collections(task: Task) -> None:
+    """Queue an ``import_purchase_records_by_collection`` task for every Bibliotheca collection."""
     with task.session() as session:
         registry = task.services.integration_registry().license_providers()
         collection_query = Collection.select_by_protocol(
@@ -193,10 +197,10 @@ def purchase_all_collections(task: Task) -> None:
         collections = session.scalars(collection_query).all()
 
     for collection in collections:
-        purchase_collection.delay(collection_id=collection.id)
+        import_purchase_records_by_collection.delay(collection_id=collection.id)
 
     task.log.info(
-        f"Queued {len(collections)} Bibliotheca collection(s) for purchase import."
+        f"Queued {len(collections)} Bibliotheca collection(s) for purchase record import."
     )
 
 
@@ -208,7 +212,7 @@ def purchase_all_collections(task: Task) -> None:
     throws=(RemoteIntegrationException,),
     retry_backoff=60,
 )
-def purchase_collection(
+def import_purchase_records_by_collection(
     task: Task,
     collection_id: int,
     *,
@@ -231,8 +235,8 @@ def purchase_collection(
     This continues until the collection is caught up to ``utc_now()``.
 
     A Redis workflow lock keyed to ``collection_id`` (prefix
-    ``PurchaseCollectionWorkflow``) ensures at most one purchase-import chain
-    runs per collection at a time.  The lock is held across ``task.replace()``
+    ``PurchaseRecordCollectionWorkflow``) ensures at most one purchase-record-import
+    chain runs per collection at a time.  The lock is held across ``task.replace()``
     calls and Celery retries so that a transient API failure does not open a
     window for a second concurrent run.
 
@@ -252,7 +256,7 @@ def purchase_collection(
     if lock_value is None:
         lock_value = str(uuid4())
 
-    workflow_lock = _purchase_workflow_lock(redis, collection_id, lock_value)
+    workflow_lock = _purchase_record_workflow_lock(redis, collection_id, lock_value)
 
     with workflow_lock.lock(
         raise_when_not_acquired=False,
@@ -263,12 +267,12 @@ def purchase_collection(
     ) as workflow_lock_acquired:
         if not workflow_lock_acquired and is_first_day:
             task.log.warning(
-                f"Bibliotheca purchase import skipped for collection {collection_id}: another run is already in progress."
+                f"Bibliotheca purchase record import skipped for collection {collection_id}: another run is already in progress."
             )
             return
         if not workflow_lock_acquired and not is_first_day:
             task.log.warning(
-                f"Bibliotheca purchase import for collection {collection_id}: workflow lock expired between days; continuing (another run may be active)."
+                f"Bibliotheca purchase record import for collection {collection_id}: workflow lock expired between days; continuing (another run may be active)."
             )
 
         cutoff = utc_now()
@@ -278,14 +282,14 @@ def purchase_collection(
         with task.transaction() as session:
             collection = load_from_id(session, Collection, collection_id)
             collection_name = collection.name
-            importer = BibliothecaPurchaseImporter(session, collection)
+            importer = BibliothecaPurchaseRecordImporter(session, collection)
 
             if current_day is None:
                 current_day = importer.get_start()
 
             if current_day >= cutoff:
                 task.log.info(
-                    f"Bibliotheca purchase import: '{collection_name}' is already up to date."
+                    f"Bibliotheca purchase record import: '{collection_name}' is already up to date."
                 )
                 return
 
@@ -294,7 +298,7 @@ def purchase_collection(
         assert result is not None
 
         task.log.info(
-            f"Bibliotheca purchase import: handled {result.records_handled} record(s) for "
+            f"Bibliotheca purchase record import: handled {result.records_handled} record(s) for "
             f"'{collection_name}' "
             f"({result.day_start.strftime('%Y-%m-%dT%H:%M:%S')} -> "
             f"{result.day_end.strftime('%Y-%m-%dT%H:%M:%S')}, offset {offset})."
