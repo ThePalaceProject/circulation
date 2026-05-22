@@ -19,9 +19,6 @@ from palace.manager.integration.patron_auth.saml.configuration.model import (
     SAMLOneLoginConfiguration,
     SAMLWebSSOAuthSettings,
 )
-from palace.manager.integration.patron_auth.saml.metadata.filter import (
-    SAMLSubjectFilter,
-)
 from palace.manager.integration.patron_auth.saml.metadata.model import (
     SAMLAttribute,
     SAMLAttributeStatement,
@@ -37,13 +34,6 @@ from palace.manager.integration.patron_auth.saml.metadata.model import (
 )
 from palace.manager.integration.patron_auth.saml.metadata.parser import (
     SAMLSubjectParser,
-)
-from palace.manager.integration.patron_auth.saml.python_expression_dsl.evaluator import (
-    DSLEvaluationVisitor,
-    DSLEvaluator,
-)
-from palace.manager.integration.patron_auth.saml.python_expression_dsl.parser import (
-    DSLParser,
 )
 from palace.manager.util import base64
 from palace.manager.util.problem_detail import ProblemDetail
@@ -116,12 +106,8 @@ class TestSAMLAuthenticationManager:
             service_provider, identity_providers
         )
         subject_parser = SAMLSubjectParser()
-        parser = DSLParser()
-        visitor = DSLEvaluationVisitor()
-        evaluator = DSLEvaluator(parser, visitor)
-        subject_filter = SAMLSubjectFilter(evaluator)
         authentication_manager = SAMLAuthenticationManager(
-            onelogin_configuration, subject_parser, subject_filter
+            onelogin_configuration, subject_parser
         )
 
         with controller_fixture.app.test_request_context("/"):
@@ -340,12 +326,8 @@ class TestSAMLAuthenticationManager:
         )
 
         subject_parser = SAMLSubjectParser()
-        parser = DSLParser()
-        visitor = DSLEvaluationVisitor()
-        evaluator = DSLEvaluator(parser, visitor)
-        subject_filter = SAMLSubjectFilter(evaluator)
         authentication_manager = SAMLAuthenticationManager(
-            onelogin_configuration, subject_parser, subject_filter
+            onelogin_configuration, subject_parser
         )
         saml_response = base64.b64encode(saml_response)
 
@@ -392,12 +374,8 @@ class TestSAMLAuthenticationManager:
             SERVICE_PROVIDER_WITH_UNSIGNED_REQUESTS, [idp_with_slo]
         )
         subject_parser = SAMLSubjectParser()
-        parser = DSLParser()
-        visitor = DSLEvaluationVisitor()
-        evaluator = DSLEvaluator(parser, visitor)
-        subject_filter = SAMLSubjectFilter(evaluator)
         authentication_manager = SAMLAuthenticationManager(
-            onelogin_configuration, subject_parser, subject_filter
+            onelogin_configuration, subject_parser
         )
 
         name_id = SAMLNameID(
@@ -435,12 +413,8 @@ class TestSAMLAuthenticationManager:
             SERVICE_PROVIDER_WITH_UNSIGNED_REQUESTS, IDENTITY_PROVIDERS
         )
         subject_parser = SAMLSubjectParser()
-        parser = DSLParser()
-        visitor = DSLEvaluationVisitor()
-        evaluator = DSLEvaluator(parser, visitor)
-        subject_filter = SAMLSubjectFilter(evaluator)
         authentication_manager = SAMLAuthenticationManager(
-            onelogin_configuration, subject_parser, subject_filter
+            onelogin_configuration, subject_parser
         )
 
         name_id = SAMLNameID(
@@ -481,12 +455,8 @@ class TestSAMLAuthenticationManager:
             SERVICE_PROVIDER_WITH_UNSIGNED_REQUESTS, IDENTITY_PROVIDERS
         )
         subject_parser = SAMLSubjectParser()
-        parser = DSLParser()
-        visitor = DSLEvaluationVisitor()
-        evaluator = DSLEvaluator(parser, visitor)
-        subject_filter = SAMLSubjectFilter(evaluator)
         authentication_manager = SAMLAuthenticationManager(
-            onelogin_configuration, subject_parser, subject_filter
+            onelogin_configuration, subject_parser
         )
 
         mock_auth = MagicMock()
@@ -528,12 +498,8 @@ class TestSAMLAuthenticationManager:
             SERVICE_PROVIDER_WITH_UNSIGNED_REQUESTS, IDENTITY_PROVIDERS
         )
         subject_parser = SAMLSubjectParser()
-        parser = DSLParser()
-        visitor = DSLEvaluationVisitor()
-        evaluator = DSLEvaluator(parser, visitor)
-        subject_filter = SAMLSubjectFilter(evaluator)
         authentication_manager = SAMLAuthenticationManager(
-            onelogin_configuration, subject_parser, subject_filter
+            onelogin_configuration, subject_parser
         )
 
         mock_auth = MagicMock()
@@ -576,12 +542,8 @@ class TestSAMLAuthenticationManager:
             SERVICE_PROVIDER_WITH_UNSIGNED_REQUESTS, IDENTITY_PROVIDERS
         )
         subject_parser = SAMLSubjectParser()
-        parser = DSLParser()
-        visitor = DSLEvaluationVisitor()
-        evaluator = DSLEvaluator(parser, visitor)
-        subject_filter = SAMLSubjectFilter(evaluator)
         authentication_manager = SAMLAuthenticationManager(
-            onelogin_configuration, subject_parser, subject_filter
+            onelogin_configuration, subject_parser
         )
 
         # No SAMLResponse in request — only SAMLRequest (IdP-Initiated path).
@@ -613,12 +575,8 @@ class TestSAMLAuthenticationManager:
             SERVICE_PROVIDER_WITH_UNSIGNED_REQUESTS, IDENTITY_PROVIDERS
         )
         subject_parser = SAMLSubjectParser()
-        parser = DSLParser()
-        visitor = DSLEvaluationVisitor()
-        evaluator = DSLEvaluator(parser, visitor)
-        subject_filter = SAMLSubjectFilter(evaluator)
         authentication_manager = SAMLAuthenticationManager(
-            onelogin_configuration, subject_parser, subject_filter
+            onelogin_configuration, subject_parser
         )
 
         with controller_fixture.app.test_request_context(
@@ -657,12 +615,8 @@ class TestSAMLAuthenticationManager:
             SERVICE_PROVIDER_WITH_UNSIGNED_REQUESTS, IDENTITY_PROVIDERS
         )
         subject_parser = SAMLSubjectParser()
-        parser = DSLParser()
-        visitor = DSLEvaluationVisitor()
-        evaluator = DSLEvaluator(parser, visitor)
-        subject_filter = SAMLSubjectFilter(evaluator)
         authentication_manager = SAMLAuthenticationManager(
-            onelogin_configuration, subject_parser, subject_filter
+            onelogin_configuration, subject_parser
         )
 
         name_id = SAMLNameID(
@@ -706,12 +660,8 @@ class TestSAMLAuthenticationManager:
             SERVICE_PROVIDER_WITH_UNSIGNED_REQUESTS, IDENTITY_PROVIDERS
         )
         subject_parser = SAMLSubjectParser()
-        parser = DSLParser()
-        visitor = DSLEvaluationVisitor()
-        evaluator = DSLEvaluator(parser, visitor)
-        subject_filter = SAMLSubjectFilter(evaluator)
         authentication_manager = SAMLAuthenticationManager(
-            onelogin_configuration, subject_parser, subject_filter
+            onelogin_configuration, subject_parser
         )
 
         with controller_fixture.app.test_request_context(
@@ -745,12 +695,8 @@ class TestSAMLAuthenticationManager:
             SERVICE_PROVIDER_WITH_UNSIGNED_REQUESTS, IDENTITY_PROVIDERS
         )
         subject_parser = SAMLSubjectParser()
-        parser = DSLParser()
-        visitor = DSLEvaluationVisitor()
-        evaluator = DSLEvaluator(parser, visitor)
-        subject_filter = SAMLSubjectFilter(evaluator)
         authentication_manager = SAMLAuthenticationManager(
-            onelogin_configuration, subject_parser, subject_filter
+            onelogin_configuration, subject_parser
         )
 
         with controller_fixture.app.test_request_context(

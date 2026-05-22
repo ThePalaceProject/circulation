@@ -22,9 +22,6 @@ from palace.manager.integration.patron_auth.saml.configuration.model import (
     SAMLWebSSOAuthSettings,
 )
 from palace.manager.integration.patron_auth.saml.credential import SAMLCredentialManager
-from palace.manager.integration.patron_auth.saml.metadata.filter import (
-    SAMLSubjectFilter,
-)
 from palace.manager.integration.patron_auth.saml.metadata.model import (
     SAMLAttribute,
     SAMLAttributeStatement,
@@ -47,13 +44,6 @@ from palace.manager.integration.patron_auth.saml.provider import (
     SAML_CANNOT_DETERMINE_PATRON,
     SAML_TOKEN_EXPIRED,
     SAMLWebSSOAuthenticationProvider,
-)
-from palace.manager.integration.patron_auth.saml.python_expression_dsl.evaluator import (
-    DSLEvaluationVisitor,
-    DSLEvaluator,
-)
-from palace.manager.integration.patron_auth.saml.python_expression_dsl.parser import (
-    DSLParser,
 )
 from palace.manager.sqlalchemy.model.credential import Credential
 from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
@@ -301,12 +291,8 @@ class TestSAMLWebSSOAuthenticationProvider:
             SERVICE_PROVIDER, identity_providers, configuration
         )
         subject_parser = SAMLSubjectParser()
-        parser = DSLParser()
-        visitor = DSLEvaluationVisitor()
-        evaluator = DSLEvaluator(parser, visitor)
-        subject_filter = SAMLSubjectFilter(evaluator)
         authentication_manager = SAMLAuthenticationManager(
-            onelogin_configuration, subject_parser, subject_filter
+            onelogin_configuration, subject_parser
         )
 
         authentication_manager_factory = create_autospec(
