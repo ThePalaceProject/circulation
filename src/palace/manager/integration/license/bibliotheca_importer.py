@@ -88,7 +88,8 @@ class BibliothecaEventImporter(LoggerMixin):
         )
         if timestamp is None or timestamp.finish is None:
             return cutoff - EVENT_IMPORT_OVERLAP
-        return timestamp.finish - EVENT_IMPORT_OVERLAP
+        finish: datetime = timestamp.finish
+        return finish - EVENT_IMPORT_OVERLAP
 
     def import_time_slice(
         self,
