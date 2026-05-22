@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from datetime import datetime, timedelta
 from unittest.mock import MagicMock, patch
 
@@ -152,7 +153,7 @@ class TestBibliothecaPurchaseImporterImportDay:
             end: datetime,
             offset: int,
             limit: int,
-        ):  # type: ignore[no-untyped-def]
+        ) -> Iterator[MagicMock]:
             nonlocal call_count
             call_count += 1
             if call_count == 1:
