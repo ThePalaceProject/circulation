@@ -100,6 +100,22 @@ class TestFilterExpression:
                 False,
                 id="disjunction-false",
             ),
+            pytest.param(
+                "not (x == 1)",
+                {"x": 1},
+                None,
+                False,
+                False,
+                id="negation-true-to-false",
+            ),
+            pytest.param(
+                "not (x == 1)",
+                {"x": 2},
+                None,
+                True,
+                False,
+                id="negation-false-to-true",
+            ),
             # Dict dot-access (claim-style context)
             pytest.param(
                 "claim.ou == 'student'",
