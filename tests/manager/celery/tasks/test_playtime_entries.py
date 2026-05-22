@@ -33,12 +33,14 @@ from palace.manager.service.google_drive.google_drive import GoogleDriveService
 from palace.manager.service.integration_registry.license_providers import (
     LicenseProvidersRegistry,
 )
+from palace.manager.service.redis.models.lock import RedisLock
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.identifier import Equivalency, Identifier
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.time_tracking import PlaytimeEntry, PlaytimeSummary
 from tests.fixtures.celery import CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.redis import RedisFixture
 from tests.fixtures.services import ServicesFixture
 
 
@@ -566,6 +568,7 @@ class TestGeneratePlaytimeReport:
         db: DatabaseTransactionFixture,
         celery_fixture: CeleryFixture,
         services_fixture: ServicesFixture,
+        redis_fixture: RedisFixture,
         monkeypatch: pytest.MonkeyPatch,
     ):
         identifier = db.identifier()
@@ -958,6 +961,69 @@ class TestGeneratePlaytimeReport:
                 expected_year,
             ],
         }
+
+    def test_generate_playtime_report_folder_lock_contention(
+        self,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        services_fixture: ServicesFixture,
+        redis_fixture: RedisFixture,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        """When the folder-creation lock is already held, the task logs a warning and proceeds anyway."""
+        parent_folder_id = "palace-test"
+        reporting_name = "test cm"
+
+        collection = db.collection(
+            "collection a",
+            protocol=OPDS2API,
+            settings=db.opds2_settings(data_source="ds_a"),
+        )
+        library = db.default_library()
+        identifier = db.identifier()
+        playtime(
+            db.session,
+            identifier,
+            collection,
+            library,
+            dt1m(3),
+            10,
+            "loan_id:1",
+        )
+
+        mock_google_drive_service = create_autospec(GoogleDriveService)
+        drive_container = services_fixture.services.google_drive()
+        drive_container.config.from_dict({"parent_folder_id": parent_folder_id})
+        drive_container.service.override(mock_google_drive_service)
+        monkeypatch.setenv(
+            Configuration.REPORTING_NAME_ENVIRONMENT_VARIABLE, reporting_name
+        )
+
+        # Pre-acquire the folder-creation lock so the task cannot get it.
+        pre_lock = RedisLock(
+            redis_fixture.client,
+            lock_name=["playtime_report_folder", parent_folder_id, "ds_a"],
+            lock_timeout=timedelta(hours=1),
+        )
+        assert pre_lock.acquire()
+
+        # Shorten the task's blocking timeout so the test runs quickly.
+        monkeypatch.setattr(
+            "palace.manager.celery.tasks.playtime_entries.FOLDER_LOCK_ACQUIRE_TIMEOUT",
+            0.1,
+        )
+
+        with caplog.at_level("WARNING"):
+            generate_playtime_report.delay().wait()
+
+        # The task should have logged a warning about the lock contention.
+        assert any(
+            "Could not acquire folder creation lock" in record.message
+            for record in caplog.records
+        )
+        # Despite the lock timeout, the task should still have completed and uploaded a file.
+        assert mock_google_drive_service.create_file.call_count == 1
 
     @pytest.mark.parametrize(
         "eligible_collections,playtime_summaries,expected_ds_names",
