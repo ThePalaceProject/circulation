@@ -215,14 +215,22 @@ def purchase_collection(
     collection_id: int,
     *,
     current_day: datetime | None = None,
+    offset: int = 1,
     lock_value: str | None = None,
 ) -> None:
-    """Process one day of Bibliotheca MARC purchase records.
+    """Process one page of Bibliotheca MARC purchase records.
 
-    Fetches all paginated MARC records for ``[current_day, current_day+1day]``,
-    creates ``LicensePool`` entries, queues ``bibliographic_apply`` for new or
-    changed titles, then re-queues itself via ``task.replace()`` for the next
-    day until the collection is caught up to ``utc_now()``.
+    Fetches up to 50 MARC records for ``[current_day, current_day+1day]``
+    starting at ``offset``, creates ``LicensePool`` entries, queues
+    ``bibliographic_apply`` for new or changed titles, then re-queues itself
+    via ``task.replace()``:
+
+    - with ``offset`` advanced when the current page was full (more records
+      remain for the same day), or
+    - with ``current_day`` advanced to the next day and ``offset`` reset to 1
+      when the current day is fully processed.
+
+    This continues until the collection is caught up to ``utc_now()``.
 
     A Redis workflow lock keyed to ``collection_id`` (prefix
     ``PurchaseCollectionWorkflow``) ensures at most one purchase-import chain
@@ -234,9 +242,11 @@ def purchase_collection(
     :param current_day: Start of the day to process.  ``None`` on the first
         invocation — the start is derived from the stored ``Timestamp``
         (defaulting to 2014-01-01 when no timestamp exists).
+    :param offset: 1-based record offset within the current day's result set.
+        Defaults to ``1`` (the first page).
     :param lock_value: UUID identifying this workflow.  Generated on the first
-        invocation and forwarded unchanged to every subsequent day so the lock
-        is held across ``task.replace()`` calls.
+        invocation and forwarded unchanged to every subsequent page/day so the
+        lock is held across ``task.replace()`` calls.
     """
     redis = task.services.redis().client()
 
@@ -281,7 +291,7 @@ def purchase_collection(
                 )
                 return
 
-            result = importer.import_day(current_day, cutoff)
+            result = importer.import_day(current_day, cutoff, offset)
 
         assert result is not None
 
@@ -289,14 +299,27 @@ def purchase_collection(
             f"Bibliotheca purchase import: handled {result.records_handled} record(s) for "
             f"'{collection_name}' "
             f"({result.day_start.strftime('%Y-%m-%dT%H:%M:%S')} -> "
-            f"{result.day_end.strftime('%Y-%m-%dT%H:%M:%S')})."
+            f"{result.day_end.strftime('%Y-%m-%dT%H:%M:%S')}, offset {offset})."
         )
 
+        if result.next_offset is not None:
+            # More pages remain for the current day.
+            raise task.replace(
+                task.s(
+                    collection_id=collection_id,
+                    current_day=current_day,
+                    offset=result.next_offset,
+                    lock_value=lock_value,
+                )
+            )
+
         if result.day_end < cutoff:
+            # Current day is complete; advance to the next day.
             raise task.replace(
                 task.s(
                     collection_id=collection_id,
                     current_day=result.day_end,
+                    offset=1,
                     lock_value=lock_value,
                 )
             )

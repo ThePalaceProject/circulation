@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Generator
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
@@ -34,24 +33,32 @@ _MARC_PAGE_SIZE = 50
 
 @dataclass(frozen=True)
 class DayImportResult:
-    """Result of importing one day of Bibliotheca MARC purchase records.
+    """Result of importing one page of Bibliotheca MARC purchase records.
 
-    :param records_handled: Number of MARC records processed.
-    :param day_start: Start of the day that was processed (inclusive).
-    :param day_end: End of the window that was processed (exclusive).
+    :param records_handled: Number of MARC records processed in this page.
+    :param day_start: Start of the day being processed (inclusive).
+    :param day_end: End of the day window (exclusive).
         Equal to ``min(day_start + 1 day, cutoff)``.
+    :param next_offset: Offset to pass to the next ``import_day`` call for
+        the same day, or ``None`` when the page was smaller than the maximum
+        (meaning the day is fully processed and the caller should advance to
+        ``day_end``).
     """
 
     records_handled: int
     day_start: datetime
     day_end: datetime
+    next_offset: int | None
 
 
 class BibliothecaPurchaseImporter(LoggerMixin):
-    """Imports Bibliotheca MARC purchase records one day at a time.
+    """Imports Bibliotheca MARC purchase records one page at a time.
 
-    Processes one day per invocation.  Callers are responsible for
-    chaining days until the collection is caught up to the cutoff.
+    Each call to :meth:`import_day` processes one API page (up to
+    :data:`_MARC_PAGE_SIZE` records) for a given day.  Callers advance
+    through pages of the same day (via ``next_offset``) and then advance
+    to the next day (via ``day_end``) until the collection is caught up
+    to the cutoff.
     """
 
     def __init__(
@@ -90,40 +97,59 @@ class BibliothecaPurchaseImporter(LoggerMixin):
         finish: datetime = timestamp.finish
         return finish
 
-    def import_day(self, current_day: datetime, cutoff: datetime) -> DayImportResult:
-        """Import all MARC purchase records for one day and stamp the ``Timestamp``.
+    def import_day(
+        self, current_day: datetime, cutoff: datetime, offset: int = 1
+    ) -> DayImportResult:
+        """Import one page of MARC purchase records for a given day.
 
-        Fetches all paginated MARC records for the window
-        ``[current_day, day_end]`` where ``day_end = min(current_day + 1 day,
-        cutoff)``, processes each record, then updates the stored ``Timestamp``
-        so that the next call to :meth:`get_start` resumes from ``day_end``.
+        Fetches up to :data:`_MARC_PAGE_SIZE` records from the window
+        ``[current_day, day_end]`` starting at ``offset``, where
+        ``day_end = min(current_day + 1 day, cutoff)``.
+
+        The ``Timestamp`` is always updated after the page is processed:
+        to ``current_day`` while the day is still in progress (so a restart
+        after a crash resumes from the beginning of this day rather than an
+        earlier day), and to ``day_end`` once the page is smaller than the
+        maximum (signalling that the day is fully processed).
 
         :param current_day: Start of the day to process.
         :param cutoff: Upper bound of the import window; the day will not
             extend past this point.
+        :param offset: 1-based record offset within the day's result set.
+            Defaults to ``1`` (the first page).
         :returns: A :class:`DayImportResult` describing what was processed.
+            Check :attr:`~DayImportResult.next_offset` to determine whether
+            to re-queue for the same day or advance to the next.
         """
         day_end = min(current_day + timedelta(days=1), cutoff)
-        records_handled = 0
 
         self.log.info(
             f"Bibliotheca purchase import: requesting MARC records for "
             f"'{self._collection.name}' between "
             f"{current_day.strftime(_LOG_DATE_FORMAT)} and "
-            f"{day_end.strftime(_LOG_DATE_FORMAT)}."
+            f"{day_end.strftime(_LOG_DATE_FORMAT)}, offset {offset}."
         )
 
-        for record in self._purchases(current_day, day_end):
+        records = list(
+            self._api.marc_request(current_day, day_end, offset, _MARC_PAGE_SIZE)
+        )
+        for record in records:
             self._process_record(record, current_day)
-            records_handled += 1
 
+        records_handled = len(records)
+        day_complete = records_handled < _MARC_PAGE_SIZE
+        next_offset = None if day_complete else offset + _MARC_PAGE_SIZE
+
+        # Always checkpoint: advance finish to day_end when the day is done,
+        # or to current_day while still in progress, so a restart after a
+        # crash resumes from this day rather than the previous one.
         Timestamp.stamp(
             self._session,
             service=PURCHASE_SERVICE_NAME,
             service_type=Timestamp.MONITOR_TYPE,
             collection=self._collection,
             start=current_day,
-            finish=day_end,
+            finish=day_end if day_complete else current_day,
             achievements=f"MARC records processed: {records_handled}.",
         )
 
@@ -131,21 +157,8 @@ class BibliothecaPurchaseImporter(LoggerMixin):
             records_handled=records_handled,
             day_start=current_day,
             day_end=day_end,
+            next_offset=next_offset,
         )
-
-    def _purchases(self, start: datetime, end: datetime) -> Generator[Record]:
-        """Paginate ``marc_request`` until a page smaller than the max is returned.
-
-        :param start: Start of the window to request.
-        :param end: End of the window to request.
-        :yields: pymarc ``Record`` objects.
-        """
-        offset = 1  # Bibliotheca smallest allowed offset.
-        records: list[Record] | None = None
-        while records is None or len(records) >= _MARC_PAGE_SIZE:
-            records = list(self._api.marc_request(start, end, offset, _MARC_PAGE_SIZE))
-            yield from records
-            offset += _MARC_PAGE_SIZE
 
     def _process_record(self, record: Record, purchase_time: datetime) -> None:
         """Process a single Bibliotheca MARC purchase record.
