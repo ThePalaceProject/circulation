@@ -116,12 +116,7 @@ class TestGoogleDriveService:
         assert f"Content-Type: {mime_type}" in body
 
     def test_get_file_excludes_trashed_items(self):
-        """get_file must include 'trashed = false' in its Drive query.
-
-        If a folder has been moved to the Drive trash, it must not be treated
-        as a live folder — doing so would cause uploads to land inside the
-        trash, making them invisible to users.
-        """
+        """get_file must include 'trashed = false' in its Drive query."""
         file_name = "some-folder"
         file_id = "folder-id"
         http_mock_sequence = HttpMockSequence(
