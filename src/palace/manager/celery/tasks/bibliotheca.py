@@ -114,15 +114,12 @@ def import_collection(
     ) as workflow_lock_acquired:
         if not workflow_lock_acquired and is_first_slice:
             task.log.warning(
-                f"Bibliotheca event import skipped for collection {collection_id}: "
-                "another run is already in progress."
+                f"Bibliotheca event import skipped for collection {collection_id}: another run is already in progress."
             )
             return
         if not workflow_lock_acquired and not is_first_slice:
             task.log.warning(
-                f"Bibliotheca event import for collection {collection_id}: "
-                "workflow lock expired between slices; continuing "
-                "(another run may be active)."
+                f"Bibliotheca event import for collection {collection_id}: workflow lock expired between slices; continuing (another run may be active)."
             )
 
         cutoff = utc_now() - EVENT_IMPORT_OVERLAP
@@ -258,15 +255,12 @@ def purchase_collection(
     ) as workflow_lock_acquired:
         if not workflow_lock_acquired and is_first_day:
             task.log.warning(
-                f"Bibliotheca purchase import skipped for collection {collection_id}: "
-                "another run is already in progress."
+                f"Bibliotheca purchase import skipped for collection {collection_id}: another run is already in progress."
             )
             return
         if not workflow_lock_acquired and not is_first_day:
             task.log.warning(
-                f"Bibliotheca purchase import for collection {collection_id}: "
-                "workflow lock expired between days; continuing "
-                "(another run may be active)."
+                f"Bibliotheca purchase import for collection {collection_id}: workflow lock expired between days; continuing (another run may be active)."
             )
 
         cutoff = utc_now()

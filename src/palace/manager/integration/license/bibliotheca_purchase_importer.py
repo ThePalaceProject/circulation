@@ -160,14 +160,12 @@ class BibliothecaPurchaseImporter(LoggerMixin):
         control_numbers = [f for f in record.fields if f.tag == "001"]
         if not control_numbers:
             self.log.error(
-                "Ignoring MARC record with no Bibliotheca control number. %s",
-                record.as_json(),
+                f"Ignoring MARC record with no Bibliotheca control number. {record.as_json()}"
             )
             return
         if len(control_numbers) > 1:
             self.log.error(
-                "Ignoring MARC record with multiple Bibliotheca control numbers. %s",
-                record.as_json(),
+                f"Ignoring MARC record with multiple Bibliotheca control numbers. {record.as_json()}"
             )
             return
 
@@ -190,7 +188,5 @@ class BibliothecaPurchaseImporter(LoggerMixin):
                 )
 
         self.log.info(
-            "%s: processed purchase record for Bibliotheca ID %s",
-            purchase_time.strftime(_LOG_DATE_FORMAT),
-            bibliotheca_id,
+            f"{purchase_time.strftime(_LOG_DATE_FORMAT)}: processed purchase record for Bibliotheca ID {bibliotheca_id}"
         )
