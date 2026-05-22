@@ -20,7 +20,7 @@ from palace.manager.api.authentication.base import (
 )
 from palace.manager.integration.patron_auth.saml.configuration.problem_details import (
     SAML_GENERIC_PARSING_ERROR,
-    SAML_INCORRECT_FILTRATION_EXPRESSION,
+    SAML_INCORRECT_FILTER_EXPRESSION,
     SAML_INCORRECT_METADATA,
     SAML_INCORRECT_PATRON_ID_REGULAR_EXPRESSION,
     SAML_INCORRECT_PRIVATE_KEY,
@@ -228,11 +228,13 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
         FormMetadata(
             label="Filter Expression",
             description=(
-                "Python expression used for filtering out patrons by their SAML attributes."
+                "A Python expression that restricts access to a subset of authenticated"
+                " patrons based on their SAML attributes. Patrons whose attributes do not satisfy"
+                " the expression are denied access."
                 "<br>"
                 "<br>"
-                'For example, if you want to authenticate using SAML only patrons having "eresources" '
-                'as the value of their "eduPersonEntitlement" then you need to use the following expression:'
+                "For example, if you want to limit access to only those patrons for whom the"
+                ' "eduPersonEntitlement" attribute has the value "eresources", use the following expression:'
                 "<br>"
                 "<pre>"
                 """
@@ -405,12 +407,12 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
             try:
                 FilterExpression(v).check_syntax()
             except FilterExpressionError as exception:
-                cls.logger().exception("Validation of the filtration expression failed")
-                message = f"SAML filtration expression has an incorrect format: {str(exception)}"
+                cls.logger().exception("Validation of the filter expression failed")
+                message = (
+                    f"SAML filter expression has an incorrect format: {str(exception)}"
+                )
                 raise SettingsValidationError(
-                    problem_detail=SAML_INCORRECT_FILTRATION_EXPRESSION.detailed(
-                        message
-                    )
+                    problem_detail=SAML_INCORRECT_FILTER_EXPRESSION.detailed(message)
                 )
         return v
 

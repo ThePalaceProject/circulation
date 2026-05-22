@@ -46,6 +46,7 @@ from palace.manager.integration.patron_auth.saml.provider import (
     SAMLWebSSOAuthenticationProvider,
 )
 from palace.manager.sqlalchemy.model.credential import Credential
+from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
 from tests.fixtures.api_controller import ControllerFixture
 from tests.fixtures.database import DatabaseTransactionFixture
@@ -1122,3 +1123,210 @@ class TestSAMLWebSSOAuthenticationProvider:
             result = provider.get_sp_metadata_xml()
 
         assert result == expected
+
+    @pytest.mark.parametrize(
+        "filter_expression, expect_raises, expected_uri",
+        [
+            pytest.param(
+                None,
+                False,
+                None,
+                id="no-filter-passes",
+            ),
+            pytest.param(
+                "subject.attribute_statement.attributes['uid'].values[0] == 'student1'",
+                False,
+                None,
+                id="filter-passes",
+            ),
+            pytest.param(
+                "subject.attribute_statement.attributes['uid'].values[0] != 'student1'",
+                True,
+                "http://palaceproject.io/terms/problem/auth/unrecoverable/saml/no-access",
+                id="filter-rejects",
+            ),
+            pytest.param(
+                # Syntactically valid so the model validator accepts it;
+                # subject.uid does not exist on SAMLSubject, so evaluation raises.
+                "subject.uid == 'student1'",
+                True,
+                "http://librarysimplified.org/terms/problem/saml/generic-error",
+                id="filter-error",
+            ),
+        ],
+    )
+    def test_filter_subject(
+        self,
+        controller_fixture: ControllerFixture,
+        create_saml_configuration: Callable[..., SAMLWebSSOAuthSettings],
+        create_saml_provider: Callable[..., SAMLWebSSOAuthenticationProvider],
+        filter_expression: str | None,
+        expect_raises: bool,
+        expected_uri: str | None,
+    ):
+        subject = SAMLSubject(
+            "http://idp.example.com",
+            None,
+            SAMLAttributeStatement(
+                [SAMLAttribute(name=SAMLAttributeType.uid.name, values=["student1"])]
+            ),
+        )
+
+        configuration = create_saml_configuration(filter_expression=filter_expression)
+        provider = create_saml_provider(settings=configuration)
+
+        context_manager = (
+            pytest.raises(ProblemDetailException) if expect_raises else nullcontext()
+        )
+
+        with context_manager as exc_info:
+            provider._filter_subject(controller_fixture.db.session, subject)
+
+        if expect_raises:
+            assert exc_info.value.problem_detail.uri == expected_uri
+
+    def test_saml_callback_filter_rejects(
+        self,
+        controller_fixture: ControllerFixture,
+        create_saml_configuration: Callable[..., SAMLWebSSOAuthSettings],
+        create_saml_provider: Callable[..., SAMLWebSSOAuthenticationProvider],
+    ):
+        """saml_callback raises SAML_NO_ACCESS_ERROR when authorization check fails."""
+        subject = SAMLSubject(
+            "http://idp.example.com",
+            None,
+            SAMLAttributeStatement(
+                [
+                    SAMLAttribute(
+                        name=SAMLAttributeType.eduPersonUniqueId.name, values=["12345"]
+                    )
+                ]
+            ),
+        )
+
+        configuration = create_saml_configuration(
+            filter_expression="subject.attribute_statement.attributes['eduPersonUniqueId'].values[0] != '12345'"
+        )
+        provider = create_saml_provider(settings=configuration)
+
+        with pytest.raises(ProblemDetailException) as exc_info:
+            provider.saml_callback(controller_fixture.db.session, subject)
+
+        assert (
+            exc_info.value.problem_detail.uri
+            == "http://palaceproject.io/terms/problem/auth/unrecoverable/saml/no-access"
+        )
+
+    def test_saml_callback_filter_passes(
+        self,
+        controller_fixture: ControllerFixture,
+        create_saml_configuration: Callable[..., SAMLWebSSOAuthSettings],
+        create_saml_provider: Callable[..., SAMLWebSSOAuthenticationProvider],
+    ):
+        """saml_callback succeeds and returns (Credential, Patron, PatronData) when the filter passes."""
+        subject = SAMLSubject(
+            "http://idp.example.com",
+            None,
+            SAMLAttributeStatement(
+                [
+                    SAMLAttribute(
+                        name=SAMLAttributeType.eduPersonUniqueId.name, values=["12345"]
+                    )
+                ]
+            ),
+        )
+
+        configuration = create_saml_configuration(
+            filter_expression="subject.attribute_statement.attributes['eduPersonUniqueId'].values[0] == '12345'"
+        )
+        provider = create_saml_provider(settings=configuration)
+
+        credential, patron, patron_data = provider.saml_callback(
+            controller_fixture.db.session, subject
+        )
+
+        assert isinstance(credential, Credential)
+        assert isinstance(patron, Patron)
+        assert isinstance(patron_data, PatronData)
+
+    def test_filter_subject_library_not_found(
+        self,
+        controller_fixture: ControllerFixture,
+        create_saml_configuration: Callable[..., SAMLWebSSOAuthSettings],
+        create_saml_provider: Callable[..., SAMLWebSSOAuthenticationProvider],
+    ):
+        """_filter_subject raises SAML_GENERIC_ERROR when the library cannot be resolved."""
+        configuration = create_saml_configuration(filter_expression="1 == 1")
+        provider = create_saml_provider(settings=configuration)
+
+        with patch.object(provider, "library", return_value=None):
+            with pytest.raises(ProblemDetailException) as exc_info:
+                provider._filter_subject(
+                    controller_fixture.db.session,
+                    SAMLSubject("http://idp.example.com", None, None),
+                )
+
+        assert (
+            exc_info.value.problem_detail.uri
+            == "http://librarysimplified.org/terms/problem/saml/generic-error"
+        )
+
+    @pytest.mark.parametrize(
+        "session_lifetime, filter_expression, expect_no_access",
+        [
+            pytest.param(
+                7,
+                "integration.session_lifetime == 7",
+                False,
+                id="integration-field-matches",
+            ),
+            pytest.param(
+                None,
+                "integration.session_lifetime == 7",
+                True,
+                id="integration-field-no-match",
+            ),
+            pytest.param(
+                None,
+                "library.id > 0",
+                False,
+                id="library-field-matches",
+            ),
+            pytest.param(
+                None,
+                "library.id == 0",
+                True,
+                id="library-field-no-match",
+            ),
+        ],
+    )
+    def test_filter_subject_context_variables(
+        self,
+        controller_fixture: ControllerFixture,
+        create_saml_configuration: Callable[..., SAMLWebSSOAuthSettings],
+        create_saml_provider: Callable[..., SAMLWebSSOAuthenticationProvider],
+        session_lifetime: int | None,
+        filter_expression: str,
+        expect_no_access: bool,
+    ):
+        """_filter_subject passes integration and library dicts into the expression context."""
+        configuration = create_saml_configuration(
+            filter_expression=filter_expression,
+            session_lifetime=session_lifetime,
+        )
+        provider = create_saml_provider(settings=configuration)
+
+        context_manager = (
+            pytest.raises(ProblemDetailException) if expect_no_access else nullcontext()
+        )
+        with context_manager as exc_info:
+            provider._filter_subject(
+                controller_fixture.db.session,
+                SAMLSubject("http://idp.example.com", None, None),
+            )
+
+        if expect_no_access:
+            assert (
+                exc_info.value.problem_detail.uri
+                == "http://palaceproject.io/terms/problem/auth/unrecoverable/saml/no-access"
+            )

@@ -1,3 +1,6 @@
+from collections.abc import Callable
+from contextlib import nullcontext
+
 import pytest
 
 from palace.manager.api.admin.problem_details import (
@@ -8,6 +11,7 @@ from palace.manager.integration.patron_auth.saml.configuration.model import (
     SAMLWebSSOAuthSettings,
 )
 from palace.manager.integration.patron_auth.saml.configuration.problem_details import (
+    SAML_INCORRECT_FILTER_EXPRESSION,
     SAML_INCORRECT_METADATA,
     SAML_INCORRECT_PATRON_ID_REGULAR_EXPRESSION,
 )
@@ -165,3 +169,53 @@ class TestSAMLSettingsValidator:
             assert expected_validation_result.uri == exception.value.problem_detail.uri
         else:
             SAMLWebSSOAuthSettings(**submitted_settings)
+
+    @pytest.mark.parametrize(
+        "filter_expression, expect_raises",
+        [
+            pytest.param(
+                'subject.attribute_statement.attributes["eduPersonEntitlement"].values[0 == "eresources"',
+                True,
+                id="syntax-error",
+            ),
+            pytest.param(
+                '"eresources" == subject.attribute_statement.attributes["eduPersonEntitlement"].values[0]',
+                False,
+                id="valid-single-value",
+            ),
+            pytest.param(
+                '"eresources" in subject.attribute_statement.attributes["eduPersonEntitlement"].values',
+                False,
+                id="valid-multi-value",
+            ),
+            pytest.param(
+                'subject.attribute_statement.attributes["urn:oid:1.3.6.1.4.1.5923.1.8"].values[0] == "eresources"',
+                False,
+                id="valid-oid-attribute",
+            ),
+            pytest.param(
+                # Syntax check is parse-only; expressions without "subject" are
+                # accepted at validation time and fail only at evaluation.
+                'attributes["eduPersonEntitlement"].values[0] == "eresources"',
+                False,
+                id="valid-no-subject-reference",
+            ),
+        ],
+    )
+    def test_validate_filter_expression(
+        self,
+        create_saml_configuration: Callable[..., SAMLWebSSOAuthSettings],
+        filter_expression: str,
+        expect_raises: bool,
+    ):
+        context_manager = (
+            pytest.raises(ProblemDetailException) if expect_raises else nullcontext()
+        )
+        with context_manager as exc_info:
+            create_saml_configuration(filter_expression=filter_expression)
+
+        if expect_raises:
+            assert (
+                exc_info.value.problem_detail.uri
+                == SAML_INCORRECT_FILTER_EXPRESSION.uri
+            )

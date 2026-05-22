@@ -7,6 +7,8 @@ from palace.manager.api.authentication.base import PatronData, PatronLookupNotSu
 from palace.manager.api.authenticator import BaseSAMLAuthenticationProvider
 from palace.manager.integration.patron_auth.constants import LOGOUT_REDIRECT_QUERY_PARAM
 from palace.manager.integration.patron_auth.saml.auth import (
+    SAML_GENERIC_ERROR,
+    SAML_NO_ACCESS_ERROR,
     SAMLAuthenticationManagerFactory,
 )
 from palace.manager.integration.patron_auth.saml.configuration.model import (
@@ -18,13 +20,17 @@ from palace.manager.integration.patron_auth.saml.configuration.service_provider 
 )
 from palace.manager.integration.patron_auth.saml.credential import SAMLCredentialManager
 from palace.manager.integration.patron_auth.saml.metadata.model import (
+    SAMLAttribute,
+    SAMLAttributeStatement,
     SAMLLocalizedMetadataItem,
+    SAMLNameID,
     SAMLSubject,
     SAMLSubjectPatronIDExtractor,
 )
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.sqlalchemy.model.credential import Credential
 from palace.manager.sqlalchemy.model.patron import Patron
+from palace.manager.util.filter import FilterExpression, FilterExpressionError
 from palace.manager.util.problem_detail import (
     ProblemDetail as pd,
     ProblemDetailException,
@@ -47,6 +53,13 @@ SAML_TOKEN_EXPIRED = pd(
     detail=_(
         "Your SAML session has expired. Please reauthenticate via your institution's identity provider."
     ),
+)
+
+_SAML_FILTER_SAFE_TYPES: tuple[type, ...] = (
+    SAMLSubject,
+    SAMLNameID,
+    SAMLAttributeStatement,
+    SAMLAttribute,
 )
 
 
@@ -80,6 +93,7 @@ class SAMLWebSSOAuthenticationProvider(
         self._patron_id_attributes = settings.patron_id_attributes
         self._patron_id_regular_expression = settings.patron_id_regular_expression
         self._settings = settings
+        self._library_settings = library_settings
 
     @classmethod
     def label(cls) -> str:
@@ -408,6 +422,52 @@ class SAMLWebSSOAuthenticationProvider(
         """
         raise PatronLookupNotSupported()
 
+    def _filter_subject(self, db: Session, subject: SAMLSubject) -> None:
+        """Apply the configured filter expression as an authorization check.
+
+        Raises ProblemDetailException if the subject does not pass the expression
+        or if the expression cannot be evaluated.
+
+        :param db: Database session
+        :param subject: Authenticated SAML subject to authorize
+        :raises ProblemDetailException: if the subject is denied access or the expression errors
+        """
+        expression = self._settings.filter_expression
+        if not expression:
+            return
+
+        library = self.library(db)
+        if library is None:
+            raise ProblemDetailException(
+                problem_detail=SAML_GENERIC_ERROR.detailed("Library not found")
+            )
+        context = {
+            "subject": subject,
+            "integration": self._settings.model_dump(
+                exclude={"service_provider_private_key"},
+                exclude_defaults=False,
+            ),
+            "library": {
+                "short_name": library.short_name,
+                "name": library.name,
+                "id": library.id,
+            },
+            "library_settings": self._library_settings.model_dump(),
+        }
+
+        try:
+            result = FilterExpression(
+                expression,
+                extra_safe_types=_SAML_FILTER_SAFE_TYPES,
+            ).evaluate(context)
+        except FilterExpressionError as exc:
+            raise ProblemDetailException(
+                problem_detail=SAML_GENERIC_ERROR.detailed(str(exc))
+            )
+
+        if not result:
+            raise ProblemDetailException(problem_detail=SAML_NO_ACCESS_ERROR)
+
     def saml_callback(
         self, db: Session, subject: SAMLSubject
     ) -> tuple[Credential, Patron, PatronData]:
@@ -423,6 +483,8 @@ class SAMLWebSSOAuthenticationProvider(
             circulation manager's database, but which should be passed on
             to the client.
         """
+        self._filter_subject(db, subject)
+
         patron_data = self.remote_patron_lookup_from_saml_subject(subject)
 
         # Convert the PatronData into a Patron object

@@ -11,7 +11,6 @@ from onelogin.saml2.xmlparser import fromstring
 from palace.util.datetime_helpers import datetime_utc
 
 from palace.manager.integration.patron_auth.saml.auth import (
-    SAML_NO_ACCESS_ERROR,
     SAMLAuthenticationManager,
     SAMLAuthenticationManagerFactory,
 )
@@ -155,12 +154,11 @@ class TestSAMLAuthenticationManager:
             )
 
     @pytest.mark.parametrize(
-        "saml_response, current_time, filter_expression, expected_value, mock_validation",
+        "saml_response, current_time, expected_value, mock_validation",
         [
             pytest.param(
                 saml_strings.SAML_RESPONSE,
                 datetime_utc(2020, 6, 7, 23, 43, 0),
-                None,
                 SAMLSubject(
                     "http://idp.example.com",
                     SAMLNameID(
@@ -184,43 +182,8 @@ class TestSAMLAuthenticationManager:
                 id="with_name_id_and_attributes",
             ),
             pytest.param(
-                saml_strings.SAML_RESPONSE,
-                datetime_utc(2020, 6, 7, 23, 43, 0),
-                "subject.attribute_statement.attributes['uid'].values[0] != 'student1'",
-                SAML_NO_ACCESS_ERROR,
-                False,
-                id="with_name_id_attributes_and_filter_expression_returning_false",
-            ),
-            pytest.param(
-                saml_strings.SAML_RESPONSE,
-                datetime_utc(2020, 6, 7, 23, 43, 0),
-                "subject.attribute_statement.attributes['uid'].values[0] == 'student1'",
-                SAMLSubject(
-                    "http://idp.example.com",
-                    SAMLNameID(
-                        SAMLNameIDFormat.TRANSIENT.value,
-                        "http://idp.hilbertteam.net/idp/shibboleth",
-                        "http://opds.hilbertteam.net/metadata/",
-                        "AAdzZWNyZXQxeAj5TZ2CQ6FkW//TigUE8kgDuJfVEw7mtnCAFq02hvot2hQzlCj5QqQOBRlsAs0dqp1oHoi/apPWmrC2G30BvrtXcDfZsCGQv9eTGSRDydTLVPEe+lfCc1yg3WlxTeiCbFazW6kcybVgUper",
-                    ),
-                    SAMLAttributeStatement(
-                        [
-                            SAMLAttribute(SAMLAttributeType.uid.name, ["student1"]),
-                            SAMLAttribute(
-                                SAMLAttributeType.mail.name, ["student1@idptestbed.edu"]
-                            ),
-                            SAMLAttribute(SAMLAttributeType.surname.name, ["Ent"]),
-                            SAMLAttribute(SAMLAttributeType.givenName.name, ["Stud"]),
-                        ]
-                    ),
-                ),
-                False,
-                id="with_name_id_attributes_and_filter_expression_returning_true",
-            ),
-            pytest.param(
                 saml_strings.SAML_COLUMBIA_RESPONSE,
                 datetime_utc(2020, 6, 7, 23, 43, 0),
-                None,
                 SAMLSubject(
                     "http://idp.example.com",
                     SAMLNameID(
@@ -248,45 +211,6 @@ class TestSAMLAuthenticationManager:
                 True,
                 id="with_name_id_inside_edu_person_targeted_id_attribute",
             ),
-            pytest.param(
-                saml_strings.SAML_COLUMBIA_RESPONSE,
-                datetime_utc(2020, 6, 7, 23, 43, 0),
-                "subject.attribute_statement.attributes['eduPersonScopedAffiliation'].values[0] != 'alum@columbia.edu'",
-                SAML_NO_ACCESS_ERROR,
-                True,
-                id="with_name_id_inside_edu_person_targeted_id_attribute_and_filter_expression_returning_false",
-            ),
-            pytest.param(
-                saml_strings.SAML_COLUMBIA_RESPONSE,
-                datetime_utc(2020, 6, 7, 23, 43, 0),
-                "subject.attribute_statement.attributes['eduPersonScopedAffiliation'].values[0] == 'alum@columbia.edu'",
-                SAMLSubject(
-                    "http://idp.example.com",
-                    SAMLNameID(
-                        SAMLNameIDFormat.PERSISTENT.value,
-                        "https://shibboleth-dev.cc.columbia.edu/idp/shibboleth",
-                        None,
-                        "0Mi3izMnex9L0sMt9wRfwY0pqQ8=",
-                    ),
-                    SAMLAttributeStatement(
-                        [
-                            SAMLAttribute(
-                                SAMLAttributeType.eduPersonScopedAffiliation.name,
-                                ["alum@columbia.edu"],
-                            ),
-                            SAMLAttribute(
-                                SAMLAttributeType.eduPersonTargetedID.name,
-                                ["0Mi3izMnex9L0sMt9wRfwY0pqQ8="],
-                            ),
-                            SAMLAttribute(
-                                SAMLAttributeType.displayName.name, ["William Tester"]
-                            ),
-                        ]
-                    ),
-                ),
-                True,
-                id="with_name_id_inside_edu_person_targeted_id_attribute_and_filter_expression_returning_true",
-            ),
         ],
     )
     def test_finish_authentication(
@@ -296,7 +220,6 @@ class TestSAMLAuthenticationManager:
         create_mock_onelogin_configuration: Callable[..., SAMLOneLoginConfiguration],
         saml_response,
         current_time,
-        filter_expression,
         expected_value,
         mock_validation,
     ):
@@ -317,7 +240,6 @@ class TestSAMLAuthenticationManager:
             )
 
         configuration = create_saml_configuration(
-            filter_expression=filter_expression,
             service_provider_debug_mode=False,
             service_provider_strict_mode=False,
         )
