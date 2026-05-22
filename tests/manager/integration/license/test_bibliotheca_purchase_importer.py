@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
-from datetime import datetime, timedelta
+from datetime import timedelta
 from unittest.mock import MagicMock, patch
 
 from palace.util.datetime_helpers import datetime_utc, utc_now
@@ -11,6 +10,7 @@ from palace.util.datetime_helpers import datetime_utc, utc_now
 from palace.manager.celery.tasks import apply
 from palace.manager.integration.license.bibliotheca import BibliothecaAPI
 from palace.manager.integration.license.bibliotheca_purchase_importer import (
+    _MARC_PAGE_SIZE,
     DEFAULT_PURCHASE_START_TIME,
     PURCHASE_SERVICE_NAME,
     BibliothecaPurchaseImporter,
@@ -100,10 +100,10 @@ class TestBibliothecaPurchaseImporterImportDay:
 
         assert abs((result.day_end - cutoff).total_seconds()) < 1
 
-    def test_stamps_timestamp_after_processing(
+    def test_stamps_timestamp_to_day_end_when_day_complete(
         self, db: DatabaseTransactionFixture
     ) -> None:
-        """import_day updates the Timestamp so the next day starts correctly."""
+        """A partial page (day complete) stamps Timestamp.finish to day_end."""
         importer, mock_api = _make_importer(db)
         collection = mock_api.collection
         current_day = datetime_utc(2024, 1, 15)
@@ -119,8 +119,34 @@ class TestBibliothecaPurchaseImporterImportDay:
         assert ts.finish is not None
         assert abs((ts.finish - result.day_end).total_seconds()) < 1
 
+    def test_stamps_timestamp_to_current_day_when_page_full(
+        self, db: DatabaseTransactionFixture
+    ) -> None:
+        """A full page (day still in progress) stamps Timestamp.finish to current_day."""
+        importer, mock_api = _make_importer(db)
+        collection = mock_api.collection
+        current_day = datetime_utc(2024, 1, 15)
+        cutoff = datetime_utc(2024, 1, 20)
+
+        full_page = [_fake_marc_record(f"item{i}") for i in range(_MARC_PAGE_SIZE)]
+
+        with (
+            patch.object(BibliothecaAPI, "marc_request", return_value=iter(full_page)),
+            patch.object(BibliothecaAPI, "bibliographic_lookup", return_value=[]),
+        ):
+            result = importer.import_day(current_day, cutoff)
+
+        assert result.next_offset is not None  # day not yet complete
+
+        ts = Timestamp.lookup(
+            db.session, PURCHASE_SERVICE_NAME, Timestamp.MONITOR_TYPE, collection
+        )
+        assert ts is not None
+        assert ts.finish is not None
+        assert abs((ts.finish - current_day).total_seconds()) < 1
+
     def test_counts_records_handled(self, db: DatabaseTransactionFixture) -> None:
-        """records_handled in the result matches the number of records processed."""
+        """records_handled in the result matches the number of records on the page."""
         importer, _ = _make_importer(db)
         current_day = datetime_utc(2024, 1, 15)
         cutoff = datetime_utc(2024, 1, 20)
@@ -137,37 +163,60 @@ class TestBibliothecaPurchaseImporterImportDay:
 
         assert result.records_handled == 3
 
-    def test_paginates_marc_request(self, db: DatabaseTransactionFixture) -> None:
-        """_purchases calls marc_request again when the page is full (50 records)."""
+    def test_returns_next_offset_when_page_is_full(
+        self, db: DatabaseTransactionFixture
+    ) -> None:
+        """A full page (50 records) sets next_offset to offset + _MARC_PAGE_SIZE."""
         importer, _ = _make_importer(db)
         current_day = datetime_utc(2024, 1, 15)
         cutoff = datetime_utc(2024, 1, 20)
 
-        full_page = [_fake_marc_record(f"item{i}") for i in range(50)]
-        partial_page = [_fake_marc_record("item_last")]
-
-        call_count = 0
-
-        def mock_marc_request(
-            start: datetime,
-            end: datetime,
-            offset: int,
-            limit: int,
-        ) -> Iterator[MagicMock]:
-            nonlocal call_count
-            call_count += 1
-            if call_count == 1:
-                return iter(full_page)
-            return iter(partial_page)
+        full_page = [_fake_marc_record(f"item{i}") for i in range(_MARC_PAGE_SIZE)]
 
         with (
-            patch.object(BibliothecaAPI, "marc_request", side_effect=mock_marc_request),
+            patch.object(BibliothecaAPI, "marc_request", return_value=iter(full_page)),
             patch.object(BibliothecaAPI, "bibliographic_lookup", return_value=[]),
         ):
-            result = importer.import_day(current_day, cutoff)
+            result = importer.import_day(current_day, cutoff, offset=1)
 
-        assert call_count == 2
-        assert result.records_handled == 51
+        assert result.next_offset == 1 + _MARC_PAGE_SIZE
+
+    def test_returns_no_next_offset_when_page_is_partial(
+        self, db: DatabaseTransactionFixture
+    ) -> None:
+        """A partial page (fewer than 50 records) sets next_offset to None."""
+        importer, _ = _make_importer(db)
+        current_day = datetime_utc(2024, 1, 15)
+        cutoff = datetime_utc(2024, 1, 20)
+
+        partial_page = [_fake_marc_record(f"item{i}") for i in range(3)]
+
+        with (
+            patch.object(
+                BibliothecaAPI, "marc_request", return_value=iter(partial_page)
+            ),
+            patch.object(BibliothecaAPI, "bibliographic_lookup", return_value=[]),
+        ):
+            result = importer.import_day(current_day, cutoff, offset=51)
+
+        assert result.next_offset is None
+
+    def test_passes_offset_to_marc_request(
+        self, db: DatabaseTransactionFixture
+    ) -> None:
+        """import_day forwards the offset parameter to marc_request."""
+        importer, _ = _make_importer(db)
+        current_day = datetime_utc(2024, 1, 15)
+        cutoff = datetime_utc(2024, 1, 20)
+
+        with patch.object(
+            BibliothecaAPI, "marc_request", return_value=iter([])
+        ) as mock_request:
+            importer.import_day(current_day, cutoff, offset=101)
+
+        args, kwargs = mock_request.call_args
+        # marc_request(start, end, offset, limit)
+        assert args[2] == 101
 
 
 class TestBibliothecaPurchaseImporterProcessRecord:

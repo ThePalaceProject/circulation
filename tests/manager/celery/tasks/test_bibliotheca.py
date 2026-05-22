@@ -712,6 +712,53 @@ class TestBibliothecaPurchaseCollection:
         replace_sig = mock_replace.call_args[0][0]
         assert replace_sig.kwargs["lock_value"] == lock_value
         assert replace_sig.kwargs["current_day"] is not None
+        assert replace_sig.kwargs["offset"] == 1
+
+    @patch(
+        "palace.manager.integration.license.bibliotheca_purchase_importer.BibliothecaAPI"
+    )
+    def test_replaces_with_next_offset_when_page_full(
+        self,
+        mock_api_cls: MagicMock,
+        bibliotheca_purchase_task_fixture: BibliothecaPurchaseTaskFixture,
+        celery_fixture: CeleryFixture,
+        redis_fixture: RedisFixture,
+    ) -> None:
+        """When a full page (50 records) is returned, task.replace() is called with
+        the same current_day and the next offset rather than advancing to the next day.
+        """
+        from palace.manager.integration.license.bibliotheca_purchase_importer import (
+            _MARC_PAGE_SIZE,
+        )
+
+        full_page_records = [MagicMock() for _ in range(_MARC_PAGE_SIZE)]
+        for record in full_page_records:
+            record.fields = []
+            record.as_json.return_value = "{}"
+
+        mock_api_cls.return_value.marc_request.return_value = iter(full_page_records)
+        collection = bibliotheca_purchase_task_fixture.collection
+
+        stored_finish = utc_now() - timedelta(days=5)
+        bibliotheca_purchase_task_fixture.stamp_purchase(finish=stored_finish)
+
+        lock_value = str(uuid4())
+        with patch.object(bibliotheca.purchase_collection, "replace") as mock_replace:
+            mock_replace.side_effect = Exception("replaced")
+            with pytest.raises(Exception, match="replaced"):
+                bibliotheca.purchase_collection.delay(
+                    collection_id=collection.id,
+                    offset=1,
+                    lock_value=lock_value,
+                ).wait()
+
+        replace_sig = mock_replace.call_args[0][0]
+        # Same day, offset advanced by _MARC_PAGE_SIZE.
+        assert (
+            abs((replace_sig.kwargs["current_day"] - stored_finish).total_seconds()) < 5
+        )
+        assert replace_sig.kwargs["offset"] == 1 + _MARC_PAGE_SIZE
+        assert replace_sig.kwargs["lock_value"] == lock_value
 
     @patch(
         "palace.manager.integration.license.bibliotheca_purchase_importer.BibliothecaAPI"
