@@ -759,6 +759,10 @@ class TestGeneratePlaytimeReport:
         monkeypatch.setenv(
             Configuration.REPORTING_NAME_ENVIRONMENT_VARIABLE, reporting_name
         )
+        monkeypatch.setattr(
+            "palace.manager.celery.tasks.playtime_entries.FOLDER_CREATION_JITTER_MAX",
+            0,
+        )
 
         # Act
         generate_playtime_report.delay().wait()
@@ -1008,7 +1012,11 @@ class TestGeneratePlaytimeReport:
         )
         assert pre_lock.acquire()
 
-        # Shorten the task's blocking timeout so the test runs quickly.
+        # Disable jitter and shorten the blocking timeout so the test runs quickly.
+        monkeypatch.setattr(
+            "palace.manager.celery.tasks.playtime_entries.FOLDER_CREATION_JITTER_MAX",
+            0,
+        )
         monkeypatch.setattr(
             "palace.manager.celery.tasks.playtime_entries.FOLDER_LOCK_ACQUIRE_TIMEOUT",
             0.1,

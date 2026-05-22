@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import csv
 import os
+import random
 import tempfile
+import time
 import uuid
 from collections import defaultdict
 from collections.abc import Iterable
@@ -150,6 +152,13 @@ REPORT_DATE_FORMAT = "%m-%d-%Y"
 # Exposed as a module-level constant so tests can monkeypatch a short value.
 FOLDER_LOCK_ACQUIRE_TIMEOUT: int = 60
 
+# Maximum seconds of random jitter added before acquiring the folder-creation lock.
+# Independent CM groups share no Redis instance and therefore cannot coordinate via
+# the lock alone; spreading their start times reduces the probability that two groups
+# race to create the same Google Drive folder at the same moment.
+# Exposed as a module-level constant so tests can set it to 0.
+FOLDER_CREATION_JITTER_MAX: int = 30
+
 
 @shared_task(queue=QueueNames.default, bind=True)
 def generate_playtime_report(
@@ -231,10 +240,14 @@ def generate_playtime_report(
                     str(start.year),
                 ]
 
-                # Acquire a distributed lock so that concurrent workers don't each
-                # create a duplicate folder hierarchy. Google Drive allows same-named
-                # folders and has list-API indexing latency, so a bare
-                # get-then-create is not safe under concurrent access.
+                # Jitter: spread out independent CM groups (which share no Redis)
+                # so they are less likely to race when creating the same folder.
+                time.sleep(random.uniform(0, FOLDER_CREATION_JITTER_MAX))
+
+                # Acquire a distributed lock so that concurrent workers within the
+                # same Redis instance don't each create a duplicate folder hierarchy.
+                # Google Drive allows same-named folders and has list-API indexing
+                # latency, so a bare get-then-create is not safe under concurrent access.
                 folder_lock = RedisLock(
                     redis_client,
                     lock_name=[

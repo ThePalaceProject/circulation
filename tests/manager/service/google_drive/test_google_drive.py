@@ -179,3 +179,46 @@ class TestGoogleDriveService:
                 stream=BytesIO(b"Hello world"),
                 content_type="text/plain",
             )
+
+    def test_get_file_orders_by_created_time(self):
+        """get_file always requests results ordered by createdTime so that the
+        oldest (canonical) folder is returned when duplicates exist."""
+        folder_name = "my-folder"
+        older_id = "older-id"
+        newer_id = "newer-id"
+        http_mock_sequence = HttpMockSequence(
+            [
+                (
+                    {"status": "200"},
+                    json.dumps(
+                        {
+                            "files": [
+                                {
+                                    "kind": "drive#file",
+                                    "id": older_id,
+                                    "name": folder_name,
+                                    "mimeType": "application/vnd.google-apps.folder",
+                                },
+                                {
+                                    "kind": "drive#file",
+                                    "id": newer_id,
+                                    "name": folder_name,
+                                    "mimeType": "application/vnd.google-apps.folder",
+                                },
+                            ]
+                        }
+                    ),
+                ),
+            ]
+        )
+        service = drive_service(http=http_mock_sequence)
+
+        result = service.get_file(name=folder_name)
+
+        # The first result (oldest, per orderBy=createdTime) is returned.
+        assert result is not None
+        assert result["id"] == older_id
+
+        # Verify orderBy=createdTime is present in the request URI.
+        request_uri = unquote_plus(http_mock_sequence.request_sequence[0][0])
+        assert "orderBy=createdTime" in request_uri

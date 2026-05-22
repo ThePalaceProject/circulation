@@ -18,17 +18,23 @@ class GoogleDriveService(LoggerMixin):
 
     def get_file(self, name: str, parent_folder_id: str | None = None) -> File | None:
         """
-        Return the first non-trashed file or folder with the given name.
+        Return the oldest non-trashed file or folder with the given name, or ``None``.
+
+        Excluding trashed items prevents a folder moved to the Drive trash from
+        being mistaken for a live folder (which would cause uploads to land in a
+        trashed, invisible directory).
+
+        Ordering by ``createdTime`` (ascending) ensures that when concurrent
+        workers race to create the same folder, every worker converges on the
+        same canonical (oldest) result regardless of which worker's ``create``
+        call won the race.
 
         :param name: The exact name to search for.
         :param parent_folder_id: If provided, restrict the search to items
             whose parent is this folder/drive ID.
-        :return: The first matching, non-trashed ``File`` object, or ``None``
+        :return: The oldest matching, non-trashed ``File`` object, or ``None``
             if no match is found.
         """
-        # Explicitly exclude trashed items so that a folder moved to the
-        # Drive trash is not mistaken for a live folder, which would cause
-        # uploads to land inside a trashed (invisible) directory.
         query = f"name = '{name}' and trashed = false"
 
         if parent_folder_id:
@@ -40,6 +46,7 @@ class GoogleDriveService(LoggerMixin):
                 q=query,
                 pageSize=10,
                 fields="nextPageToken, files(*)",
+                orderBy="createdTime",
                 supportsAllDrives=True,
                 includeItemsFromAllDrives=True,
             )
