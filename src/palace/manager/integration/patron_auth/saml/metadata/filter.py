@@ -23,7 +23,9 @@ class SAMLSubjectFilterError(BasePalaceException):
 class SAMLSubjectFilter:
     """Executes filter expressions against SAML subjects using FilterExpression."""
 
-    _SAFE_TYPES = (SAMLSubject, SAMLNameID, SAMLAttributeStatement, SAMLAttribute)
+    _SAFE_TYPES: frozenset[type] = frozenset(
+        {SAMLSubject, SAMLNameID, SAMLAttributeStatement, SAMLAttribute}
+    )
 
     def __init__(self) -> None:
         self._logger = logging.getLogger(__name__)
@@ -46,7 +48,7 @@ class SAMLSubjectFilter:
             result = FilterExpression(
                 expression, extra_safe_types=list(self._SAFE_TYPES)
             ).evaluate({"subject": subject})
-        except Exception as exc:
+        except FilterExpressionError as exc:
             raise SAMLSubjectFilterError(exc) from exc
 
         self._logger.info(
@@ -56,6 +58,10 @@ class SAMLSubjectFilter:
 
     def validate(self, expression: str) -> None:
         """Validate the filter expression by checking its syntax.
+
+        Note: only syntax is checked; names used in the expression are not
+        verified against the evaluation context. An expression that references
+        undefined names will pass this check but raise at evaluation time.
 
         :param expression: String containing the filter expression
         :raises SAMLSubjectFilterError: on any syntax error
