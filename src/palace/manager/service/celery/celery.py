@@ -55,6 +55,7 @@ def beat_schedule() -> dict[str, Any]:
     of the task to run.
     """
     from palace.manager.celery.tasks import (
+        bibliotheca,
         boundless,
         license_expiration,
         marc,
@@ -294,6 +295,10 @@ def beat_schedule() -> dict[str, Any]:
         "overdrive_reap_all_collections": {
             "task": overdrive.reap_all_collections.name,
             "schedule": crontab(minute="0", hour="23"),  # Once a day at 11:00 PM
+        },
+        "bibliotheca_import_all_collections": {
+            "task": bibliotheca.import_all_collections.name,
+            "schedule": crontab(minute="0"),  # Once an hour
         },
     }
 

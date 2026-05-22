@@ -37,7 +37,6 @@ from palace.manager.integration.license.bibliotheca import (
     BibliothecaAPI,
     BibliothecaBibliographicCoverageProvider,
     BibliothecaCirculationSweep,
-    BibliothecaEventMonitor,
     BibliothecaParser,
     BibliothecaPurchaseMonitor,
     CheckoutResponseParser,
@@ -73,7 +72,6 @@ from tests.mocks.bibliotheca import MockBibliothecaAPI
 if TYPE_CHECKING:
     from tests.fixtures.database import DatabaseTransactionFixture
     from tests.fixtures.files import BibliothecaFilesFixture
-    from tests.fixtures.time import Time
 
 
 class BibliothecaAPITestFixture:
@@ -1510,174 +1508,6 @@ class TestBibliothecaPurchaseMonitor:
         assert timestamp.achievements == "MARC records processed: 1"
         assert timestamp.finish is not None
         assert timestamp.finish > start_time
-
-
-class TestBibliothecaEventMonitor:
-    @pytest.fixture()
-    def default_monitor(self, bibliotheca_fixture: BibliothecaAPITestFixture):
-        return BibliothecaEventMonitor(
-            bibliotheca_fixture.db.session,
-            bibliotheca_fixture.collection,
-            api_class=MockBibliothecaAPI,
-        )
-
-    @pytest.fixture()
-    def initialized_monitor(self, db: DatabaseTransactionFixture):
-        collection = MockBibliothecaAPI.mock_collection(
-            db.session, db.default_library(), name="Initialized Monitor Collection"
-        )
-        monitor = BibliothecaEventMonitor(
-            db.session, collection, api_class=MockBibliothecaAPI
-        )
-        Timestamp.stamp(
-            db.session,
-            service=monitor.service_name,
-            service_type=Timestamp.MONITOR_TYPE,
-            collection=collection,
-        )
-        return monitor
-
-    def test_run_once(
-        self,
-        bibliotheca_fixture: BibliothecaAPITestFixture,
-        time_fixture: Time,
-        db: DatabaseTransactionFixture,
-    ):
-        # run_once() slices the time between its start date
-        # and the current time into five-minute intervals, and asks for
-        # data about one interval at a time.
-
-        now = utc_now()
-        one_hour_ago = now - timedelta(hours=1)
-        two_hours_ago = now - timedelta(hours=2)
-
-        # Simulate that this script last ran 24 hours ago
-        before_timestamp = TimestampData(start=two_hours_ago, finish=one_hour_ago)
-
-        api = MockBibliothecaAPI(db.session, bibliotheca_fixture.collection)
-        api.queue_response(
-            200,
-            content=bibliotheca_fixture.files.sample_data("item_metadata_single.xml"),
-        )
-        # Setting up making requests in 5-minute intervals in the hour slice.
-        for i in range(1, 15):
-            api.queue_response(
-                200,
-                content=bibliotheca_fixture.files.sample_data(
-                    "empty_end_date_event.xml"
-                ),
-            )
-
-        monitor = BibliothecaEventMonitor(
-            db.session, bibliotheca_fixture.collection, api_class=api
-        )
-
-        after_timestamp = monitor.run_once(before_timestamp)
-        # Fifteen requests were made to the API:
-        #
-        # 1. Looking up detailed information about the single book
-        #    whose event we found.
-        #
-        # 2. Retrieving the 'slices' of events between 2 hours ago and
-        #    1 hour ago in 5 minute intervals.
-        assert 15 == len(api.requests)
-
-        # There is no second 'detailed information' lookup because both events
-        # relate to the same book.
-
-        # A LicensePool was created for the identifier referred to
-        # in empty_end_date_event.xml.
-        [pool] = bibliotheca_fixture.collection.licensepools
-        assert "d5rf89" == pool.identifier.identifier
-
-        # But since the metadata retrieved in the follow-up request
-        # was for a different book, no Work and no Edition have been
-        # created. (See test_handle_event for what happens when the
-        # API cooperates.)
-        assert None == pool.work
-        assert None == pool.presentation_edition
-
-        # The timeframe covered by that run starts a little before the
-        # 'finish' date associated with the old timestamp, and ends
-        # around the time run_once() was called.
-        #
-        # The events we found were both from 2016, but that's not
-        # considered when setting the timestamp.
-        assert one_hour_ago - monitor.OVERLAP == after_timestamp.start
-        time_fixture.time_eq(after_timestamp.finish, now)
-        # The timestamp's achivements have been updated.
-        assert "Events handled: 13." == after_timestamp.achievements
-
-        # In earlier versions, the progress timestamp's `counter`
-        # property was manipulated to put the monitor in different
-        # states that would improve its reliability in different
-        # failure scenarios. With the addition of the
-        # BibliothecaPurchaseMonitor, the reliability of
-        # BibliothecaEventMonitor became much less important, so the
-        # complex code has been removed.
-        assert None == after_timestamp.counter
-
-        # To prove this, run the monitor again, catching up between
-        # after_timestamp.start (the current time, minus 5 minutes and
-        # a little bit), and the current time.
-        #
-        # This is going to result in two more API calls, one for the
-        # "5 minutes" and one for the "little bit".
-        api.queue_response(
-            200, content=bibliotheca_fixture.files.sample_data("empty_event_batch.xml")
-        )
-        api.queue_response(
-            200, content=bibliotheca_fixture.files.sample_data("empty_event_batch.xml")
-        )
-        monitor.run_once(after_timestamp)
-
-        # Two more requests were made, but no events were found for the
-        # corresponding time slices, so nothing happened.
-        #
-        # Previously the lack of any events would have been treated as
-        # an error.
-        assert 17 == len(api.requests)
-        assert "Events handled: 0." == after_timestamp.achievements
-
-    def test_handle_event(self, bibliotheca_fixture: BibliothecaAPITestFixture):
-        db = bibliotheca_fixture.db
-        api = MockBibliothecaAPI(db.session, bibliotheca_fixture.collection)
-        api.queue_response(
-            200,
-            content=bibliotheca_fixture.files.sample_data("item_metadata_single.xml"),
-        )
-        monitor = BibliothecaEventMonitor(
-            db.session,
-            bibliotheca_fixture.collection,
-            api_class=api,
-        )
-
-        now = utc_now()
-        monitor.handle_event(
-            "ddf4gr9",
-            "9781250015280",
-            None,
-            now,
-            None,
-            CirculationEvent.DISTRIBUTOR_LICENSE_ADD,
-        )
-
-        # The collection now has a LicensePool corresponding to the book
-        # we just loaded.
-        [pool] = bibliotheca_fixture.collection.licensepools
-        assert "ddf4gr9" == pool.identifier.identifier
-
-        # The book has a presentation-ready work and we know its
-        # bibliographic metadata.
-        assert True == pool.work.presentation_ready
-        assert "The Incense Game" == pool.work.title
-
-        # The LicensePool's circulation information has been changed
-        # to reflect what we know about the book -- that we have one
-        # license which (as of the instant the event happened) is
-        # available.
-        assert 1 == pool.licenses_owned
-        assert 1 == pool.licenses_available
 
 
 class TestBibliothecaPurchaseMonitorWhenMultipleCollections:
