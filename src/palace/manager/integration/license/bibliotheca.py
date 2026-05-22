@@ -10,13 +10,11 @@ import re
 import time
 import urllib.parse
 from abc import ABC
-from argparse import ArgumentParser, Namespace
-from collections.abc import Collection as CollectionT, Generator, Iterable, Sequence
+from collections.abc import Collection as CollectionT, Generator, Iterable
 from datetime import datetime, timedelta
 from io import BytesIO
 from typing import Annotated, Any, Literal, Optional, Unpack, overload
 
-import dateutil.parser
 from flask_babel import lazy_gettext as _
 from frozendict import frozendict
 from lxml.etree import Error, _Element
@@ -25,7 +23,6 @@ from requests import Response
 from sqlalchemy.orm import Session
 
 from palace.util.datetime_helpers import (
-    datetime_utc,
     strptime_utc,
     to_utc,
     utc_now,
@@ -64,12 +61,7 @@ from palace.manager.core.config import (
     ConfigurationAttributeValue,
 )
 from palace.manager.core.coverage import BibliographicCoverageProvider, CoverageFailure
-from palace.manager.core.monitor import (
-    CollectionMonitor,
-    IdentifierSweepMonitor,
-    TimelineMonitor,
-    TimestampData,
-)
+from palace.manager.core.monitor import IdentifierSweepMonitor
 from palace.manager.core.selftest import SelfTestResult
 from palace.manager.data_layer.bibliographic import BibliographicData
 from palace.manager.data_layer.circulation import CirculationData
@@ -84,13 +76,11 @@ from palace.manager.integration.settings import (
     FormFieldType,
     FormMetadata,
 )
-from palace.manager.scripts.monitor import RunCollectionMonitorScript
 from palace.manager.sqlalchemy.constants import DataSourceConstants
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.classification import Classification, Subject
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.contributor import Contributor
-from palace.manager.sqlalchemy.model.coverage import Timestamp
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
@@ -103,7 +93,6 @@ from palace.manager.sqlalchemy.model.licensing import (
 from palace.manager.sqlalchemy.model.measurement import Measurement
 from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
-from palace.manager.sqlalchemy.util import get_one
 from palace.manager.util import base64
 from palace.manager.util.http.exception import RemoteIntegrationException
 from palace.manager.util.http.http import HTTP, RequestKwargs
@@ -1314,337 +1303,6 @@ class BibliothecaCirculationSweep(IdentifierSweepMonitor):
             collection=self.collection,
             replace=self.replacement_policy,
         )
-
-
-class BibliothecaTimelineMonitor(CollectionMonitor, TimelineMonitor):
-    """Common superclass for our two TimelineMonitors."""
-
-    PROTOCOL = BibliothecaAPI.label()
-    LOG_DATE_FORMAT = "%Y-%m-%dT%H:%M:%S"
-
-    def __init__(
-        self,
-        _db: Session,
-        collection: Collection,
-        api_class: BibliothecaApiClassT,
-    ) -> None:
-        """Initializer.
-
-        :param _db: Database session object.
-        :param collection: Collection for which this monitor operates.
-        :param api_class: API class or an instance thereof for this monitor.
-        """
-        super().__init__(_db, collection)
-        if isinstance(api_class, BibliothecaAPI):
-            # We were given an actual API object. Just use it.
-            self.api = api_class
-        else:
-            self.api = api_class(_db, collection)
-        self.replacement_policy = ReplacementPolicy.from_license_source()
-        self.bibliographic_coverage_provider = BibliothecaBibliographicCoverageProvider(
-            collection, self.api, replacement_policy=self.replacement_policy
-        )
-
-
-class BibliothecaPurchaseMonitor(BibliothecaTimelineMonitor):
-    """Track purchases of licenses from Bibliotheca.
-
-    Most TimelineMonitors monitor the timeline starting at whatever
-    time they're first run. But it's crucial that this monitor start
-    at or before the first day on which a book was added to this
-    collection, even if that date was years in the past. That's
-    because this monitor may be the only time we hear about a
-    particular book.
-
-    Because of this, this monitor has a very old DEFAULT_START_TIME
-    and special capabilities for customizing the start_time to go back
-    even further.
-    """
-
-    SERVICE_NAME = "Bibliotheca Purchase Monitor"
-    DEFAULT_START_TIME = datetime_utc(2014, 1, 1)
-
-    def __init__(
-        self,
-        _db: Session,
-        collection: Collection,
-        api_class: BibliothecaApiClassT = BibliothecaAPI,
-        default_start: str | datetime | None = None,
-        override_timestamp: bool = False,
-    ) -> None:
-        """Initializer.
-
-        :param _db: Database session object.
-        :param collection: Collection for which this monitor operates.
-        :param api_class: API class or an instance thereof for this monitor.
-        :param default_start: A default date/time at which to start
-            requesting events. It should be specified as a `datetime` or
-            an ISO 8601 string. If not provided, the monitor's calculated
-            intrinsic default will be used.
-        :param override_timestamp: Boolean indicating whether
-            `default_start` should take precedence over the timestamp
-            for an already initialized monitor.
-        """
-        super().__init__(_db=_db, collection=collection, api_class=api_class)
-
-        # We should only force the use of `default_start` as the actual
-        # start time if it was passed in.
-        self.override_timestamp = override_timestamp if default_start else False
-        # A specified `default_start` takes precedence over the
-        # monitor's intrinsic default start date/time.
-        self.default_start_time = self._optional_iso_date(
-            default_start
-        ) or self._intrinsic_start_time(_db)
-
-    def _optional_iso_date(self, date: str | datetime | None) -> datetime | None:
-        """Return the date in `datetime` format.
-
-        :param date: A date/time value, specified as either an ISO 8601
-            string or as a `datetime`.
-        :return: Optional datetime.
-        """
-        if date is None or isinstance(date, datetime):
-            return to_utc(date)
-        try:
-            dt_date = to_utc(dateutil.parser.isoparse(date))
-        except ValueError as e:
-            self.log.warning(
-                '%r. Date argument "%s" was not in a valid format. Use an ISO 8601 string or a datetime.',
-                e,
-                date,
-            )
-            raise
-        return dt_date
-
-    def _intrinsic_start_time(self, _db: Session) -> datetime:
-        """Return the intrinsic start time for this monitor.
-
-        The intrinsic start time is the time at which this monitor would
-        start if it were uninitialized (no timestamp) and no `default_start`
-        parameter were supplied. It is `self.DEFAULT_START_TIME`.
-
-        :param _db: Database session object.
-
-        :return: datetime representing a default start time.
-        """
-        # We don't use Monitor.timestamp() because that will create
-        # the timestamp if it doesn't exist -- we want to see whether
-        # or not it exists.
-        default_start_time = self.DEFAULT_START_TIME
-        initialized = get_one(
-            _db,
-            Timestamp,
-            service=self.service_name,
-            service_type=Timestamp.MONITOR_TYPE,
-            collection=self.collection,
-        )
-        if not initialized:
-            self.log.info(
-                "Initializing %s from date: %s.",
-                self.service_name,
-                default_start_time.strftime(self.LOG_DATE_FORMAT),
-            )
-        return default_start_time
-
-    def timestamp(self) -> Timestamp:
-        """Find or create a Timestamp for this Monitor.
-
-        If we are overriding the normal start time with one supplied when
-        the this class was instantiated, we do that here. The instance's
-        `default_start_time` will have been set to the specified datetime
-        and setting`timestamp.finish` to None will cause the default to
-        be used.
-        """
-        timestamp = super().timestamp()
-        if self.override_timestamp:
-            self.log.info(
-                "Overriding timestamp and starting at %s.",
-                datetime.strftime(self.default_start_time, self.LOG_DATE_FORMAT),
-            )
-            timestamp.finish = None
-        return timestamp  # type: ignore[no-any-return]
-
-    def catch_up_from(
-        self, start: datetime, cutoff: datetime, progress: TimestampData
-    ) -> None:
-        """Ask the Bibliotheca API about new purchases for every
-        day between `start` and `cutoff`.
-
-        :param start: The first day to ask about.
-        :param cutoff: The last day to ask about.
-        :param progress: Object used to record progress through the timeline.
-        """
-        num_records = 0
-        # Ask the Bibliotheca API for one day of data at a time.  This
-        # ensures that TITLE_ADD events are associated with the day
-        # the license was purchased.
-        today = utc_now().date()
-        achievement_template = "MARC records processed: %s"
-        for slice_start, slice_end, is_full_slice in self.slice_timespan(
-            start, cutoff, timedelta(days=1)
-        ):
-            for record in self.purchases(slice_start, slice_end):
-                self.process_record(record, slice_start)
-                num_records += 1
-            if isinstance(slice_end, datetime):
-                slice_end_as_date = slice_end.date()
-            else:
-                slice_end_as_date = slice_end
-            if is_full_slice and slice_end_as_date < today:
-                # We have finished processing a date in the past.
-                # There can never be more licenses purchased for that
-                # day. Treat this as a checkpoint.
-                #
-                # We're playing it safe by using slice_start instead
-                # of slice_end here -- slice_end should be fine.
-                self._checkpoint(
-                    progress, start, slice_start, achievement_template % num_records
-                )
-            # We're all caught up. The superclass will take care of
-            # finalizing the dates, so there's no need to explicitly
-            # set a checkpoint.
-            progress.achievements = achievement_template % num_records
-
-    def _checkpoint(
-        self,
-        progress: TimestampData,
-        start: datetime,
-        finish: datetime,
-        achievements: str,
-    ) -> None:
-        """Set the monitor's progress so that if it crashes later on it will
-        start from this point, reducing duplicate work.
-
-        This is especially important for this monitor, which usually
-        starts several years in the past. TODO: However it might be
-        useful to make this a general feature of TimelineMonitor.
-
-        :param progress: Object used to record progress through the timeline.
-
-        :param start: New value for `progress.start`
-        :param finish: New value for `progress.finish`
-        :param achievements: The monitor's achievements thus far.
-        """
-        progress.start = start
-        progress.finish = finish
-        progress.achievements = achievements
-        progress.finalize(
-            service=self.service_name,
-            service_type=Timestamp.MONITOR_TYPE,
-            collection=self.collection,
-        )
-        progress.apply(self._db)
-        self._db.commit()
-
-    def purchases(self, start: datetime, end: datetime) -> Generator[Record]:
-        """Ask Bibliotheca for a MARC record for each book purchased
-        between `start` and `end`.
-
-        :yield: A sequence of pymarc Record objects
-        """
-        offset = 1  # Smallest allowed offset
-        page_size = 50  # Maximum supported size.
-        records = None
-        while records is None or len(records) >= page_size:
-            records = [x for x in self.api.marc_request(start, end, offset, page_size)]
-            yield from records
-            offset += page_size
-
-    def process_record(
-        self, record: Record, purchase_time: datetime
-    ) -> LicensePool | None:
-        """Record the purchase of a new title.
-
-        :param record: Bibliographic information about the new title.
-        :param purchase_time: Put down this time as the time the
-           purchase happened.
-
-        :return: A LicensePool representing the new title.
-        """
-        # The control number associated with the MARC record is what
-        # we call the Bibliotheca ID.
-        control_numbers = [x for x in record.fields if x.tag == "001"]
-        # These errors should not happen in real usage.
-        error = None
-        if not control_numbers:
-            error = "Ignoring MARC record with no Bibliotheca control number."
-        elif len(control_numbers) > 1:
-            error = "Ignoring MARC record with multiple Bibliotheca control numbers."
-        if error is not None:
-            self.log.error(error + " " + record.as_json())
-            return None
-
-        # At this point we know there is one and only one control
-        # number.
-        bibliotheca_id = control_numbers[0].value()
-
-        # Find or lookup a LicensePool from the control number.
-        license_pool, is_new = LicensePool.for_foreign_id(
-            self._db,
-            self.api.data_source,
-            Identifier.BIBLIOTHECA_ID,
-            bibliotheca_id,
-            collection=self.collection,
-        )
-
-        if is_new:
-            # We've never seen this book before. Immediately acquire
-            # bibliographic coverage for it. This will set the
-            # DistributionMechanisms and make the book
-            # presentation-ready.
-            #
-            # We have most of the bibliographic information in the
-            # MARC record itself, but using the
-            # BibliographicCoverageProvider saves code and also gives
-            # us up-to-date circulation information.
-            coverage_record = self.bibliographic_coverage_provider.ensure_coverage(
-                license_pool.identifier, force=True
-            )
-
-        return license_pool
-
-
-class RunBibliothecaPurchaseMonitorScript(RunCollectionMonitorScript):
-    """Adds the ability to specify a particular start date for the
-    BibliothecaPurchaseMonitor. This is important because for a given
-    collection, the start date needs to be before books
-    started being licensed into that collection.
-    """
-
-    @classmethod
-    def arg_parser(cls, _db: Session) -> ArgumentParser:
-        parser = super().arg_parser(_db)
-        parser.add_argument(
-            "--default-start",
-            metavar="DATETIME",
-            default=None,
-            type=dateutil.parser.isoparse,
-            help="Default start date/time to be used for uninitialized (no timestamp) monitors."
-            ' Use ISO 8601 format (e.g., "yyyy-mm-dd", "yyyy-mm-ddThh:mm:ss").'
-            " Do not specify a time zone or offset.",
-        )
-        parser.add_argument(
-            "--override-timestamp",
-            action="store_true",
-            help="Use the specified `--default-start` as the actual"
-            " start date, even if a monitor is already initialized.",
-        )
-        return parser
-
-    @classmethod
-    def parse_command_line(
-        cls,
-        _db: Session,
-        cmd_args: Sequence[str | None] | None = None,
-        *args: Any,
-        **kwargs: Any,
-    ) -> Namespace:
-        parsed = super().parse_command_line(_db, cmd_args, *args, **kwargs)
-        if parsed.override_timestamp and not parsed.default_start:
-            cls.arg_parser(_db).error(
-                '"--override-timestamp" is valid only when "--default-start" is also specified.'
-            )
-        return parsed
 
 
 class BibliothecaBibliographicCoverageProvider(BibliographicCoverageProvider):

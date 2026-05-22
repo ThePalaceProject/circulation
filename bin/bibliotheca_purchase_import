@@ -1,0 +1,8 @@
+#!/usr/bin/env python
+"""Manually kick off the Bibliotheca purchase import for one or all collections."""
+
+from palace.manager.integration.license.bibliotheca_scripts import (
+    ImportPurchaseCollection,
+)
+
+ImportPurchaseCollection().run()
