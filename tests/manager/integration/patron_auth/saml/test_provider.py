@@ -19,6 +19,7 @@ from palace.manager.integration.patron_auth.saml.auth import (
 )
 from palace.manager.integration.patron_auth.saml.configuration.model import (
     SAMLOneLoginConfiguration,
+    SAMLWebSSOAuthLibrarySettings,
     SAMLWebSSOAuthSettings,
 )
 from palace.manager.integration.patron_auth.saml.credential import SAMLCredentialManager
@@ -1315,6 +1316,54 @@ class TestSAMLWebSSOAuthenticationProvider:
             session_lifetime=session_lifetime,
         )
         provider = create_saml_provider(settings=configuration)
+
+        context_manager = (
+            pytest.raises(ProblemDetailException) if expect_no_access else nullcontext()
+        )
+        with context_manager as exc_info:
+            provider._filter_subject(
+                controller_fixture.db.session,
+                SAMLSubject("http://idp.example.com", None, None),
+            )
+
+        if expect_no_access:
+            assert (
+                exc_info.value.problem_detail.uri
+                == "http://palaceproject.io/terms/problem/auth/unrecoverable/saml/no-access"
+            )
+
+    @pytest.mark.parametrize(
+        "integration_expression, library_expression, expect_no_access",
+        [
+            pytest.param("1 == 1", "1 == 1", False, id="both-pass"),
+            pytest.param("1 == 2", "1 == 1", True, id="integration-rejects"),
+            pytest.param("1 == 1", "1 == 2", True, id="library-rejects"),
+            pytest.param("1 == 2", "1 == 2", True, id="both-reject"),
+            pytest.param(None, "1 == 1", False, id="only-library-passes"),
+            pytest.param(None, "1 == 2", True, id="only-library-rejects"),
+            pytest.param("1 == 1", None, False, id="only-integration-passes"),
+            pytest.param("1 == 2", None, True, id="only-integration-rejects"),
+        ],
+    )
+    def test_filter_subject_and_behavior(
+        self,
+        controller_fixture: ControllerFixture,
+        create_saml_configuration: Callable[..., SAMLWebSSOAuthSettings],
+        create_saml_provider: Callable[..., SAMLWebSSOAuthenticationProvider],
+        integration_expression: str | None,
+        library_expression: str | None,
+        expect_no_access: bool,
+    ):
+        """Integration and library filter expressions are ANDed; both must pass."""
+        configuration = create_saml_configuration(
+            filter_expression=integration_expression
+        )
+        provider = create_saml_provider(
+            settings=configuration,
+            library_settings=SAMLWebSSOAuthLibrarySettings(
+                filter_expression=library_expression
+            ),
+        )
 
         context_manager = (
             pytest.raises(ProblemDetailException) if expect_no_access else nullcontext()

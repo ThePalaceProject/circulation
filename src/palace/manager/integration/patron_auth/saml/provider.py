@@ -432,8 +432,15 @@ class SAMLWebSSOAuthenticationProvider(
         :param subject: Authenticated SAML subject to authorize
         :raises ProblemDetailException: if the subject is denied access or the expression errors
         """
-        expression = self._settings.filter_expression
-        if not expression:
+        expressions = [
+            e
+            for e in (
+                self._settings.filter_expression,
+                self._library_settings.filter_expression,
+            )
+            if e
+        ]
+        if not expressions:
             return
 
         library = self.library(db)
@@ -455,18 +462,18 @@ class SAMLWebSSOAuthenticationProvider(
             "library_settings": self._library_settings.model_dump(),
         }
 
-        try:
-            result = FilterExpression(
-                expression,
-                extra_safe_types=_SAML_FILTER_SAFE_TYPES,
-            ).evaluate(context)
-        except FilterExpressionError as exc:
-            raise ProblemDetailException(
-                problem_detail=SAML_GENERIC_ERROR.detailed(str(exc))
-            )
-
-        if not result:
-            raise ProblemDetailException(problem_detail=SAML_NO_ACCESS_ERROR)
+        for expression in expressions:
+            try:
+                result = FilterExpression(
+                    expression,
+                    extra_safe_types=_SAML_FILTER_SAFE_TYPES,
+                ).evaluate(context)
+            except FilterExpressionError as exc:
+                raise ProblemDetailException(
+                    problem_detail=SAML_GENERIC_ERROR.detailed(str(exc))
+                )
+            if not result:
+                raise ProblemDetailException(problem_detail=SAML_NO_ACCESS_ERROR)
 
     def saml_callback(
         self, db: Session, subject: SAMLSubject

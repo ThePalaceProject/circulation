@@ -104,6 +104,21 @@ class FederatedIdentityProviderOptions:
         return {entity_id: label for entity_id, label in identity_providers}
 
 
+def _validate_filter_expression(cls: Any, v: str | None) -> str | None:
+    """Shared validator for SAML filter expression fields on settings models."""
+    if v is not None:
+        try:
+            FilterExpression(v).check_syntax()
+        except FilterExpressionError as exception:
+            cls.logger().exception("Validation of the filter expression failed")
+            raise SettingsValidationError(
+                problem_detail=SAML_INCORRECT_FILTER_EXPRESSION.detailed(
+                    f"SAML filter expression has an incorrect format: {str(exception)}"
+                )
+            )
+    return v
+
+
 class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
     """SAML Web SSO Authentication settings"""
 
@@ -228,9 +243,9 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
         FormMetadata(
             label="Filter Expression",
             description=(
-                "A Python expression that restricts access to a subset of authenticated"
-                " patrons based on their SAML attributes. Patrons whose attributes do not satisfy"
-                " the expression are denied access."
+                "A Python expression that may restrict a patron's access based on their"
+                " SAML Subject and other settings."
+                " When present, it must evaluate to True in order for the patron to gain access."
                 "<br>"
                 "<br>"
                 "For example, if you want to limit access to only those patrons for whom the"
@@ -403,18 +418,7 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
     @field_validator("filter_expression")
     @classmethod
     def validate_filter_expression(cls, v: str | None) -> str | None:
-        if v is not None:
-            try:
-                FilterExpression(v).check_syntax()
-            except FilterExpressionError as exception:
-                cls.logger().exception("Validation of the filter expression failed")
-                message = (
-                    f"SAML filter expression has an incorrect format: {str(exception)}"
-                )
-                raise SettingsValidationError(
-                    problem_detail=SAML_INCORRECT_FILTER_EXPRESSION.detailed(message)
-                )
-        return v
+        return _validate_filter_expression(cls, v)
 
     @field_validator("patron_id_regular_expression")
     @classmethod
@@ -433,7 +437,31 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
         return v
 
 
-class SAMLWebSSOAuthLibrarySettings(AuthProviderLibrarySettings): ...
+class SAMLWebSSOAuthLibrarySettings(AuthProviderLibrarySettings):
+    """Per-library SAML Web SSO authentication settings."""
+
+    filter_expression: Annotated[
+        str | None,
+        FormMetadata(
+            label="Filter Expression",
+            description=(
+                "A Python expression that may restrict a patron's access to this library"
+                " based on their SAML Subject and other settings."
+                " When present, it must evaluate to True in order for the patron to gain"
+                " access to this library."
+                "<br>"
+                "<br>"
+                "Refer to the integration-level Filter Expression setting for expression"
+                " syntax and examples."
+            ),
+            type=FormFieldType.TEXTAREA,
+        ),
+    ] = None
+
+    @field_validator("filter_expression")
+    @classmethod
+    def validate_filter_expression(cls, v: str | None) -> str | None:
+        return _validate_filter_expression(cls, v)
 
 
 class SAMLOneLoginConfiguration(LoggerMixin):
