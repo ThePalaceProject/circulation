@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import typing
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -52,6 +53,7 @@ class FormFieldType(Enum):
     ANNOUNCEMENTS = "announcements"
     COLOR = "color-picker"
     IMAGE = "image"
+    JSON = "json"
 
 
 FormOptionsType = Mapping[Enum | str | bool | None, str | LazyString]
@@ -137,7 +139,10 @@ class FormMetadata(LoggerMixin):
             )
 
         if default is not None and default is not PydanticUndefined:
-            form_entry["default"] = self.get_form_value(default)
+            if self.type == FormFieldType.JSON:
+                form_entry["default"] = json.dumps(default)
+            else:
+                form_entry["default"] = self.get_form_value(default)
         if self.type.value is not None:
             form_entry["type"] = self.type.value
         if self.description is not None:
@@ -199,6 +204,31 @@ class BaseSettings(BaseModel, LoggerMixin):
         for key, value in values.items():
             if isinstance(value, str) and value.strip() == "":
                 values[key] = None
+
+        # For FormFieldType.JSON fields, the admin interface sends the textarea
+        # content as a string. Parse it as JSON so downstream validators and
+        # callers receive the actual Python value.
+        for name, field_info in cls.model_fields.items():
+            fm = _get_form_metadata(field_info)
+            if fm is None or fm.type != FormFieldType.JSON:
+                continue
+            key = (
+                field_info.alias
+                if field_info.alias is not None and field_info.alias in values
+                else name
+            )
+            if key not in values:
+                continue
+            v = values[key]
+            if isinstance(v, str):
+                try:
+                    values[key] = json.loads(v)
+                except json.JSONDecodeError as exc:
+                    raise SettingsValidationError(
+                        problem_detail=INVALID_CONFIGURATION_OPTION.detailed(
+                            f"'{fm.label}' must be valid JSON: {exc}"
+                        )
+                    )
 
         return values
 

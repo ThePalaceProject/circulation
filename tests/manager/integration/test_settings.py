@@ -1,6 +1,6 @@
 import logging
 from functools import partial
-from typing import Annotated, Self
+from typing import Annotated, Any, Self
 from unittest.mock import MagicMock
 
 import pytest
@@ -62,6 +62,13 @@ class MockSettings(BaseSettings):
         float,
         FormMetadata(label="With Alias", description="With Alias description"),
     ] = Field(default=-1.1, alias="foo")
+
+
+class JsonMockSettings(BaseSettings):
+    data: Annotated[
+        dict | list | str | int | float | bool | None,
+        FormMetadata(label="Data", type=FormFieldType.JSON),
+    ] = None
 
 
 class BaseSettingsFixture:
@@ -131,6 +138,10 @@ class TestBaseSettings:
         settings = base_settings_fixture.settings(test=" foo ")
         assert settings.model_dump() == {"test": "foo", "number": 1}
 
+        # Empty string is normalized to None for all fields, including JSON fields.
+        settings = JsonMockSettings(data="")
+        assert settings.data is None
+
     def test_whitespace_only_required_field_treated_as_missing(self) -> None:
         # A whitespace-only string submitted for a required field should be
         # treated the same as an empty string (i.e. missing), because the admin
@@ -144,6 +155,72 @@ class TestBaseSettings:
 
         with raises_problem_detail(detail="Required field 'Username' is missing."):
             RequiredStrSettings(username=" ")
+
+    @pytest.mark.parametrize(
+        "input_val, expected_val",
+        [
+            ('{"a": 1}', {"a": 1}),
+            ("[1, 2, 3]", [1, 2, 3]),
+            ("42", 42),
+            ("true", True),
+            ({"a": 1}, {"a": 1}),
+            ("null", None),
+            (None, None),
+        ],
+        ids=[
+            "dict-string",
+            "list-string",
+            "int-string",
+            "bool-string",
+            "already-parsed-dict",
+            "json-null-string",
+            "none-passthrough",
+        ],
+    )
+    def test_json_field_parsing(self, input_val: Any, expected_val: Any) -> None:
+        settings = JsonMockSettings(data=input_val)
+        assert settings.data == expected_val
+
+    def test_json_field_invalid_raises_error(self) -> None:
+        with raises_problem_detail() as info:
+            JsonMockSettings(data="not json")
+        assert (
+            info.value.detail is not None
+            and "'Data' must be valid JSON:" in info.value.detail
+        )
+
+    def test_json_field_alias_parsing(self) -> None:
+        class AliasedJsonSettings(BaseSettings):
+            data: Annotated[
+                dict | None,
+                FormMetadata(label="Data", type=FormFieldType.JSON),
+            ] = Field(default=None, alias="cfg")
+
+        settings = AliasedJsonSettings(**{"cfg": '{"x": 1}'})
+        assert settings.data == {"x": 1}
+
+    @pytest.mark.parametrize(
+        "default_val, expected_json",
+        [
+            ({"key": "value"}, '{"key": "value"}'),
+            ([1, 2, 3], "[1, 2, 3]"),
+            ("hello", '"hello"'),
+            (42, "42"),
+            (True, "true"),
+        ],
+        ids=["dict", "list", "str", "int", "bool"],
+    )
+    def test_json_field_default_serialized_in_form(
+        self, default_val: Any, expected_json: str
+    ) -> None:
+        class DefaultJsonSettings(BaseSettings):
+            data: Annotated[
+                Any,
+                FormMetadata(label="Data", type=FormFieldType.JSON),
+            ] = default_val
+
+        form = DefaultJsonSettings.configuration_form(MagicMock())
+        assert form[0]["default"] == expected_json
 
     def test_field_validator_return_pd_exception(
         self, base_settings_fixture: BaseSettingsFixture
