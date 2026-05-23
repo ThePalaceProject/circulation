@@ -8,6 +8,7 @@ from palace.manager.api.admin.problem_details import (
     INVALID_CONFIGURATION_OPTION,
 )
 from palace.manager.integration.patron_auth.saml.configuration.model import (
+    SAMLWebSSOAuthLibrarySettings,
     SAMLWebSSOAuthSettings,
 )
 from palace.manager.integration.patron_auth.saml.configuration.problem_details import (
@@ -219,3 +220,11 @@ class TestSAMLSettingsValidator:
                 exc_info.value.problem_detail.uri
                 == SAML_INCORRECT_FILTER_EXPRESSION.uri
             )
+
+    def test_validate_filter_expression_library_settings(self) -> None:
+        """SAMLWebSSOAuthLibrarySettings rejects invalid filter expression syntax."""
+        with pytest.raises(ProblemDetailException) as exc_info:
+            SAMLWebSSOAuthLibrarySettings(
+                filter_expression='subject.attribute_statement.attributes["eduPersonEntitlement"].values[0 == "eresources"'
+            )
+        assert exc_info.value.problem_detail.uri == SAML_INCORRECT_FILTER_EXPRESSION.uri

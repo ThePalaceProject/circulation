@@ -14,6 +14,8 @@ from palace.util.datetime_helpers import datetime_utc, utc_now
 from palace.manager.api.authentication.base import PatronData, PatronLookupNotSupported
 from palace.manager.integration.patron_auth.saml import provider as saml_provider
 from palace.manager.integration.patron_auth.saml.auth import (
+    SAML_GENERIC_ERROR,
+    SAML_NO_ACCESS_ERROR,
     SAMLAuthenticationManager,
     SAMLAuthenticationManagerFactory,
 )
@@ -1213,10 +1215,7 @@ class TestSAMLWebSSOAuthenticationProvider:
         with pytest.raises(ProblemDetailException) as exc_info:
             provider.saml_callback(controller_fixture.db.session, subject)
 
-        assert (
-            exc_info.value.problem_detail.uri
-            == "http://palaceproject.io/terms/problem/auth/unrecoverable/saml/no-access"
-        )
+        assert exc_info.value.problem_detail.uri == SAML_NO_ACCESS_ERROR.uri
 
     def test_saml_callback_filter_passes(
         self,
@@ -1267,21 +1266,20 @@ class TestSAMLWebSSOAuthenticationProvider:
                     SAMLSubject("http://idp.example.com", None, None),
                 )
 
-        assert (
-            exc_info.value.problem_detail.uri
-            == "http://librarysimplified.org/terms/problem/saml/generic-error"
-        )
+        assert exc_info.value.problem_detail.uri == SAML_GENERIC_ERROR.uri
 
     @pytest.mark.parametrize(
-        "session_lifetime, filter_expression, expect_no_access",
+        "session_lifetime, extra_data, filter_expression, expect_no_access",
         [
             pytest.param(
                 7,
+                None,
                 "integration.session_lifetime == 7",
                 False,
                 id="integration-field-matches",
             ),
             pytest.param(
+                None,
                 None,
                 "integration.session_lifetime == 7",
                 True,
@@ -1289,15 +1287,38 @@ class TestSAMLWebSSOAuthenticationProvider:
             ),
             pytest.param(
                 None,
+                None,
                 "library.id > 0",
                 False,
                 id="library-field-matches",
             ),
             pytest.param(
                 None,
+                None,
                 "library.id == 0",
                 True,
                 id="library-field-no-match",
+            ),
+            pytest.param(
+                None,
+                {"role": "staff"},
+                'integration.extra_data["role"] == "staff"',
+                False,
+                id="extra-data-dict-matches",
+            ),
+            pytest.param(
+                None,
+                {"role": "guest"},
+                'integration.extra_data["role"] == "staff"',
+                True,
+                id="extra-data-dict-no-match",
+            ),
+            pytest.param(
+                None,
+                None,
+                "integration.extra_data is None",
+                False,
+                id="extra-data-none",
             ),
         ],
     )
@@ -1307,6 +1328,7 @@ class TestSAMLWebSSOAuthenticationProvider:
         create_saml_configuration: Callable[..., SAMLWebSSOAuthSettings],
         create_saml_provider: Callable[..., SAMLWebSSOAuthenticationProvider],
         session_lifetime: int | None,
+        extra_data: object,
         filter_expression: str,
         expect_no_access: bool,
     ):
@@ -1314,6 +1336,7 @@ class TestSAMLWebSSOAuthenticationProvider:
         configuration = create_saml_configuration(
             filter_expression=filter_expression,
             session_lifetime=session_lifetime,
+            extra_data=extra_data,
         )
         provider = create_saml_provider(settings=configuration)
 
@@ -1327,22 +1350,33 @@ class TestSAMLWebSSOAuthenticationProvider:
             )
 
         if expect_no_access:
-            assert (
-                exc_info.value.problem_detail.uri
-                == "http://palaceproject.io/terms/problem/auth/unrecoverable/saml/no-access"
-            )
+            assert exc_info.value.problem_detail.uri == SAML_NO_ACCESS_ERROR.uri
 
     @pytest.mark.parametrize(
-        "integration_expression, library_expression, expect_no_access",
+        "integration_expression, library_expression, extra_data, expect_no_access",
         [
-            pytest.param("1 == 1", "1 == 1", False, id="both-pass"),
-            pytest.param("1 == 2", "1 == 1", True, id="integration-rejects"),
-            pytest.param("1 == 1", "1 == 2", True, id="library-rejects"),
-            pytest.param("1 == 2", "1 == 2", True, id="both-reject"),
-            pytest.param(None, "1 == 1", False, id="only-library-passes"),
-            pytest.param(None, "1 == 2", True, id="only-library-rejects"),
-            pytest.param("1 == 1", None, False, id="only-integration-passes"),
-            pytest.param("1 == 2", None, True, id="only-integration-rejects"),
+            pytest.param("1 == 1", "1 == 1", None, False, id="both-pass"),
+            pytest.param("1 == 2", "1 == 1", None, True, id="integration-rejects"),
+            pytest.param("1 == 1", "1 == 2", None, True, id="library-rejects"),
+            pytest.param("1 == 2", "1 == 2", None, True, id="both-reject"),
+            pytest.param(None, "1 == 1", None, False, id="only-library-passes"),
+            pytest.param(None, "1 == 2", None, True, id="only-library-rejects"),
+            pytest.param("1 == 1", None, None, False, id="only-integration-passes"),
+            pytest.param("1 == 2", None, None, True, id="only-integration-rejects"),
+            pytest.param(
+                None,
+                'integration.extra_data["role"] == "staff"',
+                {"role": "staff"},
+                False,
+                id="library-reads-extra-data-passes",
+            ),
+            pytest.param(
+                None,
+                'integration.extra_data["role"] == "staff"',
+                {"role": "guest"},
+                True,
+                id="library-reads-extra-data-rejects",
+            ),
         ],
     )
     def test_filter_subject_and_behavior(
@@ -1352,11 +1386,13 @@ class TestSAMLWebSSOAuthenticationProvider:
         create_saml_provider: Callable[..., SAMLWebSSOAuthenticationProvider],
         integration_expression: str | None,
         library_expression: str | None,
+        extra_data: object,
         expect_no_access: bool,
     ):
         """Integration and library filter expressions are ANDed; both must pass."""
         configuration = create_saml_configuration(
-            filter_expression=integration_expression
+            filter_expression=integration_expression,
+            extra_data=extra_data,
         )
         provider = create_saml_provider(
             settings=configuration,
@@ -1375,7 +1411,4 @@ class TestSAMLWebSSOAuthenticationProvider:
             )
 
         if expect_no_access:
-            assert (
-                exc_info.value.problem_detail.uri
-                == "http://palaceproject.io/terms/problem/auth/unrecoverable/saml/no-access"
-            )
+            assert exc_info.value.problem_detail.uri == SAML_NO_ACCESS_ERROR.uri

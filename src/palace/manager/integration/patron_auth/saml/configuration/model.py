@@ -41,6 +41,7 @@ from palace.manager.integration.patron_auth.saml.metadata.parser import (
     SAMLMetadataParsingError,
 )
 from palace.manager.integration.settings import (
+    BaseSettings,
     FormFieldType,
     FormMetadata,
     FormOptionsType,
@@ -104,13 +105,15 @@ class FederatedIdentityProviderOptions:
         return {entity_id: label for entity_id, label in identity_providers}
 
 
-def _validate_filter_expression(cls: Any, v: str | None) -> str | None:
+def _validate_filter_expression(cls: type[BaseSettings], v: str | None) -> str | None:
     """Shared validator for SAML filter expression fields on settings models."""
     if v is not None:
         try:
             FilterExpression(v).check_syntax()
         except FilterExpressionError as exception:
-            cls.logger().exception("Validation of the filter expression failed")
+            cls.logger().warning(
+                f"Validation of the filter expression failed: {exception}"
+            )
             raise SettingsValidationError(
                 problem_detail=SAML_INCORRECT_FILTER_EXPRESSION.detailed(
                     f"SAML filter expression has an incorrect format: {str(exception)}"
@@ -154,6 +157,7 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
             ),
             type=FormFieldType.MENU,
             options=FederatedIdentityProviderOptions(),
+            patron_auth_filter_context=True,
         ),
     ] = None
     patron_id_use_name_id: Annotated[
@@ -170,6 +174,7 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
                 True: "Use SAML NameID",
                 False: "Do NOT use SAML NameID",
             },
+            patron_auth_filter_context=True,
         ),
     ] = True
     patron_id_attributes: Annotated[
@@ -186,6 +191,7 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
             type=FormFieldType.MENU,
             options={attribute.name: attribute.name for attribute in SAMLAttributeType},
             format="narrow",
+            patron_auth_filter_context=True,
         ),
     ] = None
     patron_id_regular_expression: Annotated[
@@ -236,6 +242,7 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
                 "Accessing content protected by SAML will still be governed by the IdP and patrons "
                 "will have to reauthenticate each time the IdP's session expires."
             ),
+            patron_auth_filter_context=True,
         ),
     ] = None
     filter_expression: Annotated[
@@ -246,6 +253,7 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
                 "A Python expression that may restrict a patron's access based on their"
                 " SAML Subject and other settings."
                 " When present, it must evaluate to True in order for the patron to gain access."
+                " If a per-library Filter Expression is also configured, both must evaluate to True."
                 "<br>"
                 "<br>"
                 "For example, if you want to limit access to only those patrons for whom the"
@@ -266,6 +274,23 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
                 "</pre>"
             ),
             type=FormFieldType.TEXTAREA,
+        ),
+    ] = None
+    # Note: the key-ordering caveat in the description below is a JSONB storage
+    # side effect — PostgreSQL sorts all object keys when storing/retrieving JSONB.
+    extra_data: Annotated[
+        dict[str, Any] | list[Any] | int | float | bool | str | None,
+        FormMetadata(
+            label="Extra Data",
+            description=(
+                "Extra data available to patron filter expressions via the"
+                " 'integration.extra_data' context variable."
+                " Accepts any JSON value (object, array, string, number, boolean, or null)."
+                "<br>"
+                "Note: Dictionary/object key order may not be preserved after saving."
+            ),
+            type=FormFieldType.JSON,
+            patron_auth_filter_context=True,
         ),
     ] = None
     service_provider_strict_mode: Annotated[

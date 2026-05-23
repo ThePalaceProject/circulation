@@ -102,6 +102,11 @@ class FormMetadata(LoggerMixin):
     # If set to True, the Admin UI will be directed to hide this field.
     hidden: bool = False
 
+    # If set to True, this field is eligible to be included in the patron auth filter
+    # expression context. Fields that contain credentials (e.g., private keys, client
+    # secrets) or large blobs (e.g., XML metadata) should leave this False.
+    patron_auth_filter_context: bool = False
+
     @staticmethod
     def get_form_value(value: Any) -> Any:
         if value is None:
@@ -306,6 +311,21 @@ class BaseSettings(BaseModel, LoggerMixin):
                 )
 
         return super().model_dump(**kwargs)
+
+    def filter_context_dump(self) -> dict[str, Any]:
+        """Return a dict of fields eligible for patron-auth filter expression context.
+
+        Only fields whose :class:`FormMetadata` has ``patron_auth_filter_context=True``
+        are included. All fields are included at their current value regardless of
+        whether they match their default (i.e. ``exclude_defaults=False``).
+        """
+        include = {
+            name
+            for name, field_info in type(self).model_fields.items()
+            if (fm := _get_form_metadata(field_info)) is not None
+            and fm.patron_auth_filter_context
+        }
+        return self.model_dump(include=include, exclude_defaults=False)
 
     @classmethod
     def get_form_field_label(cls, field_name: str) -> str:

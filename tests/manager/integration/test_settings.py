@@ -274,6 +274,36 @@ class TestBaseSettings:
         settings = base_settings_fixture.settings(test="test")
         assert settings.model_dump() == {"number": 1}
 
+    def test_filter_context_dump(self) -> None:
+        class FilterContextSettings(BaseSettings):
+            included: Annotated[
+                str,
+                FormMetadata(label="Included", patron_auth_filter_context=True),
+            ] = "hello"
+            excluded: Annotated[
+                str,
+                FormMetadata(label="Excluded"),
+            ] = "secret"
+            included_at_default: Annotated[
+                str | None,
+                FormMetadata(
+                    label="Included at default", patron_auth_filter_context=True
+                ),
+            ] = None
+
+        settings = FilterContextSettings()
+        # Only patron_auth_filter_context=True fields are returned, including those at default.
+        assert settings.filter_context_dump() == {
+            "included": "hello",
+            "included_at_default": None,
+        }
+
+        settings = FilterContextSettings(included="world", included_at_default="x")
+        assert settings.filter_context_dump() == {
+            "included": "world",
+            "included_at_default": "x",
+        }
+
     def test_settings_no_mutation(
         self, base_settings_fixture: BaseSettingsFixture
     ) -> None:

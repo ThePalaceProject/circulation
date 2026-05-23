@@ -450,16 +450,12 @@ class SAMLWebSSOAuthenticationProvider(
             )
         context = {
             "subject": subject,
-            "integration": self._settings.model_dump(
-                exclude={"service_provider_private_key"},
-                exclude_defaults=False,
-            ),
+            "integration": self._settings.filter_context_dump(),
             "library": {
                 "short_name": library.short_name,
                 "name": library.name,
                 "id": library.id,
             },
-            "library_settings": self._library_settings.model_dump(),
         }
 
         for expression in expressions:
@@ -471,7 +467,7 @@ class SAMLWebSSOAuthenticationProvider(
             except FilterExpressionError as exc:
                 raise ProblemDetailException(
                     problem_detail=SAML_GENERIC_ERROR.detailed(str(exc))
-                )
+                ) from exc
             if not result:
                 raise ProblemDetailException(problem_detail=SAML_NO_ACCESS_ERROR)
 

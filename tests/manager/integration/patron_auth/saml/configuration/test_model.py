@@ -5,7 +5,10 @@ from unittest.mock import MagicMock, call, create_autospec
 import pytest
 import sqlalchemy
 
-from palace.manager.api.admin.problem_details import INCOMPLETE_CONFIGURATION
+from palace.manager.api.admin.problem_details import (
+    INCOMPLETE_CONFIGURATION,
+    INVALID_CONFIGURATION_OPTION,
+)
 from palace.manager.integration.patron_auth.saml.configuration.model import (
     SAMLOneLoginConfiguration,
     SAMLWebSSOAuthSettings,
@@ -673,6 +676,43 @@ class TestSAMLSettings:
             )
         assert excinfo.value.problem_detail.detail is not None
         assert "less than or equal to 1" in excinfo.value.problem_detail.detail
+
+    @pytest.mark.parametrize(
+        "value, expected_python",
+        [
+            pytest.param(None, None, id="none-becomes-none"),
+            pytest.param("", None, id="empty-string-becomes-none"),
+            pytest.param({}, {}, id="dict-passthrough"),
+            pytest.param('{"key": "value"}', {"key": "value"}, id="json-object-string"),
+            pytest.param("[1, 2, 3]", [1, 2, 3], id="json-array-string"),
+            pytest.param("42", 42, id="json-number-string"),
+            pytest.param('"hello"', "hello", id="json-string-string"),
+            pytest.param("true", True, id="json-bool-string"),
+            pytest.param("null", None, id="json-null-string"),
+            pytest.param(
+                '{"nested": {"a": [1, 2]}}',
+                {"nested": {"a": [1, 2]}},
+                id="nested-json",
+            ),
+        ],
+    )
+    def test_extra_data_valid(self, value: object, expected_python: object) -> None:
+        settings = SAMLWebSSOAuthSettings(extra_data=value)
+        assert settings.extra_data == expected_python
+        assert settings.filter_context_dump()["extra_data"] == expected_python
+
+    def test_extra_data_default(self) -> None:
+        settings = SAMLWebSSOAuthSettings()
+        assert settings.extra_data is None
+        assert settings.filter_context_dump()["extra_data"] is None
+
+    def test_extra_data_invalid_json(self) -> None:
+        with pytest.raises(ProblemDetailException) as exc_info:
+            SAMLWebSSOAuthSettings(extra_data="{not valid json}")
+        assert exc_info.value.problem_detail.uri == INVALID_CONFIGURATION_OPTION.uri
+        assert "'Extra Data' must be valid JSON" in (
+            exc_info.value.problem_detail.detail or ""
+        )
 
 
 class TestSAMLOneLoginConfiguration:
