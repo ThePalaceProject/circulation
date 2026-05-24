@@ -181,6 +181,10 @@ class TestBaseSettings:
         settings = JsonMockSettings(data=input_val)
         assert settings.data == expected_val
 
+    def test_json_field_omitted_uses_default_without_raising(self) -> None:
+        settings = JsonMockSettings()
+        assert settings.data is None
+
     def test_json_field_invalid_raises_error(self) -> None:
         with raises_problem_detail() as info:
             JsonMockSettings(data="not json")
