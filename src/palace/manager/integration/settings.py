@@ -205,9 +205,7 @@ class BaseSettings(BaseModel, LoggerMixin):
             if isinstance(value, str) and value.strip() == "":
                 values[key] = None
 
-        # For FormFieldType.JSON fields, the admin interface sends the textarea
-        # content as a string. Parse it as JSON so downstream validators and
-        # callers receive the actual Python value.
+        # The admin interface submits JSON field values as raw strings.
         for name, field_info in cls.model_fields.items():
             fm = _get_form_metadata(field_info)
             if fm is None or fm.type != FormFieldType.JSON:
