@@ -140,7 +140,7 @@ class FormMetadata(LoggerMixin):
 
         if default is not None and default is not PydanticUndefined:
             if self.type == FormFieldType.JSON:
-                form_entry["default"] = json.dumps(default)
+                form_entry["default"] = json.dumps(default, ensure_ascii=False)
             else:
                 form_entry["default"] = self.get_form_value(default)
         if self.type.value is not None:
