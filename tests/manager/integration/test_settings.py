@@ -204,19 +204,17 @@ class TestBaseSettings:
         assert settings.data == {"x": 1}
 
     @pytest.mark.parametrize(
-        "default_val, expected_json",
+        "default_val",
         [
-            ({"key": "value"}, '{"key": "value"}'),
-            ([1, 2, 3], "[1, 2, 3]"),
-            ("hello", '"hello"'),
-            (42, "42"),
-            (True, "true"),
+            {"key": "value"},
+            [1, 2, 3],
+            "hello",
+            42,
+            True,
         ],
         ids=["dict", "list", "str", "int", "bool"],
     )
-    def test_json_field_default_serialized_in_form(
-        self, default_val: Any, expected_json: str
-    ) -> None:
+    def test_json_field_default_passed_through_in_form(self, default_val: Any) -> None:
         class DefaultJsonSettings(BaseSettings):
             data: Annotated[
                 Any,
@@ -224,7 +222,7 @@ class TestBaseSettings:
             ] = default_val
 
         form = DefaultJsonSettings.configuration_form(MagicMock())
-        assert form[0]["default"] == expected_json
+        assert form[0]["default"] == default_val
 
     def test_field_validator_return_pd_exception(
         self, base_settings_fixture: BaseSettingsFixture
