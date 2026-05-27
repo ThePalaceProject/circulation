@@ -149,15 +149,16 @@ class Writer(Protocol):
 REPORT_DATE_FORMAT = "%m-%d-%Y"
 
 # How long (seconds) to wait for the folder-creation lock before proceeding without it.
-# Exposed as a module-level constant so tests can monkeypatch a short value.
-FOLDER_LOCK_ACQUIRE_TIMEOUT: int = 60
+# Typed as float | int to match acquire_blocking's signature; tests monkeypatch this
+# to a small float (e.g. 0.1) to avoid waiting a full 60 seconds.
+FOLDER_LOCK_ACQUIRE_TIMEOUT: float | int = 60
 
-# Maximum seconds of random jitter added before acquiring the folder-creation lock.
-# Independent CM groups share no Redis instance and therefore cannot coordinate via
-# the lock alone; spreading their start times reduces the probability that two groups
-# race to create the same Google Drive folder at the same moment.
+# Maximum seconds of random jitter added once per task invocation before the
+# folder-creation loop. Independent CM groups share no Redis instance and therefore
+# cannot coordinate via the lock alone; a single random offset per run spreads their
+# arrival times across all folder levels without multiplying the delay by N data sources.
 # Exposed as a module-level constant so tests can set it to 0.
-FOLDER_CREATION_JITTER_MAX: int = 30
+FOLDER_CREATION_JITTER_MAX: int = 10
 
 
 @shared_task(queue=QueueNames.default, bind=True)
@@ -200,6 +201,12 @@ def generate_playtime_report(
 
     redis_client = task.services.redis.client()
 
+    # Jitter: a single random delay per task invocation spreads independent CM groups
+    # (which share no Redis instance) in time, reducing the probability that two groups
+    # race to create the same Google Drive folder. Taking it once before the loop keeps
+    # the per-data-source overhead constant regardless of how many sources are processed.
+    time.sleep(random.uniform(0, FOLDER_CREATION_JITTER_MAX))
+
     with task.session() as session:
         # get list of collections
         data_source_names = _fetch_distinct_eligible_data_source_names(
@@ -239,10 +246,6 @@ def generate_playtime_report(
                     reporting_name,
                     str(start.year),
                 ]
-
-                # Jitter: spread out independent CM groups (which share no Redis)
-                # so they are less likely to race when creating the same folder.
-                time.sleep(random.uniform(0, FOLDER_CREATION_JITTER_MAX))
 
                 # Acquire a distributed lock so that concurrent workers within the
                 # same Redis instance don't each create a duplicate folder hierarchy.
