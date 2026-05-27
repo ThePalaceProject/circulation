@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from io import BytesIO
 from typing import TYPE_CHECKING
+from urllib.parse import unquote_plus
 
 import pytest
 from googleapiclient.discovery import build
@@ -113,6 +114,40 @@ class TestGoogleDriveService:
         assert '{"name": "' + file_name + '", "parents": []}' in body
         assert "Hello world" in body
         assert f"Content-Type: {mime_type}" in body
+
+    def test_get_file_excludes_trashed_items(self):
+        """get_file must include 'trashed = false' in its Drive query."""
+        file_name = "some-folder"
+        file_id = "folder-id"
+        http_mock_sequence = HttpMockSequence(
+            [
+                (
+                    {"status": "200"},
+                    json.dumps(
+                        {
+                            "files": [
+                                {
+                                    "kind": "drive#file",
+                                    "id": file_id,
+                                    "name": file_name,
+                                    "mimeType": "application/vnd.google-apps.folder",
+                                }
+                            ]
+                        }
+                    ),
+                ),
+            ]
+        )
+        service = drive_service(http=http_mock_sequence)
+
+        result = service.get_file(name=file_name, parent_folder_id="parent-id")
+
+        assert result is not None
+        assert result["id"] == file_id
+
+        # Verify the query sent to the Drive API contains the trashed filter.
+        request_uri = unquote_plus(http_mock_sequence.request_sequence[0][0])
+        assert "trashed = false" in request_uri
 
     def test_create_existing_file_fails(self):
         file_name = "file.txt"
