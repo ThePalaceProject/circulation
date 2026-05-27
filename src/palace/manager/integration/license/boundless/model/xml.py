@@ -43,6 +43,7 @@ class BaseBoundlessXmlModel(
         cls,
         source: str | bytes,
         context: dict[str, Any] | None = None,
+        empty_as_string: bool = False,
         **kwargs: Any,
     ) -> Self:
         """
@@ -55,7 +56,9 @@ class BaseBoundlessXmlModel(
         if "parser" not in kwargs:
             kwargs["parser"] = etree.XMLParser(recover=True)
         try:
-            return super().from_xml(source, context, **kwargs)
+            return super().from_xml(
+                source, context, empty_as_string=empty_as_string, **kwargs
+            )
         except AttributeError:
             # Because we are using a very lenient XML parser, we can end up with
             # None coming back from the XML parser, which causes an AttributeError
