@@ -2,11 +2,12 @@ from __future__ import annotations
 
 from flask import Response, redirect, url_for
 
+from palace.opds.authentication.document import AUTH_DOCUMENT_MEDIA_TYPE
+
 from palace.manager.api.controller.circulation_manager import (
     CirculationManagerController,
 )
 from palace.manager.api.util.flask import get_request_library
-from palace.manager.util.authentication_for_opds import AuthenticationForOPDSDocument
 from palace.manager.util.problem_detail import ProblemDetail
 
 
@@ -34,7 +35,7 @@ class IndexController(CirculationManagerController):
         return Response(
             self.manager.authentication_for_opds_document,
             200,
-            {"Content-Type": AuthenticationForOPDSDocument.MEDIA_TYPE},
+            {"Content-Type": AUTH_DOCUMENT_MEDIA_TYPE},
         )
 
     def has_root_lanes(self):

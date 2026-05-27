@@ -333,7 +333,7 @@ class TestSAMLWebSSOAuthenticationProvider:
             with controller_fixture.app.test_request_context("/"):
                 result = provider.authentication_flow_document(
                     controller_fixture.db.session
-                )
+                ).serialize()
 
             # Assert
             assert expected_result == result

@@ -7,6 +7,10 @@ from flask import url_for
 from sqlalchemy.orm import Session
 from werkzeug.datastructures import Authorization
 
+from palace.opds.authentication.document import PalaceAuthentication
+from palace.opds.rwpm import Link
+from palace.opds.types.link import CompactCollection
+
 from palace.manager.api.authentication.access_token import PatronJWEAccessTokenProvider
 from palace.manager.api.authentication.base import (
     AuthenticationProvider,
@@ -85,23 +89,24 @@ class BasicTokenAuthenticationProvider(
 
         return None
 
-    def _authentication_flow_document(self, _db):
+    def _authentication_flow_document(self, _db: Session) -> PalaceAuthentication:
         """This auth type should follow the entry of it's basic auth provider"""
+        library = self.library(_db)
         token_url = url_for(
             "patron_auth_token",
-            library_short_name=self.library(_db).short_name,
+            library_short_name=library.short_name if library else None,
             _external=True,
         )
-        links = [
-            {
-                "rel": "authenticate",
-                "href": token_url,
+        # Reuse the labels and inputs from the basic provider's flow, but with
+        # our own type, description and a single "authenticate" link.
+        basic_flow = self.basic_provider._authentication_flow_document(_db)
+        return basic_flow.model_copy(
+            update={
+                "type": self.flow_type,
+                "description": str(self.label()),
+                "links": CompactCollection([Link(rel="authenticate", href=token_url)]),
             }
-        ]
-        flow_doc = self.basic_provider._authentication_flow_document(_db)
-        flow_doc["description"] = str(self.label())
-        flow_doc["links"] = links
-        return flow_doc
+        )
 
     def remote_patron_lookup(self, patron_or_patrondata):
         """Delegate remote patron lookup to the underlying basic provider."""

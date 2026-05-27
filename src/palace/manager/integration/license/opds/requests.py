@@ -10,7 +10,7 @@ import feedparser
 from pydantic import ValidationError
 from requests import Response
 
-from palace.opds.authentication import AuthenticationDocument
+from palace.opds.authentication.document import AuthenticationDocument
 from palace.opds.opds2 import PublicationFeedNoValidation
 from palace.util.exceptions import PalaceValueError
 

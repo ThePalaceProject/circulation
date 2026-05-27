@@ -15,6 +15,15 @@ from pydantic_core.core_schema import ValidationInfo
 from sqlalchemy.orm import Session
 from werkzeug.datastructures import Authorization
 
+from palace.opds.authentication.document import (
+    AuthenticationLabels,
+    PalaceAuthentication,
+)
+from palace.opds.authentication.palace import (
+    AuthenticationInput,
+    AuthenticationInputs,
+)
+from palace.opds.rwpm import Link
 from palace.util.log import elapsed_time_logging
 
 from palace.manager.api.admin.problem_details import (
@@ -843,42 +852,49 @@ class BasicAuthenticationProvider[
     def authentication_header(self) -> str:
         return f'Basic realm="{self.authentication_realm}"'
 
-    def _authentication_flow_document(self, _db: Session) -> dict[str, Any]:
+    def _authentication_flow_document(self, _db: Session) -> PalaceAuthentication:
         """Create a Authentication Flow object for use in an Authentication for
         OPDS document.
         """
 
-        login_inputs: dict[str, Any] = dict(keyboard=self.identifier_keyboard.value)
-        if self.identifier_maximum_length:
-            login_inputs["maximum_length"] = self.identifier_maximum_length
-        if self.identifier_barcode_format != BarcodeFormats.NONE:
-            login_inputs["barcode_format"] = self.identifier_barcode_format.value
-
-        password_inputs: dict[str, Any] = dict(keyboard=self.password_keyboard.value)
-        if self.password_maximum_length:
-            password_inputs["maximum_length"] = self.password_maximum_length
-
-        flow_doc: dict[str, Any] = dict(
-            description=str(self.label()),
-            labels=dict(
-                login=self.identifier_label,
-                password=self.password_label,
+        login_input = AuthenticationInput(
+            keyboard=self.identifier_keyboard.value,
+            maximum_length=self.identifier_maximum_length,
+            barcode_format=(
+                self.identifier_barcode_format.value
+                if self.identifier_barcode_format != BarcodeFormats.NONE
+                else None
             ),
-            inputs=dict(login=login_inputs, password=password_inputs),
         )
+        password_input = AuthenticationInput(
+            keyboard=self.password_keyboard.value,
+            maximum_length=self.password_maximum_length,
+        )
+
+        links: list[Link] = []
         if self.login_button_image:
             # TODO: I'm not sure if logo is appropriate for this, since it's a button
             # with the logo on it rather than a plain logo. Perhaps we should use plain
             # logos instead.
-            flow_doc["links"] = [
-                dict(
+            links.append(
+                Link(
                     rel="logo",
                     href=url_for(
                         "static_image", filename=self.login_button_image, _external=True
                     ),
                 )
-            ]
-        return flow_doc
+            )
+
+        return PalaceAuthentication(
+            type=self.flow_type,
+            description=str(self.label()),
+            labels=AuthenticationLabels(
+                login=self.identifier_label,
+                password=self.password_label,
+            ),
+            inputs=AuthenticationInputs(login=login_input, password=password_input),
+            links=links,
+        )
 
     @property
     def login_button_image(self) -> str | None:
