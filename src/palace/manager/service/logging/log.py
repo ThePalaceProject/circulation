@@ -107,6 +107,9 @@ class JSONFormatter(logging.Formatter):
                 "method": flask_request.method,
                 "host": flask_request.host_url,
             }
+            # Stable per-route pattern for log aggregation; omitted when no route matched (e.g. 404).
+            if flask_request.url_rule:
+                data["request"]["rule"] = flask_request.url_rule.rule
             if flask_request.query_string:
                 data["request"]["query"] = flask_request.query_string.decode()
             if user_agent := flask_request.headers.get("User-Agent"):
