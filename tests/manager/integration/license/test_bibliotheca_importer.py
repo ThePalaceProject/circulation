@@ -54,7 +54,7 @@ class TestBibliothecaEventImporterGetStart:
         Timestamp.stamp(
             db.session,
             service=EVENT_IMPORT_SERVICE_NAME,
-            service_type=Timestamp.MONITOR_TYPE,
+            service_type=Timestamp.TASK_TYPE,
             collection=collection,
             finish=finish,
         )
@@ -72,7 +72,7 @@ class TestBibliothecaEventImporterGetStart:
         Timestamp.stamp(
             db.session,
             service=EVENT_IMPORT_SERVICE_NAME,
-            service_type=Timestamp.MONITOR_TYPE,
+            service_type=Timestamp.TASK_TYPE,
             collection=collection,
             finish=None,
         )
@@ -143,7 +143,7 @@ class TestBibliothecaEventImporterImportTimeSlice:
         ts = Timestamp.lookup(
             db.session,
             EVENT_IMPORT_SERVICE_NAME,
-            Timestamp.MONITOR_TYPE,
+            Timestamp.TASK_TYPE,
             collection,
         )
         assert ts is not None
