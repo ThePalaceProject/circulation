@@ -22,7 +22,9 @@ from palace.manager.sqlalchemy.model.licensing import LicensePool
 PURCHASE_RECORD_SERVICE_NAME = "Bibliotheca Purchase Record Importer"
 
 # The importer starts from this date when no prior Timestamp exists.
-# Bibliotheca collections typically go back to 2014-01-01.
+# Earlier versions of this importer set the default start date to 2014-01-01.
+# For the sake of consistency, we will preserve this default until there is a
+# clear rationale for changing it.
 DEFAULT_PURCHASE_RECORD_START_TIME = datetime_utc(2014, 1, 1)
 
 _LOG_DATE_FORMAT = "%Y-%m-%dT%H:%M:%S"
