@@ -425,12 +425,15 @@ class SAMLWebSSOAuthenticationProvider(
     def _filter_subject(self, db: Session, subject: SAMLSubject) -> None:
         """Apply the configured filter expression as an authorization check.
 
-        Raises ProblemDetailException if the subject does not pass the expression
-        or if the expression cannot be evaluated.
+        The integration-level expression is evaluated first, then the library-level
+        expression. Both must evaluate to True for access to be granted. The
+        evaluation context exposes ``subject``, ``integration`` (fields from the
+        integration settings marked with ``patron_auth_filter_context=True``, including
+        ``extra_data``), and ``library`` (``id``, ``name``, ``short_name``).
 
         :param db: Database session
         :param subject: Authenticated SAML subject to authorize
-        :raises ProblemDetailException: if the subject is denied access or the expression errors
+        :raises ProblemDetailException: if the subject is denied access or an expression errors
         """
         expressions = [
             e

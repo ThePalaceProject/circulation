@@ -106,7 +106,10 @@ class FederatedIdentityProviderOptions:
 
 
 def _validate_filter_expression(cls: type[BaseSettings], v: str | None) -> str | None:
-    """Shared validator for SAML filter expression fields on settings models."""
+    """Shared validator for SAML filter expression fields on settings models.
+
+    :raises SettingsValidationError: if the expression is syntactically invalid.
+    """
     if v is not None:
         try:
             FilterExpression(v).check_syntax()

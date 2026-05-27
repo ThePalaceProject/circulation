@@ -221,10 +221,33 @@ class TestSAMLSettingsValidator:
                 == SAML_INCORRECT_FILTER_EXPRESSION.uri
             )
 
-    def test_validate_filter_expression_library_settings(self) -> None:
-        """SAMLWebSSOAuthLibrarySettings rejects invalid filter expression syntax."""
-        with pytest.raises(ProblemDetailException) as exc_info:
-            SAMLWebSSOAuthLibrarySettings(
-                filter_expression='subject.attribute_statement.attributes["eduPersonEntitlement"].values[0 == "eresources"'
+    @pytest.mark.parametrize(
+        "filter_expression, expect_raises",
+        [
+            pytest.param(None, False, id="none-passes"),
+            pytest.param(
+                '"eresources" == subject.attribute_statement.attributes["eduPersonEntitlement"].values[0]',
+                False,
+                id="valid-expression",
+            ),
+            pytest.param(
+                'subject.attribute_statement.attributes["eduPersonEntitlement"].values[0 == "eresources"',
+                True,
+                id="syntax-error",
+            ),
+        ],
+    )
+    def test_validate_filter_expression_library_settings(
+        self, filter_expression: str | None, expect_raises: bool
+    ) -> None:
+        context_manager = (
+            pytest.raises(ProblemDetailException) if expect_raises else nullcontext()
+        )
+        with context_manager as exc_info:
+            SAMLWebSSOAuthLibrarySettings(filter_expression=filter_expression)
+
+        if expect_raises:
+            assert (
+                exc_info.value.problem_detail.uri
+                == SAML_INCORRECT_FILTER_EXPRESSION.uri
             )
-        assert exc_info.value.problem_detail.uri == SAML_INCORRECT_FILTER_EXPRESSION.uri
