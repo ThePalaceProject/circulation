@@ -69,6 +69,26 @@ class TestBibliothecaPurchaseRecordImporterGetStart:
         start = importer.get_start()
         assert abs((start - finish).total_seconds()) < 1
 
+    def test_prior_timestamp_with_null_finish_returns_default_start(
+        self, db: DatabaseTransactionFixture
+    ) -> None:
+        """A Timestamp row whose finish is None falls back to DEFAULT_PURCHASE_RECORD_START_TIME."""
+        importer, mock_api = _make_importer(db)
+        collection = mock_api.collection
+        # Timestamp.stamp(finish=None) defaults to utc_now(), so create the row
+        # then clear finish directly to simulate a crash-interrupted run.
+        ts = Timestamp.stamp(
+            db.session,
+            service=PURCHASE_RECORD_SERVICE_NAME,
+            service_type=Timestamp.TASK_TYPE,
+            collection=collection,
+        )
+        ts.finish = None
+        db.session.flush()
+
+        start = importer.get_start()
+        assert start == DEFAULT_PURCHASE_RECORD_START_TIME
+
 
 class TestBibliothecaPurchaseRecordImporterImportDay:
     def test_returns_day_result_with_correct_bounds(

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, call, patch
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
@@ -19,7 +19,10 @@ from palace.manager.integration.license.bibliotheca_importer import (
     EVENT_IMPORT_SERVICE_NAME,
 )
 from palace.manager.integration.license.bibliotheca_purchase_record_importer import (
+    _MARC_PAGE_SIZE,
+    DEFAULT_PURCHASE_RECORD_START_TIME,
     PURCHASE_RECORD_SERVICE_NAME,
+    DayImportResult,
 )
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.collection import Collection
@@ -293,7 +296,7 @@ class TestBibliothecaImportCollection:
         replace_sig = mock_replace.call_args[0][0]
         lock_value = replace_sig.kwargs["lock_value"]
         assert lock_value is not None
-        assert isinstance(lock_value, str)
+        UUID(lock_value)  # raises ValueError if not a valid UUID
 
     def test_skips_when_lock_held(
         self,
@@ -594,10 +597,6 @@ class TestImportPurchaseRecordsForAllCollections:
         celery_fixture: CeleryFixture,
     ) -> None:
         """force_reimport=True passes current_day=DEFAULT_PURCHASE_RECORD_START_TIME to each per-collection task."""
-        from palace.manager.integration.license.bibliotheca_purchase_record_importer import (
-            DEFAULT_PURCHASE_RECORD_START_TIME,
-        )
-
         c1 = MockBibliothecaAPI.mock_collection(
             db.session, db.default_library(), name="Bibliotheca 1"
         )
@@ -745,8 +744,9 @@ class TestImportPurchaseRecordsByCollection:
         collection = bibliotheca_purchase_record_task_fixture.collection
 
         # Stamp a timestamp several days in the past so multiple days are needed.
+        stored_finish = utc_now() - timedelta(days=5)
         bibliotheca_purchase_record_task_fixture.stamp_purchase_record(
-            finish=utc_now() - timedelta(days=5)
+            finish=stored_finish
         )
 
         lock_value = str(uuid4())
@@ -762,37 +762,39 @@ class TestImportPurchaseRecordsByCollection:
 
         replace_sig = mock_replace.call_args[0][0]
         assert replace_sig.kwargs["lock_value"] == lock_value
-        assert replace_sig.kwargs["current_day"] is not None
+        expected_next_day = stored_finish + timedelta(days=1)
+        assert (
+            abs((replace_sig.kwargs["current_day"] - expected_next_day).total_seconds())
+            < 5
+        )
         assert replace_sig.kwargs["offset"] == 1
 
     @patch(
-        "palace.manager.integration.license.bibliotheca_purchase_record_importer.BibliothecaAPI"
+        "palace.manager.integration.license.bibliotheca_purchase_record_importer.BibliothecaPurchaseRecordImporter.import_day"
     )
     def test_replaces_with_next_offset_when_page_full(
         self,
-        mock_api_cls: MagicMock,
+        mock_import_day: MagicMock,
         bibliotheca_purchase_record_task_fixture: BibliothecaPurchaseRecordTaskFixture,
         celery_fixture: CeleryFixture,
         redis_fixture: RedisFixture,
     ) -> None:
-        """When a full page (50 records) is returned, task.replace() is called with
-        the same current_day and the next offset rather than advancing to the next day.
-        """
-        from palace.manager.integration.license.bibliotheca_purchase_record_importer import (
-            _MARC_PAGE_SIZE,
-        )
-
-        full_page_records = [MagicMock() for _ in range(_MARC_PAGE_SIZE)]
-        for record in full_page_records:
-            record.fields = []
-            record.as_json.return_value = "{}"
-
-        mock_api_cls.return_value.marc_request.return_value = iter(full_page_records)
+        """When import_day signals a full page (next_offset set), task.replace() is
+        called with the same current_day and the advanced offset rather than
+        advancing to the next day."""
         collection = bibliotheca_purchase_record_task_fixture.collection
 
         stored_finish = utc_now() - timedelta(days=5)
         bibliotheca_purchase_record_task_fixture.stamp_purchase_record(
             finish=stored_finish
+        )
+
+        next_day = stored_finish + timedelta(days=1)
+        mock_import_day.return_value = DayImportResult(
+            records_handled=_MARC_PAGE_SIZE,
+            day_start=stored_finish,
+            day_end=next_day,
+            next_offset=1 + _MARC_PAGE_SIZE,
         )
 
         lock_value = str(uuid4())
@@ -874,7 +876,7 @@ class TestImportPurchaseRecordsByCollection:
         replace_sig = mock_replace.call_args[0][0]
         lock_value = replace_sig.kwargs["lock_value"]
         assert lock_value is not None
-        assert isinstance(lock_value, str)
+        UUID(lock_value)  # raises ValueError if not a valid UUID
 
     def test_skips_when_lock_held(
         self,
