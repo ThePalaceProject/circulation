@@ -33,6 +33,7 @@ from palace.manager.integration.license.bibliotheca_importer import (
     BibliothecaEventImporter,
 )
 from palace.manager.integration.license.bibliotheca_purchase_record_importer import (
+    DEFAULT_PURCHASE_RECORD_START_TIME,
     BibliothecaPurchaseRecordImporter,
 )
 from palace.manager.service.celery.celery import QueueNames
@@ -189,8 +190,15 @@ def _purchase_record_workflow_lock(
 
 
 @shared_task(queue=QueueNames.default, bind=True)
-def import_purchase_records_for_all_collections(task: Task) -> None:
-    """Queue an ``import_purchase_records_by_collection`` task for every Bibliotheca collection."""
+def import_purchase_records_for_all_collections(
+    task: Task, *, force_reimport: bool = False
+) -> None:
+    """Queue an ``import_purchase_records_by_collection`` task for every Bibliotheca collection.
+
+    :param force_reimport: When ``True``, each per-collection task ignores the stored
+        ``Timestamp`` and reimports from :data:`DEFAULT_PURCHASE_RECORD_START_TIME`
+        (2014-01-01) rather than resuming where the last run left off.
+    """
     with task.session() as session:
         registry = task.services.integration_registry().license_providers()
         collection_query = Collection.select_by_protocol(
@@ -198,11 +206,16 @@ def import_purchase_records_for_all_collections(task: Task) -> None:
         )
         collections = session.scalars(collection_query).all()
 
+    current_day = DEFAULT_PURCHASE_RECORD_START_TIME if force_reimport else None
     for collection in collections:
-        import_purchase_records_by_collection.delay(collection_id=collection.id)
+        import_purchase_records_by_collection.delay(
+            collection_id=collection.id,
+            current_day=current_day,
+        )
 
+    suffix = " (force reimport from start)" if force_reimport else ""
     task.log.info(
-        f"Queued {len(collections)} Bibliotheca collection(s) for purchase record import."
+        f"Queued {len(collections)} Bibliotheca collection(s) for purchase record import{suffix}."
     )
 
 

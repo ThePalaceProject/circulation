@@ -9,6 +9,9 @@ import pytest
 from palace.util.exceptions import PalaceValueError
 
 from palace.manager.celery.tasks import bibliotheca
+from palace.manager.integration.license.bibliotheca_purchase_record_importer import (
+    DEFAULT_PURCHASE_RECORD_START_TIME,
+)
 from palace.manager.integration.license.bibliotheca_scripts import (
     ImportEventCollection,
     ImportPurchaseRecordCollection,
@@ -67,7 +70,19 @@ class TestImportPurchaseRecordCollection:
             bibliotheca, "import_purchase_records_for_all_collections"
         ) as mock_task:
             ImportPurchaseRecordCollection(db.session).do_run(["--import-all"])
-        mock_task.delay.assert_called_once_with()
+        mock_task.delay.assert_called_once_with(force_reimport=False)
+
+    def test_import_all_force_reimport_passes_flag(
+        self, db: DatabaseTransactionFixture
+    ) -> None:
+        """--import-all --force-reimport passes force_reimport=True to the task."""
+        with patch.object(
+            bibliotheca, "import_purchase_records_for_all_collections"
+        ) as mock_task:
+            ImportPurchaseRecordCollection(db.session).do_run(
+                ["--import-all", "--force-reimport"]
+            )
+        mock_task.delay.assert_called_once_with(force_reimport=True)
 
     def test_collection_queues_import_purchase_records_by_collection(
         self, db: DatabaseTransactionFixture
@@ -82,7 +97,27 @@ class TestImportPurchaseRecordCollection:
             ImportPurchaseRecordCollection(db.session).do_run(
                 ["--collection", collection.name]
             )
-        mock_task.delay.assert_called_once_with(collection_id=collection.id)
+        mock_task.delay.assert_called_once_with(
+            collection_id=collection.id, current_day=None
+        )
+
+    def test_collection_force_reimport_passes_start_date(
+        self, db: DatabaseTransactionFixture
+    ) -> None:
+        """--collection --force-reimport passes current_day=DEFAULT_PURCHASE_RECORD_START_TIME."""
+        collection = MockBibliothecaAPI.mock_collection(
+            db.session, db.default_library(), name="My Bibliotheca"
+        )
+        with patch.object(
+            bibliotheca, "import_purchase_records_by_collection"
+        ) as mock_task:
+            ImportPurchaseRecordCollection(db.session).do_run(
+                ["--collection", collection.name, "--force-reimport"]
+            )
+        mock_task.delay.assert_called_once_with(
+            collection_id=collection.id,
+            current_day=DEFAULT_PURCHASE_RECORD_START_TIME,
+        )
 
     def test_collection_not_found_raises(self, db: DatabaseTransactionFixture) -> None:
         """--collection with an unknown name raises PalaceValueError."""
