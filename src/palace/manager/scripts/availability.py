@@ -4,7 +4,6 @@ from collections.abc import Sequence
 
 from palace.util.exceptions import PalaceValueError
 
-from palace.manager.integration.license.bibliotheca import BibliothecaCirculationSweep
 from palace.manager.integration.license.overdrive.api import OverdriveAPI
 from palace.manager.scripts.input import IdentifierInputScript
 from palace.manager.sqlalchemy.model.identifier import Identifier
@@ -44,8 +43,14 @@ class AvailabilityRefreshScript(IdentifierInputScript):
         collection = pool.collection
 
         if identifier.type == Identifier.BIBLIOTHECA_ID:
-            sweeper = BibliothecaCirculationSweep(self._db, collection)
-            sweeper.process_batch(identifiers)
+            # Local import to avoid circular dependency between availability.py and
+            # bibliotheca_circulation_updater.py.
+            from palace.manager.integration.license.bibliotheca_circulation_updater import (
+                BibliothecaCirculationUpdater,
+            )
+
+            updater = BibliothecaCirculationUpdater(self._db, collection)
+            updater.process_identifiers(identifiers)
         elif identifier.type == Identifier.OVERDRIVE_ID:
             api = OverdriveAPI(self._db, collection)
             for identifier in identifiers:

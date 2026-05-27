@@ -14,8 +14,15 @@ from palace.util.log import LogLevel
 
 from palace.manager.celery.importer import import_workflow_lock
 from palace.manager.celery.tasks import apply, bibliotheca
-from palace.manager.celery.tasks.bibliotheca import _purchase_record_workflow_lock
+from palace.manager.celery.tasks.bibliotheca import (
+    _circulation_update_workflow_lock,
+    _purchase_record_workflow_lock,
+)
 from palace.manager.integration.license.bibliotheca import BibliothecaAPI
+from palace.manager.integration.license.bibliotheca_circulation_updater import (
+    CIRCULATION_UPDATE_SERVICE_NAME,
+    BatchUpdateResult,
+)
 from palace.manager.integration.license.bibliotheca_importer import (
     EVENT_IMPORT_SERVICE_NAME,
 )
@@ -1094,5 +1101,353 @@ class TestImportPurchaseRecordsByCollection:
         acquired = purchase_record_lock.acquire()
         assert acquired
 
+        purchase_record_lock.release()
+        event_lock.release()
+
+
+class BibliothecaCirculationUpdateTaskFixture:
+    """Common setup for Bibliotheca circulation update Celery task tests."""
+
+    def __init__(self, db: DatabaseTransactionFixture) -> None:
+        self.db = db
+        self.collection = MockBibliothecaAPI.mock_collection(
+            db.session, db.default_library()
+        )
+
+    def stamp_circulation_update(
+        self, counter: int | None = None, collection: Collection | None = None
+    ) -> Timestamp:
+        """Create (or update) the circulation update Timestamp for the collection."""
+        return Timestamp.stamp(
+            self.db.session,
+            service=CIRCULATION_UPDATE_SERVICE_NAME,
+            service_type=Timestamp.TASK_TYPE,
+            collection=collection or self.collection,
+            counter=counter,
+        )
+
+    def get_circulation_update_timestamp(
+        self, collection: Collection | None = None
+    ) -> Timestamp | None:
+        return Timestamp.lookup(
+            self.db.session,
+            CIRCULATION_UPDATE_SERVICE_NAME,
+            Timestamp.TASK_TYPE,
+            collection or self.collection,
+        )
+
+
+@pytest.fixture
+def bibliotheca_circulation_update_task_fixture(
+    db: DatabaseTransactionFixture,
+) -> BibliothecaCirculationUpdateTaskFixture:
+    return BibliothecaCirculationUpdateTaskFixture(db)
+
+
+class TestCirculationUpdateAllCollections:
+    def test_queues_circulation_update_collection_for_each_bibliotheca_collection(
+        self,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+    ) -> None:
+        """circulation_update_all_collections queues circulation_update_collection for every
+        Bibliotheca collection and ignores collections using other protocols."""
+        db.default_collection()  # non-Bibliotheca, should be ignored
+        c1 = MockBibliothecaAPI.mock_collection(
+            db.session, db.default_library(), name="Bibliotheca 1"
+        )
+        c2 = MockBibliothecaAPI.mock_collection(
+            db.session, db.default_library(), name="Bibliotheca 2"
+        )
+
+        with patch.object(bibliotheca, "circulation_update_collection") as mock_task:
+            bibliotheca.circulation_update_all_collections.delay().wait()
+
+        mock_task.delay.assert_has_calls(
+            [call(collection_id=c1.id), call(collection_id=c2.id)],
+            any_order=True,
+        )
+        assert mock_task.delay.call_count == 2
+
+    def test_no_bibliotheca_collections(
+        self,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+    ) -> None:
+        """circulation_update_all_collections is a no-op when there are no Bibliotheca collections."""
+        db.default_collection()  # non-Bibliotheca
+
+        with patch.object(bibliotheca, "circulation_update_collection") as mock_task:
+            bibliotheca.circulation_update_all_collections.delay().wait()
+
+        mock_task.delay.assert_not_called()
+
+
+class TestCirculationUpdateCollection:
+    def test_first_invocation_reads_offset_from_timestamp(
+        self,
+        bibliotheca_circulation_update_task_fixture: BibliothecaCirculationUpdateTaskFixture,
+        celery_fixture: CeleryFixture,
+        redis_fixture: RedisFixture,
+    ) -> None:
+        """On the first invocation (offset=None), the offset is read from the stored Timestamp.counter."""
+        collection = bibliotheca_circulation_update_task_fixture.collection
+
+        # Set a counter so we can verify it was used as the offset.
+        bibliotheca_circulation_update_task_fixture.stamp_circulation_update(counter=99)
+
+        mock_result = BatchUpdateResult(records_handled=0, next_offset=None)
+
+        with patch(
+            "palace.manager.celery.tasks.bibliotheca.BibliothecaCirculationUpdater"
+        ) as mock_updater_cls:
+            mock_updater = mock_updater_cls.return_value
+            mock_updater.get_offset.return_value = 99
+            mock_updater.update_batch.return_value = mock_result
+
+            bibliotheca.circulation_update_collection.delay(
+                collection_id=collection.id
+            ).wait()
+
+        # Verify that update_batch was called with the offset from the stored timestamp.
+        mock_updater.update_batch.assert_called_once_with(99)
+
+    @patch(
+        "palace.manager.integration.license.bibliotheca_circulation_updater.BibliothecaAPI"
+    )
+    def test_already_complete_no_replace(
+        self,
+        mock_api_cls: MagicMock,
+        bibliotheca_circulation_update_task_fixture: BibliothecaCirculationUpdateTaskFixture,
+        celery_fixture: CeleryFixture,
+        redis_fixture: RedisFixture,
+    ) -> None:
+        """When the sweep is complete (empty batch), no replace is issued."""
+        mock_api_cls.return_value.bibliographic_lookup.return_value = iter([])
+        collection = bibliotheca_circulation_update_task_fixture.collection
+
+        # Offset 0, no identifiers in collection → partial batch → no replace.
+        with patch.object(
+            bibliotheca.circulation_update_collection, "replace"
+        ) as mock_replace:
+            bibliotheca.circulation_update_collection.delay(
+                collection_id=collection.id
+            ).wait()
+
+        mock_replace.assert_not_called()
+
+    @patch(
+        "palace.manager.integration.license.bibliotheca_circulation_updater.BibliothecaAPI"
+    )
+    def test_full_batch_issues_replace_with_next_offset(
+        self,
+        mock_api_cls: MagicMock,
+        bibliotheca_circulation_update_task_fixture: BibliothecaCirculationUpdateTaskFixture,
+        celery_fixture: CeleryFixture,
+        redis_fixture: RedisFixture,
+    ) -> None:
+        """When update_batch returns a full batch (next_offset set), task.replace() is
+        raised with the next offset."""
+        collection = bibliotheca_circulation_update_task_fixture.collection
+
+        mock_result = BatchUpdateResult(records_handled=25, next_offset=100)
+
+        with (
+            patch(
+                "palace.manager.celery.tasks.bibliotheca.BibliothecaCirculationUpdater"
+            ) as mock_updater_cls,
+            patch.object(
+                bibliotheca.circulation_update_collection, "replace"
+            ) as mock_replace,
+        ):
+            mock_updater = mock_updater_cls.return_value
+            mock_updater.get_offset.return_value = 0
+            mock_updater.update_batch.return_value = mock_result
+            mock_replace.side_effect = Exception("replaced")
+
+            with pytest.raises(Exception, match="replaced"):
+                bibliotheca.circulation_update_collection.delay(
+                    collection_id=collection.id,
+                ).wait()
+
+        replace_sig = mock_replace.call_args[0][0]
+        assert replace_sig.kwargs["offset"] == 100
+
+    @patch(
+        "palace.manager.integration.license.bibliotheca_circulation_updater.BibliothecaAPI"
+    )
+    def test_partial_batch_no_replace(
+        self,
+        mock_api_cls: MagicMock,
+        bibliotheca_circulation_update_task_fixture: BibliothecaCirculationUpdateTaskFixture,
+        celery_fixture: CeleryFixture,
+        redis_fixture: RedisFixture,
+    ) -> None:
+        """When update_batch signals completion (next_offset=None), no replace is issued."""
+        collection = bibliotheca_circulation_update_task_fixture.collection
+
+        mock_result = BatchUpdateResult(records_handled=3, next_offset=None)
+
+        with (
+            patch(
+                "palace.manager.celery.tasks.bibliotheca.BibliothecaCirculationUpdater"
+            ) as mock_updater_cls,
+            patch.object(
+                bibliotheca.circulation_update_collection, "replace"
+            ) as mock_replace,
+        ):
+            mock_updater = mock_updater_cls.return_value
+            mock_updater.get_offset.return_value = 0
+            mock_updater.update_batch.return_value = mock_result
+
+            bibliotheca.circulation_update_collection.delay(
+                collection_id=collection.id,
+            ).wait()
+
+        mock_replace.assert_not_called()
+
+    @patch(
+        "palace.manager.integration.license.bibliotheca_circulation_updater.BibliothecaAPI"
+    )
+    def test_replace_carries_collection_id(
+        self,
+        mock_api_cls: MagicMock,
+        bibliotheca_circulation_update_task_fixture: BibliothecaCirculationUpdateTaskFixture,
+        celery_fixture: CeleryFixture,
+        redis_fixture: RedisFixture,
+    ) -> None:
+        """The replace signature carries the collection_id forward via signature_with."""
+        collection = bibliotheca_circulation_update_task_fixture.collection
+
+        mock_result = BatchUpdateResult(records_handled=25, next_offset=100)
+
+        with (
+            patch(
+                "palace.manager.celery.tasks.bibliotheca.BibliothecaCirculationUpdater"
+            ) as mock_updater_cls,
+            patch.object(
+                bibliotheca.circulation_update_collection, "replace"
+            ) as mock_replace,
+        ):
+            mock_updater = mock_updater_cls.return_value
+            mock_updater.get_offset.return_value = 0
+            mock_updater.update_batch.return_value = mock_result
+            mock_replace.side_effect = Exception("replaced")
+
+            with pytest.raises(Exception, match="replaced"):
+                bibliotheca.circulation_update_collection.delay(
+                    collection_id=collection.id,
+                ).wait()
+
+        replace_sig = mock_replace.call_args[0][0]
+        assert replace_sig.kwargs["collection_id"] == collection.id
+        assert replace_sig.kwargs["offset"] == 100
+
+    def test_skips_when_lock_held(
+        self,
+        bibliotheca_circulation_update_task_fixture: BibliothecaCirculationUpdateTaskFixture,
+        celery_fixture: CeleryFixture,
+        redis_fixture: RedisFixture,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """When the workflow lock is already held by another run, the task logs a warning
+        and returns without processing."""
+        collection = bibliotheca_circulation_update_task_fixture.collection
+
+        existing_lock = _circulation_update_workflow_lock(
+            redis_fixture.client, collection.id, str(uuid4())
+        )
+        existing_lock.acquire()
+
+        caplog.set_level(LogLevel.warning)
+
+        with patch(
+            "palace.manager.celery.tasks.bibliotheca.BibliothecaCirculationUpdater"
+        ) as mock_updater_cls:
+            bibliotheca.circulation_update_collection.delay(
+                collection_id=collection.id
+            ).wait()
+            mock_updater_cls.return_value.update_batch.assert_not_called()
+
+        assert "skipped" in caplog.text
+        assert "already in progress" in caplog.text
+
+        existing_lock.release()
+
+    def test_lock_not_released_on_autoretry(
+        self,
+        bibliotheca_circulation_update_task_fixture: BibliothecaCirculationUpdateTaskFixture,
+        celery_fixture: CeleryFixture,
+        redis_fixture: RedisFixture,
+    ) -> None:
+        """A retryable failure holds the workflow lock and each retry re-runs the batch.
+
+        The workflow lock is keyed on ``task.request.id``, which Celery preserves across
+        retries, so every retry re-acquires the same lock and re-runs the batch rather
+        than skipping as if another run were in progress. The lock stays held so no
+        concurrent run can start.
+        """
+        collection = bibliotheca_circulation_update_task_fixture.collection
+
+        mock_response = MockRequestsResponse(500, content="Internal Server Error")
+
+        with patch(
+            "palace.manager.celery.tasks.bibliotheca.BibliothecaCirculationUpdater"
+        ) as mock_updater_cls:
+            mock_updater = mock_updater_cls.return_value
+            mock_updater.get_offset.return_value = 0
+            mock_updater.update_batch.side_effect = BadResponseException(
+                "http://test.com", "Bad response", mock_response
+            )
+
+            with celery_fixture.patch_retry_backoff():
+                bibliotheca.circulation_update_collection.delay(
+                    collection_id=collection.id
+                ).get(propagate=False)
+
+            # The batch was re-run on every retry (1 initial attempt + max_retries=4),
+            # not skipped as an "already in progress" run.
+            assert mock_updater.update_batch.call_count == 5
+
+        # Lock should still be held after retries exhaust — it will expire via
+        # the 2-hour Redis TTL, preventing a concurrent run from starting.
+        workflow_lock = _circulation_update_workflow_lock(
+            redis_fixture.client, collection.id, random_value="any"
+        )
+        assert workflow_lock.locked()
+
+    def test_circulation_update_lock_independent_from_event_import_and_purchase_record_locks(
+        self,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        redis_fixture: RedisFixture,
+    ) -> None:
+        """The circulation update workflow lock uses a different Redis key than both the
+        event import and purchase record locks, so all three can run concurrently per collection.
+        """
+        collection = MockBibliothecaAPI.mock_collection(
+            db.session, db.default_library()
+        )
+
+        # Hold the event import lock.
+        event_lock = import_workflow_lock(
+            redis_fixture.client, collection.id, str(uuid4())
+        )
+        event_lock.acquire()
+
+        # Hold the purchase record lock.
+        purchase_record_lock = _purchase_record_workflow_lock(
+            redis_fixture.client, collection.id, str(uuid4())
+        )
+        purchase_record_lock.acquire()
+
+        # The circulation update lock should still be acquirable.
+        circulation_lock = _circulation_update_workflow_lock(
+            redis_fixture.client, collection.id, str(uuid4())
+        )
+        acquired = circulation_lock.acquire()
+        assert acquired
+
+        circulation_lock.release()
         purchase_record_lock.release()
         event_lock.release()

@@ -13,6 +13,7 @@ from palace.manager.integration.license.bibliotheca_purchase_record_importer imp
     DEFAULT_PURCHASE_RECORD_START_TIME,
 )
 from palace.manager.integration.license.bibliotheca_scripts import (
+    CirculationUpdateCollection,
     ImportEventCollection,
     ImportPurchaseRecordCollection,
 )
@@ -137,5 +138,52 @@ class TestImportPurchaseRecordCollection:
         )
         with pytest.raises(SystemExit):
             ImportPurchaseRecordCollection(db.session).do_run(
+                ["--collection", collection.name, "--import-all"]
+            )
+
+
+class TestCirculationUpdateCollection:
+    def test_import_all_queues_circulation_update_all_collections(
+        self, db: DatabaseTransactionFixture
+    ) -> None:
+        """--import-all dispatches circulation_update_all_collections."""
+        with patch.object(
+            bibliotheca, "circulation_update_all_collections"
+        ) as mock_task:
+            CirculationUpdateCollection(db.session).do_run(["--import-all"])
+        mock_task.delay.assert_called_once_with()
+
+    def test_collection_queues_circulation_update_collection(
+        self, db: DatabaseTransactionFixture
+    ) -> None:
+        """--collection <name> dispatches circulation_update_collection for that collection."""
+        collection = MockBibliothecaAPI.mock_collection(
+            db.session, db.default_library(), name="My Bibliotheca"
+        )
+        with patch.object(bibliotheca, "circulation_update_collection") as mock_task:
+            CirculationUpdateCollection(db.session).do_run(
+                ["--collection", collection.name]
+            )
+        mock_task.delay.assert_called_once_with(collection_id=collection.id)
+
+    def test_collection_not_found_raises(self, db: DatabaseTransactionFixture) -> None:
+        """--collection with an unknown name raises PalaceValueError."""
+        from palace.util.exceptions import PalaceValueError
+
+        with pytest.raises(PalaceValueError, match='No collection found named "Ghost"'):
+            CirculationUpdateCollection(db.session).do_run(["--collection", "Ghost"])
+
+    def test_no_args_raises(self, db: DatabaseTransactionFixture) -> None:
+        """Omitting both --collection and --import-all is an error."""
+        with pytest.raises(SystemExit):
+            CirculationUpdateCollection(db.session).do_run([])
+
+    def test_both_args_raises(self, db: DatabaseTransactionFixture) -> None:
+        """Specifying both --collection and --import-all is an error."""
+        collection = MockBibliothecaAPI.mock_collection(
+            db.session, db.default_library()
+        )
+        with pytest.raises(SystemExit):
+            CirculationUpdateCollection(db.session).do_run(
                 ["--collection", collection.name, "--import-all"]
             )
