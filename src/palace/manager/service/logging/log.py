@@ -107,10 +107,7 @@ class JSONFormatter(logging.Formatter):
                 "method": flask_request.method,
                 "host": flask_request.host_url,
             }
-            # The matched route rule (e.g. "/<library_short_name>/works/
-            # <identifier_type>/<path:identifier>") -- a stable per-route key for
-            # log aggregation, unlike `path`, which varies per request. None when
-            # no route matched (e.g. a 404).
+            # Stable per-route pattern for log aggregation; omitted when no route matched (e.g. 404).
             if flask_request.url_rule:
                 data["request"]["rule"] = flask_request.url_rule.rule
             if flask_request.query_string:

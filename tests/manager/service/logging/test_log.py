@@ -196,9 +196,7 @@ class TestJSONFormatter:
             # No route matched this path, so there is no rule to include.
             assert "rule" not in request
 
-        # When the request matches a registered route, the matched rule pattern is
-        # included in the log -- a stable per-route key for aggregation, unlike
-        # `path`, which varies per request.
+        # When the request matches a registered route, its rule pattern is included.
         flask_app_fixture.app.add_url_rule(
             "/books/<identifier>", "book", lambda identifier: ""
         )
