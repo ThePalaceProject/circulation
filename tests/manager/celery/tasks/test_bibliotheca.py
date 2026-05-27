@@ -519,11 +519,6 @@ class TestBibliothecaImportCollection:
         lock_c1.release()
 
 
-# ---------------------------------------------------------------------------
-# Purchase record importer tests
-# ---------------------------------------------------------------------------
-
-
 class BibliothecaPurchaseRecordTaskFixture:
     """Common setup for Bibliotheca purchase record importer Celery task tests."""
 
