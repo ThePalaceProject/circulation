@@ -193,6 +193,20 @@ class TestJSONFormatter:
             assert "query" not in request
             assert "user_agent" not in request
             assert "forwarded_for" not in request
+            # No route matched this path, so there is no rule to include.
+            assert "rule" not in request
+
+        # When the request matches a registered route, the matched rule pattern is
+        # included in the log -- a stable per-route key for aggregation, unlike
+        # `path`, which varies per request.
+        flask_app_fixture.app.add_url_rule(
+            "/books/<identifier>", "book", lambda identifier: ""
+        )
+        with flask_app_fixture.test_request_context("/books/12345"):
+            data = json.loads(formatter.format(record))
+            request = data["request"]
+            assert request["path"] == "/books/12345"
+            assert request["rule"] == "/books/<identifier>"
 
         with flask_app_fixture.test_request_context(
             "/test?query=string&foo=bar",
