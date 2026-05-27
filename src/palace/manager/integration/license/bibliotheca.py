@@ -61,7 +61,6 @@ from palace.manager.core.config import (
     ConfigurationAttributeValue,
 )
 from palace.manager.core.coverage import BibliographicCoverageProvider, CoverageFailure
-from palace.manager.core.monitor import IdentifierSweepMonitor
 from palace.manager.core.selftest import SelfTestResult
 from palace.manager.data_layer.bibliographic import BibliographicData
 from palace.manager.data_layer.circulation import CirculationData
@@ -70,7 +69,6 @@ from palace.manager.data_layer.format import FormatData
 from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.data_layer.link import LinkData
 from palace.manager.data_layer.measurement import MeasurementData
-from palace.manager.data_layer.policy.replacement import ReplacementPolicy
 from palace.manager.data_layer.subject import SubjectData
 from palace.manager.integration.settings import (
     FormFieldType,
@@ -378,10 +376,16 @@ class BibliothecaAPI(
 
     def update_availability(self, licensepool: LicensePool) -> None:
         """Update the availability information for a single LicensePool."""
-        monitor = BibliothecaCirculationSweep(
-            self._db, licensepool.collection, api_class=self
+        # Local import to avoid circular dependency between bibliotheca.py and
+        # bibliotheca_circulation_updater.py (the updater imports BibliothecaAPI).
+        from palace.manager.integration.license.bibliotheca_circulation_updater import (
+            BibliothecaCirculationUpdater,
         )
-        return monitor.process_items([licensepool.identifier])
+
+        updater = BibliothecaCirculationUpdater(
+            self._db, licensepool.collection, api=self
+        )
+        updater.process_identifiers([licensepool.identifier])
 
     def _patron_activity_request(self, patron: Patron) -> Response:
         patron_id = patron.authorization_identifier
@@ -1200,109 +1204,6 @@ class EventParser(
 
 
 BibliothecaApiClassT = type[BibliothecaAPI] | BibliothecaAPI
-
-
-class BibliothecaCirculationSweep(IdentifierSweepMonitor):
-    """Check on the current circulation status of each Bibliotheca book in our
-    collection.
-
-    In some cases this will lead to duplicate events being logged,
-    because this monitor and the main Bibliotheca circulation monitor will
-    count the same event.  However it will greatly improve our current
-    view of our Bibliotheca circulation, which is more important.
-
-    If Bibliotheca has updated its metadata for a book, that update will
-    also take effect during the circulation sweep.
-
-    If a Bibliotheca license has expired, and we didn't hear about it for
-    whatever reason, we'll find out about it here, because Bibliotheca
-    will act like they never heard of it.
-    """
-
-    SERVICE_NAME = "Bibliotheca Circulation Sweep"
-    DEFAULT_BATCH_SIZE = 25
-    PROTOCOL = BibliothecaAPI.label()
-
-    def __init__(
-        self,
-        _db: Session,
-        collection: Collection,
-        api_class: BibliothecaApiClassT = BibliothecaAPI,
-        **kwargs: Any,
-    ) -> None:
-        _db = Session.object_session(collection)
-        super().__init__(_db, collection, **kwargs)
-        if isinstance(api_class, BibliothecaAPI):
-            self.api = api_class
-        else:
-            self.api = api_class(_db, collection)
-        self.replacement_policy = ReplacementPolicy.from_license_source()
-        self.analytics = self.services.analytics.analytics()
-
-    def process_items(self, identifiers: CollectionT[Identifier]) -> None:
-        identifiers_by_bibliotheca_id = dict()
-        bibliotheca_ids = set()
-        for identifier in identifiers:
-            bibliotheca_ids.add(identifier.identifier)
-            identifiers_by_bibliotheca_id[identifier.identifier] = identifier
-
-        identifiers_not_mentioned_by_bibliotheca = set(identifiers)
-        now = utc_now()
-        for bibliographic in self.api.bibliographic_lookup(bibliotheca_ids):
-            self._process_bibliographic(
-                bibliographic,
-                identifiers_by_bibliotheca_id,
-                identifiers_not_mentioned_by_bibliotheca,
-            )
-
-        # At this point there may be some license pools left over
-        # that Bibliotheca doesn't know about.  This is a pretty reliable
-        # indication that we no longer own any licenses to the
-        # book.
-        for identifier in identifiers_not_mentioned_by_bibliotheca:
-            pools = [
-                lp
-                for lp in identifier.licensed_through
-                if lp.data_source.name == DataSource.BIBLIOTHECA
-                and lp.collection == self.collection
-            ]
-            if pools:
-                [pool] = pools
-            else:
-                continue
-            if pool.licenses_owned > 0:
-                self.log.warning("Removing %s from circulation.", identifier.identifier)
-            pool.update_availability(0, 0, 0, 0, as_of=now)
-
-    def _process_bibliographic(
-        self,
-        bibliographic: BibliographicData,
-        identifiers_by_bibliotheca_id: dict[str, Identifier],
-        identifiers_not_mentioned_by_bibliotheca: set[Identifier],
-    ) -> None:
-        """Process a single BibliographicData object (containing CirculationData)
-        retrieved from Bibliotheca.
-        """
-        bibliotheca_id = (
-            bibliographic.primary_identifier_data.identifier
-            if bibliographic.primary_identifier_data
-            else None
-        )
-        if bibliotheca_id:
-            identifier = identifiers_by_bibliotheca_id[bibliotheca_id]
-            if identifier in identifiers_not_mentioned_by_bibliotheca:
-                # Bibliotheca mentioned this identifier. Remove it from
-                # this list so we know the title is still in the collection.
-                identifiers_not_mentioned_by_bibliotheca.remove(identifier)
-
-        edition, _ = bibliographic.edition(self._db)
-
-        bibliographic.apply(
-            self._db,
-            edition,
-            collection=self.collection,
-            replace=self.replacement_policy,
-        )
 
 
 class BibliothecaBibliographicCoverageProvider(BibliographicCoverageProvider):

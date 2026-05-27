@@ -1,6 +1,7 @@
 """Celery tasks for Bibliotheca (3M Cloud) collection management.
 
-Four tasks handle near-real-time event import and historical purchase record import:
+Six tasks handle near-real-time event import, historical purchase record import, and
+periodic circulation availability sweeps:
 
 - ``import_all_collections``: Fans out to one ``import_collection`` task per collection.
 - ``import_collection``: Processes one time slice of circulation events, then
@@ -12,6 +13,11 @@ Four tasks handle near-real-time event import and historical purchase record imp
   records, then re-queues itself via ``task.replace()`` until the collection is
   caught up to ``utc_now()``, holding a separate Redis workflow lock so at most one
   purchase record import run proceeds per collection at a time.
+- ``circulation_update_all_collections``: Fans out to one ``circulation_update_collection``
+  task per collection.
+- ``circulation_update_collection``: Processes one batch of identifiers for circulation
+  availability updates, re-queuing itself via ``task.replace()`` until the full collection
+  has been swept, holding a separate Redis workflow lock per collection.
 """
 
 from __future__ import annotations
@@ -28,6 +34,9 @@ from palace.manager.celery.importer import import_workflow_lock
 from palace.manager.celery.task import Task
 from palace.manager.celery.utils import load_from_id
 from palace.manager.integration.license.bibliotheca import BibliothecaAPI
+from palace.manager.integration.license.bibliotheca_circulation_updater import (
+    BibliothecaCirculationUpdater,
+)
 from palace.manager.integration.license.bibliotheca_importer import (
     EVENT_IMPORT_OVERLAP,
     BibliothecaEventImporter,
@@ -330,6 +339,134 @@ def import_purchase_records_by_collection(
                     collection_id=collection_id,
                     current_day=result.day_end,
                     offset=1,
+                    lock_value=lock_value,
+                )
+            )
+
+
+def _circulation_update_workflow_lock(
+    client: Redis, collection_id: int, random_value: str
+) -> RedisLock:
+    """Create a workflow-level lock for the circulation updater.
+
+    Uses a key distinct from the event-import and purchase-record-import locks
+    so all three workflows can run concurrently per collection.
+    """
+    return RedisLock(
+        client,
+        [
+            "CirculationUpdateWorkflow",
+            Collection.redis_key_from_id(collection_id),
+        ],
+        random_value=random_value,
+        lock_timeout=timedelta(hours=2),
+    )
+
+
+@shared_task(queue=QueueNames.default, bind=True)
+def circulation_update_all_collections(task: Task) -> None:
+    """Queue a ``circulation_update_collection`` task for every Bibliotheca collection."""
+    with task.session() as session:
+        registry = task.services.integration_registry().license_providers()
+        collection_query = Collection.select_by_protocol(
+            BibliothecaAPI, registry=registry
+        )
+        collections = session.scalars(collection_query).all()
+
+    for collection in collections:
+        circulation_update_collection.delay(collection_id=collection.id)
+
+    task.log.info(
+        f"Queued {len(collections)} Bibliotheca collection(s) for circulation update."
+    )
+
+
+@shared_task(
+    queue=QueueNames.default,
+    bind=True,
+    max_retries=4,
+    autoretry_for=(BadResponseException, RequestTimedOut),
+    throws=(RemoteIntegrationException,),
+    retry_backoff=60,
+)
+def circulation_update_collection(
+    task: Task,
+    collection_id: int,
+    *,
+    offset: int | None = None,
+    lock_value: str | None = None,
+) -> None:
+    """Process one batch of Bibliotheca circulation availability updates.
+
+    Fetches up to 25 identifiers licensed through the collection with
+    ``id > offset``, requests current availability from the Bibliotheca API,
+    queues ``bibliographic_apply`` for changed titles, and zeros out any
+    titles the API no longer recognises.
+
+    Re-queues itself via ``task.replace()`` until all identifiers have been
+    processed (the batch was full).  When the final partial batch is processed
+    the :attr:`~palace.manager.sqlalchemy.model.coverage.Timestamp.counter`
+    is reset to 0 and no further replace is issued; the next beat trigger
+    restarts the sweep from the beginning.
+
+    A Redis workflow lock keyed to ``collection_id`` (prefix
+    ``CirculationUpdateWorkflow``) ensures at most one circulation-update
+    chain runs per collection at a time.
+
+    :param collection_id: Database ID of the Bibliotheca collection.
+    :param offset: Last identifier DB ID processed.  ``None`` on the first
+        invocation — the offset is read from the stored
+        :attr:`~palace.manager.sqlalchemy.model.coverage.Timestamp.counter`.
+    :param lock_value: UUID identifying this workflow.  Generated on the first
+        invocation and forwarded unchanged to every subsequent batch.
+    """
+    redis = task.services.redis().client()
+
+    is_first_invocation = lock_value is None
+    if lock_value is None:
+        lock_value = str(uuid4())
+
+    workflow_lock = _circulation_update_workflow_lock(redis, collection_id, lock_value)
+
+    with workflow_lock.lock(
+        raise_when_not_acquired=False,
+        ignored_exceptions=(Ignore, BadResponseException, RequestTimedOut),
+    ) as workflow_lock_acquired:
+        if not workflow_lock_acquired and is_first_invocation:
+            task.log.warning(
+                f"Bibliotheca circulation update skipped for collection {collection_id}: another run is already in progress."
+            )
+            return
+        if not workflow_lock_acquired and not is_first_invocation:
+            task.log.warning(
+                f"Bibliotheca circulation update for collection {collection_id}: workflow lock expired between invocations; continuing (another run may be active)."
+            )
+
+        result = None
+        collection_name: str | None = None
+
+        with task.transaction() as session:
+            collection = load_from_id(session, Collection, collection_id)
+            collection_name = collection.name
+            updater = BibliothecaCirculationUpdater(session, collection)
+
+            if offset is None:
+                offset = updater.get_offset()
+
+            result = updater.update_batch(offset)
+
+        assert result is not None
+
+        task.log.info(
+            f"Bibliotheca circulation update: handled {result.records_handled} identifier(s) for "
+            f"'{collection_name}' (offset {offset})."
+        )
+
+        if result.next_offset is not None:
+            raise task.replace(
+                task.s(
+                    collection_id=collection_id,
+                    offset=result.next_offset,
                     lock_value=lock_value,
                 )
             )
