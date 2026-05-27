@@ -262,7 +262,7 @@ def import_purchase_records_by_collection(
     """
     redis = task.services.redis().client()
 
-    is_first_day = lock_value is None
+    is_first_invocation = lock_value is None
     if lock_value is None:
         lock_value = str(uuid4())
 
@@ -275,14 +275,14 @@ def import_purchase_records_by_collection(
         # does not open a window for a concurrent run on the same collection.
         ignored_exceptions=(Ignore, BadResponseException, RequestTimedOut),
     ) as workflow_lock_acquired:
-        if not workflow_lock_acquired and is_first_day:
+        if not workflow_lock_acquired and is_first_invocation:
             task.log.warning(
                 f"Bibliotheca purchase record import skipped for collection {collection_id}: another run is already in progress."
             )
             return
-        if not workflow_lock_acquired and not is_first_day:
+        if not workflow_lock_acquired and not is_first_invocation:
             task.log.warning(
-                f"Bibliotheca purchase record import for collection {collection_id}: workflow lock expired between days; continuing (another run may be active)."
+                f"Bibliotheca purchase record import for collection {collection_id}: workflow lock expired between invocations; continuing (another run may be active)."
             )
 
         cutoff = utc_now()

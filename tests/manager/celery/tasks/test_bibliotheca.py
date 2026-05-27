@@ -914,7 +914,7 @@ class TestImportPurchaseRecordsByCollection:
         redis_fixture: RedisFixture,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
-        """When the purchase record workflow lock expires between days (is_first_day=False
+        """When the purchase record workflow lock expires mid-chain (is_first_invocation=False
         and lock not acquired), the task logs a warning but still processes the day."""
         collection = bibliotheca_purchase_record_task_fixture.collection
         bibliotheca_purchase_record_task_fixture.stamp_purchase_record(
@@ -938,7 +938,7 @@ class TestImportPurchaseRecordsByCollection:
             ).wait()
             mock_api_cls.return_value.marc_request.assert_called_once()
 
-        assert "workflow lock expired between days" in caplog.text
+        assert "workflow lock expired between invocations" in caplog.text
 
         competing_lock.release()
 
