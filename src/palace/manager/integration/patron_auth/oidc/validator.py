@@ -66,9 +66,7 @@ class OIDCTokenValidator(LoggerMixin):
             token = jwt.decode(
                 id_token,
                 key_set,
-                # This type ignore can go away if / when upstream merges
-                # https://github.com/authlib/joserfc/pull/98
-                algorithms=self.ALLOWED_ALGORITHMS,  # type: ignore[arg-type]
+                algorithms=self.ALLOWED_ALGORITHMS,
             )
 
             self.log.debug("ID token signature validated successfully")
