@@ -61,7 +61,7 @@ class TestBibliothecaPurchaseRecordImporterGetStart:
         Timestamp.stamp(
             db.session,
             service=PURCHASE_RECORD_SERVICE_NAME,
-            service_type=Timestamp.MONITOR_TYPE,
+            service_type=Timestamp.TASK_TYPE,
             collection=collection,
             finish=finish,
         )
@@ -113,7 +113,7 @@ class TestBibliothecaPurchaseRecordImporterImportDay:
             result = importer.import_day(current_day, cutoff)
 
         ts = Timestamp.lookup(
-            db.session, PURCHASE_RECORD_SERVICE_NAME, Timestamp.MONITOR_TYPE, collection
+            db.session, PURCHASE_RECORD_SERVICE_NAME, Timestamp.TASK_TYPE, collection
         )
         assert ts is not None
         assert ts.finish is not None
@@ -139,7 +139,7 @@ class TestBibliothecaPurchaseRecordImporterImportDay:
         assert result.next_offset is not None  # day not yet complete
 
         ts = Timestamp.lookup(
-            db.session, PURCHASE_RECORD_SERVICE_NAME, Timestamp.MONITOR_TYPE, collection
+            db.session, PURCHASE_RECORD_SERVICE_NAME, Timestamp.TASK_TYPE, collection
         )
         assert ts is not None
         assert ts.finish is not None

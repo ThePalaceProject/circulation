@@ -91,7 +91,7 @@ class BibliothecaPurchaseRecordImporter(LoggerMixin):
         timestamp = Timestamp.lookup(
             self._session,
             PURCHASE_RECORD_SERVICE_NAME,
-            Timestamp.MONITOR_TYPE,
+            Timestamp.TASK_TYPE,
             self._collection,
         )
         if timestamp is None or timestamp.finish is None:
@@ -148,7 +148,7 @@ class BibliothecaPurchaseRecordImporter(LoggerMixin):
         Timestamp.stamp(
             self._session,
             service=PURCHASE_RECORD_SERVICE_NAME,
-            service_type=Timestamp.MONITOR_TYPE,
+            service_type=Timestamp.TASK_TYPE,
             collection=self._collection,
             start=current_day,
             finish=day_end if day_complete else current_day,

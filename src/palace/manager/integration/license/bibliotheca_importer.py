@@ -83,7 +83,7 @@ class BibliothecaEventImporter(LoggerMixin):
         timestamp = Timestamp.lookup(
             self._session,
             EVENT_IMPORT_SERVICE_NAME,
-            Timestamp.MONITOR_TYPE,
+            Timestamp.TASK_TYPE,
             self._collection,
         )
         if timestamp is None or timestamp.finish is None:
@@ -135,7 +135,7 @@ class BibliothecaEventImporter(LoggerMixin):
         Timestamp.stamp(
             self._session,
             service=EVENT_IMPORT_SERVICE_NAME,
-            service_type=Timestamp.MONITOR_TYPE,
+            service_type=Timestamp.TASK_TYPE,
             collection=self._collection,
             start=start,
             finish=slice_end,
