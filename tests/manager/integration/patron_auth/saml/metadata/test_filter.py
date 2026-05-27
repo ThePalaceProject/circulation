@@ -10,13 +10,6 @@ from palace.manager.integration.patron_auth.saml.metadata.model import (
     SAMLAttributeType,
     SAMLSubject,
 )
-from palace.manager.integration.patron_auth.saml.python_expression_dsl.evaluator import (
-    DSLEvaluationVisitor,
-    DSLEvaluator,
-)
-from palace.manager.integration.patron_auth.saml.python_expression_dsl.parser import (
-    DSLParser,
-)
 
 
 class TestSAMLSubjectFilter:
@@ -119,20 +112,14 @@ class TestSAMLSubjectFilter:
         ],
     )
     def test_execute(self, expression, subject, expected_result, expected_exception):
-        # Arrange
-        parser = DSLParser()
-        visitor = DSLEvaluationVisitor()
-        evaluator = DSLEvaluator(parser, visitor)
-        subject_filter = SAMLSubjectFilter(evaluator)
+        subject_filter = SAMLSubjectFilter()
 
-        # Act
         if expected_exception:
             with pytest.raises(expected_exception):
                 subject_filter.execute(expression, subject)
         else:
             result = subject_filter.execute(expression, subject)
 
-            # Assert
             assert expected_result == result
 
     @pytest.mark.parametrize(
@@ -144,9 +131,12 @@ class TestSAMLSubjectFilter:
                 id="fails_in_the_case_of_syntax_error",
             ),
             pytest.param(
+                # The old DSL grammar required expressions to start with "subject.";
+                # the new syntax-only check accepts any valid Python expression.
+                # Expressions without "subject" will fail at evaluation time, not validation.
                 'attributes["eduPersonEntitlement"].values[0] == "urn:mace:nyu.edu:entl:lib:eresources"',
-                SAMLSubjectFilterError,
-                id="fails_when_subject_is_not_used",
+                None,
+                id="passes_validation_when_subject_is_not_used",
             ),
             pytest.param(
                 'subject.attribute_statement.attributes["urn:oid:1.3.6.1.4.1.5923.1.8"].values[0] == "urn:mace:nyu.edu:entl:lib:eresources"',
@@ -166,13 +156,8 @@ class TestSAMLSubjectFilter:
         ],
     )
     def test_validate(self, expression, expected_exception):
-        # Arrange
-        parser = DSLParser()
-        visitor = DSLEvaluationVisitor()
-        evaluator = DSLEvaluator(parser, visitor)
-        subject_filter = SAMLSubjectFilter(evaluator)
+        subject_filter = SAMLSubjectFilter()
 
-        # Act
         if expected_exception:
             with pytest.raises(expected_exception):
                 subject_filter.validate(expression)

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import logging
 
 from palace.util.exceptions import BasePalaceException
@@ -8,53 +10,35 @@ from palace.manager.integration.patron_auth.saml.metadata.model import (
     SAMLNameID,
     SAMLSubject,
 )
-from palace.manager.integration.patron_auth.saml.python_expression_dsl.evaluator import (
-    DSLEvaluator,
-)
+from palace.manager.util.filter import FilterExpression, FilterExpressionError
 
 
 class SAMLSubjectFilterError(BasePalaceException):
     """Raised in the case of any errors during execution of a filter expression."""
 
     def __init__(self, inner_exception: Exception) -> None:
-        """Initialize a new instance of SAMLSubjectFilterError class."""
-        message = f"Incorrect filter expression: {str(inner_exception)}"
-
-        super().__init__(message)
+        super().__init__(f"Incorrect filter expression: {str(inner_exception)}")
 
 
 class SAMLSubjectFilter:
-    """Executes filter expressions."""
+    """Executes filter expressions against SAML subjects using FilterExpression."""
 
-    def __init__(self, dsl_evaluator):
-        """Initialize a new instance of SAMLSubjectFilter class.
+    _SAFE_TYPES: tuple[type, ...] = (
+        SAMLSubject,
+        SAMLNameID,
+        SAMLAttributeStatement,
+        SAMLAttribute,
+    )
 
-        :param dsl_evaluator: DSL evaluator
-        :type dsl_evaluator: core.python_expression_dsl.evaluator.DSLEvaluator
-        """
-        if not isinstance(dsl_evaluator, DSLEvaluator):
-            raise ValueError(
-                "Argument 'dsl_evaluator' must be an instance of {} class".format(
-                    DSLEvaluator
-                )
-            )
-
-        self._dsl_evaluator = dsl_evaluator
+    def __init__(self) -> None:
         self._logger = logging.getLogger(__name__)
 
-    def execute(self, expression, subject):
-        """Apply the expression to the subject and return a boolean value indicating whether it's a valid subject.
+    def execute(self, expression: str, subject: SAMLSubject) -> bool:
+        """Apply the expression to the subject and return whether it passes.
 
         :param expression: String containing the filter expression
-        :type expression: str
-
         :param subject: SAML subject
-        :type subject: api.saml.metadata.model.SAMLSubject
-
-        :return: Boolean value indicating whether it's a valid subject
-        :rtype: bool
-
-        :raise SAMLSubjectFilterError: in the case of any errors occurred during expression evaluation
+        :raises SAMLSubjectFilterError: on any evaluation error
         """
         if not expression or not isinstance(expression, str):
             raise ValueError("Argument 'expression' must be a non-empty string")
@@ -64,43 +48,31 @@ class SAMLSubjectFilter:
         self._logger.info(f"Started applying expression '{expression}' to {subject}")
 
         try:
-            result = self._dsl_evaluator.evaluate(
-                expression,
-                context={"subject": subject},
-                safe_classes=[
-                    SAMLSubject,
-                    SAMLNameID,
-                    SAMLAttributeStatement,
-                    SAMLAttribute,
-                ],
-            )
-        except Exception as exception:
-            raise SAMLSubjectFilterError(exception) from exception
+            result = FilterExpression(
+                expression, extra_safe_types=self._SAFE_TYPES
+            ).evaluate({"subject": subject})
+        except FilterExpressionError as exc:
+            raise SAMLSubjectFilterError(exc) from exc
 
         self._logger.info(
-            "Finished applying expression '{}' to {}: {}".format(
-                expression, subject, result
-            )
+            f"Finished applying expression '{expression}' to {subject}: {result}"
         )
-
-        result = bool(result)
-
         return result
 
-    def validate(self, expression):
-        """Validate the filter expression.
+    def validate(self, expression: str) -> None:
+        """Validate the filter expression by checking its syntax.
 
-        Try to apply the expression to a dummy Subject object containing all the known SAML attributes.
+        Note: only syntax is checked; names used in the expression are not
+        verified against the evaluation context. An expression that references
+        undefined names will pass this check but raise at evaluation time.
 
         :param expression: String containing the filter expression
-        :type expression: str
-
-        :raise: SAMLSubjectFilterError
+        :raises SAMLSubjectFilterError: on any syntax error
         """
         if not expression or not isinstance(expression, str):
             raise ValueError("Argument 'expression' must be a non-empty string")
 
         try:
-            self._dsl_evaluator.parser.parse(expression)
-        except Exception as exception:
-            raise SAMLSubjectFilterError(exception) from exception
+            FilterExpression(expression).check_syntax()
+        except FilterExpressionError as exc:
+            raise SAMLSubjectFilterError(exc) from exc

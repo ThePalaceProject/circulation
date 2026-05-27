@@ -29,10 +29,6 @@ from palace.manager.integration.patron_auth.saml.configuration.service_provider 
     SamlServiceProviderConfiguration,
 )
 from palace.manager.integration.patron_auth.saml.metadata.federations import incommon
-from palace.manager.integration.patron_auth.saml.metadata.filter import (
-    SAMLSubjectFilter,
-    SAMLSubjectFilterError,
-)
 from palace.manager.integration.patron_auth.saml.metadata.model import (
     SAMLAttributeType,
     SAMLBinding,
@@ -44,13 +40,6 @@ from palace.manager.integration.patron_auth.saml.metadata.parser import (
     SAMLMetadataParser,
     SAMLMetadataParsingError,
 )
-from palace.manager.integration.patron_auth.saml.python_expression_dsl.evaluator import (
-    DSLEvaluationVisitor,
-    DSLEvaluator,
-)
-from palace.manager.integration.patron_auth.saml.python_expression_dsl.parser import (
-    DSLParser,
-)
 from palace.manager.integration.settings import (
     FormFieldType,
     FormMetadata,
@@ -61,6 +50,7 @@ from palace.manager.sqlalchemy.model.saml import (
     SAMLFederatedIdentityProvider,
     SAMLFederation,
 )
+from palace.manager.util.filter import FilterExpression, FilterExpressionError
 
 
 class SAMLConfigurationError(BasePalaceException):
@@ -410,15 +400,11 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
 
     @field_validator("filter_expression")
     @classmethod
-    def validate_filter_expression(cls, v: str):
-        parser = DSLParser()
-        visitor = DSLEvaluationVisitor()
-        evaluator = DSLEvaluator(parser, visitor)
-        subject_filter = SAMLSubjectFilter(evaluator)
+    def validate_filter_expression(cls, v: str | None) -> str | None:
         if v is not None:
             try:
-                subject_filter.validate(v)
-            except SAMLSubjectFilterError as exception:
+                FilterExpression(v).check_syntax()
+            except FilterExpressionError as exception:
                 cls.logger().exception("Validation of the filtration expression failed")
                 message = f"SAML filtration expression has an incorrect format: {str(exception)}"
                 raise SettingsValidationError(
