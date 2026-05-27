@@ -267,6 +267,38 @@ class TestBibliothecaPurchaseRecordImporterProcessRecord:
         # The record was "handled" (iterated) but produced no LicensePool.
         assert result.records_handled == 1
 
+    def test_skips_record_with_multiple_control_numbers(
+        self, db: DatabaseTransactionFixture
+    ) -> None:
+        """_process_record logs an error and skips records with more than one 001 field."""
+        importer, mock_api = _make_importer(db)
+        collection = mock_api.collection
+        current_day = datetime_utc(2024, 1, 15)
+        cutoff = datetime_utc(2024, 1, 20)
+
+        # Record with two 001 fields — ambiguous Bibliotheca ID.
+        def _make_field(bib_id: str) -> MagicMock:
+            field = MagicMock()
+            field.tag = "001"
+            field.value.return_value = bib_id
+            return field
+
+        bad_record = MagicMock()
+        bad_record.fields = [_make_field("id_one"), _make_field("id_two")]
+        bad_record.as_json.return_value = "{}"
+
+        with patch.object(
+            BibliothecaAPI, "marc_request", return_value=iter([bad_record])
+        ):
+            result = importer.import_day(current_day, cutoff)
+
+        # The record was "handled" (iterated) but produced no LicensePool.
+        assert result.records_handled == 1
+        assert not any(
+            lp.identifier.identifier in {"id_one", "id_two"}
+            for lp in collection.licensepools
+        )
+
     def test_queues_bibliographic_apply_when_needed(
         self, db: DatabaseTransactionFixture
     ) -> None:
