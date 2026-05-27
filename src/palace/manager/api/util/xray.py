@@ -9,10 +9,14 @@ from flask import Flask, Response, request, session
 from palace import manager
 
 
-class PalaceXrayMiddleware(XRayMiddleware):  # type: ignore[misc]
+class PalaceXrayMiddleware(XRayMiddleware):
     XRAY_ENV_NAME = "PALACE_XRAY_NAME"
     XRAY_ENV_ANNOTATE = "PALACE_XRAY_ANNOTATE_"
     XRAY_ENV_PATRON_BARCODE = "PALACE_XRAY_INCLUDE_BARCODE"
+
+    # Set by the parent XRayMiddleware.__init__ at runtime, but the
+    # aws_xray_sdk type stubs don't declare it, so we declare it here.
+    _recorder: AWSXRayRecorder
 
     @classmethod
     def put_annotations(cls, segment: Segment, seg_type: str | None = None):
@@ -55,7 +59,9 @@ class PalaceXrayMiddleware(XRayMiddleware):  # type: ignore[misc]
         self.put_annotations(self._recorder.current_segment(), "web")
 
     def _after_request(self, response: Response):
-        super()._after_request(response)
+        # _after_request is defined by XRayMiddleware at runtime, but the
+        # aws_xray_sdk type stubs don't declare it.
+        super()._after_request(response)  # type: ignore[misc]
 
         segment = self._recorder.current_segment()
 
