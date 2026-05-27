@@ -52,7 +52,7 @@ class BibliothecaTaskFixture:
         return Timestamp.stamp(
             self.db.session,
             service=EVENT_IMPORT_SERVICE_NAME,
-            service_type=Timestamp.MONITOR_TYPE,
+            service_type=Timestamp.TASK_TYPE,
             collection=collection or self.collection,
             finish=finish or utc_now(),
         )
@@ -63,7 +63,7 @@ class BibliothecaTaskFixture:
         return Timestamp.lookup(
             self.db.session,
             EVENT_IMPORT_SERVICE_NAME,
-            Timestamp.MONITOR_TYPE,
+            Timestamp.TASK_TYPE,
             collection or self.collection,
         )
 
@@ -535,7 +535,7 @@ class BibliothecaPurchaseRecordTaskFixture:
         return Timestamp.stamp(
             self.db.session,
             service=PURCHASE_RECORD_SERVICE_NAME,
-            service_type=Timestamp.MONITOR_TYPE,
+            service_type=Timestamp.TASK_TYPE,
             collection=collection or self.collection,
             finish=finish or utc_now(),
         )
@@ -546,7 +546,7 @@ class BibliothecaPurchaseRecordTaskFixture:
         return Timestamp.lookup(
             self.db.session,
             PURCHASE_RECORD_SERVICE_NAME,
-            Timestamp.MONITOR_TYPE,
+            Timestamp.TASK_TYPE,
             collection or self.collection,
         )
 
