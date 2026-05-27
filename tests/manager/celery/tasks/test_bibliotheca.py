@@ -585,7 +585,49 @@ class TestImportPurchaseRecordsForAllCollections:
             bibliotheca.import_purchase_records_for_all_collections.delay().wait()
 
         mock_task.delay.assert_has_calls(
-            [call(collection_id=c1.id), call(collection_id=c2.id)],
+            [
+                call(collection_id=c1.id, current_day=None),
+                call(collection_id=c2.id, current_day=None),
+            ],
+            any_order=True,
+        )
+        assert mock_task.delay.call_count == 2
+
+    def test_force_reimport_passes_start_date_to_each_collection(
+        self,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+    ) -> None:
+        """force_reimport=True passes current_day=DEFAULT_PURCHASE_RECORD_START_TIME to each per-collection task."""
+        from palace.manager.integration.license.bibliotheca_purchase_record_importer import (
+            DEFAULT_PURCHASE_RECORD_START_TIME,
+        )
+
+        c1 = MockBibliothecaAPI.mock_collection(
+            db.session, db.default_library(), name="Bibliotheca 1"
+        )
+        c2 = MockBibliothecaAPI.mock_collection(
+            db.session, db.default_library(), name="Bibliotheca 2"
+        )
+
+        with patch.object(
+            bibliotheca, "import_purchase_records_by_collection"
+        ) as mock_task:
+            bibliotheca.import_purchase_records_for_all_collections.delay(
+                force_reimport=True
+            ).wait()
+
+        mock_task.delay.assert_has_calls(
+            [
+                call(
+                    collection_id=c1.id,
+                    current_day=DEFAULT_PURCHASE_RECORD_START_TIME,
+                ),
+                call(
+                    collection_id=c2.id,
+                    current_day=DEFAULT_PURCHASE_RECORD_START_TIME,
+                ),
+            ],
             any_order=True,
         )
         assert mock_task.delay.call_count == 2
