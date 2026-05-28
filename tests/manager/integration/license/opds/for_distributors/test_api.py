@@ -101,8 +101,8 @@ class TestOPDSForDistributorsAPI:
         self, opds_dist_api_fixture: OPDSForDistributorsAPIFixture
     ):
         """A book made available through OPDS For Distributors can be
-        fulfilled with no underlying loan, if its delivery mechanism
-        uses bearer token fulfillment.
+        fulfilled with no underlying loan only if its delivery mechanism
+        uses NO_DRM — a plain redirect to a public URL.
         """
         patron = MagicMock()
         pool = opds_dist_api_fixture.db.licensepool(
@@ -129,16 +129,21 @@ class TestOPDSForDistributorsAPI:
         lpdm.delivery_mechanism.drm_scheme = DeliveryMechanism.ADOBE_DRM
         assert False == m(patron, pool, lpdm)
 
-        # Otherwise -> True
+        # NO_DRM is allowed: the redirect points to a public URL, no
+        # credential is issued, no per-patron tracking is required.
         lpdm.delivery_mechanism.drm_scheme = DeliveryMechanism.NO_DRM
         assert True == m(patron, pool, lpdm)
 
+        # BEARER_TOKEN is NOT allowed without a loan: the token document is
+        # an access credential and we shouldn't hand one out without a
+        # corresponding loan record.
         lpdm.delivery_mechanism.drm_scheme = DeliveryMechanism.BEARER_TOKEN
-        assert True == m(patron, pool, lpdm)
+        assert False == m(patron, pool, lpdm)
 
-        # STREAMING_DRM is also allowed
+        # STREAMING_DRM is NOT allowed without a loan: a streaming fulfillment
+        # is an OPDS entry tied to a Loan, so it cannot be built loan-less.
         lpdm.delivery_mechanism.drm_scheme = DeliveryMechanism.STREAMING_DRM
-        assert True == m(patron, pool, lpdm)
+        assert False == m(patron, pool, lpdm)
 
     def test_checkin(self, opds_dist_api_fixture: OPDSForDistributorsAPIFixture):
         # The patron has two loans, one from this API's collection and
