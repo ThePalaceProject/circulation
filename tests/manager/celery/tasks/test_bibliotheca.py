@@ -791,7 +791,7 @@ class TestImportPurchaseRecordsByCollection:
 
         next_day = stored_finish + timedelta(days=1)
         mock_import_day.return_value = DayImportResult(
-            records_handled=_MARC_PAGE_SIZE,
+            records_fetched=_MARC_PAGE_SIZE,
             day_start=stored_finish,
             day_end=next_day,
             next_offset=1 + _MARC_PAGE_SIZE,

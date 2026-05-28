@@ -308,7 +308,7 @@ def import_purchase_records_by_collection(
         assert result is not None
 
         task.log.info(
-            f"Bibliotheca purchase record import: handled {result.records_handled} record(s) for "
+            f"Bibliotheca purchase record import: fetched {result.records_fetched} record(s) for "
             f"'{collection_name}' "
             f"({result.day_start.strftime('%Y-%m-%dT%H:%M:%S')} -> "
             f"{result.day_end.strftime('%Y-%m-%dT%H:%M:%S')}, offset {offset})."

@@ -37,7 +37,7 @@ _MARC_PAGE_SIZE = 50
 class DayImportResult:
     """Result of importing one page of Bibliotheca MARC purchase records.
 
-    :param records_handled: Number of MARC records processed in this page.
+    :param records_fetched: Number of MARC records received from the API in this page.
     :param day_start: Start of the day being processed (inclusive).
     :param day_end: End of the day window (exclusive).
         Equal to ``min(day_start + 1 day, cutoff)``.
@@ -47,7 +47,7 @@ class DayImportResult:
         ``day_end``).
     """
 
-    records_handled: int
+    records_fetched: int
     day_start: datetime
     day_end: datetime
     next_offset: int | None
@@ -138,8 +138,8 @@ class BibliothecaPurchaseRecordImporter(LoggerMixin):
         for record in records:
             self._process_record(record, current_day)
 
-        records_handled = len(records)
-        day_complete = records_handled < _MARC_PAGE_SIZE
+        records_fetched = len(records)
+        day_complete = records_fetched < _MARC_PAGE_SIZE
         next_offset = None if day_complete else offset + _MARC_PAGE_SIZE
 
         # Always checkpoint: advance finish to day_end when the day is done,
@@ -152,11 +152,11 @@ class BibliothecaPurchaseRecordImporter(LoggerMixin):
             collection=self._collection,
             start=current_day,
             finish=day_end if day_complete else current_day,
-            achievements=f"MARC records processed: {records_handled}.",
+            achievements=f"MARC records fetched: {records_fetched}.",
         )
 
         return DayImportResult(
-            records_handled=records_handled,
+            records_fetched=records_fetched,
             day_start=current_day,
             day_end=day_end,
             next_offset=next_offset,

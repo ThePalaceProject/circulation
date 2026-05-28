@@ -106,7 +106,7 @@ class TestBibliothecaPurchaseRecordImporterImportDay:
         assert result.day_start == current_day
         expected_end = current_day + timedelta(days=1)
         assert abs((result.day_end - expected_end).total_seconds()) < 1
-        assert result.records_handled == 0
+        assert result.records_fetched == 0
 
     def test_day_end_capped_at_cutoff(self, db: DatabaseTransactionFixture) -> None:
         """When current_day + 1 day > cutoff, day_end is capped at cutoff."""
@@ -165,8 +165,8 @@ class TestBibliothecaPurchaseRecordImporterImportDay:
         assert ts.finish is not None
         assert abs((ts.finish - current_day).total_seconds()) < 1
 
-    def test_counts_records_handled(self, db: DatabaseTransactionFixture) -> None:
-        """records_handled in the result matches the number of records on the page."""
+    def test_counts_records_fetched(self, db: DatabaseTransactionFixture) -> None:
+        """records_fetched in the result matches the number of records on the page."""
         importer, _ = _make_importer(db)
         current_day = datetime_utc(2024, 1, 15)
         cutoff = datetime_utc(2024, 1, 20)
@@ -181,7 +181,7 @@ class TestBibliothecaPurchaseRecordImporterImportDay:
         ):
             result = importer.import_day(current_day, cutoff)
 
-        assert result.records_handled == 3
+        assert result.records_fetched == 3
 
     def test_returns_next_offset_when_page_is_full(
         self, db: DatabaseTransactionFixture
@@ -285,7 +285,7 @@ class TestBibliothecaPurchaseRecordImporterProcessRecord:
             result = importer.import_day(current_day, cutoff)
 
         # The record was "handled" (iterated) but produced no LicensePool.
-        assert result.records_handled == 1
+        assert result.records_fetched == 1
 
     def test_skips_record_with_multiple_control_numbers(
         self, db: DatabaseTransactionFixture
@@ -313,7 +313,7 @@ class TestBibliothecaPurchaseRecordImporterProcessRecord:
             result = importer.import_day(current_day, cutoff)
 
         # The record was "handled" (iterated) but produced no LicensePool.
-        assert result.records_handled == 1
+        assert result.records_fetched == 1
         assert not any(
             lp.identifier.identifier in {"id_one", "id_two"}
             for lp in collection.licensepools
