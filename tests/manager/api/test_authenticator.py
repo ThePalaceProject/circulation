@@ -1333,8 +1333,26 @@ class TestLibraryAuthenticator:
         providers = list(authenticator.providers)
         assert oidc_provider in providers
 
+        # Stub the discovery HTTP call so no real network request is made.
+        # Omitting end_session_endpoint/revocation_endpoint keeps supports_logout()
+        # False, so only the authenticate link appears.
+        mock_discovery = {
+            "issuer": "https://idp.example.com",
+            "authorization_endpoint": "https://idp.example.com/authorize",
+            "token_endpoint": "https://idp.example.com/token",
+            "jwks_uri": "https://idp.example.com/.well-known/jwks.json",
+        }
+        mock_http_response = MagicMock()
+        mock_http_response.json.return_value = mock_discovery
+
         # Verify provider appears in authentication document
-        with app.test_request_context("/"):
+        with (
+            patch(
+                "palace.manager.integration.patron_auth.oidc.util.HTTP.get_with_timeout",
+                return_value=mock_http_response,
+            ),
+            app.test_request_context("/"),
+        ):
             doc = json.loads(authenticator.create_authentication_document())
             authenticators = doc["authentication"]
 
