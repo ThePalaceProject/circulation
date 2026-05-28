@@ -2,6 +2,9 @@
 
 import logging
 import re
+from collections.abc import Callable
+from contextlib import nullcontext
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -19,13 +22,17 @@ from palace.manager.integration.patron_auth.oidc.configuration.model import (
 )
 from palace.manager.integration.patron_auth.oidc.provider import (
     OIDC_CANNOT_DETERMINE_PATRON,
+    OIDC_LIBRARY_NOT_FOUND,
+    OIDC_NO_ACCESS_ERROR,
     OIDC_TOKEN_EXPIRED,
     OIDCAuthenticationProvider,
 )
 from palace.manager.integration.patron_auth.oidc.util import (
     OIDCDiscoveryError,
 )
+from palace.manager.sqlalchemy.model.credential import Credential
 from palace.manager.sqlalchemy.model.datasource import DataSource
+from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.util.problem_detail import ProblemDetailException
 from tests.fixtures.database import DatabaseTransactionFixture
 
@@ -572,3 +579,257 @@ class TestOIDCAuthenticationProvider:
             MockNewManager.return_value = new_mock_manager
 
             assert new_provider.get_authentication_manager() is not manager
+
+    # Shared ID token claims for filter tests.
+    _FILTER_CLAIMS: dict[str, Any] = {
+        "sub": "user-123",
+        "email": "user@example.edu",
+        "iss": "https://idp.example.com",
+        "aud": "test-client-id",
+    }
+
+    @pytest.mark.parametrize(
+        "filter_expression, expect_raises, expected_uri",
+        [
+            pytest.param(None, False, None, id="no-filter-passes"),
+            pytest.param(
+                "claims['email'].endswith('@example.edu')",
+                False,
+                None,
+                id="filter-passes",
+            ),
+            pytest.param(
+                "claims['email'].endswith('@other.com')",
+                True,
+                "http://palaceproject.io/terms/problem/auth/unrecoverable/oidc/no-access",
+                id="filter-rejects",
+            ),
+            pytest.param(
+                # Syntactically valid so the model validator accepts it;
+                # claims.nonexistent raises at evaluation time.
+                "claims.nonexistent == 'value'",
+                True,
+                "http://palaceproject.io/terms/problem/auth/unrecoverable/oidc/filter-evaluation-error",
+                id="filter-error",
+            ),
+        ],
+    )
+    def test_filter_claims(
+        self,
+        db: DatabaseTransactionFixture,
+        create_oidc_settings: Callable[..., OIDCAuthSettings],
+        create_oidc_provider: Callable[..., OIDCAuthenticationProvider],
+        filter_expression: str | None,
+        expect_raises: bool,
+        expected_uri: str | None,
+    ) -> None:
+        configuration = create_oidc_settings(filter_expression=filter_expression)
+        provider = create_oidc_provider(settings=configuration)
+
+        context_manager = (
+            pytest.raises(ProblemDetailException) if expect_raises else nullcontext()
+        )
+        with context_manager as exc_info:
+            provider._filter_claims(db.session, self._FILTER_CLAIMS)
+
+        if expect_raises:
+            assert exc_info.value.problem_detail.uri == expected_uri
+
+    def test_oidc_callback_filter_rejects(
+        self,
+        db: DatabaseTransactionFixture,
+        create_oidc_settings: Callable[..., OIDCAuthSettings],
+        create_oidc_provider: Callable[..., OIDCAuthenticationProvider],
+    ) -> None:
+        """oidc_callback raises OIDC_NO_ACCESS_ERROR when the filter rejects the patron."""
+        configuration = create_oidc_settings(
+            filter_expression="claims['email'].endswith('@other.com')"
+        )
+        provider = create_oidc_provider(settings=configuration)
+
+        with pytest.raises(ProblemDetailException) as exc_info:
+            provider.oidc_callback(
+                db.session,
+                self._FILTER_CLAIMS,
+                "test-access-token",
+            )
+
+        assert exc_info.value.problem_detail.uri == OIDC_NO_ACCESS_ERROR.uri
+
+    def test_oidc_callback_filter_passes(
+        self,
+        db: DatabaseTransactionFixture,
+        create_oidc_settings: Callable[..., OIDCAuthSettings],
+        create_oidc_provider: Callable[..., OIDCAuthenticationProvider],
+    ) -> None:
+        """oidc_callback succeeds and returns (Credential, Patron, PatronData) when the filter passes."""
+        DataSource.lookup(db.session, "OIDC", autocreate=True)
+        configuration = create_oidc_settings(
+            filter_expression="claims['email'].endswith('@example.edu')"
+        )
+        provider = create_oidc_provider(settings=configuration)
+
+        credential, patron, patron_data = provider.oidc_callback(
+            db.session,
+            self._FILTER_CLAIMS,
+            "test-access-token",
+        )
+
+        assert isinstance(credential, Credential)
+        assert isinstance(patron, Patron)
+        assert isinstance(patron_data, PatronData)
+
+    def test_filter_claims_library_not_found(
+        self,
+        db: DatabaseTransactionFixture,
+        create_oidc_settings: Callable[..., OIDCAuthSettings],
+        create_oidc_provider: Callable[..., OIDCAuthenticationProvider],
+    ) -> None:
+        """_filter_claims raises OIDC_LIBRARY_NOT_FOUND when the library cannot be resolved."""
+        configuration = create_oidc_settings(filter_expression="1 == 1")
+        provider = create_oidc_provider(settings=configuration)
+
+        with patch.object(provider, "library", return_value=None):
+            with pytest.raises(ProblemDetailException) as exc_info:
+                provider._filter_claims(db.session, self._FILTER_CLAIMS)
+
+        assert exc_info.value.problem_detail.uri == OIDC_LIBRARY_NOT_FOUND.uri
+
+    @pytest.mark.parametrize(
+        "session_lifetime, extra_data, filter_expression, expect_no_access",
+        [
+            pytest.param(
+                7,
+                None,
+                "integration.session_lifetime == 7",
+                False,
+                id="integration-field-matches",
+            ),
+            pytest.param(
+                None,
+                None,
+                "integration.session_lifetime == 7",
+                True,
+                id="integration-field-no-match",
+            ),
+            pytest.param(
+                None,
+                None,
+                "library.id > 0",
+                False,
+                id="library-field-matches",
+            ),
+            pytest.param(
+                None,
+                None,
+                "library.id == 0",
+                True,
+                id="library-field-no-match",
+            ),
+            pytest.param(
+                None,
+                {"role": "staff"},
+                'integration.extra_data["role"] == "staff"',
+                False,
+                id="extra-data-dict-matches",
+            ),
+            pytest.param(
+                None,
+                {"role": "guest"},
+                'integration.extra_data["role"] == "staff"',
+                True,
+                id="extra-data-dict-no-match",
+            ),
+            pytest.param(
+                None,
+                None,
+                "integration.extra_data is None",
+                False,
+                id="extra-data-none",
+            ),
+        ],
+    )
+    def test_filter_claims_context_variables(
+        self,
+        db: DatabaseTransactionFixture,
+        create_oidc_settings: Callable[..., OIDCAuthSettings],
+        create_oidc_provider: Callable[..., OIDCAuthenticationProvider],
+        session_lifetime: int | None,
+        extra_data: object,
+        filter_expression: str,
+        expect_no_access: bool,
+    ) -> None:
+        """_filter_claims passes integration and library dicts into the expression context."""
+        configuration = create_oidc_settings(
+            filter_expression=filter_expression,
+            session_lifetime=session_lifetime,
+            extra_data=extra_data,
+        )
+        provider = create_oidc_provider(settings=configuration)
+
+        context_manager = (
+            pytest.raises(ProblemDetailException) if expect_no_access else nullcontext()
+        )
+        with context_manager as exc_info:
+            provider._filter_claims(db.session, self._FILTER_CLAIMS)
+
+        if expect_no_access:
+            assert exc_info.value.problem_detail.uri == OIDC_NO_ACCESS_ERROR.uri
+
+    @pytest.mark.parametrize(
+        "integration_expression, library_expression, extra_data, expect_no_access",
+        [
+            pytest.param("1 == 1", "1 == 1", None, False, id="both-pass"),
+            pytest.param("1 == 2", "1 == 1", None, True, id="integration-rejects"),
+            pytest.param("1 == 1", "1 == 2", None, True, id="library-rejects"),
+            pytest.param("1 == 2", "1 == 2", None, True, id="both-reject"),
+            pytest.param(None, "1 == 1", None, False, id="only-library-passes"),
+            pytest.param(None, "1 == 2", None, True, id="only-library-rejects"),
+            pytest.param("1 == 1", None, None, False, id="only-integration-passes"),
+            pytest.param("1 == 2", None, None, True, id="only-integration-rejects"),
+            pytest.param(
+                None,
+                'integration.extra_data["role"] == "staff"',
+                {"role": "staff"},
+                False,
+                id="library-reads-extra-data-passes",
+            ),
+            pytest.param(
+                None,
+                'integration.extra_data["role"] == "staff"',
+                {"role": "guest"},
+                True,
+                id="library-reads-extra-data-rejects",
+            ),
+        ],
+    )
+    def test_filter_claims_and_behavior(
+        self,
+        db: DatabaseTransactionFixture,
+        create_oidc_settings: Callable[..., OIDCAuthSettings],
+        create_oidc_provider: Callable[..., OIDCAuthenticationProvider],
+        integration_expression: str | None,
+        library_expression: str | None,
+        extra_data: object,
+        expect_no_access: bool,
+    ) -> None:
+        """Integration and library filter expressions are ANDed; both must pass."""
+        configuration = create_oidc_settings(
+            filter_expression=integration_expression,
+            extra_data=extra_data,
+        )
+        provider = create_oidc_provider(
+            settings=configuration,
+            library_settings=OIDCAuthLibrarySettings(
+                filter_expression=library_expression
+            ),
+        )
+
+        context_manager = (
+            pytest.raises(ProblemDetailException) if expect_no_access else nullcontext()
+        )
+        with context_manager as exc_info:
+            provider._filter_claims(db.session, self._FILTER_CLAIMS)
+
+        if expect_no_access:
+            assert exc_info.value.problem_detail.uri == OIDC_NO_ACCESS_ERROR.uri

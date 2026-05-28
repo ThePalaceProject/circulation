@@ -32,6 +32,7 @@ from palace.manager.integration.patron_auth.oidc.util import (
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.sqlalchemy.model.credential import Credential
 from palace.manager.sqlalchemy.model.patron import Patron
+from palace.manager.util.filter import FilterExpression, FilterExpressionError
 from palace.manager.util.problem_detail import (
     ProblemDetail as pd,
     ProblemDetailException,
@@ -57,6 +58,27 @@ OIDC_TOKEN_EXPIRED = pd(
     detail=_(
         "Your OIDC session has expired. Please reauthenticate via your identity provider."
     ),
+)
+
+OIDC_NO_ACCESS_ERROR = pd(
+    "http://palaceproject.io/terms/problem/auth/unrecoverable/oidc/no-access",
+    status_code=401,
+    title=_("No access."),
+    detail=_("Patron does not have access based on their ID token claims."),
+)
+
+OIDC_LIBRARY_NOT_FOUND = pd(
+    "http://palaceproject.io/terms/problem/auth/unrecoverable/oidc/library-not-found",
+    status_code=500,
+    title=_("Library not found."),
+    detail=_("The library associated with this OIDC integration could not be found."),
+)
+
+OIDC_FILTER_EVALUATION_ERROR = pd(
+    "http://palaceproject.io/terms/problem/auth/unrecoverable/oidc/filter-evaluation-error",
+    status_code=500,
+    title=_("Filter expression error."),
+    detail=_("OIDC patron filter expression could not be evaluated."),
 )
 
 
@@ -87,6 +109,7 @@ class OIDCAuthenticationProvider(
 
         self._credential_manager = OIDCCredentialManager()
         self._settings = settings
+        self._library_settings = library_settings
         self._auth_manager: OIDCAuthenticationManager | None = None
 
     @classmethod
@@ -316,6 +339,54 @@ class OIDCAuthenticationProvider(
         """
         raise PatronLookupNotSupported()
 
+    def _filter_claims(self, db: Session, id_token_claims: dict[str, Any]) -> None:
+        """Apply the configured filter expression as an authorization check.
+
+        The integration-level expression is evaluated first, then the library-level
+        expression. Both must evaluate to True for access to be granted. The
+        evaluation context exposes ``claims`` (ID token claims dict),
+        ``integration`` (fields from the integration settings marked with
+        ``patron_auth_filter_context=True``, including ``extra_data``),
+        and ``library`` (``id``, ``name``, ``short_name``).
+
+        :param db: Database session
+        :param id_token_claims: Validated ID token claims from the OIDC provider
+        :raises ProblemDetailException: if the patron is denied access or an expression errors
+        """
+        expressions = [
+            e
+            for e in (
+                self._settings.filter_expression,
+                self._library_settings.filter_expression,
+            )
+            if e is not None
+        ]
+        if not expressions:
+            return
+
+        library = self.library(db)
+        if library is None:
+            raise ProblemDetailException(problem_detail=OIDC_LIBRARY_NOT_FOUND)
+        context = {
+            "claims": id_token_claims,
+            "integration": self._settings.filter_context_dump(),
+            "library": {
+                "short_name": library.short_name,
+                "name": library.name,
+                "id": library.id,
+            },
+        }
+
+        for expression in expressions:
+            try:
+                result = FilterExpression(expression).evaluate(context)
+            except FilterExpressionError as exc:
+                raise ProblemDetailException(
+                    problem_detail=OIDC_FILTER_EVALUATION_ERROR.detailed(str(exc))
+                ) from exc
+            if not result:
+                raise ProblemDetailException(problem_detail=OIDC_NO_ACCESS_ERROR)
+
     def oidc_callback(
         self,
         db: Session,
@@ -335,6 +406,8 @@ class OIDCAuthenticationProvider(
         :param id_token: Raw ID token JWT (stored for use as id_token_hint on logout)
         :return: 3-tuple (Credential, Patron, PatronData)
         """
+        self._filter_claims(db, id_token_claims)
+
         patron_data = self.remote_patron_lookup_from_oidc_claims(id_token_claims)
 
         patron, is_new = patron_data.get_or_create_patron(

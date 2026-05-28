@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from re import Pattern
-from typing import Annotated
+from typing import Annotated, Any
 
 from flask_babel import lazy_gettext as _
 from pydantic import (
@@ -27,10 +27,13 @@ from palace.manager.api.authentication.base import (
     AuthProviderSettings,
 )
 from palace.manager.integration.settings import (
+    BaseSettings,
     FormFieldType,
     FormMetadata,
     SettingsValidationError,
 )
+from palace.manager.util.filter import FilterExpression, FilterExpressionError
+from palace.manager.util.problem_detail import ProblemDetail as pd
 
 PRODUCTION_AUTH_ADAPTER: TypeAdapter[
     Annotated[HttpUrl, UrlConstraints(allowed_schemes=["https"])]
@@ -38,6 +41,33 @@ PRODUCTION_AUTH_ADAPTER: TypeAdapter[
 TEST_MODE_AUTH_ADAPTER: TypeAdapter[
     Annotated[HttpUrl, UrlConstraints(allowed_schemes=["https", "http"])]
 ] = TypeAdapter(Annotated[HttpUrl, UrlConstraints(allowed_schemes=["https", "http"])])
+
+OIDC_INCORRECT_FILTER_EXPRESSION = pd(
+    "http://palaceproject.io/terms/problem/auth/unrecoverable/oidc/incorrect-filter-expression-format",
+    status_code=400,
+    title=_("Invalid filter expression."),
+    detail=_("OIDC filter expression has an incorrect format."),
+)
+
+
+def _validate_filter_expression(cls: type[BaseSettings], v: str | None) -> str | None:
+    """Shared validator for OIDC filter expression fields on settings models.
+
+    :raises SettingsValidationError: if the expression is syntactically invalid.
+    """
+    if v is not None:
+        try:
+            FilterExpression(v).check_syntax()
+        except FilterExpressionError as exception:
+            cls.logger().warning(
+                f"Validation of the filter expression failed: {exception}"
+            )
+            raise SettingsValidationError(
+                problem_detail=OIDC_INCORRECT_FILTER_EXPRESSION.detailed(
+                    f"OIDC filter expression has an incorrect format: {exception}"
+                )
+            )
+    return v
 
 
 class OIDCAuthSettings(AuthProviderSettings, LoggerMixin):
@@ -218,6 +248,7 @@ class OIDCAuthSettings(AuthProviderSettings, LoggerMixin):
                 "Comma-separated list."
             ),
             type=FormFieldType.LIST,
+            patron_auth_filter_context=True,
         ),
     ] = ["openid", "profile", "email"]
 
@@ -231,6 +262,7 @@ class OIDCAuthSettings(AuthProviderSettings, LoggerMixin):
                 "'preferred_username', 'eduPersonPrincipalName'. "
                 "Default: 'sub'"
             ),
+            patron_auth_filter_context=True,
         ),
     ] = "sub"
 
@@ -259,6 +291,49 @@ class OIDCAuthSettings(AuthProviderSettings, LoggerMixin):
                 "Note: This only affects the Circulation Manager's session. "
                 "Protected content access is still governed by the OIDC provider's tokens."
             ),
+            patron_auth_filter_context=True,
+        ),
+    ] = None
+
+    filter_expression: Annotated[
+        str | None,
+        FormMetadata(
+            label="Filter Expression",
+            description=(
+                "A Python expression that may restrict a patron's access based on their"
+                " ID token claims and other settings."
+                " When present, it must evaluate to True in order for the patron to gain access."
+                " If a per-library Filter Expression is also configured, both must evaluate to True."
+                "<br>"
+                "<br>"
+                "The expression has access to: 'claims' (dict of ID token claims),"
+                " 'integration' (selected integration settings),"
+                " and 'library' (id, name, short_name)."
+                "<br>"
+                "<br>"
+                "Example — restrict to a specific email domain:"
+                "<br>"
+                "<pre>claims['email'].endswith('@example.edu')</pre>"
+            ),
+            type=FormFieldType.TEXTAREA,
+        ),
+    ] = None
+
+    # Note: the key-ordering caveat in the description below is a JSONB storage
+    # side effect — PostgreSQL sorts all object keys when storing/retrieving JSONB.
+    extra_data: Annotated[
+        dict[str, Any] | list[Any] | int | float | bool | str | None,
+        FormMetadata(
+            label="Extra Data",
+            description=(
+                "Extra data available to patron filter expressions via the"
+                " 'integration.extra_data' context variable."
+                " Accepts any JSON value (object, array, string, number, boolean, or null)."
+                "<br>"
+                "Note: Dictionary/object key order may not be preserved after saving."
+            ),
+            type=FormFieldType.JSON,
+            patron_auth_filter_context=True,
         ),
     ] = None
 
@@ -471,6 +546,11 @@ class OIDCAuthSettings(AuthProviderSettings, LoggerMixin):
             )
         return v
 
+    @field_validator("filter_expression")
+    @classmethod
+    def validate_filter_expression(cls, v: str | None) -> str | None:
+        return _validate_filter_expression(cls, v)
+
     @field_validator("patron_id_regular_expression")
     @classmethod
     def validate_patron_id_regex(cls, v: Pattern[str] | None) -> Pattern[str] | None:
@@ -487,11 +567,27 @@ class OIDCAuthSettings(AuthProviderSettings, LoggerMixin):
 
 
 class OIDCAuthLibrarySettings(AuthProviderLibrarySettings):
-    """OIDC Authentication Library-Level Settings.
+    """Per-library OIDC authentication settings."""
 
-    Currently empty (like SAML). Future enhancements may include:
-    - Library-specific scope overrides
-    - Custom claim mappings
-    """
+    filter_expression: Annotated[
+        str | None,
+        FormMetadata(
+            label="Filter Expression",
+            description=(
+                "A Python expression that may restrict a patron's access to this library"
+                " based on their ID token claims and other settings."
+                " When present, it must evaluate to True in order for the patron to gain"
+                " access to this library."
+                "<br>"
+                "<br>"
+                "Refer to the integration-level Filter Expression setting for expression"
+                " syntax and available context variables."
+            ),
+            type=FormFieldType.TEXTAREA,
+        ),
+    ] = None
 
-    ...
+    @field_validator("filter_expression")
+    @classmethod
+    def validate_filter_expression(cls, v: str | None) -> str | None:
+        return _validate_filter_expression(cls, v)
