@@ -100,9 +100,10 @@ class OPDSForDistributorsAPI(
         identifying the patron, assuming the library's policies
         allow it.
 
-        Just to be safe, though, we require that the
-        DeliveryMechanism's drm_scheme be either 'no DRM', 'bearer
-        token', or 'streaming', since other DRM schemes require identifying a patron.
+        Just to be safe, though, we require that the DeliveryMechanism's
+        drm_scheme be either 'no DRM' or 'bearer token', since other DRM
+        schemes require identifying a patron. Streaming content is excluded
+        because fulfilling it requires building an OPDS entry tied to a Loan.
         """
         if not lpdm or not lpdm.delivery_mechanism:
             return False
@@ -110,7 +111,6 @@ class OPDSForDistributorsAPI(
         if drm_scheme in (
             DeliveryMechanism.NO_DRM,
             DeliveryMechanism.BEARER_TOKEN,
-            DeliveryMechanism.STREAMING_DRM,
         ):
             return True
         return False

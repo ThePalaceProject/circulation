@@ -136,9 +136,10 @@ class TestOPDSForDistributorsAPI:
         lpdm.delivery_mechanism.drm_scheme = DeliveryMechanism.BEARER_TOKEN
         assert True == m(patron, pool, lpdm)
 
-        # STREAMING_DRM is also allowed
+        # STREAMING_DRM is NOT allowed without a loan: a streaming fulfillment
+        # is an OPDS entry tied to a Loan, so it cannot be built loan-less.
         lpdm.delivery_mechanism.drm_scheme = DeliveryMechanism.STREAMING_DRM
-        assert True == m(patron, pool, lpdm)
+        assert False == m(patron, pool, lpdm)
 
     def test_checkin(self, opds_dist_api_fixture: OPDSForDistributorsAPIFixture):
         # The patron has two loans, one from this API's collection and
