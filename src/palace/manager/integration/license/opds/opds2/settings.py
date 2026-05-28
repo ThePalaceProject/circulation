@@ -20,6 +20,23 @@ from palace.manager.sqlalchemy.constants import IdentifierType
 
 
 class OPDS2ImporterSettings(OPDSImporterSettings):
+    generate_playtime_report: Annotated[
+        bool,
+        FormMetadata(
+            label=_("Generate playtime report for audio books"),
+            description=_(
+                "When enabled, this collection will be included in the monthly "
+                "playtime report uploaded to Google Drive. This is a system "
+                "administrator setting."
+            ),
+            type=FormFieldType.SELECT,
+            options={
+                True: "Yes",
+                False: "(Default) No",
+            },
+        ),
+    ] = False
+
     custom_accept_header: Annotated[
         str,
         FormMetadata(

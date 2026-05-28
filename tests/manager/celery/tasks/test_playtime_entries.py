@@ -575,7 +575,9 @@ class TestGeneratePlaytimeReport:
         collection = db.collection(
             "collection b",
             protocol=OPDSForDistributorsAPI,
-            settings=db.opds_for_distributors_settings(data_source="ds_b"),
+            settings=db.opds_for_distributors_settings(
+                data_source="ds_b", generate_playtime_report=True
+            ),
         )
 
         library = db.default_library()
@@ -584,22 +586,29 @@ class TestGeneratePlaytimeReport:
         collection2 = db.collection(
             "collection a",
             protocol=OPDS2API,
-            settings=db.opds2_settings(data_source="ds_a"),
+            settings=db.opds2_settings(
+                data_source="ds_a", generate_playtime_report=True
+            ),
         )
 
         # a data source with no playtime data - we expect an empty report for ds_c
         collection3 = db.collection(
             "collection c",
             protocol=OPDS2API,
-            settings=db.opds2_settings(data_source="ds_c"),
+            settings=db.opds2_settings(
+                data_source="ds_c", generate_playtime_report=True
+            ),
         )
 
-        # A collection and datasource that will be removed after the playtime is recorded, but before the report
-        # is generated.
+        # A collection whose data source will be deleted before the report runs.
+        # Without the PlaytimeSummary fallback, its data source will NOT appear
+        # in the report even though playtime was recorded for it.
         collection4 = db.collection(
             "collection d",
             protocol=OPDS2API,
-            settings=db.opds2_settings(data_source="ds_d"),
+            settings=db.opds2_settings(
+                data_source="ds_d", generate_playtime_report=True
+            ),
         )
 
         library2 = db.library()
@@ -767,19 +776,18 @@ class TestGeneratePlaytimeReport:
         # Act
         generate_playtime_report.delay().wait()
 
-        # Assert
-        assert len(output_data) == 4
+        # Assert: only 3 reports — ds_d's collection is deleted before the task runs,
+        # so it is excluded from the eligible set (no PlaytimeSummary fallback).
+        assert len(output_data) == 3
         [
             (ds_a_filename, ds_a_data),
             (ds_b_filename, ds_b_data),
             (ds_c_filename, ds_c_data),
-            (ds_d_filename, ds_d_data),
         ] = [(k, list(csv.reader(StringIO(v)))) for k, v in output_data.items()]
 
         assert len(ds_a_data) == 6
         assert len(ds_b_data) == 4
         assert len(ds_c_data) == 1
-        assert len(ds_d_data) == 2
 
         cutoff = date1m(0).replace(day=1)
         until = utc_now().date().replace(day=1)
@@ -902,29 +910,10 @@ class TestGeneratePlaytimeReport:
             headers,
         ]
 
-        assert (
-            f"{cutoff.strftime(REPORT_DATE_FORMAT)}-{until.strftime(REPORT_DATE_FORMAT)}-playtime-summary-test_cm-ds_d-"
-            in ds_d_filename
-        )
-
-        assert ds_d_data == [
-            headers,
-            [
-                column1,
-                identifier.urn,
-                strongest_isbn,
-                "collection d",
-                library.name,
-                "",
-                "1",
-                "1",
-            ],
-        ]
-
-        assert mock_google_drive_service.create_file.call_count == 4
+        assert mock_google_drive_service.create_file.call_count == 3
 
         nested_method = mock_google_drive_service.create_nested_folders_if_not_exist
-        assert nested_method.call_count == 4
+        assert nested_method.call_count == 3
         # The year in the folder structure is based on the start of the reporting period.
         expected_year = str(cutoff.year)
         assert nested_method.call_args_list[0].kwargs == {
@@ -956,15 +945,6 @@ class TestGeneratePlaytimeReport:
             ],
         }
 
-        assert nested_method.call_args_list[3].kwargs == {
-            "parent_folder_id": parent_folder_id,
-            "folders": [
-                "ds_d",
-                "Usage Reports",
-                "test cm",
-                expected_year,
-            ],
-        }
 
     def test_generate_playtime_report_folder_lock_contention(
         self,
@@ -982,7 +962,7 @@ class TestGeneratePlaytimeReport:
         collection = db.collection(
             "collection a",
             protocol=OPDS2API,
-            settings=db.opds2_settings(data_source="ds_a"),
+            settings=db.opds2_settings(data_source="ds_a", generate_playtime_report=True),
         )
         library = db.default_library()
         identifier = db.identifier()
@@ -1033,26 +1013,27 @@ class TestGeneratePlaytimeReport:
         # Despite the lock timeout, the task should still have completed and uploaded a file.
         assert mock_google_drive_service.create_file.call_count == 1
 
+
     @pytest.mark.parametrize(
-        "eligible_collections,playtime_summaries,expected_ds_names",
+        "flagged_collections,unflagged_collections,expected_ds_names",
         (
             pytest.param(
                 [],
                 [],
                 [],
-                id="no-collections-no-summaries",
+                id="no-collections",
             ),
             pytest.param(
                 [(OPDS2API, "ds_opds2")],
                 [],
                 ["ds_opds2"],
-                id="eligible-collection-only-opds2",
+                id="opds2-with-flag",
             ),
             pytest.param(
                 [(OPDSForDistributorsAPI, "ds_ofd")],
                 [],
                 ["ds_ofd"],
-                id="eligible-collection-only-opds-for-distributors",
+                id="ofd-with-flag",
             ),
             pytest.param(
                 [
@@ -1061,125 +1042,91 @@ class TestGeneratePlaytimeReport:
                 ],
                 [],
                 ["ds_ofd", "ds_opds2"],
-                id="multiple-eligible-collections",
+                id="multiple-flagged",
             ),
             pytest.param(
+                [],
+                [(OPDS2API, "ds_unflagged")],
+                [],
+                id="opds2-without-flag-excluded",
+            ),
+            pytest.param(
+                [(OPDS2API, "ds_flagged")],
+                [(OPDS2API, "ds_unflagged")],
+                ["ds_flagged"],
+                id="mix-flagged-and-unflagged",
+            ),
+            pytest.param(
+                [],
                 [
                     (BibliothecaAPI, "ds_bibliotheca"),
                     (OPDS2WithODLApi, "ds_opds2odl"),
                 ],
                 [],
-                [],
-                id="ineligible-collections-only",
-            ),
-            pytest.param(
-                [],
-                ["ds_from_summary"],
-                ["ds_from_summary"],
-                id="playtime-summary-only",
-            ),
-            pytest.param(
-                [(OPDS2API, "ds_shared")],
-                ["ds_shared"],
-                ["ds_shared"],
-                id="collection-and-summary-same-ds",
-            ),
-            pytest.param(
-                [(OPDS2API, "ds_collection")],
-                ["ds_summary"],
-                ["ds_collection", "ds_summary"],
-                id="collection-and-summary-different-ds",
-            ),
-            pytest.param(
-                [],
-                ["ds_dup", "ds_dup", "ds_dup"],
-                ["ds_dup"],
-                id="multiple-summaries-same-ds",
+                id="ineligible-protocols-excluded",
             ),
             pytest.param(
                 [
                     (OPDS2API, "ds_z"),
                     (OPDSForDistributorsAPI, "ds_a"),
-                    (BibliothecaAPI, "ds_ineligible"),
                 ],
-                ["ds_m", "ds_b"],
-                ["ds_a", "ds_b", "ds_m", "ds_z"],
-                id="mixed-eligible-ineligible-with-summaries-sorting",
+                [(BibliothecaAPI, "ds_ineligible")],
+                ["ds_a", "ds_z"],
+                id="mixed-eligible-ineligible-sorted",
             ),
         ),
     )
     def test_fetch_distinct_eligible_data_source_names(
         self,
         db: DatabaseTransactionFixture,
-        eligible_collections: list[tuple[type, str | None]],
-        playtime_summaries: list[str],
+        flagged_collections: list[tuple[type, str | None]],
+        unflagged_collections: list[tuple[type, str | None]],
         expected_ds_names: list[str],
     ):
-        """Test fetching distinct eligible data source names from collections and summaries.
+        """Test fetching distinct data source names for collections with the playtime flag.
 
         Verifies that:
-        - Only collections with eligible protocols are included
-        - All PlaytimeSummary data sources are included
-        - Results are deduplicated
+        - Only collections with generate_playtime_report=True are included
+        - Collections without the flag are excluded regardless of protocol
+        - Ineligible protocols (Bibliotheca, OPDS2WithODL) are excluded even without the flag
         - Results are sorted alphabetically
-        - Mixed scenarios with both eligible and ineligible collections work correctly
         """
-        # Create collections with specified protocols and data sources.
-        for protocol, ds_name in eligible_collections:
-            settings: BaseCirculationApiSettings
+        settings: BaseCirculationApiSettings
+        for protocol, ds_name in flagged_collections:
             if protocol == OPDS2API:
-                settings = db.opds2_settings(data_source=ds_name)
-            elif protocol == OPDS2WithODLApi:
-                settings = db.opds2_odl_settings(data_source=ds_name)
+                settings = db.opds2_settings(
+                    data_source=ds_name, generate_playtime_report=True
+                )
             elif protocol == OPDSForDistributorsAPI:
-                settings = db.opds_for_distributors_settings(data_source=ds_name)
-            elif protocol == BibliothecaAPI:
-                settings = db.bibliotheca_settings(data_source=ds_name)
+                settings = db.opds_for_distributors_settings(
+                    data_source=ds_name, generate_playtime_report=True
+                )
             else:
-                raise ValueError(f"Unhandled protocol: {protocol}")
-
+                raise ValueError(
+                    f"Protocol {protocol} does not support generate_playtime_report"
+                )
             db.collection(
-                name=f"collection_{ds_name or 'none'}",
+                name=f"collection_flagged_{ds_name or 'none'}",
                 protocol=protocol,
                 settings=settings,
             )
 
-        if playtime_summaries:
-            identifier = db.identifier()
-            # We'll delete this collection after creating summaries so that
-            # only the summary data sources are counted.
-            temp_collection = db.collection(
-                protocol=OPDS2API,
-                settings=db.opds2_settings(data_source="temp_ds_to_delete"),
+        for protocol, ds_name in unflagged_collections:
+            if protocol == OPDS2API:
+                settings = db.opds2_settings(data_source=ds_name)
+            elif protocol == OPDSForDistributorsAPI:
+                settings = db.opds_for_distributors_settings(data_source=ds_name)
+            elif protocol == BibliothecaAPI:
+                settings = db.bibliotheca_settings(data_source=ds_name)
+            elif protocol == OPDS2WithODLApi:
+                settings = db.opds2_odl_settings(data_source=ds_name)
+            else:
+                raise ValueError(f"Unhandled protocol: {protocol}")
+            db.collection(
+                name=f"collection_unflagged_{ds_name or 'none'}",
+                protocol=protocol,
+                settings=settings,
             )
-            library = db.default_library()
-
-            for idx, ds_name in enumerate(playtime_summaries):
-                # Create summaries and assign data sources.
-                playtime(
-                    db.session,
-                    identifier=identifier,
-                    collection=temp_collection,
-                    library=library,
-                    timestamp=dt1m(3),
-                    total_seconds=10,
-                    loan_identifier=f"loan_{idx}",
-                )
-                summary = (
-                    db.session.query(PlaytimeSummary)
-                    .order_by(PlaytimeSummary.id.desc())
-                    .first()
-                )
-                assert summary is not None
-                summary.data_source_name = ds_name
-
-            db.session.flush()
-
-            # Delete the temporary collection and its data source so they don't affect the result.
-            temp_ds = temp_collection.data_source
-            db.session.delete(temp_collection)
-            db.session.delete(temp_ds)
-            db.session.flush()
 
         registry = LicenseProvidersRegistry()
         result = _fetch_distinct_eligible_data_source_names(db.session, registry)
@@ -1190,26 +1137,20 @@ class TestGeneratePlaytimeReport:
         self,
         db: DatabaseTransactionFixture,
     ):
-        """Test that data sources from deleted collections still appear via PlaytimeSummary."""
+        """Test that deleted collections are excluded even if they had playtime data.
+
+        With the flag-based system there is no PlaytimeSummary fallback. Once a
+        collection is deleted the data source no longer appears in the report.
+        """
         collection = db.collection(
             name="collection_to_delete",
             protocol=OPDS2API,
-            settings=db.opds2_settings(data_source="ds_deleted"),
+            settings=db.opds2_settings(
+                data_source="ds_deleted", generate_playtime_report=True
+            ),
         )
 
-        identifier = db.identifier()
-        library = db.default_library()
-        playtime(
-            db.session,
-            identifier=identifier,
-            collection=collection,
-            library=library,
-            timestamp=dt1m(3),
-            total_seconds=100,
-            loan_identifier="loan_1",
-        )
-
-        # Verify that the data source is returned before the collection is deleted.
+        # Verify that the data source is returned while the collection exists.
         registry = LicenseProvidersRegistry()
         result = _fetch_distinct_eligible_data_source_names(db.session, registry)
         assert result == ["ds_deleted"]
@@ -1220,6 +1161,7 @@ class TestGeneratePlaytimeReport:
         db.session.delete(data_source)
         db.session.flush()
 
-        # Verify that the data source is returned after the collection is deleted.
+        # The data source is no longer returned because no live flagged collection
+        # references it (PlaytimeSummary records are not used as a fallback).
         result = _fetch_distinct_eligible_data_source_names(db.session, registry)
-        assert result == ["ds_deleted"]
+        assert result == []
