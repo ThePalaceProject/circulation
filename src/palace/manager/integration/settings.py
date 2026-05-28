@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import functools
 import json
 import typing
 from collections.abc import Callable, Mapping
@@ -38,6 +39,21 @@ def _get_form_metadata(field_info: FieldInfo) -> FormMetadata | None:
         if isinstance(item, FormMetadata):
             return item
     return None
+
+
+@functools.cache
+def _filter_context_fields(cls: type[BaseSettings]) -> frozenset[str]:
+    """Return the set of field names with `patron_auth_filter_context=True`.
+
+    Cached per class — field metadata is set at class-definition time and never
+    changes at runtime, so no invalidation is required.
+    """
+    return frozenset(
+        name
+        for name, field_info in cls.model_fields.items()
+        if (fm := _get_form_metadata(field_info)) is not None
+        and fm.patron_auth_filter_context
+    )
 
 
 class FormFieldType(Enum):
@@ -315,17 +331,13 @@ class BaseSettings(BaseModel, LoggerMixin):
     def filter_context_dump(self) -> dict[str, Any]:
         """Return a dict of fields eligible for patron-auth filter expression context.
 
-        Only fields whose :class:`FormMetadata` has ``patron_auth_filter_context=True``
+        Only fields whose `FormMetadata` has `patron_auth_filter_context=True`
         are included. All fields are included at their current value regardless of
-        whether they match their default (i.e. ``exclude_defaults=False``).
+        whether they match their default (i.e. `exclude_defaults=False`).
         """
-        include = {
-            name
-            for name, field_info in type(self).model_fields.items()
-            if (fm := _get_form_metadata(field_info)) is not None
-            and fm.patron_auth_filter_context
-        }
-        return self.model_dump(include=include, exclude_defaults=False)
+        return self.model_dump(
+            include=_filter_context_fields(type(self)), exclude_defaults=False
+        )
 
     @classmethod
     def get_form_field_label(cls, field_name: str) -> str:
