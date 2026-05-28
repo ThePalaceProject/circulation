@@ -168,11 +168,6 @@ def import_collection(
 def _purchase_record_workflow_lock(
     client: Redis, collection_id: int, random_value: str
 ) -> RedisLock:
-    """Create a workflow-level lock for the purchase record importer.
-
-    Uses a key distinct from ``import_workflow_lock`` so that event-import
-    and purchase-record-import runs for the same collection do not block each other.
-    """
     return RedisLock(
         client,
         [
