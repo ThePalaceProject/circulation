@@ -13,6 +13,7 @@ Create Date: 2026-05-28 19:52:19.605245+00:00
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy import bindparam
 
 from palace.manager.util.json import json_serializer
 from palace.manager.util.migration.helpers import migration_logger
@@ -45,8 +46,8 @@ def upgrade() -> None:
               )
             FOR UPDATE
             """
-        ),
-        {"protocols": _ELIGIBLE_PROTOCOLS},
+        ).bindparams(bindparam("protocols", expanding=True)),
+        {"protocols": list(_ELIGIBLE_PROTOCOLS)},
     )
 
     rows = list(results)
@@ -85,8 +86,8 @@ def downgrade() -> None:
               AND protocol IN :protocols
               AND settings ? 'generate_playtime_report'
             """
-        ),
-        {"protocols": _ELIGIBLE_PROTOCOLS},
+        ).bindparams(bindparam("protocols", expanding=True)),
+        {"protocols": list(_ELIGIBLE_PROTOCOLS)},
     )
     log.info(
         f"Removed generate_playtime_report from {result.rowcount} integration configuration(s)"

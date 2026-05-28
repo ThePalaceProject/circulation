@@ -334,11 +334,11 @@ def _fetch_distinct_eligible_data_source_names(
     eligible_collections = session.scalars(eligible_collections_query).all()
 
     # Only include collections that have opted in via the generate_playtime_report flag.
+    # c.integration_configuration is guaranteed non-null by the query filter above.
     collection_ds_names = {
         c.data_source.name
         for c in eligible_collections
-        if c.integration_configuration
-        and c.integration_configuration.settings_dict.get("generate_playtime_report")
+        if c.integration_configuration.settings_dict.get("generate_playtime_report")
         is True
         and c.data_source
         and c.data_source.name is not None
