@@ -96,24 +96,16 @@ class OPDSForDistributorsAPI(
         lpdm: LicensePoolDeliveryMechanism,
     ) -> bool:
         """Since OPDS For Distributors delivers books to the library rather
-        than creating loans, any book can be fulfilled without
-        identifying the patron, assuming the library's policies
-        allow it.
+        than creating loans, books with no DRM can be fulfilled without
+        identifying the patron — the redirect just points at a public URL.
 
-        Just to be safe, though, we require that the
-        DeliveryMechanism's drm_scheme be either 'no DRM', 'bearer
-        token', or 'streaming', since other DRM schemes require identifying a patron.
+        Other DRM schemes are excluded: bearer tokens are access credentials
+        we shouldn't hand out without a loan record, and streaming requires
+        building an OPDS entry tied to a Loan.
         """
         if not lpdm or not lpdm.delivery_mechanism:
             return False
-        drm_scheme = lpdm.delivery_mechanism.drm_scheme
-        if drm_scheme in (
-            DeliveryMechanism.NO_DRM,
-            DeliveryMechanism.BEARER_TOKEN,
-            DeliveryMechanism.STREAMING_DRM,
-        ):
-            return True
-        return False
+        return lpdm.delivery_mechanism.drm_scheme == DeliveryMechanism.NO_DRM
 
     def checkin(self, patron: Patron, pin: str, licensepool: LicensePool) -> None:
         # Delete the patron's loan for this licensepool.
