@@ -576,7 +576,7 @@ class TestGeneratePlaytimeReport:
             "collection b",
             protocol=OPDSForDistributorsAPI,
             settings=db.opds_for_distributors_settings(
-                data_source="ds_b", generate_playtime_report=True
+                data_source="ds_b", is_generate_playtime_report=True
             ),
         )
 
@@ -587,7 +587,7 @@ class TestGeneratePlaytimeReport:
             "collection a",
             protocol=OPDS2API,
             settings=db.opds2_settings(
-                data_source="ds_a", generate_playtime_report=True
+                data_source="ds_a", is_generate_playtime_report=True
             ),
         )
 
@@ -596,7 +596,7 @@ class TestGeneratePlaytimeReport:
             "collection c",
             protocol=OPDS2API,
             settings=db.opds2_settings(
-                data_source="ds_c", generate_playtime_report=True
+                data_source="ds_c", is_generate_playtime_report=True
             ),
         )
 
@@ -607,7 +607,7 @@ class TestGeneratePlaytimeReport:
             "collection d",
             protocol=OPDS2API,
             settings=db.opds2_settings(
-                data_source="ds_d", generate_playtime_report=True
+                data_source="ds_d", is_generate_playtime_report=True
             ),
         )
 
@@ -1086,7 +1086,7 @@ class TestGeneratePlaytimeReport:
         """Test fetching distinct data source names for collections with the playtime flag.
 
         Verifies that:
-        - Only collections with generate_playtime_report=True are included
+        - Only collections with is_generate_playtime_report=True are included
         - Collections without the flag are excluded regardless of protocol
         - Ineligible protocols (Bibliotheca, OPDS2WithODL) are excluded even without the flag
         - Results are sorted alphabetically
@@ -1095,15 +1095,15 @@ class TestGeneratePlaytimeReport:
         for protocol, ds_name in flagged_collections:
             if protocol == OPDS2API:
                 settings = db.opds2_settings(
-                    data_source=ds_name, generate_playtime_report=True
+                    data_source=ds_name, is_generate_playtime_report=True
                 )
             elif protocol == OPDSForDistributorsAPI:
                 settings = db.opds_for_distributors_settings(
-                    data_source=ds_name, generate_playtime_report=True
+                    data_source=ds_name, is_generate_playtime_report=True
                 )
             else:
                 raise ValueError(
-                    f"Protocol {protocol} does not support generate_playtime_report"
+                    f"Protocol {protocol} does not support is_generate_playtime_report"
                 )
             db.collection(
                 name=f"collection_flagged_{ds_name or 'none'}",
@@ -1146,7 +1146,7 @@ class TestGeneratePlaytimeReport:
             name="collection_to_delete",
             protocol=OPDS2API,
             settings=db.opds2_settings(
-                data_source="ds_deleted", generate_playtime_report=True
+                data_source="ds_deleted", is_generate_playtime_report=True
             ),
         )
 
