@@ -156,7 +156,11 @@ class AuthenticateLink(Link):
     def _serialize(self, serializer: SerializerFunctionWrapHandler) -> dict[str, Any]:
         data = cast(dict[str, Any], serializer(self))
 
-        # Preserve the behavior inherited from rwpm.Link / BaseLink.
+        # Preserve the behavior inherited from rwpm.Link / BaseLink. These drops
+        # are necessary, not redundant: our ``model_serializer`` override replaces
+        # ``Link._serialize`` rather than chaining to it, so ``serializer(self)``
+        # runs the default serialization and would otherwise emit an explicitly
+        # set but falsy ``properties``/``templated``.
         drop_if_falsy(self, "properties", data)
         drop_if_falsy(self, "templated", data)
 
