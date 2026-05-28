@@ -1105,6 +1105,15 @@ class TestQueryParser:
         assert " books" == m("children's books", "children")
         assert "" == m("adulting", "adult")
 
+        # Regex metacharacters in the matched portion (e.g. an unbalanced
+        # parenthesis pulled from the user's query) are treated literally
+        # rather than crashing pattern compilation.
+        query = (
+            "robbie faith inspired romance (european romance suspense series book 2)"
+        )
+        match = "romance (european romance suspense"
+        assert "robbie faith inspired  series book 2)" == m(query, match)
+
 
 class TestJSONQuery:
     @staticmethod
