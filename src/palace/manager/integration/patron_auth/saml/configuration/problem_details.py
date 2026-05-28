@@ -32,11 +32,12 @@ SAML_GENERIC_PARSING_ERROR = pd(
     ),
 )
 
-SAML_INCORRECT_FILTRATION_EXPRESSION = pd(
+# URI preserves "filtration" for backward-compat with existing clients.
+SAML_INCORRECT_FILTER_EXPRESSION = pd(
     "http://librarysimplified.org/terms/problem/saml/incorrect-filtration-expression-format",
     status_code=400,
-    title=_("SAML filtration expression has an incorrect format."),
-    detail=_("SAML filtration expression has an incorrect format."),
+    title=_("SAML filter expression has an incorrect format."),
+    detail=_("SAML filter expression has an incorrect format."),
 )
 
 SAML_INCORRECT_PATRON_ID_REGULAR_EXPRESSION = pd(

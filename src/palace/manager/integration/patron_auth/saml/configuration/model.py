@@ -20,7 +20,7 @@ from palace.manager.api.authentication.base import (
 )
 from palace.manager.integration.patron_auth.saml.configuration.problem_details import (
     SAML_GENERIC_PARSING_ERROR,
-    SAML_INCORRECT_FILTRATION_EXPRESSION,
+    SAML_INCORRECT_FILTER_EXPRESSION,
     SAML_INCORRECT_METADATA,
     SAML_INCORRECT_PATRON_ID_REGULAR_EXPRESSION,
     SAML_INCORRECT_PRIVATE_KEY,
@@ -41,6 +41,7 @@ from palace.manager.integration.patron_auth.saml.metadata.parser import (
     SAMLMetadataParsingError,
 )
 from palace.manager.integration.settings import (
+    BaseSettings,
     FormFieldType,
     FormMetadata,
     FormOptionsType,
@@ -104,6 +105,26 @@ class FederatedIdentityProviderOptions:
         return {entity_id: label for entity_id, label in identity_providers}
 
 
+def _validate_filter_expression(cls: type[BaseSettings], v: str | None) -> str | None:
+    """Shared validator for SAML filter expression fields on settings models.
+
+    :raises SettingsValidationError: if the expression is syntactically invalid.
+    """
+    if v is not None:
+        try:
+            FilterExpression(v).check_syntax()
+        except FilterExpressionError as exception:
+            cls.logger().warning(
+                f"Validation of the filter expression failed: {exception}"
+            )
+            raise SettingsValidationError(
+                problem_detail=SAML_INCORRECT_FILTER_EXPRESSION.detailed(
+                    f"SAML filter expression has an incorrect format: {str(exception)}"
+                )
+            )
+    return v
+
+
 class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
     """SAML Web SSO Authentication settings"""
 
@@ -139,6 +160,7 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
             ),
             type=FormFieldType.MENU,
             options=FederatedIdentityProviderOptions(),
+            patron_auth_filter_context=True,
         ),
     ] = None
     patron_id_use_name_id: Annotated[
@@ -155,6 +177,7 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
                 True: "Use SAML NameID",
                 False: "Do NOT use SAML NameID",
             },
+            patron_auth_filter_context=True,
         ),
     ] = True
     patron_id_attributes: Annotated[
@@ -171,6 +194,7 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
             type=FormFieldType.MENU,
             options={attribute.name: attribute.name for attribute in SAMLAttributeType},
             format="narrow",
+            patron_auth_filter_context=True,
         ),
     ] = None
     patron_id_regular_expression: Annotated[
@@ -221,6 +245,7 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
                 "Accessing content protected by SAML will still be governed by the IdP and patrons "
                 "will have to reauthenticate each time the IdP's session expires."
             ),
+            patron_auth_filter_context=True,
         ),
     ] = None
     filter_expression: Annotated[
@@ -228,11 +253,14 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
         FormMetadata(
             label="Filter Expression",
             description=(
-                "Python expression used for filtering out patrons by their SAML attributes."
+                "A Python expression that may restrict a patron's access based on their"
+                " SAML Subject and other settings."
+                " When present, it must evaluate to True in order for the patron to gain access."
+                " If a per-library Filter Expression is also configured, both must evaluate to True."
                 "<br>"
                 "<br>"
-                'For example, if you want to authenticate using SAML only patrons having "eresources" '
-                'as the value of their "eduPersonEntitlement" then you need to use the following expression:'
+                "For example, if you want to limit access to only those patrons for whom the"
+                ' "eduPersonEntitlement" attribute has the value "eresources", use the following expression:'
                 "<br>"
                 "<pre>"
                 """
@@ -249,6 +277,23 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
                 "</pre>"
             ),
             type=FormFieldType.TEXTAREA,
+        ),
+    ] = None
+    # Note: the key-ordering caveat in the description below is a JSONB storage
+    # side effect — PostgreSQL sorts all object keys when storing/retrieving JSONB.
+    extra_data: Annotated[
+        dict[str, Any] | list[Any] | int | float | bool | str | None,
+        FormMetadata(
+            label="Extra Data",
+            description=(
+                "Extra data available to patron filter expressions via the"
+                " 'integration.extra_data' context variable."
+                " Accepts any JSON value (object, array, string, number, boolean, or null)."
+                "<br>"
+                "Note: Dictionary/object key order may not be preserved after saving."
+            ),
+            type=FormFieldType.JSON,
+            patron_auth_filter_context=True,
         ),
     ] = None
     service_provider_strict_mode: Annotated[
@@ -401,18 +446,7 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
     @field_validator("filter_expression")
     @classmethod
     def validate_filter_expression(cls, v: str | None) -> str | None:
-        if v is not None:
-            try:
-                FilterExpression(v).check_syntax()
-            except FilterExpressionError as exception:
-                cls.logger().exception("Validation of the filtration expression failed")
-                message = f"SAML filtration expression has an incorrect format: {str(exception)}"
-                raise SettingsValidationError(
-                    problem_detail=SAML_INCORRECT_FILTRATION_EXPRESSION.detailed(
-                        message
-                    )
-                )
-        return v
+        return _validate_filter_expression(cls, v)
 
     @field_validator("patron_id_regular_expression")
     @classmethod
@@ -431,7 +465,31 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
         return v
 
 
-class SAMLWebSSOAuthLibrarySettings(AuthProviderLibrarySettings): ...
+class SAMLWebSSOAuthLibrarySettings(AuthProviderLibrarySettings):
+    """Per-library SAML Web SSO authentication settings."""
+
+    filter_expression: Annotated[
+        str | None,
+        FormMetadata(
+            label="Filter Expression",
+            description=(
+                "A Python expression that may restrict a patron's access to this library"
+                " based on their SAML Subject and other settings."
+                " When present, it must evaluate to True in order for the patron to gain"
+                " access to this library."
+                "<br>"
+                "<br>"
+                "Refer to the integration-level Filter Expression setting for expression"
+                " syntax and examples."
+            ),
+            type=FormFieldType.TEXTAREA,
+        ),
+    ] = None
+
+    @field_validator("filter_expression")
+    @classmethod
+    def validate_filter_expression(cls, v: str | None) -> str | None:
+        return _validate_filter_expression(cls, v)
 
 
 class SAMLOneLoginConfiguration(LoggerMixin):

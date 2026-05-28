@@ -16,10 +16,6 @@ from palace.manager.integration.patron_auth.saml.configuration.model import (
 from palace.manager.integration.patron_auth.saml.configuration.service_provider import (
     SamlServiceProviderConfiguration,
 )
-from palace.manager.integration.patron_auth.saml.metadata.filter import (
-    SAMLSubjectFilter,
-    SAMLSubjectFilterError,
-)
 from palace.manager.integration.patron_auth.saml.metadata.parser import (
     SAMLSubjectParser,
 )
@@ -31,10 +27,7 @@ if TYPE_CHECKING:
     from palace.manager.integration.patron_auth.saml.configuration.model import (
         SAMLWebSSOAuthSettings,
     )
-    from palace.manager.integration.patron_auth.saml.metadata.model import (
-        SAMLNameID,
-        SAMLSubject,
-    )
+    from palace.manager.integration.patron_auth.saml.metadata.model import SAMLNameID
 
 SAML_GENERIC_ERROR = pd(
     "http://librarysimplified.org/terms/problem/saml/generic-error",
@@ -74,7 +67,6 @@ class SAMLAuthenticationManager:
         self,
         configuration: SAMLOneLoginConfiguration,
         subject_parser: SAMLSubjectParser,
-        subject_filter: SAMLSubjectFilter | None = None,
     ) -> None:
         """Initialize a new instance of SAMLAuthenticationManager.
 
@@ -83,9 +75,6 @@ class SAMLAuthenticationManager:
 
         :param subject_parser: Subject parser
         :type subject_parser: api.saml.metadata.parser.SAMLSubjectParser
-
-        :param subject_filter: Subject filter (optional; defaults to SAMLSubjectFilter())
-        :type subject_filter: SAMLSubjectFilter | None
         """
         if not isinstance(configuration, SAMLOneLoginConfiguration):
             raise ValueError(
@@ -99,18 +88,9 @@ class SAMLAuthenticationManager:
                     SAMLSubjectParser
                 )
             )
-        if subject_filter is None:
-            subject_filter = SAMLSubjectFilter()
-        if not isinstance(subject_filter, SAMLSubjectFilter):
-            raise ValueError(
-                "Argument 'subject_filter' must be an instance of {} class".format(
-                    SAMLSubjectFilter
-                )
-            )
 
         self._configuration = configuration
         self._subject_parser = subject_parser
-        self._subject_filter = subject_filter
 
         self._logger = logging.getLogger(__name__)
 
@@ -187,39 +167,6 @@ class SAMLAuthenticationManager:
         auth_object = self._create_auth_object(db, idp_entity_id)
 
         return auth_object
-
-    def _filter_subject(self, subject: SAMLSubject) -> SAMLSubject | pd:
-        """Filter the subject using the configured expression (if any).
-
-        :param subject: SAML subject object
-        :return: Subject if it passes, or a ProblemDetail if filtered out or on error
-        """
-        self._logger.info(f"Started filtering {subject}")
-
-        if not self._configuration.configuration.filter_expression:
-            self._logger.info(
-                "There is no filtration expression. Finished filtering {}".format(
-                    subject
-                )
-            )
-            return subject
-
-        try:
-            filtration_result = self._subject_filter.execute(
-                self._configuration.configuration.filter_expression, subject
-            )
-
-            self._logger.info(f"Finished filtering {subject}: {filtration_result}")
-
-            if not filtration_result:
-                return SAML_NO_ACCESS_ERROR
-
-            return subject
-        except SAMLSubjectFilterError as exception:
-            self._logger.info(
-                f"An unexpected error occurred during filtering {subject}"
-            )
-            return SAML_GENERIC_ERROR.detailed(str(exception))
 
     @property
     def configuration(self):
@@ -314,7 +261,6 @@ class SAMLAuthenticationManager:
 
         if authenticated:
             subject = self._subject_parser.parse(auth)
-            subject = self._filter_subject(subject)
 
             self._logger.info(
                 "Finished finishing authentication workflow for IdP '{}': {}".format(
@@ -455,9 +401,8 @@ class SAMLAuthenticationManagerFactory:
         # Pass both configs to SAMLOneLoginConfiguration
         onelogin_configuration = SAMLOneLoginConfiguration(configuration, sp_config)
         subject_parser = SAMLSubjectParser()
-        subject_filter = SAMLSubjectFilter()
         authentication_manager = SAMLAuthenticationManager(
-            onelogin_configuration, subject_parser, subject_filter
+            onelogin_configuration, subject_parser
         )
 
         return authentication_manager
