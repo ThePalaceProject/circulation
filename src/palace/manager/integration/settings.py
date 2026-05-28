@@ -331,9 +331,9 @@ class BaseSettings(BaseModel, LoggerMixin):
     def filter_context_dump(self) -> dict[str, Any]:
         """Return a dict of fields eligible for patron-auth filter expression context.
 
-        Only fields whose `FormMetadata` has `patron_auth_filter_context=True`
+        Only fields whose :class:`FormMetadata` has ``patron_auth_filter_context=True``
         are included. All fields are included at their current value regardless of
-        whether they match their default (i.e. `exclude_defaults=False`).
+        whether they match their default (i.e. ``exclude_defaults=False``).
         """
         return self.model_dump(
             include=_filter_context_fields(type(self)), exclude_defaults=False

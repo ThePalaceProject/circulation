@@ -22,6 +22,7 @@ from palace.manager.integration.patron_auth.oidc.configuration.model import (
 )
 from palace.manager.integration.patron_auth.oidc.provider import (
     OIDC_CANNOT_DETERMINE_PATRON,
+    OIDC_FILTER_EVALUATION_ERROR,
     OIDC_LIBRARY_NOT_FOUND,
     OIDC_NO_ACCESS_ERROR,
     OIDC_TOKEN_EXPIRED,
@@ -678,6 +679,29 @@ class TestOIDCAuthenticationProvider:
         assert isinstance(credential, Credential)
         assert isinstance(patron, Patron)
         assert isinstance(patron_data, PatronData)
+
+    def test_oidc_callback_filter_evaluation_error(
+        self,
+        db: DatabaseTransactionFixture,
+        create_oidc_settings: Callable[..., OIDCAuthSettings],
+        create_oidc_provider: Callable[..., OIDCAuthenticationProvider],
+    ) -> None:
+        """oidc_callback raises OIDC_FILTER_EVALUATION_ERROR when the filter expression errors at evaluation."""
+        configuration = create_oidc_settings(
+            # Syntactically valid, so the model validator accepts it;
+            # claims.nonexistent raises AttributeDoesNotExist at evaluation time.
+            filter_expression="claims.nonexistent == 'value'"
+        )
+        provider = create_oidc_provider(settings=configuration)
+
+        with pytest.raises(ProblemDetailException) as exc_info:
+            provider.oidc_callback(
+                db.session,
+                self._FILTER_CLAIMS,
+                "test-access-token",
+            )
+
+        assert exc_info.value.problem_detail.uri == OIDC_FILTER_EVALUATION_ERROR.uri
 
     def test_filter_claims_library_not_found(
         self,
