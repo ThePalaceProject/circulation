@@ -129,12 +129,16 @@ class TestOPDSForDistributorsAPI:
         lpdm.delivery_mechanism.drm_scheme = DeliveryMechanism.ADOBE_DRM
         assert False == m(patron, pool, lpdm)
 
-        # Otherwise -> True
+        # NO_DRM is allowed: the redirect points to a public URL, no
+        # credential is issued, no per-patron tracking is required.
         lpdm.delivery_mechanism.drm_scheme = DeliveryMechanism.NO_DRM
         assert True == m(patron, pool, lpdm)
 
+        # BEARER_TOKEN is NOT allowed without a loan: the token document is
+        # an access credential and we shouldn't hand one out without a
+        # corresponding loan record.
         lpdm.delivery_mechanism.drm_scheme = DeliveryMechanism.BEARER_TOKEN
-        assert True == m(patron, pool, lpdm)
+        assert False == m(patron, pool, lpdm)
 
         # STREAMING_DRM is NOT allowed without a loan: a streaming fulfillment
         # is an OPDS entry tied to a Loan, so it cannot be built loan-less.
