@@ -101,8 +101,8 @@ class TestOPDSForDistributorsAPI:
         self, opds_dist_api_fixture: OPDSForDistributorsAPIFixture
     ):
         """A book made available through OPDS For Distributors can be
-        fulfilled with no underlying loan, if its delivery mechanism
-        uses bearer token fulfillment.
+        fulfilled with no underlying loan only if its delivery mechanism
+        uses NO_DRM — a plain redirect to a public URL.
         """
         patron = MagicMock()
         pool = opds_dist_api_fixture.db.licensepool(
