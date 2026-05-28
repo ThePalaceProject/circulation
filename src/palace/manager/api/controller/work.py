@@ -161,6 +161,9 @@ class WorkController(CirculationManagerController):
         if isinstance(work, ProblemDetail):
             return work
 
+        if work.presentation_edition is None:
+            return NOT_FOUND_ON_REMOTE
+
         search_engine = self.search_engine
         if isinstance(search_engine, ProblemDetail):
             return search_engine
@@ -215,6 +218,9 @@ class WorkController(CirculationManagerController):
         work = self.load_work(library, identifier_type, identifier)
         if isinstance(work, ProblemDetail):
             return work
+
+        if work.presentation_edition is None:
+            return NOT_FOUND_ON_REMOTE
 
         search_engine = self.search_engine
         if isinstance(search_engine, ProblemDetail):

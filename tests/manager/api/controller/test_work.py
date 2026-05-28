@@ -889,6 +889,34 @@ class TestWorkController:
             )
         assert result == NOT_FOUND_ON_REMOTE
 
+    def test_related_no_presentation_edition(self, work_fixture: WorkFixture):
+        """A work without a presentation_edition is treated as not found."""
+        db = work_fixture.db
+        work: Work = db.work(with_license_pool=True)
+        identifier = work.presentation_edition.primary_identifier
+        work.presentation_edition = None
+        db.session.commit()
+
+        with work_fixture.request_context_with_library("/"):
+            result = work_fixture.manager.work_controller.related(
+                identifier.type, identifier.identifier
+            )
+        assert result == NOT_FOUND_ON_REMOTE
+
+    def test_recommendations_no_presentation_edition(self, work_fixture: WorkFixture):
+        """A work without a presentation_edition is treated as not found."""
+        db = work_fixture.db
+        work: Work = db.work(with_license_pool=True)
+        identifier = work.presentation_edition.primary_identifier
+        work.presentation_edition = None
+        db.session.commit()
+
+        with work_fixture.request_context_with_library("/"):
+            result = work_fixture.manager.work_controller.recommendations(
+                identifier.type, identifier.identifier
+            )
+        assert result == NOT_FOUND_ON_REMOTE
+
     def test_series(self, work_fixture: WorkFixture):
         # Test the ability of the series() method to generate an OPDS
         # feed representing all the books in a given series, subject
