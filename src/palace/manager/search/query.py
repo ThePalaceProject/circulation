@@ -1095,6 +1095,9 @@ class QueryParser:
         # dash.
         word_boundary_pattern = r"\b%s[\w'\-]*\b"
 
-        return re.compile(word_boundary_pattern % match.strip(), re.IGNORECASE).sub(
-            "", query_string
-        )
+        # The match is taken from the user's query string and may contain
+        # regex metacharacters (e.g. an unbalanced parenthesis), so escape
+        # it before interpolating into the pattern.
+        return re.compile(
+            word_boundary_pattern % re.escape(match.strip()), re.IGNORECASE
+        ).sub("", query_string)
