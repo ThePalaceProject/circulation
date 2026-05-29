@@ -945,7 +945,6 @@ class TestGeneratePlaytimeReport:
             ],
         }
 
-
     def test_generate_playtime_report_folder_lock_contention(
         self,
         db: DatabaseTransactionFixture,
@@ -962,7 +961,9 @@ class TestGeneratePlaytimeReport:
         collection = db.collection(
             "collection a",
             protocol=OPDS2API,
-            settings=db.opds2_settings(data_source="ds_a", generate_playtime_report=True),
+            settings=db.opds2_settings(
+                data_source="ds_a", is_generate_playtime_report=True
+            ),
         )
         library = db.default_library()
         identifier = db.identifier()
@@ -1012,7 +1013,6 @@ class TestGeneratePlaytimeReport:
         )
         # Despite the lock timeout, the task should still have completed and uploaded a file.
         assert mock_google_drive_service.create_file.call_count == 1
-
 
     @pytest.mark.parametrize(
         "flagged_collections,unflagged_collections,expected_ds_names",
