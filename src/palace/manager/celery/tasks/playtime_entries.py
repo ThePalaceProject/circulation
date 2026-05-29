@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import csv
 import os
+import random
 import tempfile
+import time
 import uuid
 from collections import defaultdict
 from collections.abc import Iterable
@@ -27,6 +29,7 @@ from palace.manager.service.celery.celery import QueueNames
 from palace.manager.service.integration_registry.license_providers import (
     LicenseProvidersRegistry,
 )
+from palace.manager.service.redis.models.lock import RedisLock
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.integration import IntegrationConfiguration
@@ -145,6 +148,17 @@ class Writer(Protocol):
 
 REPORT_DATE_FORMAT = "%m-%d-%Y"
 
+# How long (seconds) to wait for the folder-creation lock before proceeding without it.
+# Typed as float | int to match acquire_blocking's signature.
+FOLDER_LOCK_ACQUIRE_TIMEOUT: float | int = 60
+
+# Maximum seconds of random jitter added once per task invocation before the
+# folder-creation loop. Independent CM groups share no Redis instance and therefore
+# cannot coordinate via the lock alone; a single random offset per run spreads their
+# arrival times across all folder levels without multiplying the delay by N data sources.
+# Exposed as a module-level constant so tests can set it to 0.
+FOLDER_CREATION_JITTER_MAX: int = 10
+
 
 @shared_task(queue=QueueNames.default, bind=True)
 def generate_playtime_report(
@@ -183,6 +197,14 @@ def generate_playtime_report(
 
     # create directory hierarchy
     root_folder_id: str | None = google_drive_container.config.parent_folder_id()
+
+    redis_client = task.services.redis.client()
+
+    # Jitter: a single random delay per task invocation spreads independent CM groups
+    # (which share no Redis instance) in time, reducing the probability that two groups
+    # race to create the same Google Drive folder. Taking it once before the loop keeps
+    # the per-data-source overhead constant regardless of how many sources are processed.
+    time.sleep(random.uniform(0, FOLDER_CREATION_JITTER_MAX))
 
     with task.session() as session:
         # get list of collections
@@ -223,12 +245,46 @@ def generate_playtime_report(
                     reporting_name,
                     str(start.year),
                 ]
-                folder_results = google_drive.create_nested_folders_if_not_exist(
-                    folders=nested_folders,
-                    parent_folder_id=root_folder_id,
+
+                # Acquire a distributed lock so that concurrent workers within the
+                # same Redis instance don't each create a duplicate folder hierarchy.
+                # Google Drive allows same-named folders and has list-API indexing
+                # latency, so a bare get-then-create is not safe under concurrent access.
+                folder_lock = RedisLock(
+                    redis_client,
+                    lock_name=[
+                        "playtime_report_folder",
+                        root_folder_id or "default",
+                        data_source_name,
+                    ],
+                    lock_timeout=timedelta(minutes=5),
                 )
-                # the leaf folder is the last path segment in the result list
-                leaf_folder = folder_results[-1]
+                try:
+                    lock_acquired = folder_lock.acquire_blocking(
+                        timeout=FOLDER_LOCK_ACQUIRE_TIMEOUT
+                    )
+                except Exception:
+                    # Redis may be unavailable (connection error, timeout, etc.).
+                    # Treat this the same as failing to acquire within the timeout:
+                    # log a warning and proceed without the lock rather than
+                    # aborting the entire report for this data source.
+                    lock_acquired = False
+                if not lock_acquired:
+                    task.log.warning(
+                        f"Could not acquire folder creation lock for {data_source_name!r} "
+                        f"within {FOLDER_LOCK_ACQUIRE_TIMEOUT} seconds. Proceeding without "
+                        "lock — duplicate folders may be created."
+                    )
+                try:
+                    folder_results = google_drive.create_nested_folders_if_not_exist(
+                        folders=nested_folders,
+                        parent_folder_id=root_folder_id,
+                    )
+                    # the leaf folder is the last path segment in the result list
+                    leaf_folder = folder_results[-1]
+                finally:
+                    if lock_acquired:
+                        folder_lock.release()
 
                 # store file
                 google_drive.create_file(
