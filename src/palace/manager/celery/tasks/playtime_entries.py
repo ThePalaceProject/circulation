@@ -149,8 +149,7 @@ class Writer(Protocol):
 REPORT_DATE_FORMAT = "%m-%d-%Y"
 
 # How long (seconds) to wait for the folder-creation lock before proceeding without it.
-# Typed as float | int to match acquire_blocking's signature; tests monkeypatch this
-# to a small float (e.g. 0.1) to avoid waiting a full 60 seconds.
+# Typed as float | int to match acquire_blocking's signature.
 FOLDER_LOCK_ACQUIRE_TIMEOUT: float | int = 60
 
 # Maximum seconds of random jitter added once per task invocation before the
