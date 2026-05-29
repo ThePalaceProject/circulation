@@ -35,3 +35,10 @@ class PlaytimeReportSettings(BaseSettings):
             },
         ),
     ] = False
+
+
+# The key as it appears in settings_dict; derived from the model field to avoid bare string literals.
+PLAYTIME_REPORT_FLAG_KEY: str = (
+    PlaytimeReportSettings.model_fields["is_generate_playtime_report"].alias
+    or "is_generate_playtime_report"
+)

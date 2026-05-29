@@ -25,6 +25,9 @@ from palace.manager.integration.license.opds.for_distributors.api import (
     OPDSForDistributorsAPI,
 )
 from palace.manager.integration.license.opds.opds2.api import OPDS2API
+from palace.manager.integration.license.opds.settings.playtime_report import (
+    PLAYTIME_REPORT_FLAG_KEY,
+)
 from palace.manager.service.celery.celery import QueueNames
 from palace.manager.service.integration_registry.license_providers import (
     LicenseProvidersRegistry,
@@ -338,7 +341,7 @@ def _fetch_distinct_eligible_data_source_names(
     collection_ds_names = {
         c.data_source.name
         for c in eligible_collections
-        if c.integration_configuration.settings_dict.get("is_generate_playtime_report")
+        if c.integration_configuration.settings_dict.get(PLAYTIME_REPORT_FLAG_KEY)
         is True
         and c.data_source
         and c.data_source.name is not None
