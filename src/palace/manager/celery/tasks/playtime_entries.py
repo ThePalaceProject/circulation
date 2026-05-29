@@ -259,9 +259,16 @@ def generate_playtime_report(
                     ],
                     lock_timeout=timedelta(minutes=5),
                 )
-                lock_acquired = folder_lock.acquire_blocking(
-                    timeout=FOLDER_LOCK_ACQUIRE_TIMEOUT
-                )
+                try:
+                    lock_acquired = folder_lock.acquire_blocking(
+                        timeout=FOLDER_LOCK_ACQUIRE_TIMEOUT
+                    )
+                except Exception:
+                    # Redis may be unavailable (connection error, timeout, etc.).
+                    # Treat this the same as failing to acquire within the timeout:
+                    # log a warning and proceed without the lock rather than
+                    # aborting the entire report for this data source.
+                    lock_acquired = False
                 if not lock_acquired:
                     task.log.warning(
                         f"Could not acquire folder creation lock for {data_source_name!r} "
