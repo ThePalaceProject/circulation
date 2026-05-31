@@ -9,7 +9,9 @@ from typing import Any
 import pytest
 from pydantic import HttpUrl
 
-from palace.manager.api.admin.problem_details import INVALID_CONFIGURATION_OPTION
+from palace.manager.api.admin.problem_details import (
+    INVALID_CONFIGURATION_OPTION,
+)
 from palace.manager.integration.patron_auth.oidc.configuration.model import (
     OIDCAuthLibrarySettings,
     OIDCAuthSettings,
@@ -550,6 +552,57 @@ class TestOIDCAuthSettings:
         settings = OIDCAuthSettings(**kwargs)
         assert settings.patron_id_claim == expected
 
+    @pytest.mark.parametrize(
+        "value, expected_python",
+        [
+            pytest.param(None, None, id="none-becomes-none"),
+            pytest.param("", None, id="empty-string-becomes-none"),
+            pytest.param({}, {}, id="dict-passthrough"),
+            pytest.param('{"key": "value"}', {"key": "value"}, id="json-object-string"),
+            pytest.param("[1, 2, 3]", [1, 2, 3], id="json-array-string"),
+            pytest.param("42", 42, id="json-number-string"),
+            pytest.param('"hello"', "hello", id="json-string-string"),
+            pytest.param("true", True, id="json-bool-string"),
+            pytest.param("null", None, id="json-null-string"),
+            pytest.param(
+                '{"nested": {"a": [1, 2]}}',
+                {"nested": {"a": [1, 2]}},
+                id="nested-json",
+            ),
+        ],
+    )
+    def test_extra_data_valid(self, value: object, expected_python: object) -> None:
+        settings = OIDCAuthSettings(
+            issuer_url="https://idp.example.com",
+            client_id="test-client-id",
+            client_secret="test-client-secret",
+            extra_data=value,
+        )
+        assert settings.extra_data == expected_python
+        assert settings.filter_context_dump()["extra_data"] == expected_python
+
+    def test_extra_data_default(self) -> None:
+        settings = OIDCAuthSettings(
+            issuer_url="https://idp.example.com",
+            client_id="test-client-id",
+            client_secret="test-client-secret",
+        )
+        assert settings.extra_data is None
+        assert settings.filter_context_dump()["extra_data"] is None
+
+    def test_extra_data_invalid_json(self) -> None:
+        with pytest.raises(ProblemDetailException) as exc_info:
+            OIDCAuthSettings(
+                issuer_url="https://idp.example.com",
+                client_id="test-client-id",
+                client_secret="test-client-secret",
+                extra_data="{not valid json}",
+            )
+        assert exc_info.value.problem_detail.uri == INVALID_CONFIGURATION_OPTION.uri
+        assert "'Extra Data' must be valid JSON" in (
+            exc_info.value.problem_detail.detail or ""
+        )
+
 
 class TestOIDCAuthLibrarySettings:
     """Tests for OIDCAuthLibrarySettings."""
@@ -561,14 +614,8 @@ class TestOIDCAuthLibrarySettings:
         assert settings is not None
         assert isinstance(settings, OIDCAuthLibrarySettings)
 
-    def test_library_settings_is_empty(self):
-        """Test that OIDCAuthLibrarySettings has no required fields."""
-        # Should not raise any errors
+    def test_library_settings_defaults(self):
+        """Test that OIDCAuthLibrarySettings fields default to None."""
         settings = OIDCAuthLibrarySettings()
-
-        # Convert to dict to check it's empty (only has inherited fields if any)
-        settings_dict = settings.model_dump()
-        # Should be empty or only contain inherited base fields
-        assert len(settings_dict) == 0 or all(
-            k.startswith("_") for k in settings_dict.keys()
-        )
+        assert settings.filter_expression is None
+        assert settings.model_dump() == {}

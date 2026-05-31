@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from functools import partial
 from unittest.mock import patch
 
 import pytest
 from pydantic import HttpUrl
 
+from palace.manager.integration.goals import Goals
 from palace.manager.integration.patron_auth.oidc.auth import OIDCAuthenticationManager
 from palace.manager.integration.patron_auth.oidc.configuration.model import (
     OIDCAuthLibrarySettings,
@@ -48,6 +51,37 @@ def oidc_provider(db: DatabaseTransactionFixture) -> OIDCAuthenticationProvider:
     ):
         provider.get_authentication_manager()
     return provider
+
+
+@pytest.fixture
+def create_oidc_settings() -> Callable[..., OIDCAuthSettings]:
+    """Factory fixture that creates OIDCAuthSettings with minimal required fields."""
+    return partial(
+        OIDCAuthSettings,
+        issuer_url="https://idp.example.com",
+        client_id="test-client-id",
+        client_secret="test-client-secret",
+    )
+
+
+@pytest.fixture
+def create_oidc_provider(
+    db: DatabaseTransactionFixture,
+    create_oidc_settings: Callable[..., OIDCAuthSettings],
+) -> Callable[..., OIDCAuthenticationProvider]:
+    """Factory fixture that creates OIDCAuthenticationProvider instances."""
+    library = db.default_library()
+    assert library.id is not None
+    integration = db.integration_configuration(
+        protocol="oidc", goal=Goals.PATRON_AUTH_GOAL
+    )
+    return partial(
+        OIDCAuthenticationProvider,
+        library_id=library.id,
+        integration_id=integration.id,
+        settings=create_oidc_settings(),
+        library_settings=OIDCAuthLibrarySettings(),
+    )
 
 
 @pytest.fixture
