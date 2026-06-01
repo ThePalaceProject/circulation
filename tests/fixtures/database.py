@@ -66,7 +66,9 @@ from palace.manager.integration.license.opds.odl.settings import OPDS2WithODLSet
 from palace.manager.integration.license.opds.opds1.api import OPDSAPI
 from palace.manager.integration.license.opds.opds1.settings import OPDSImporterSettings
 from palace.manager.integration.license.opds.opds2.api import OPDS2API
-from palace.manager.integration.license.opds.opds2.settings import OPDS2ImporterSettings
+from palace.manager.integration.license.opds.opds2.settings import (
+    OPDS2APISettings,
+)
 from palace.manager.integration.license.overdrive.api import OverdriveAPI
 from palace.manager.integration.license.overdrive.settings import OverdriveSettings
 from palace.manager.integration.patron_auth.simple_authentication import (
@@ -624,7 +626,7 @@ class DatabaseTransactionFixture:
 
     opds2_settings = staticmethod(
         functools.partial(
-            OPDS2ImporterSettings,
+            OPDS2APISettings,
             external_account_id="http://opds.example.com/feed",
             data_source="OPDS",
         )

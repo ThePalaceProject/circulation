@@ -22,7 +22,7 @@ from palace.manager.integration.settings import (
 from palace.manager.sqlalchemy.constants import IdentifierType
 
 
-class OPDS2ImporterSettings(PlaytimeReportSettings, OPDSImporterSettings):
+class OPDS2ImporterSettings(OPDSImporterSettings):
     custom_accept_header: Annotated[
         str,
         FormMetadata(
@@ -99,3 +99,13 @@ class OPDS2ImporterSettings(PlaytimeReportSettings, OPDSImporterSettings):
 
 class OPDS2ImporterLibrarySettings(OPDSImporterLibrarySettings):
     pass
+
+
+class OPDS2APISettings(PlaytimeReportSettings, OPDS2ImporterSettings):
+    """Settings for OPDS2API.
+
+    Extends :class:`OPDS2ImporterSettings` with the ``generate_playtime_report``
+    opt-in flag.  Kept as a separate subclass so that ``OPDS2WithODLSettings``
+    (which also inherits from ``OPDS2ImporterSettings``) does not inadvertently
+    expose the playtime-report setting on ODL 2.0 collection forms.
+    """
