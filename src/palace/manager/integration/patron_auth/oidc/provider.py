@@ -6,7 +6,7 @@ This module provides the OIDC authentication provider implementation for patron 
 from __future__ import annotations
 
 from collections.abc import Generator
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from flask import url_for
 from flask_babel import lazy_gettext as _
