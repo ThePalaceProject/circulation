@@ -304,14 +304,11 @@ def _fetch_distinct_eligible_data_source_names(
     registry: LicenseProvidersRegistry,
 ) -> list[str]:
     """
-    Fetches a sorted list of distinct data source names for which to produce a playback time report.
+    Fetches a sorted list of distinct data source names for which to produce a playtime report.
 
-    We gather data source names from two sources:
-    1. Collections with eligible protocols.
-    2. Data sources that appear in PlaytimeSummary records.
-
-    The names collected from both sources are combined, deduplicated, and then
-    returned as a sorted list.
+    Only OPDS 2.0 and OPDS for Distributors collections that have the
+    ``generate_playtime_report`` setting explicitly set to ``True`` are included.
+    All other collections are ignored.
 
     :param session: The SQLAlchemy database session.
     :param registry: The license providers registry for protocol lookups.
@@ -328,27 +325,26 @@ def _fetch_distinct_eligible_data_source_names(
             for protocol in eligible_protocols
         ]
     )
-    # Query collections with those configuration IDs.
+    # Query collections with those configuration IDs, eagerly loading their configuration.
     eligible_collections_query = (
         select(Collection)
         .where(Collection.integration_configuration_id.in_(eligible_config_ids_query))
         .options(joinedload(Collection.integration_configuration))
     )
     eligible_collections = session.scalars(eligible_collections_query).all()
-    # And get their data source names.
+
+    # Only include collections that have opted in via the generate_playtime_report flag.
+    # c.integration_configuration is guaranteed non-null by the query filter above.
     collection_ds_names = {
         c.data_source.name
         for c in eligible_collections
-        if c.data_source and c.data_source.name is not None
+        if c.integration_configuration.settings_dict.get("generate_playtime_report")
+        is True
+        and c.data_source
+        and c.data_source.name is not None
     }
 
-    # Data sources that appear in existing playback time summary records...
-    playtime_summary_query = select(distinct(PlaytimeSummary.data_source_name))
-    playtime_summary_result = session.scalars(playtime_summary_query).all()
-    playtime_summary_ds_names = set(playtime_summary_result)
-
-    all_ds_names = collection_ds_names.union(playtime_summary_ds_names)
-    return sorted(list(all_ds_names))
+    return sorted(collection_ds_names)
 
 
 def _fetch_report_records(

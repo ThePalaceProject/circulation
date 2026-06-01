@@ -12,6 +12,9 @@ from palace.manager.integration.license.opds.opds1.settings import (
     OPDSImporterLibrarySettings,
     OPDSImporterSettings,
 )
+from palace.manager.integration.license.opds.settings.playtime_report import (
+    PlaytimeReportSettings,
+)
 from palace.manager.integration.settings import (
     FormFieldType,
     FormMetadata,
@@ -96,3 +99,13 @@ class OPDS2ImporterSettings(OPDSImporterSettings):
 
 class OPDS2ImporterLibrarySettings(OPDSImporterLibrarySettings):
     pass
+
+
+class OPDS2APISettings(PlaytimeReportSettings, OPDS2ImporterSettings):
+    """Settings for OPDS2API.
+
+    Extends :class:`OPDS2ImporterSettings` with the ``generate_playtime_report``
+    opt-in flag.  Kept as a separate subclass so that ``OPDS2WithODLSettings``
+    (which also inherits from ``OPDS2ImporterSettings``) does not inadvertently
+    expose the playtime-report setting on ODL 2.0 collection forms.
+    """

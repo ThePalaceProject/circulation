@@ -5,13 +5,16 @@ from typing import Annotated
 from flask_babel import lazy_gettext as _
 
 from palace.manager.integration.license.opds.opds1.settings import OPDSImporterSettings
+from palace.manager.integration.license.opds.settings.playtime_report import (
+    PlaytimeReportSettings,
+)
 from palace.manager.integration.settings import (
     BaseSettings,
     FormMetadata,
 )
 
 
-class OPDSForDistributorsSettings(OPDSImporterSettings):
+class OPDSForDistributorsSettings(PlaytimeReportSettings, OPDSImporterSettings):
     username: Annotated[
         str,
         FormMetadata(

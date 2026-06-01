@@ -17,8 +17,8 @@ from palace.manager.api.circulation.exceptions import CannotFulfill
 from palace.manager.api.circulation.fulfillment import RedirectFulfillment
 from palace.manager.integration.license.opds.base.api import BaseOPDSAPI
 from palace.manager.integration.license.opds.opds2.settings import (
+    OPDS2APISettings,
     OPDS2ImporterLibrarySettings,
-    OPDS2ImporterSettings,
 )
 from palace.manager.integration.license.opds.requests import (
     OpdsAuthType,
@@ -50,14 +50,14 @@ SUPPORTED_TEMPLATE_VARIABLES: frozenset[str] = frozenset(TemplateVariable)
 
 
 class OPDS2API(
-    BaseOPDSAPI[OPDS2ImporterSettings, OPDS2ImporterLibrarySettings], SupportsImport
+    BaseOPDSAPI[OPDS2APISettings, OPDS2ImporterLibrarySettings], SupportsImport
 ):
     TOKEN_AUTH_CONFIG_KEY = "token_auth_endpoint"
     LAST_REAP_TIME_KEY = "last_reap_time"
 
     @classmethod
-    def settings_class(cls) -> type[OPDS2ImporterSettings]:
-        return OPDS2ImporterSettings
+    def settings_class(cls) -> type[OPDS2APISettings]:
+        return OPDS2APISettings
 
     @classmethod
     def library_settings_class(cls) -> type[OPDS2ImporterLibrarySettings]:
