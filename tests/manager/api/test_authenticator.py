@@ -21,6 +21,10 @@ from freezegun import freeze_time
 from sqlalchemy.orm import Session
 from werkzeug.datastructures import Authorization
 
+from palace.opds.authentication.document import (
+    AUTH_DOCUMENT_MEDIA_TYPE,
+    AUTH_DOCUMENT_REL,
+)
 from palace.util.datetime_helpers import utc_now
 from palace.util.log import LogLevel
 
@@ -92,7 +96,6 @@ from palace.manager.sqlalchemy.model.integration import (
 from palace.manager.sqlalchemy.model.library import Library, LibraryLogo
 from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.util import MoneyUtility
-from palace.manager.util.authentication_for_opds import AuthenticationForOPDSDocument
 from palace.manager.util.http.exception import RemoteIntegrationException
 from palace.manager.util.opds_writer import OPDSFeed
 from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
@@ -1128,7 +1131,7 @@ class TestLibraryAuthenticator:
             [token_doc, basic_doc] = authenticators
             assert BasicTokenAuthenticationProvider.FLOW_TYPE == token_doc["type"]
 
-            expect_basic = basic.authentication_flow_document(db.session)
+            expect_basic = basic.authentication_flow_document(db.session).serialize()
             assert expect_basic == basic_doc
 
             # We also need to test that the library's name and ID
@@ -1203,6 +1206,10 @@ class TestLibraryAuthenticator:
             assert "http://library.help/" == help_web["href"]
             assert "text/html" == help_web["type"]
             assert "mailto:help@library.org" == help_email["href"]
+            # Configuration.help_uris yields a None type for the mailto link, so
+            # the link omits the "type" key entirely (rather than emitting
+            # "type": null, as the pre-pydantic implementation did).
+            assert "type" not in help_email
 
             # Since no special address was given for the copyright
             # designated agent, the help address was reused.
@@ -1274,14 +1281,14 @@ class TestLibraryAuthenticator:
             # provider, that provider's .authentication_header is used
             # for WWW-Authenticate.
             headers = authenticator.create_authentication_headers()
-            assert AuthenticationForOPDSDocument.MEDIA_TYPE == headers["Content-Type"]
+            assert AUTH_DOCUMENT_MEDIA_TYPE == headers["Content-Type"]
             assert basic.authentication_header == headers["WWW-Authenticate"]
 
             # The response contains a Link header pointing to the authentication
             # document
             expect = "<{}>; rel={}".format(
                 authenticator.authentication_document_url(),
-                AuthenticationForOPDSDocument.LINK_RELATION,
+                AUTH_DOCUMENT_REL,
             )
             assert expect == headers["Link"]
 
@@ -2794,7 +2801,7 @@ class TestBasicAuthenticationProvider:
         # Mock url_for so that the document can be generated.
         with patch("palace.manager.api.authentication.basic.url_for") as url_for_patch:
             url_for_patch.return_value = "http://localhost/"
-            doc = provider.authentication_flow_document(db)
+            doc = provider.authentication_flow_document(db).serialize()
             assert doc["description"] == provider.label()
             assert doc["type"] == provider.flow_type
 

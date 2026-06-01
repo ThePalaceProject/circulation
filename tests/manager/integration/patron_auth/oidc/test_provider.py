@@ -107,7 +107,7 @@ class TestOIDCAuthenticationProvider:
                 f"https://example.com/{library.short_name}/oidc_authenticate"
             )
 
-            result = oidc_provider._authentication_flow_document(db.session)
+            result = oidc_provider._authentication_flow_document(db.session).serialize()
 
             assert result["type"] == "http://palaceproject.io/authtype/OpenIDConnect"
             assert result["description"] == "OpenID Connect"
@@ -175,7 +175,7 @@ class TestOIDCAuthenticationProvider:
                 f"https://example.com/{library.short_name}/oidc/authenticate"
             )
 
-            result = provider._authentication_flow_document(db.session)
+            result = provider._authentication_flow_document(db.session).serialize()
 
             assert result["type"] == "http://palaceproject.io/authtype/OpenIDConnect"
             assert result["description"] == "OpenID Connect"
@@ -230,7 +230,7 @@ class TestOIDCAuthenticationProvider:
                 f"https://example.com/{library.short_name}/oidc/logout",
             ]
 
-            result = oidc_provider._authentication_flow_document(db.session)
+            result = oidc_provider._authentication_flow_document(db.session).serialize()
 
             assert len(result["links"]) == 2
             auth_link = result["links"][0]
@@ -264,7 +264,7 @@ class TestOIDCAuthenticationProvider:
                 f"https://example.com/{library.short_name}/oidc_authenticate"
             )
 
-            result = oidc_provider._authentication_flow_document(db.session)
+            result = oidc_provider._authentication_flow_document(db.session).serialize()
 
             assert len(result["links"]) == 1
             assert result["links"][0]["rel"] == "authenticate"

@@ -1,7 +1,14 @@
+from collections.abc import Iterable
+
 from flask import url_for
 from flask_babel import lazy_gettext as _
 from sqlalchemy.orm import Session
 from werkzeug.datastructures import Authorization
+
+from palace.opds.authentication.document import AuthenticateLink, PalaceAuthentication
+from palace.opds.authentication.palace import LocalizedValue
+from palace.opds.rwpm import Link
+from palace.util.exceptions import PalaceValueError
 
 from palace.manager.api.authentication.base import PatronData, PatronLookupNotSupported
 from palace.manager.api.authenticator import BaseSAMLAuthenticationProvider
@@ -122,7 +129,7 @@ class SAMLWebSSOAuthenticationProvider(
         # We cannot extract the credential from the header, so we just return None
         return None
 
-    def _authentication_flow_document(self, db):
+    def _authentication_flow_document(self, db: Session) -> PalaceAuthentication:
         """Creates a Authentication Flow object for use in an Authentication for OPDS document.
 
         Example:
@@ -197,51 +204,57 @@ class SAMLWebSSOAuthenticationProvider(
         :return: Authentication Flow object for use in an Authentication for OPDS document
         :rtype: Dict
         """
-        flow_doc = {"type": self.flow_type, "description": self.label(), "links": []}
+        links: list[Link] = []
 
         configuration = self.get_authentication_manager().configuration
 
         for index, identity_provider in enumerate(
             configuration.get_identity_providers(db)
         ):
-            link = {
-                "rel": "authenticate",
-                "href": self._create_authenticate_url(db, identity_provider.entity_id),
-                "display_names": self._join_ui_info_items(
-                    self._get_idp_display_names(index + 1, identity_provider)
-                ),
-                "descriptions": self._join_ui_info_items(
-                    identity_provider.ui_info.descriptions
-                ),
-                "information_urls": self._join_ui_info_items(
-                    identity_provider.ui_info.information_urls
-                ),
-                "privacy_statement_urls": self._join_ui_info_items(
-                    identity_provider.ui_info.privacy_statement_urls
-                ),
-                "logo_urls": self._join_ui_info_items(
-                    identity_provider.ui_info.logo_urls
-                ),
-            }
-
-            flow_doc["links"].append(link)
+            links.append(
+                AuthenticateLink(
+                    rel="authenticate",
+                    href=self._create_authenticate_url(db, identity_provider.entity_id),
+                    display_names=self._join_ui_info_items(
+                        self._get_idp_display_names(index + 1, identity_provider)
+                    ),
+                    descriptions=self._join_ui_info_items(
+                        identity_provider.ui_info.descriptions
+                    ),
+                    information_urls=self._join_ui_info_items(
+                        identity_provider.ui_info.information_urls
+                    ),
+                    privacy_statement_urls=self._join_ui_info_items(
+                        identity_provider.ui_info.privacy_statement_urls
+                    ),
+                    logo_urls=self._join_ui_info_items(
+                        identity_provider.ui_info.logo_urls
+                    ),
+                )
+            )
 
         library = self.library(db)
+        if not library:
+            raise PalaceValueError("Library not found")
         logout_url = url_for(
             "saml_logout",
             _external=True,
             library_short_name=library.short_name,
             provider=self.label(),
         )
-        flow_doc["links"].append(
-            {
-                "rel": "logout",
-                "href": f"{logout_url}{{&{LOGOUT_REDIRECT_QUERY_PARAM}}}",
-                "templated": True,
-            }
+        links.append(
+            Link(
+                rel="logout",
+                href=f"{logout_url}{{&{LOGOUT_REDIRECT_QUERY_PARAM}}}",
+                templated=True,
+            )
         )
 
-        return flow_doc
+        return PalaceAuthentication(
+            type=self.flow_type,
+            description=self.label(),
+            links=links,
+        )
 
     @staticmethod
     def _get_idp_display_names(identity_provider_index, identity_provider):
@@ -291,29 +304,21 @@ class SAMLWebSSOAuthenticationProvider(
         )
 
     @staticmethod
-    def _join_ui_info_items(*ui_info_item_lists):
-        """Joins all UI info items (like, display names, descriptions, etc.) to a single list of dicts
+    def _join_ui_info_items(
+        ui_info_items: Iterable[SAMLLocalizedMetadataItem] | None,
+    ) -> list[LocalizedValue]:
+        """Convert localizable SAML UI info items (display names, descriptions,
+        etc.) into a list of ``LocalizedValue`` objects.
 
-        :param ui_info_item_lists: List of child LocalizableMetadataInfo objects
-        :type: List[LocalizableMetadataItem]
-
-        :return: List of dicts containing UI information (display names, descriptions, etc.)
-        :rtype: List[Dict]
+        ``SAMLUIInfo`` getters return ``None`` when a field was not provided, so
+        a ``None`` input is treated as an empty list.
         """
-        result = []
-
-        if ui_info_item_lists:
-            for ui_info_item_list in ui_info_item_lists:
-                if ui_info_item_list:
-                    for ui_info_item in ui_info_item_list:
-                        result.append(
-                            {
-                                "value": ui_info_item.value,
-                                "language": ui_info_item.language,
-                            }
-                        )
-
-        return result
+        if not ui_info_items:
+            return []
+        return [
+            LocalizedValue(value=item.value, language=item.language)
+            for item in ui_info_items
+        ]
 
     def _run_self_tests(self, _db):
         pass

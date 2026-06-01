@@ -2,6 +2,15 @@ from unittest.mock import Mock, patch
 
 from werkzeug.datastructures import Authorization
 
+from palace.opds.authentication.document import (
+    AuthenticationLabels,
+    PalaceAuthentication,
+)
+from palace.opds.authentication.palace import (
+    AuthenticationInput,
+    AuthenticationInputs,
+)
+
 from palace.manager.api.authentication.access_token import (
     PatronJWEAccessTokenProvider,
     TokenPatronInfo,
@@ -85,17 +94,27 @@ class TestBasicTokenAuthenticationProvider:
         provider = BasicTokenAuthenticationProvider(
             db.session, db.default_library(), Mock(spec=BasicAuthenticationProvider)
         )
-        provider.basic_provider._authentication_flow_document.return_value = dict(  # type: ignore[attr-defined]
-            mock=True
+        provider.basic_provider._authentication_flow_document.return_value = (  # type: ignore[attr-defined]
+            PalaceAuthentication(
+                type="http://opds-spec.org/auth/basic",
+                description="Library Barcode",
+                labels=AuthenticationLabels(login="Barcode", password="PIN"),
+                inputs=AuthenticationInputs(
+                    login=AuthenticationInput(keyboard="Default"),
+                    password=AuthenticationInput(keyboard="Default"),
+                ),
+            )
         )
         with controller_fixture.request_context_with_library(
             "/", library=db.default_library()
         ):
-            auth_doc = provider.authentication_flow_document(db.session)
+            auth_doc = provider.authentication_flow_document(db.session).serialize()
 
-        # From the basic provider
-        assert auth_doc["mock"] == True
-        # Overrides in the token provider
+        # The labels and inputs are carried over from the basic provider.
+        assert auth_doc["labels"] == {"login": "Barcode", "password": "PIN"}
+        assert auth_doc["inputs"]["login"]["keyboard"] == "Default"
+        # The type, description and links are overridden by the token provider.
         assert auth_doc["links"][0]["href"].endswith("/default/patrons/me/token/")
+        assert auth_doc["links"][0]["rel"] == "authenticate"
         assert auth_doc["type"] == provider.flow_type
         assert auth_doc["description"] == provider.label()

@@ -14,6 +14,13 @@ from flask_babel import lazy_gettext as _
 from sqlalchemy.orm import Session
 from werkzeug.datastructures import Authorization, Headers
 
+from palace.opds.authentication import palace
+from palace.opds.authentication.document import (
+    AUTH_DOCUMENT_MEDIA_TYPE,
+    AUTH_DOCUMENT_REL,
+    PalaceAuthenticationDocument,
+)
+from palace.opds.rwpm import Link
 from palace.util.log import LoggerMixin, elapsed_time_logging
 
 from palace.manager.api.adobe_vendor_id import AuthdataUtility
@@ -49,7 +56,6 @@ from palace.manager.sqlalchemy.model.integration import IntegrationLibraryConfig
 from palace.manager.sqlalchemy.model.key import Key, KeyType
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.patron import Patron, PatronProfileStorage
-from palace.manager.util.authentication_for_opds import AuthenticationForOPDSDocument
 from palace.manager.util.http.exception import RemoteIntegrationException
 from palace.manager.util.opds_writer import OPDSFeed
 from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
@@ -651,14 +657,14 @@ class LibraryAuthenticator(LoggerMixin):
         """Create the Authentication For OPDS document to be used when
         a request comes in with no authentication.
         """
-        links: list[dict[str, str | None]] = []
+        links: list[Link] = []
         if self.library is None:
             raise ValueError("No library specified!")
 
         # Add the same links that we would show in an OPDS feed.
         if self.library.settings.terms_of_service:
             links.append(
-                dict(
+                Link(
                     rel="terms-of-service",
                     href=self.library.settings.terms_of_service,
                     type="text/html",
@@ -667,7 +673,7 @@ class LibraryAuthenticator(LoggerMixin):
 
         if self.library.settings.privacy_policy:
             links.append(
-                dict(
+                Link(
                     rel="privacy-policy",
                     href=self.library.settings.privacy_policy,
                     type="text/html",
@@ -676,7 +682,7 @@ class LibraryAuthenticator(LoggerMixin):
 
         if self.library.settings.copyright:
             links.append(
-                dict(
+                Link(
                     rel="copyright",
                     href=self.library.settings.copyright,
                     type="text/html",
@@ -685,7 +691,7 @@ class LibraryAuthenticator(LoggerMixin):
 
         if self.library.settings.about:
             links.append(
-                dict(
+                Link(
                     rel="about",
                     href=self.library.settings.about,
                     type="text/html",
@@ -694,7 +700,7 @@ class LibraryAuthenticator(LoggerMixin):
 
         if self.library.settings.license:
             links.append(
-                dict(
+                Link(
                     rel="license",
                     href=self.library.settings.license,
                     type="text/html",
@@ -704,7 +710,7 @@ class LibraryAuthenticator(LoggerMixin):
         # Plus some extra like 'registration' that are specific to Authentication For OPDS.
         if self.library.settings.registration_url:
             links.append(
-                dict(
+                Link(
                     rel="register",
                     href=self.library.settings.registration_url,
                     type="text/html",
@@ -713,7 +719,7 @@ class LibraryAuthenticator(LoggerMixin):
 
         if self.library.settings.patron_password_reset:
             links.append(
-                dict(
+                Link(
                     rel="http://librarysimplified.org/terms/rel/patron-password-reset",
                     href=self.library.settings.patron_password_reset,
                     type="text/html",
@@ -732,17 +738,17 @@ class LibraryAuthenticator(LoggerMixin):
         )
 
         links.append(
-            dict(rel="start", href=index_url, type=OPDSFeed.ACQUISITION_FEED_TYPE)
+            Link(rel="start", href=index_url, type=OPDSFeed.ACQUISITION_FEED_TYPE)
         )
         links.append(
-            dict(
+            Link(
                 rel="http://opds-spec.org/shelf",
                 href=loans_url,
                 type=OPDSFeed.ACQUISITION_FEED_TYPE,
             )
         )
         links.append(
-            dict(
+            Link(
                 rel=ProfileController.LINK_RELATION,
                 href=profile_url,
                 type=ProfileController.MEDIA_TYPE,
@@ -756,7 +762,7 @@ class LibraryAuthenticator(LoggerMixin):
                 library_short_name=self.library_short_name,
             )
             links.append(
-                dict(
+                Link(
                     rel="http://palaceproject.io/terms/rel/delete-adobe-id",
                     href=adobe_id_delete_url,
                     type=MediaTypes.APPLICATION_JSON_MEDIA_TYPE,
@@ -770,7 +776,7 @@ class LibraryAuthenticator(LoggerMixin):
         )
         if designated_agent_uri:
             links.append(
-                dict(
+                Link(
                     rel="http://librarysimplified.org/rel/designated-agent/copyright",
                     href=designated_agent_uri,
                 )
@@ -779,98 +785,95 @@ class LibraryAuthenticator(LoggerMixin):
         # Add a rel="help" link for every type of URL scheme that
         # leads to library-specific help.
         for type, uri in Configuration.help_uris(self.library):
-            links.append(dict(rel="help", href=uri, type=type))
+            links.append(Link(rel="help", href=uri, type=type))
 
         # Add a link to the web page of the library itself.
         library_uri = self.library.settings.website
         if library_uri:
-            links.append(dict(rel="alternate", type="text/html", href=library_uri))
+            links.append(Link(rel="alternate", type="text/html", href=library_uri))
 
         # Add the library's logo, if it has one.
-        if self.library and self.library.logo:
+        if self.library.logo:
             links.append(
-                dict(rel="logo", type="image/png", href=self.library.logo.data_url)
+                Link(rel="logo", type="image/png", href=self.library.logo.data_url)
             )
 
         # Add the library's custom CSS file, if it has one.
         css_file = self.library.settings.web_css_file
         if css_file:
-            links.append(dict(rel="stylesheet", type="text/css", href=css_file))
+            links.append(Link(rel="stylesheet", type="text/css", href=css_file))
 
         library_name = self.library_name or str(_("Library"))
         auth_doc_url = self.authentication_document_url()
-        doc = AuthenticationForOPDSDocument(
-            id=auth_doc_url,
-            title=library_name,
-            authentication_flows=list(self.providers),
-            links=links,
-        ).to_dict(self._db)
 
-        # Add the library's mobile color scheme, if it has one.
-        color_scheme = self.library.settings.color_scheme
-        if color_scheme:
-            doc["color_scheme"] = color_scheme
-
-        # Add the library's web colors, if it has any.
+        # The library's web colors. Both have non-empty defaults, so the
+        # scheme is virtually always present.
         primary = self.library.settings.web_primary_color
         secondary = self.library.settings.web_secondary_color
-        if primary or secondary:
-            doc["web_color_scheme"] = dict(
+        web_color_scheme = (
+            palace.WebColorScheme(
                 primary=primary,
                 secondary=secondary,
                 background=primary,
                 foreground=secondary,
             )
+            if (primary or secondary)
+            else None
+        )
 
-        # Add the description of the library as the OPDS feed's
-        # service_description.
-        description = self.library.settings.library_description
-        if description:
-            doc["service_description"] = description
-
-        # Add the library's public key.
-        if self.library and self.library.public_key:
-            doc["public_key"] = dict(type="RSA", value=self.library.public_key)
+        # The library's public key, used to encrypt data sent to the server.
+        if self.library.public_key:
+            public_key = palace.PublicKey(value=self.library.public_key)
         else:
-            error_library = (
-                self.library.short_name
-                if self.library
-                else f'Library ID "{self.library_id}"'
-            )
+            public_key = None
             self.log.error(
-                f"{error_library} has no public key to include in auth document."
+                f"{self.library.short_name} has no public key to include in auth document."
             )
 
-        # Add feature flags to signal to clients what features they should
-        # offer.
+        # Feature flags signal to clients what features they should offer.
         enabled: list[str] = []
         disabled: list[str] = []
-        if self.library and self.library.settings.allow_holds:
-            bucket = enabled
-        else:
-            bucket = disabled
+        bucket = enabled if self.library.settings.allow_holds else disabled
         bucket.append(Configuration.RESERVATIONS_FEATURE)
-        doc["features"] = dict(enabled=enabled, disabled=disabled)
 
-        # Add any active announcements for the library.
-        if self.library:
-            doc["announcements"] = Announcement.authentication_document_announcements(
-                self.library
-            )
+        document = PalaceAuthenticationDocument(
+            id=auth_doc_url,
+            title=library_name,
+            authentication=[
+                provider.authentication_flow_document(self._db)
+                for provider in self.providers
+            ],
+            links=links,
+            # The library's mobile color scheme, if it has one.
+            color_scheme=self.library.settings.color_scheme or None,
+            web_color_scheme=web_color_scheme,
+            # The library description, served as the document's service description.
+            service_description=self.library.settings.library_description or None,
+            public_key=public_key,
+            features=palace.Features(enabled=enabled, disabled=disabled),
+            announcements=tuple(
+                palace.AnnouncementDocument(
+                    id=announcement["id"], content=announcement["content"]
+                )
+                for announcement in Announcement.authentication_document_announcements(
+                    self.library
+                )
+            ),
+        )
 
-        return json.dumps(doc)
+        return json.dumps(document.serialize())
 
     def create_authentication_headers(self) -> Headers:
         """Create the HTTP headers to return with the OPDS
         authentication document."""
         headers = Headers()
-        headers.add("Content-Type", AuthenticationForOPDSDocument.MEDIA_TYPE)
+        headers.add("Content-Type", AUTH_DOCUMENT_MEDIA_TYPE)
         headers.add(
             "Link",
             "<%s>; rel=%s"
             % (
                 self.authentication_document_url(),
-                AuthenticationForOPDSDocument.LINK_RELATION,
+                AUTH_DOCUMENT_REL,
             ),
         )
         # if requested from a web client, don't include WWW-Authenticate header,

@@ -11,7 +11,7 @@ from unittest.mock import MagicMock
 import pytest
 from freezegun import freeze_time
 
-from palace.opds.authentication import AuthenticationDocument
+from palace.opds.authentication.document import AuthenticationDocument
 from palace.opds.opds2 import (
     FeedMetadata,
     Link,
