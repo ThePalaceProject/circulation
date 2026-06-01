@@ -307,7 +307,7 @@ def _fetch_distinct_eligible_data_source_names(
     Fetches a sorted list of distinct data source names for which to produce a playtime report.
 
     Only OPDS 2.0 and OPDS for Distributors collections that have the
-    ``is_generate_playtime_report`` setting explicitly set to ``True`` are included.
+    ``generate_playtime_report`` setting explicitly set to ``True`` are included.
     All other collections are ignored.
 
     :param session: The SQLAlchemy database session.
@@ -333,12 +333,12 @@ def _fetch_distinct_eligible_data_source_names(
     )
     eligible_collections = session.scalars(eligible_collections_query).all()
 
-    # Only include collections that have opted in via the is_generate_playtime_report flag.
+    # Only include collections that have opted in via the generate_playtime_report flag.
     # c.integration_configuration is guaranteed non-null by the query filter above.
     collection_ds_names = {
         c.data_source.name
         for c in eligible_collections
-        if c.integration_configuration.settings_dict.get("is_generate_playtime_report")
+        if c.integration_configuration.settings_dict.get("generate_playtime_report")
         is True
         and c.data_source
         and c.data_source.name is not None

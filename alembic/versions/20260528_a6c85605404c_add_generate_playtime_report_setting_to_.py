@@ -1,6 +1,6 @@
-"""Add is_generate_playtime_report setting to Blackstone collections
+"""Add generate_playtime_report setting to Blackstone collections
 
-Enable the is_generate_playtime_report flag for all OPDS 2.0 Import and
+Enable the generate_playtime_report flag for all OPDS 2.0 Import and
 OPDS for Distributors collections whose data_source name begins with
 "Blackstone" or "Unlimited". All other collections default to False
 (the Pydantic field default), so no update is required for them.
@@ -52,7 +52,7 @@ def upgrade() -> None:
 
     rows = list(results)
     for integration_id, name, settings_dict in rows:
-        settings_dict["is_generate_playtime_report"] = True
+        settings_dict["generate_playtime_report"] = True
         conn.execute(
             sa.text(
                 """
@@ -67,10 +67,10 @@ def upgrade() -> None:
             },
         )
         log.info(
-            f"Enabled is_generate_playtime_report for integration {name!r} (id={integration_id})"
+            f"Enabled generate_playtime_report for integration {name!r} (id={integration_id})"
         )
 
-    log.info(f"Enabled is_generate_playtime_report on {len(rows)} collection(s)")
+    log.info(f"Enabled generate_playtime_report on {len(rows)} collection(s)")
 
 
 def downgrade() -> None:
@@ -81,14 +81,14 @@ def downgrade() -> None:
         sa.text(
             """
             UPDATE integration_configurations
-            SET settings = settings - 'is_generate_playtime_report'
+            SET settings = settings - 'generate_playtime_report'
             WHERE goal = 'LICENSE_GOAL'
               AND protocol IN :protocols
-              AND settings ? 'is_generate_playtime_report'
+              AND settings ? 'generate_playtime_report'
             """
         ).bindparams(bindparam("protocols", expanding=True)),
         {"protocols": list(_ELIGIBLE_PROTOCOLS)},
     )
     log.info(
-        f"Removed is_generate_playtime_report from {result.rowcount} integration configuration(s)"
+        f"Removed generate_playtime_report from {result.rowcount} integration configuration(s)"
     )

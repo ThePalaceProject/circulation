@@ -12,14 +12,14 @@ from palace.manager.integration.settings import (
 
 
 class PlaytimeReportSettings(BaseSettings):
-    """Mixin that adds the is_generate_playtime_report opt-in flag.
+    """Mixin that adds the generate_playtime_report opt-in flag.
 
     Intended for OPDS 2.0 and OPDS for Distributors collections only.
     When True the collection's data source is included in the monthly
     playtime report uploaded to Google Drive.
     """
 
-    is_generate_playtime_report: Annotated[
+    generate_playtime_report: Annotated[
         bool,
         FormMetadata(
             label=_("Generate playtime report for audio books"),
