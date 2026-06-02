@@ -71,9 +71,7 @@ class DirtyIdentifierIds(LoggerMixin):
         total = 0
         for partition in session.execute(query).partitions():
             ids = [str(row.identifier_id) for row in partition]
-            with self._client.pipeline() as pipe:
-                pipe.sadd(self._key, *ids)
-                pipe.execute()
+            self._client.sadd(self._key, *ids)
             total += len(ids)
 
         return total
