@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, call, patch
 from uuid import UUID, uuid4
@@ -1090,6 +1091,65 @@ class TestImportPurchaseRecordsByCollection:
 
         replace_sig = mock_replace.call_args[0][0]
         assert replace_sig.kwargs.get("reset_timestamp") is not True
+
+    def test_chain_runs_through_multiple_days_end_to_end(
+        self,
+        bibliotheca_purchase_record_task_fixture: BibliothecaPurchaseRecordTaskFixture,
+        celery_fixture: CeleryFixture,
+        redis_fixture: RedisFixture,
+    ) -> None:
+        """The replace chain actually processes multiple days without mocking task.replace().
+
+        Three days of backlog with empty pages forces at least 3 marc_request calls
+        and the Timestamp advancing at least 3 days past the stored finish, verifying
+        that the chain continuation logic (not just the first invocation) is wired
+        up correctly end-to-end.
+        """
+        collection = bibliotheca_purchase_record_task_fixture.collection
+        db = bibliotheca_purchase_record_task_fixture.db
+
+        stored_finish = utc_now() - timedelta(days=3)
+        bibliotheca_purchase_record_task_fixture.stamp_purchase_record(
+            finish=stored_finish
+        )
+
+        with patch(
+            "palace.manager.integration.license.bibliotheca_purchase_record_importer.BibliothecaAPI"
+        ) as mock_api_cls:
+            # Return a fresh empty iterator on every call so each day's page
+            # returns 0 records (day_complete=True, no pagination within a day).
+            mock_api_cls.return_value.marc_request.side_effect = lambda *a, **kw: iter(
+                []
+            )
+
+            # Start the chain. wait() only blocks until the *first* task finishes;
+            # replacement tasks are queued and picked up by the worker asynchronously.
+            bibliotheca.import_purchase_records_by_collection.delay(
+                collection_id=collection.id
+            ).wait()
+
+            # Poll until the Timestamp has advanced at least 3 days past the stored
+            # finish, or we hit the 10-second timeout.
+            deadline = utc_now() + timedelta(seconds=10)
+            while utc_now() < deadline:
+                db.session.expire_all()
+                ts = (
+                    bibliotheca_purchase_record_task_fixture.get_purchase_record_timestamp()
+                )
+                if (
+                    ts is not None
+                    and ts.finish is not None
+                    and ts.finish >= stored_finish + timedelta(days=3)
+                ):
+                    break
+                time.sleep(0.1)
+
+        ts = bibliotheca_purchase_record_task_fixture.get_purchase_record_timestamp()
+        assert ts is not None
+        assert ts.finish is not None
+        assert ts.finish >= stored_finish + timedelta(days=3)
+        # At least one marc_request call per day of backlog.
+        assert mock_api_cls.return_value.marc_request.call_count >= 3
 
     def test_stops_chain_gracefully_when_collection_deleted(
         self,
