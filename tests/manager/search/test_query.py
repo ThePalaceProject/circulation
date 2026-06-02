@@ -1,4 +1,5 @@
 import json
+import logging
 import uuid
 from collections.abc import Callable
 from datetime import datetime
@@ -65,7 +66,9 @@ class TestQuery:
         assert False == query.contains_stopwords
         assert 0 == query.fuzzy_coefficient
 
-    def test_constructor_caps_query_length(self):
+    def test_constructor_caps_query_length(self, caplog: pytest.LogCaptureFixture):
+        caplog.set_level(logging.WARNING)
+
         # A pathologically long query string (e.g. a patron pasting a
         # block of text into the search box) is truncated to
         # MAX_QUERY_WORDS so it can't exhaust OpenSearch search heap.
@@ -74,11 +77,19 @@ class TestQuery:
         assert Query.MAX_QUERY_WORDS == len(query.words)
         assert Query.MAX_QUERY_WORDS == len(query.query_string.split())
 
-        # A query at or below the limit is left untouched.
+        # Truncation is logged so it's visible in production.
+        assert len(caplog.records) == 1
+        assert caplog.records[0].levelname == "WARNING"
+        assert "Truncating search query" in caplog.records[0].message
+
+        # A query at or below the limit is left untouched, and nothing
+        # is logged.
+        caplog.clear()
         short_query = " ".join(f"word{i}" for i in range(Query.MAX_QUERY_WORDS))
         query = Query(short_query)
         assert short_query == query.query_string
         assert Query.MAX_QUERY_WORDS == len(query.words)
+        assert len(caplog.records) == 0
 
     def test_build(self, db: DatabaseTransactionFixture):
         # Verify that the build() method combines the 'query' part of

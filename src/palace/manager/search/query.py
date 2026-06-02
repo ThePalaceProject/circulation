@@ -22,6 +22,7 @@ from opensearchpy.helpers.query import (
 from spellchecker import SpellChecker
 
 from palace.util.exceptions import BasePalaceException
+from palace.util.log import LoggerMixin
 
 from palace.manager.core.classifier.age import AgeClassifier, GradeLevelClassifier
 from palace.manager.core.classifier.keyword import KeywordBasedClassifier
@@ -41,7 +42,7 @@ from palace.manager.util.personal_names import display_name_to_sort_name
 from palace.manager.util.stopwords import ENGLISH_STOPWORDS
 
 
-class Query:
+class Query(LoggerMixin):
     """An attempt to find something in the search index."""
 
     # This dictionary establishes the relative importance of the
@@ -169,6 +170,10 @@ class Query:
         # a pasted block of text from exhausting OpenSearch search heap.
         self.words = self.query_string.split()
         if len(self.words) > self.MAX_QUERY_WORDS:
+            self.log.warning(
+                f"Truncating search query from {len(self.words)} to "
+                f"{self.MAX_QUERY_WORDS} words to protect OpenSearch heap."
+            )
             self.words = self.words[: self.MAX_QUERY_WORDS]
             self.query_string = " ".join(self.words)
 
