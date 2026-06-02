@@ -311,7 +311,9 @@ def beat_schedule() -> dict[str, Any]:
         },
         "equivalent_identifiers_refresh": {
             "task": equivalents.equivalent_identifiers_refresh.name,
-            "schedule": crontab(hour="3", minute="30"),  # Daily at 3:30 AM
+            "schedule": crontab(
+                hour="3", minute="30", day_of_week="1-6"
+            ),  # Mon–Sat at 3:30 AM (Sunday is covered by the full refresh below)
         },
         "equivalent_identifiers_full_refresh": {
             "task": equivalents.equivalent_identifiers_refresh.name,
