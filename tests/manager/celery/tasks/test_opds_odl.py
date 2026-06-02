@@ -18,6 +18,7 @@ from palace.util import datetime_helpers
 from palace.util.datetime_helpers import utc_now
 from palace.util.log import LogLevel
 
+from palace.manager.celery.importer import import_workflow_lock
 from palace.manager.celery.tasks import apply, opds_odl
 from palace.manager.celery.tasks.opds_odl import (
     _licensepool_ids_with_holds,
@@ -61,6 +62,7 @@ from palace.manager.sqlalchemy.model.patron import Hold, Patron
 from palace.manager.sqlalchemy.model.resource import Hyperlink
 from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.sqlalchemy.util import create
+from palace.manager.util.http.exception import RequestTimedOut
 from tests.fixtures.celery import ApplyTaskFixture, CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import OPDS2WithODLFilesFixture
@@ -710,6 +712,129 @@ class TestImportCollection:
                 ),
             ]
         )
+
+    def test_skipped_when_already_running(
+        self,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        redis_fixture: RedisFixture,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """When the workflow lock is already held (another import is in progress),
+        the task logs a warning and returns without importing anything."""
+        collection = db.collection(
+            protocol=OPDS2WithODLApi,
+            settings=db.opds2_odl_settings(external_account_id="http://feed.com"),
+        )
+
+        existing_lock_value = str(uuid.uuid4())
+        workflow_lock = import_workflow_lock(
+            redis_fixture.client, collection.id, existing_lock_value
+        )
+        workflow_lock.acquire()
+
+        caplog.set_level(LogLevel.warning)
+
+        mock_importer = create_autospec(OpdsImporter)
+        with patch.object(
+            opds_odl,
+            "importer_from_collection",
+            autospec=True,
+            return_value=mock_importer,
+        ):
+            opds_odl.import_collection.delay(collection.id).wait()
+
+        mock_importer.import_feed.assert_not_called()
+        assert "skipped" in caplog.text
+        assert "already in progress" in caplog.text
+
+        workflow_lock.release()
+
+    def test_continues_with_warning_when_lock_expires_mid_chain(
+        self,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        redis_fixture: RedisFixture,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """When the workflow lock expires between pages (is_first_page is False and
+        the lock cannot be acquired), the task logs a warning but still processes the
+        page rather than silently returning."""
+        collection = db.collection(
+            protocol=OPDS2WithODLApi,
+            settings=db.opds2_odl_settings(external_account_id="http://feed.com"),
+        )
+
+        # Simulate the lock having been re-acquired by a competing run. A free lock
+        # would be acquired successfully; we need another holder so that our task's
+        # lock_value (a different UUID) fails to acquire.
+        competing_lock = import_workflow_lock(
+            redis_fixture.client, collection.id, str(uuid.uuid4())
+        )
+        competing_lock.acquire()
+
+        caplog.set_level(LogLevel.warning)
+
+        mock_importer = create_autospec(OpdsImporter)
+        mock_importer.import_feed.return_value = FeedImportResult(
+            next_url=None,
+            feed=MagicMock(),
+            results={},
+            failures=[],
+            identifier_set=None,
+        )
+        with patch.object(
+            opds_odl,
+            "importer_from_collection",
+            autospec=True,
+            return_value=mock_importer,
+        ):
+            # Pass a lock_value that does not match the competing lock so acquire
+            # fails, but is_first_page is False (lock_value is not None).
+            opds_odl.import_collection.delay(
+                collection.id, lock_value=str(uuid.uuid4())
+            ).wait()
+
+        # Despite the lock not being acquired, the page was still processed.
+        mock_importer.import_feed.assert_called_once()
+        assert "workflow lock expired between pages" in caplog.text
+
+        competing_lock.release()
+
+    def test_lock_not_released_on_autoretry(
+        self,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        redis_fixture: RedisFixture,
+    ) -> None:
+        """When a retryable exception is raised the workflow lock is held so that a
+        concurrent run cannot start on the same collection while retries are in
+        progress."""
+        collection = db.collection(
+            protocol=OPDS2WithODLApi,
+            settings=db.opds2_odl_settings(external_account_id="http://feed.com"),
+        )
+
+        mock_importer = create_autospec(OpdsImporter)
+        mock_importer.import_feed.side_effect = RequestTimedOut(
+            "http://feed.com", "Request timed out"
+        )
+
+        with patch.object(
+            opds_odl,
+            "importer_from_collection",
+            autospec=True,
+            return_value=mock_importer,
+        ):
+            with celery_fixture.patch_retry_backoff():
+                opds_odl.import_collection.delay(collection.id).get(propagate=False)
+
+        # Lock should still be held after retries exhaust — it will expire via the
+        # Redis TTL, preventing a concurrent run from starting in the meantime.
+        workflow_lock = import_workflow_lock(
+            redis_fixture.client, collection.id, random_value="any"
+        )
+        assert workflow_lock.locked()
 
     def test_wrong_protocol(
         self,
