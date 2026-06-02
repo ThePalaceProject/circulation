@@ -26,7 +26,7 @@ from palace.util.datetime_helpers import utc_now
 
 from palace.manager.celery.importer import import_workflow_lock
 from palace.manager.celery.task import Task
-from palace.manager.celery.utils import load_from_id, signature_with
+from palace.manager.celery.utils import ModelNotFoundError, load_from_id, signature_with
 from palace.manager.integration.license.bibliotheca import BibliothecaAPI
 from palace.manager.integration.license.bibliotheca_importer import (
     EVENT_IMPORT_OVERLAP,
@@ -299,7 +299,14 @@ def import_purchase_records_by_collection(
         collection_name: str | None = None
 
         with task.transaction() as session:
-            collection = load_from_id(session, Collection, collection_id)
+            try:
+                collection = load_from_id(session, Collection, collection_id)
+            except ModelNotFoundError:
+                task.log.warning(
+                    f"Bibliotheca purchase record import: collection {collection_id} not "
+                    "found; it may have been deleted. Stopping chain."
+                )
+                return
             collection_name = collection.name
             importer = BibliothecaPurchaseRecordImporter(session, collection)
 

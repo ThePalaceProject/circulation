@@ -1091,6 +1091,36 @@ class TestImportPurchaseRecordsByCollection:
         replace_sig = mock_replace.call_args[0][0]
         assert replace_sig.kwargs.get("reset_timestamp") is not True
 
+    def test_stops_chain_gracefully_when_collection_deleted(
+        self,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        redis_fixture: RedisFixture,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """When the collection is deleted between chain invocations, the task logs a
+        warning and returns without raising, stopping the chain cleanly."""
+        collection = MockBibliothecaAPI.mock_collection(
+            db.session, db.default_library()
+        )
+        collection_id = collection.id
+
+        # Delete the collection so load_from_id will raise ModelNotFoundError.
+        db.session.delete(collection)
+        db.session.commit()
+
+        caplog.set_level(LogLevel.warning)
+
+        # Pass a non-None lock_value to simulate a mid-chain invocation (not first).
+        bibliotheca.import_purchase_records_by_collection.delay(
+            collection_id=collection_id,
+            lock_value=str(uuid4()),
+        ).wait()
+
+        assert "not found" in caplog.text
+        assert "deleted" in caplog.text
+        assert str(collection_id) in caplog.text
+
     def test_purchase_record_lock_independent_from_import_lock(
         self,
         db: DatabaseTransactionFixture,
