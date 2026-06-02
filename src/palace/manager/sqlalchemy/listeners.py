@@ -1,17 +1,21 @@
 from __future__ import annotations
 
 import datetime
+import logging
 from threading import RLock
 from typing import Any
 
-from sqlalchemy import event, text
+log = logging.getLogger(__name__)
+
+from sqlalchemy import event, select, text
 from sqlalchemy.engine import Connection
 from sqlalchemy.orm import Mapper, Session
 
 from palace.util.datetime_helpers import utc_now
 
 from palace.manager.core.config import Configuration
-from palace.manager.core.query.coverage import EquivalencyCoverageQueries
+from palace.manager.service.container import container_instance
+from palace.manager.service.redis.models.dirty_identifiers import DirtyIdentifierIds
 from palace.manager.sqlalchemy.before_flush_decorator import Listener, ListenerState
 from palace.manager.sqlalchemy.model.base import Base
 from palace.manager.sqlalchemy.model.identifier import (
@@ -183,12 +187,47 @@ def last_update_time_change(target, value, oldvalue, initator):
 def equivalency_coverage_reset_on_equivalency_delete(
     session: Session, target: Equivalency
 ) -> None:
-    """On equivalency delete reset the coverage records of ANY ids touching
-    the deleted identifiers
+    """On equivalency delete, mark all identifier chains touching the deleted
+    identifiers as dirty so they will be recomputed by the next Celery task run.
+
+    Redis unavailability is non-fatal — any missed dirty IDs will be recovered
+    by the next scheduled full-refresh run.
     """
-    EquivalencyCoverageQueries.add_coverage_for_identifiers_chain(
-        [target.input, target.output], _db=session
-    )
+    try:
+        parent_ids = (
+            session.execute(
+                select(RecursiveEquivalencyCache.parent_identifier_id).where(
+                    RecursiveEquivalencyCache.identifier_id.in_(
+                        [target.input_id, target.output_id]
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        DirtyIdentifierIds(container_instance().redis().client()).add(
+            target.input_id, target.output_id, *parent_ids
+        )
+    except Exception as e:
+        log.warning(f"Failed to mark dirty identifiers on equivalency delete: {e}")
+
+
+@Listener.before_flush(Equivalency, ListenerState.new)
+def equivalency_coverage_reset_on_equivalency_create(
+    session: Session, target: Equivalency
+) -> None:
+    """On equivalency create, mark the two linked identifiers as dirty so their
+    chains will be recomputed by the next Celery task run.
+
+    Redis unavailability is non-fatal — any missed dirty IDs will be recovered
+    by the next scheduled full-refresh run.
+    """
+    try:
+        DirtyIdentifierIds(container_instance().redis().client()).add(
+            target.input_id, target.output_id
+        )
+    except Exception as e:
+        log.warning(f"Failed to mark dirty identifiers on equivalency create: {e}")
 
 
 @Listener.before_flush(Identifier, ListenerState.new)

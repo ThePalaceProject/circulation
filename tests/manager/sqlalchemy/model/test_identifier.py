@@ -5,9 +5,6 @@ from unittest.mock import MagicMock, PropertyMock, create_autospec, patch
 import pytest
 from bidict import frozenbidict
 
-from palace.manager.core.equivalents_coverage import (
-    EquivalentIdentifiersCoverageProvider,
-)
 from palace.manager.data_layer.policy.presentation import (
     PresentationCalculationPolicy,
 )
@@ -22,11 +19,9 @@ from palace.manager.sqlalchemy.model.identifier import (
     isbn_for_identifier,
 )
 from palace.manager.sqlalchemy.model.resource import Hyperlink
+from palace.manager.sqlalchemy.refresh_equivalents import refresh_equivalent_identifiers
 from palace.manager.sqlalchemy.util import create
 from tests.fixtures.database import DatabaseTransactionFixture
-from tests.manager.sqlalchemy.model.test_coverage import (
-    ExampleEquivalencyCoverageRecordFixture,
-)
 
 
 class TestIdentifier:
@@ -738,46 +733,33 @@ class TestIdentifier:
         )
 
 
-@pytest.fixture()
-def example_equivalency_coverage_record_fixture(
-    db,
-) -> ExampleEquivalencyCoverageRecordFixture:
-    return ExampleEquivalencyCoverageRecordFixture(db)
-
-
 class TestRecursiveEquivalencyCache:
-    def test_is_parent(
-        self,
-        example_equivalency_coverage_record_fixture: ExampleEquivalencyCoverageRecordFixture,
-    ):
-        data = example_equivalency_coverage_record_fixture
-        session = data.transaction.session
+    def test_is_parent(self, db: DatabaseTransactionFixture) -> None:
+        identifier = db.identifier()
+        db.session.flush()
 
         rec_eq = (
-            session.query(RecursiveEquivalencyCache)
-            .filter(
-                RecursiveEquivalencyCache.parent_identifier_id == data.identifiers[0].id
-            )
+            db.session.query(RecursiveEquivalencyCache)
+            .filter(RecursiveEquivalencyCache.parent_identifier_id == identifier.id)
             .first()
         )
         assert isinstance(rec_eq, RecursiveEquivalencyCache)
         assert rec_eq.is_parent == True
 
     def test_identifier_delete_cascade_parent(
-        self,
-        example_equivalency_coverage_record_fixture: ExampleEquivalencyCoverageRecordFixture,
-    ):
-        data = example_equivalency_coverage_record_fixture
-        session = data.transaction.session
+        self, db: DatabaseTransactionFixture
+    ) -> None:
+        identifiers = [db.identifier() for _ in range(4)]
+        db.session.commit()
 
-        all_recursives = session.query(RecursiveEquivalencyCache).all()
+        all_recursives = db.session.query(RecursiveEquivalencyCache).all()
         assert len(all_recursives) == 4  # all selfs
 
-        session.delete(data.identifiers[0])
-        session.commit()
+        db.session.delete(identifiers[0])
+        db.session.commit()
 
-        # RecursiveEquivalencyCache was deleted by cascade
-        all_recursives = session.query(RecursiveEquivalencyCache).all()
+        # RecursiveEquivalencyCache rows cascade-deleted with the identifier.
+        all_recursives = db.session.query(RecursiveEquivalencyCache).all()
         assert len(all_recursives) == 3
 
     def test_equivalent_identifiers(self, db: DatabaseTransactionFixture) -> None:
@@ -826,7 +808,7 @@ class TestRecursiveEquivalencyCache:
         )
 
         # We're using the RecursiveEquivalencyCache, so must refresh it.
-        EquivalentIdentifiersCoverageProvider(db.session).run()
+        refresh_equivalent_identifiers(db.session)
 
         # Calling with only identifiers of the specified type doesn't do a query,
         # it just returns the identifiers
@@ -934,7 +916,7 @@ class TestRecursiveEquivalencyCache:
             test_identifier.equivalencies = equivalencies
 
         # We're using the RecursiveEquivalencyCache, so must refresh it.
-        EquivalentIdentifiersCoverageProvider(db.session).run()
+        refresh_equivalent_identifiers(db.session)
 
         # Act
         result = isbn_for_identifier(test_identifier)

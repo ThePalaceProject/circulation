@@ -20,9 +20,6 @@ from palace.manager.celery.tasks.playtime_entries import (
     sum_playtime_entries,
 )
 from palace.manager.core.config import Configuration
-from palace.manager.core.equivalents_coverage import (
-    EquivalentIdentifiersCoverageProvider,
-)
 from palace.manager.integration.license.bibliotheca import BibliothecaAPI
 from palace.manager.integration.license.opds.for_distributors.api import (
     OPDSForDistributorsAPI,
@@ -38,6 +35,7 @@ from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.identifier import Equivalency, Identifier
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.time_tracking import PlaytimeEntry, PlaytimeSummary
+from palace.manager.sqlalchemy.refresh_equivalents import refresh_equivalent_identifiers
 from tests.fixtures.celery import CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.redis import RedisFixture
@@ -646,7 +644,7 @@ class TestGeneratePlaytimeReport:
         no_isbn = ""
 
         # We're using the RecursiveEquivalencyCache, so must refresh it.
-        EquivalentIdentifiersCoverageProvider(db.session).run()
+        refresh_equivalent_identifiers(db.session)
 
         # one month + 3 days ago : in scope
         playtime(
