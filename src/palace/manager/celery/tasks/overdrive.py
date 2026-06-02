@@ -16,7 +16,7 @@ from palace.manager.celery.importer import (
 )
 from palace.manager.celery.task import Task
 from palace.manager.celery.tasks import apply
-from palace.manager.celery.utils import load_from_id
+from palace.manager.celery.utils import load_from_id, signature_with
 from palace.manager.integration.license.overdrive.api import (
     BookInfoEndpoint,
     OverdriveAPI,
@@ -215,12 +215,13 @@ def import_collection(
                 parent_identifier_set.__json__() if parent_identifier_set else None
             )
             raise task.replace(
-                task.s(
-                    collection_id=collection_id,
-                    import_all=import_all,
+                signature_with(
+                    task,
                     parent_identifiers=serialized_parent_identifiers,
-                    return_identifiers=return_identifiers,
                     page=result.next_page.url,
+                    # modified_since, start_time, and lock_value are resolved from
+                    # None on the first page, so they must be carried forward
+                    # explicitly rather than refilled from the original arguments.
                     modified_since=modified_since,
                     start_time=start_time,
                     lock_value=lock_value,
@@ -604,10 +605,11 @@ def reap_collection(
 
         if processed_count == batch_size:
             raise task.replace(
-                task.s(
-                    collection_id=collection_id,
+                signature_with(
+                    task,
                     offset=new_offset,
-                    batch_size=batch_size,
+                    # lock_value is resolved from None on the first batch, so it
+                    # must be carried forward explicitly rather than refilled.
                     lock_value=lock_value,
                 )
             )

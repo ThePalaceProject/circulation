@@ -14,6 +14,7 @@ from palace.util.exceptions import BasePalaceException
 from palace.util.log import elapsed_time_logging
 
 from palace.manager.celery.task import Task
+from palace.manager.celery.utils import signature_with
 from palace.manager.search.external_search import ExternalSearchIndex
 from palace.manager.service.celery.celery import QueueNames
 from palace.manager.service.redis.models.lock import TaskLock
@@ -96,9 +97,7 @@ def search_reindex(task: Task, offset: int = 0, batch_size: int = 500) -> None:
             # when this task is running in parallel on multiple workers.
             delay = random.uniform(5, 15)
             raise task.replace(
-                search_reindex.s(offset=offset + batch_size, batch_size=batch_size).set(
-                    countdown=delay
-                )
+                signature_with(task, offset=offset + batch_size).set(countdown=delay)
             )
 
     task.log.info("Finished search reindex.")
@@ -144,7 +143,7 @@ def search_indexing(task: Task, batch_size: int = 500) -> None:
     if len(works) == batch_size:
         # This task is complete, but there are more works waiting to be indexed. Requeue ourselves
         # to process the next batch.
-        raise task.replace(search_indexing.s(batch_size=batch_size))
+        raise task.replace(signature_with(task))
 
     task.log.info(f"Finished queuing indexing tasks.")
     return

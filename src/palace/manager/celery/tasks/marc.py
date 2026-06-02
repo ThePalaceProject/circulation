@@ -7,6 +7,7 @@ from celery import shared_task
 from palace.util.datetime_helpers import utc_now
 
 from palace.manager.celery.task import Task
+from palace.manager.celery.utils import signature_with
 from palace.manager.integration.catalog.marc.exporter import LibraryInfo, MarcExporter
 from palace.manager.integration.catalog.marc.uploader import (
     MarcUploadManager,
@@ -236,11 +237,8 @@ def marc_export_collection(
     # This task is complete, but there are more works waiting to be exported. So we requeue ourselves
     # to process the next batch.
     raise task.replace(
-        marc_export_collection.s(
-            collection_id=collection_id,
-            collection_name=collection_name,
-            start_time=start_time,
-            libraries=libraries,
+        signature_with(
+            task,
             # We pass context as a list of tuples instead of a dict, because the json serializer
             # converts all dict keys to strings, so we lose the integer keys. We convert it back
             # to a dict on the other side.
@@ -249,9 +247,8 @@ def marc_export_collection(
                 (library.library_id, upload.context)
                 for library, upload in uploads.items()
             ],
+            # last_work_id advances each batch, so carry the updated value forward.
             last_work_id=last_work_id,
-            batch_size=batch_size,
-            delta=delta,
         )
     )
 
