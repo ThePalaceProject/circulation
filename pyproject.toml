@@ -19,7 +19,7 @@ dev = [
     "mypy>=2.1.0,<3",
     "pyfakefs>=6.2.0,<7",
     "pytest-alembic>=0.12.0,<0.13",
-    "pytest-asyncio>=1.1.0,<2",
+    "pytest-asyncio>=1.4.0,<2",
     "pytest-celery>=0.0.0,<0.0.1",
     "pytest-cov>=7.0.0,<8",
     "pytest-timeout",
