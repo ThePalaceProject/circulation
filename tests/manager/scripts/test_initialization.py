@@ -193,7 +193,7 @@ class TestInstanceInitializationScript:
     ):
         service = external_search_fixture.service
         index = external_search_fixture.index
-        client = external_search_fixture.client
+        client = external_search_fixture.write_client
         revision = external_search_fixture.revision
         base_name = service.base_revision_name
 

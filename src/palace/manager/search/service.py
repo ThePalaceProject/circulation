@@ -165,15 +165,28 @@ class SearchService(ABC):
 class SearchServiceOpensearch1(SearchService, LoggerMixin):
     """The real Opensearch 1.x service."""
 
-    def __init__(self, client: OpenSearch, base_revision_name: str):
-        self._client = client
-        self._search = Search(using=self._client)
+    def __init__(
+        self,
+        write_client: OpenSearch,
+        read_client: OpenSearch,
+        base_revision_name: str,
+    ):
+        # Indexing and admin operations use the write client, which keeps the
+        # longer client-wide timeout because they legitimately run longer.
+        self._write_client = write_client
+        # The user-facing read path uses a dedicated client configured with a
+        # short timeout (and timeout retries) so a node that briefly stalls
+        # during OpenSearch maintenance fails over fast. The timeout is a
+        # transport property of the client, so every Search/MultiSearch built
+        # with it inherits it without per-request overrides.
+        self._read_client = read_client
+        self._search = Search(using=self._read_client)
+        self._multi_search = MultiSearch(using=self._read_client)
         self._base_revision_name = base_revision_name
-        self._multi_search = MultiSearch(using=self._client)
 
         # Documents are not allowed to automatically create indexes.
         # AWS OpenSearch only accepts the "flat" format
-        self._client.cluster.put_settings(
+        self._write_client.cluster.put_settings(
             body={"persistent": {"action.auto_create_index": "false"}}
         )
 
@@ -183,7 +196,7 @@ class SearchServiceOpensearch1(SearchService, LoggerMixin):
 
     def _get_pointer(self, name: str) -> SearchPointer | None:
         try:
-            result = self._client.indices.get_alias(name=name)
+            result = self._write_client.indices.get_alias(name=name)
             if len(result) != 1:
                 # This should never happen, based on my understanding of the API.
                 self.log.error(
@@ -212,13 +225,13 @@ class SearchServiceOpensearch1(SearchService, LoggerMixin):
             ]
         }
         self.log.debug(f"setting read pointer {alias_name} to index {target_index}")
-        self._client.indices.update_aliases(body=action)
+        self._write_client.indices.update_aliases(body=action)
 
     def index_create(self, revision: SearchSchemaRevision) -> None:
         try:
             index_name = revision.name_for_index(self.base_revision_name)
             self.log.info(f"creating index {index_name}")
-            self._client.indices.create(
+            self._write_client.indices.create(
                 index=index_name,
                 body=revision.mapping_document().serialize(),
             )
@@ -231,7 +244,7 @@ class SearchServiceOpensearch1(SearchService, LoggerMixin):
         data = {"properties": revision.mapping_document().serialize_properties()}
         index_name = revision.name_for_index(self.base_revision_name)
         self.log.debug(f"setting mappings for index {index_name}")
-        self._client.indices.put_mapping(index=index_name, body=data)
+        self._write_client.indices.put_mapping(index=index_name, body=data)
         self._ensure_scripts(revision)
 
     def _ensure_scripts(self, revision: SearchSchemaRevision) -> None:
@@ -239,13 +252,13 @@ class SearchServiceOpensearch1(SearchService, LoggerMixin):
             script = dict(script=dict(lang="painless", source=body))
             if not name.startswith("simplified"):
                 name = revision.script_name(name)
-            self._client.put_script(id=name, body=script)
+            self._write_client.put_script(id=name, body=script)
 
     def index_submit_document(
         self, document: dict[str, Any], refresh: bool = False
     ) -> None:
         _id = document.pop("_id")
-        self._client.index(
+        self._write_client.index(
             id=_id,
             index=self.write_pointer_name(),
             body=document,
@@ -273,7 +286,7 @@ class SearchServiceOpensearch1(SearchService, LoggerMixin):
         # and a list of documents that failed. Unfortunately, the type checker disagrees and the documentation
         # gives no hint as to what an "int" might mean for errors.
         (success_count, errors) = opensearchpy.helpers.bulk(
-            client=self._client,
+            client=self._write_client,
             actions=documents,
             raise_on_error=False,
             max_retries=3,
@@ -293,7 +306,7 @@ class SearchServiceOpensearch1(SearchService, LoggerMixin):
         return error_results
 
     def index_clear_documents(self) -> None:
-        self._client.delete_by_query(
+        self._write_client.delete_by_query(
             index=self.write_pointer_name(),
             body={"query": {"match_all": {}}},
             wait_for_completion=True,
@@ -301,7 +314,7 @@ class SearchServiceOpensearch1(SearchService, LoggerMixin):
 
     def refresh(self) -> None:
         self.log.debug(f"waiting for indexes to become ready")
-        self._client.indices.refresh()
+        self._write_client.indices.refresh()
 
     def write_pointer_set(self, revision: SearchSchemaRevision) -> None:
         alias_name = self.write_pointer_name()
@@ -313,12 +326,14 @@ class SearchServiceOpensearch1(SearchService, LoggerMixin):
             ]
         }
         self.log.debug(f"setting write pointer {alias_name} to {target_index}")
-        self._client.indices.update_aliases(body=action)
+        self._write_client.indices.update_aliases(body=action)
 
     def read_pointer(self) -> SearchPointer | None:
         return self._get_pointer(self.read_pointer_name())
 
     def read_search_client(self) -> Search:
+        # The read timeout comes from the dedicated read client (see __init__),
+        # so no per-request override is needed here.
         return self._search.index(self.read_pointer_name())  # type: ignore[no-any-return]
         # opensearchpy Search.index() is not properly typed
 
@@ -333,4 +348,4 @@ class SearchServiceOpensearch1(SearchService, LoggerMixin):
         return f"{self.base_revision_name}-search-write"
 
     def index_remove_document(self, doc_id: int) -> None:
-        self._client.delete(index=self.write_pointer_name(), id=doc_id)
+        self._write_client.delete(index=self.write_pointer_name(), id=doc_id)

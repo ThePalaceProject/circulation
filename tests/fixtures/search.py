@@ -27,7 +27,10 @@ from tests.mocks.search import SearchServiceFake
 
 class SearchTestConfiguration(FixtureTestUrlConfiguration):
     url: HttpUrl
-    timeout: int = 20
+    write_timeout: int = 20
+    read_timeout: int = 4
+    read_max_retries: int = 2
+    read_retry_on_timeout: bool = True
     maxsize: int = 25
     model_config = SettingsConfigDict(env_prefix="PALACE_TEST_SEARCH_")
 
@@ -55,7 +58,7 @@ class ExternalSearchFixture(LoggerMixin):
         services.search.override(self.search_container)
 
         self.db = db
-        self.client: OpenSearch = services.search().client()
+        self.write_client: OpenSearch = services.search().write_client()
         self.service: SearchServiceOpensearch1 = services.search().service()
         self.index: ExternalSearchIndex = services.search().index()
         self.revision: SearchSchemaRevision = (
@@ -64,7 +67,7 @@ class ExternalSearchFixture(LoggerMixin):
 
     def close(self):
         # Delete our index prefix
-        self.client.indices.delete(index=f"{self.index_prefix}*")
+        self.write_client.indices.delete(index=f"{self.index_prefix}*")
         return None
 
     def default_work(self, *args, **kwargs):
@@ -125,7 +128,7 @@ class EndToEndSearchFixture:
         # Add all the works created in the setup to the search index.
         documents = get_work_search_documents(self.db.session, 1000, 0)
         self.external_search_index.add_documents(documents)
-        self.external_search.client.indices.refresh()
+        self.external_search.write_client.indices.refresh()
 
     @staticmethod
     def assert_works(description, expect, actual, should_be_ordered=True):
