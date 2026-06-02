@@ -30,9 +30,11 @@ class TestCustomListQueries:
         custom_list, _ = db.customlist(num_entries=0)
         custom_list.auto_update_query = "{}"
 
-        assert 1 == CustomListQueries.populate_query_pages(
+        count, next_key = CustomListQueries.populate_query_pages(
             db.session, mock_search, custom_list
         )
+        assert count == 1
+        assert next_key is None
         assert mock_wl().search.call_count == 2
         assert [e.work_id for e in custom_list.entries] == [w1.id]
 
@@ -48,9 +50,11 @@ class TestCustomListQueries:
         custom_list, _ = db.customlist(num_entries=0)
         custom_list.auto_update_query = "{}"
 
-        assert 2 == CustomListQueries.populate_query_pages(
+        count, next_key = CustomListQueries.populate_query_pages(
             db.session, mock_search, custom_list
         )
+        assert count == 2
+        assert next_key is None
         assert mock_wl().search.call_count == 3
         assert next_page.call_count == 2
         assert [e.work_id for e in custom_list.entries] == [w1.id, w2.id]
@@ -67,7 +71,7 @@ class TestCustomListQueries:
         custom_list, _ = db.customlist(num_entries=0)
         custom_list.auto_update_query = "{}"
 
-        assert 1 == CustomListQueries.populate_query_pages(
+        count, _ = CustomListQueries.populate_query_pages(
             db.session,
             mock_search,
             custom_list,
@@ -76,6 +80,7 @@ class TestCustomListQueries:
             page_size=10,
         )
         # The search will be paged through from 0, but only the 2nd page onwards should be populated
+        assert count == 1
         assert mock_wl().search.call_count == 2
         assert next_page.call_count == 2
         assert [e.work_id for e in custom_list.entries] == [w2.id]
