@@ -584,19 +584,20 @@ class TestImportPurchaseRecordsForAllCollections:
 
         mock_task.delay.assert_has_calls(
             [
-                call(collection_id=c1.id, current_day=None),
-                call(collection_id=c2.id, current_day=None),
+                call(collection_id=c1.id, current_day=None, reset_timestamp=False),
+                call(collection_id=c2.id, current_day=None, reset_timestamp=False),
             ],
             any_order=True,
         )
         assert mock_task.delay.call_count == 2
 
-    def test_force_reimport_passes_start_date_to_each_collection(
+    def test_force_reimport_passes_start_date_and_reset_to_each_collection(
         self,
         db: DatabaseTransactionFixture,
         celery_fixture: CeleryFixture,
     ) -> None:
-        """force_reimport=True passes current_day=DEFAULT_PURCHASE_RECORD_START_TIME to each per-collection task."""
+        """force_reimport=True passes current_day=DEFAULT_PURCHASE_RECORD_START_TIME and
+        reset_timestamp=True to each per-collection task."""
         c1 = MockBibliothecaAPI.mock_collection(
             db.session, db.default_library(), name="Bibliotheca 1"
         )
@@ -616,10 +617,12 @@ class TestImportPurchaseRecordsForAllCollections:
                 call(
                     collection_id=c1.id,
                     current_day=DEFAULT_PURCHASE_RECORD_START_TIME,
+                    reset_timestamp=True,
                 ),
                 call(
                     collection_id=c2.id,
                     current_day=DEFAULT_PURCHASE_RECORD_START_TIME,
+                    reset_timestamp=True,
                 ),
             ],
             any_order=True,
@@ -1013,6 +1016,80 @@ class TestImportPurchaseRecordsByCollection:
         assert ts.finish is not None
         expected_finish = stored_finish + timedelta(days=1)
         assert abs((ts.finish - expected_finish).total_seconds()) < 5
+
+    @patch(
+        "palace.manager.integration.license.bibliotheca_purchase_record_importer.BibliothecaAPI"
+    )
+    def test_force_reimport_clears_timestamp_before_import(
+        self,
+        mock_api_cls: MagicMock,
+        bibliotheca_purchase_record_task_fixture: BibliothecaPurchaseRecordTaskFixture,
+        celery_fixture: CeleryFixture,
+        redis_fixture: RedisFixture,
+    ) -> None:
+        """When reset_timestamp=True, Timestamp.finish is cleared before get_start() is
+        called, so the import starts from DEFAULT_PURCHASE_RECORD_START_TIME rather than
+        the stale stored finish date."""
+        mock_api_cls.return_value.marc_request.return_value = iter([])
+        collection = bibliotheca_purchase_record_task_fixture.collection
+
+        # Stamp a finish date far in the past that would be returned by get_start() if
+        # the timestamp were not cleared.
+        stale_finish = datetime_utc(2024, 3, 10)
+        bibliotheca_purchase_record_task_fixture.stamp_purchase_record(
+            finish=stale_finish
+        )
+
+        # Stop after the first day (mock replace so we can inspect what was stamped).
+        with patch.object(
+            bibliotheca.import_purchase_records_by_collection, "replace"
+        ) as mock_replace:
+            mock_replace.side_effect = Exception("replaced")
+            with pytest.raises(Exception, match="replaced"):
+                bibliotheca.import_purchase_records_by_collection.delay(
+                    collection_id=collection.id,
+                    reset_timestamp=True,
+                ).wait()
+
+        # After clearing, get_start() returns DEFAULT_PURCHASE_RECORD_START_TIME
+        # (2014-01-01), so import_day stamps finish = 2014-01-02 (one day later).
+        # If the clear did not happen, finish would be 2024-03-11 instead.
+        ts = bibliotheca_purchase_record_task_fixture.get_purchase_record_timestamp()
+        assert ts is not None
+        expected_finish = DEFAULT_PURCHASE_RECORD_START_TIME + timedelta(days=1)
+        assert ts.finish == expected_finish
+
+    @patch(
+        "palace.manager.integration.license.bibliotheca_purchase_record_importer.BibliothecaAPI"
+    )
+    def test_reset_timestamp_not_forwarded_to_replacement(
+        self,
+        mock_api_cls: MagicMock,
+        bibliotheca_purchase_record_task_fixture: BibliothecaPurchaseRecordTaskFixture,
+        celery_fixture: CeleryFixture,
+        redis_fixture: RedisFixture,
+    ) -> None:
+        """reset_timestamp=True is not forwarded to replacement tasks; it only
+        applies to the first invocation."""
+        mock_api_cls.return_value.marc_request.return_value = iter([])
+        collection = bibliotheca_purchase_record_task_fixture.collection
+
+        bibliotheca_purchase_record_task_fixture.stamp_purchase_record(
+            finish=utc_now() - timedelta(days=5)
+        )
+
+        with patch.object(
+            bibliotheca.import_purchase_records_by_collection, "replace"
+        ) as mock_replace:
+            mock_replace.side_effect = Exception("replaced")
+            with pytest.raises(Exception, match="replaced"):
+                bibliotheca.import_purchase_records_by_collection.delay(
+                    collection_id=collection.id,
+                    reset_timestamp=True,
+                ).wait()
+
+        replace_sig = mock_replace.call_args[0][0]
+        assert replace_sig.kwargs.get("reset_timestamp") is not True
 
     def test_purchase_record_lock_independent_from_import_lock(
         self,

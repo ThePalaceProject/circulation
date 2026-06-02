@@ -110,6 +110,7 @@ class ImportPurchaseRecordCollection(Script):
         bibliotheca.import_purchase_records_by_collection.delay(
             collection_id=collection.id,
             current_day=current_day,
+            reset_timestamp=parsed.force_reimport,
         )
         suffix = " (force reimport from start)" if parsed.force_reimport else ""
         self.log.info(

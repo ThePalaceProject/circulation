@@ -34,6 +34,7 @@ from palace.manager.integration.license.bibliotheca_importer import (
 )
 from palace.manager.integration.license.bibliotheca_purchase_record_importer import (
     DEFAULT_PURCHASE_RECORD_START_TIME,
+    PURCHASE_RECORD_SERVICE_NAME,
     BibliothecaPurchaseRecordImporter,
     DayImportResult,
 )
@@ -41,6 +42,7 @@ from palace.manager.service.celery.celery import QueueNames
 from palace.manager.service.redis.models.lock import RedisLock
 from palace.manager.service.redis.redis import Redis
 from palace.manager.sqlalchemy.model.collection import Collection
+from palace.manager.sqlalchemy.model.coverage import Timestamp
 from palace.manager.util.http.exception import (
     BadResponseException,
     RemoteIntegrationException,
@@ -189,7 +191,10 @@ def import_purchase_records_for_all_collections(
 
     :param force_reimport: When ``True``, each per-collection task ignores the stored
         ``Timestamp`` and reimports from :data:`DEFAULT_PURCHASE_RECORD_START_TIME`
-        (2014-01-01) rather than resuming where the last run left off.
+        (2014-01-01) rather than resuming where the last run left off.  The stored
+        ``Timestamp.finish`` is also cleared so that a crash before the first record
+        is processed causes the next scheduled run to start from
+        :data:`DEFAULT_PURCHASE_RECORD_START_TIME` rather than the stale finish date.
     """
     with task.session() as session:
         registry = task.services.integration_registry().license_providers()
@@ -203,6 +208,7 @@ def import_purchase_records_for_all_collections(
         import_purchase_records_by_collection.delay(
             collection_id=collection.id,
             current_day=current_day,
+            reset_timestamp=force_reimport,
         )
 
     suffix = " (force reimport from start)" if force_reimport else ""
@@ -226,6 +232,7 @@ def import_purchase_records_by_collection(
     current_day: datetime | None = None,
     offset: int = 1,
     lock_value: str | None = None,
+    reset_timestamp: bool = False,
 ) -> None:
     """Process one page of Bibliotheca MARC purchase records.
 
@@ -256,6 +263,11 @@ def import_purchase_records_by_collection(
     :param lock_value: UUID identifying this workflow.  Generated on the first
         invocation and forwarded unchanged to every subsequent page/day so the
         lock is held across ``task.replace()`` calls.
+    :param reset_timestamp: When ``True`` on the **first** invocation, clears
+        ``Timestamp.finish`` before importing so that a crash before the first
+        record is processed causes the next scheduled run to start from
+        :data:`DEFAULT_PURCHASE_RECORD_START_TIME` rather than the stale finish
+        date.  Not forwarded to replacement tasks.
     """
     redis = task.services.redis().client()
 
@@ -290,6 +302,20 @@ def import_purchase_records_by_collection(
             collection = load_from_id(session, Collection, collection_id)
             collection_name = collection.name
             importer = BibliothecaPurchaseRecordImporter(session, collection)
+
+            # On a force-reimport's first invocation, clear Timestamp.finish so
+            # that a crash before the first record is processed causes the next
+            # scheduled run to fall back to DEFAULT_PURCHASE_RECORD_START_TIME
+            # rather than the stale pre-reimport finish date.
+            if is_first_invocation and reset_timestamp:
+                ts = Timestamp.lookup(
+                    session,
+                    PURCHASE_RECORD_SERVICE_NAME,
+                    Timestamp.TASK_TYPE,
+                    collection,
+                )
+                if ts is not None:
+                    ts.finish = None
 
             if current_day is None:
                 current_day = importer.get_start()

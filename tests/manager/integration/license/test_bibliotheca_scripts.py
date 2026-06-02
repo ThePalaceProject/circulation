@@ -98,7 +98,7 @@ class TestImportPurchaseRecordCollection:
                 ["--collection", collection.name]
             )
         mock_task.delay.assert_called_once_with(
-            collection_id=collection.id, current_day=None
+            collection_id=collection.id, current_day=None, reset_timestamp=False
         )
 
     def test_collection_force_reimport_passes_start_date(
@@ -117,6 +117,7 @@ class TestImportPurchaseRecordCollection:
         mock_task.delay.assert_called_once_with(
             collection_id=collection.id,
             current_day=DEFAULT_PURCHASE_RECORD_START_TIME,
+            reset_timestamp=True,
         )
 
     def test_collection_not_found_raises(self, db: DatabaseTransactionFixture) -> None:
