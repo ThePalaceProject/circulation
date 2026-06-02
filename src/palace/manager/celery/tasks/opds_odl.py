@@ -1,6 +1,8 @@
 import datetime
+from uuid import uuid4
 
 from celery import shared_task
+from celery.exceptions import Ignore
 from sqlalchemy import delete, select
 from sqlalchemy.exc import NoResultFound
 from sqlalchemy.orm import Session
@@ -8,7 +10,7 @@ from sqlalchemy.orm import Session
 from palace.util.datetime_helpers import utc_now
 
 from palace.manager.celery import importer
-from palace.manager.celery.importer import import_lock
+from palace.manager.celery.importer import import_workflow_lock
 from palace.manager.celery.task import Task
 from palace.manager.celery.tasks import apply
 from palace.manager.celery.utils import load_from_id
@@ -333,41 +335,84 @@ def import_collection(
     url: str | None = None,
     *,
     force: bool = False,
+    lock_value: str | None = None,
 ) -> None:
     """
     Run an OPDS2+ODL import for the given collection.
+
+    A Redis workflow lock keyed to ``collection_id`` ensures at most one import
+    runs per collection at a time. The lock is held across ``task.replace()``
+    page boundaries and across Celery retries (``BadResponseException``,
+    ``RequestTimedOut``) so a transient failure does not open a window for a
+    second concurrent run to start on the same collection.
+
+    :param collection_id: Database ID of the collection to import.
+    :param url: The next page URL to import. ``None`` on the first page — the
+        import starts from the beginning of the feed.
+    :param force: If True, import even if the feed is unchanged.
+    :param lock_value: UUID identifying this import workflow. Generated on the
+        first page and forwarded unchanged to every subsequent page so the lock
+        is held across ``task.replace()`` calls.
     """
     redis = task.services.redis().client()
-    with import_lock(redis, collection_id).lock(), task.session() as session:
-        collection = load_from_id(session, Collection, collection_id)
-        registry = task.services.integration_registry().license_providers()
 
-        import_result = importer_from_collection(collection, registry).import_feed(
-            collection,
-            url,
-            apply_bibliographic=apply.bibliographic_apply.delay,
-            apply_circulation=apply.circulation_apply.delay,
-            import_even_if_unchanged=force,
-        )
+    is_first_page = lock_value is None
+    if lock_value is None:
+        lock_value = str(uuid4())
 
-    if not import_result:
-        task.log.info(
-            f"Import failed, aborting task for collection '{collection.name}' (id={collection_id})."
-        )
-        return
+    workflow_lock = import_workflow_lock(redis, collection_id, lock_value)
 
-    next_link = import_result.next_url
-    if next_link is not None:
-        # This page is complete, but there are more pages to import, so we requeue ourselves with the
-        # next page URL.
-        raise task.replace(
-            task.s(
-                collection_id=collection_id,
-                url=next_link,
-                force=force,
+    with workflow_lock.lock(
+        raise_when_not_acquired=False,
+        # Hold the lock across task.replace() (Ignore) and across Celery retries
+        # (BadResponseException, RequestTimedOut) so a transient failure doesn't
+        # open a window for a concurrent run to start on the same collection.
+        ignored_exceptions=(Ignore, BadResponseException, RequestTimedOut),
+    ) as workflow_lock_acquired:
+        if not workflow_lock_acquired and is_first_page:
+            task.log.warning(
+                f"Import skipped for collection {collection_id}: "
+                "another import is already in progress."
             )
-        )
+            return
+        if not workflow_lock_acquired and not is_first_page:
+            task.log.warning(
+                f"Import for collection {collection_id}: workflow lock expired "
+                "between pages; continuing (another import may be running)."
+            )
 
-    task.log.info(
-        f"Import complete for collection '{collection.name}' (id={collection_id})."
-    )
+        with task.session() as session:
+            collection = load_from_id(session, Collection, collection_id)
+            collection_name = collection.name
+            registry = task.services.integration_registry().license_providers()
+
+            import_result = importer_from_collection(collection, registry).import_feed(
+                collection,
+                url,
+                apply_bibliographic=apply.bibliographic_apply.delay,
+                apply_circulation=apply.circulation_apply.delay,
+                import_even_if_unchanged=force,
+            )
+
+        if not import_result:
+            task.log.info(
+                f"Import failed, aborting task for collection '{collection_name}' (id={collection_id})."
+            )
+            return
+
+        next_link = import_result.next_url
+        if next_link is not None:
+            # This page is complete, but there are more pages to import, so we requeue ourselves with the
+            # next page URL, forwarding lock_value so the workflow lock is held across the page boundary.
+            raise task.replace(
+                task.s(
+                    collection_id=collection_id,
+                    url=next_link,
+                    force=force,
+                    lock_value=lock_value,
+                )
+            )
+
+        task.log.info(
+            f"Import complete for collection '{collection_name}' (id={collection_id})."
+        )
