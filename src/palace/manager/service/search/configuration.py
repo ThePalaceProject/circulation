@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-import logging
 import os
 
 from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import SettingsConfigDict
+
+from palace.util.log import LoggerMixin
 
 from palace.manager.service.configuration.service_configuration import (
     ServiceConfiguration,
@@ -17,7 +18,7 @@ _DEPRECATED_WRITE_TIMEOUT_ENV = "PALACE_SEARCH_TIMEOUT"
 _WRITE_TIMEOUT_ENV = "PALACE_SEARCH_WRITE_TIMEOUT"
 
 
-class SearchConfiguration(ServiceConfiguration):
+class SearchConfiguration(ServiceConfiguration, LoggerMixin):
     url: HttpUrl
     index_prefix: str = "circulation-works"
     # Timeout (seconds) for indexing and admin operations, which legitimately
@@ -51,7 +52,7 @@ class SearchConfiguration(ServiceConfiguration):
             _DEPRECATED_WRITE_TIMEOUT_ENV in os.environ
             and _WRITE_TIMEOUT_ENV not in os.environ
         ):
-            logging.getLogger(__name__).warning(
+            self.log.warning(
                 "%s is deprecated; use %s instead.",
                 _DEPRECATED_WRITE_TIMEOUT_ENV,
                 _WRITE_TIMEOUT_ENV,
