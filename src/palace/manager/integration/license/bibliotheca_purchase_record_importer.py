@@ -166,8 +166,10 @@ class BibliothecaPurchaseRecordImporter(LoggerMixin):
         """Process a single Bibliotheca MARC purchase record.
 
         Extracts the Bibliotheca ID from MARC field ``001``, creates or finds
-        the ``LicensePool``, then queues a ``bibliographic_apply`` task when
-        the title's metadata has changed (hash-based deduplication).
+        the ``LicensePool``, then — for **new** titles only — queues a
+        ``bibliographic_apply`` task when the title's metadata has changed
+        (hash-based deduplication).  Existing titles are skipped to avoid
+        unnecessary outbound API calls during historical backfills.
 
         :param record: A pymarc ``Record`` representing one purchased title.
         :param purchase_record_time: Timestamp of the purchase record day.
@@ -186,7 +188,7 @@ class BibliothecaPurchaseRecordImporter(LoggerMixin):
 
         bibliotheca_id = control_numbers[0].value()
 
-        LicensePool.for_foreign_id(
+        _, is_new = LicensePool.for_foreign_id(
             self._session,
             self._api.data_source,
             Identifier.BIBLIOTHECA_ID,
@@ -194,13 +196,14 @@ class BibliothecaPurchaseRecordImporter(LoggerMixin):
             collection=self._collection,
         )
 
-        for bibliographic in self._api.bibliographic_lookup(bibliotheca_id):
-            if bibliographic.needs_apply(self._session):
-                apply.bibliographic_apply.delay(
-                    bibliographic,
-                    collection_id=self._collection.id,
-                    replace=ReplacementPolicy.from_license_source(),
-                )
+        if is_new:
+            for bibliographic in self._api.bibliographic_lookup(bibliotheca_id):
+                if bibliographic.needs_apply(self._session):
+                    apply.bibliographic_apply.delay(
+                        bibliographic,
+                        collection_id=self._collection.id,
+                        replace=ReplacementPolicy.from_license_source(),
+                    )
 
         self.log.info(
             f"{purchase_record_time.strftime(_LOG_DATE_FORMAT)}: processed purchase record for Bibliotheca ID {bibliotheca_id}"

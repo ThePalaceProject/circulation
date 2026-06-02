@@ -17,6 +17,8 @@ from palace.manager.integration.license.bibliotheca_purchase_record_importer imp
     DayImportResult,
 )
 from palace.manager.sqlalchemy.model.coverage import Timestamp
+from palace.manager.sqlalchemy.model.identifier import Identifier
+from palace.manager.sqlalchemy.model.licensing import LicensePool
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.mocks.bibliotheca import MockBibliothecaAPI
 
@@ -368,3 +370,36 @@ class TestBibliothecaPurchaseRecordImporterProcessRecord:
             importer.import_day(current_day, cutoff)
 
         mock_apply.delay.assert_not_called()
+
+    def test_skips_bibliographic_lookup_for_existing_record(
+        self, db: DatabaseTransactionFixture
+    ) -> None:
+        """bibliographic_lookup is not called when is_new=False (LicensePool already exists).
+
+        Avoids unnecessary outbound API calls for already-known titles during
+        historical backfills.
+        """
+        importer, mock_api = _make_importer(db)
+        current_day = datetime_utc(2024, 1, 15)
+        cutoff = datetime_utc(2024, 1, 20)
+
+        # Pre-create the LicensePool so the record is not "new".
+        LicensePool.for_foreign_id(
+            db.session,
+            mock_api.data_source,
+            Identifier.BIBLIOTHECA_ID,
+            "d5rf89",
+            collection=mock_api.collection,
+        )
+
+        with (
+            patch.object(
+                BibliothecaAPI,
+                "marc_request",
+                return_value=iter([_fake_marc_record("d5rf89")]),
+            ),
+            patch.object(BibliothecaAPI, "bibliographic_lookup") as mock_lookup,
+        ):
+            importer.import_day(current_day, cutoff)
+
+        mock_lookup.assert_not_called()
