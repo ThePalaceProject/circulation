@@ -302,6 +302,25 @@ class TestWorkController:
         assert expect.data == response.get_data()
         assert OPDSFeed.ENTRY_TYPE == response.headers["Content-Type"]
 
+    def test_permalink_work_with_no_presentation_edition(
+        self, work_fixture: WorkFixture
+    ):
+        # A work can be looked up by a valid identifier yet have no
+        # presentation edition (no usable metadata). In that case there is
+        # no identifier to build an entry around, so rather than raising an
+        # unhandled error from single_entry we return a 404.
+        work_fixture.english_1.presentation_edition = None
+
+        with work_fixture.request_context_with_library("/"):
+            assert work_fixture.identifier.type is not None
+            assert work_fixture.identifier.identifier is not None
+            response = work_fixture.manager.work_controller.permalink(
+                work_fixture.identifier.type, work_fixture.identifier.identifier
+            )
+
+        assert isinstance(response, ProblemDetail)
+        assert NOT_FOUND_ON_REMOTE == response
+
     @pytest.mark.parametrize(
         *OPDSSerializationTestHelper.PARAMETRIZED_SINGLE_ENTRY_ACCEPT_HEADERS
     )
