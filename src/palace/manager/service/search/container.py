@@ -29,8 +29,8 @@ class Search(DeclarativeContainer):
         hosts=config.url,
         timeout=config.read_timeout,
         maxsize=config.maxsize,
-        max_retries=config.max_retries,
-        retry_on_timeout=config.retry_on_timeout,
+        max_retries=config.read_max_retries,
+        retry_on_timeout=config.read_retry_on_timeout,
     )
 
     service: Provider[SearchServiceOpensearch1] = providers.Singleton(

@@ -36,9 +36,10 @@ class SearchConfiguration(ServiceConfiguration, LoggerMixin):
     # worker for the full write timeout.
     read_timeout: int = 4
     # Retry timed-out reads against another node. With two nodes per domain
-    # this lets a read survive a single node bouncing during maintenance.
-    max_retries: int = 2
-    retry_on_timeout: bool = True
+    # this lets a read survive a single node bouncing during maintenance. These
+    # apply only to the read path; indexing/admin calls are not retried.
+    read_max_retries: int = 2
+    read_retry_on_timeout: bool = True
     maxsize: int = 25
     model_config = SettingsConfigDict(env_prefix="PALACE_SEARCH_")
 

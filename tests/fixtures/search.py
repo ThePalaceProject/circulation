@@ -29,8 +29,8 @@ class SearchTestConfiguration(FixtureTestUrlConfiguration):
     url: HttpUrl
     write_timeout: int = 20
     read_timeout: int = 4
-    max_retries: int = 2
-    retry_on_timeout: bool = True
+    read_max_retries: int = 2
+    read_retry_on_timeout: bool = True
     maxsize: int = 25
     model_config = SettingsConfigDict(env_prefix="PALACE_TEST_SEARCH_")
 
