@@ -23,7 +23,6 @@ from sqlalchemy.sql.expression import and_, literal, literal_column, or_
 
 from palace.util.datetime_helpers import utc_now
 
-from palace.manager.sqlalchemy.bulk_operation import SessionBulkOperation
 from palace.manager.sqlalchemy.model.base import Base
 from palace.manager.sqlalchemy.util import get_one, get_one_or_create
 from palace.manager.util.sentinel import SentinelType
@@ -31,7 +30,7 @@ from palace.manager.util.sentinel import SentinelType
 if TYPE_CHECKING:
     from palace.manager.sqlalchemy.model.collection import Collection
     from palace.manager.sqlalchemy.model.datasource import DataSource
-    from palace.manager.sqlalchemy.model.identifier import Equivalency, Identifier
+    from palace.manager.sqlalchemy.model.identifier import Identifier
 
 
 class BaseCoverageRecord:
@@ -653,77 +652,3 @@ Index(
     CoverageRecord.operation,
     CoverageRecord.identifier_id,
 )
-
-
-class EquivalencyCoverageRecord(Base, BaseCoverageRecord):
-    """A coverage record that tracks work needs to be done
-    on identifier equivalents
-    """
-
-    RECURSIVE_EQUIVALENCY_REFRESH = "recursive-equivalency-refresh"
-    RECURSIVE_EQUIVALENCY_DELETE = (
-        "recursive-equivalency-delete"  # an identifier was deleted
-    )
-
-    __tablename__ = "equivalentscoveragerecords"
-
-    id: Mapped[int] = Column(Integer, primary_key=True)
-
-    equivalency_id: Mapped[int] = Column(
-        Integer,
-        ForeignKey("equivalents.id", ondelete="CASCADE"),
-        index=True,
-        nullable=False,
-    )
-    equivalency: Mapped[Equivalency] = relationship(
-        "Equivalency", foreign_keys=equivalency_id
-    )
-
-    operation = Column(String(255), index=True, default=None)
-
-    timestamp = Column(DateTime(timezone=True), index=True)
-
-    status = Column(BaseCoverageRecord.status_enum, index=True)
-    exception = Column(Unicode)
-
-    __table_args__ = (UniqueConstraint(equivalency_id, operation),)
-
-    @classmethod
-    def bulk_add(
-        cls,
-        _db,
-        equivalents: list[Equivalency],
-        operation: str,
-        status=BaseCoverageRecord.REGISTERED,
-        batch_size=100,
-    ):
-        with SessionBulkOperation(_db, batch_size) as bulk:
-            for eq in equivalents:
-                record = EquivalencyCoverageRecord(  # type: ignore[call-arg]
-                    equivalency_id=eq.id,
-                    operation=operation,
-                    status=status,
-                    timestamp=utc_now(),
-                )
-                bulk.add(record)
-
-    @classmethod
-    def add_for(
-        cls,
-        equivalency: Equivalency,
-        operation: str,
-        timestamp=None,
-        status=CoverageRecord.SUCCESS,
-    ):
-        _db = Session.object_session(equivalency)
-        timestamp = timestamp or utc_now()
-        coverage_record, is_new = get_one_or_create(
-            _db,
-            cls,
-            equivalency=equivalency,
-            operation=operation,
-            on_multiple="interchangeable",
-        )
-        coverage_record.status = status
-        coverage_record.timestamp = timestamp
-        return coverage_record, is_new
