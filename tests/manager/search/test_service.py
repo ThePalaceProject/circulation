@@ -168,13 +168,23 @@ class TestService:
             "properties": mappings.serialize_properties()
         }
 
-    def test_read_search_client_applies_timeout(self):
-        """The read search client applies search_timeout as request_timeout."""
+    def test_read_search_client_omits_request_timeout(self):
+        """The read search client must NOT set request_timeout.
+
+        Searches built from read_search_client() are added to the MultiSearch
+        and their params are serialized into the msearch metadata header line,
+        which OpenSearch rejects if it contains request_timeout. The timeout is
+        applied on the MultiSearch instead.
+        """
         service = SearchServiceOpensearch1(MagicMock(), "base", search_timeout=7)
-        assert service.read_search_client()._params.get("request_timeout") == 7
+        assert "request_timeout" not in service.read_search_client()._params
 
     def test_read_search_multi_client_applies_timeout(self):
-        """The read multi-search client applies search_timeout as request_timeout."""
+        """The read multi-search client applies search_timeout as request_timeout.
+
+        These params are passed to client.msearch() as a transport parameter,
+        so they govern the read path without ending up in the request body.
+        """
         service = SearchServiceOpensearch1(MagicMock(), "base", search_timeout=7)
         assert service.read_search_multi_client()._params.get("request_timeout") == 7
 

@@ -322,12 +322,18 @@ class SearchServiceOpensearch1(SearchService, LoggerMixin):
         return self._get_pointer(self.read_pointer_name())
 
     def read_search_client(self) -> Search:
-        # opensearchpy Search.index()/params() are not properly typed
-        return self._search.index(self.read_pointer_name()).params(  # type: ignore[no-any-return]
-            request_timeout=self._search_timeout
-        )
+        # NOTE: request_timeout is intentionally NOT set here. Every read goes
+        # through the MultiSearch in read_search_multi_client(), and a Search's
+        # params are serialized into the msearch metadata header line, where
+        # OpenSearch rejects request_timeout ("not supported in the metadata
+        # section"). The timeout is applied on the MultiSearch instead.
+        return self._search.index(self.read_pointer_name())  # type: ignore[no-any-return]
+        # opensearchpy Search.index() is not properly typed
 
     def read_search_multi_client(self) -> MultiSearch:
+        # request_timeout here is passed through to client.msearch() as a
+        # transport parameter (not into the request body), so it governs the
+        # read path without tripping the metadata-section validation.
         # opensearchpy MultiSearch.index()/params() are not properly typed
         return self._multi_search.index(self.read_pointer_name()).params(  # type: ignore[no-any-return]
             request_timeout=self._search_timeout
