@@ -57,6 +57,7 @@ def beat_schedule() -> dict[str, Any]:
     from palace.manager.celery.tasks import (
         bibliotheca,
         boundless,
+        custom_lists,
         equivalents,
         license_expiration,
         marc,
@@ -77,6 +78,13 @@ def beat_schedule() -> dict[str, Any]:
     )
 
     return {
+        "update_custom_list_entries_sweep": {
+            "task": custom_lists.update_custom_list_entries_sweep.name,
+            "schedule": crontab(
+                minute="0",
+                hour="1",
+            ),  # Once a day at 1:00 AM
+        },
         "full_search_reindex": {
             "task": search.search_reindex.name,
             "schedule": crontab(hour="0", minute="10"),  # Run every day at 12:10 AM
