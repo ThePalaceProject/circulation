@@ -71,7 +71,7 @@ def test_search_reindex(
     search_reindex_task_lock_fixture: SearchReindexTaskLockFixture,
     end_to_end_search_fixture: EndToEndSearchFixture,
 ) -> None:
-    client = end_to_end_search_fixture.external_search.client
+    client = end_to_end_search_fixture.external_search.write_client
     index = end_to_end_search_fixture.external_search_index
 
     work1 = db.work(with_open_access_download=True)
@@ -271,7 +271,7 @@ def test_update_read_pointer(
     celery_fixture: CeleryFixture,
     end_to_end_search_fixture: EndToEndSearchFixture,
 ):
-    client = end_to_end_search_fixture.external_search.client
+    client = end_to_end_search_fixture.external_search.write_client
     service = end_to_end_search_fixture.external_search.service
 
     # Remove the read pointer
@@ -322,7 +322,7 @@ def test_get_migrate_search_chain(
 ):
     container = end_to_end_search_fixture.external_search.search_container
 
-    client = container.client()
+    client = container.write_client()
     service = container.service()
     revision_directory = container.revision_directory()
     revision = revision_directory.highest()
@@ -460,7 +460,7 @@ def test_index_works(
     celery_fixture: CeleryFixture,
     end_to_end_search_fixture: EndToEndSearchFixture,
 ):
-    client = end_to_end_search_fixture.external_search.client
+    client = end_to_end_search_fixture.external_search.write_client
     index = end_to_end_search_fixture.external_search_index
 
     work1_id = db.work(with_open_access_download=True).id

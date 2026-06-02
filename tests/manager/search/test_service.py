@@ -24,7 +24,7 @@ class TestSearchPointer:
         ],
     )
     def test_from_index(self, base: str, index: str, expected_version: int):
-        service = SearchServiceOpensearch1(MagicMock(), base)
+        service = SearchServiceOpensearch1(MagicMock(), MagicMock(), base)
 
         write_pointer = SearchPointer.from_index(
             base, service.write_pointer_name(), index
@@ -54,7 +54,7 @@ class TestSearchPointer:
         ],
     )
     def test_from_index_errors(self, base: str, index: str):
-        service = SearchServiceOpensearch1(MagicMock(), base)
+        service = SearchServiceOpensearch1(MagicMock(), MagicMock(), base)
 
         assert (
             SearchPointer.from_index(base, service.write_pointer_name(), index) is None
@@ -78,7 +78,7 @@ class TestService:
         service.index_create(revision)
         service.index_create(revision)
 
-        indices = external_search_fixture.client.indices.client.indices
+        indices = external_search_fixture.write_client.indices.client.indices
         assert indices is not None
         assert indices.exists(
             index=revision.name_for_index(external_search_fixture.index_prefix)
@@ -157,7 +157,7 @@ class TestService:
         service.index_submit_documents(documents)
         service.index_submit_documents(documents)
 
-        indices = external_search_fixture.client.indices.client.indices
+        indices = external_search_fixture.write_client.indices.client.indices
         assert indices is not None
         assert indices.exists(
             index=revision.name_for_index(external_search_fixture.index_prefix)
@@ -168,13 +168,28 @@ class TestService:
             "properties": mappings.serialize_properties()
         }
 
+    def test_read_clients_use_dedicated_read_client(self):
+        """The read search/multi-search clients are built on the read client.
+
+        The read timeout is a transport property of the dedicated read client,
+        so reads inherit it without any per-request override (which would be
+        rejected in the msearch metadata header). Indexing/admin operations use
+        the write client instead.
+        """
+        write_client = MagicMock()
+        read_client = MagicMock()
+        service = SearchServiceOpensearch1(write_client, read_client, "base")
+
+        assert service.read_search_client()._using is read_client
+        assert service.read_search_multi_client()._using is read_client
+
     def test__get_pointer(self):
         """Getting a pointer works."""
         mock_client = MagicMock()
         mock_client.indices.get_alias.return_value = {
             "base-v23": {"aliases": {"base-search-read": {}}}
         }
-        service = SearchServiceOpensearch1(mock_client, "base")
+        service = SearchServiceOpensearch1(mock_client, MagicMock(), "base")
 
         pointer = service._get_pointer("base-search-read")
         assert pointer is not None
