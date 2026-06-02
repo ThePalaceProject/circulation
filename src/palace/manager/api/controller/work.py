@@ -136,6 +136,15 @@ class WorkController(CirculationManagerController):
                 mime_types=flask.request.accept_mimetypes,
             )
         else:
+            if work.presentation_edition is None:
+                # The work exists but has no presentation edition, so there's
+                # no usable metadata or identifier to build an entry around.
+                # Treat it as not found rather than letting single_entry raise
+                # an unhandled error. The authenticated patron path above builds
+                # its entry from the loan/hold's license pool instead, so this
+                # guard only applies to the unauthenticated path.
+                return NOT_FOUND_ON_REMOTE
+
             annotator = self.manager.annotator(lane=None)
 
             return OPDSAcquisitionFeed.entry_as_response(
