@@ -10,12 +10,11 @@ from palace.manager.core.monitor import TimestampData
 from palace.manager.sqlalchemy.model.coverage import (
     BaseCoverageRecord,
     CoverageRecord,
-    EquivalencyCoverageRecord,
     Timestamp,
 )
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
-from palace.manager.sqlalchemy.model.identifier import Equivalency, Identifier
+from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.util.sentinel import SentinelType
 from tests.fixtures.database import DatabaseTransactionFixture
 
@@ -539,92 +538,3 @@ class TestCoverageRecord:
                 edition.data_source,
                 CoverageRecord.IMPORT_OPERATION,
             )
-
-
-class ExampleEquivalencyCoverageRecordFixture:
-    identifiers: list[Identifier]
-    equivalencies: list[Equivalency]
-    transaction: DatabaseTransactionFixture
-
-    def __init__(self, transaction: DatabaseTransactionFixture):
-        self.transaction = transaction
-        self.identifiers = [
-            transaction.identifier(),
-            transaction.identifier(),
-            transaction.identifier(),
-            transaction.identifier(),
-        ]
-        idn = self.identifiers
-        self.equivalencies = [
-            Equivalency(input_id=idn[0].id, output_id=idn[1].id, strength=1),
-            Equivalency(input_id=idn[1].id, output_id=idn[2].id, strength=1),
-            Equivalency(input_id=idn[1].id, output_id=idn[0].id, strength=1),
-        ]
-        session = transaction.session
-        session.add_all(self.equivalencies)
-        session.commit()
-
-
-@pytest.fixture()
-def example_equivalency_coverage_record_fixture(
-    db,
-) -> ExampleEquivalencyCoverageRecordFixture:
-    return ExampleEquivalencyCoverageRecordFixture(db)
-
-
-class TestEquivalencyCoverageRecord:
-    def test_add_for(
-        self,
-        example_equivalency_coverage_record_fixture: ExampleEquivalencyCoverageRecordFixture,
-    ):
-        operation = EquivalencyCoverageRecord.RECURSIVE_EQUIVALENCY_REFRESH
-        equivalencies = example_equivalency_coverage_record_fixture.equivalencies
-        session = example_equivalency_coverage_record_fixture.transaction.session
-
-        for eq in equivalencies:
-            record, is_new = EquivalencyCoverageRecord.add_for(
-                eq, operation, status=CoverageRecord.REGISTERED
-            )
-
-            assert record.equivalency_id == eq.id
-            assert record.status == CoverageRecord.REGISTERED
-            assert record.operation == operation
-
-    def test_bulk_add(
-        self,
-        example_equivalency_coverage_record_fixture: ExampleEquivalencyCoverageRecordFixture,
-    ):
-        equivalencies = example_equivalency_coverage_record_fixture.equivalencies
-        session = example_equivalency_coverage_record_fixture.transaction.session
-
-        operation = EquivalencyCoverageRecord.RECURSIVE_EQUIVALENCY_REFRESH
-        EquivalencyCoverageRecord.bulk_add(session, equivalencies, operation)
-        all_records = session.query(EquivalencyCoverageRecord).all()
-
-        assert len(all_records) == 3
-        # All equivalencies are the same
-        assert {r.equivalency_id for r in all_records} == {e.id for e in equivalencies}
-
-    def test_delete_identifier(
-        self,
-        example_equivalency_coverage_record_fixture: ExampleEquivalencyCoverageRecordFixture,
-    ):
-        equivalencies = example_equivalency_coverage_record_fixture.equivalencies
-        session = example_equivalency_coverage_record_fixture.transaction.session
-
-        for eq in equivalencies:
-            record, is_new = EquivalencyCoverageRecord.add_for(
-                eq,
-                EquivalencyCoverageRecord.RECURSIVE_EQUIVALENCY_REFRESH,
-                status=CoverageRecord.REGISTERED,
-            )
-        session.commit()
-
-        all_equivs = session.query(EquivalencyCoverageRecord).all()
-        assert len(all_equivs) == 3
-
-        session.delete(example_equivalency_coverage_record_fixture.identifiers[0])
-        session.commit()
-
-        all_equivs = session.query(EquivalencyCoverageRecord).all()
-        assert len(all_equivs) == 1

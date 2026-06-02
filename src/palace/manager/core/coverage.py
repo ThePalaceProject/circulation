@@ -13,7 +13,6 @@ from palace.manager.sqlalchemy.model.collection import Collection, CollectionMis
 from palace.manager.sqlalchemy.model.coverage import (
     BaseCoverageRecord,
     CoverageRecord,
-    EquivalencyCoverageRecord,
     Timestamp,
 )
 from palace.manager.sqlalchemy.model.datasource import DataSource
@@ -56,20 +55,6 @@ class CoverageFailure:
 
         record, ignore = CoverageRecord.add_for(
             self.obj, self.data_source, operation=operation, collection=self.collection
-        )
-        record.exception = self.exception
-        if self.transient:
-            record.status = CoverageRecord.TRANSIENT_FAILURE
-        else:
-            record.status = CoverageRecord.PERSISTENT_FAILURE
-        return record
-
-    def to_equivalency_coverage_record(
-        self, operation: str
-    ) -> EquivalencyCoverageRecord:
-        """Convert this failure into a EquivalencyCoverageRecord."""
-        record, ignore = EquivalencyCoverageRecord.add_for(
-            self.obj, operation=operation
         )
         record.exception = self.exception
         if self.transient:
