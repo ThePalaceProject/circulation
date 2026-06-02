@@ -401,12 +401,15 @@ class SIP2AuthenticationProvider(
             # the SIP2 server's configured encoding, so they can't possibly be
             # valid credentials for this server. Treat this as a failed
             # authentication rather than letting it become a 500.
-            cls.logger().warning(
+            debug_info = (
                 f"Credentials could not be encoded using the configured "
-                f"SIP2 encoding ({client.encoding}): {e}",
+                f"SIP2 encoding ({client.encoding})"
+            )
+            cls.logger().warning(
+                f"{debug_info}: {e}",
                 exc_info=e,
             )
-            return INVALID_CREDENTIALS
+            return INVALID_CREDENTIALS.with_debug(debug_info)
 
         except OSError as e:
             server_name = client.target_server or "unknown server"
