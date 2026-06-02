@@ -17,17 +17,17 @@ class Search(DeclarativeContainer):
     write_client: Provider[OpenSearch] = providers.Singleton(
         OpenSearch,
         hosts=config.url,
-        timeout=config.timeout,
+        timeout=config.write_timeout,
         maxsize=config.maxsize,
     )
 
-    # Used for the user-facing read path. The shorter ``search_timeout`` plus
+    # Used for the user-facing read path. The shorter ``read_timeout`` plus
     # timeout retries let a read fail over quickly to the domain's other node
     # when one briefly stalls during OpenSearch maintenance.
     read_client: Provider[OpenSearch] = providers.Singleton(
         OpenSearch,
         hosts=config.url,
-        timeout=config.search_timeout,
+        timeout=config.read_timeout,
         maxsize=config.maxsize,
         max_retries=config.max_retries,
         retry_on_timeout=config.retry_on_timeout,
