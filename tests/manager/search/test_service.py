@@ -24,7 +24,7 @@ class TestSearchPointer:
         ],
     )
     def test_from_index(self, base: str, index: str, expected_version: int):
-        service = SearchServiceOpensearch1(MagicMock(), base)
+        service = SearchServiceOpensearch1(MagicMock(), MagicMock(), base)
 
         write_pointer = SearchPointer.from_index(
             base, service.write_pointer_name(), index
@@ -54,7 +54,7 @@ class TestSearchPointer:
         ],
     )
     def test_from_index_errors(self, base: str, index: str):
-        service = SearchServiceOpensearch1(MagicMock(), base)
+        service = SearchServiceOpensearch1(MagicMock(), MagicMock(), base)
 
         assert (
             SearchPointer.from_index(base, service.write_pointer_name(), index) is None
@@ -168,25 +168,20 @@ class TestService:
             "properties": mappings.serialize_properties()
         }
 
-    def test_read_search_client_omits_request_timeout(self):
-        """The read search client must NOT set request_timeout.
+    def test_read_clients_use_dedicated_read_client(self):
+        """The read search/multi-search clients are built on the read client.
 
-        Searches built from read_search_client() are added to the MultiSearch
-        and their params are serialized into the msearch metadata header line,
-        which OpenSearch rejects if it contains request_timeout. The timeout is
-        applied on the MultiSearch instead.
+        The read timeout is a transport property of the dedicated read client,
+        so reads inherit it without any per-request override (which would be
+        rejected in the msearch metadata header). Indexing/admin operations use
+        the write client instead.
         """
-        service = SearchServiceOpensearch1(MagicMock(), "base", search_timeout=7)
-        assert "request_timeout" not in service.read_search_client()._params
+        write_client = MagicMock()
+        read_client = MagicMock()
+        service = SearchServiceOpensearch1(write_client, read_client, "base")
 
-    def test_read_search_multi_client_applies_timeout(self):
-        """The read multi-search client applies search_timeout as request_timeout.
-
-        These params are passed to client.msearch() as a transport parameter,
-        so they govern the read path without ending up in the request body.
-        """
-        service = SearchServiceOpensearch1(MagicMock(), "base", search_timeout=7)
-        assert service.read_search_multi_client()._params.get("request_timeout") == 7
+        assert service.read_search_client()._using is read_client
+        assert service.read_search_multi_client()._using is read_client
 
     def test__get_pointer(self):
         """Getting a pointer works."""
@@ -194,7 +189,7 @@ class TestService:
         mock_client.indices.get_alias.return_value = {
             "base-v23": {"aliases": {"base-search-read": {}}}
         }
-        service = SearchServiceOpensearch1(mock_client, "base")
+        service = SearchServiceOpensearch1(mock_client, MagicMock(), "base")
 
         pointer = service._get_pointer("base-search-read")
         assert pointer is not None

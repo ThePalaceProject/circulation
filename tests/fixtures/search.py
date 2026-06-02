@@ -58,7 +58,7 @@ class ExternalSearchFixture(LoggerMixin):
         services.search.override(self.search_container)
 
         self.db = db
-        self.client: OpenSearch = services.search().client()
+        self.client: OpenSearch = services.search().write_client()
         self.service: SearchServiceOpensearch1 = services.search().service()
         self.index: ExternalSearchIndex = services.search().index()
         self.revision: SearchSchemaRevision = (

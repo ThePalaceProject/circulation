@@ -79,7 +79,8 @@ class ServicesFixture:
 
         # Mock out search
         search_container = self.services.search()
-        search_container.client.override(self.search_client)
+        search_container.write_client.override(self.search_client)
+        search_container.read_client.override(self.search_client)
         search_container.service.override(self.search_service)
         search_container.revision_directory.override(self.search_revision_directory)
         search_container.index.override(self.search_index)

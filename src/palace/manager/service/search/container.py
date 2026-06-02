@@ -11,10 +11,23 @@ from palace.manager.search.service import SearchServiceOpensearch1
 class Search(DeclarativeContainer):
     config = providers.Configuration()
 
-    client: Provider[OpenSearch] = providers.Singleton(
+    # Used for indexing and admin operations, which legitimately run longer and
+    # keep the full client-wide timeout. No timeout retries here, so indexing
+    # and admin behavior is unchanged.
+    write_client: Provider[OpenSearch] = providers.Singleton(
         OpenSearch,
         hosts=config.url,
         timeout=config.timeout,
+        maxsize=config.maxsize,
+    )
+
+    # Used for the user-facing read path. The shorter ``search_timeout`` plus
+    # timeout retries let a read fail over quickly to the domain's other node
+    # when one briefly stalls during OpenSearch maintenance.
+    read_client: Provider[OpenSearch] = providers.Singleton(
+        OpenSearch,
+        hosts=config.url,
+        timeout=config.search_timeout,
         maxsize=config.maxsize,
         max_retries=config.max_retries,
         retry_on_timeout=config.retry_on_timeout,
@@ -22,9 +35,9 @@ class Search(DeclarativeContainer):
 
     service: Provider[SearchServiceOpensearch1] = providers.Singleton(
         SearchServiceOpensearch1,
-        client=client,
+        write_client=write_client,
+        read_client=read_client,
         base_revision_name=config.index_prefix,
-        search_timeout=config.search_timeout,
     )
 
     revision_directory: Provider[SearchRevisionDirectory] = providers.Singleton(
