@@ -35,6 +35,7 @@ from palace.manager.integration.license.bibliotheca_importer import (
 from palace.manager.integration.license.bibliotheca_purchase_record_importer import (
     DEFAULT_PURCHASE_RECORD_START_TIME,
     BibliothecaPurchaseRecordImporter,
+    DayImportResult,
 )
 from palace.manager.service.celery.celery import QueueNames
 from palace.manager.service.redis.models.lock import RedisLock
@@ -282,7 +283,7 @@ def import_purchase_records_by_collection(
             )
 
         cutoff = utc_now()
-        result = None
+        result: DayImportResult
         collection_name: str | None = None
 
         with task.transaction() as session:
@@ -300,8 +301,6 @@ def import_purchase_records_by_collection(
                 return
 
             result = importer.import_day(current_day, cutoff, offset)
-
-        assert result is not None
 
         task.log.info(
             f"Bibliotheca purchase record import: fetched {result.records_fetched} record(s) for "
