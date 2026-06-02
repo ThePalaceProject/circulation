@@ -472,6 +472,17 @@ class SIP2AuthenticationProvider(
             sip.disconnect()
             return info
 
+        except UnicodeEncodeError as e:
+            # The patron's credentials contain characters that can't be
+            # represented in the SIP2 server's configured encoding, so they
+            # can't possibly be valid credentials for this server. Treat this
+            # as a failed authentication rather than letting it become a 500.
+            self.log.warning(
+                f"Patron credentials could not be encoded using the configured "
+                f"SIP2 encoding ({self.encoding}): {e}"
+            )
+            return INVALID_CREDENTIALS
+
         except OSError as e:
             server_name = self.server or "unknown server"
             self.log.warning(f"SIP2 error ({server_name}): {str(e)}", exc_info=e)

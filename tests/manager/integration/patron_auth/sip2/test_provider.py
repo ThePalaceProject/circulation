@@ -540,6 +540,32 @@ class TestSIP2AuthenticationProvider:
             == "Error contacting authentication server (server.local). Please try again later."
         )
 
+    def test_unencodable_credentials_become_problemdetail(
+        self,
+        create_provider: Callable[..., SIP2AuthenticationProvider],
+        create_settings: Callable[..., SIP2Settings],
+    ):
+        """If the patron's credentials contain characters that can't be
+        encoded using the server's configured encoding, we treat it as a
+        failed authentication rather than letting the UnicodeEncodeError
+        become an unhandled 500 error.
+        """
+
+        # The default encoding is CP850, which can't represent these
+        # characters, so encoding the outgoing message will fail.
+        settings = create_settings(encoding=Sip2Encoding.cp850)
+        provider = create_provider(settings=settings)
+
+        result = provider.remote_authenticate(
+            "username",
+            "密码字字字",
+        )
+        response = result.patron_data
+
+        assert isinstance(response, ProblemDetail)
+        assert response.status_code == INVALID_CREDENTIALS.status_code
+        assert response.uri == INVALID_CREDENTIALS.uri
+
     def test_parse_date(self):
         parse = SIP2AuthenticationProvider.parse_date
         assert datetime(2011, 1, 2) == parse("20110102")
