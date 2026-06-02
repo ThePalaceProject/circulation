@@ -197,13 +197,20 @@ class BibliothecaPurchaseRecordImporter(LoggerMixin):
         )
 
         if is_new:
-            for bibliographic in self._api.bibliographic_lookup(bibliotheca_id):
-                if bibliographic.needs_apply(self._session):
-                    apply.bibliographic_apply.delay(
-                        bibliographic,
-                        collection_id=self._collection.id,
-                        replace=ReplacementPolicy.from_license_source(),
-                    )
+            bibliographic_results = list(self._api.bibliographic_lookup(bibliotheca_id))
+            if not bibliographic_results:
+                self.log.warning(
+                    f"Bibliotheca ID {bibliotheca_id}: bibliographic_lookup returned "
+                    "no results; LicensePool created but metadata may be incomplete."
+                )
+            else:
+                for bibliographic in bibliographic_results:
+                    if bibliographic.needs_apply(self._session):
+                        apply.bibliographic_apply.delay(
+                            bibliographic,
+                            collection_id=self._collection.id,
+                            replace=ReplacementPolicy.from_license_source(),
+                        )
 
         self.log.info(
             f"{purchase_record_time.strftime(_LOG_DATE_FORMAT)}: processed purchase record for Bibliotheca ID {bibliotheca_id}"

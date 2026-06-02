@@ -5,7 +5,10 @@ from __future__ import annotations
 from datetime import timedelta
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from palace.util.datetime_helpers import datetime_utc, utc_now
+from palace.util.log import LogLevel
 
 from palace.manager.celery.tasks import apply
 from palace.manager.integration.license.bibliotheca import BibliothecaAPI
@@ -403,3 +406,29 @@ class TestBibliothecaPurchaseRecordImporterProcessRecord:
             importer.import_day(current_day, cutoff)
 
         mock_lookup.assert_not_called()
+
+    def test_warns_when_bibliographic_lookup_returns_no_results(
+        self,
+        db: DatabaseTransactionFixture,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """A warning is logged when a new LicensePool is created but bibliographic_lookup
+        returns no results, so operators can spot titles with incomplete metadata."""
+        importer, _ = _make_importer(db)
+        current_day = datetime_utc(2024, 1, 15)
+        cutoff = datetime_utc(2024, 1, 20)
+
+        caplog.set_level(LogLevel.warning)
+
+        with (
+            patch.object(
+                BibliothecaAPI,
+                "marc_request",
+                return_value=iter([_fake_marc_record("d5rf89")]),
+            ),
+            patch.object(BibliothecaAPI, "bibliographic_lookup", return_value=[]),
+        ):
+            importer.import_day(current_day, cutoff)
+
+        assert "bibliographic_lookup returned no results" in caplog.text
+        assert "d5rf89" in caplog.text
