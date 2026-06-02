@@ -191,9 +191,23 @@ class CirculationManagerController(BaseCirculationManagerController):
             to look up an Identifier.
         """
         _db = Session.object_session(library)
-        identifier_obj, ignore = Identifier.for_foreign_id(
-            _db, identifier_type, identifier, autocreate=False
-        )
+        try:
+            identifier_obj, ignore = Identifier.for_foreign_id(
+                _db, identifier_type, identifier, autocreate=False
+            )
+        except ValueError:
+            # The identifier isn't valid for its type (e.g. a Bibliotheca ID
+            # with an embedded slash, which happens when a malformed request
+            # path is captured by the greedy <path:identifier> route). Such an
+            # identifier can't exist in any collection, so report it as a
+            # missing item rather than letting the ValueError escape as a 500.
+            self.log.info(
+                "Invalid identifier requested: %s/%s", identifier_type, identifier
+            )
+            return NO_LICENSES.detailed(
+                _("The item you're asking about (%s/%s) isn't in this collection.")
+                % (identifier_type, identifier)
+            )
         pools = (
             _db.scalars(
                 select(LicensePool)
