@@ -403,7 +403,8 @@ class SIP2AuthenticationProvider(
             # authentication rather than letting it become a 500.
             cls.logger().warning(
                 f"Credentials could not be encoded using the configured "
-                f"SIP2 encoding ({client.encoding}): {e}"
+                f"SIP2 encoding ({client.encoding}): {e}",
+                exc_info=e,
             )
             return INVALID_CREDENTIALS
 
