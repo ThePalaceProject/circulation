@@ -1625,6 +1625,35 @@ class TestFetchLiveRuleValidationValues:
 
         mock_fetch.assert_called_once_with(settings, "user1", "")
 
+    def test_unencodable_test_credentials_surface_actionable_error(
+        self,
+        create_settings: Callable[..., SIP2Settings],
+    ) -> None:
+        """If the configured test credentials can't be encoded with the server's
+        encoding, the admin gets a clear INVALID_CREDENTIALS-based error rather
+        than a misleading 'could not contact the server' message.
+        """
+        settings = create_settings(
+            test_identifier="密码字字字",
+            test_password="secret",
+            encoding=Sip2Encoding.cp850,
+        )
+        client = MockSIPClient(target_server="server.com", encoding="cp850")
+
+        with patch.object(
+            SIP2AuthenticationProvider,
+            "_build_client_from_settings",
+            return_value=client,
+        ):
+            with pytest.raises(ProblemDetailException) as exc_info:
+                SIP2AuthenticationProvider.fetch_live_rule_validation_values(settings)
+
+        problem = exc_info.value.problem_detail
+        assert problem.uri == INVALID_CONFIGURATION_OPTION.uri
+        # The message comes from the ProblemDetail branch (server returned an
+        # error), not the broad "could not contact server" exception branch.
+        assert "returned an error" in (problem.detail or "")
+
 
 class TestBuildValuesFromSip2Info:
     """Tests for :meth:`~palace.manager.integration.patron_auth.sip2.provider.SIP2AuthenticationProvider._build_values_from_sip2_info`.
