@@ -308,6 +308,14 @@ def import_purchase_records_by_collection(
                 )
                 return
             collection_name = collection.name
+
+            if collection.marked_for_deletion:
+                task.log.warning(
+                    f"Bibliotheca purchase record import: collection '{collection_name}' "
+                    "is marked for deletion. Stopping chain."
+                )
+                return
+
             importer = BibliothecaPurchaseRecordImporter(session, collection)
 
             # On a force-reimport's first invocation, clear Timestamp.finish so

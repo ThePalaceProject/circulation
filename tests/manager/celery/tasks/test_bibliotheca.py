@@ -1181,6 +1181,32 @@ class TestImportPurchaseRecordsByCollection:
         assert "deleted" in caplog.text
         assert str(collection_id) in caplog.text
 
+    def test_stops_chain_gracefully_when_collection_marked_for_deletion(
+        self,
+        bibliotheca_purchase_record_task_fixture: BibliothecaPurchaseRecordTaskFixture,
+        celery_fixture: CeleryFixture,
+        redis_fixture: RedisFixture,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """When the collection is marked for deletion, the task logs a warning and
+        returns without making any API calls, stopping the chain cleanly."""
+        collection = bibliotheca_purchase_record_task_fixture.collection
+        collection.marked_for_deletion = True
+
+        caplog.set_level(LogLevel.warning)
+
+        with patch(
+            "palace.manager.integration.license.bibliotheca_purchase_record_importer.BibliothecaAPI"
+        ) as mock_api_cls:
+            bibliotheca.import_purchase_records_by_collection.delay(
+                collection_id=collection.id,
+                lock_value=str(uuid4()),
+            ).wait()
+            mock_api_cls.return_value.marc_request.assert_not_called()
+
+        assert "marked for deletion" in caplog.text
+        assert collection.name in caplog.text
+
     def test_purchase_record_lock_independent_from_import_lock(
         self,
         db: DatabaseTransactionFixture,
