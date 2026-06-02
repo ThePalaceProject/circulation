@@ -400,6 +400,24 @@ class TestBaseController:
         assert isinstance(problem_detail, ProblemDetail)
         assert NO_LICENSES.uri == problem_detail.uri
 
+        # Try an identifier that is invalid for its type. A Bibliotheca ID
+        # may not contain a slash, which is what happens when a malformed
+        # request path (e.g. ".../axv8gvz9/open_book") is captured by the
+        # greedy <path:identifier> route. This must be reported as a missing
+        # item rather than raising a ValueError that escapes as a 500.
+        problem_detail = circulation_fixture.controller.load_licensepools(
+            circulation_fixture.db.default_library(),
+            Identifier.BIBLIOTHECA_ID,
+            "axv8gvz9/open_book",
+        )
+        assert isinstance(problem_detail, ProblemDetail)
+        assert NO_LICENSES.uri == problem_detail.uri
+        expect = (
+            "The item you're asking about (%s/axv8gvz9/open_book) isn't in this collection."
+            % Identifier.BIBLIOTHECA_ID
+        )
+        assert expect == problem_detail.detail
+
     def test_load_work(self, circulation_fixture: CirculationControllerFixture):
         # Create a Work with two LicensePools.
         work = circulation_fixture.db.work(with_license_pool=True)
