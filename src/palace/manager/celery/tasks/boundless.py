@@ -11,7 +11,7 @@ from palace.manager.celery.importer import (
 )
 from palace.manager.celery.task import Task
 from palace.manager.celery.tasks import apply
-from palace.manager.celery.utils import load_from_id
+from palace.manager.celery.utils import load_from_id, signature_with
 from palace.manager.integration.license.boundless.api import BoundlessApi
 from palace.manager.integration.license.boundless.importer import BoundlessImporter
 from palace.manager.service.celery.celery import QueueNames
@@ -141,10 +141,12 @@ def import_collection(
             f"Boundless import re-queueing: '{collection_name}' Next page: {result.next_page}."
         )
         raise task.replace(
-            task.s(
-                collection_id=collection_id,
-                import_all=import_all,
+            signature_with(
+                task,
                 page=result.next_page,
+                # modified_since and start_time are resolved from None on the
+                # first page, so they must be carried forward explicitly rather
+                # than refilled from the original arguments.
                 modified_since=modified_since,
                 start_time=start_time,
             )

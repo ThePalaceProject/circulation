@@ -13,7 +13,7 @@ from palace.manager.celery import importer
 from palace.manager.celery.importer import import_workflow_lock
 from palace.manager.celery.task import Task
 from palace.manager.celery.tasks import apply
-from palace.manager.celery.utils import load_from_id
+from palace.manager.celery.utils import load_from_id, signature_with
 from palace.manager.integration.license.opds.odl.api import OPDS2WithODLApi
 from palace.manager.integration.license.opds.odl.importer import (
     importer_from_collection,
@@ -291,11 +291,7 @@ def recalculate_hold_queue_collection(
 
     if len(license_pool_ids) == batch_size:
         # We are done this batch, but there is probably more work to do, we queue up the next batch.
-        raise task.replace(
-            recalculate_hold_queue_collection.s(
-                collection_id, batch_size, license_pool_ids[-1]
-            )
-        )
+        raise task.replace(signature_with(task, after_id=license_pool_ids[-1]))
 
     task.log.info(
         f"Finished recalculating hold queue for collection {collection_name} ({collection_id})."
@@ -405,12 +401,7 @@ def import_collection(
             # This page is complete, but there are more pages to import, so we requeue ourselves with the
             # next page URL, forwarding lock_value so the workflow lock is held across the page boundary.
             raise task.replace(
-                task.s(
-                    collection_id=collection_id,
-                    url=next_link,
-                    force=force,
-                    lock_value=lock_value,
-                )
+                signature_with(task, url=next_link, lock_value=lock_value)
             )
 
         task.log.info(

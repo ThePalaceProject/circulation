@@ -20,7 +20,7 @@ from palace.util.datetime_helpers import utc_now
 
 from palace.manager.celery.importer import import_workflow_lock
 from palace.manager.celery.task import Task
-from palace.manager.celery.utils import load_from_id
+from palace.manager.celery.utils import load_from_id, signature_with
 from palace.manager.integration.license.bibliotheca import BibliothecaAPI
 from palace.manager.integration.license.bibliotheca_importer import (
     EVENT_IMPORT_OVERLAP,
@@ -146,9 +146,11 @@ def import_collection(
 
         if result.slice_end < cutoff:
             raise task.replace(
-                task.s(
-                    collection_id=collection_id,
+                signature_with(
+                    task,
                     start=result.slice_end,
+                    # lock_value is resolved from None on the first slice, so it
+                    # must be carried forward explicitly rather than refilled.
                     lock_value=lock_value,
                 )
             )

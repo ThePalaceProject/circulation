@@ -14,7 +14,7 @@ from palace.util.exceptions import PalaceValueError
 from palace.util.log import LoggerMixin
 
 from palace.manager.celery.task import Task
-from palace.manager.celery.utils import load_from_id
+from palace.manager.celery.utils import load_from_id, signature_with
 from palace.manager.data_layer.base.frozen import BaseFrozenData
 from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.service.celery.celery import QueueNames
@@ -396,9 +396,9 @@ def loan_expiration(
     if len(loans) == batch_size:
         # We have more loans to process, requeue the task
         raise task.replace(
-            loan_expiration.s(
-                loan_expiration_days=loan_expiration_days, batch_size=batch_size
-            )
+            # loan_expiration_days is resolved to a default when empty, so carry
+            # the resolved value forward rather than refilling the original.
+            signature_with(task, loan_expiration_days=loan_expiration_days)
         )
 
     task.log.info(f"Loan notifications complete")
@@ -442,6 +442,6 @@ def hold_available(
 
     if len(holds) == batch_size:
         # We have more holds to process, requeue the task
-        raise task.replace(hold_available.s(batch_size=batch_size))
+        raise task.replace(signature_with(task))
 
     task.log.info(f"Hold available notifications complete")

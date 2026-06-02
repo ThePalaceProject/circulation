@@ -19,6 +19,7 @@ from palace.manager.celery.tasks.notifications import (
     RemovedItemNotificationData,
     send_item_removed_notification,
 )
+from palace.manager.celery.utils import signature_with
 from palace.manager.service.analytics.eventdata import AnalyticsEventData
 from palace.manager.service.celery.celery import QueueNames
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
@@ -112,7 +113,7 @@ def work_reaper(task: Task, batch_size: int = 1000) -> None:
     )
     if len(works) == batch_size:
         task.log.info("There may be more Works to delete. Re-queueing the reaper.")
-        raise task.replace(work_reaper.s(batch_size=batch_size))
+        raise task.replace(signature_with(task))
 
 
 @shared_task(queue=QueueNames.default, bind=True)
@@ -220,7 +221,7 @@ def hold_reaper(task: Task, batch_size: int = 100) -> None:
 
     if count == batch_size:
         task.log.info("There may be more holds to delete. Re-queueing the reaper.")
-        raise task.replace(hold_reaper.s(batch_size=batch_size))
+        raise task.replace(signature_with(task))
 
 
 @shared_task(queue=QueueNames.default, bind=True)
@@ -354,9 +355,7 @@ def removed_license_pool_hold_loan_reaper(task: Task, batch_size: int = 100) -> 
         task.log.info(
             "Batch size reached. There may be more items to delete. Re-queueing the reaper."
         )
-        raise task.replace(
-            removed_license_pool_hold_loan_reaper.s(batch_size=batch_size)
-        )
+        raise task.replace(signature_with(task))
 
 
 @shared_task(queue=QueueNames.default, bind=True)

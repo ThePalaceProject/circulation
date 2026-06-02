@@ -3,6 +3,7 @@ from __future__ import annotations
 from celery import shared_task
 
 from palace.manager.celery.task import Task
+from palace.manager.celery.utils import signature_with
 from palace.manager.service.celery.celery import QueueNames
 from palace.manager.sqlalchemy.model.collection import Collection
 
@@ -34,4 +35,4 @@ def collection_delete(task: Task, collection_id: int, batch_size: int = 1000) ->
             f"Collection {collection_id} has more license pools to delete. "
             f"Re-queueing."
         )
-        raise task.replace(collection_delete.s(collection_id, batch_size=batch_size))
+        raise task.replace(signature_with(task))
