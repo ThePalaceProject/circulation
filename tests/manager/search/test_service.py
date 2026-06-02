@@ -168,6 +168,16 @@ class TestService:
             "properties": mappings.serialize_properties()
         }
 
+    def test_read_search_client_applies_timeout(self):
+        """The read search client applies search_timeout as request_timeout."""
+        service = SearchServiceOpensearch1(MagicMock(), "base", search_timeout=7)
+        assert service.read_search_client()._params.get("request_timeout") == 7
+
+    def test_read_search_multi_client_applies_timeout(self):
+        """The read multi-search client applies search_timeout as request_timeout."""
+        service = SearchServiceOpensearch1(MagicMock(), "base", search_timeout=7)
+        assert service.read_search_multi_client()._params.get("request_timeout") == 7
+
     def test__get_pointer(self):
         """Getting a pointer works."""
         mock_client = MagicMock()

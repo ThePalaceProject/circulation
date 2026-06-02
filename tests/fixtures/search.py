@@ -28,6 +28,9 @@ from tests.mocks.search import SearchServiceFake
 class SearchTestConfiguration(FixtureTestUrlConfiguration):
     url: HttpUrl
     timeout: int = 20
+    search_timeout: int = 4
+    max_retries: int = 2
+    retry_on_timeout: bool = True
     maxsize: int = 25
     model_config = SettingsConfigDict(env_prefix="PALACE_TEST_SEARCH_")
 
