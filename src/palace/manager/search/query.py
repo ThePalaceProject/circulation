@@ -22,6 +22,7 @@ from opensearchpy.helpers.query import (
 from spellchecker import SpellChecker
 
 from palace.util.exceptions import BasePalaceException
+from palace.util.log import LoggerMixin
 
 from palace.manager.core.classifier.age import AgeClassifier, GradeLevelClassifier
 from palace.manager.core.classifier.keyword import KeywordBasedClassifier
@@ -41,7 +42,7 @@ from palace.manager.util.personal_names import display_name_to_sort_name
 from palace.manager.util.stopwords import ENGLISH_STOPWORDS
 
 
-class Query:
+class Query(LoggerMixin):
     """An attempt to find something in the search index."""
 
     # This dictionary establishes the relative importance of the
@@ -133,6 +134,15 @@ class Query:
     # in a query string are _important_.
     STOPWORD_FIELDS = ["title", "subtitle", "series"]
 
+    # The maximum number of words we'll consider from a query string.
+    # Real catalog searches (a title, an author, a few qualifiers) are
+    # well under this. Longer strings are almost always a patron pasting
+    # a block of text into the search box; the extra words add no search
+    # value but multiply the cost of the fuzzy/multi-match hypotheses
+    # below -- enough to exhaust OpenSearch's per-request search heap and
+    # get the whole query cancelled. We truncate to this many words.
+    MAX_QUERY_WORDS = 32
+
     # SpellChecker is expensive to initialize, so keep around
     # a class-level instance.
     SPELLCHECKER = SpellChecker()
@@ -155,15 +165,23 @@ class Query:
         self.filter = filter
         self.use_query_parser = use_query_parser
 
+        # Cap the query at a sane number of words (see MAX_QUERY_WORDS).
+        # This bounds the cost of every hypothesis built below and keeps
+        # a pasted block of text from exhausting OpenSearch search heap.
+        self.words = self.query_string.split()
+        if len(self.words) > self.MAX_QUERY_WORDS:
+            self.log.warning(
+                f"Truncating search query from {len(self.words)} to "
+                f"{self.MAX_QUERY_WORDS} words to protect OpenSearch heap."
+            )
+            self.words = self.words[: self.MAX_QUERY_WORDS]
+            self.query_string = " ".join(self.words)
+
         # Pre-calculate some values that will be checked frequently
         # when generating the opensearch-dsl query.
 
         # Check if the string contains English stopwords.
-        if query_string:
-            self.words = query_string.split()
-        else:
-            self.words = []
-        self.contains_stopwords = query_string and any(
+        self.contains_stopwords = bool(self.words) and any(
             word in ENGLISH_STOPWORDS for word in self.words
         )
 
