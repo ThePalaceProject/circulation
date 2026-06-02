@@ -62,8 +62,23 @@ class TestQuery:
         # Try again with a query that contains no query string.
         # The fuzzy hypotheses will not be run at all.
         query = Query(None)
-        assert None == query.contains_stopwords
+        assert False == query.contains_stopwords
         assert 0 == query.fuzzy_coefficient
+
+    def test_constructor_caps_query_length(self):
+        # A pathologically long query string (e.g. a patron pasting a
+        # block of text into the search box) is truncated to
+        # MAX_QUERY_WORDS so it can't exhaust OpenSearch search heap.
+        long_query = " ".join(f"word{i}" for i in range(Query.MAX_QUERY_WORDS * 3))
+        query = Query(long_query)
+        assert Query.MAX_QUERY_WORDS == len(query.words)
+        assert Query.MAX_QUERY_WORDS == len(query.query_string.split())
+
+        # A query at or below the limit is left untouched.
+        short_query = " ".join(f"word{i}" for i in range(Query.MAX_QUERY_WORDS))
+        query = Query(short_query)
+        assert short_query == query.query_string
+        assert Query.MAX_QUERY_WORDS == len(query.words)
 
     def test_build(self, db: DatabaseTransactionFixture):
         # Verify that the build() method combines the 'query' part of
