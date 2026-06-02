@@ -114,6 +114,13 @@ class WorkController(CirculationManagerController):
         if isinstance(work, ProblemDetail):
             return work
 
+        if work.presentation_edition is None:
+            # The work exists but has no presentation edition, so there's no
+            # usable metadata or identifier to build an entry around. Treat it
+            # as not found rather than letting single_entry raise an unhandled
+            # error. This mirrors the behavior of the `related` endpoint.
+            return NOT_FOUND_ON_REMOTE
+
         patron = get_request_patron(default=None)
 
         if patron:
