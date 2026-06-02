@@ -100,7 +100,7 @@ class TestExternalSearch:
             title="Moby's life as a Duck", with_open_access_download=True
         )
         moby_dick = db.work(title="Moby Dick", with_open_access_download=True)
-        client = end_to_end_search_fixture.external_search.client
+        client = end_to_end_search_fixture.external_search.write_client
         index = end_to_end_search_fixture.external_search_index
         end_to_end_search_fixture.populate_search_index()
 
@@ -120,7 +120,7 @@ class TestExternalSearch:
         end_to_end_search_fixture: EndToEndSearchFixture,
         db: DatabaseTransactionFixture,
     ):
-        client = end_to_end_search_fixture.external_search.client
+        client = end_to_end_search_fixture.external_search.write_client
         index = end_to_end_search_fixture.external_search_index
 
         butterfly = db.work(
@@ -137,7 +137,7 @@ class TestExternalSearch:
         end_to_end_search_fixture: EndToEndSearchFixture,
         db: DatabaseTransactionFixture,
     ):
-        client = end_to_end_search_fixture.external_search.client
+        client = end_to_end_search_fixture.external_search.write_client
         index = end_to_end_search_fixture.external_search_index
 
         butterfly = db.work(
@@ -155,7 +155,7 @@ class TestExternalSearch:
         end_to_end_search_fixture: EndToEndSearchFixture,
         db: DatabaseTransactionFixture,
     ):
-        client = end_to_end_search_fixture.external_search.client
+        client = end_to_end_search_fixture.external_search.write_client
         index = end_to_end_search_fixture.external_search_index
 
         work = db.work(with_open_access_download=True)

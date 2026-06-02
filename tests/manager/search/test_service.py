@@ -78,7 +78,7 @@ class TestService:
         service.index_create(revision)
         service.index_create(revision)
 
-        indices = external_search_fixture.client.indices.client.indices
+        indices = external_search_fixture.write_client.indices.client.indices
         assert indices is not None
         assert indices.exists(
             index=revision.name_for_index(external_search_fixture.index_prefix)
@@ -157,7 +157,7 @@ class TestService:
         service.index_submit_documents(documents)
         service.index_submit_documents(documents)
 
-        indices = external_search_fixture.client.indices.client.indices
+        indices = external_search_fixture.write_client.indices.client.indices
         assert indices is not None
         assert indices.exists(
             index=revision.name_for_index(external_search_fixture.index_prefix)
