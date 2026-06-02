@@ -40,9 +40,7 @@ class SearchConfiguration(ServiceConfiguration, LoggerMixin):
     max_retries: int = 2
     retry_on_timeout: bool = True
     maxsize: int = 25
-    model_config = SettingsConfigDict(
-        env_prefix="PALACE_SEARCH_", populate_by_name=True
-    )
+    model_config = SettingsConfigDict(env_prefix="PALACE_SEARCH_")
 
     @model_validator(mode="after")
     def _warn_deprecated_write_timeout_env(self) -> SearchConfiguration:
