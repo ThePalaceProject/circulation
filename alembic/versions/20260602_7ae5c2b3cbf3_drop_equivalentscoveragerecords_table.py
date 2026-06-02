@@ -29,12 +29,15 @@ def downgrade() -> None:
         sa.Column("timestamp", sa.DateTime(timezone=True), nullable=True),
         sa.Column(
             "status",
+            # coverage_status is shared with the coveragerecords table, so we
+            # must not attempt to re-create the type here.
             sa.Enum(
-                "registered",
                 "success",
-                "transient-failure",
-                "persistent-failure",
-                name="coveragerecord_status",
+                "transient failure",
+                "persistent failure",
+                "registered",
+                name="coverage_status",
+                create_type=False,
             ),
             nullable=True,
         ),
