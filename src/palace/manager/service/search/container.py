@@ -16,12 +16,15 @@ class Search(DeclarativeContainer):
         hosts=config.url,
         timeout=config.timeout,
         maxsize=config.maxsize,
+        max_retries=config.max_retries,
+        retry_on_timeout=config.retry_on_timeout,
     )
 
     service: Provider[SearchServiceOpensearch1] = providers.Singleton(
         SearchServiceOpensearch1,
         client=client,
         base_revision_name=config.index_prefix,
+        search_timeout=config.search_timeout,
     )
 
     revision_directory: Provider[SearchRevisionDirectory] = providers.Singleton(

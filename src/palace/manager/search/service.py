@@ -165,11 +165,14 @@ class SearchService(ABC):
 class SearchServiceOpensearch1(SearchService, LoggerMixin):
     """The real Opensearch 1.x service."""
 
-    def __init__(self, client: OpenSearch, base_revision_name: str):
+    def __init__(
+        self, client: OpenSearch, base_revision_name: str, search_timeout: int = 4
+    ):
         self._client = client
         self._search = Search(using=self._client)
         self._base_revision_name = base_revision_name
         self._multi_search = MultiSearch(using=self._client)
+        self._search_timeout = search_timeout
 
         # Documents are not allowed to automatically create indexes.
         # AWS OpenSearch only accepts the "flat" format
@@ -319,12 +322,16 @@ class SearchServiceOpensearch1(SearchService, LoggerMixin):
         return self._get_pointer(self.read_pointer_name())
 
     def read_search_client(self) -> Search:
-        return self._search.index(self.read_pointer_name())  # type: ignore[no-any-return]
-        # opensearchpy Search.index() is not properly typed
+        # opensearchpy Search.index()/params() are not properly typed
+        return self._search.index(self.read_pointer_name()).params(  # type: ignore[no-any-return]
+            request_timeout=self._search_timeout
+        )
 
     def read_search_multi_client(self) -> MultiSearch:
-        return self._multi_search.index(self.read_pointer_name())  # type: ignore[no-any-return]
-        # opensearchpy MultiSearch.index() is not properly typed
+        # opensearchpy MultiSearch.index()/params() are not properly typed
+        return self._multi_search.index(self.read_pointer_name()).params(  # type: ignore[no-any-return]
+            request_timeout=self._search_timeout
+        )
 
     def read_pointer_name(self) -> str:
         return f"{self.base_revision_name}-search-read"
