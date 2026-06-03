@@ -45,11 +45,11 @@ def opds_import_task[FeedType](
 
     :return: An IdentifierSet if return_identifiers is True, otherwise None.
     """
-    redis = task.services.redis().client()
     with workflow_lock_guard(task, collection.id, label=label) as proceed:
         if not proceed:
             return None
 
+        redis = task.services.redis().client()
         # Create a set to store identifiers that will be imported
         identifier_set = (
             IdentifierSet(redis, import_key(collection.id, task.request.id))
