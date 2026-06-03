@@ -17,14 +17,12 @@ Four tasks handle near-real-time event import and historical purchase record imp
 from __future__ import annotations
 
 from datetime import datetime, timedelta
-from uuid import uuid4
 
 from celery import shared_task
-from celery.exceptions import Ignore
 
 from palace.util.datetime_helpers import utc_now
 
-from palace.manager.celery.importer import import_workflow_lock
+from palace.manager.celery.importer import workflow_lock_guard
 from palace.manager.celery.task import Task
 from palace.manager.celery.utils import ModelNotFoundError, load_from_id, signature_with
 from palace.manager.integration.license.bibliotheca import BibliothecaAPI
@@ -81,7 +79,6 @@ def import_collection(
     collection_id: int,
     *,
     start: datetime | None = None,
-    lock_value: str | None = None,
 ) -> None:
     """Process one time slice of Bibliotheca circulation events.
 
@@ -90,42 +87,19 @@ def import_collection(
     slice via ``task.replace()`` until the collection is caught up to
     ``now - EVENT_IMPORT_OVERLAP``.
 
-    A Redis workflow lock keyed to ``collection_id`` ensures at most one chain
-    runs per collection at a time.  The lock is held across both ``task.replace()``
-    calls and Celery retries (``BadResponseException``, ``RequestTimedOut``) so that
-    a transient API failure does not open a window for a second concurrent run.
+    Concurrency is governed by
+    :func:`~palace.manager.celery.importer.workflow_lock_guard`, which holds a
+    per-collection Redis lock across both ``task.replace()`` calls and Celery retries.
 
     :param collection_id: Database ID of the Bibliotheca collection.
     :param start: Start of the slice to process.  ``None`` on the first
         invocation — the start is derived from the stored ``Timestamp``.
-    :param lock_value: UUID identifying this workflow.  Generated on the first
-        invocation and forwarded unchanged to every subsequent slice so the
-        lock is held across ``task.replace()`` calls.
     """
-    redis = task.services.redis().client()
-
-    is_first_slice = lock_value is None
-    if lock_value is None:
-        lock_value = str(uuid4())
-
-    workflow_lock = import_workflow_lock(redis, collection_id, lock_value)
-
-    with workflow_lock.lock(
-        raise_when_not_acquired=False,
-        # Hold the lock across task.replace() (Ignore), and across Celery retries
-        # (BadResponseException, RequestTimedOut) so a transient API failure doesn't
-        # open a window for a concurrent run to start on the same collection.
-        ignored_exceptions=(Ignore, BadResponseException, RequestTimedOut),
-    ) as workflow_lock_acquired:
-        if not workflow_lock_acquired and is_first_slice:
-            task.log.warning(
-                f"Bibliotheca event import skipped for collection {collection_id}: another run is already in progress."
-            )
+    with workflow_lock_guard(
+        task, collection_id, label="Bibliotheca event import"
+    ) as proceed:
+        if not proceed:
             return
-        if not workflow_lock_acquired and not is_first_slice:
-            task.log.warning(
-                f"Bibliotheca event import for collection {collection_id}: workflow lock expired between slices; continuing (another run may be active)."
-            )
 
         cutoff = utc_now() - EVENT_IMPORT_OVERLAP
         result = None
@@ -161,9 +135,6 @@ def import_collection(
                 signature_with(
                     task,
                     start=result.slice_end,
-                    # lock_value is resolved from None on the first slice, so it
-                    # must be carried forward explicitly rather than refilled.
-                    lock_value=lock_value,
                 )
             )
 
@@ -228,7 +199,6 @@ def import_purchase_records_by_collection(
     *,
     current_day: datetime | None = None,
     offset: int = 1,
-    lock_value: str | None = None,
     reset_timestamp: bool = False,
 ) -> None:
     """Process one page of Bibliotheca MARC purchase records.
@@ -245,11 +215,11 @@ def import_purchase_records_by_collection(
 
     This continues until the collection is caught up to ``utc_now()``.
 
-    A Redis workflow lock keyed to ``collection_id`` (prefix
-    ``PurchaseRecordCollectionWorkflow``) ensures at most one purchase-record-import
-    chain runs per collection at a time.  The lock is held across ``task.replace()``
-    calls and Celery retries so that a transient API failure does not open a
-    window for a second concurrent run.
+    Concurrency is governed by
+    :func:`~palace.manager.celery.importer.workflow_lock_guard` using a dedicated
+    :func:`_purchase_record_workflow_lock` (prefix ``PurchaseRecordCollectionWorkflow``),
+    which holds a per-collection Redis lock across both ``task.replace()`` calls and
+    Celery retries so at most one purchase-record-import chain runs per collection.
 
     :param collection_id: Database ID of the Bibliotheca collection.
     :param current_day: Start of the day to process.  ``None`` on the first
@@ -257,9 +227,6 @@ def import_purchase_records_by_collection(
         (defaulting to 2014-01-01 when no timestamp exists).
     :param offset: 1-based record offset within the current day's result set.
         Defaults to ``1`` (the first page).
-    :param lock_value: UUID identifying this workflow.  Generated on the first
-        invocation and forwarded unchanged to every subsequent page/day so the
-        lock is held across ``task.replace()`` calls.
     :param reset_timestamp: When ``True`` on the **first** invocation, clears
         ``Timestamp.finish`` within the transaction so that ``get_start()``
         returns :data:`DEFAULT_PURCHASE_RECORD_START_TIME` rather than the stale
@@ -267,30 +234,14 @@ def import_purchase_records_by_collection(
         since ``get_start()`` is not called in that case.  Not forwarded to
         replacement tasks.
     """
-    redis = task.services.redis().client()
-
-    is_first_invocation = lock_value is None
-    if lock_value is None:
-        lock_value = str(uuid4())
-
-    workflow_lock = _purchase_record_workflow_lock(redis, collection_id, lock_value)
-
-    with workflow_lock.lock(
-        raise_when_not_acquired=False,
-        # Hold the lock across task.replace() (Ignore) and Celery retries
-        # (BadResponseException, RequestTimedOut) so a transient API failure
-        # does not open a window for a concurrent run on the same collection.
-        ignored_exceptions=(Ignore, BadResponseException, RequestTimedOut),
-    ) as workflow_lock_acquired:
-        if not workflow_lock_acquired and is_first_invocation:
-            task.log.warning(
-                f"Bibliotheca purchase record import skipped for collection {collection_id}: another run is already in progress."
-            )
+    with workflow_lock_guard(
+        task,
+        collection_id,
+        label="Bibliotheca purchase record import",
+        lock_factory=_purchase_record_workflow_lock,
+    ) as proceed:
+        if not proceed:
             return
-        if not workflow_lock_acquired and not is_first_invocation:
-            task.log.warning(
-                f"Bibliotheca purchase record import for collection {collection_id}: workflow lock expired between invocations; continuing (another run may be active)."
-            )
 
         cutoff = utc_now()
         result: DayImportResult
@@ -319,8 +270,9 @@ def import_purchase_records_by_collection(
             # On a force-reimport's first invocation, clear Timestamp.finish so
             # that a crash before the first record is processed causes the next
             # scheduled run to fall back to DEFAULT_PURCHASE_RECORD_START_TIME
-            # rather than the stale pre-reimport finish date.
-            if is_first_invocation and reset_timestamp:
+            # rather than the stale pre-reimport finish date. reset_timestamp is
+            # only ever True on the first invocation (replacements force it False).
+            if reset_timestamp:
                 ts = Timestamp.lookup(
                     session,
                     PURCHASE_RECORD_SERVICE_NAME,
@@ -357,9 +309,6 @@ def import_purchase_records_by_collection(
                     # (via get_start()), so it must be carried forward explicitly.
                     current_day=current_day,
                     offset=result.next_offset,
-                    # lock_value is resolved from None on the first invocation, so it
-                    # must be carried forward explicitly rather than refilled.
-                    lock_value=lock_value,
                     # reset_timestamp applies only to the first invocation.
                     reset_timestamp=False,
                 )
@@ -372,9 +321,6 @@ def import_purchase_records_by_collection(
                     task,
                     current_day=result.day_end,
                     offset=1,
-                    # lock_value is resolved from None on the first invocation, so it
-                    # must be carried forward explicitly rather than refilled.
-                    lock_value=lock_value,
                     # reset_timestamp applies only to the first invocation.
                     reset_timestamp=False,
                 )

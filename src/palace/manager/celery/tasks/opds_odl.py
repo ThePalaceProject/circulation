@@ -1,16 +1,16 @@
 import datetime
-from uuid import uuid4
 
 from celery import shared_task
-from celery.exceptions import Ignore
 from sqlalchemy import delete, select
 from sqlalchemy.exc import NoResultFound
 from sqlalchemy.orm import Session
 
 from palace.util.datetime_helpers import utc_now
 
-from palace.manager.celery import importer
-from palace.manager.celery.importer import import_workflow_lock
+from palace.manager.celery.importer import (
+    import_all as create_import_tasks,
+    workflow_lock_guard,
+)
 from palace.manager.celery.task import Task
 from palace.manager.celery.tasks import apply
 from palace.manager.celery.utils import load_from_id, signature_with
@@ -308,7 +308,7 @@ def import_all(task: Task, force: bool = False) -> None:
         collection_query = Collection.select_by_protocol(
             OPDS2WithODLApi, registry=registry
         )
-        importer.import_all(
+        create_import_tasks(
             session.scalars(collection_query).all(),
             import_collection.s(
                 force=force,
@@ -331,51 +331,23 @@ def import_collection(
     url: str | None = None,
     *,
     force: bool = False,
-    lock_value: str | None = None,
 ) -> None:
     """
     Run an OPDS2+ODL import for the given collection.
 
-    A Redis workflow lock keyed to ``collection_id`` ensures at most one import
-    runs per collection at a time. The lock is held across ``task.replace()``
-    page boundaries and across Celery retries (``BadResponseException``,
-    ``RequestTimedOut``) so a transient failure does not open a window for a
-    second concurrent run to start on the same collection.
+    Concurrency is governed by
+    :func:`~palace.manager.celery.importer.workflow_lock_guard`, which holds a
+    per-collection Redis lock across ``task.replace()`` page boundaries and
+    ``autoretry_for`` retries.
 
     :param collection_id: Database ID of the collection to import.
     :param url: The next page URL to import. ``None`` on the first page — the
         import starts from the beginning of the feed.
     :param force: If True, import even if the feed is unchanged.
-    :param lock_value: UUID identifying this import workflow. Generated on the
-        first page and forwarded unchanged to every subsequent page so the lock
-        is held across ``task.replace()`` calls.
     """
-    redis = task.services.redis().client()
-
-    is_first_page = lock_value is None
-    if lock_value is None:
-        lock_value = str(uuid4())
-
-    workflow_lock = import_workflow_lock(redis, collection_id, lock_value)
-
-    with workflow_lock.lock(
-        raise_when_not_acquired=False,
-        # Hold the lock across task.replace() (Ignore) and across Celery retries
-        # (BadResponseException, RequestTimedOut) so a transient failure doesn't
-        # open a window for a concurrent run to start on the same collection.
-        ignored_exceptions=(Ignore, BadResponseException, RequestTimedOut),
-    ) as workflow_lock_acquired:
-        if not workflow_lock_acquired and is_first_page:
-            task.log.warning(
-                f"Import skipped for collection {collection_id}: "
-                "another import is already in progress."
-            )
+    with workflow_lock_guard(task, collection_id, label="OPDS2+ODL import") as proceed:
+        if not proceed:
             return
-        if not workflow_lock_acquired and not is_first_page:
-            task.log.warning(
-                f"Import for collection {collection_id}: workflow lock expired "
-                "between pages; continuing (another import may be running)."
-            )
 
         with task.session() as session:
             collection = load_from_id(session, Collection, collection_id)
@@ -398,11 +370,10 @@ def import_collection(
 
         next_link = import_result.next_url
         if next_link is not None:
-            # This page is complete, but there are more pages to import, so we requeue ourselves with the
-            # next page URL, forwarding lock_value so the workflow lock is held across the page boundary.
-            raise task.replace(
-                signature_with(task, url=next_link, lock_value=lock_value)
-            )
+            # This page is complete, but there are more pages to import, so we requeue
+            # ourselves with the next page URL. The workflow lock is keyed on the task id,
+            # which task.replace() preserves, so the next page re-acquires the same lock.
+            raise task.replace(signature_with(task, url=next_link))
 
         task.log.info(
             f"Import complete for collection '{collection_name}' (id={collection_id})."
