@@ -115,9 +115,10 @@ class BibliothecaCirculationUpdater(LoggerMixin):
                 Identifier.id > offset,
             )
             .order_by(Identifier.id)
+            .distinct()
             .limit(CIRCULATION_UPDATE_BATCH_SIZE)
         )
-        identifiers: list[Identifier] = list(self._session.scalars(stmt).unique().all())
+        identifiers: list[Identifier] = list(self._session.scalars(stmt).all())
 
         if identifiers:
             self._process_batch(identifiers)
