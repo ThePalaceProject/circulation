@@ -1,13 +1,16 @@
 """Drop equivalentscoveragerecords table
 
 Revision ID: 7ae5c2b3cbf3
-Revises: d856ff4dbefb
+Revises: a6c85605404c
 Create Date: 2026-06-02 17:49:35.182272+00:00
 
 """
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy.dialects import postgresql
+
+from palace.manager.sqlalchemy.model.coverage import BaseCoverageRecord
 
 # revision identifiers, used by Alembic.
 revision = "7ae5c2b3cbf3"
@@ -29,14 +32,11 @@ def downgrade() -> None:
         sa.Column("timestamp", sa.DateTime(timezone=True), nullable=True),
         sa.Column(
             "status",
-            # coverage_status is shared with the coveragerecords table, so we
-            # must not attempt to re-create the type here.
-            sa.Enum(
-                "success",
-                "transient failure",
-                "persistent failure",
-                "registered",
-                name="coverage_status",
+            # coverage_status is shared with coveragerecords; use postgresql.ENUM
+            # with create_type=False so Alembic does not attempt to re-create it.
+            postgresql.ENUM(
+                *BaseCoverageRecord.status_enum.enums,  # type: ignore[attr-defined]
+                name=BaseCoverageRecord.status_enum.name,
                 create_type=False,
             ),
             nullable=True,
