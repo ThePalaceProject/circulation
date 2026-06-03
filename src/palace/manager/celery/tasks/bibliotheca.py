@@ -351,21 +351,31 @@ def import_purchase_records_by_collection(
         if result.next_offset is not None:
             # More pages remain for the current day.
             raise task.replace(
-                task.s(
-                    collection_id=collection_id,
+                signature_with(
+                    task,
+                    # current_day may have been resolved from None inside the task body
+                    # (via get_start()), so it must be carried forward explicitly.
                     current_day=current_day,
                     offset=result.next_offset,
+                    # lock_value is resolved from None on the first invocation, so it
+                    # must be carried forward explicitly rather than refilled.
                     lock_value=lock_value,
+                    # reset_timestamp applies only to the first invocation.
+                    reset_timestamp=False,
                 )
             )
 
         if result.day_end < cutoff:
             # Current day is complete; advance to the next day.
             raise task.replace(
-                task.s(
-                    collection_id=collection_id,
+                signature_with(
+                    task,
                     current_day=result.day_end,
                     offset=1,
+                    # lock_value is resolved from None on the first invocation, so it
+                    # must be carried forward explicitly rather than refilled.
                     lock_value=lock_value,
+                    # reset_timestamp applies only to the first invocation.
+                    reset_timestamp=False,
                 )
             )
