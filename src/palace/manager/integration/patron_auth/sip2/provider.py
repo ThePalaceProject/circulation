@@ -368,6 +368,58 @@ class SIP2AuthenticationProvider(
         )
 
     @classmethod
+    def _fetch_patron_info(
+        cls,
+        client: SIPClient,
+        username: str,
+        password: str | None,
+    ) -> dict[str, Any] | ProblemDetail:
+        """Run a full SIP2 patron-information exchange against the given client.
+
+        Performs connect, login, sc_status, patron_information, end_session,
+        disconnect, converting transport and encoding errors into a
+        :class:`ProblemDetail`. This is the single place where both the
+        instance and settings-only code paths talk to the SIP2 server, so the
+        error handling stays consistent between them.
+
+        :param client: A configured :class:`SIPClient` to use for the exchange.
+        :param username: Patron identifier (e.g. barcode or test_identifier).
+        :param password: Patron password (e.g. PIN, test_password, or None).
+        :returns: Raw SIP2 info dict on success, or a :class:`ProblemDetail` on error.
+        """
+        try:
+            client.connect()
+            client.login()
+            client.sc_status()
+            info = client.patron_information(username, password)
+            client.end_session(username, password)
+            client.disconnect()
+            return info
+
+        except UnicodeEncodeError as e:
+            # The credentials contain characters that can't be represented in
+            # the SIP2 server's configured encoding, so they can't possibly be
+            # valid credentials for this server. Treat this as a failed
+            # authentication rather than letting it become a 500.
+            debug_info = (
+                f"Credentials could not be encoded using the configured "
+                f"SIP2 encoding ({client.encoding})"
+            )
+            cls.logger().warning(
+                f"{debug_info}: {e}",
+                exc_info=e,
+            )
+            return INVALID_CREDENTIALS.with_debug(debug_info)
+
+        except OSError as e:
+            server_name = client.target_server or "unknown server"
+            cls.logger().warning(f"SIP2 error ({server_name}): {str(e)}", exc_info=e)
+            return INVALID_CREDENTIALS.detailed(
+                f"Error contacting authentication server ({server_name}). "
+                "Please try again later."
+            )
+
+    @classmethod
     def _fetch_patron_info_via_sip2(
         cls,
         settings: SIP2Settings,
@@ -377,8 +429,8 @@ class SIP2AuthenticationProvider(
     ) -> dict[str, Any] | ProblemDetail:
         """Fetch patron information from the SIP2 server using settings only.
 
-        Performs connect, login, sc_status, patron_information, end_session, disconnect.
-        Does not require a provider instance.
+        Builds a SIP client from the settings and delegates to
+        :meth:`_fetch_patron_info`. Does not require a provider instance.
 
         :param settings: The validated :class:`SIP2Settings`.
         :param username: Patron identifier (e.g. test_identifier).
@@ -386,21 +438,8 @@ class SIP2AuthenticationProvider(
         :param institution_id: Optional institution ID from library settings.
         :returns: Raw SIP2 info dict on success, or a :class:`ProblemDetail` on error.
         """
-        sip = cls._build_client_from_settings(settings, institution_id)
-        try:
-            sip.connect()
-            sip.login()
-            sip.sc_status()
-            info = sip.patron_information(username, password)
-            sip.end_session(username, password)
-            sip.disconnect()
-            return info
-        except OSError as e:
-            server_name = settings.url or "unknown server"
-            return INVALID_CREDENTIALS.detailed(
-                f"Error contacting authentication server ({server_name}). "
-                "Please try again later."
-            )
+        client = cls._build_client_from_settings(settings, institution_id)
+        return cls._fetch_patron_info(client, username, password)
 
     @classmethod
     def fetch_live_rule_validation_values(
@@ -462,22 +501,7 @@ class SIP2AuthenticationProvider(
     def patron_information(
         self, username: str, password: str | None
     ) -> dict[str, Any] | ProblemDetail:
-        try:
-            sip = self.client
-            sip.connect()
-            sip.login()
-            sip.sc_status()
-            info = sip.patron_information(username, password)
-            sip.end_session(username, password)
-            sip.disconnect()
-            return info
-
-        except OSError as e:
-            server_name = self.server or "unknown server"
-            self.log.warning(f"SIP2 error ({server_name}): {str(e)}", exc_info=e)
-            return INVALID_CREDENTIALS.detailed(
-                f"Error contacting authentication server ({server_name}). Please try again later."
-            )
+        return self._fetch_patron_info(self.client, username, password)
 
     def remote_patron_lookup(
         self, patron_or_patrondata: PatronData | Patron
