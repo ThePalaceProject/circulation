@@ -118,7 +118,12 @@ class BibliothecaCirculationUpdater(LoggerMixin):
             .distinct()
             .limit(CIRCULATION_UPDATE_BATCH_SIZE)
         )
-        identifiers: list[Identifier] = list(self._session.scalars(stmt).all())
+        # .unique() is required because Identifier has eager-loaded collection
+        # relationships that cause SQLAlchemy to raise if it is omitted.
+        # .distinct() (on the statement) ensures LIMIT is applied to distinct
+        # rows at the database level so the page boundary is reliable regardless
+        # of any join multiplicity.
+        identifiers: list[Identifier] = list(self._session.scalars(stmt).unique().all())
 
         if identifiers:
             self._process_batch(identifiers)
