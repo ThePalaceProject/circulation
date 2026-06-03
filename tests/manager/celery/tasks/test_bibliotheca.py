@@ -1451,3 +1451,55 @@ class TestCirculationUpdateCollection:
         circulation_lock.release()
         purchase_record_lock.release()
         event_lock.release()
+
+    def test_stops_chain_gracefully_when_collection_deleted(
+        self,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        redis_fixture: RedisFixture,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """When the collection is deleted between chain invocations, the task logs a
+        warning and returns without raising, stopping the chain cleanly."""
+        collection = MockBibliothecaAPI.mock_collection(
+            db.session, db.default_library()
+        )
+        collection_id = collection.id
+
+        db.session.delete(collection)
+        db.session.commit()
+
+        caplog.set_level(LogLevel.warning)
+
+        bibliotheca.circulation_update_collection.delay(
+            collection_id=collection_id,
+        ).wait()
+
+        assert "not found" in caplog.text
+        assert "deleted" in caplog.text
+        assert str(collection_id) in caplog.text
+
+    def test_stops_chain_gracefully_when_collection_marked_for_deletion(
+        self,
+        bibliotheca_circulation_update_task_fixture: BibliothecaCirculationUpdateTaskFixture,
+        celery_fixture: CeleryFixture,
+        redis_fixture: RedisFixture,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """When the collection is marked for deletion, the task logs a warning and
+        returns without making any API calls, stopping the chain cleanly."""
+        collection = bibliotheca_circulation_update_task_fixture.collection
+        collection.marked_for_deletion = True
+
+        caplog.set_level(LogLevel.warning)
+
+        with patch(
+            "palace.manager.celery.tasks.bibliotheca.BibliothecaCirculationUpdater"
+        ) as mock_updater_cls:
+            bibliotheca.circulation_update_collection.delay(
+                collection_id=collection.id,
+            ).wait()
+            mock_updater_cls.return_value.update_batch.assert_not_called()
+
+        assert "marked for deletion" in caplog.text
+        assert collection.name in caplog.text

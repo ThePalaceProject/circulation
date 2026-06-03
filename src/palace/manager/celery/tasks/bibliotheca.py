@@ -424,8 +424,23 @@ def circulation_update_collection(
         collection_name: str | None = None
 
         with task.transaction() as session:
-            collection = load_from_id(session, Collection, collection_id)
+            try:
+                collection = load_from_id(session, Collection, collection_id)
+            except ModelNotFoundError:
+                task.log.warning(
+                    f"Bibliotheca circulation update: collection {collection_id} not "
+                    "found; it may have been deleted. Stopping chain."
+                )
+                return
             collection_name = collection.name
+
+            if collection.marked_for_deletion:
+                task.log.warning(
+                    f"Bibliotheca circulation update: collection '{collection_name}' "
+                    "is marked for deletion. Stopping chain."
+                )
+                return
+
             updater = BibliothecaCirculationUpdater(session, collection)
 
             if offset is None:
