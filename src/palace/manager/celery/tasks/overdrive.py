@@ -3,7 +3,6 @@ from typing import Any, Literal, TypedDict, TypeGuard
 from uuid import uuid4
 
 from celery import chain, chord, group, shared_task
-from celery.exceptions import Ignore
 from sqlalchemy import select
 
 from palace.util.datetime_helpers import utc_now
@@ -13,6 +12,7 @@ from palace.manager.celery.importer import (
     import_key,
     import_workflow_lock,
     reap_workflow_lock,
+    workflow_lock_guard,
 )
 from palace.manager.celery.task import Task
 from palace.manager.celery.tasks import apply
@@ -67,7 +67,6 @@ def import_collection(
     start_time: datetime.datetime | None = None,
     return_identifiers: bool = True,
     parent_identifiers: dict[str, Any] | None = None,
-    lock_value: str | None = None,
 ) -> IdentifierSet | ImportSkippedPayload | None:
     """
     Run an import for a single Overdrive collection.
@@ -94,8 +93,6 @@ def import_collection(
     :param parent_identifiers: A running set of parent identifiers (if not a parent collection)
         that were processed before this run started. This value is a serialized representation of the
         parent_identifier IdentifierSet.
-    :param lock_value: UUID identifying this import workflow. Passed between pages to hold the workflow lock
-        across page boundaries. Generated on the first page when None.
     :return: IdentifierSet when import completes and return_identifiers is True; None when
         return_identifiers is False or collection is marked for deletion; {IMPORT_SKIPPED: True}
         when the workflow lock is held and another import is already in progress.
@@ -106,32 +103,9 @@ def import_collection(
     if start_time is None:
         start_time = utc_now()
 
-    # Both page and lock_value are None only on the first page of a fresh import.
-    # They are always set together when task.replace() chains to the next page.
-    is_first_page = page is None and lock_value is None
-    if lock_value is None:
-        lock_value = str(uuid4())
-
-    workflow_lock = import_workflow_lock(redis, collection_id, lock_value)
-
-    # Ignore is raised by task.replace() and Retry is raised by autoretry_for exceptions.
-    # Neither should release the workflow lock: replace() hands it to the next page task,
-    # and retries should continue holding the lock across the backoff window.
-    with workflow_lock.lock(
-        raise_when_not_acquired=False,
-        ignored_exceptions=(Ignore, BadResponseException, RequestTimedOut),
-    ) as workflow_lock_acquired:
-        if not workflow_lock_acquired and is_first_page:
-            task.log.warning(
-                f"OverDrive import skipped for collection {collection_id}: "
-                "another import is already in progress."
-            )
+    with workflow_lock_guard(task, collection_id, label="OverDrive import") as proceed:
+        if not proceed:
             return _import_skipped_payload()
-        if not workflow_lock_acquired and not is_first_page:
-            task.log.warning(
-                f"OverDrive import for collection {collection_id}: workflow lock expired "
-                "between pages; continuing (another import may be running)."
-            )
 
         with task.transaction() as session:
             collection = load_from_id(session, Collection, collection_id)
@@ -219,12 +193,11 @@ def import_collection(
                     task,
                     parent_identifiers=serialized_parent_identifiers,
                     page=result.next_page.url,
-                    # modified_since, start_time, and lock_value are resolved from
-                    # None on the first page, so they must be carried forward
-                    # explicitly rather than refilled from the original arguments.
+                    # modified_since and start_time are resolved from None on the first
+                    # page, so they must be carried forward explicitly rather than
+                    # refilled from the original arguments.
                     modified_since=modified_since,
                     start_time=start_time,
-                    lock_value=lock_value,
                 )
             )
         else:
@@ -522,44 +495,26 @@ def reap_collection(
     *,
     offset: int = 0,
     batch_size: int = 50,
-    lock_value: str | None = None,
 ) -> None:
     """
     Check for books that are in the local collection but have left our Overdrive collection.
 
     Processes identifiers in batches, re-queuing itself via task.replace() until all
-    identifiers have been checked. A Redis workflow lock prevents overlapping runs for
-    the same collection; the lock auto-expires after 2 hours if the process dies.
+    identifiers have been checked. Concurrency is governed by
+    :func:`~palace.manager.celery.importer.workflow_lock_guard`.
 
     :param collection_id: The ID of the Overdrive collection to reap.
     :param offset: The last Identifier.id processed; used to resume across batches.
     :param batch_size: Number of identifiers to process per batch.
-    :param lock_value: UUID identifying this reap workflow. Generated on the first batch
-        when None, then passed to each subsequent batch to hold the lock across replacements.
     """
-    redis = task.services.redis().client()
-
-    is_first_batch = lock_value is None
-    if lock_value is None:
-        lock_value = str(uuid4())
-
-    workflow_lock = reap_workflow_lock(redis, collection_id, lock_value)
-
-    with workflow_lock.lock(
-        raise_when_not_acquired=False,
-        ignored_exceptions=(Ignore, BadResponseException, RequestTimedOut),
-    ) as workflow_lock_acquired:
-        if not workflow_lock_acquired and is_first_batch:
-            task.log.warning(
-                f"Overdrive reaper skipped for collection {collection_id}: "
-                "another reap is already in progress."
-            )
+    with workflow_lock_guard(
+        task,
+        collection_id,
+        label="Overdrive reaper",
+        lock_factory=reap_workflow_lock,
+    ) as proceed:
+        if not proceed:
             return
-        if not workflow_lock_acquired and not is_first_batch:
-            task.log.warning(
-                f"Overdrive reaper for collection {collection_id}: workflow lock expired "
-                "between batches; continuing (another reap may be running)."
-            )
 
         new_offset = 0
         processed_count = 0
@@ -608,8 +563,5 @@ def reap_collection(
                 signature_with(
                     task,
                     offset=new_offset,
-                    # lock_value is resolved from None on the first batch, so it
-                    # must be carried forward explicitly rather than refilled.
-                    lock_value=lock_value,
                 )
             )

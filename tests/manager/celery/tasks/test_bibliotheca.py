@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, call, patch
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 import pytest
 
@@ -183,7 +183,6 @@ class TestBibliothecaImportCollection:
         collection = bibliotheca_task_fixture.collection
 
         explicit_start = utc_now() - timedelta(hours=2)
-        lock_value = str(uuid4())
 
         with patch.object(bibliotheca.import_collection, "replace") as mock_replace:
             mock_replace.side_effect = Exception("replaced")
@@ -191,7 +190,6 @@ class TestBibliothecaImportCollection:
                 bibliotheca.import_collection.delay(
                     collection_id=collection.id,
                     start=explicit_start,
-                    lock_value=lock_value,
                 ).wait()
 
         slice_start, _ = mock_api.get_events_between.call_args.args
@@ -225,7 +223,7 @@ class TestBibliothecaImportCollection:
         redis_fixture: RedisFixture,
     ) -> None:
         """When start is more than one slice behind cutoff, task.replace() is raised
-        with the next slice's start and the same lock_value."""
+        with the next slice's start."""
         mock_api_cls.return_value.get_events_between.return_value = iter([])
         collection = bibliotheca_task_fixture.collection
 
@@ -234,17 +232,14 @@ class TestBibliothecaImportCollection:
             finish=utc_now() - timedelta(hours=1)
         )
 
-        lock_value = str(uuid4())
         with patch.object(bibliotheca.import_collection, "replace") as mock_replace:
             mock_replace.side_effect = Exception("replaced")
             with pytest.raises(Exception, match="replaced"):
                 bibliotheca.import_collection.delay(
                     collection_id=collection.id,
-                    lock_value=lock_value,
                 ).wait()
 
         replace_sig = mock_replace.call_args[0][0]
-        assert replace_sig.kwargs["lock_value"] == lock_value
         # The next start should be approximately 5 minutes after the slice started.
         assert replace_sig.kwargs["start"] is not None
 
@@ -270,34 +265,6 @@ class TestBibliothecaImportCollection:
 
         mock_replace.assert_not_called()
         mock_api_cls.return_value.get_events_between.assert_called_once()
-
-    @patch("palace.manager.integration.license.bibliotheca_importer.BibliothecaAPI")
-    def test_lock_value_passed_through_on_replace(
-        self,
-        mock_api_cls: MagicMock,
-        bibliotheca_task_fixture: BibliothecaTaskFixture,
-        celery_fixture: CeleryFixture,
-        redis_fixture: RedisFixture,
-    ) -> None:
-        """The lock_value generated on the first slice is forwarded unchanged to the
-        next slice so the workflow lock remains held across task.replace() calls."""
-        mock_api_cls.return_value.get_events_between.return_value = iter([])
-        collection = bibliotheca_task_fixture.collection
-
-        bibliotheca_task_fixture.stamp_event_import(
-            finish=utc_now() - timedelta(hours=1)
-        )
-
-        with patch.object(bibliotheca.import_collection, "replace") as mock_replace:
-            mock_replace.side_effect = Exception("replaced")
-            with pytest.raises(Exception, match="replaced"):
-                # First invocation: no lock_value (will be generated internally).
-                bibliotheca.import_collection.delay(collection_id=collection.id).wait()
-
-        replace_sig = mock_replace.call_args[0][0]
-        lock_value = replace_sig.kwargs["lock_value"]
-        assert lock_value is not None
-        UUID(lock_value)  # raises ValueError if not a valid UUID
 
     def test_skips_when_lock_held(
         self,
@@ -329,57 +296,19 @@ class TestBibliothecaImportCollection:
 
         workflow_lock.release()
 
-    def test_continues_with_warning_when_lock_expires_mid_chain(
-        self,
-        bibliotheca_task_fixture: BibliothecaTaskFixture,
-        celery_fixture: CeleryFixture,
-        redis_fixture: RedisFixture,
-        caplog: pytest.LogCaptureFixture,
-    ) -> None:
-        """When the workflow lock expires between slices (is_first_slice=False and lock
-        not acquired), the task logs a warning but still processes the slice rather than
-        silently returning."""
-        collection = bibliotheca_task_fixture.collection
-        bibliotheca_task_fixture.stamp_event_import(
-            finish=utc_now() - timedelta(minutes=3)
-        )
-
-        # Simulate the lock having expired and been re-acquired by a competing run.
-        # A free lock would be acquired successfully; we need another holder so that our
-        # task's lock_value (a different UUID) fails to acquire.
-        competing_lock = import_workflow_lock(
-            redis_fixture.client, collection.id, str(uuid4())
-        )
-        competing_lock.acquire()
-
-        caplog.set_level(LogLevel.warning)
-
-        with patch(
-            "palace.manager.integration.license.bibliotheca_importer.BibliothecaAPI"
-        ) as mock_api_cls:
-            mock_api_cls.return_value.get_events_between.return_value = iter([])
-            # Pass a lock_value that does not match the competing lock so acquire fails,
-            # but is_first_slice is False (lock_value is not None).
-            bibliotheca.import_collection.delay(
-                collection_id=collection.id,
-                lock_value=str(uuid4()),
-            ).wait()
-            # Despite the lock not being acquired, the slice was still processed.
-            mock_api_cls.return_value.get_events_between.assert_called_once()
-
-        assert "workflow lock expired between slices" in caplog.text
-
-        competing_lock.release()
-
     def test_lock_not_released_on_autoretry(
         self,
         bibliotheca_task_fixture: BibliothecaTaskFixture,
         celery_fixture: CeleryFixture,
         redis_fixture: RedisFixture,
     ) -> None:
-        """When a retryable exception is raised the workflow lock is held so that
-        a concurrent run cannot start on the same collection while retries are
-        in progress."""
+        """A retryable failure holds the workflow lock and each retry re-runs the import.
+
+        The workflow lock is keyed on ``task.request.id``, which Celery preserves across
+        retries, so every retry re-acquires the same lock and re-runs the slice rather
+        than skipping as if another run were in progress. The lock stays held so no
+        concurrent run can start.
+        """
         collection = bibliotheca_task_fixture.collection
         bibliotheca_task_fixture.stamp_event_import(
             finish=utc_now() - timedelta(minutes=10)
@@ -398,6 +327,10 @@ class TestBibliothecaImportCollection:
                 bibliotheca.import_collection.delay(collection_id=collection.id).get(
                     propagate=False
                 )
+
+            # The slice was re-run on every retry (1 initial attempt + max_retries=4),
+            # not skipped as an "already in progress" run.
+            assert mock_api_cls.return_value.get_events_between.call_count == 5
 
         # Lock should still be held after retries exhaust — it will expire via
         # the 2-hour Redis TTL, preventing a concurrent run from starting.
@@ -472,13 +405,11 @@ class TestBibliothecaImportCollection:
         one_hour_ago = utc_now() - timedelta(hours=1)
         bibliotheca_task_fixture.stamp_event_import(finish=one_hour_ago)
 
-        lock_value = str(uuid4())
         with patch.object(bibliotheca.import_collection, "replace") as mock_replace:
             mock_replace.side_effect = Exception("replaced")
             with pytest.raises(Exception, match="replaced"):
                 bibliotheca.import_collection.delay(
                     collection_id=collection.id,
-                    lock_value=lock_value,
                 ).wait()
 
         # After processing one slice the timestamp finish should have advanced
@@ -743,7 +674,7 @@ class TestImportPurchaseRecordsByCollection:
         redis_fixture: RedisFixture,
     ) -> None:
         """When current_day + 1 day is still behind cutoff, task.replace() is raised
-        with the next day and the same lock_value."""
+        with the next day."""
         mock_api_cls.return_value.marc_request.return_value = iter([])
         collection = bibliotheca_purchase_record_task_fixture.collection
 
@@ -753,7 +684,6 @@ class TestImportPurchaseRecordsByCollection:
             finish=stored_finish
         )
 
-        lock_value = str(uuid4())
         with patch.object(
             bibliotheca.import_purchase_records_by_collection, "replace"
         ) as mock_replace:
@@ -761,11 +691,9 @@ class TestImportPurchaseRecordsByCollection:
             with pytest.raises(Exception, match="replaced"):
                 bibliotheca.import_purchase_records_by_collection.delay(
                     collection_id=collection.id,
-                    lock_value=lock_value,
                 ).wait()
 
         replace_sig = mock_replace.call_args[0][0]
-        assert replace_sig.kwargs["lock_value"] == lock_value
         expected_next_day = stored_finish + timedelta(days=1)
         assert (
             abs((replace_sig.kwargs["current_day"] - expected_next_day).total_seconds())
@@ -801,7 +729,6 @@ class TestImportPurchaseRecordsByCollection:
             next_offset=1 + _MARC_PAGE_SIZE,
         )
 
-        lock_value = str(uuid4())
         with patch.object(
             bibliotheca.import_purchase_records_by_collection, "replace"
         ) as mock_replace:
@@ -810,7 +737,6 @@ class TestImportPurchaseRecordsByCollection:
                 bibliotheca.import_purchase_records_by_collection.delay(
                     collection_id=collection.id,
                     offset=1,
-                    lock_value=lock_value,
                 ).wait()
 
         replace_sig = mock_replace.call_args[0][0]
@@ -819,7 +745,6 @@ class TestImportPurchaseRecordsByCollection:
             abs((replace_sig.kwargs["current_day"] - stored_finish).total_seconds()) < 5
         )
         assert replace_sig.kwargs["offset"] == 1 + _MARC_PAGE_SIZE
-        assert replace_sig.kwargs["lock_value"] == lock_value
 
     @patch(
         "palace.manager.integration.license.bibliotheca_purchase_record_importer.BibliothecaAPI"
@@ -848,39 +773,6 @@ class TestImportPurchaseRecordsByCollection:
             ).wait()
 
         mock_replace.assert_not_called()
-
-    @patch(
-        "palace.manager.integration.license.bibliotheca_purchase_record_importer.BibliothecaAPI"
-    )
-    def test_lock_value_passed_through_on_replace(
-        self,
-        mock_api_cls: MagicMock,
-        bibliotheca_purchase_record_task_fixture: BibliothecaPurchaseRecordTaskFixture,
-        celery_fixture: CeleryFixture,
-        redis_fixture: RedisFixture,
-    ) -> None:
-        """The lock_value generated on the first day is forwarded unchanged to the
-        next day so the workflow lock remains held across task.replace() calls."""
-        mock_api_cls.return_value.marc_request.return_value = iter([])
-        collection = bibliotheca_purchase_record_task_fixture.collection
-
-        bibliotheca_purchase_record_task_fixture.stamp_purchase_record(
-            finish=utc_now() - timedelta(days=5)
-        )
-
-        with patch.object(
-            bibliotheca.import_purchase_records_by_collection, "replace"
-        ) as mock_replace:
-            mock_replace.side_effect = Exception("replaced")
-            with pytest.raises(Exception, match="replaced"):
-                bibliotheca.import_purchase_records_by_collection.delay(
-                    collection_id=collection.id
-                ).wait()
-
-        replace_sig = mock_replace.call_args[0][0]
-        lock_value = replace_sig.kwargs["lock_value"]
-        assert lock_value is not None
-        UUID(lock_value)  # raises ValueError if not a valid UUID
 
     def test_skips_when_lock_held(
         self,
@@ -913,50 +805,19 @@ class TestImportPurchaseRecordsByCollection:
 
         existing_lock.release()
 
-    def test_continues_with_warning_when_lock_expires_mid_chain(
-        self,
-        bibliotheca_purchase_record_task_fixture: BibliothecaPurchaseRecordTaskFixture,
-        celery_fixture: CeleryFixture,
-        redis_fixture: RedisFixture,
-        caplog: pytest.LogCaptureFixture,
-    ) -> None:
-        """When the purchase record workflow lock expires mid-chain (is_first_invocation=False
-        and lock not acquired), the task logs a warning but still processes the day."""
-        collection = bibliotheca_purchase_record_task_fixture.collection
-        bibliotheca_purchase_record_task_fixture.stamp_purchase_record(
-            finish=utc_now() - timedelta(hours=3)
-        )
-
-        competing_lock = _purchase_record_workflow_lock(
-            redis_fixture.client, collection.id, str(uuid4())
-        )
-        competing_lock.acquire()
-
-        caplog.set_level(LogLevel.warning)
-
-        with patch(
-            "palace.manager.integration.license.bibliotheca_purchase_record_importer.BibliothecaAPI"
-        ) as mock_api_cls:
-            mock_api_cls.return_value.marc_request.return_value = iter([])
-            bibliotheca.import_purchase_records_by_collection.delay(
-                collection_id=collection.id,
-                lock_value=str(uuid4()),
-            ).wait()
-            mock_api_cls.return_value.marc_request.assert_called_once()
-
-        assert "workflow lock expired between invocations" in caplog.text
-
-        competing_lock.release()
-
     def test_lock_not_released_on_autoretry(
         self,
         bibliotheca_purchase_record_task_fixture: BibliothecaPurchaseRecordTaskFixture,
         celery_fixture: CeleryFixture,
         redis_fixture: RedisFixture,
     ) -> None:
-        """When a retryable exception is raised the purchase record workflow lock is held so
-        that a concurrent run cannot start on the same collection while retries are
-        in progress."""
+        """A retryable failure holds the workflow lock and each retry re-runs the import.
+
+        The workflow lock is keyed on ``task.request.id``, which Celery preserves across
+        retries, so every retry re-acquires the same lock and re-runs the day rather than
+        skipping as if another run were in progress. The lock stays held so no concurrent
+        run can start.
+        """
         collection = bibliotheca_purchase_record_task_fixture.collection
         bibliotheca_purchase_record_task_fixture.stamp_purchase_record(
             finish=utc_now() - timedelta(days=5)
@@ -976,6 +837,12 @@ class TestImportPurchaseRecordsByCollection:
                     collection_id=collection.id
                 ).get(propagate=False)
 
+            # The day was re-run on every retry (1 initial attempt + max_retries=4),
+            # not skipped as an "already in progress" run.
+            assert mock_api_cls.return_value.marc_request.call_count == 5
+
+        # Lock should still be held after retries exhaust — it will expire via
+        # the 2-hour Redis TTL, preventing a concurrent run from starting.
         workflow_lock = _purchase_record_workflow_lock(
             redis_fixture.client, collection.id, random_value="any"
         )
@@ -1001,7 +868,6 @@ class TestImportPurchaseRecordsByCollection:
             finish=stored_finish
         )
 
-        lock_value = str(uuid4())
         with patch.object(
             bibliotheca.import_purchase_records_by_collection, "replace"
         ) as mock_replace:
@@ -1009,7 +875,6 @@ class TestImportPurchaseRecordsByCollection:
             with pytest.raises(Exception, match="replaced"):
                 bibliotheca.import_purchase_records_by_collection.delay(
                     collection_id=collection.id,
-                    lock_value=lock_value,
                 ).wait()
 
         ts = bibliotheca_purchase_record_task_fixture.get_purchase_record_timestamp()
@@ -1171,10 +1036,8 @@ class TestImportPurchaseRecordsByCollection:
 
         caplog.set_level(LogLevel.warning)
 
-        # Pass a non-None lock_value to simulate a mid-chain invocation (not first).
         bibliotheca.import_purchase_records_by_collection.delay(
             collection_id=collection_id,
-            lock_value=str(uuid4()),
         ).wait()
 
         assert "not found" in caplog.text
@@ -1200,7 +1063,6 @@ class TestImportPurchaseRecordsByCollection:
         ) as mock_api_cls:
             bibliotheca.import_purchase_records_by_collection.delay(
                 collection_id=collection.id,
-                lock_value=str(uuid4()),
             ).wait()
             mock_api_cls.return_value.marc_request.assert_not_called()
 

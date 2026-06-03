@@ -454,12 +454,14 @@ class TestImportCollection:
         assert not workflow_lock.locked()
 
     @patch("palace.manager.celery.tasks.overdrive.OverdriveImporter")
-    def test_workflow_lock_passed_to_next_page(
+    def test_replace_raised_with_next_page(
         self,
         mock_importer_class: MagicMock,
         overdrive_import_fixture: OverdriveImportFixture,
     ):
-        """When replacing task with next page, lock_value is passed to the next task."""
+        """When more pages remain, task.replace() is raised with the next page. The
+        workflow lock is keyed on the task id (which replace preserves), so nothing
+        needs to be threaded through the signature's kwargs."""
         collection = overdrive_import_fixture.collection
 
         next_endpoint = BookInfoEndpoint(url="http://test.com/books/page2")
@@ -475,29 +477,30 @@ class TestImportCollection:
                 overdrive.import_collection.delay(collection.id).wait()
 
             replace_sig = mock_replace.call_args[0][0]
-            assert replace_sig.kwargs["lock_value"] is not None
-            assert isinstance(replace_sig.kwargs["lock_value"], str)
+            assert replace_sig.kwargs["page"] == "http://test.com/books/page2"
+            assert "lock_value" not in replace_sig.kwargs
 
     @patch("palace.manager.celery.tasks.overdrive.OverdriveImporter")
-    def test_workflow_lock_subsequent_page_runs_importer(
+    def test_workflow_lock_continuation_reacquires_own_lock(
         self,
         mock_importer_class: MagicMock,
         overdrive_import_fixture: OverdriveImportFixture,
         redis_fixture: RedisFixture,
     ):
-        """When lock_value is passed for a subsequent page, the task runs the importer."""
+        """A continuation page carries the same task id, so it re-acquires the workflow
+        lock it already holds and runs the importer."""
         collection = overdrive_import_fixture.collection
-        lock_value = str(uuid4())
-        workflow_lock = import_workflow_lock(
-            redis_fixture.client, collection.id, lock_value
-        )
-        workflow_lock.acquire()
+        # Simulate the lock still held by this run's own task id from a prior page.
+        task_id = str(uuid4())
+        import_workflow_lock(redis_fixture.client, collection.id, task_id).acquire()
 
         mock_importer, _ = overdrive_import_fixture.create_mock_importer()
         mock_importer_class.return_value = mock_importer
 
-        result = overdrive.import_collection.delay(
-            collection.id, page="http://test.com/page1", lock_value=lock_value
+        result = overdrive.import_collection.apply_async(
+            args=(collection.id,),
+            kwargs={"page": "http://test.com/page1"},
+            task_id=task_id,
         ).wait()
 
         mock_importer_class.assert_called_once()
@@ -511,7 +514,13 @@ class TestImportCollection:
         redis_fixture: RedisFixture,
         celery_fixture: CeleryFixture,
     ):
-        """When an autoretry exception is raised, the workflow lock is not released."""
+        """A retryable failure holds the workflow lock and each retry re-runs the import.
+
+        The workflow lock is keyed on ``task.request.id``, which Celery preserves across
+        retries, so every retry re-acquires the same workflow lock and re-runs the import,
+        rather than skipping as if another run were in progress. The lock stays held the
+        whole time so no concurrent run can start.
+        """
         collection = overdrive_import_fixture.collection
         mock_importer, _ = overdrive_import_fixture.create_mock_importer()
         mock_response = MockRequestsResponse(500, content="Internal Server Error")
@@ -521,49 +530,15 @@ class TestImportCollection:
         mock_importer_class.return_value = mock_importer
 
         with celery_fixture.patch_retry_backoff():
-            result = overdrive.import_collection.delay(collection.id).wait()
+            overdrive.import_collection.delay(collection.id).get(propagate=False)
 
-        # First attempt raises BadResponseException; lock is not released (ignored).
-        # Retry fails to acquire (lock still held), returns skip payload.
-        assert result == overdrive._import_skipped_payload()
+        # The import was re-run on every retry (1 initial attempt + max_retries=4),
+        # not skipped as an "already in progress" run.
+        assert mock_importer.import_collection.call_count == 5
         workflow_lock = import_workflow_lock(
             redis_fixture.client, collection.id, random_value="any"
         )
         assert workflow_lock.locked()
-
-    @patch("palace.manager.celery.tasks.overdrive.OverdriveImporter")
-    def test_workflow_lock_expired_between_pages(
-        self,
-        mock_importer_class: MagicMock,
-        overdrive_import_fixture: OverdriveImportFixture,
-        redis_fixture: RedisFixture,
-        caplog: pytest.LogCaptureFixture,
-    ):
-        """When the workflow lock expired between pages, the task logs a warning and continues."""
-        collection = overdrive_import_fixture.collection
-        lock_value_held = str(uuid4())
-        lock_value_passed = str(uuid4())
-        workflow_lock = import_workflow_lock(
-            redis_fixture.client, collection.id, lock_value_held
-        )
-        workflow_lock.acquire()
-
-        mock_importer, _ = overdrive_import_fixture.create_mock_importer()
-        mock_importer_class.return_value = mock_importer
-
-        caplog.set_level(LogLevel.warning)
-
-        result = overdrive.import_collection.delay(
-            collection.id,
-            page="http://test.com/page1",
-            lock_value=lock_value_passed,
-        ).wait()
-
-        assert "workflow lock expired" in caplog.text
-        assert "between pages" in caplog.text
-        mock_importer_class.assert_called_once()
-        assert result is not None
-        workflow_lock.release()
 
     @patch("palace.manager.celery.tasks.overdrive.OverdriveImporter")
     def test_import_collection_marked_for_deletion(
@@ -1328,7 +1303,7 @@ class TestOverdriveReaper:
         overdrive_api_fixture: OverdriveAPIFixture,
         redis_fixture: RedisFixture,
     ):
-        """When a full batch is processed, task.replace is raised with the next offset and same lock_value."""
+        """When a full batch is processed, task.replace is raised with the next offset."""
         collection = overdrive_api_fixture.collection
         # Create exactly batch_size identifiers to trigger replace
         batch_size = 3
@@ -1341,15 +1316,14 @@ class TestOverdriveReaper:
 
         with patch.object(overdrive.reap_collection, "replace") as mock_replace:
             mock_replace.side_effect = Exception("replaced")
-            lock_value = str(uuid4())
             with pytest.raises(Exception, match="replaced"):
                 overdrive.reap_collection.delay(
-                    collection.id, batch_size=batch_size, lock_value=lock_value
+                    collection.id, batch_size=batch_size
                 ).wait()
 
             replace_sig = mock_replace.call_args[0][0]
             assert replace_sig.kwargs["offset"] == last_id
-            assert replace_sig.kwargs["lock_value"] == lock_value
+            assert "lock_value" not in replace_sig.kwargs
 
     @patch("palace.manager.celery.tasks.overdrive.OverdriveAPI")
     def test_reap_collection_stops_on_partial_batch(
@@ -1378,10 +1352,12 @@ class TestOverdriveReaper:
         overdrive_api_fixture: OverdriveAPIFixture,
         redis_fixture: RedisFixture,
     ):
-        """When an autoretry exception is raised, the workflow lock is not released.
+        """A retryable failure holds the workflow lock and each retry re-runs the reap.
 
-        On the retry attempt, lock_value is None (fresh call), so a new UUID is generated
-        and fails to acquire the still-held lock, causing the retry to silently skip.
+        The workflow lock is keyed on ``task.request.id``, which Celery preserves across
+        retries, so every retry re-acquires the same workflow lock and re-runs the batch,
+        rather than skipping as if another run were in progress. The lock stays held so no
+        concurrent run can start.
         """
         collection = overdrive_api_fixture.collection
         db.licensepool(db.edition(), collection=collection)
@@ -1397,10 +1373,13 @@ class TestOverdriveReaper:
             )
 
             with celery_fixture.patch_retry_backoff():
-                overdrive.reap_collection.delay(collection.id).wait()
+                overdrive.reap_collection.delay(collection.id).get(propagate=False)
 
-        # Lock is still held: first attempt raised BadResponseException (ignored),
-        # retry generated a new lock_value and skipped rather than releasing.
+            # The reap was re-run on every retry (1 initial attempt + max_retries=4),
+            # not skipped as an "already in progress" run.
+            assert mock_api_class.return_value.update_licensepool.call_count == 5
+
+        # Lock is still held after retries exhaust; it expires via the Redis TTL.
         workflow_lock = reap_workflow_lock(
             redis_fixture.client, collection.id, random_value="any"
         )
@@ -1436,30 +1415,3 @@ class TestOverdriveReaper:
         assert "skipped" in caplog.text
         assert "already in progress" in caplog.text
         workflow_lock.release()
-
-    def test_reap_collection_lock_value_passed_through(
-        self,
-        db: DatabaseTransactionFixture,
-        celery_fixture: CeleryFixture,
-        overdrive_api_fixture: OverdriveAPIFixture,
-        redis_fixture: RedisFixture,
-    ):
-        """The lock_value generated on the first batch is forwarded unchanged to the next batch."""
-        collection = overdrive_api_fixture.collection
-        batch_size = 2
-        for _ in range(batch_size):
-            db.licensepool(db.edition(), collection=collection)
-        db.session.flush()
-
-        with patch("palace.manager.celery.tasks.overdrive.OverdriveAPI"):
-            with patch.object(overdrive.reap_collection, "replace") as mock_replace:
-                mock_replace.side_effect = Exception("replaced")
-                with pytest.raises(Exception, match="replaced"):
-                    overdrive.reap_collection.delay(
-                        collection.id, batch_size=batch_size
-                    ).wait()
-
-                replace_sig = mock_replace.call_args[0][0]
-                lock_value = replace_sig.kwargs["lock_value"]
-                assert lock_value is not None
-                assert isinstance(lock_value, str)
