@@ -4,6 +4,7 @@ from typing import Any
 from palace.manager.celery.importer import import_key, workflow_lock_guard
 from palace.manager.celery.task import Task
 from palace.manager.celery.tasks import apply
+from palace.manager.celery.utils import signature_with
 from palace.manager.integration.license.opds.importer import (
     FeedImportResult,
     OpdsImporter,
@@ -82,14 +83,7 @@ def opds_import_task[FeedType](
         if next_link is not None and should_continue:
             # This page is complete, but there are more pages to import, so we requeue ourselves with the
             # next page URL.
-            raise task.replace(
-                task.s(
-                    collection_id=collection.id,
-                    url=next_link,
-                    force=force,
-                    return_identifiers=return_identifiers,
-                )
-            )
+            raise task.replace(signature_with(task, url=next_link))
 
         if not should_continue:
             task.log.info(
