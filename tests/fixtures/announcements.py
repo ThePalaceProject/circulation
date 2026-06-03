@@ -1,6 +1,8 @@
 import datetime
+from collections.abc import Generator
 
 import pytest
+from freezegun import freeze_time
 from sqlalchemy.orm import Session
 
 from palace.manager.sqlalchemy.model.announcements import Announcement, AnnouncementData
@@ -10,13 +12,21 @@ from palace.manager.sqlalchemy.model.library import Library
 class AnnouncementFixture:
     """A fixture for tests that need to create announcements."""
 
-    # Create raw data to be used in tests.
     format = "%Y-%m-%d"
-    today: datetime.date = datetime.date.today()
-    yesterday = today - datetime.timedelta(days=1)
-    tomorrow = today + datetime.timedelta(days=1)
-    a_week_ago = today - datetime.timedelta(days=7)
-    in_a_week = today + datetime.timedelta(days=7)
+
+    def __init__(self) -> None:
+        # Capture the dates relative to "today" when the fixture is
+        # instantiated. The ``announcement_fixture`` below freezes the
+        # clock for the duration of the test, so these match the
+        # ``datetime.date.today()`` calls the model and validator make at
+        # runtime -- without that, a test running across the midnight UTC
+        # boundary would compute its expectations against one date and the
+        # code under test against the next.
+        self.today = datetime.date.today()
+        self.yesterday = self.today - datetime.timedelta(days=1)
+        self.tomorrow = self.today + datetime.timedelta(days=1)
+        self.a_week_ago = self.today - datetime.timedelta(days=7)
+        self.in_a_week = self.today + datetime.timedelta(days=7)
 
     def create_announcement(
         self,
@@ -76,5 +86,9 @@ class AnnouncementFixture:
 
 
 @pytest.fixture(scope="function")
-def announcement_fixture() -> AnnouncementFixture:
-    return AnnouncementFixture()
+def announcement_fixture() -> Generator[AnnouncementFixture]:
+    # Freeze the clock so the fixture's dates and the runtime
+    # ``datetime.date.today()`` calls in the model and validator agree,
+    # even when the test runs across the midnight UTC boundary.
+    with freeze_time():
+        yield AnnouncementFixture()
