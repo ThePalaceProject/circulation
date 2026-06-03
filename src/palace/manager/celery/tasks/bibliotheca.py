@@ -189,12 +189,9 @@ def import_purchase_records_for_all_collections(
 ) -> None:
     """Queue an ``import_purchase_records_by_collection`` task for every Bibliotheca collection.
 
-    :param force_reimport: When ``True``, each per-collection task ignores the stored
-        ``Timestamp`` and reimports from :data:`DEFAULT_PURCHASE_RECORD_START_TIME`
-        (2014-01-01) rather than resuming where the last run left off.  The stored
-        ``Timestamp.finish`` is also cleared so that a crash before the first record
-        is processed causes the next scheduled run to start from
-        :data:`DEFAULT_PURCHASE_RECORD_START_TIME` rather than the stale finish date.
+    :param force_reimport: When ``True``, each per-collection task reimports from
+        :data:`DEFAULT_PURCHASE_RECORD_START_TIME` (2014-01-01) rather than resuming
+        where the last run left off.
     """
     with task.session() as session:
         registry = task.services.integration_registry().license_providers()
@@ -264,10 +261,11 @@ def import_purchase_records_by_collection(
         invocation and forwarded unchanged to every subsequent page/day so the
         lock is held across ``task.replace()`` calls.
     :param reset_timestamp: When ``True`` on the **first** invocation, clears
-        ``Timestamp.finish`` before importing so that a crash before the first
-        record is processed causes the next scheduled run to start from
-        :data:`DEFAULT_PURCHASE_RECORD_START_TIME` rather than the stale finish
-        date.  Not forwarded to replacement tasks.
+        ``Timestamp.finish`` within the transaction so that ``get_start()``
+        returns :data:`DEFAULT_PURCHASE_RECORD_START_TIME` rather than the stale
+        finish date.  Has no effect when ``current_day`` is explicitly provided,
+        since ``get_start()`` is not called in that case.  Not forwarded to
+        replacement tasks.
     """
     redis = task.services.redis().client()
 
