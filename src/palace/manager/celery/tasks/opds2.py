@@ -149,6 +149,7 @@ def import_collection(
             collection,
             importer,
             url,
+            label="OPDS2 import",
             post_import_hook=update_token_auth_link,
             force=force,
             return_identifiers=return_identifiers,

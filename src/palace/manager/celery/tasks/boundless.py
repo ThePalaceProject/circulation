@@ -7,7 +7,7 @@ from palace.util.exceptions import PalaceValueError
 
 from palace.manager.celery.importer import (
     import_all as create_import_tasks,
-    import_lock,
+    workflow_lock_guard,
 )
 from palace.manager.celery.task import Task
 from palace.manager.celery.tasks import apply
@@ -68,6 +68,11 @@ def import_collection(
     to process subsequent pages while maintaining the same modified_since timestamp
     and start_time across all pages.
 
+    Concurrency is governed by
+    :func:`~palace.manager.celery.importer.workflow_lock_guard`, which holds a
+    per-collection Redis lock across both ``task.replace()`` calls and Celery retries
+    so at most one import runs per collection at a time.
+
     :param collection_id: The ID of the collection to import
     :param import_all: If True, import all titles regardless of whether they have changed.
         If False, only import titles that have been modified since the last import.
@@ -87,16 +92,18 @@ def import_collection(
             "modified_since and start_time are required after the first page."
         )
 
-    redis = task.services.redis().client()
     registry = task.services.integration_registry().license_providers()
 
     if start_time is None:
         start_time = utc_now()
 
     with (
-        import_lock(redis, collection_id).lock(),
+        workflow_lock_guard(task, collection_id, label="Boundless import") as proceed,
         task.transaction() as session,
     ):
+        if not proceed:
+            return
+
         collection = load_from_id(session, Collection, collection_id)
         collection_name = collection.name
 
@@ -136,18 +143,18 @@ def import_collection(
                 f"Boundless import complete: '{collection_name}' Total time: {timestamp.elapsed}."
             )
 
-    if result.next_page is not None:
-        task.log.info(
-            f"Boundless import re-queueing: '{collection_name}' Next page: {result.next_page}."
-        )
-        raise task.replace(
-            signature_with(
-                task,
-                page=result.next_page,
-                # modified_since and start_time are resolved from None on the
-                # first page, so they must be carried forward explicitly rather
-                # than refilled from the original arguments.
-                modified_since=modified_since,
-                start_time=start_time,
+        if result.next_page is not None:
+            task.log.info(
+                f"Boundless import re-queueing: '{collection_name}' Next page: {result.next_page}."
             )
-        )
+            raise task.replace(
+                signature_with(
+                    task,
+                    page=result.next_page,
+                    # modified_since and start_time are resolved from None on the
+                    # first page, so they must be carried forward explicitly rather
+                    # than refilled from the original arguments.
+                    modified_since=modified_since,
+                    start_time=start_time,
+                )
+            )

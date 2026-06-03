@@ -4,6 +4,7 @@ import datetime
 import json
 from functools import partial
 from unittest.mock import MagicMock, call, patch
+from uuid import uuid4
 
 import pytest
 from freezegun import freeze_time
@@ -15,6 +16,7 @@ from palace.util.log import LogLevel
 
 from palace.manager.api.circulation.dispatcher import CirculationApiDispatcher
 from palace.manager.api.circulation.fulfillment import RedirectFulfillment
+from palace.manager.celery.importer import import_workflow_lock
 from palace.manager.celery.tasks import identifiers, opds2
 from palace.manager.data_layer.circulation import CirculationData
 from palace.manager.data_layer.identifier import IdentifierData
@@ -1030,6 +1032,31 @@ class TestImportCollection:
             "Failed to import publication: urn:ISBN:9780792766919 (Past Imperfect)"
             in caplog.text
         )
+
+    def test_skips_when_lock_held(
+        self,
+        opds2_import_fixture: OPDS2ImportFixture,
+        redis_fixture: RedisFixture,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """When the per-collection workflow lock is already held (another run is in
+        progress), the shared opds_import_task skips: it makes no feed request and
+        logs a warning rather than raising."""
+        collection = opds2_import_fixture.collection
+
+        import_workflow_lock(
+            redis_fixture.client, collection.id, str(uuid4())
+        ).acquire()
+
+        caplog.set_level(LogLevel.warning)
+
+        # No HTTP response is queued: if the task did not skip it would fail trying to
+        # fetch the feed. It completes cleanly instead.
+        opds2.import_collection.delay(collection.id).wait()
+
+        assert opds2_import_fixture.client.requests == []
+        assert "OPDS2 import skipped" in caplog.text
+        assert "already in progress" in caplog.text
 
 
 class TestImportAndReapNotFoundChord:
