@@ -5,6 +5,7 @@ from typing import cast
 from unittest import mock
 
 import pytest
+from freezegun import freeze_time
 
 from palace.manager.api.local_analytics_exporter import LocalAnalyticsExporter
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
@@ -38,6 +39,10 @@ def dashboard_fixture(controller_fixture: ControllerFixture) -> DashboardFixture
 
 
 class TestDashboardController:
+    # Freeze the clock at midday so the event created at ``now() - 1 minute``
+    # and the "current day" the controller queries for can't land on
+    # different dates when the test happens to run near midnight.
+    @freeze_time("2024-01-01 12:00:00")
     def test_bulk_circulation_events(self, dashboard_fixture: DashboardFixture):
         [lp] = dashboard_fixture.english_1.license_pools
         edition = dashboard_fixture.english_1.presentation_edition
