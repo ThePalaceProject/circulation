@@ -91,11 +91,6 @@ class AuthenticationDocument(BaseOpdsModel):
     def _validate_authentication(
         cls, value: Sequence[Authentication]
     ) -> Sequence[Authentication]:
-        if not value:
-            raise ValueError(
-                "Authentication document must have at least one authentication object."
-            )
-
         auth_types = set()
         for auth in value:
             if auth.type in auth_types:
