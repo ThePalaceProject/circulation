@@ -67,10 +67,13 @@ class TestAuthenticationDocument:
             document.by_type("some-other-type")
 
     def test_validate_authentication_empty(self) -> None:
-        with pytest.raises(ValidationError, match="at least one authentication"):
-            AuthenticationDocument(
-                id="http://example.com/auth", title="Library", authentication=[]
-            )
+        # The spec requires the ``authentication`` key but imposes no minItems,
+        # so an empty list is valid (e.g. a library with no/misconfigured auth
+        # providers). It must not raise.
+        document = AuthenticationDocument(
+            id="http://example.com/auth", title="Library", authentication=[]
+        )
+        assert document.authentication == []
 
     def test_validate_authentication_duplicate_types(self) -> None:
         with pytest.raises(ValidationError, match="Duplicate authentication type"):
