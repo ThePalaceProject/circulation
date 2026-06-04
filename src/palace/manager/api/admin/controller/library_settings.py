@@ -420,11 +420,14 @@ class LibrarySettingsController(AdminPermissionsControllerMixin):
             # is large enough to be a potential decompression bomb, well before
             # we ever get a chance to scale it down. Give the admin an
             # actionable message rather than a generic "unable to open" error.
+            # MAX_IMAGE_PIXELS is None when the check is disabled, but in that
+            # case this exception can't be raised, so the limit is always set.
+            pixel_limit = 2 * (Image.MAX_IMAGE_PIXELS or 0)
             raise ProblemDetailException(
                 INVALID_CONFIGURATION_OPTION.detailed(
                     f"Uploaded image has too many pixels and could not be "
                     f"processed. Please upload an image smaller than "
-                    f"{2 * Image.MAX_IMAGE_PIXELS:,} total pixels (width x height)."
+                    f"{pixel_limit:,} total pixels (width x height)."
                 )
             )
         except UnidentifiedImageError:
