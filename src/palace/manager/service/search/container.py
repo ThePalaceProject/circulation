@@ -21,10 +21,8 @@ class Search(DeclarativeContainer):
         maxsize=config.maxsize,
     )
 
-    # Used for the user-facing read path. A bounded ``read_timeout`` keeps a
-    # stalled read from holding a web worker for the full ``write_timeout``.
-    # Timeout retries default off (see config) since they cannot fail over when
-    # the host is a single endpoint; operators can enable them via config.
+    # Used for the user-facing read path, with timeout and retry settings
+    # tunable independently of the write client to suit that path.
     read_client: Provider[OpenSearch] = providers.Singleton(
         OpenSearch,
         hosts=config.url,
