@@ -412,13 +412,18 @@ def test_search_indexing_lock(
 
 
 @pytest.mark.parametrize("batch_size", [3, 5, 500])
+@patch("palace.manager.celery.tasks.search.random")
 @patch("palace.manager.celery.tasks.search.index_works")
 def test_search_indexing(
     mock_index_works: MagicMock,
+    mock_random: MagicMock,
     batch_size: int,
     celery_fixture: CeleryFixture,
     search_indexing_fixture: SearchIndexingFixture,
 ):
+    # The cooldown countdown is honoured by the real Celery workers, so mock it
+    # out to avoid adding several seconds of real wait between requeued batches.
+    mock_random.uniform.return_value = 0.0
     # No works to index, so we should not call index_works
     search_indexing.delay(batch_size=batch_size).wait()
     assert search_indexing_fixture.lock.locked() is False
@@ -453,6 +458,37 @@ def test_search_indexing(
 
     # No works are left in the waiting list
     assert search_indexing_fixture.waiting.get(10) == []
+
+
+@patch("palace.manager.celery.tasks.search.random")
+@patch("palace.manager.celery.tasks.search.index_works")
+def test_search_indexing_cooldown_between_batches(
+    mock_index_works: MagicMock,
+    mock_random: MagicMock,
+    celery_fixture: CeleryFixture,
+    search_indexing_fixture: SearchIndexingFixture,
+):
+    # Each full batch requeues itself after a cooldown so a large backlog drains
+    # at a bounded rate instead of flooding the index. With 10 works and
+    # batch_size 3 the task pops 3, 3, 3, 1 -- the three full batches each
+    # schedule a cooldown; the final partial batch does not.
+    mock_random.uniform.return_value = 0.0
+    search_indexing_fixture.add_works()
+
+    search_indexing.delay(batch_size=3).wait()
+
+    # A cooldown was taken after each full batch
+    assert mock_random.uniform.call_count == 3
+
+    # The backlog still fully drained and the lock was released at the end.
+    assert search_indexing_fixture.lock.locked() is False
+    assert search_indexing_fixture.waiting.get(10) == []
+    indexed = [
+        work
+        for call_args in mock_index_works.delay.call_args_list
+        for work in call_args.kwargs["works"]
+    ]
+    assert set(indexed) == search_indexing_fixture.mock_works
 
 
 def test_index_works(

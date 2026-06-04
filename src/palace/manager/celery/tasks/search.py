@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import random
 from collections.abc import Sequence
+from datetime import timedelta
 from typing import Any
 
 from celery import chain, shared_task
@@ -17,7 +18,7 @@ from palace.manager.celery.task import Task
 from palace.manager.celery.utils import signature_with
 from palace.manager.search.external_search import ExternalSearchIndex
 from palace.manager.service.celery.celery import QueueNames
-from palace.manager.service.redis.models.lock import TaskLock
+from palace.manager.service.redis.models.lock import LockNotAcquired, TaskLock
 from palace.manager.service.redis.models.search import WaitingForIndexing
 from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.util.backoff import exponential_backoff
@@ -130,23 +131,32 @@ def update_read_pointer(task: Task) -> None:
     )
 
 
-@shared_task(queue=QueueNames.default, bind=True)
+@shared_task(queue=QueueNames.default, bind=True, throws=(LockNotAcquired,))
 def search_indexing(task: Task, batch_size: int = 500) -> None:
     redis_client = task.services.redis.client()
-    with TaskLock(task).lock():
+    task_lock = TaskLock(task, lock_timeout=timedelta(minutes=15))
+
+    # Hold the lock across our self-replacements (release_on_exit=False) so the
+    # every-minute beat schedule can't start a second, concurrent search_indexing
+    # task.
+    with task_lock.lock(release_on_exit=False, ignored_exceptions=(Retry, Ignore)):
         waiting = WaitingForIndexing(redis_client)
         works = waiting.pop(batch_size)
 
         if len(works) > 0:
             index_works.delay(works=works)
 
-    if len(works) == batch_size:
-        # This task is complete, but there are more works waiting to be indexed. Requeue ourselves
-        # to process the next batch.
-        raise task.replace(signature_with(task))
+        if len(works) == batch_size:
+            # There are more works waiting to be indexed. Requeue ourselves to
+            # process the next batch after a short cooldown so we don't flood the
+            # opensearch index and degrade search performance. This is shorter than
+            # the reindex cooldown because indexing must stay roughly current.
+            delay = random.uniform(1.0, 3.0)
+            raise task.replace(signature_with(task).set(countdown=delay))
 
-    task.log.info(f"Finished queuing indexing tasks.")
-    return
+    # The queue is drained; release the lock so the next beat run can start fresh.
+    task_lock.release()
+    task.log.info("Finished queuing indexing tasks.")
 
 
 @shared_task(queue=QueueNames.default, bind=True, max_retries=4)
