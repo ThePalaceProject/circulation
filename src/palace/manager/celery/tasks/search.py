@@ -17,10 +17,17 @@ from palace.manager.celery.task import Task
 from palace.manager.celery.utils import signature_with
 from palace.manager.search.external_search import ExternalSearchIndex
 from palace.manager.service.celery.celery import QueueNames
-from palace.manager.service.redis.models.lock import TaskLock
+from palace.manager.service.redis.models.lock import LockNotAcquired, TaskLock
 from palace.manager.service.redis.models.search import WaitingForIndexing
 from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.util.backoff import exponential_backoff
+
+# Cooldown (min, max seconds) between search_indexing batches when draining a
+# backlog. A batch is batch_size works, so the drain rate is bounded to roughly
+# batch_size / cooldown works/sec -- fast enough to stay in sync with the normal
+# dirty rate but slow enough that a large burst can't flood OpenSearch. Kept
+# shorter than the reindex cooldown because indexing must stay roughly current.
+SEARCH_INDEXING_COOLDOWN = (1.0, 3.0)
 
 
 def get_work_search_documents(
@@ -130,23 +137,36 @@ def update_read_pointer(task: Task) -> None:
     )
 
 
-@shared_task(queue=QueueNames.default, bind=True)
+@shared_task(queue=QueueNames.default, bind=True, throws=(LockNotAcquired,))
 def search_indexing(task: Task, batch_size: int = 500) -> None:
     redis_client = task.services.redis.client()
-    with TaskLock(task).lock():
+    task_lock = TaskLock(task)
+
+    # Hold the lock across our self-replacements (release_on_exit=False) so the
+    # every-minute beat schedule can't start a second, concurrent drain. A beat
+    # run that fires while a drain is in progress fails to acquire the lock and
+    # exits via LockNotAcquired (declared in ``throws`` so Celery treats it as an
+    # expected, non-error outcome). Combined with the per-batch cooldown below,
+    # this turns a large backlog into a single paced stream rather than an
+    # unbounded fan-out of index_works tasks that floods OpenSearch.
+    with task_lock.lock(release_on_exit=False, ignored_exceptions=(Retry, Ignore)):
         waiting = WaitingForIndexing(redis_client)
         works = waiting.pop(batch_size)
 
         if len(works) > 0:
             index_works.delay(works=works)
 
-    if len(works) == batch_size:
-        # This task is complete, but there are more works waiting to be indexed. Requeue ourselves
-        # to process the next batch.
-        raise task.replace(signature_with(task))
+        if len(works) == batch_size:
+            # There are more works waiting to be indexed. Requeue ourselves to
+            # process the next batch after a short cooldown so we drain at a
+            # bounded rate instead of flooding the index. The lock is held
+            # across the replacement, so no other run drains in parallel.
+            delay = random.uniform(*SEARCH_INDEXING_COOLDOWN)
+            raise task.replace(signature_with(task).set(countdown=delay))
 
-    task.log.info(f"Finished queuing indexing tasks.")
-    return
+    # The queue is drained; release the lock so the next beat run can start fresh.
+    task_lock.release()
+    task.log.info("Finished queuing indexing tasks.")
 
 
 @shared_task(queue=QueueNames.default, bind=True, max_retries=4)
