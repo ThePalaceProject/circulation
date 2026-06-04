@@ -10,7 +10,7 @@ import flask
 from flask import Response
 from flask_babel import lazy_gettext as _
 from PIL import Image, UnidentifiedImageError
-from PIL.Image import Resampling
+from PIL.Image import DecompressionBombError, Resampling
 from pydantic import BaseModel, ValidationError
 from werkzeug.datastructures import FileStorage
 
@@ -415,6 +415,18 @@ class LibrarySettingsController(AdminPermissionsControllerMixin):
 
         try:
             image = Image.open(image_file.stream)
+        except DecompressionBombError:
+            # Pillow raises this when an image's pixel count (width * height)
+            # is large enough to be a potential decompression bomb, well before
+            # we ever get a chance to scale it down. Give the admin an
+            # actionable message rather than a generic "unable to open" error.
+            raise ProblemDetailException(
+                INVALID_CONFIGURATION_OPTION.detailed(
+                    f"Uploaded image has too many pixels and could not be "
+                    f"processed. Please upload an image smaller than "
+                    f"{2 * Image.MAX_IMAGE_PIXELS:,} total pixels (width x height)."
+                )
+            )
         except UnidentifiedImageError:
             raise ProblemDetailException(
                 INVALID_CONFIGURATION_OPTION.detailed(

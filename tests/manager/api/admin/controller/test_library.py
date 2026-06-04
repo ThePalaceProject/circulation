@@ -280,6 +280,8 @@ class TestLibrarySettings:
         flask_app_fixture: FlaskAppFixture,
         controller: LibrarySettingsController,
         db: DatabaseTransactionFixture,
+        logo_properties: dict[str, Any],
+        monkeypatch: pytest.MonkeyPatch,
     ):
         with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict([])
@@ -461,6 +463,30 @@ class TestLibrarySettings:
             assert excinfo.value.problem_detail.detail is not None
             assert (
                 "Unable to open uploaded image" in excinfo.value.problem_detail.detail
+            )
+
+        # Test uploading a logo with too many pixels (a potential
+        # decompression bomb). Lower Pillow's limit so a small fixture image
+        # trips it rather than allocating a real multi-hundred-megapixel image.
+        monkeypatch.setattr(Image, "MAX_IMAGE_PIXELS", 0)
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
+            flask.request.form = self.library_form(library)
+            flask.request.files = ImmutableMultiDict(
+                {
+                    "logo": FileStorage(
+                        stream=BytesIO(logo_properties["raw_bytes"]),
+                        content_type="image/png",
+                        filename="logo.png",
+                    )
+                }
+            )
+            with pytest.raises(ProblemDetailException) as excinfo:
+                controller.process_post()
+            assert excinfo.value.problem_detail.uri == INVALID_CONFIGURATION_OPTION.uri
+            assert excinfo.value.problem_detail.detail is not None
+            assert (
+                "Uploaded image has too many pixels"
+                in excinfo.value.problem_detail.detail
             )
 
     def test__process_image(self, logo_properties: dict[str, Any]):
