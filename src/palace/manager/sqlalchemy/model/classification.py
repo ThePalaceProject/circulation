@@ -278,10 +278,17 @@ class Subject(Base):
 
     def assign_to_genre(self) -> None:
         """Assign this subject to a genre."""
+        # Mark the subject as checked even when no classifier handles its type.
+        # Otherwise types we can never classify (e.g. Lexile and ATOS reading
+        # measures, schema:Place/Person/Organization) stay unchecked forever and
+        # are re-examined -- and their works re-indexed -- every night by
+        # classify_unchecked_subjects, with no change to show for it. A migration
+        # can reset checked=False to force reprocessing if a classifier is later
+        # added for the type.
+        self.checked = True
         classifier = lookup_classifier(self.type)
         if not classifier:
             return
-        self.checked = True
         log = logging.getLogger("Subject-genre assignment")
 
         genredata, audience, target_age, fiction = classifier.classify(self)

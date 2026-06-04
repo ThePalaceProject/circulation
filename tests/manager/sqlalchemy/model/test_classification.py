@@ -77,6 +77,26 @@ class TestSubject:
         assert None == subject.genre
         assert None == subject.fiction
 
+    def test_assign_to_genre_marks_unclassifiable_subject_checked(
+        self, db: DatabaseTransactionFixture
+    ):
+        # Lexile is a reading measure with no registered classifier, so there
+        # is nothing for assign_to_genre() to classify. It must still mark the
+        # Subject checked; otherwise it stays unchecked forever and is
+        # re-examined -- and its works re-indexed -- every night by
+        # classify_unchecked_subjects, with nothing to show for it.
+        subject = db.subject(Subject.LEXILE_SCORE, "720L")
+        assert subject.checked is False
+
+        subject.assign_to_genre()
+
+        assert subject.checked is True
+        # With no classifier, no genre/audience data is invented.
+        assert subject.genre is None
+        assert subject.audience is None
+        assert subject.fiction is None
+        assert subject.target_age is None
+
 
 class TestGenre:
     def test_name_is_unique(self, db: DatabaseTransactionFixture):
