@@ -205,9 +205,10 @@ To let the application know which OpenSearch instance to use, you can set the fo
   backwards compatibility.
 - `PALACE_SEARCH_READ_TIMEOUT`: The timeout in seconds to use for the user-facing read/search path. The default is `10`
   (optional).
-- `PALACE_SEARCH_READ_RETRY_ON_TIMEOUT`: Whether a timed-out read should be retried. The default is `false` (optional).
-- `PALACE_SEARCH_READ_MAX_RETRIES`: The maximum number of retries for a timed-out read before the error is propagated.
-  The default is `0` (optional).
+- `PALACE_SEARCH_READ_RETRY_ON_TIMEOUT`: Whether a timed-out read should be retried. Must be `true` for
+  `PALACE_SEARCH_READ_MAX_RETRIES` to apply to timeout failures. The default is `false` (optional).
+- `PALACE_SEARCH_READ_MAX_RETRIES`: The maximum number of retries for a read before the error is propagated. For timeout
+  failures this only takes effect when `PALACE_SEARCH_READ_RETRY_ON_TIMEOUT` is `true`. The default is `0` (optional).
 - `PALACE_SEARCH_MAXSIZE`: The maximum size of the connection pool to use when connecting to the OpenSearch instance
   (optional).
 
