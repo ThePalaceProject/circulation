@@ -318,8 +318,9 @@ class TestBibliothecaAPI:
         db = bibliotheca_fixture.db
         # Test the Bibliotheca implementation of the update_availability
         # method defined by the CirculationAPI interface.
-        # The new implementation delegates to BibliothecaCirculationUpdater which
-        # queues bibliographic_apply tasks asynchronously and zeros out any titles
+        # The new implementation delegates to BibliothecaCirculationUpdater, which on
+        # this on-demand path applies changes synchronously (so the refreshed
+        # availability is visible to the caller immediately) and zeros out any titles
         # that Bibliotheca no longer recognises.
 
         # Create a LicensePool that needs updating.
@@ -342,15 +343,23 @@ class TestBibliothecaAPI:
         # about the LicensePool we just created.
         data = data.replace(b"ddf4gr9", pool.identifier.identifier.encode("utf8"))
 
-        # When Bibliotheca returns data for the identifier, bibliographic_apply
-        # should be queued asynchronously (patched here to avoid Redis dependency).
+        # When Bibliotheca returns data for the identifier, the change is applied
+        # synchronously in the caller's session rather than queued as an async
+        # bibliographic_apply task.
         bibliotheca_fixture.api.queue_response(200, content=data)
 
         with patch.object(apply, "bibliographic_apply") as mock_apply:
             bibliotheca_fixture.api.update_availability(pool)
 
-        # bibliographic_apply was queued for the identified title.
-        mock_apply.delay.assert_called_once()
+        # No async task was queued; the apply happened in-band.
+        mock_apply.delay.assert_not_called()
+
+        # The pool immediately reflects the availability reported by Bibliotheca
+        # (TotalCopies=1, AvailableCopies=1, OnHoldCount=0 in the sample data).
+        assert 1 == pool.licenses_owned
+        assert 1 == pool.licenses_available
+        assert 0 == pool.patrons_in_hold_queue
+        assert pool.last_checked is not None
 
         # Now test the zero-out path: API returns no data for the identifier.
         data = bibliotheca_fixture.files.sample_data("empty_item_bibliographic.xml")

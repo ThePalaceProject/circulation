@@ -306,7 +306,7 @@ class TestBibliothecaCirculationUpdaterProcessIdentifiers:
             with patch.object(BibliothecaAPI, "bibliographic_lookup", return_value=[]):
                 updater.process_identifiers([ident])
 
-        mock_process.assert_called_once_with([ident])
+        mock_process.assert_called_once_with([ident], synchronous=True)
 
         # No Timestamp should have been created.
         ts = Timestamp.lookup(
@@ -316,3 +316,74 @@ class TestBibliothecaCirculationUpdaterProcessIdentifiers:
             collection,
         )
         assert ts is None
+
+    def test_changed_title_applied_synchronously(
+        self, db: DatabaseTransactionFixture
+    ) -> None:
+        """On the on-demand path, a changed title is applied in-band, not queued."""
+        updater, mock_api = _make_updater(db)
+        collection = mock_api.collection
+
+        ident = db.identifier(
+            identifier_type=Identifier.BIBLIOTHECA_ID, foreign_id="syncapply"
+        )
+        LicensePool.for_foreign_id(
+            db.session,
+            mock_api.data_source,
+            Identifier.BIBLIOTHECA_ID,
+            ident.identifier,
+            collection=collection,
+        )
+        db.session.flush()
+
+        mock_bib = MagicMock()
+        mock_bib.needs_apply.return_value = True
+        mock_bib.primary_identifier_data.identifier = ident.identifier
+        mock_bib.edition.return_value = (MagicMock(), False)
+
+        with (
+            patch.object(
+                BibliothecaAPI, "bibliographic_lookup", return_value=[mock_bib]
+            ),
+            patch.object(apply, "bibliographic_apply") as mock_apply,
+        ):
+            updater.process_identifiers([ident])
+
+        # The change was applied synchronously, not dispatched to a worker.
+        mock_bib.apply.assert_called_once()
+        assert mock_bib.apply.call_args.kwargs["create_coverage_record"] is False
+        mock_apply.delay.assert_not_called()
+
+    def test_unchanged_title_is_not_applied(
+        self, db: DatabaseTransactionFixture
+    ) -> None:
+        """needs_apply() is honored on the synchronous path: no apply, no queue."""
+        updater, mock_api = _make_updater(db)
+        collection = mock_api.collection
+
+        ident = db.identifier(
+            identifier_type=Identifier.BIBLIOTHECA_ID, foreign_id="syncnoapply"
+        )
+        LicensePool.for_foreign_id(
+            db.session,
+            mock_api.data_source,
+            Identifier.BIBLIOTHECA_ID,
+            ident.identifier,
+            collection=collection,
+        )
+        db.session.flush()
+
+        mock_bib = MagicMock()
+        mock_bib.needs_apply.return_value = False
+        mock_bib.primary_identifier_data.identifier = ident.identifier
+
+        with (
+            patch.object(
+                BibliothecaAPI, "bibliographic_lookup", return_value=[mock_bib]
+            ),
+            patch.object(apply, "bibliographic_apply") as mock_apply,
+        ):
+            updater.process_identifiers([ident])
+
+        mock_bib.apply.assert_not_called()
+        mock_apply.delay.assert_not_called()

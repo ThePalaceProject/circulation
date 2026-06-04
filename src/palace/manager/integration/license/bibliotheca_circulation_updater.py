@@ -162,17 +162,29 @@ class BibliothecaCirculationUpdater(LoggerMixin):
         on-demand single-title refreshes.  Applies the same hash-based deduplication
         as :meth:`update_batch` so unchanged titles produce no database writes.
 
+        Unlike the sweep (:meth:`update_batch`), changes are applied **synchronously**
+        in the caller's session rather than queued as ``bibliographic_apply`` tasks, so
+        the updated availability is visible as soon as this method returns.  Callers such
+        as :meth:`~palace.manager.integration.license.bibliotheca.BibliothecaAPI.update_availability`
+        rely on this — e.g. the circulation dispatcher reads ``LicensePool.licenses_available``
+        immediately after requesting an availability refresh.
+
         :param identifiers: Identifiers to process.
         """
-        self._process_batch(list(identifiers))
+        self._process_batch(list(identifiers), synchronous=True)
 
-    def _process_batch(self, identifiers: list[Identifier]) -> None:
+    def _process_batch(
+        self, identifiers: list[Identifier], *, synchronous: bool = False
+    ) -> None:
         """Look up availability from Bibliotheca, apply changes, and zero out removed titles.
 
         For each :class:`~palace.manager.data_layer.bibliographic.BibliographicData`
-        returned by the API, queues a ``bibliographic_apply`` task when
+        returned by the API, applies the change when
         :meth:`~palace.manager.data_layer.bibliographic.BibliographicData.needs_apply`
-        returns ``True`` (hash-based deduplication).
+        returns ``True`` (hash-based deduplication).  When ``synchronous`` is ``False``
+        (the sweep) the apply is queued as a ``bibliographic_apply`` Celery task; when
+        ``True`` (on-demand refreshes) it is applied directly in this session so the
+        result is immediately visible to the caller.
 
         For identifiers the API does not return (indicating removed or expired
         licenses), calls
@@ -180,6 +192,8 @@ class BibliothecaCirculationUpdater(LoggerMixin):
         with all-zero counts.
 
         :param identifiers: Identifiers to process.
+        :param synchronous: When ``True``, apply changes in-band instead of queuing
+            asynchronous ``bibliographic_apply`` tasks.
         """
         identifiers_by_bibliotheca_id: dict[str, Identifier] = {
             i.identifier: i for i in identifiers
@@ -199,11 +213,23 @@ class BibliothecaCirculationUpdater(LoggerMixin):
                 )
 
             if bibliographic.needs_apply(self._session):
-                apply.bibliographic_apply.delay(
-                    bibliographic,
-                    collection_id=self._collection.id,
-                    replace=ReplacementPolicy.from_license_source(),
-                )
+                if synchronous:
+                    # Apply in-band (mirrors the apply.bibliographic_apply task body)
+                    # so the caller sees the updated availability in its own session.
+                    edition, _ = bibliographic.edition(self._session)
+                    bibliographic.apply(
+                        self._session,
+                        edition,
+                        self._collection,
+                        ReplacementPolicy.from_license_source(),
+                        create_coverage_record=False,
+                    )
+                else:
+                    apply.bibliographic_apply.delay(
+                        bibliographic,
+                        collection_id=self._collection.id,
+                        replace=ReplacementPolicy.from_license_source(),
+                    )
 
         now = utc_now()
         for identifier in identifiers_not_mentioned:
