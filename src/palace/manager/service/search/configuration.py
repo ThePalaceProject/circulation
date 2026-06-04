@@ -21,25 +21,20 @@ _WRITE_TIMEOUT_ENV = "PALACE_SEARCH_WRITE_TIMEOUT"
 class SearchConfiguration(ServiceConfiguration, LoggerMixin):
     url: HttpUrl
     index_prefix: str = "circulation-works"
-    # Timeout (seconds) for indexing and admin operations, which legitimately
-    # run longer. ``PALACE_SEARCH_TIMEOUT`` is the deprecated name for this
-    # setting and is still accepted; prefer ``PALACE_SEARCH_WRITE_TIMEOUT``.
+    # Timeout (seconds) for indexing and admin operations.
+    # ``PALACE_SEARCH_TIMEOUT`` is the deprecated name for this setting and is
+    # still accepted; prefer ``PALACE_SEARCH_WRITE_TIMEOUT``.
     write_timeout: int = Field(
         default=20,
         validation_alias=AliasChoices(
             _WRITE_TIMEOUT_ENV, _DEPRECATED_WRITE_TIMEOUT_ENV
         ),
     )
-    # Timeout (seconds) for the user-facing read path. Kept well below
-    # ``write_timeout`` so a node that goes briefly unresponsive during
-    # OpenSearch maintenance fails over quickly instead of stalling a web
-    # worker for the full write timeout.
-    read_timeout: int = 4
-    # Retry timed-out reads against another node. With two nodes per domain
-    # this lets a read survive a single node bouncing during maintenance. These
-    # apply only to the read path; indexing/admin calls are not retried.
-    read_max_retries: int = 2
-    read_retry_on_timeout: bool = True
+    # Timeout (seconds) for the user-facing read path.
+    read_timeout: int = 10
+    # Read-path request retries, applied only to the read client.
+    read_max_retries: int = 0
+    read_retry_on_timeout: bool = False
     maxsize: int = 25
     model_config = SettingsConfigDict(env_prefix="PALACE_SEARCH_")
 

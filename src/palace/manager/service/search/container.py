@@ -21,9 +21,8 @@ class Search(DeclarativeContainer):
         maxsize=config.maxsize,
     )
 
-    # Used for the user-facing read path. The shorter ``read_timeout`` plus
-    # timeout retries let a read fail over quickly to the domain's other node
-    # when one briefly stalls during OpenSearch maintenance.
+    # Used for the user-facing read path, with timeout and retry settings
+    # tunable independently of the write client to suit that path.
     read_client: Provider[OpenSearch] = providers.Singleton(
         OpenSearch,
         hosts=config.url,
