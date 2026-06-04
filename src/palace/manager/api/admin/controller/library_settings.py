@@ -4,7 +4,7 @@ import base64
 import json
 import uuid
 from io import BytesIO
-from typing import Any
+from typing import Any, cast
 
 import flask
 from flask import Response
@@ -422,7 +422,7 @@ class LibrarySettingsController(AdminPermissionsControllerMixin):
             # actionable message rather than a generic "unable to open" error.
             # MAX_IMAGE_PIXELS is None when the check is disabled, but in that
             # case this exception can't be raised, so the limit is always set.
-            pixel_limit = 2 * (Image.MAX_IMAGE_PIXELS or 0)
+            pixel_limit = 2 * cast(int, Image.MAX_IMAGE_PIXELS)
             raise ProblemDetailException(
                 INVALID_CONFIGURATION_OPTION.detailed(
                     f"Uploaded image has too many pixels and could not be "
