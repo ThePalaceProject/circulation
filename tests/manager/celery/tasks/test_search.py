@@ -412,13 +412,18 @@ def test_search_indexing_lock(
 
 
 @pytest.mark.parametrize("batch_size", [3, 5, 500])
+@patch("palace.manager.celery.tasks.search.random")
 @patch("palace.manager.celery.tasks.search.index_works")
 def test_search_indexing(
     mock_index_works: MagicMock,
+    mock_random: MagicMock,
     batch_size: int,
     celery_fixture: CeleryFixture,
     search_indexing_fixture: SearchIndexingFixture,
 ):
+    # The cooldown countdown is honoured by the real Celery workers, so mock it
+    # out to avoid adding several seconds of real wait between requeued batches.
+    mock_random.uniform.return_value = 0.0
     # No works to index, so we should not call index_works
     search_indexing.delay(batch_size=batch_size).wait()
     assert search_indexing_fixture.lock.locked() is False
