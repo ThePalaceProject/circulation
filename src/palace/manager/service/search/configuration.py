@@ -32,7 +32,7 @@ class SearchConfiguration(ServiceConfiguration, LoggerMixin):
     )
     # Timeout (seconds) for the user-facing read path.
     read_timeout: int = 10
-    # Read-path timeout retries, applied only to the read client.
+    # Read-path request retries, applied only to the read client.
     read_max_retries: int = 0
     read_retry_on_timeout: bool = False
     maxsize: int = 25
