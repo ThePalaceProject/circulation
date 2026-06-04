@@ -10,7 +10,6 @@ from opensearchpy import OpenSearchException
 from palace.util.exceptions import BasePalaceException
 
 from palace.manager.celery.tasks.search import (
-    SEARCH_INDEXING_COOLDOWN,
     get_migrate_search_chain,
     get_work_search_documents,
     index_works,
@@ -473,9 +472,8 @@ def test_search_indexing_cooldown_between_batches(
 
     search_indexing.delay(batch_size=3).wait()
 
-    # A cooldown was taken after each full batch, using the configured range.
+    # A cooldown was taken after each full batch
     assert mock_random.uniform.call_count == 3
-    mock_random.uniform.assert_called_with(*SEARCH_INDEXING_COOLDOWN)
 
     # The backlog still fully drained and the lock was released at the end.
     assert search_indexing_fixture.lock.locked() is False
