@@ -43,8 +43,12 @@ class AvailabilityRefreshScript(IdentifierInputScript):
         collection = pool.collection
 
         if identifier.type == Identifier.BIBLIOTHECA_ID:
-            # Local import to avoid circular dependency between availability.py and
-            # bibliotheca_circulation_updater.py.
+            # Local import to avoid a circular import. bibliotheca_circulation_updater
+            # imports `palace.manager.celery.tasks`, whose package __init__ eagerly
+            # autoloads every task module (including celery.tasks.bibliotheca), and
+            # celery.tasks.bibliotheca imports BibliothecaCirculationUpdater back. A
+            # top-level import here would trigger that cycle whenever availability.py is
+            # imported before the Celery tasks have finished loading.
             from palace.manager.integration.license.bibliotheca_circulation_updater import (
                 BibliothecaCirculationUpdater,
             )
