@@ -306,7 +306,7 @@ def beat_schedule() -> dict[str, Any]:
         },
         "bibliotheca_circulation_update_all_collections": {
             "task": bibliotheca.circulation_update_all_collections.name,
-            "schedule": crontab(minute="30", hour="*/6"),  # Every 6 hours
+            "schedule": crontab(minute="0", hour="5"),  # Once a day at 5:00 AM
         },
     }
 

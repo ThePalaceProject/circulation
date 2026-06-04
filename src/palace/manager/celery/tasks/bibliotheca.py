@@ -357,7 +357,12 @@ def _circulation_update_workflow_lock(
 
 @shared_task(queue=QueueNames.default, bind=True)
 def circulation_update_all_collections(task: Task) -> None:
-    """Queue a ``circulation_update_collection`` task for every Bibliotheca collection."""
+    """Queue a ``circulation_update_collection`` task for every Bibliotheca collection.
+
+    This is the beat-scheduled entry point for the circulation sweep.  It runs once a
+    day (05:00), matching the cadence of the legacy ``bibliotheca_circulation_sweep``
+    cron job it replaced.
+    """
     with task.session() as session:
         registry = task.services.integration_registry().license_providers()
         collection_query = Collection.select_by_protocol(
