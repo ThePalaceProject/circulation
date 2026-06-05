@@ -712,6 +712,13 @@ class OverdriveAPI(
             async_task_list = list()
             response_products = data.get("products")
             if response_products is None:
+                # Overdrive omits the 'products' key entirely when a collection
+                # (or page) contains no titles. In that case 'totalItems' is 0
+                # and there is simply nothing to import, so we treat it as an
+                # empty page rather than an error.
+                if data.get("totalItems") == 0:
+                    return [], next_endpoint
+
                 self.log.warning(
                     f"Overdrive response missing 'products' key for endpoint {endpoint.url}.",
                     extra={
