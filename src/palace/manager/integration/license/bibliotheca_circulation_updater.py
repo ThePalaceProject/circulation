@@ -241,7 +241,7 @@ class BibliothecaCirculationUpdater(LoggerMixin):
             ]
             if not pools:
                 continue
-            pool = pools[0]
+            [pool] = pools
             if pool.licenses_owned > 0:
                 self.log.warning("Removing %s from circulation.", identifier.identifier)
             pool.update_availability(0, 0, 0, 0, as_of=now)
