@@ -10,13 +10,22 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-from palace.manager.sqlalchemy.model.coverage import BaseCoverageRecord
-
 # revision identifiers, used by Alembic.
 revision = "7ae5c2b3cbf3"
 down_revision = "a6c85605404c"
 branch_labels = None
 depends_on = None
+
+# Inlined (rather than imported from the model) so this migration stays
+# reproducible even if BaseCoverageRecord.status_enum later changes. These are
+# the name and members of the shared "coverage_status" enum as of this revision.
+COVERAGE_STATUS_ENUM_NAME = "coverage_status"
+COVERAGE_STATUS_ENUM_VALUES = (
+    "success",
+    "transient failure",
+    "persistent failure",
+    "registered",
+)
 
 
 def upgrade() -> None:
@@ -35,8 +44,8 @@ def downgrade() -> None:
             # coverage_status is shared with coveragerecords; use postgresql.ENUM
             # with create_type=False so Alembic does not attempt to re-create it.
             postgresql.ENUM(
-                *BaseCoverageRecord.status_enum.enums,  # type: ignore[attr-defined]
-                name=BaseCoverageRecord.status_enum.name,
+                *COVERAGE_STATUS_ENUM_VALUES,
+                name=COVERAGE_STATUS_ENUM_NAME,
                 create_type=False,
             ),
             nullable=True,
