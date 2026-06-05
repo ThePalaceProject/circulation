@@ -55,8 +55,8 @@ class DirtyIdentifierIds:
         identifiers with no equivalencies already have (id, id) self-references
         maintained by the Identifier creation listener and do not need recomputation.
 
-        IDs are streamed from the DB and pipelined to Redis in chunks of *chunk_size*
-        to avoid a single large network call.
+        IDs are streamed from the DB with ``yield_per`` and sent to Redis in chunks
+        of *chunk_size* (one ``SADD`` per chunk) to avoid a single large network call.
 
         :return: Total number of identifier IDs pushed.
         """
