@@ -3,13 +3,11 @@ from __future__ import annotations
 from sqlalchemy import select, union
 from sqlalchemy.orm import Session
 
-from palace.util.log import LoggerMixin
-
 from palace.manager.service.redis.redis import Redis
 from palace.manager.sqlalchemy.model.identifier import Equivalency
 
 
-class DirtyIdentifierIds(LoggerMixin):
+class DirtyIdentifierIds:
     """
     A persistent Redis set of identifier IDs whose recursive equivalents
     need to be recomputed.
