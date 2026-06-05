@@ -20,6 +20,7 @@ from palace.manager.celery.tasks.bibliotheca import (
 )
 from palace.manager.integration.license.bibliotheca import BibliothecaAPI
 from palace.manager.integration.license.bibliotheca_circulation_updater import (
+    CIRCULATION_UPDATE_BATCH_SIZE,
     CIRCULATION_UPDATE_SERVICE_NAME,
     BatchUpdateResult,
 )
@@ -35,6 +36,8 @@ from palace.manager.integration.license.bibliotheca_purchase_record_importer imp
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.coverage import Timestamp
+from palace.manager.sqlalchemy.model.identifier import Identifier
+from palace.manager.sqlalchemy.model.licensing import LicensePool
 from palace.manager.util.http.exception import BadResponseException
 from tests.fixtures.celery import CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
@@ -1503,3 +1506,70 @@ class TestCirculationUpdateCollection:
 
         assert "marked for deletion" in caplog.text
         assert collection.name in caplog.text
+
+    @patch(
+        "palace.manager.integration.license.bibliotheca_circulation_updater.BibliothecaAPI"
+    )
+    def test_full_sweep_chains_through_every_batch_and_releases_lock(
+        self,
+        mock_api_cls: MagicMock,
+        bibliotheca_circulation_update_task_fixture: BibliothecaCirculationUpdateTaskFixture,
+        celery_fixture: CeleryFixture,
+        redis_fixture: RedisFixture,
+    ) -> None:
+        """End-to-end: a multi-batch sweep chains through every batch via a real
+        ``task.replace()`` until completion, then releases the workflow lock.
+
+        This complements the unit-level lock coverage
+        (``test_lock_not_released_on_autoretry``,
+        ``RedisLock`` ``test_lock_not_released_on_ignored_exception``, and
+        ``workflow_lock_guard`` ``test_continuation_reacquires_own_lock``): here a real
+        chain runs the full sweep, proving the batches advance to completion under a
+        single lock that is held across the ``replace()`` hand-off and released at the end.
+        """
+        fixture = bibliotheca_circulation_update_task_fixture
+        collection = fixture.collection
+        db = fixture.db
+
+        # Bibliotheca recognises nothing, so each batch simply iterates its identifiers
+        # without queuing applies — we only care about chaining and lock lifecycle here.
+        mock_api_cls.return_value.bibliographic_lookup.return_value = []
+
+        # One more identifier than a single batch, so the sweep needs two batches:
+        # batch 1 = CIRCULATION_UPDATE_BATCH_SIZE (full -> replace), batch 2 = 1
+        # (partial -> complete).
+        data_source = MockBibliothecaAPI(db.session, collection).data_source
+        for i in range(CIRCULATION_UPDATE_BATCH_SIZE + 1):
+            identifier = db.identifier(
+                identifier_type=Identifier.BIBLIOTHECA_ID, foreign_id=f"chain{i:04d}"
+            )
+            LicensePool.for_foreign_id(
+                db.session,
+                data_source,
+                Identifier.BIBLIOTHECA_ID,
+                identifier.identifier,
+                collection=collection,
+            )
+        db.session.commit()
+
+        # Run the chain for real — replace is NOT mocked, so the worker processes every
+        # batch in sequence under one preserved task id.
+        bibliotheca.circulation_update_collection.delay(
+            collection_id=collection.id
+        ).wait()
+
+        # bibliographic_lookup was called once per batch: the chain ran both batches.
+        assert mock_api_cls.return_value.bibliographic_lookup.call_count == 2
+
+        # The sweep completed: counter reset to 0 and finish stamped.
+        ts = fixture.get_circulation_update_timestamp()
+        assert ts is not None
+        assert ts.counter == 0
+        assert ts.finish is not None
+
+        # The workflow lock was held across the replace hand-off and released on normal
+        # completion, so no lock remains to block the next scheduled sweep.
+        lock = _circulation_update_workflow_lock(
+            redis_fixture.client, collection.id, random_value="probe"
+        )
+        assert not lock.locked()
