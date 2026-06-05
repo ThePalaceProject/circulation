@@ -183,6 +183,15 @@ def last_update_time_change(target, value, oldvalue, initator):
     target.external_index_needs_updating()
 
 
+# These two listeners fire once per Equivalency row. Batching them into a single
+# per-flush pass (e.g. a one_shot listener scanning session.new/session.deleted)
+# was considered but isn't worth the indirection:
+#   - Create: the only bulk path, BibliographicData._update_equivalent_identifiers,
+#     adds just a handful of equivalencies per apply(), and each apply() is its own
+#     transaction — a few sub-millisecond SADDs per flush.
+#   - Delete: Equivalency rows are never deleted in bulk via the ORM; they go away
+#     through FK ON DELETE CASCADE when an Identifier is deleted, which happens in
+#     the DB and bypasses before_flush listeners entirely.
 @Listener.before_flush(Equivalency, ListenerState.deleted)
 def equivalency_coverage_reset_on_equivalency_delete(
     session: Session, target: Equivalency
