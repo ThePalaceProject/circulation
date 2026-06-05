@@ -7,7 +7,6 @@ from typing import Any
 
 log = logging.getLogger(__name__)
 
-from redis import RedisError
 from sqlalchemy import event, select, text
 from sqlalchemy.engine import Connection
 from sqlalchemy.orm import Mapper, Session
@@ -194,8 +193,8 @@ def equivalency_coverage_reset_on_equivalency_delete(
     Redis unavailability is non-fatal — any missed dirty IDs will be recovered
     by the next scheduled full-refresh run.
     """
-    # The chain-member lookup is part of the flush; let any DB error propagate
-    # rather than swallowing it as a "Redis" failure below.
+    # The chain-member lookup is part of the flush; keep it outside the try so a
+    # DB error propagates rather than being swallowed as a "Redis" failure below.
     parent_ids = (
         session.execute(
             select(RecursiveEquivalencyCache.parent_identifier_id).where(
@@ -207,10 +206,14 @@ def equivalency_coverage_reset_on_equivalency_delete(
         .scalars()
         .all()
     )
-    dirty = DirtyIdentifierIds(container_instance().redis().client())
+    # Marking dirty IDs is a best-effort side effect: any Redis problem (the
+    # service being down, or even unconfigured) must never break the equivalency
+    # change itself. The weekly full refresh recovers any IDs missed here.
     try:
-        dirty.add(target.input_id, target.output_id, *parent_ids)
-    except RedisError as e:
+        DirtyIdentifierIds(container_instance().redis().client()).add(
+            target.input_id, target.output_id, *parent_ids
+        )
+    except Exception as e:
         log.warning(f"Failed to mark dirty identifiers on equivalency delete: {e}")
 
 
@@ -224,10 +227,13 @@ def equivalency_coverage_reset_on_equivalency_create(
     Redis unavailability is non-fatal — any missed dirty IDs will be recovered
     by the next scheduled full-refresh run.
     """
-    dirty = DirtyIdentifierIds(container_instance().redis().client())
+    # Best-effort side effect — see the delete listener above; a Redis problem
+    # must never break the equivalency creation.
     try:
-        dirty.add(target.input_id, target.output_id)
-    except RedisError as e:
+        DirtyIdentifierIds(container_instance().redis().client()).add(
+            target.input_id, target.output_id
+        )
+    except Exception as e:
         log.warning(f"Failed to mark dirty identifiers on equivalency create: {e}")
 
 
