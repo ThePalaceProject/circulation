@@ -1,36 +1,15 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
-from sqlalchemy import select
 
 from palace.manager.celery.tasks.equivalents import equivalent_identifiers_refresh
 from palace.manager.service.redis.models.dirty_identifiers import DirtyIdentifierIds
 from palace.manager.service.redis.models.lock import LockNotAcquired, TaskLock
-from palace.manager.sqlalchemy.model.identifier import (
-    Equivalency,
-    RecursiveEquivalencyCache,
-)
+from palace.manager.sqlalchemy.model.identifier import Equivalency
 from tests.fixtures.celery import CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.equivalents import RecursiveEquivalencyCacheFixture
 from tests.fixtures.redis import RedisFixture
-
-
-def _cache_for(session, parent_id: int) -> set[int]:
-    rows = (
-        session.execute(
-            select(RecursiveEquivalencyCache.identifier_id).where(
-                RecursiveEquivalencyCache.parent_identifier_id == parent_id
-            )
-        )
-        .scalars()
-        .all()
-    )
-    return set(rows)
-
-
-def _drop_cache(session) -> None:
-    session.query(RecursiveEquivalencyCache).delete()
-    session.commit()
 
 
 class TestEquivalentIdentifiersRefresh:
@@ -39,20 +18,21 @@ class TestEquivalentIdentifiersRefresh:
         db: DatabaseTransactionFixture,
         celery_fixture: CeleryFixture,
         redis_fixture: RedisFixture,
+        recursive_equivalency_cache: RecursiveEquivalencyCacheFixture,
     ) -> None:
         a = db.identifier()
         b = db.identifier()
         db.session.add(Equivalency(input_id=a.id, output_id=b.id, strength=1.0))
         db.session.commit()
-        _drop_cache(db.session)
+        recursive_equivalency_cache.drop()
 
         dirty = DirtyIdentifierIds(redis_fixture.client)
         dirty.add(a.id, b.id)
 
         equivalent_identifiers_refresh.delay().wait()
 
-        assert _cache_for(db.session, a.id) == {a.id, b.id}
-        assert _cache_for(db.session, b.id) == {a.id, b.id}
+        assert recursive_equivalency_cache.cache_for(a.id) == {a.id, b.id}
+        assert recursive_equivalency_cache.cache_for(b.id) == {a.id, b.id}
         assert dirty.count() == 0
 
     def test_full_refresh_adds_missing_identity_equivalents(
@@ -60,39 +40,42 @@ class TestEquivalentIdentifiersRefresh:
         db: DatabaseTransactionFixture,
         celery_fixture: CeleryFixture,
         redis_fixture: RedisFixture,
+        recursive_equivalency_cache: RecursiveEquivalencyCacheFixture,
     ) -> None:
         a = db.identifier()
         db.session.commit()
-        _drop_cache(db.session)
+        recursive_equivalency_cache.drop()
 
         # A full refresh sweeps the table and backfills missing (id, id) rows.
         equivalent_identifiers_refresh.delay(full_refresh=True).wait()
 
-        assert _cache_for(db.session, a.id) == {a.id}
+        assert recursive_equivalency_cache.cache_for(a.id) == {a.id}
 
     def test_delta_run_skips_identity_sweep(
         self,
         db: DatabaseTransactionFixture,
         celery_fixture: CeleryFixture,
         redis_fixture: RedisFixture,
+        recursive_equivalency_cache: RecursiveEquivalencyCacheFixture,
     ) -> None:
         # The identifier's self-reference is maintained by the creation listener;
         # drop it to simulate drift that only the full-refresh sweep should fix.
         a = db.identifier()
         db.session.commit()
-        _drop_cache(db.session)
+        recursive_equivalency_cache.drop()
 
         # A delta run with an empty queue must not run the full-table sweep, so the
         # dropped self-reference is left for the next full refresh to backfill.
         equivalent_identifiers_refresh.delay().wait()
 
-        assert _cache_for(db.session, a.id) == set()
+        assert recursive_equivalency_cache.cache_for(a.id) == set()
 
     def test_processes_in_batches(
         self,
         db: DatabaseTransactionFixture,
         celery_fixture: CeleryFixture,
         redis_fixture: RedisFixture,
+        recursive_equivalency_cache: RecursiveEquivalencyCacheFixture,
     ) -> None:
         # Create three identifiers each in a separate equivalency chain.
         a = db.identifier()
@@ -101,7 +84,7 @@ class TestEquivalentIdentifiersRefresh:
         db.session.add(Equivalency(input_id=a.id, output_id=b.id, strength=1.0))
         db.session.add(Equivalency(input_id=b.id, output_id=c.id, strength=1.0))
         db.session.commit()
-        _drop_cache(db.session)
+        recursive_equivalency_cache.drop()
 
         dirty = DirtyIdentifierIds(redis_fixture.client)
         dirty.add(a.id, b.id, c.id)
@@ -112,7 +95,7 @@ class TestEquivalentIdentifiersRefresh:
         # All chains should be computed despite multiple re-queues.
         # a, b, c are all connected, so their chains should each include
         # all three identifiers.
-        assert {a.id, b.id, c.id}.issubset(_cache_for(db.session, a.id))
+        assert {a.id, b.id, c.id}.issubset(recursive_equivalency_cache.cache_for(a.id))
         assert dirty.count() == 0
 
     def test_full_refresh(
@@ -120,12 +103,13 @@ class TestEquivalentIdentifiersRefresh:
         db: DatabaseTransactionFixture,
         celery_fixture: CeleryFixture,
         redis_fixture: RedisFixture,
+        recursive_equivalency_cache: RecursiveEquivalencyCacheFixture,
     ) -> None:
         a = db.identifier()
         b = db.identifier()
         db.session.add(Equivalency(input_id=a.id, output_id=b.id, strength=1.0))
         db.session.commit()
-        _drop_cache(db.session)
+        recursive_equivalency_cache.drop()
 
         # Clear any IDs pushed by the equivalency-creation listener, so we can
         # verify that full_refresh=True is what re-seeds the queue from the DB.
@@ -135,14 +119,15 @@ class TestEquivalentIdentifiersRefresh:
 
         equivalent_identifiers_refresh.delay(full_refresh=True).wait()
 
-        assert _cache_for(db.session, a.id) == {a.id, b.id}
-        assert _cache_for(db.session, b.id) == {a.id, b.id}
+        assert recursive_equivalency_cache.cache_for(a.id) == {a.id, b.id}
+        assert recursive_equivalency_cache.cache_for(b.id) == {a.id, b.id}
 
     def test_skips_when_lock_held(
         self,
         db: DatabaseTransactionFixture,
         celery_fixture: CeleryFixture,
         redis_fixture: RedisFixture,
+        recursive_equivalency_cache: RecursiveEquivalencyCacheFixture,
     ) -> None:
         """When another run already holds the task lock, the refresh raises
         LockNotAcquired (declared in the task's ``throws``) and leaves the dirty
@@ -151,7 +136,7 @@ class TestEquivalentIdentifiersRefresh:
         b = db.identifier()
         db.session.add(Equivalency(input_id=a.id, output_id=b.id, strength=1.0))
         db.session.commit()
-        _drop_cache(db.session)
+        recursive_equivalency_cache.drop()
 
         dirty = DirtyIdentifierIds(redis_fixture.client)
         dirty.add(a.id, b.id)
@@ -169,7 +154,7 @@ class TestEquivalentIdentifiersRefresh:
 
         # The queue was left untouched and no chains were computed.
         assert dirty.count() == 2
-        assert _cache_for(db.session, a.id) == set()
+        assert recursive_equivalency_cache.cache_for(a.id) == set()
 
         held_lock.release()
 
@@ -178,6 +163,7 @@ class TestEquivalentIdentifiersRefresh:
         db: DatabaseTransactionFixture,
         celery_fixture: CeleryFixture,
         redis_fixture: RedisFixture,
+        recursive_equivalency_cache: RecursiveEquivalencyCacheFixture,
     ) -> None:
         """If processing a popped batch fails, the IDs are returned to the dirty
         queue rather than being silently lost until the next full refresh."""
@@ -185,7 +171,7 @@ class TestEquivalentIdentifiersRefresh:
         b = db.identifier()
         db.session.add(Equivalency(input_id=a.id, output_id=b.id, strength=1.0))
         db.session.commit()
-        _drop_cache(db.session)
+        recursive_equivalency_cache.drop()
 
         dirty = DirtyIdentifierIds(redis_fixture.client)
         # Clear listener-added IDs, then seed a known batch.
