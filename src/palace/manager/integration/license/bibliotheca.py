@@ -1162,7 +1162,7 @@ class EventParser(
         # even in recovery mode), so treat a blank body the same as a
         # response that contained no events rather than letting the parse
         # error propagate as an unhandled exception.
-        if string and string.strip():
+        if string.strip():
             for i in super().process_all(string):
                 yield i
                 has_events = True
