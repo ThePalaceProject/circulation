@@ -2916,7 +2916,9 @@ class TestSyncBookshelf:
         api = overdrive_api_fixture.api
         mock_async_client = overdrive_api_fixture.mock_async_client
 
-        mock_async_client.queue_response(200, content={"no_products_key": True})
+        # totalItems is non-zero, so the missing 'products' key is a genuinely
+        # malformed response rather than an empty collection.
+        mock_async_client.queue_response(200, content={"totalItems": 5})
 
         initial_endpoint = api.book_info_initial_endpoint(start=None, page_size=1)
         with pytest.raises(BadResponseException, match="missing 'products' key"):
