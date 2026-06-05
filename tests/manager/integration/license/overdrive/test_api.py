@@ -2910,13 +2910,35 @@ class TestSyncBookshelf:
         self,
         overdrive_api_fixture: OverdriveAPIFixture,
     ):
-        """When the Overdrive API returns a response without a 'products' key,
-        a BadResponseException is raised so the Celery task can retry."""
+        """When the Overdrive API returns a response without a 'products' key
+        and a non-empty collection, a BadResponseException is raised so the
+        Celery task can retry."""
         api = overdrive_api_fixture.api
         mock_async_client = overdrive_api_fixture.mock_async_client
 
-        mock_async_client.queue_response(200, content={"no_products_key": True})
+        # totalItems is non-zero, so the missing 'products' key is a genuinely
+        # malformed response rather than an empty collection.
+        mock_async_client.queue_response(200, content={"totalItems": 5})
 
         initial_endpoint = api.book_info_initial_endpoint(start=None, page_size=1)
         with pytest.raises(BadResponseException, match="missing 'products' key"):
             await api.fetch_book_info_list(initial_endpoint)
+
+    async def test_fetch_book_info_list_empty_collection(
+        self,
+        overdrive_api_fixture: OverdriveAPIFixture,
+    ):
+        """Overdrive omits the 'products' key for an empty collection
+        (totalItems == 0). This is not an error: we return an empty page."""
+        api = overdrive_api_fixture.api
+        mock_async_client = overdrive_api_fixture.mock_async_client
+
+        mock_async_client.queue_response(
+            200, content={"totalItems": 0, "limit": 100, "offset": 0}
+        )
+
+        initial_endpoint = api.book_info_initial_endpoint(start=None, page_size=1)
+        book_info_list, next_endpoint = await api.fetch_book_info_list(initial_endpoint)
+
+        assert book_info_list == []
+        assert next_endpoint is None
