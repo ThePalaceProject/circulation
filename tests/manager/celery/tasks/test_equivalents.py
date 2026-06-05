@@ -1,7 +1,11 @@
+from unittest.mock import MagicMock
+
+import pytest
 from sqlalchemy import select
 
 from palace.manager.celery.tasks.equivalents import equivalent_identifiers_refresh
 from palace.manager.service.redis.models.dirty_identifiers import DirtyIdentifierIds
+from palace.manager.service.redis.models.lock import LockNotAcquired, TaskLock
 from palace.manager.sqlalchemy.model.identifier import (
     Equivalency,
     RecursiveEquivalencyCache,
@@ -115,3 +119,38 @@ class TestEquivalentIdentifiersRefresh:
 
         assert _cache_for(db.session, a.id) == {a.id, b.id}
         assert _cache_for(db.session, b.id) == {a.id, b.id}
+
+    def test_skips_when_lock_held(
+        self,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        redis_fixture: RedisFixture,
+    ) -> None:
+        """When another run already holds the task lock, the refresh raises
+        LockNotAcquired (declared in the task's ``throws``) and leaves the dirty
+        queue untouched."""
+        a = db.identifier()
+        b = db.identifier()
+        db.session.add(Equivalency(input_id=a.id, output_id=b.id, strength=1.0))
+        db.session.commit()
+        _drop_cache(db.session)
+
+        dirty = DirtyIdentifierIds(redis_fixture.client)
+        dirty.add(a.id, b.id)
+
+        # Simulate a concurrent run holding the lock by acquiring it with a
+        # different owner (root_id), using the same task-name-derived key.
+        held_task = MagicMock()
+        held_task.request.root_id = "other-run"
+        held_task.name = equivalent_identifiers_refresh.name
+        held_lock = TaskLock(held_task, redis_client=redis_fixture.client)
+        held_lock.acquire()
+
+        with pytest.raises(LockNotAcquired):
+            equivalent_identifiers_refresh.delay().wait()
+
+        # The queue was left untouched and no chains were computed.
+        assert dirty.count() == 2
+        assert _cache_for(db.session, a.id) == set()
+
+        held_lock.release()
