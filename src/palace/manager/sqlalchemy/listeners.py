@@ -7,6 +7,7 @@ from typing import Any
 
 log = logging.getLogger(__name__)
 
+from redis import RedisError
 from sqlalchemy import event, select, text
 from sqlalchemy.engine import Connection
 from sqlalchemy.orm import Mapper, Session
@@ -193,22 +194,23 @@ def equivalency_coverage_reset_on_equivalency_delete(
     Redis unavailability is non-fatal — any missed dirty IDs will be recovered
     by the next scheduled full-refresh run.
     """
-    try:
-        parent_ids = (
-            session.execute(
-                select(RecursiveEquivalencyCache.parent_identifier_id).where(
-                    RecursiveEquivalencyCache.identifier_id.in_(
-                        [target.input_id, target.output_id]
-                    )
+    # The chain-member lookup is part of the flush; let any DB error propagate
+    # rather than swallowing it as a "Redis" failure below.
+    parent_ids = (
+        session.execute(
+            select(RecursiveEquivalencyCache.parent_identifier_id).where(
+                RecursiveEquivalencyCache.identifier_id.in_(
+                    [target.input_id, target.output_id]
                 )
             )
-            .scalars()
-            .all()
         )
-        DirtyIdentifierIds(container_instance().redis().client()).add(
-            target.input_id, target.output_id, *parent_ids
-        )
-    except Exception as e:
+        .scalars()
+        .all()
+    )
+    dirty = DirtyIdentifierIds(container_instance().redis().client())
+    try:
+        dirty.add(target.input_id, target.output_id, *parent_ids)
+    except RedisError as e:
         log.warning(f"Failed to mark dirty identifiers on equivalency delete: {e}")
 
 
@@ -222,11 +224,10 @@ def equivalency_coverage_reset_on_equivalency_create(
     Redis unavailability is non-fatal — any missed dirty IDs will be recovered
     by the next scheduled full-refresh run.
     """
+    dirty = DirtyIdentifierIds(container_instance().redis().client())
     try:
-        DirtyIdentifierIds(container_instance().redis().client()).add(
-            target.input_id, target.output_id
-        )
-    except Exception as e:
+        dirty.add(target.input_id, target.output_id)
+    except RedisError as e:
         log.warning(f"Failed to mark dirty identifiers on equivalency create: {e}")
 
 
