@@ -1,4 +1,4 @@
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 from sqlalchemy import select
@@ -154,3 +154,32 @@ class TestEquivalentIdentifiersRefresh:
         assert _cache_for(db.session, a.id) == set()
 
         held_lock.release()
+
+    def test_requeues_batch_on_processing_failure(
+        self,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        redis_fixture: RedisFixture,
+    ) -> None:
+        """If processing a popped batch fails, the IDs are returned to the dirty
+        queue rather than being silently lost until the next full refresh."""
+        a = db.identifier()
+        b = db.identifier()
+        db.session.add(Equivalency(input_id=a.id, output_id=b.id, strength=1.0))
+        db.session.commit()
+        _drop_cache(db.session)
+
+        dirty = DirtyIdentifierIds(redis_fixture.client)
+        # Clear listener-added IDs, then seed a known batch.
+        dirty.pop(100)
+        dirty.add(a.id, b.id)
+
+        with patch(
+            "palace.manager.celery.tasks.equivalents.process_identifier_ids",
+            side_effect=RuntimeError("boom"),
+        ):
+            with pytest.raises(RuntimeError, match="boom"):
+                equivalent_identifiers_refresh.delay().wait()
+
+        # The popped batch was put back so the next run can retry it.
+        assert dirty.pop(100) == {a.id, b.id}
