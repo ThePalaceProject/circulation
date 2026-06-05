@@ -736,6 +736,23 @@ class TestEventParser:
             in str(excinfo.value)
         )
 
+    @pytest.mark.parametrize("data", [b"", b"   \n  ", ""])
+    def test_parse_empty_response_body(self, data: bytes | str):
+        # Bibliotheca occasionally returns a completely empty response
+        # body, which cannot be parsed as XML. We treat it the same as a
+        # response containing no events rather than raising a parse error.
+        events = list(EventParser().process_all(data))
+        assert [] == events
+
+        # And, as with a well-formed empty batch, we raise when the caller
+        # has indicated that having no events should be treated as an error.
+        with pytest.raises(RemoteInitiatedServerError) as excinfo:
+            list(EventParser().process_all(data, no_events_error=True))
+        assert (
+            "No events returned from server. This may not be an error, but treating it as one to be safe."
+            in str(excinfo.value)
+        )
+
     def test_parse_empty_end_date_event(
         self, bibliotheca_fixture: BibliothecaAPITestFixture
     ):

@@ -1157,9 +1157,15 @@ class EventParser(
         self, string: bytes | str, no_events_error: bool = False
     ) -> Generator[tuple[str, str, str | None, datetime, datetime | None, str]]:
         has_events = False
-        for i in super().process_all(string):
-            yield i
-            has_events = True
+        # Bibliotheca occasionally returns an empty response body. An empty
+        # document cannot be parsed as XML (lxml raises "Document is empty"
+        # even in recovery mode), so treat a blank body the same as a
+        # response that contained no events rather than letting the parse
+        # error propagate as an unhandled exception.
+        if string and string.strip():
+            for i in super().process_all(string):
+                yield i
+                has_events = True
 
         # If we are catching up on events and we expect to have a time
         # period where there are no events, we don't want to consider that
