@@ -59,8 +59,20 @@ def equivalent_identifiers_refresh(
 
         if identifier_ids:
             task.log.info(f"Processing {len(identifier_ids)} dirty identifier IDs.")
-            with task.transaction() as session:
-                process_identifier_ids(session, identifier_ids)
+            try:
+                with task.transaction() as session:
+                    process_identifier_ids(session, identifier_ids)
+            except Exception:
+                # pop() already removed these IDs from Redis. If processing or the
+                # commit failed, put them back so the batch isn't silently lost
+                # until the next weekly full refresh; the next scheduled run will
+                # retry them.
+                dirty.add(*identifier_ids)
+                task.log.warning(
+                    f"Re-queued {len(identifier_ids)} identifier IDs after a "
+                    "processing failure."
+                )
+                raise
             # full_refresh=False so the replacement doesn't re-seed the queue.
             raise task.replace(signature_with(task, full_refresh=False))
 
