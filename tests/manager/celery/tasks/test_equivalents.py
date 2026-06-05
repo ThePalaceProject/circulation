@@ -55,7 +55,7 @@ class TestEquivalentIdentifiersRefresh:
         assert _cache_for(db.session, b.id) == {a.id, b.id}
         assert dirty.count() == 0
 
-    def test_empty_queue_adds_identity_equivalents(
+    def test_full_refresh_adds_missing_identity_equivalents(
         self,
         db: DatabaseTransactionFixture,
         celery_fixture: CeleryFixture,
@@ -65,10 +65,28 @@ class TestEquivalentIdentifiersRefresh:
         db.session.commit()
         _drop_cache(db.session)
 
-        # Queue is empty — task should add (id, id) self-references.
-        equivalent_identifiers_refresh.delay().wait()
+        # A full refresh sweeps the table and backfills missing (id, id) rows.
+        equivalent_identifiers_refresh.delay(full_refresh=True).wait()
 
         assert _cache_for(db.session, a.id) == {a.id}
+
+    def test_delta_run_skips_identity_sweep(
+        self,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        redis_fixture: RedisFixture,
+    ) -> None:
+        # The identifier's self-reference is maintained by the creation listener;
+        # drop it to simulate drift that only the full-refresh sweep should fix.
+        a = db.identifier()
+        db.session.commit()
+        _drop_cache(db.session)
+
+        # A delta run with an empty queue must not run the full-table sweep, so the
+        # dropped self-reference is left for the next full refresh to backfill.
+        equivalent_identifiers_refresh.delay().wait()
+
+        assert _cache_for(db.session, a.id) == set()
 
     def test_processes_in_batches(
         self,
