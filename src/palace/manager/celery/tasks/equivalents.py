@@ -16,7 +16,10 @@ from palace.manager.sqlalchemy.refresh_equivalents import (
 
 @shared_task(queue=QueueNames.default, bind=True, throws=(LockNotAcquired,))
 def equivalent_identifiers_refresh(
-    task: Task, batch_size: int = 200, full_refresh: bool = False
+    task: Task,
+    batch_size: int = 200,
+    full_refresh: bool = False,
+    ensure_identity: bool = False,
 ) -> None:
     """
     Recompute the RecursiveEquivalencyCache for identifier chains marked as dirty.
@@ -25,19 +28,26 @@ def equivalent_identifiers_refresh(
     are created or deleted. This task pops a batch, recomputes the affected chains,
     then re-queues itself until the queue is empty.
 
-    Once the queue is empty, self-reference rows are added for any Identifier
-    that is still missing one.
-
     A global :class:`~palace.manager.service.redis.models.lock.TaskLock` (owned by
     ``task.request.root_id``, which Celery preserves across ``task.replace()`` and
     retries) ensures at most one refresh run is in progress at a time, so the
     daily/weekly beat schedules can't start a second run that races on the shared
     dirty queue or the RecursiveEquivalencyCache.
 
+    Self-reference ``(id, id)`` rows are maintained for new identifiers by the
+    ``Identifier`` creation listener, so a normal delta run does not need to check
+    for missing ones. The full-table sweep that backfills any missing self-rows is
+    therefore only run as part of a ``full_refresh`` (weekly), avoiding a daily
+    full-table scan.
+
     :param batch_size: Number of identifier IDs to process per invocation.
     :param full_refresh: If True, seed the dirty queue with all identifier IDs
         from the equivalents table before processing. Use for initial deployment
         or to recover after a Redis restart wipes the queue.
+    :param ensure_identity: Internal chain-state flag. Set automatically when a
+        ``full_refresh`` run starts and carried through the self-replacements so
+        that the missing-self-reference sweep runs once, when the queue drains at
+        the end of a full refresh.
     """
     redis_client = task.services.redis().client()
     dirty = DirtyIdentifierIds(redis_client)
@@ -54,6 +64,8 @@ def equivalent_identifiers_refresh(
             task.log.info(
                 f"Full refresh: seeded dirty queue with {total} identifier IDs."
             )
+            # Run the missing-self-reference sweep when this full refresh drains.
+            ensure_identity = True
 
         identifier_ids = dirty.pop(batch_size)
 
@@ -73,15 +85,25 @@ def equivalent_identifiers_refresh(
                     "processing failure."
                 )
                 raise
-            # full_refresh=False so the replacement doesn't re-seed the queue.
-            raise task.replace(signature_with(task, full_refresh=False))
+            # full_refresh=False so the replacement doesn't re-seed the queue, but
+            # ensure_identity is carried forward so the end-of-chain sweep still runs.
+            raise task.replace(
+                signature_with(
+                    task, full_refresh=False, ensure_identity=ensure_identity
+                )
+            )
 
-        # Queue drained: ensure a self-reference exists for any identifier missing one.
-        with task.transaction() as session:
-            add_identity_equivalents(session, batch_size)
-        task.log.info(
-            "Dirty queue is empty; identity equivalents ensured for all identifiers."
-        )
+        # Queue drained. Only on a full refresh do we sweep the whole identifiers
+        # table for missing self-references; delta runs rely on the creation
+        # listener and skip the scan.
+        if ensure_identity:
+            with task.transaction() as session:
+                add_identity_equivalents(session, batch_size)
+            task.log.info(
+                "Dirty queue is empty; identity equivalents ensured for all identifiers."
+            )
+        else:
+            task.log.info("Dirty queue is empty; nothing to do.")
 
     # Reached only on the drained (terminal) path — the task.replace() above exits
     # via Ignore and keeps the lock held for the next batch. Release here so the
