@@ -152,16 +152,24 @@ def update_custom_list_entries_sweep(task: Task) -> None:
 # Stage 1 — Per-list entry update
 # ---------------------------------------------------------------------------
 
-# Internal sentinel: returned by _setup_first_invocation to signal "skip this list".
-# The caller checks identity (json_query is _SKIP), not equality.
-_SKIP: dict[str, Any] = {}
+
+class _Skip:
+    """Sentinel type returned by ``_setup_first_invocation`` to signal "skip this list".
+
+    Using a dedicated class (rather than a bare ``{}``) makes the identity
+    contract explicit: callers check ``result is _SKIP``, not ``result == {}``,
+    which would be ambiguous if a legitimate empty dict were ever a valid query.
+    """
+
+
+_SKIP = _Skip()
 
 
 def _setup_first_invocation(
     task: Task,
     session: Session,
     custom_list: CustomList,
-) -> dict[str, Any] | None:
+) -> dict[str, Any] | _Skip | None:
     """Perform mode-specific setup on the first invocation of an entry-update run.
 
     Returns the ``json_query`` to pass to ``populate_query_pages``:
@@ -285,9 +293,10 @@ def update_custom_list_entries(
                     return
 
                 if is_first_invocation:
-                    json_query = _setup_first_invocation(task, session, custom_list)
-                    if json_query is _SKIP:
+                    setup_result = _setup_first_invocation(task, session, custom_list)
+                    if isinstance(setup_result, _Skip):
                         return
+                    json_query = setup_result
 
                 search: ExternalSearchIndex = task.services.search.index()
                 task.log.info(
