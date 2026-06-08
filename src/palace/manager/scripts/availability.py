@@ -4,7 +4,6 @@ from collections.abc import Sequence
 
 from palace.util.exceptions import PalaceValueError
 
-from palace.manager.integration.license.bibliotheca import BibliothecaCirculationSweep
 from palace.manager.integration.license.overdrive.api import OverdriveAPI
 from palace.manager.scripts.input import IdentifierInputScript
 from palace.manager.sqlalchemy.model.identifier import Identifier
@@ -44,8 +43,18 @@ class AvailabilityRefreshScript(IdentifierInputScript):
         collection = pool.collection
 
         if identifier.type == Identifier.BIBLIOTHECA_ID:
-            sweeper = BibliothecaCirculationSweep(self._db, collection)
-            sweeper.process_batch(identifiers)
+            # Local import to avoid a circular import. bibliotheca_circulation_updater
+            # imports `palace.manager.celery.tasks`, whose package __init__ eagerly
+            # autoloads every task module (including celery.tasks.bibliotheca), and
+            # celery.tasks.bibliotheca imports BibliothecaCirculationUpdater back. A
+            # top-level import here would trigger that cycle whenever availability.py is
+            # imported before the Celery tasks have finished loading.
+            from palace.manager.integration.license.bibliotheca_circulation_updater import (
+                BibliothecaCirculationUpdater,
+            )
+
+            updater = BibliothecaCirculationUpdater(self._db, collection)
+            updater.process_identifiers(identifiers)
         elif identifier.type == Identifier.OVERDRIVE_ID:
             api = OverdriveAPI(self._db, collection)
             for identifier in identifiers:

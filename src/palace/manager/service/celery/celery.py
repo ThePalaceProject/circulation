@@ -304,6 +304,10 @@ def beat_schedule() -> dict[str, Any]:
             "task": bibliotheca.import_purchase_records_for_all_collections.name,
             "schedule": crontab(minute="0", hour="4"),  # Once a day at 4:00 AM
         },
+        "bibliotheca_circulation_update_all_collections": {
+            "task": bibliotheca.circulation_update_all_collections.name,
+            "schedule": crontab(minute="0", hour="5"),  # Once a day at 5:00 AM
+        },
     }
 
 

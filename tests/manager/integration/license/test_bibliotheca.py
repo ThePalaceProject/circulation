@@ -4,7 +4,7 @@ import json
 import random
 from datetime import date, timedelta
 from typing import TYPE_CHECKING, cast
-from unittest.mock import create_autospec
+from unittest.mock import create_autospec, patch
 
 import pytest
 from pymarc.record import Record
@@ -29,10 +29,10 @@ from palace.manager.api.circulation.exceptions import (
 )
 from palace.manager.api.circulation.fulfillment import Fulfillment
 from palace.manager.api.web_publication_manifest import FindawayManifest
+from palace.manager.celery.tasks import apply
 from palace.manager.integration.license.bibliotheca import (
     BibliothecaAPI,
     BibliothecaBibliographicCoverageProvider,
-    BibliothecaCirculationSweep,
     BibliothecaParser,
     CheckoutResponseParser,
     ErrorParser,
@@ -318,6 +318,10 @@ class TestBibliothecaAPI:
         db = bibliotheca_fixture.db
         # Test the Bibliotheca implementation of the update_availability
         # method defined by the CirculationAPI interface.
+        # The new implementation delegates to BibliothecaCirculationUpdater, which on
+        # this on-demand path applies changes synchronously (so the refreshed
+        # availability is visible to the caller immediately) and zeros out any titles
+        # that Bibliotheca no longer recognises.
 
         # Create a LicensePool that needs updating.
         edition, pool = db.edition(
@@ -327,17 +331,11 @@ class TestBibliothecaAPI:
             collection=bibliotheca_fixture.collection,
         )
 
-        # We have never checked the circulation information for this
-        # LicensePool. Put some random junk in the pool to verify
-        # that it gets changed.
+        # Put some junk in the pool to verify that the zero-out path works.
         pool.licenses_owned = 10
         pool.licenses_available = 5
         pool.patrons_in_hold_queue = 3
         assert None == pool.last_checked
-
-        # We do have a Work hanging around, but things are about to
-        # change for it.
-        work, is_new = pool.calculate_work()
 
         # Prepare availability information.
         data = bibliotheca_fixture.files.sample_data("item_metadata_single.xml")
@@ -345,32 +343,35 @@ class TestBibliothecaAPI:
         # about the LicensePool we just created.
         data = data.replace(b"ddf4gr9", pool.identifier.identifier.encode("utf8"))
 
-        # Update availability using that data.
+        # When Bibliotheca returns data for the identifier, the change is applied
+        # synchronously in the caller's session rather than queued as an async
+        # bibliographic_apply task.
         bibliotheca_fixture.api.queue_response(200, content=data)
 
-        bibliotheca_fixture.api.update_availability(pool)
-        # The availability information has been updated, as has the
-        # date the availability information was last checked.
+        with patch.object(apply, "bibliographic_apply") as mock_apply:
+            bibliotheca_fixture.api.update_availability(pool)
+
+        # No async task was queued; the apply happened in-band.
+        mock_apply.delay.assert_not_called()
+
+        # The pool immediately reflects the availability reported by Bibliotheca
+        # (TotalCopies=1, AvailableCopies=1, OnHoldCount=0 in the sample data).
         assert 1 == pool.licenses_owned
         assert 1 == pool.licenses_available
         assert 0 == pool.patrons_in_hold_queue
+        assert pool.last_checked is not None
 
-        old_last_checked = pool.last_checked
-        assert old_last_checked is not None
-
-        # Now let's try update_availability again, with a file that
-        # makes it look like the book has been removed from the
-        # collection.
+        # Now test the zero-out path: API returns no data for the identifier.
         data = bibliotheca_fixture.files.sample_data("empty_item_bibliographic.xml")
         bibliotheca_fixture.api.queue_response(200, content=data)
 
-        bibliotheca_fixture.api.update_availability(pool)
+        with patch.object(apply, "bibliographic_apply"):
+            bibliotheca_fixture.api.update_availability(pool)
 
+        # The pool should be zeroed out because Bibliotheca didn't mention it.
         assert 0 == pool.licenses_owned
         assert 0 == pool.licenses_available
         assert 0 == pool.patrons_in_hold_queue
-
-        assert pool.last_checked is not old_last_checked
 
     def test_marc_request(self, bibliotheca_fixture: BibliothecaAPITestFixture):
         # A request for MARC records between two dates makes an API
@@ -660,48 +661,6 @@ class TestBibliothecaAPI:
 
         # The total duration, in seconds, has been added to metadata.
         assert 28371 == int(metadata["duration"])
-
-
-class TestBibliothecaCirculationSweep:
-    def test_circulation_sweep_discovers_work(
-        self, bibliotheca_fixture: BibliothecaAPITestFixture
-    ):
-        db = bibliotheca_fixture.db
-        # Test what happens when BibliothecaCirculationSweep discovers a new
-        # work.
-
-        # We know about an identifier, but nothing else.
-        identifier = db.identifier(
-            identifier_type=Identifier.BIBLIOTHECA_ID, foreign_id="ddf4gr9"
-        )
-
-        # We're about to get information about that identifier from
-        # the API.
-        data = bibliotheca_fixture.files.sample_data("item_metadata_single.xml")
-
-        # Update availability using that data.
-        bibliotheca_fixture.api.queue_response(200, content=data)
-        monitor = BibliothecaCirculationSweep(
-            db.session,
-            bibliotheca_fixture.collection,
-            api_class=bibliotheca_fixture.api,
-        )
-
-        monitor.process_items([identifier])
-
-        # Validate that the HTTP request went to the /items endpoint.
-        request = bibliotheca_fixture.api.requests.pop()
-        url = request[1]
-        assert (
-            url
-            == bibliotheca_fixture.api.full_url("items") + "/" + identifier.identifier
-        )
-
-        # A LicensePool has been created for the previously mysterious
-        # identifier.
-        [pool] = identifier.licensed_through
-        assert bibliotheca_fixture.collection == pool.collection
-        assert False == pool.open_access
 
 
 # Tests of the various parser classes.
