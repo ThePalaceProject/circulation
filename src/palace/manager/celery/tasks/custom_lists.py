@@ -29,16 +29,17 @@ from typing import Any
 from uuid import uuid4
 
 from celery import chord, group, shared_task
-from celery.exceptions import Ignore
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from palace.manager.celery.importer import workflow_lock_guard
 from palace.manager.celery.task import Task
-from palace.manager.celery.utils import ModelNotFoundError, load_from_id
+from palace.manager.celery.utils import ModelNotFoundError, load_from_id, signature_with
 from palace.manager.core.query.customlist import CustomListQueries
 from palace.manager.search.external_search import ExternalSearchIndex
 from palace.manager.service.celery.celery import QueueNames
 from palace.manager.service.redis.models.lock import RedisLock
+from palace.manager.service.redis.redis import Redis
 from palace.manager.sqlalchemy.listeners import site_configuration_has_changed
 from palace.manager.sqlalchemy.model.customlist import CustomList, CustomListEntry
 from palace.manager.sqlalchemy.model.lane import Lane
@@ -73,7 +74,7 @@ _SWEEP_LOCK_TTL = datetime.timedelta(hours=2)
 
 
 def _entry_update_lock(
-    redis_client: Any, custom_list_id: int, lock_value: str
+    redis_client: Redis, custom_list_id: int, lock_value: str
 ) -> RedisLock:
     """Return a per-list Redis lock for the entry-update workflow."""
     return RedisLock(
@@ -84,7 +85,7 @@ def _entry_update_lock(
     )
 
 
-def _sweep_lock(redis_client: Any, lock_value: str) -> RedisLock:
+def _sweep_lock(redis_client: Redis, lock_value: str) -> RedisLock:
     """Return a Redis lock for the custom-list sweep orchestrator."""
     return RedisLock(
         redis_client,
@@ -109,38 +110,42 @@ def update_custom_list_entries_sweep(task: Task) -> None:
     list entries have been settled.
 
     A sweep-level Redis lock prevents a second beat-triggered run from
-    overlapping with a sweep already in progress.
+    overlapping with a sweep already in progress.  The lock is acquired here
+    and released by ``finalize_lane_size_update`` at the end of the chord
+    pipeline — so it genuinely covers the full entries → lane-sizes sequence.
     """
     redis = task.services.redis.client()
     lock_value = str(uuid4())
 
-    with _sweep_lock(redis, lock_value).lock(raise_when_not_acquired=False) as acquired:
-        if not acquired:
-            task.log.warning(
-                "Custom list entries sweep skipped: another sweep is already in progress."
+    if not _sweep_lock(redis, lock_value).acquire():
+        task.log.warning(
+            "Custom list entries sweep skipped: another sweep is already in progress."
+        )
+        return
+
+    # The sweep lock is intentionally NOT released here.  It is passed through
+    # the pipeline and released by finalize_lane_size_update once all lane
+    # sizes have been updated.  The 2-hour TTL acts as a safety net in case the
+    # orchestrator or any downstream task crashes before reaching finalize.
+
+    with task.session() as session:
+        list_ids: list[int] = list(
+            session.scalars(
+                select(CustomList.id).where(CustomList.auto_update_enabled.is_(True))
             )
-            return
+        )
 
-        with task.session() as session:
-            list_ids: list[int] = list(
-                session.scalars(
-                    select(CustomList.id).where(
-                        CustomList.auto_update_enabled.is_(True)
-                    )
-                )
-            )
+    task.log.info(f"Sweeping {len(list_ids)} auto-updating custom list(s).")
 
-        task.log.info(f"Sweeping {len(list_ids)} auto-updating custom list(s).")
+    if not list_ids:
+        # No auto-updating lists; skip straight to lane size updates.
+        update_lane_sizes_sweep.delay(lock_value=lock_value)
+        return
 
-        if not list_ids:
-            # No auto-updating lists; skip straight to lane size updates.
-            update_lane_sizes_sweep.delay()
-            return
-
-        chord(
-            group([update_custom_list_entries.si(list_id) for list_id in list_ids]),
-            update_lane_sizes_sweep.si(),
-        ).delay()
+    chord(
+        group([update_custom_list_entries.si(list_id) for list_id in list_ids]),
+        update_lane_sizes_sweep.si(lock_value=lock_value),
+    ).delay()
 
 
 # ---------------------------------------------------------------------------
@@ -232,7 +237,6 @@ def update_custom_list_entries(
     custom_list_id: int,
     json_query: dict[str, Any] | None = None,
     pagination_key: list[Any] | None = None,
-    lock_value: str | None = None,
 ) -> None:
     """Update entries for a single auto-updating custom list.
 
@@ -244,10 +248,11 @@ def update_custom_list_entries(
     After all entries are populated, the list's cached ``size`` is reconciled
     against the database count via :meth:`CustomList.update_size`.
 
-    A per-list Redis lock prevents concurrent runs.  The lock value is threaded
-    through ``task.replace()`` continuations so the same workflow identity is
-    maintained; the lock is **not** released between continuations (Celery's
-    ``Ignore`` exception bypasses the release path in the lock context manager).
+    A per-list Redis lock (managed by :func:`~palace.manager.celery.importer.workflow_lock_guard`)
+    prevents concurrent runs.  The lock is keyed on ``task.request.id``, which
+    Celery preserves across ``task.replace()`` page hand-offs, so each
+    continuation re-acquires the same lock without explicitly threading a value
+    through the signature.
 
     :param custom_list_id: ID of the custom list to update.
     :param json_query: Pre-computed search-query dict.  ``None`` on the first
@@ -255,32 +260,17 @@ def update_custom_list_entries(
         UPDATED continuations (carries the time-filtered query).
     :param pagination_key: Cursor from a previous :func:`populate_query_pages`
         call; ``None`` on the first invocation.
-    :param lock_value: UUID identifying this workflow.  Generated on the first
-        invocation and forwarded to every continuation to hold the lock.
     """
-    redis = task.services.redis.client()
-    is_first_invocation = lock_value is None
-    if lock_value is None:
-        lock_value = str(uuid4())
-
-    lock = _entry_update_lock(redis, custom_list_id, lock_value)
-
-    with lock.lock(
-        raise_when_not_acquired=False,
-        ignored_exceptions=(Ignore,),
-    ) as acquired:
-        if not acquired and is_first_invocation:
-            task.log.warning(
-                f"Custom list {custom_list_id} entries update skipped: "
-                "another update is already in progress."
-            )
+    with workflow_lock_guard(
+        task,
+        custom_list_id,
+        label=f"Custom list {custom_list_id} entries update",
+        lock_factory=_entry_update_lock,
+    ) as proceed:
+        if not proceed:
             return
-        if not acquired and not is_first_invocation:
-            task.log.warning(
-                f"Custom list {custom_list_id} entries update: lock expired between "
-                "pages; continuing (another update may be running)."
-            )
 
+        is_first_invocation = pagination_key is None
         next_pagination_key: list[Any] | None = None
 
         try:
@@ -334,17 +324,18 @@ def update_custom_list_entries(
                         f"size={custom_list.size}."
                     )
 
-            # Transaction committed above. If more pages remain, re-queue now that
-            # the work is persisted.  task.replace() raises Ignore which propagates
-            # through the lock context manager; because Ignore is in ignored_exceptions
-            # the lock is NOT released, allowing the replacement task to re-acquire it.
+            # Transaction committed above. If more pages remain, re-queue now
+            # that the work is persisted.  signature_with carries all existing
+            # arguments forward, overriding only the changed ones, so adding a
+            # new parameter to this task's signature can never silently drop a
+            # value.  task.replace() raises Ignore, which workflow_lock_guard
+            # holds the lock across (Ignore is in its ignored_exceptions tuple).
             if next_pagination_key is not None:
                 raise task.replace(
-                    task.s(
-                        custom_list_id=custom_list_id,
+                    signature_with(
+                        task,
                         json_query=json_query,
                         pagination_key=next_pagination_key,
-                        lock_value=lock_value,
                     )
                 )
 
@@ -390,7 +381,7 @@ def update_custom_list_size(task: Task, custom_list_id: int) -> None:
 
 
 @shared_task(queue=QueueNames.default, bind=True)
-def update_lane_sizes_sweep(task: Task) -> None:
+def update_lane_sizes_sweep(task: Task, lock_value: str | None = None) -> None:
     """Fan out lane size updates for all lanes.
 
     Queries all Lane IDs and creates a chord of ``update_lane_size`` tasks
@@ -398,6 +389,10 @@ def update_lane_sizes_sweep(task: Task) -> None:
 
     This task is the chord callback from ``update_custom_list_entries_sweep``
     and may also be invoked standalone (e.g. from the CLI or admin tooling).
+
+    :param lock_value: Sweep-lock random value from
+        ``update_custom_list_entries_sweep``.  Passed through to
+        ``finalize_lane_size_update`` so the lock can be released there.
     """
     with task.session() as session:
         lane_ids: list[int] = list(session.scalars(select(Lane.id)))
@@ -405,12 +400,12 @@ def update_lane_sizes_sweep(task: Task) -> None:
     task.log.info(f"Sweeping sizes for {len(lane_ids)} lane(s).")
 
     if not lane_ids:
-        finalize_lane_size_update.delay()
+        finalize_lane_size_update.delay(lock_value=lock_value)
         return
 
     chord(
         group([update_lane_size.si(lane_id) for lane_id in lane_ids]),
-        finalize_lane_size_update.si(),
+        finalize_lane_size_update.si(lock_value=lock_value),
     ).delay()
 
 
@@ -453,13 +448,29 @@ def update_lane_size(task: Task, lane_id: int) -> None:
 
 
 @shared_task(queue=QueueNames.default, bind=True)
-def finalize_lane_size_update(task: Task) -> None:
+def finalize_lane_size_update(task: Task, lock_value: str | None = None) -> None:
     """Notify the system that lane sizes have changed.
 
     Called as the chord callback once all ``update_lane_size`` tasks complete.
     Fires ``site_configuration_has_changed`` a single time so downstream caches
     are invalidated without triggering a separate notification per lane.
+
+    If ``lock_value`` is provided, releases the sweep-level Redis lock that was
+    acquired by ``update_custom_list_entries_sweep`` at the start of the
+    pipeline.  This ensures the lock truly covers the full chord sequence.
+
+    :param lock_value: Sweep-lock random value to release, or ``None`` when
+        this task is invoked standalone (outside the full pipeline).
     """
     with task.transaction() as session:
         site_configuration_has_changed(session)
     task.log.info("Lane size sweep complete: site configuration change recorded.")
+
+    if lock_value is not None:
+        redis = task.services.redis.client()
+        released = _sweep_lock(redis, lock_value).release()
+        if not released:
+            task.log.warning(
+                "Could not release sweep lock — it may have already expired or "
+                "been released by another process."
+            )
