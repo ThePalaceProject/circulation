@@ -62,6 +62,9 @@ class TestUpdateCustomListEntriesSweep:
 
             mock_entries.si.assert_not_called()
             mock_lane_sweep.delay.assert_called_once()
+            # The sweep lock_value must be forwarded so finalize can release it.
+            _, kwargs = mock_lane_sweep.delay.call_args
+            assert kwargs.get("lock_value") is not None
 
     def test_fans_out_per_list_tasks(
         self,
@@ -92,6 +95,28 @@ class TestUpdateCustomListEntriesSweep:
             assert cl1.id in si_ids
             assert cl2.id in si_ids
             assert disabled_list.id not in si_ids
+
+    def test_sweep_lock_value_forwarded_to_lane_sweep(
+        self,
+        db: DatabaseTransactionFixture,
+        redis_fixture: RedisFixture,
+        celery_fixture: CeleryFixture,
+    ):
+        """The sweep lock_value is forwarded to update_lane_sizes_sweep so it
+        reaches finalize_lane_size_update and is released there."""
+        cl1 = _make_auto_updating_list(db)
+
+        with (
+            patch.object(custom_lists, "update_custom_list_entries"),
+            patch.object(custom_lists, "update_lane_sizes_sweep") as mock_lane_sweep,
+            patch("palace.manager.celery.tasks.custom_lists.chord") as mock_chord,
+            patch("palace.manager.celery.tasks.custom_lists.group"),
+        ):
+            custom_lists.update_custom_list_entries_sweep.delay().wait()
+
+        # The chord callback signature must carry lock_value.
+        chord_callback = mock_chord.call_args[0][1]
+        assert chord_callback.kwargs.get("lock_value") is not None
 
     def test_sweep_lock_prevents_concurrent_sweeps(
         self,
@@ -232,14 +257,14 @@ class TestUpdateCustomListEntries:
         assert custom_list.auto_update_status == CustomList.UPDATED
         assert custom_list.auto_update_last_update is not None
 
-    def test_continuation_uses_task_replace(
+    def test_continuation_uses_signature_with(
         self,
         db: DatabaseTransactionFixture,
         redis_fixture: RedisFixture,
         celery_fixture: CeleryFixture,
         services_fixture: ServicesFixture,
     ):
-        """When more pages remain, task.replace() is called with the pagination cursor."""
+        """When more pages remain, task.replace() uses signature_with to carry args forward."""
         custom_list = _make_auto_updating_list(db, status=CustomList.INIT)
         next_key = ["sort_key_value_1", 42]
 
@@ -257,24 +282,24 @@ class TestUpdateCustomListEntries:
             replace_sig = mock_replace.call_args[0][0]
             assert replace_sig.kwargs["pagination_key"] == next_key
             assert replace_sig.kwargs["custom_list_id"] == custom_list.id
-            assert replace_sig.kwargs["lock_value"] is not None
+            # lock_value is no longer an explicit parameter — workflow_lock_guard
+            # uses task.request.id as the stable lock identity across pages.
+            assert "lock_value" not in replace_sig.kwargs
 
-    def test_continuation_propagates_lock_value(
+    def test_continuation_uses_task_id_as_lock_identity(
         self,
         db: DatabaseTransactionFixture,
         redis_fixture: RedisFixture,
         celery_fixture: CeleryFixture,
         services_fixture: ServicesFixture,
     ):
-        """lock_value is threaded through task.replace() continuations."""
+        """Continuation invocations re-acquire the same lock via the stable task ID."""
         custom_list = _make_auto_updating_list(db, status=CustomList.INIT)
         next_key = ["sort_key_value"]
-        lock_value = str(uuid4())
 
-        # Simulate a second (continuation) invocation by passing lock_value.
-        lock = _entry_update_lock(redis_fixture.client, custom_list.id, lock_value)
-        lock.acquire()
-
+        # Simulate a continuation by passing a pagination_key (first-invocation
+        # detection uses pagination_key is None, so any non-None value here
+        # triggers continuation logic).
         with patch(
             "palace.manager.celery.tasks.custom_lists.CustomListQueries"
         ) as mock_queries:
@@ -287,13 +312,12 @@ class TestUpdateCustomListEntries:
                     custom_lists.update_custom_list_entries.delay(
                         custom_list.id,
                         pagination_key=["previous_key"],
-                        lock_value=lock_value,
                     ).wait()
 
             replace_sig = mock_replace.call_args[0][0]
-            assert replace_sig.kwargs["lock_value"] == lock_value
-
-        lock.release()
+            # pagination_key updated, custom_list_id carried forward
+            assert replace_sig.kwargs["pagination_key"] == next_key
+            assert replace_sig.kwargs["custom_list_id"] == custom_list.id
 
     def test_entry_lock_blocks_duplicate_update(
         self,
@@ -456,6 +480,24 @@ class TestUpdateLaneSizesSweep:
             mock_lane_size.si.assert_not_called()
             mock_finalize.delay.assert_called_once()
 
+    def test_lock_value_forwarded_to_finalize(
+        self,
+        db: DatabaseTransactionFixture,
+        redis_fixture: RedisFixture,
+        celery_fixture: CeleryFixture,
+    ):
+        """lock_value is threaded through to finalize_lane_size_update."""
+        lock_value = str(uuid4())
+
+        with (
+            patch.object(custom_lists, "finalize_lane_size_update") as mock_finalize,
+            patch.object(custom_lists, "update_lane_size"),
+        ):
+            custom_lists.update_lane_sizes_sweep.delay(lock_value=lock_value).wait()
+
+        _, kwargs = mock_finalize.delay.call_args
+        assert kwargs.get("lock_value") == lock_value
+
     def test_fans_out_per_lane_tasks(
         self,
         db: DatabaseTransactionFixture,
@@ -558,3 +600,36 @@ class TestFinalizeLaneSizeUpdate:
         ) as mock_changed:
             custom_lists.finalize_lane_size_update.delay().wait()
             mock_changed.assert_called_once()
+
+    def test_releases_sweep_lock_when_lock_value_provided(
+        self,
+        db: DatabaseTransactionFixture,
+        redis_fixture: RedisFixture,
+        celery_fixture: CeleryFixture,
+    ):
+        """finalize_lane_size_update releases the sweep lock when lock_value is passed."""
+        lock_value = str(uuid4())
+        sweep_lock = _sweep_lock(redis_fixture.client, lock_value)
+        sweep_lock.acquire()
+        assert sweep_lock.locked()
+
+        with patch(
+            "palace.manager.celery.tasks.custom_lists.site_configuration_has_changed"
+        ):
+            custom_lists.finalize_lane_size_update.delay(lock_value=lock_value).wait()
+
+        # Lock must be released after finalize completes.
+        assert not sweep_lock.locked()
+
+    def test_no_lock_released_when_standalone(
+        self,
+        db: DatabaseTransactionFixture,
+        redis_fixture: RedisFixture,
+        celery_fixture: CeleryFixture,
+    ):
+        """Without lock_value the sweep lock is not touched (standalone invocation)."""
+        # Verify no errors and no unexpected lock interaction when called without lock_value.
+        with patch(
+            "palace.manager.celery.tasks.custom_lists.site_configuration_has_changed"
+        ):
+            custom_lists.finalize_lane_size_update.delay().wait()  # no lock_value
