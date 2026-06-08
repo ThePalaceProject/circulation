@@ -47,6 +47,9 @@ from palace.manager.api.util.flask import get_request_library
 from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.core.user_profile import ProfileController
 from palace.manager.integration.goals import Goals
+from palace.manager.integration.patron_auth.anonymous_authentication import (
+    AnonymousAuthenticationProvider,
+)
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.service.integration_registry.base import IntegrationRegistry
 from palace.manager.service.integration_registry.patron_auth import PatronAuthRegistry
@@ -293,6 +296,7 @@ class LibraryAuthenticator(LoggerMixin):
         self.access_token_authentication_provider: (
             BasicTokenAuthenticationProvider | None
         ) = None
+        self.anonymous_provider: AnonymousAuthenticationProvider | None = None
         if basic_auth_provider:
             self.register_basic_auth_provider(basic_auth_provider)
 
@@ -331,6 +335,18 @@ class LibraryAuthenticator(LoggerMixin):
             return False
         matches = list(self.providers)
         return len(matches) > 0 and all([x.identifies_individuals for x in matches])
+
+    @property
+    def allows_anonymous_access(self) -> bool:
+        """Does this library explicitly allow anonymous (unauthenticated) access?
+
+        This is true only when an :class:`AnonymousAuthenticationProvider` has
+        been deliberately configured. The mere absence of authentication
+        providers is *not* enough -- that could just as easily mean the library
+        is mid-setup or being decommissioned, neither of which should grant
+        anonymous access.
+        """
+        return self.anonymous_provider is not None
 
     @property
     def library(self) -> Library | None:
@@ -395,17 +411,20 @@ class LibraryAuthenticator(LoggerMixin):
             self.register_saml_provider(provider)
         elif isinstance(provider, BaseOIDCAuthenticationProvider):
             self.register_oidc_provider(provider)
+        elif isinstance(provider, AnonymousAuthenticationProvider):
+            self.register_anonymous_provider(provider)
         else:
             raise CannotLoadConfiguration(
-                f"Authentication provider {impl_cls.__name__} is neither BasicAuthenticationProvider, "
-                "BaseSAMLAuthenticationProvider, nor BaseOIDCAuthenticationProvider. "
-                "I can create it, but not sure where to put it."
+                f"Authentication provider {impl_cls.__name__} is none of BasicAuthenticationProvider, "
+                "BaseSAMLAuthenticationProvider, BaseOIDCAuthenticationProvider, nor "
+                "AnonymousAuthenticationProvider. I can create it, but not sure where to put it."
             )
 
     def register_basic_auth_provider(
         self,
         provider: BasicAuthenticationProvider,
     ):
+        self._guard_against_anonymous_provider()
         if (
             self.basic_auth_provider is not None
             and self.basic_auth_provider != provider
@@ -423,6 +442,7 @@ class LibraryAuthenticator(LoggerMixin):
         self,
         provider: BaseSAMLAuthenticationProvider,
     ):
+        self._guard_against_anonymous_provider()
         already_registered = self.saml_providers_by_name.get(provider.label())
         if already_registered and already_registered != provider:
             raise CannotLoadConfiguration(
@@ -434,12 +454,41 @@ class LibraryAuthenticator(LoggerMixin):
         self,
         provider: BaseOIDCAuthenticationProvider,
     ) -> None:
+        self._guard_against_anonymous_provider()
         already_registered = self.oidc_providers_by_name.get(provider.label())
         if already_registered and already_registered != provider:
             raise CannotLoadConfiguration(
                 'Two different OIDC providers claim the name "%s"' % (provider.label())
             )
         self.oidc_providers_by_name[provider.label()] = provider
+
+    def register_anonymous_provider(
+        self,
+        provider: AnonymousAuthenticationProvider,
+    ) -> None:
+        # Anonymous access is mutually exclusive with every other kind of
+        # authentication: a library either identifies its patrons or it
+        # deliberately serves everyone anonymously, never both.
+        if self.supports_patron_authentication:
+            raise CannotLoadConfiguration(
+                "Anonymous access cannot be combined with another authentication provider."
+            )
+        if self.anonymous_provider is not None and self.anonymous_provider != provider:
+            raise CannotLoadConfiguration("Two anonymous access providers configured")
+        self.anonymous_provider = provider
+
+    def _guard_against_anonymous_provider(self) -> None:
+        """Reject identifying providers when anonymous access is already configured.
+
+        The reverse guard (rejecting an anonymous provider when an identifying
+        provider exists) lives in :meth:`register_anonymous_provider`. Together
+        they make it impossible to end up with both kinds registered, regardless
+        of the order in which the integrations are loaded.
+        """
+        if self.anonymous_provider is not None:
+            raise CannotLoadConfiguration(
+                "Anonymous access cannot be combined with another authentication provider."
+            )
 
     @property
     def providers(self) -> Iterable[AuthenticationProvider]:

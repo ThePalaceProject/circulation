@@ -17,6 +17,9 @@ if TYPE_CHECKING:
 class PatronAuthRegistry(IntegrationRegistry["AuthenticationProviderType"]):
     def __init__(self) -> None:
         super().__init__(Goals.PATRON_AUTH_GOAL)
+        from palace.manager.integration.patron_auth.anonymous_authentication import (
+            AnonymousAuthenticationProvider,
+        )
         from palace.manager.integration.patron_auth.kansas_patron import (
             KansasAuthenticationAPI,
         )
@@ -53,4 +56,7 @@ class PatronAuthRegistry(IntegrationRegistry["AuthenticationProviderType"]):
         self.register(
             SirsiDynixHorizonAuthenticationProvider,
             canonical="api.sirsidynix_authentication_provider",
+        )
+        self.register(
+            AnonymousAuthenticationProvider, canonical="api.anonymous_authentication"
         )

@@ -423,6 +423,9 @@ class CirculationManager(LoggerMixin):
         library_identifies_patrons = (
             authenticator is not None and authenticator.identifies_individuals
         )
+        library_allows_anonymous_access = (
+            authenticator is not None and authenticator.allows_anonymous_access
+        )
         annotator_class = kwargs.pop("annotator_class", LibraryAnnotator)
         return annotator_class(
             self.circulation_apis[library.id],
@@ -430,6 +433,7 @@ class CirculationManager(LoggerMixin):
             library,
             top_level_title="All Books",
             library_identifies_patrons=library_identifies_patrons,
+            library_allows_anonymous_access=library_allows_anonymous_access,
             facets=facets,
             *args,
             **kwargs,

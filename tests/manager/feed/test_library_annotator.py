@@ -1662,9 +1662,10 @@ class TestLibraryAnnotator:
         assert fulfill.href and "fulfill" in fulfill.href
         assert fulfill.rel and "http://opds-spec.org/acquisition" == fulfill.rel
 
-        # Allow direct open-access downloads
-        # This will also filter out loan revoke links
+        # Make the library explicitly anonymous: this allows direct
+        # open-access downloads and also filters out loan revoke links.
         annotator.identifies_patrons = False
+        annotator.allows_anonymous_access = True
         loan1_links = annotator.acquisition_links(
             loan1.license_pool, loan1, None, None, loan1.license_pool.identifier
         )
@@ -1681,6 +1682,7 @@ class TestLibraryAnnotator:
 
         # Revert the annotator state
         annotator.identifies_patrons = True
+        annotator.allows_anonymous_access = False
 
         assert strftime(loan1.start) == fulfill.availability_since
         assert loan1.end == fulfill.availability_until == None
@@ -1759,9 +1761,10 @@ class TestLibraryAnnotator:
         # assert loan5.end == availability.until
         assert None == loan5.end
 
-        # If patron authentication is turned off for the library, then
+        # If the library is explicitly configured for anonymous access, then
         # only open-access links are displayed.
         annotator.identifies_patrons = False
+        annotator.allows_anonymous_access = True
 
         [open_access] = annotator.acquisition_links(
             loan1.license_pool, loan1, None, None, loan1.license_pool.identifier
@@ -1802,6 +1805,30 @@ class TestLibraryAnnotator:
             hold.license_pool, None, hold, None, hold.license_pool.identifier
         )
         assert [] == hold_links
+
+    def test_acquisition_links_unconfigured_library_is_locked(
+        self,
+        annotator_fixture: LibraryAnnotatorFixture,
+    ):
+        # A library that does not identify patrons but is *not* explicitly
+        # configured for anonymous access (e.g. it is mid-setup or being
+        # decommissioned) offers neither patron-specific links nor anonymous
+        # open-access links -- it is effectively locked.
+        annotator = LibraryLoanAndHoldAnnotator(
+            None, None, annotator_fixture.db.default_library()
+        )
+        annotator.identifies_patrons = False
+        annotator.allows_anonymous_access = False
+
+        patron = annotator_fixture.db.patron()
+        work = annotator_fixture.db.work(with_open_access_download=True)
+        loan, _ = work.license_pools[0].loan_to(patron, start=utc_now())
+
+        links = annotator.acquisition_links(
+            loan.license_pool, loan, None, None, loan.license_pool.identifier
+        )
+        # No open-access link, no borrow link, no revoke link.
+        assert links == []
 
     def test_acquisition_links_multiple_links(
         self,

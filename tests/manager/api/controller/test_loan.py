@@ -175,23 +175,40 @@ class TestLoanController:
         lpdm = MagicMock()
         assert False == m(loan_fixture.db.default_library(), patron, pool, lpdm)
 
-        # If the library does not authenticate patrons, then this
-        # _may_ be possible, but
-        # CirculationAPI.can_fulfill_without_loan also has to say it's
-        # okay.
-        class MockLibraryAuthenticator:
-            identifies_individuals = False
-
         short_name = loan_fixture.db.default_library().short_name
         assert short_name is not None
-        loan_fixture.manager.auth.library_authenticators[short_name] = (
-            MockLibraryAuthenticator()
-        )
 
         def mock_can_fulfill_without_loan(patron, pool, lpdm):
             self.called_with = (patron, pool, lpdm)
             return True
 
+        # A library that has no authentication configured at all -- because
+        # it is mid-setup or being decommissioned, not because it is
+        # deliberately anonymous -- never fulfills without a loan, and the
+        # CirculationAPI is not even consulted.
+        class UnconfiguredLibraryAuthenticator:
+            allows_anonymous_access = False
+
+        self.called_with = None
+        loan_fixture.manager.auth.library_authenticators[short_name] = (
+            UnconfiguredLibraryAuthenticator()
+        )
+        with loan_fixture.request_context_with_library("/"):
+            loan_fixture.manager.loans.circulation.can_fulfill_without_loan = (
+                mock_can_fulfill_without_loan
+            )
+            assert False == m(loan_fixture.db.default_library(), patron, pool, lpdm)
+            assert self.called_with is None
+
+        # If the library is explicitly configured for anonymous access, then
+        # this _may_ be possible, but CirculationAPI.can_fulfill_without_loan
+        # also has to say it's okay.
+        class AnonymousLibraryAuthenticator:
+            allows_anonymous_access = True
+
+        loan_fixture.manager.auth.library_authenticators[short_name] = (
+            AnonymousLibraryAuthenticator()
+        )
         with loan_fixture.request_context_with_library("/"):
             loan_fixture.manager.loans.circulation.can_fulfill_without_loan = (
                 mock_can_fulfill_without_loan

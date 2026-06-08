@@ -690,6 +690,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
         facet_view: str = "feed",
         top_level_title: str = "All Books",
         library_identifies_patrons: bool = True,
+        library_allows_anonymous_access: bool = False,
         facets: FacetsWithEntryPoint | None = None,
     ) -> None:
         """Constructor.
@@ -701,10 +702,14 @@ class LibraryAnnotator(CirculationManagerAnnotator):
           way that does not allow it to keep track of individuals.
 
           If this is false, links that imply the library can
-          distinguish between patrons will not be included. Depending
-          on the configured collections, some extra links may be
-          added, for direct acquisition of titles that would normally
-          require a loan.
+          distinguish between patrons will not be included.
+
+        :param library_allows_anonymous_access: A boolean indicating
+          whether this library is explicitly configured for anonymous
+          access. If this is true, some extra links may be added, for
+          direct acquisition of titles that would normally require a
+          loan. It is only ever true when ``library_identifies_patrons``
+          is false.
         """
         super().__init__(
             lane,
@@ -720,6 +725,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
         self._adobe_id_cache: dict[str, DRMLicensor | None] = {}
         self._top_level_title = top_level_title
         self.identifies_patrons = library_identifies_patrons
+        self.allows_anonymous_access = library_allows_anonymous_access
         self.facets = facets or None
 
     @cached_property
@@ -1236,7 +1242,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
             set_mechanism_at_borrow = (
                 api.SET_DELIVERY_MECHANISM_AT == BaseCirculationAPI.BORROW_STEP
             )
-            if active_license_pool and not self.identifies_patrons and not active_loan:
+            if active_license_pool and self.allows_anonymous_access and not active_loan:
                 for lpdm in active_license_pool.available_delivery_mechanisms:
                     if api.can_fulfill_without_loan(None, active_license_pool, lpdm):
                         # This title can be fulfilled without an
@@ -1270,7 +1276,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
             ),
             set_mechanism_at_borrow=set_mechanism_at_borrow,
             direct_fulfillment_delivery_mechanisms=direct_fulfillment_delivery_mechanisms,
-            add_open_access_links=(not self.identifies_patrons),
+            add_open_access_links=self.allows_anonymous_access,
         )
 
     def revoke_link(

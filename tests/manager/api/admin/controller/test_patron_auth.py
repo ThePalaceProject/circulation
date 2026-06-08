@@ -315,7 +315,7 @@ class TestPatronAuth:
 
         protocols = response_data.get("protocols")
         assert isinstance(protocols, list)
-        assert len(protocols) == 8
+        assert len(protocols) == 9
         assert "settings" in protocols[0]
         assert "library_settings" in protocols[0]
 
