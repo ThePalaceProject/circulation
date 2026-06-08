@@ -230,3 +230,31 @@ class TestEquivalencyDirtyListeners:
         # The equivalency was still persisted.
         assert db.session.get(Equivalency, equivalency.id) is not None
         assert "Failed to mark dirty identifiers on equivalency create" in caplog.text
+
+    def test_delete_redis_failure_is_non_fatal(
+        self,
+        db: DatabaseTransactionFixture,
+        redis_fixture: RedisFixture,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """A Redis outage during the delete listener must not abort the flush;
+        the delete path is more complex (it does a DB query first) but the
+        non-fatal contract must hold for it too."""
+        a = db.identifier()
+        b = db.identifier()
+        equivalency = Equivalency(input_id=a.id, output_id=b.id, strength=1.0)
+        db.session.add(equivalency)
+        db.session.commit()
+        caplog.set_level(LogLevel.warning)
+
+        with patch(
+            "palace.manager.sqlalchemy.listeners.DirtyIdentifierIds"
+        ) as mock_dirty_cls:
+            mock_dirty_cls.return_value.add.side_effect = RedisError("redis down")
+
+            db.session.delete(equivalency)
+            db.session.commit()  # must not raise despite Redis being down
+
+        # The equivalency was still deleted.
+        assert db.session.get(Equivalency, equivalency.id) is None
+        assert "Failed to mark dirty identifiers on equivalency delete" in caplog.text
