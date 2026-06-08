@@ -1,6 +1,10 @@
 #!/usr/bin/env python
-"""Update the cached sizes of all lanes."""
+"""
+Manually kick off the lane size sweep Celery task.
 
-from palace.manager.scripts.lane import UpdateLaneSizeScript
+Enqueues update_lane_sizes_sweep, which fans out size updates for every lane
+and fires finalize_lane_size_update once all updates are complete.
+"""
+from palace.manager.scripts.lane import UpdateLaneSizesSweepScript
 
-UpdateLaneSizeScript().run()
+UpdateLaneSizesSweepScript().run()

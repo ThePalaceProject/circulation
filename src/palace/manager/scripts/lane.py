@@ -9,12 +9,33 @@ from typing import Any, TextIO
 from sqlalchemy.orm import Session
 
 from palace.manager.api.lanes import create_default_lanes
+from palace.manager.celery.tasks.custom_lists import update_lane_sizes_sweep
 from palace.manager.feed.worklist.base import WorkList
+from palace.manager.scripts.base import Script
 from palace.manager.scripts.input import LibraryInputScript
 from palace.manager.search.external_search import ExternalSearchIndex
 from palace.manager.sqlalchemy.listeners import site_configuration_has_changed
 from palace.manager.sqlalchemy.model.lane import Lane
 from palace.manager.sqlalchemy.model.library import Library
+
+
+class UpdateLaneSizesSweepScript(Script):
+    """Manually kick off the lane size sweep Celery task.
+
+    Enqueues ``update_lane_sizes_sweep``, which fans out size updates for
+    every lane and fires ``finalize_lane_size_update`` once all updates
+    are complete.
+
+    The script returns as soon as the task is queued; execution happens
+    asynchronously on the Celery workers.
+    """
+
+    def do_run(self, *args: Any, **kwargs: Any) -> None:
+        update_lane_sizes_sweep.delay()
+        self.log.info(
+            'The "update_lane_sizes_sweep" task has been queued for execution. '
+            "See the Celery logs for details about task execution."
+        )
 
 
 class LaneSweeperScript(LibraryInputScript):
