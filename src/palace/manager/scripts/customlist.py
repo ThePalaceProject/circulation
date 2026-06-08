@@ -4,6 +4,7 @@ from typing import Any
 
 from palace.util.exceptions import PalaceValueError
 
+from palace.manager.celery.tasks.custom_lists import update_custom_list_entries_sweep
 from palace.manager.core.query.customlist import CustomListQueries
 from palace.manager.scripts.base import Script
 from palace.manager.scripts.input import LibraryInputScript
@@ -11,6 +12,26 @@ from palace.manager.sqlalchemy.model.customlist import CustomList
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.util import get_one_or_create
+
+
+class CustomListEntriesSweepScript(Script):
+    """Manually kick off the full custom-list maintenance pipeline.
+
+    Enqueues ``update_custom_list_entries_sweep``, which fans out entry
+    updates for every auto-updating custom list and then recalculates lane
+    sizes once all updates are complete.
+
+    This is equivalent to waiting for the daily beat-schedule run but fires
+    immediately.  The script returns as soon as the task is queued; actual
+    execution happens asynchronously on the Celery workers.
+    """
+
+    def do_run(self, *args: Any, **kwargs: Any) -> None:
+        update_custom_list_entries_sweep.delay()
+        self.log.info(
+            'The "update_custom_list_entries_sweep" task has been queued for '
+            "execution. See the Celery logs for details about task execution."
+        )
 
 
 class CustomListSweeperScript(LibraryInputScript):
