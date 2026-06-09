@@ -1,35 +1,17 @@
-from __future__ import annotations
-
-import os
-
-from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import SettingsConfigDict
-
-from palace.util.log import LoggerMixin
 
 from palace.manager.service.configuration.service_configuration import (
     ServiceConfiguration,
 )
 from palace.manager.util.pydantic import HttpUrl
 
-# Deprecated environment variable name for ``write_timeout``, still honored for
-# backwards compatibility. Remove once deployments have migrated.
-_DEPRECATED_WRITE_TIMEOUT_ENV = "PALACE_SEARCH_TIMEOUT"
-_WRITE_TIMEOUT_ENV = "PALACE_SEARCH_WRITE_TIMEOUT"
 
-
-class SearchConfiguration(ServiceConfiguration, LoggerMixin):
+class SearchConfiguration(ServiceConfiguration):
     url: HttpUrl
     index_prefix: str = "circulation-works"
-    # Timeout (seconds) for indexing and admin operations.
-    # ``PALACE_SEARCH_TIMEOUT`` is the deprecated name for this setting and is
-    # still accepted; prefer ``PALACE_SEARCH_WRITE_TIMEOUT``.
-    write_timeout: int = Field(
-        default=20,
-        validation_alias=AliasChoices(
-            _WRITE_TIMEOUT_ENV, _DEPRECATED_WRITE_TIMEOUT_ENV
-        ),
-    )
+    # Timeout (seconds) for indexing and admin operations, which legitimately
+    # run longer.
+    write_timeout: int = 20
     # Timeout (seconds) for the user-facing read path.
     read_timeout: int = 10
     # Read-path request retries, applied only to the read client.
@@ -37,18 +19,3 @@ class SearchConfiguration(ServiceConfiguration, LoggerMixin):
     read_retry_on_timeout: bool = False
     maxsize: int = 25
     model_config = SettingsConfigDict(env_prefix="PALACE_SEARCH_")
-
-    @model_validator(mode="after")
-    def _warn_deprecated_write_timeout_env(self) -> SearchConfiguration:
-        # AliasChoices accepts the deprecated env var, but we want operators to
-        # migrate, so emit a warning when only the deprecated name is set.
-        if (
-            _DEPRECATED_WRITE_TIMEOUT_ENV in os.environ
-            and _WRITE_TIMEOUT_ENV not in os.environ
-        ):
-            self.log.warning(
-                "%s is deprecated; use %s instead.",
-                _DEPRECATED_WRITE_TIMEOUT_ENV,
-                _WRITE_TIMEOUT_ENV,
-            )
-        return self

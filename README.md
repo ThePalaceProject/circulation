@@ -201,8 +201,7 @@ To let the application know which OpenSearch instance to use, you can set the fo
 - `PALACE_SEARCH_INDEX_PREFIX`: The prefix to use for the OpenSearch indices. The default is `circulation-works`.
     This is useful if you want to use the same OpenSearch instance for multiple Circulation Manager instances (optional).
 - `PALACE_SEARCH_WRITE_TIMEOUT`: The timeout in seconds to use for indexing and admin operations against the OpenSearch
-  instance. The default is `20` (optional). Replaces the deprecated `PALACE_SEARCH_TIMEOUT`, which is still honored for
-  backwards compatibility.
+  instance. The default is `20` (optional).
 - `PALACE_SEARCH_READ_TIMEOUT`: The timeout in seconds to use for the user-facing read/search path. The default is `10`
   (optional).
 - `PALACE_SEARCH_READ_RETRY_ON_TIMEOUT`: Whether a timed-out read should be retried. Must be `true` for
