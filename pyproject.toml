@@ -263,7 +263,6 @@ module = [
     "palace.manager.core.config",
     "palace.manager.core.coverage",
     "palace.manager.core.entrypoint",
-    "palace.manager.core.equivalents_coverage",
     "palace.manager.core.external_list",
     "palace.manager.core.lcp.credential",
     "palace.manager.core.monitor",
