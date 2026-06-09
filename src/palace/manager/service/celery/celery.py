@@ -80,9 +80,9 @@ def beat_schedule() -> dict[str, Any]:
         "update_custom_list_entries_sweep": {
             "task": custom_lists.update_custom_list_entries_sweep.name,
             "schedule": crontab(
-                minute="0",
-                hour="1",
-            ),  # Once a day at 1:00 AM
+                minute="5",
+                hour="0,1,7-23",
+            ),  # Every hour except 2–6 AM (matches the legacy cron schedule)
         },
         "full_search_reindex": {
             "task": search.search_reindex.name,
