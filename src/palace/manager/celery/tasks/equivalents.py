@@ -53,11 +53,15 @@ def equivalent_identifiers_refresh(
     dirty = DirtyIdentifierIds(redis_client)
     task_lock = TaskLock(task, lock_timeout=timedelta(hours=2))
 
-    # Hold the lock across our self-replacements (release_on_exit=False) so a
-    # concurrent beat run can't start a second refresh. The lock is keyed on the
-    # task name and owned by root_id, so each self-replacement re-acquires the same
-    # lock for free while a different run is locked out.
-    with task_lock.lock(release_on_exit=False, ignored_exceptions=(Retry, Ignore)):
+    # Hold the lock across our self-replacements so a concurrent beat run can't
+    # start a second refresh. The lock is keyed on the task name and owned by
+    # root_id, so each self-replacement re-acquires the same lock for free while
+    # a different run is locked out. ignored_exceptions=(Retry, Ignore) ensures
+    # the lock is not released when task.replace() raises Ignore (the context
+    # manager's finally block skips release for ignored exceptions). On normal
+    # exit (queue drained) the default release_on_exit=True releases the lock,
+    # and a real processing exception releases via the default release_on_error=True.
+    with task_lock.lock(ignored_exceptions=(Retry, Ignore)):
         if full_refresh:
             with task.transaction() as session:
                 total = dirty.add_all_from_db(session)
@@ -104,8 +108,3 @@ def equivalent_identifiers_refresh(
             )
         else:
             task.log.info("Dirty queue is empty; nothing to do.")
-
-    # Reached only on the drained (terminal) path — the task.replace() above exits
-    # via Ignore and keeps the lock held for the next batch. Release here so the
-    # next scheduled run can start fresh.
-    task_lock.release()
