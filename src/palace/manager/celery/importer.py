@@ -73,16 +73,6 @@ def import_workflow_lock(
     )
 
 
-def import_lock(client: Redis, collection_id: int) -> RedisLock:
-    """
-    Create a lock for the given collection.
-
-    This makes sure only one task is importing data for the collection
-    at a time.
-    """
-    return RedisLock(client, import_key(collection_id), lock_timeout=timedelta(hours=1))
-
-
 def reap_workflow_key(collection_id: int) -> list[str]:
     """
     Generate a Redis key for the reap workflow-level lock for the given collection.

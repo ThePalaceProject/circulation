@@ -85,6 +85,7 @@ def import_collection(
             collection,
             importer,
             url,
+            label="OPDS for Distributors import",
             force=force,
             return_identifiers=return_identifiers,
         )

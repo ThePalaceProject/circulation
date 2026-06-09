@@ -1,5 +1,6 @@
 from typing import Any
 from unittest.mock import call, create_autospec, patch
+from uuid import uuid4
 
 import pytest
 
@@ -7,7 +8,7 @@ from palace.util.datetime_helpers import utc_now
 from palace.util.exceptions import PalaceValueError
 from palace.util.log import LogLevel
 
-from palace.manager.celery.importer import import_lock
+from palace.manager.celery.importer import import_workflow_lock
 from palace.manager.celery.tasks import boundless
 from palace.manager.integration.license.boundless.api import BoundlessApi
 from palace.manager.integration.license.boundless.importer import (
@@ -20,7 +21,6 @@ from palace.manager.integration.license.boundless.model.json import (
     Title,
     TitleLicenseResponse,
 )
-from palace.manager.service.redis.models.lock import LockNotAcquired
 from palace.manager.sqlalchemy.model.coverage import Timestamp
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.util import get_one
@@ -35,20 +35,30 @@ from tests.mocks.mock import MockRequestsResponse
 
 
 class TestImportCollection:
-    def test_import_lock(
+    def test_skips_when_lock_held(
         self,
         celery_fixture: CeleryFixture,
         redis_fixture: RedisFixture,
         services_fixture: ServicesFixture,
+        caplog: pytest.LogCaptureFixture,
     ) -> None:
         """
-        The import_collection task is protected by a lock, so only one import can run at a time.
+        The import_collection task is protected by a workflow lock, so only one import
+        runs per collection at a time. When the lock is already held, the task logs a
+        warning and returns without importing.
         """
         mock_collection_id = 1234
         redis = services_fixture.services.redis().client()
-        import_lock(redis, mock_collection_id).acquire()
-        with pytest.raises(LockNotAcquired):
-            boundless.import_collection.delay(collection_id=mock_collection_id).wait()
+        import_workflow_lock(redis, mock_collection_id, str(uuid4())).acquire()
+
+        caplog.set_level(LogLevel.warning)
+
+        # Completes without raising: the task skips before loading the (nonexistent)
+        # collection. If the guard failed, load_from_id would raise instead.
+        boundless.import_collection.delay(collection_id=mock_collection_id).wait()
+
+        assert "skipped" in caplog.text
+        assert "already in progress" in caplog.text
 
     @pytest.mark.parametrize(
         "import_all",
