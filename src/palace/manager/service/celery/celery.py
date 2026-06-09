@@ -85,6 +85,13 @@ def beat_schedule() -> dict[str, Any]:
                 hour="0,1,7-23",
             ),  # Every hour except 2–6 AM (matches the legacy cron schedule)
         },
+        "update_independent_lane_sizes_sweep": {
+            "task": custom_lists.update_independent_lane_sizes_sweep.name,
+            "schedule": crontab(
+                minute="0",
+                hour="*/6",
+            ),  # Every 6 hours; genre/language lanes change only with collection imports
+        },
         "full_search_reindex": {
             "task": search.search_reindex.name,
             "schedule": crontab(hour="0", minute="10"),  # Run every day at 12:10 AM
