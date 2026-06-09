@@ -247,6 +247,11 @@ Celery and caching, we recommend that you use a separate database for each purpo
         ```
 - `PALACE_REDIS_KEY_PREFIX`: The prefix to use for keys stored in the Redis instance. The default is `palace`.
     This is useful if you want to use the same Redis database for multiple Circulation Manager instances (optional).
+- `PALACE_REDIS_SOCKET_KEEPALIVE`: Whether to enable TCP keepalive on Redis connections, so the OS can
+    reclaim a connection whose peer has gone away. The default is `true` (optional).
+- `PALACE_REDIS_HEALTH_CHECK_INTERVAL`: How often, in seconds, an idle Redis connection is health-checked
+    (PINGed) before reuse, so a connection left stale by a Redis restart is transparently re-established
+    rather than failing a command. The default is `30` (optional).
 
 #### General
 

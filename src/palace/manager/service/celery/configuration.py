@@ -35,6 +35,21 @@ class CeleryConfiguration(ServiceConfiguration):
 
     # Broker options for both Redis and SQS
     broker_transport_options_visibility_timeout: int = 3600  # 1 hour
+
+    # Redis broker/result-backend connection resilience. The broker and the
+    # result backend each open their own Redis connection, separate from the
+    # application Redis client (see service/redis). socket_keepalive and
+    # health_check_interval let a stale connection be detected and replaced
+    # before it's used, and result_backend_always_retry transparently retries a
+    # result write that hits a transient connection error rather than failing a
+    # task that has already done its work. These are ignored by the SQS broker.
+    broker_transport_options_socket_keepalive: bool = True
+    broker_transport_options_health_check_interval: int = 30
+    redis_socket_keepalive: bool = True
+    redis_backend_health_check_interval: int = 30
+    result_backend_always_retry: bool = True
+    result_backend_max_retries: int = 3
+
     result_expires: int = 3600  # 1 hour  (default is 1 day)
     result_backend_transport_options_global_keyprefix: str = "palace-"
     task_acks_late: bool = True

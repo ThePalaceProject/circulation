@@ -15,6 +15,8 @@ class RedisContainer(DeclarativeContainer):
         decode_responses=True,
         socket_timeout=config.socket_timeout,
         socket_connect_timeout=config.socket_connect_timeout,
+        socket_keepalive=config.socket_keepalive,
+        health_check_interval=config.health_check_interval,
     )
 
     key_generator: providers.Provider[RedisKeyGenerator] = providers.Singleton(

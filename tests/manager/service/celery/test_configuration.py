@@ -75,6 +75,37 @@ class TestCeleryConfiguration:
         assert options.get("global_keyprefix") == "z"
         assert "result_backend_transport_options_global_keyprefix" not in result
 
+    def test_dict_merge_resilience_options(
+        self, celery_configuration: CeleryConfFixture
+    ):
+        # The connection-resilience settings must land where Celery expects them.
+        # broker_transport_options_* keys are folded into the
+        # broker_transport_options dict, while redis_* and result_backend_* keys
+        # (which are *not* *_transport_options_ keys) are top-level Celery
+        # settings and must survive model_dump's prefix extraction unchanged.
+        config = celery_configuration()
+        result = config.model_dump()
+
+        broker_options = result["broker_transport_options"]
+        assert broker_options["socket_keepalive"] is True
+        assert broker_options["health_check_interval"] == 30
+        assert "broker_transport_options_socket_keepalive" not in result
+        assert "broker_transport_options_health_check_interval" not in result
+
+        # These look superficially like transport-option keys but must stay
+        # top-level; if extract_keys_by_prefix ever swallowed them (e.g. by
+        # matching on "result_backend_") these lookups would KeyError.
+        assert result["redis_socket_keepalive"] is True
+        assert result["redis_backend_health_check_interval"] == 30
+        assert result["result_backend_always_retry"] is True
+        assert result["result_backend_max_retries"] == 3
+
+        # ...and they must not have leaked into the result-backend options dict
+        # (which by default only holds the global_keyprefix).
+        backend_options = result["result_backend_transport_options"]
+        assert "always_retry" not in backend_options
+        assert "max_retries" not in backend_options
+
 
 class TestPydanticSerialization:
     def test_pydantic_object(self, opds2_files_fixture: OPDS2FilesFixture) -> None:
