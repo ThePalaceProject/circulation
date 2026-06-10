@@ -312,8 +312,8 @@ def beat_schedule() -> dict[str, Any]:
         "equivalent_identifiers_refresh": {
             "task": equivalents.equivalent_identifiers_refresh.name,
             "schedule": crontab(
-                minute="*/30"
-            ),  # Every 30 minutes; no-op when queue is empty
+                minute="5,35"
+            ),  # Twice an hour at :05 and :35; no-op when queue is empty
         },
         "equivalent_identifiers_full_refresh": {
             "task": equivalents.equivalent_identifiers_refresh.name,
