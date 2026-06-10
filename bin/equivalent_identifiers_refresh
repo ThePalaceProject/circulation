@@ -1,0 +1,10 @@
+#!/usr/bin/env python
+"""
+Queue the equivalent_identifiers_refresh Celery task.
+
+By default a delta run is queued (processes only dirty identifiers).
+Pass --full-refresh to seed the queue from the database first.
+"""
+from palace.manager.scripts.equivalents import EquivalentIdentifiersRefreshScript
+
+EquivalentIdentifiersRefreshScript().run()
