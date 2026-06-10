@@ -1,3 +1,7 @@
+import pytest
+
+from palace.util.log import LogLevel
+
 from palace.manager.service.redis.models.dirty_identifiers import DirtyIdentifierIds
 from palace.manager.sqlalchemy.model.identifier import Equivalency
 from tests.fixtures.database import DatabaseTransactionFixture
@@ -73,6 +77,25 @@ class TestDirtyIdentifierIds:
         assert id2.id in all_ids
         assert id3.id in all_ids
         assert id4.id not in all_ids
+
+    def test_pop_skips_non_integer_values(
+        self,
+        redis_fixture: RedisFixture,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Non-integer values stored in the set (e.g. a legacy 'None' string)
+        are silently discarded with a warning rather than raising ValueError."""
+        dirty = DirtyIdentifierIds(redis_fixture.client)
+        dirty.add(1, 2)
+        # Manually inject a bad value the way an older code path would have.
+        redis_fixture.client.sadd(dirty._key, "None")
+        caplog.set_level(LogLevel.warning)
+
+        popped = dirty.pop(10)
+
+        assert popped == {1, 2}
+        assert dirty.count() == 0
+        assert "Discarding non-integer value" in caplog.text
 
     def test_add_all_from_db_empty(
         self, redis_fixture: RedisFixture, db: DatabaseTransactionFixture

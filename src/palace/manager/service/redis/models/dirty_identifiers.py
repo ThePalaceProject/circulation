@@ -3,11 +3,13 @@ from __future__ import annotations
 from sqlalchemy import select, union
 from sqlalchemy.orm import Session
 
+from palace.util.log import LoggerMixin
+
 from palace.manager.service.redis.redis import Redis
 from palace.manager.sqlalchemy.model.identifier import Equivalency
 
 
-class DirtyIdentifierIds:
+class DirtyIdentifierIds(LoggerMixin):
     """
     A persistent Redis set of identifier IDs whose recursive equivalents
     need to be recomputed.
@@ -41,7 +43,19 @@ class DirtyIdentifierIds:
         :return: A frozenset of the popped IDs (may be smaller than *count*
                  if fewer IDs are in the set).
         """
-        return frozenset(int(v) for v in self._client.spop(self._key, count))
+        result = set()
+        for v in self._client.spop(self._key, count):
+            try:
+                result.add(int(v))
+            except (ValueError, TypeError):
+                # A non-integer value ended up in the set (e.g. the string
+                # "None" written by an older code path that passed a Python
+                # None through str()). Log and discard so it doesn't block
+                # further processing.
+                self.log.warning(
+                    f"Discarding non-integer value {v!r} from dirty identifier set."
+                )
+        return frozenset(result)
 
     def count(self) -> int:
         """Return the number of identifier IDs currently in the set."""
@@ -61,8 +75,12 @@ class DirtyIdentifierIds:
         :return: Total number of identifier IDs pushed.
         """
         union_q = union(
-            select(Equivalency.input_id.label("identifier_id")),
-            select(Equivalency.output_id.label("identifier_id")),
+            select(Equivalency.input_id.label("identifier_id")).where(
+                Equivalency.input_id.isnot(None)
+            ),
+            select(Equivalency.output_id.label("identifier_id")).where(
+                Equivalency.output_id.isnot(None)
+            ),
         ).subquery()
         query = select(union_q.c.identifier_id).execution_options(yield_per=chunk_size)
 
