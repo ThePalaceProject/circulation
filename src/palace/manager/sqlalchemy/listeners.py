@@ -192,6 +192,26 @@ def last_update_time_change(target, value, oldvalue, initator):
 #   - Delete: Equivalency rows are never deleted in bulk via the ORM; they go away
 #     through FK ON DELETE CASCADE when an Identifier is deleted, which happens in
 #     the DB and bypasses before_flush listeners entirely.
+def _equivalency_identifier_ids(target: Equivalency) -> tuple[int, int]:
+    """Resolve the input/output identifier IDs of an Equivalency.
+
+    When an Equivalency is built by setting the ``input``/``output``
+    relationships (the production path, ``Identifier.equivalent_to``) rather
+    than the ``input_id``/``output_id`` FK columns, SQLAlchemy does not copy
+    the relationship into its FK column until the flush's dependency-resolution
+    step — which runs *after* the ``before_flush`` listener fires. At listener
+    time ``target.input_id``/``output_id`` are therefore still ``None`` even
+    though both identifiers are persistent with valid PKs.
+
+    Prefer the FK column when it is already populated (e.g. constructed with
+    ``input_id=...`` directly, which avoids a relationship lazy-load); otherwise
+    fall back to the related object's ``id``.
+    """
+    input_id = target.input_id if target.input_id is not None else target.input.id
+    output_id = target.output_id if target.output_id is not None else target.output.id
+    return input_id, output_id
+
+
 @Listener.before_flush(Equivalency, ListenerState.deleted)
 def equivalency_coverage_reset_on_equivalency_delete(
     session: Session, target: Equivalency
@@ -202,14 +222,13 @@ def equivalency_coverage_reset_on_equivalency_delete(
     Redis unavailability is non-fatal — any missed dirty IDs will be recovered
     by the next scheduled full-refresh run.
     """
+    input_id, output_id = _equivalency_identifier_ids(target)
     # The chain-member lookup is part of the flush; keep it outside the try so a
     # DB error propagates rather than being swallowed as a "Redis" failure below.
     parent_ids = (
         session.execute(
             select(RecursiveEquivalencyCache.parent_identifier_id).where(
-                RecursiveEquivalencyCache.identifier_id.in_(
-                    [target.input_id, target.output_id]
-                )
+                RecursiveEquivalencyCache.identifier_id.in_([input_id, output_id])
             )
         )
         .scalars()
@@ -220,7 +239,7 @@ def equivalency_coverage_reset_on_equivalency_delete(
     # change itself. The weekly full refresh recovers any IDs missed here.
     try:
         DirtyIdentifierIds(container_instance().redis().client()).add(
-            target.input_id, target.output_id, *parent_ids
+            input_id, output_id, *parent_ids
         )
     except Exception as e:
         log.warning(f"Failed to mark dirty identifiers on equivalency delete: {e}")
@@ -236,11 +255,12 @@ def equivalency_coverage_reset_on_equivalency_create(
     Redis unavailability is non-fatal — any missed dirty IDs will be recovered
     by the next scheduled full-refresh run.
     """
+    input_id, output_id = _equivalency_identifier_ids(target)
     # Best-effort side effect — see the delete listener above; a Redis problem
     # must never break the equivalency creation.
     try:
         DirtyIdentifierIds(container_instance().redis().client()).add(
-            target.input_id, target.output_id
+            input_id, output_id
         )
     except Exception as e:
         log.warning(f"Failed to mark dirty identifiers on equivalency create: {e}")
