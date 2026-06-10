@@ -87,12 +87,17 @@ class OIDCController(LoggerMixin):
     ERROR = "error"
     REDIRECT_URI = "redirect_uri"
     PROVIDER_NAME = "provider"
+    PROMPT = "prompt"
     STATE = "state"
     CODE = "code"
     ACCESS_TOKEN = "access_token"
     PATRON_INFO = "patron_info"
     LOGOUT_STATUS = "logout_status"
     LOGOUT_TOKEN = "logout_token"
+
+    VALID_PROMPT_VALUES: frozenset[str] = frozenset(
+        {"none", "login", "consent", "select_account"}
+    )
 
     def __init__(
         self, circulation_manager: CirculationManager, authenticator: Authenticator
@@ -149,6 +154,18 @@ class OIDCController(LoggerMixin):
         params = {self.ERROR: problem_detail_json}
         return self._add_params_to_url(redirect_uri, params)
 
+    @classmethod
+    def _is_valid_prompt(cls, prompt: str) -> bool:
+        """Return True if every space-separated token is a recognised OIDC prompt value.
+
+        :param prompt: Raw prompt string from the request.
+        :return: True if all tokens are valid.
+        """
+        tokens = prompt.split()
+        return bool(tokens) and all(
+            token in cls.VALID_PROMPT_VALUES for token in tokens
+        )
+
     @staticmethod
     def _get_request_parameter(
         params: dict[str, str], name: str, default_value: str | None = None
@@ -197,6 +214,10 @@ class OIDCController(LoggerMixin):
         if isinstance(redirect_uri, ProblemDetail):
             return redirect_uri
 
+        prompt = params.get(self.PROMPT)
+        if prompt is not None and not self._is_valid_prompt(prompt):
+            return OIDC_INVALID_REQUEST.detailed(_(f"Invalid prompt value: {prompt!r}"))
+
         # TODO: Validate redirect_uri against configured patron web client URLs
         #  to prevent open redirect attacks. This should be done consistently
         #  for both OIDC and SAML.
@@ -235,6 +256,7 @@ class OIDCController(LoggerMixin):
             state=state,
             nonce=nonce,
             code_challenge=code_challenge,
+            prompt=prompt,
         )
 
         return redirect(authorization_url)
