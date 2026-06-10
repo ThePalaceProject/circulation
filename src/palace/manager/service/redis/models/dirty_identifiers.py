@@ -3,13 +3,11 @@ from __future__ import annotations
 from sqlalchemy import select, union
 from sqlalchemy.orm import Session
 
-from palace.util.log import LoggerMixin
-
 from palace.manager.service.redis.redis import Redis
 from palace.manager.sqlalchemy.model.identifier import Equivalency
 
 
-class DirtyIdentifierIds(LoggerMixin):
+class DirtyIdentifierIds:
     """
     A persistent Redis set of identifier IDs whose recursive equivalents
     need to be recomputed.
@@ -43,19 +41,7 @@ class DirtyIdentifierIds(LoggerMixin):
         :return: A frozenset of the popped IDs (may be smaller than *count*
                  if fewer IDs are in the set).
         """
-        result = set()
-        for v in self._client.spop(self._key, count):
-            try:
-                result.add(int(v))
-            except (ValueError, TypeError):
-                # A non-integer value ended up in the set (e.g. the string
-                # "None" written by an older code path that passed a Python
-                # None through str()). Log and discard so it doesn't block
-                # further processing.
-                self.log.warning(
-                    f"Discarding non-integer value {v!r} from dirty identifier set."
-                )
-        return frozenset(result)
+        return frozenset(int(v) for v in self._client.spop(self._key, count))
 
     def count(self) -> int:
         """Return the number of identifier IDs currently in the set."""
