@@ -188,6 +188,32 @@ class TestEquivalencyDirtyListeners:
         # Both linked identifiers are marked dirty on create.
         assert dirty.pop(1000) == {a.id, b.id}
 
+    def test_create_via_relationship_marks_identifiers_dirty(
+        self, db: DatabaseTransactionFixture, redis_fixture: RedisFixture
+    ) -> None:
+        """The production import path (Identifier.equivalent_to) builds the
+        Equivalency by setting the input/output *relationships*, not the FK
+        columns. SQLAlchemy doesn't copy a relationship into its FK column
+        until the flush's dependency-resolution step, which runs after the
+        before_flush listener fires — so target.input_id/output_id are still
+        None when the listener reads them. The listener must resolve the IDs
+        from the relationship objects so real IDs (not the string "None") are
+        pushed to Redis.
+        """
+        a = db.identifier()
+        b = db.identifier()
+
+        dirty = DirtyIdentifierIds(redis_fixture.client)
+        dirty.pop(1000)  # clear anything left from setup
+
+        a.equivalent_to(None, b, 1.0)
+        db.session.commit()
+
+        marked = dirty.pop(1000)
+        assert marked == {a.id, b.id}
+        # The string "None" must never end up in the set.
+        assert "None" not in {str(v) for v in marked}
+
     def test_delete_marks_chain_dirty(
         self, db: DatabaseTransactionFixture, redis_fixture: RedisFixture
     ) -> None:
