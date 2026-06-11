@@ -156,15 +156,20 @@ class OIDCController(LoggerMixin):
 
     @classmethod
     def _is_valid_prompt(cls, prompt: str) -> bool:
-        """Return True if every space-separated token is a recognised OIDC prompt value.
+        """Return True if the prompt string is a valid OIDC prompt value.
+
+        Each space-separated token must be a recognised OIDC value, and
+        ``none`` must not appear alongside any other token (OIDC Core §3.1.2.1).
 
         :param prompt: Raw prompt string from the request.
-        :return: True if all tokens are valid.
+        :return: True if the prompt is valid per the OIDC spec.
         """
         tokens = prompt.split()
-        return bool(tokens) and all(
-            token in cls.VALID_PROMPT_VALUES for token in tokens
-        )
+        if not tokens:
+            return False
+        if len(tokens) > 1 and "none" in tokens:
+            return False
+        return all(token in cls.VALID_PROMPT_VALUES for token in tokens)
 
     @staticmethod
     def _get_request_parameter(
@@ -216,7 +221,10 @@ class OIDCController(LoggerMixin):
 
         prompt = params.get(self.PROMPT)
         if prompt is not None and not self._is_valid_prompt(prompt):
-            return OIDC_INVALID_REQUEST.detailed(_(f"Invalid prompt value: {prompt!r}"))
+            return self._redirect_with_error(
+                redirect_uri,
+                OIDC_INVALID_REQUEST.detailed(_(f"Invalid prompt value: {prompt!r}")),
+            )
 
         # TODO: Validate redirect_uri against configured patron web client URLs
         #  to prevent open redirect attacks. This should be done consistently

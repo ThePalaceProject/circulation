@@ -364,6 +364,7 @@ class TestOIDCController:
         [
             pytest.param("invalid_value", id="unknown-single"),
             pytest.param("select_account invalid_value", id="unknown-token-in-multi"),
+            pytest.param("none login", id="none-combined"),
             pytest.param("", id="empty-string"),
             pytest.param("   ", id="whitespace-only"),
         ],
@@ -371,7 +372,7 @@ class TestOIDCController:
     def test_oidc_authentication_redirect_invalid_prompt(
         self, controller: OIDCController, prompt: str
     ):
-        """Test that any unrecognised prompt token is rejected with OIDC_INVALID_REQUEST."""
+        """Test that invalid prompt values are redirected back with an encoded error."""
         params = {
             "provider": "OpenID Connect",
             "redirect_uri": "https://app.example.com",
@@ -380,8 +381,8 @@ class TestOIDCController:
 
         result = controller.oidc_authentication_redirect(params, MagicMock())
 
-        assert result.uri == OIDC_INVALID_REQUEST.uri
-        assert prompt in str(result.detail)
+        assert result.status_code == 302
+        assert "error=" in result.location
 
     @pytest.mark.parametrize(
         "params,expected_error_substring",
