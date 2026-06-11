@@ -2,7 +2,7 @@
 """
 Manually kick off the independent lane size sweep Celery task.
 
-Enqueues update_independent_lane_sizes_sweep, which fans out size updates
+Enqueues update_independent_lane_sizes, which fans out size updates
 for every lane not associated with a custom list (genre lanes, language
 lanes, audience lanes, etc.) and fires finalize_lane_size_update once all
 updates are complete.

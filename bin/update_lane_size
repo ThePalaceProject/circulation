@@ -2,7 +2,7 @@
 """
 Manually kick off the lane size sweep Celery task.
 
-Enqueues update_lane_sizes_sweep, which fans out size updates for lanes
+Enqueues update_custom_list_based_lane_sizes, which fans out size updates for lanes
 associated with custom lists and fires finalize_lane_size_update once all
 updates are complete.
 

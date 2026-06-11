@@ -85,8 +85,8 @@ def beat_schedule() -> dict[str, Any]:
                 hour="0,1,7-23",
             ),  # Every hour except 2–6 AM (matches the legacy cron schedule)
         },
-        "update_independent_lane_sizes_sweep": {
-            "task": custom_lists.update_independent_lane_sizes_sweep.name,
+        "update_independent_lane_sizes": {
+            "task": custom_lists.update_independent_lane_sizes.name,
             "schedule": crontab(
                 minute="0",
                 hour="*/6",

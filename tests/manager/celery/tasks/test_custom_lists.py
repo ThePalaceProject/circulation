@@ -59,7 +59,9 @@ class TestUpdateCustomListEntriesSweep:
     ):
         """When there are no auto-updating lists, lane sizes are updated directly."""
         with (
-            patch.object(custom_lists, "update_lane_sizes_sweep") as mock_lane_sweep,
+            patch.object(
+                custom_lists, "update_custom_list_based_lane_sizes"
+            ) as mock_lane_sweep,
             patch.object(custom_lists, "update_custom_list_entries") as mock_entries,
         ):
             custom_lists.update_custom_list_entries_sweep.delay().wait()
@@ -85,7 +87,9 @@ class TestUpdateCustomListEntriesSweep:
 
         with (
             patch.object(custom_lists, "update_custom_list_entries") as mock_entries,
-            patch.object(custom_lists, "update_lane_sizes_sweep") as mock_lane_sweep,
+            patch.object(
+                custom_lists, "update_custom_list_based_lane_sizes"
+            ) as mock_lane_sweep,
         ):
             # Use a mock chord so we can inspect what was assembled.
             with patch("palace.manager.celery.tasks.custom_lists.chord") as mock_chord:
@@ -106,13 +110,15 @@ class TestUpdateCustomListEntriesSweep:
         redis_fixture: RedisFixture,
         celery_fixture: CeleryFixture,
     ):
-        """The sweep lock_value is forwarded to update_lane_sizes_sweep so it
+        """The sweep lock_value is forwarded to update_custom_list_based_lane_sizes so it
         reaches finalize_lane_size_update and is released there."""
         cl1 = _make_auto_updating_list(db)
 
         with (
             patch.object(custom_lists, "update_custom_list_entries"),
-            patch.object(custom_lists, "update_lane_sizes_sweep") as mock_lane_sweep,
+            patch.object(
+                custom_lists, "update_custom_list_based_lane_sizes"
+            ) as mock_lane_sweep,
             patch("palace.manager.celery.tasks.custom_lists.chord") as mock_chord,
             patch("palace.manager.celery.tasks.custom_lists.group"),
         ):
@@ -134,7 +140,9 @@ class TestUpdateCustomListEntriesSweep:
         sweep_lock.acquire()
 
         with (
-            patch.object(custom_lists, "update_lane_sizes_sweep") as mock_lane_sweep,
+            patch.object(
+                custom_lists, "update_custom_list_based_lane_sizes"
+            ) as mock_lane_sweep,
             patch.object(custom_lists, "update_custom_list_entries") as mock_entries,
         ):
             custom_lists.update_custom_list_entries_sweep.delay().wait()
@@ -526,11 +534,11 @@ class TestUpdateCustomListSize:
 
 
 # ---------------------------------------------------------------------------
-# Stage 2 — Lane size sweep orchestrator
+# Stage 2 — Custom-list-based lane size sweep orchestrator
 # ---------------------------------------------------------------------------
 
 
-class TestUpdateLaneSizesSweep:
+class TestUpdateCustomListBasedLaneSizes:
     def test_no_lanes_calls_finalize_directly(
         self,
         db: DatabaseTransactionFixture,
@@ -542,7 +550,7 @@ class TestUpdateLaneSizesSweep:
             patch.object(custom_lists, "finalize_lane_size_update") as mock_finalize,
             patch.object(custom_lists, "update_lane_size") as mock_lane_size,
         ):
-            custom_lists.update_lane_sizes_sweep.delay().wait()
+            custom_lists.update_custom_list_based_lane_sizes.delay().wait()
             mock_lane_size.si.assert_not_called()
             mock_finalize.delay.assert_called_once()
 
@@ -559,7 +567,9 @@ class TestUpdateLaneSizesSweep:
             patch.object(custom_lists, "finalize_lane_size_update") as mock_finalize,
             patch.object(custom_lists, "update_lane_size"),
         ):
-            custom_lists.update_lane_sizes_sweep.delay(lock_value=lock_value).wait()
+            custom_lists.update_custom_list_based_lane_sizes.delay(
+                lock_value=lock_value
+            ).wait()
 
         _, kwargs = mock_finalize.delay.call_args
         assert kwargs.get("lock_value") == lock_value
@@ -586,7 +596,7 @@ class TestUpdateLaneSizesSweep:
             patch("palace.manager.celery.tasks.custom_lists.chord"),
             patch("palace.manager.celery.tasks.custom_lists.group"),
         ):
-            custom_lists.update_lane_sizes_sweep.delay().wait()
+            custom_lists.update_custom_list_based_lane_sizes.delay().wait()
 
         si_ids = {c.args[0] for c in mock_lane_size.si.call_args_list}
         assert custom_list_lane.id in si_ids
@@ -607,7 +617,7 @@ class TestUpdateLaneSizesSweep:
             patch.object(custom_lists, "finalize_lane_size_update") as mock_finalize,
             patch.object(custom_lists, "update_lane_size") as mock_lane_size,
         ):
-            custom_lists.update_lane_sizes_sweep.delay().wait()
+            custom_lists.update_custom_list_based_lane_sizes.delay().wait()
 
         mock_lane_size.si.assert_not_called()
         mock_finalize.delay.assert_called_once()
@@ -699,7 +709,7 @@ class TestCustomListLaneIdsQuery:
 # ---------------------------------------------------------------------------
 
 
-class TestUpdateIndependentLaneSizesSweep:
+class TestUpdateIndependentLaneSizes:
     def test_no_lanes_calls_finalize_directly(
         self,
         db: DatabaseTransactionFixture,
@@ -711,7 +721,7 @@ class TestUpdateIndependentLaneSizesSweep:
             patch.object(custom_lists, "finalize_lane_size_update") as mock_finalize,
             patch.object(custom_lists, "update_lane_size") as mock_lane_size,
         ):
-            custom_lists.update_independent_lane_sizes_sweep.delay().wait()
+            custom_lists.update_independent_lane_sizes.delay().wait()
 
         mock_lane_size.si.assert_not_called()
         mock_finalize.delay.assert_called_once()
@@ -733,7 +743,7 @@ class TestUpdateIndependentLaneSizesSweep:
             patch.object(custom_lists, "finalize_lane_size_update") as mock_finalize,
             patch.object(custom_lists, "update_lane_size") as mock_lane_size,
         ):
-            custom_lists.update_independent_lane_sizes_sweep.delay().wait()
+            custom_lists.update_independent_lane_sizes.delay().wait()
 
         mock_lane_size.si.assert_not_called()
         mock_finalize.delay.assert_called_once()
@@ -760,7 +770,7 @@ class TestUpdateIndependentLaneSizesSweep:
             patch("palace.manager.celery.tasks.custom_lists.chord"),
             patch("palace.manager.celery.tasks.custom_lists.group"),
         ):
-            custom_lists.update_independent_lane_sizes_sweep.delay().wait()
+            custom_lists.update_independent_lane_sizes.delay().wait()
 
         si_ids = {c.args[0] for c in mock_lane_size.si.call_args_list}
         assert independent_lane.id in si_ids
@@ -783,7 +793,7 @@ class TestUpdateIndependentLaneSizesSweep:
             patch("palace.manager.celery.tasks.custom_lists.chord"),
             patch("palace.manager.celery.tasks.custom_lists.group"),
         ):
-            custom_lists.update_independent_lane_sizes_sweep.delay().wait()
+            custom_lists.update_independent_lane_sizes.delay().wait()
 
         # finalize is wired via .si() with no lock_value; verify delay is NOT called
         # (the chord callback is set up via .si(), not .delay())
