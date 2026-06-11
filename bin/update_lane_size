@@ -2,8 +2,13 @@
 """
 Manually kick off the lane size sweep Celery task.
 
-Enqueues update_lane_sizes_sweep, which fans out size updates for every lane
-and fires finalize_lane_size_update once all updates are complete.
+Enqueues update_lane_sizes_sweep, which fans out size updates for lanes
+associated with custom lists and fires finalize_lane_size_update once all
+updates are complete.
+
+Note: this sweep covers only custom-list lanes. To recalculate the sizes of
+independent lanes (genre, language, audience, etc.) — e.g. after a collection
+import — run bin/update_independent_lane_sizes as well.
 """
 from palace.manager.scripts.lane import UpdateLaneSizesSweepScript
 

@@ -7,6 +7,9 @@ from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
+from opensearchpy import RequestError
+from opensearchpy.exceptions import TransportError
+from sqlalchemy.exc import SQLAlchemyError
 
 from palace.manager.celery.tasks import custom_lists
 from palace.manager.celery.tasks.custom_lists import (
@@ -391,6 +394,68 @@ class TestUpdateCustomListEntries:
         nonexistent_id = 999_999_999
         # Should not raise.
         custom_lists.update_custom_list_entries.delay(nonexistent_id).wait()
+
+    def test_malformed_query_logged_and_swallowed(
+        self,
+        db: DatabaseTransactionFixture,
+        redis_fixture: RedisFixture,
+        celery_fixture: CeleryFixture,
+        services_fixture: ServicesFixture,
+    ):
+        """A RequestError (this list's query is malformed) is logged and skipped.
+
+        Because this task is a chord header, a propagated error would abort the
+        whole sweep chord and hold the sweep lock until its TTL. A malformed
+        query is a list-specific config problem, so the task must instead succeed
+        (the chord proceeds and the per-list lock is released).
+        """
+        custom_list = _make_auto_updating_list(db, status=CustomList.INIT)
+
+        with patch(
+            "palace.manager.celery.tasks.custom_lists.CustomListQueries"
+        ) as mock_queries:
+            mock_queries.populate_query_pages.side_effect = RequestError(
+                400, "parsing_exception", {"error": "malformed query"}
+            )
+            # Should not raise -- the error is caught, logged, and swallowed.
+            custom_lists.update_custom_list_entries.delay(custom_list.id).wait()
+
+        # The per-list lock must be released so a later sweep can run.
+        lock = _entry_update_lock(redis_fixture.client, custom_list.id, str(uuid4()))
+        assert lock.acquire() is not False
+
+    @pytest.mark.parametrize(
+        "error",
+        [
+            pytest.param(SQLAlchemyError("database is down"), id="database"),
+            pytest.param(
+                TransportError(503, "service_unavailable"), id="opensearch-transport"
+            ),
+        ],
+    )
+    def test_infrastructure_error_surfaces(
+        self,
+        error: Exception,
+        db: DatabaseTransactionFixture,
+        redis_fixture: RedisFixture,
+        celery_fixture: CeleryFixture,
+        services_fixture: ServicesFixture,
+    ):
+        """Infrastructure failures propagate so the Celery error alarm fires.
+
+        A database error or an OpenSearch connection/transport failure is not
+        list-specific; swallowing it would let a persistent outage fail silently
+        on every sweep instead of triggering the "unhandled Celery error"
+        CloudWatch alarm. These must NOT be caught.
+        """
+        custom_list = _make_auto_updating_list(db, status=CustomList.INIT)
+
+        with patch(
+            "palace.manager.celery.tasks.custom_lists.CustomListQueries"
+        ) as mock_queries:
+            mock_queries.populate_query_pages.side_effect = error
+            with pytest.raises(type(error)):
+                custom_lists.update_custom_list_entries.delay(custom_list.id).wait()
 
     def test_updated_mode_no_query_skips(
         self,

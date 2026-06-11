@@ -23,11 +23,16 @@ from palace.manager.sqlalchemy.model.library import Library
 
 
 class UpdateLaneSizesSweepScript(Script):
-    """Manually kick off the lane size sweep Celery task.
+    """Manually kick off the custom-list lane size sweep Celery task.
 
     Enqueues ``update_lane_sizes_sweep``, which fans out size updates for
-    every lane and fires ``finalize_lane_size_update`` once all updates
-    are complete.
+    lanes associated with custom lists (see ``_custom_list_lane_ids_query``)
+    and fires ``finalize_lane_size_update`` once all updates are complete.
+
+    This sweep covers only custom-list lanes. To recalculate the sizes of
+    independent lanes (genre, language, audience, etc.) — e.g. after a
+    collection import — use :class:`UpdateIndependentLaneSizesSweepScript`
+    (``bin/update_independent_lane_sizes``) as well.
 
     The script returns as soon as the task is queued; execution happens
     asynchronously on the Celery workers.

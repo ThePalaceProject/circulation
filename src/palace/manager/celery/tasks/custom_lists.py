@@ -37,6 +37,7 @@ from typing import Any
 from uuid import uuid4
 
 from celery import chord, group, shared_task
+from opensearchpy import RequestError
 from sqlalchemy import and_, exists, or_, select
 from sqlalchemy.orm import Session, aliased
 from sqlalchemy.sql import Select
@@ -416,6 +417,29 @@ def update_custom_list_entries(
             task.log.warning(
                 f"Custom list {custom_list_id} not found; it may have been deleted. "
                 "Skipping."
+            )
+        except RequestError:
+            # This task is a chord header, so an unhandled error aborts the whole
+            # sweep chord. A RequestError (OpenSearch 400) means *this* list's
+            # auto_update_query is malformed -- a list-specific problem, not an
+            # infrastructure failure -- so we skip it rather than let one bad query
+            # block the rest of the sweep.
+            #
+            # A malformed query should not be reachable through normal use: the
+            # admin UI and circulation API validate queries before saving. Seeing
+            # one here therefore points to an upstream validation bug, so we log it
+            # as an exception (with traceback) to make it visible -- but we do not
+            # escalate to a task failure, since a single bad list shouldn't take
+            # down the sweep.
+            #
+            # Infrastructure failures are deliberately NOT caught here: a
+            # SQLAlchemyError (database down) or an OpenSearch connection/transport
+            # error affects every list, not just this one, and must propagate so
+            # the task fails and triggers the "unhandled Celery error" CloudWatch
+            # alarm in hosting-playbook rather than failing silently on every sweep.
+            task.log.exception(
+                f"Custom list {custom_list_id} has a malformed auto_update_query; "
+                "skipping it so the rest of the sweep can proceed."
             )
 
 
