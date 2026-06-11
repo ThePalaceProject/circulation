@@ -10,8 +10,8 @@ from sqlalchemy.orm import Session
 
 from palace.manager.api.lanes import create_default_lanes
 from palace.manager.celery.tasks.custom_lists import (
-    update_independent_lane_sizes_sweep,
-    update_lane_sizes_sweep,
+    update_custom_list_based_lane_sizes,
+    update_independent_lane_sizes,
 )
 from palace.manager.feed.worklist.base import WorkList
 from palace.manager.scripts.base import Script
@@ -25,7 +25,7 @@ from palace.manager.sqlalchemy.model.library import Library
 class UpdateLaneSizesSweepScript(Script):
     """Manually kick off the custom-list lane size sweep Celery task.
 
-    Enqueues ``update_lane_sizes_sweep``, which fans out size updates for
+    Enqueues ``update_custom_list_based_lane_sizes``, which fans out size updates for
     lanes associated with custom lists (see ``_custom_list_lane_ids_query``)
     and fires ``finalize_lane_size_update`` once all updates are complete.
 
@@ -39,9 +39,9 @@ class UpdateLaneSizesSweepScript(Script):
     """
 
     def do_run(self, *args: Any, **kwargs: Any) -> None:
-        update_lane_sizes_sweep.delay()
+        update_custom_list_based_lane_sizes.delay()
         self.log.info(
-            'The "update_lane_sizes_sweep" task has been queued for execution. '
+            'The "update_custom_list_based_lane_sizes" task has been queued for execution. '
             "See the Celery logs for details about task execution."
         )
 
@@ -49,7 +49,7 @@ class UpdateLaneSizesSweepScript(Script):
 class UpdateIndependentLaneSizesSweepScript(Script):
     """Manually kick off the independent lane size sweep Celery task.
 
-    Enqueues ``update_independent_lane_sizes_sweep``, which fans out size
+    Enqueues ``update_independent_lane_sizes``, which fans out size
     updates for every lane *not* associated with a custom list (genre lanes,
     language lanes, audience lanes, etc.) and fires
     ``finalize_lane_size_update`` once all updates are complete.
@@ -59,9 +59,9 @@ class UpdateIndependentLaneSizesSweepScript(Script):
     """
 
     def do_run(self, *args: Any, **kwargs: Any) -> None:
-        update_independent_lane_sizes_sweep.delay()
+        update_independent_lane_sizes.delay()
         self.log.info(
-            'The "update_independent_lane_sizes_sweep" task has been queued for execution. '
+            'The "update_independent_lane_sizes" task has been queued for execution. '
             "See the Celery logs for details about task execution."
         )
 
