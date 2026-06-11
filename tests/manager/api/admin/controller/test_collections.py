@@ -1,4 +1,5 @@
 import json
+from typing import Any
 from unittest.mock import MagicMock, create_autospec, patch
 
 import flask
@@ -29,12 +30,17 @@ from palace.manager.api.admin.problem_details import (
     REAP_NOT_SUPPORTED,
     UNKNOWN_PROTOCOL,
 )
+from palace.manager.api.circulation.base import BaseCirculationAPI
 from palace.manager.api.selftest import HasCollectionSelfTests
 from palace.manager.celery.tasks import boundless, opds2, opds_odl
 from palace.manager.core.selftest import HasSelfTests
 from palace.manager.integration.goals import Goals
 from palace.manager.integration.license.boundless.api import BoundlessApi
+from palace.manager.integration.license.opds.for_distributors.api import (
+    OPDSForDistributorsAPI,
+)
 from palace.manager.integration.license.opds.odl.api import OPDS2WithODLApi
+from palace.manager.integration.license.opds.opds1.api import OPDSAPI
 from palace.manager.integration.license.opds.opds2.api import OPDS2API
 from palace.manager.integration.license.overdrive.api import OverdriveAPI
 from palace.manager.integration.license.overdrive.settings import (
@@ -1194,14 +1200,28 @@ class TestCollectionSettings:
         mock_reap.assert_called_once_with(collection.id)
         mock_reap.return_value.apply_async.assert_called_once()
 
+    @pytest.mark.parametrize(
+        "protocol",
+        [
+            pytest.param(OPDS2API, id="opds2"),
+            pytest.param(OPDSAPI, id="opds1"),
+            pytest.param(OPDSForDistributorsAPI, id="opds_for_distributors"),
+            pytest.param(OverdriveAPI, id="overdrive"),
+        ],
+    )
     def test_protocol_details_supports_reap(
+        self,
+        protocol: type[BaseCirculationAPI[Any, Any]],
+        db: DatabaseTransactionFixture,
+    ):
+        # These protocols implement SupportsReaping, so supports_reap should be True.
+        details = protocol.protocol_details(db.session)
+        assert details["supports_reap"] is True
+
+    def test_protocol_details_does_not_support_reap(
         self,
         db: DatabaseTransactionFixture,
     ):
-        # OPDS2API implements SupportsReaping, so supports_reap should be True.
-        opds2_details = OPDS2API.protocol_details(db.session)
-        assert opds2_details["supports_reap"] is True
-
         # BoundlessApi supports import but not reaping, so supports_reap should be False.
         boundless_details = BoundlessApi.protocol_details(db.session)
         assert boundless_details["supports_reap"] is False

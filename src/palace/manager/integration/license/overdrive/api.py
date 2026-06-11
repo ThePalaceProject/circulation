@@ -11,6 +11,7 @@ from typing import Any, NamedTuple, Unpack, overload
 from urllib.parse import urlsplit
 
 import flask
+from celery.canvas import Signature
 from pydantic import ValidationError
 from requests import Response
 from requests.structures import CaseInsensitiveDict
@@ -22,6 +23,7 @@ from palace.manager.api.circulation.base import (
     BaseCirculationAPI,
     CirculationInternalFormatsMixin,
     PatronActivityCirculationAPI,
+    SupportsReaping,
 )
 from palace.manager.api.circulation.data import HoldInfo, LoanInfo
 from palace.manager.api.circulation.exceptions import (
@@ -140,6 +142,7 @@ class OverdriveAPI(
     HasCollectionSelfTests,
     HasChildIntegrationConfiguration[OverdriveSettings, OverdriveChildSettings],
     OverdriveConstants,
+    SupportsReaping,
 ):
     SET_DELIVERY_MECHANISM_AT = BaseCirculationAPI.FULFILL_STEP
 
@@ -280,6 +283,14 @@ class OverdriveAPI(
     @classmethod
     def description(cls) -> str:
         return "Integrate an Overdrive collection. For an Overdrive Advantage collection, select the consortium's Overdrive collection as the parent."
+
+    @classmethod
+    def reap_task(cls, collection_id: int) -> Signature:
+        # Local import to avoid a circular import between this module and the
+        # overdrive celery tasks module, which imports OverdriveAPI.
+        from palace.manager.celery.tasks.overdrive import reap_collection
+
+        return reap_collection.s(collection_id)
 
     def __init__(self, _db: Session, collection: Collection) -> None:
         super().__init__(_db, collection)

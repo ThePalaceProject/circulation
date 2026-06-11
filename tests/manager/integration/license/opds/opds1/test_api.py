@@ -201,3 +201,11 @@ class TestOPDSAPI:
 
         mock_import.s.assert_called_once_with(collection_id, force=force)
         assert result == mock_import.s.return_value
+
+    def test_reap_task(self) -> None:
+        collection_id = MagicMock()
+        with patch.object(opds1, "import_and_reap_not_found_chord") as mock_reap:
+            result = OPDSAPI.reap_task(collection_id)
+
+        mock_reap.assert_called_once_with(collection_id)
+        assert result == mock_reap.return_value

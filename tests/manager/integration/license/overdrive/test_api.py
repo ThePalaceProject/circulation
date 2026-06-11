@@ -74,6 +74,16 @@ from tests.mocks.mock import MockRequestsResponse
 
 
 class TestOverdriveAPI:
+    def test_reap_task(self) -> None:
+        from palace.manager.celery.tasks import overdrive as overdrive_celery
+
+        collection_id = MagicMock()
+        with patch.object(overdrive_celery, "reap_collection") as mock_reap:
+            result = OverdriveAPI.reap_task(collection_id)
+
+        mock_reap.s.assert_called_once_with(collection_id)
+        assert result == mock_reap.s.return_value
+
     def test_patron_activity_exception_collection_none(
         self,
         overdrive_api_fixture: OverdriveAPIFixture,
