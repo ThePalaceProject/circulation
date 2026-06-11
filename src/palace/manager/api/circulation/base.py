@@ -79,6 +79,24 @@ class SupportsImport(ABC):
         ...
 
 
+class SupportsReaping(ABC):
+    """Mixin for circulation APIs that support on-demand collection reaping.
+
+    Reaping re-reads the collection's feed and marks any identifiers that are no
+    longer present in the feed as unavailable, removing those titles from the
+    catalog.
+    """
+
+    @classmethod
+    @abstractmethod
+    def reap_task(cls, collection_id: int) -> Signature:
+        """Return the Celery task signature for reaping the collection.
+
+        :param collection_id: The ID of the collection to reap.
+        """
+        ...
+
+
 class BaseCirculationAPI[
     SettingsType: BaseCirculationApiSettings, LibrarySettingsType: BaseSettings
 ](
@@ -224,10 +242,12 @@ class BaseCirculationAPI[
 
     @classmethod
     def protocol_details(cls, db: Session) -> dict[str, Any]:
-        """Include ``supports_import`` so the admin UI knows whether to
-        offer an import button for collections using this protocol."""
+        """Include ``supports_import`` and ``supports_reap`` so the admin UI
+        knows whether to offer import and reap buttons for collections using
+        this protocol."""
         details = super().protocol_details(db)
         details["supports_import"] = issubclass(cls, SupportsImport)
+        details["supports_reap"] = issubclass(cls, SupportsReaping)
         return details
 
     @property

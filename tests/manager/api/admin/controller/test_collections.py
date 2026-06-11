@@ -1,4 +1,5 @@
 import json
+from typing import Any
 from unittest.mock import MagicMock, create_autospec, patch
 
 import flask
@@ -26,14 +27,21 @@ from palace.manager.api.admin.problem_details import (
     NO_PROTOCOL_FOR_NEW_SERVICE,
     NO_SUCH_LIBRARY,
     PROTOCOL_DOES_NOT_SUPPORT_PARENTS,
+    REAP_NOT_SUPPORTED,
     UNKNOWN_PROTOCOL,
 )
+from palace.manager.api.circulation.base import BaseCirculationAPI
 from palace.manager.api.selftest import HasCollectionSelfTests
-from palace.manager.celery.tasks import boundless, opds_odl
+from palace.manager.celery.tasks import boundless, opds2, opds_odl
 from palace.manager.core.selftest import HasSelfTests
 from palace.manager.integration.goals import Goals
 from palace.manager.integration.license.boundless.api import BoundlessApi
+from palace.manager.integration.license.opds.for_distributors.api import (
+    OPDSForDistributorsAPI,
+)
 from palace.manager.integration.license.opds.odl.api import OPDS2WithODLApi
+from palace.manager.integration.license.opds.opds1.api import OPDSAPI
+from palace.manager.integration.license.opds.opds2.api import OPDS2API
 from palace.manager.integration.license.overdrive.api import OverdriveAPI
 from palace.manager.integration.license.overdrive.settings import (
     OverdriveLibrarySettings,
@@ -1108,3 +1116,112 @@ class TestCollectionSettings:
         # OverdriveAPI does not implement SupportsImport, so supports_import should be False.
         overdrive_details = OverdriveAPI.protocol_details(db.session)
         assert overdrive_details["supports_import"] is False
+
+    def test_process_reap_requires_system_admin(
+        self,
+        controller: CollectionSettingsController,
+        flask_app_fixture: FlaskAppFixture,
+        db: DatabaseTransactionFixture,
+    ):
+        collection = db.collection(protocol=OPDS2API)
+        assert collection.integration_configuration.id is not None
+        with flask_app_fixture.test_request_context("/", method="POST"):
+            pytest.raises(
+                AdminNotAuthorized,
+                controller.process_reap,
+                collection.integration_configuration.id,
+            )
+
+    def test_process_reap_missing_service(
+        self,
+        controller: CollectionSettingsController,
+        flask_app_fixture: FlaskAppFixture,
+    ):
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
+            response = controller.process_reap(999999)
+        assert response == MISSING_SERVICE
+
+    def test_process_reap_marked_for_deletion(
+        self,
+        controller: CollectionSettingsController,
+        flask_app_fixture: FlaskAppFixture,
+        db: DatabaseTransactionFixture,
+    ):
+        collection = db.collection(protocol=OPDS2API)
+        collection.marked_for_deletion = True
+        assert collection.integration_configuration.id is not None
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
+            response = controller.process_reap(collection.integration_configuration.id)
+        assert response == MISSING_COLLECTION
+
+    def test_process_reap_unknown_protocol(
+        self,
+        controller: CollectionSettingsController,
+        flask_app_fixture: FlaskAppFixture,
+        db: DatabaseTransactionFixture,
+    ):
+        collection = db.collection(protocol=OPDS2API)
+        integration = collection.integration_configuration
+        integration.protocol = "UnknownProtocol"
+        assert integration.id is not None
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
+            response = controller.process_reap(integration.id)
+        assert response == UNKNOWN_PROTOCOL
+
+    def test_process_reap_unsupported_protocol(
+        self,
+        controller: CollectionSettingsController,
+        flask_app_fixture: FlaskAppFixture,
+        db: DatabaseTransactionFixture,
+    ):
+        # BoundlessApi supports import but does not implement SupportsReaping.
+        collection = db.collection(protocol=BoundlessApi)
+        assert collection.integration_configuration.id is not None
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
+            response = controller.process_reap(collection.integration_configuration.id)
+        assert response == REAP_NOT_SUPPORTED
+
+    def test_process_reap_success(
+        self,
+        controller: CollectionSettingsController,
+        flask_app_fixture: FlaskAppFixture,
+        db: DatabaseTransactionFixture,
+    ):
+        collection = db.collection(protocol=OPDS2API)
+        assert collection.integration_configuration.id is not None
+        with (
+            flask_app_fixture.test_request_context_system_admin("/", method="POST"),
+            patch.object(opds2, "import_and_reap_not_found_chord") as mock_reap,
+        ):
+            response = controller.process_reap(collection.integration_configuration.id)
+        assert isinstance(response, Response)
+        assert response.status_code == 200
+        assert response.get_data(as_text=True) == "Reap task queued."
+        mock_reap.assert_called_once_with(collection.id)
+        mock_reap.return_value.apply_async.assert_called_once()
+
+    @pytest.mark.parametrize(
+        "protocol",
+        [
+            pytest.param(OPDS2API, id="opds2"),
+            pytest.param(OPDSAPI, id="opds1"),
+            pytest.param(OPDSForDistributorsAPI, id="opds_for_distributors"),
+            pytest.param(OverdriveAPI, id="overdrive"),
+        ],
+    )
+    def test_protocol_details_supports_reap(
+        self,
+        protocol: type[BaseCirculationAPI[Any, Any]],
+        db: DatabaseTransactionFixture,
+    ):
+        # These protocols implement SupportsReaping, so supports_reap should be True.
+        details = protocol.protocol_details(db.session)
+        assert details["supports_reap"] is True
+
+    def test_protocol_details_does_not_support_reap(
+        self,
+        db: DatabaseTransactionFixture,
+    ):
+        # BoundlessApi supports import but not reaping, so supports_reap should be False.
+        boundless_details = BoundlessApi.protocol_details(db.session)
+        assert boundless_details["supports_reap"] is False

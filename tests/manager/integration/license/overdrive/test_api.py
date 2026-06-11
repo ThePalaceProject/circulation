@@ -28,6 +28,7 @@ from palace.manager.api.circulation.fulfillment import (
     StreamingFulfillment,
 )
 from palace.manager.api.config import Configuration
+from palace.manager.celery.tasks import overdrive as overdrive_celery
 from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.core.exceptions import IntegrationException
 from palace.manager.integration.license.overdrive.api import (
@@ -74,6 +75,14 @@ from tests.mocks.mock import MockRequestsResponse
 
 
 class TestOverdriveAPI:
+    def test_reap_task(self) -> None:
+        collection_id = MagicMock()
+        with patch.object(overdrive_celery, "reap_collection") as mock_reap:
+            result = OverdriveAPI.reap_task(collection_id)
+
+        mock_reap.s.assert_called_once_with(collection_id)
+        assert result == mock_reap.s.return_value
+
     def test_patron_activity_exception_collection_none(
         self,
         overdrive_api_fixture: OverdriveAPIFixture,

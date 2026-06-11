@@ -17,10 +17,15 @@ from palace.manager.api.admin.problem_details import (
     MISSING_PARENT,
     MISSING_SERVICE,
     PROTOCOL_DOES_NOT_SUPPORT_PARENTS,
+    REAP_NOT_SUPPORTED,
     UNKNOWN_PROTOCOL,
 )
 from palace.manager.api.admin.util.flask import get_request_admin
-from palace.manager.api.circulation.base import CirculationApiType, SupportsImport
+from palace.manager.api.circulation.base import (
+    CirculationApiType,
+    SupportsImport,
+    SupportsReaping,
+)
 from palace.manager.celery.tasks.collection_delete import collection_delete
 from palace.manager.celery.tasks.reaper import (
     reap_unassociated_holds,
@@ -231,6 +236,49 @@ class CollectionSettingsController(
         impl_cls.import_task(collection.id, force=force).apply_async()
 
         return Response("Import task queued.", 200)
+
+    def process_reap(self, service_id: int) -> Response | ProblemDetail:
+        """Queue a collection reap task on demand.
+
+        Reaping re-reads the collection's feed and marks any identifiers that
+        are no longer present in the feed as unavailable, removing those titles
+        from the catalog. This is useful when items have been accidentally added
+        to the catalog and need to be removed without waiting for the collection's
+        scheduled reap.
+
+        :param service_id: The integration configuration ID of the collection to reap.
+        :return: A 200 response on success, or a ProblemDetail on error.
+        """
+        self.require_system_admin()
+
+        integration = get_one(
+            self._db,
+            IntegrationConfiguration,
+            id=service_id,
+            goal=self.registry.goal,
+        )
+        if not integration:
+            return MISSING_SERVICE
+
+        collection = integration.collection
+        if not collection:
+            return MISSING_COLLECTION
+
+        if collection.marked_for_deletion:
+            return MISSING_COLLECTION
+
+        protocol = integration.protocol
+        if protocol not in self.registry:
+            return UNKNOWN_PROTOCOL
+
+        impl_cls = self.registry[protocol]
+
+        if not issubclass(impl_cls, SupportsReaping):
+            return REAP_NOT_SUPPORTED
+
+        impl_cls.reap_task(collection.id).apply_async()
+
+        return Response("Reap task queued.", 200)
 
     def process_collection_self_tests(
         self, identifier: int | None

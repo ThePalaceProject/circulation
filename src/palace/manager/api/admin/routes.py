@@ -434,6 +434,19 @@ def collection_import(collection_id):
     )
 
 
+@app.route("/admin/collection/<collection_id>/reap", methods=["POST"])
+@returns_json_or_response_or_problem_detail
+@requires_admin
+@requires_csrf_token
+def collection_reap(collection_id):
+    try:
+        integration_id = int(collection_id)
+    except ValueError:
+        return INVALID_INPUT
+
+    return app.manager.admin_collection_settings_controller.process_reap(integration_id)
+
+
 @app.route("/admin/collection_self_tests/<identifier>", methods=["GET", "POST"])
 @returns_json_or_response_or_problem_detail
 @requires_admin
