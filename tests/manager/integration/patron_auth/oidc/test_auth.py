@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import time
+from typing import Any
 from unittest.mock import Mock, patch
 from urllib.parse import quote
 
@@ -24,6 +25,7 @@ from palace.manager.integration.patron_auth.oidc.util import OIDCDiscoveryError
 from palace.manager.util.http.exception import (
     RequestNetworkException,
 )
+from tests.fixtures.redis import RedisFixture
 
 # Test constants
 TEST_ISSUER_URL = "https://oidc.test.example.com"
@@ -224,19 +226,20 @@ class TestOIDCAuthenticationManagerAuthorizationURL:
     """Tests for authorization URL building."""
 
     @pytest.mark.parametrize(
-        "use_pkce,scopes,access_type,code_challenge,expected_in_url,expected_not_in_url",
+        "use_pkce,scopes,access_type,code_challenge,prompt,expected_in_url,expected_not_in_url",
         [
             pytest.param(
                 True,
                 None,
                 "offline",
                 "test-challenge",
+                None,
                 [
                     "code_challenge=test-challenge",
                     "code_challenge_method=S256",
                     "access_type=offline",
                 ],
-                [],
+                ["prompt="],
                 id="with-pkce",
             ),
             pytest.param(
@@ -244,14 +247,16 @@ class TestOIDCAuthenticationManagerAuthorizationURL:
                 None,
                 "offline",
                 None,
+                None,
                 ["access_type=offline"],
-                ["code_challenge", "code_challenge_method"],
+                ["code_challenge", "code_challenge_method", "prompt="],
                 id="without-pkce",
             ),
             pytest.param(
                 True,
                 ["openid", "profile", "custom_scope"],
                 "offline",
+                None,
                 None,
                 ["scope=openid+profile+custom_scope"],
                 [],
@@ -262,22 +267,44 @@ class TestOIDCAuthenticationManagerAuthorizationURL:
                 None,
                 "online",
                 None,
+                None,
                 ["access_type=online"],
-                [],
+                ["prompt="],
                 id="online-access",
+            ),
+            pytest.param(
+                False,
+                None,
+                "offline",
+                None,
+                "select_account",
+                ["prompt=select_account"],
+                [],
+                id="with-prompt-select-account",
+            ),
+            pytest.param(
+                False,
+                None,
+                "offline",
+                None,
+                "login",
+                ["prompt=login"],
+                [],
+                id="with-prompt-login",
             ),
         ],
     )
     def test_build_authorization_url(
         self,
-        use_pkce,
-        scopes,
-        access_type,
-        code_challenge,
-        expected_in_url,
-        expected_not_in_url,
-        redis_fixture,
-        mock_discovery_document,
+        use_pkce: bool,
+        scopes: list[str] | None,
+        access_type: str,
+        code_challenge: str | None,
+        prompt: str | None,
+        expected_in_url: list[str],
+        expected_not_in_url: list[str],
+        redis_fixture: RedisFixture,
+        mock_discovery_document: dict[str, Any],
     ):
         """Test authorization URL building with different configurations."""
         # Build settings with only non-None optional parameters
@@ -315,6 +342,8 @@ class TestOIDCAuthenticationManagerAuthorizationURL:
             }
             if code_challenge:
                 build_kwargs["code_challenge"] = code_challenge
+            if prompt:
+                build_kwargs["prompt"] = prompt
 
             url = manager.build_authorization_url(**build_kwargs)
 
