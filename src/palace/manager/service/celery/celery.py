@@ -59,6 +59,7 @@ def beat_schedule() -> dict[str, Any]:
         boundless,
         custom_lists,
         equivalents,
+        lanes,
         license_expiration,
         marc,
         notifications,
@@ -86,7 +87,7 @@ def beat_schedule() -> dict[str, Any]:
             ),  # Every hour except 2–6 AM (matches the legacy cron schedule)
         },
         "update_independent_lane_sizes": {
-            "task": custom_lists.update_independent_lane_sizes.name,
+            "task": lanes.update_independent_lane_sizes.name,
             "schedule": crontab(
                 minute="0",
                 hour="*/6",

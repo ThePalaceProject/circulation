@@ -11,8 +11,8 @@ from sqlalchemy.orm import Session
 from palace.manager.api.lanes import create_default_lanes
 from palace.manager.celery.tasks.custom_lists import (
     update_custom_list_based_lane_sizes,
-    update_independent_lane_sizes,
 )
+from palace.manager.celery.tasks.lanes import update_independent_lane_sizes
 from palace.manager.feed.worklist.base import WorkList
 from palace.manager.scripts.base import Script
 from palace.manager.scripts.input import LibraryInputScript

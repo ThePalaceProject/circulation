@@ -1,5 +1,5 @@
 """
-Celery tasks for maintaining custom list entries and lane sizes.
+Celery tasks for maintaining custom list entries and custom-list lane sizes.
 
 Pipeline (orchestrated via chords):
 
@@ -10,20 +10,14 @@ Pipeline (orchestrated via chords):
    OpenSearch and reconciles the cached ``size``.  Uses ``task.replace()`` to
    spread pagination over multiple short task invocations.
 3. ``update_custom_list_based_lane_sizes`` — queries only lanes whose sizes
-   depend on custom list content, fans them out into parallel ``update_lane_size``
-   tasks, and wires ``finalize_lane_size_update`` as the chord callback.
-4. ``update_lane_size``                    — per-lane: counts matching works in
-   OpenSearch and stores the result.
-5. ``finalize_lane_size_update``           — fires ``site_configuration_has_changed``
-   once after all lane sizes are settled.
+   depend on custom list content (see :func:`custom_list_lane_ids_query`) and
+   fans them out into a chord of ``update_lane_size`` tasks with
+   ``finalize_lane_size_update`` as the callback.
 
-Lanes that do **not** depend on custom list content (genre lanes, language lanes,
-audience lanes, etc.) are updated by a separate scheduled task:
-
-``update_independent_lane_sizes``    — queries lanes that are *not*
-   associated with any custom list and fans them out into parallel
-   ``update_lane_size`` tasks on an independent beat schedule (every 6 hours).
-   Uses ``finalize_lane_size_update`` as its chord callback.
+The generic lane-size primitives (``update_lane_size``,
+``finalize_lane_size_update``) and the independent-lane sweep
+(``update_independent_lane_sizes``, which recounts lanes *not* tied to any
+custom list) live in :mod:`palace.manager.celery.tasks.lanes`.
 
 The standalone ``update_custom_list_size`` task is kept for the CLI /
 backward-compat path only; it is *not* a stage in the chord pipeline.
@@ -44,13 +38,16 @@ from sqlalchemy.sql import Select
 
 from palace.manager.celery.importer import workflow_lock_guard
 from palace.manager.celery.task import Task
+from palace.manager.celery.tasks.lanes import (
+    finalize_lane_size_update,
+    update_lane_size,
+)
 from palace.manager.celery.utils import ModelNotFoundError, load_from_id, signature_with
 from palace.manager.core.query.customlist import CustomListQueries
 from palace.manager.search.external_search import ExternalSearchIndex
 from palace.manager.service.celery.celery import QueueNames
 from palace.manager.service.redis.models.lock import RedisLock
 from palace.manager.service.redis.redis import Redis
-from palace.manager.sqlalchemy.listeners import site_configuration_has_changed
 from palace.manager.sqlalchemy.model.customlist import CustomList, CustomListEntry
 from palace.manager.sqlalchemy.model.lane import Lane, lanes_customlists
 
@@ -110,7 +107,7 @@ def _sweep_lock(redis_client: Redis, lock_value: str) -> RedisLock:
 # ---------------------------------------------------------------------------
 
 
-def _custom_list_lane_ids_query() -> Select:
+def custom_list_lane_ids_query() -> Select:
     """Return a SELECT of lane IDs whose sizes depend on custom list content.
 
     A lane depends on custom list content if any of the following hold:
@@ -484,7 +481,7 @@ def update_custom_list_based_lane_sizes(
     """Fan out lane size updates for lanes associated with custom lists.
 
     Queries lane IDs whose sizes depend on custom list content (via
-    :func:`_custom_list_lane_ids_query`) and creates a chord of
+    :func:`custom_list_lane_ids_query`) and creates a chord of
     ``update_lane_size`` tasks with ``finalize_lane_size_update`` as the
     callback.
 
@@ -497,7 +494,7 @@ def update_custom_list_based_lane_sizes(
         ``finalize_lane_size_update`` so the lock can be released there.
     """
     with task.session() as session:
-        lane_ids: list[int] = list(session.scalars(_custom_list_lane_ids_query()))
+        lane_ids: list[int] = list(session.scalars(custom_list_lane_ids_query()))
 
     task.log.info(f"Sweeping sizes for {len(lane_ids)} custom-list lane(s).")
 
@@ -509,103 +506,3 @@ def update_custom_list_based_lane_sizes(
         group([update_lane_size.si(lane_id) for lane_id in lane_ids]),
         finalize_lane_size_update.si(lock_value=lock_value),
     ).delay()
-
-
-@shared_task(queue=QueueNames.default, bind=True)
-def update_independent_lane_sizes(task: Task) -> None:
-    """Fan out lane size updates for lanes not associated with any custom list.
-
-    Queries lane IDs that do *not* depend on custom list content (the
-    complement of :func:`_custom_list_lane_ids_query`) and creates a chord of
-    ``update_lane_size`` tasks with ``finalize_lane_size_update`` as the
-    callback.
-
-    These lanes (genre lanes, language lanes, audience lanes, etc.) only change
-    when the underlying collection changes — not when custom list entries are
-    updated — so they are scheduled independently every 6 hours rather than
-    being tied to the custom list sweep.
-    """
-    with task.session() as session:
-        lane_ids: list[int] = list(
-            session.scalars(
-                select(Lane.id).where(Lane.id.not_in(_custom_list_lane_ids_query()))
-            )
-        )
-
-    task.log.info(f"Sweeping sizes for {len(lane_ids)} independent lane(s).")
-
-    if not lane_ids:
-        finalize_lane_size_update.delay()
-        return
-
-    chord(
-        group([update_lane_size.si(lane_id) for lane_id in lane_ids]),
-        finalize_lane_size_update.si(),
-    ).delay()
-
-
-# ---------------------------------------------------------------------------
-# Stage 3 — Per-lane size update
-# ---------------------------------------------------------------------------
-
-
-@shared_task(queue=QueueNames.default, bind=True)
-def update_lane_size(task: Task, lane_id: int) -> None:
-    """Update the estimated size for a single lane.
-
-    Suppresses the per-flush ``site_configuration_has_changed`` listener on
-    the lane instance so that the cache-invalidation notification is batched
-    into the single call made by ``finalize_lane_size_update`` after all lane
-    tasks complete — matching the behaviour of the legacy
-    ``UpdateLaneSizeScript``.
-
-    :param lane_id: ID of the Lane to update.
-    """
-    search: ExternalSearchIndex = task.services.search.index()
-    try:
-        with task.transaction() as session:
-            lane = load_from_id(session, Lane, lane_id)
-            # Suppress the before-flush listener that calls
-            # site_configuration_has_changed on every flush.
-            # finalize_lane_size_update fires it once after all lane tasks finish.
-            lane._suppress_before_flush_listeners = True
-            lane.update_size(session, search_engine=search)
-            task.log.info(f"{lane.full_identifier}: {lane.size}")
-    except ModelNotFoundError:
-        task.log.warning(
-            f"Lane {lane_id} not found; it may have been deleted. Skipping."
-        )
-
-
-# ---------------------------------------------------------------------------
-# Stage 4 — Finalize
-# ---------------------------------------------------------------------------
-
-
-@shared_task(queue=QueueNames.default, bind=True)
-def finalize_lane_size_update(task: Task, lock_value: str | None = None) -> None:
-    """Notify the system that lane sizes have changed.
-
-    Called as the chord callback once all ``update_lane_size`` tasks complete.
-    Fires ``site_configuration_has_changed`` a single time so downstream caches
-    are invalidated without triggering a separate notification per lane.
-
-    If ``lock_value`` is provided, releases the sweep-level Redis lock that was
-    acquired by ``update_custom_list_entries_sweep`` at the start of the
-    pipeline.  This ensures the lock truly covers the full chord sequence.
-
-    :param lock_value: Sweep-lock random value to release, or ``None`` when
-        this task is invoked standalone (outside the full pipeline).
-    """
-    with task.transaction() as session:
-        site_configuration_has_changed(session)
-    task.log.info("Lane size sweep complete: site configuration change recorded.")
-
-    if lock_value is not None:
-        redis = task.services.redis.client()
-        released = _sweep_lock(redis, lock_value).release()
-        if not released:
-            task.log.warning(
-                "Could not release sweep lock — it may have already expired or "
-                "been released by another process."
-            )
