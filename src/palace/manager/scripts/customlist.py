@@ -80,11 +80,6 @@ class CustomListManagementScript(Script):
         self._db.commit()
 
 
-class UpdateCustomListSizeScript(CustomListSweeperScript):
-    def process_custom_list(self, custom_list: CustomList) -> None:
-        custom_list.update_size(self._db)
-
-
 class CustomListUpdateEntriesScript(CustomListSweeperScript):
     """Traverse all entries and update lists if they have auto_update_enabled"""
 
