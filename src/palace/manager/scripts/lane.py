@@ -9,12 +9,61 @@ from typing import Any, TextIO
 from sqlalchemy.orm import Session
 
 from palace.manager.api.lanes import create_default_lanes
+from palace.manager.celery.tasks.custom_lists import (
+    update_custom_list_based_lane_sizes,
+)
+from palace.manager.celery.tasks.lanes import update_independent_lane_sizes
 from palace.manager.feed.worklist.base import WorkList
+from palace.manager.scripts.base import Script
 from palace.manager.scripts.input import LibraryInputScript
 from palace.manager.search.external_search import ExternalSearchIndex
 from palace.manager.sqlalchemy.listeners import site_configuration_has_changed
 from palace.manager.sqlalchemy.model.lane import Lane
 from palace.manager.sqlalchemy.model.library import Library
+
+
+class UpdateCustomListBasedLaneSizesScript(Script):
+    """Manually queue the ``update_custom_list_based_lane_sizes`` Celery task.
+
+    Enqueues ``update_custom_list_based_lane_sizes``, which fans out size updates for
+    lanes associated with custom lists (see ``custom_list_lane_ids_query``)
+    and fires ``finalize_lane_size_update`` once all updates are complete.
+
+    This sweep covers only custom-list lanes. To recalculate the sizes of
+    independent lanes (genre, language, audience, etc.) — e.g. after a
+    collection import — use :class:`UpdateIndependentLaneSizesScript`
+    (``bin/update_independent_lane_sizes``) as well.
+
+    The script returns as soon as the task is queued; execution happens
+    asynchronously on the Celery workers.
+    """
+
+    def do_run(self, *args: Any, **kwargs: Any) -> None:
+        update_custom_list_based_lane_sizes.delay()
+        self.log.info(
+            'The "update_custom_list_based_lane_sizes" task has been queued for execution. '
+            "See the Celery logs for details about task execution."
+        )
+
+
+class UpdateIndependentLaneSizesScript(Script):
+    """Manually queue the ``update_independent_lane_sizes`` Celery task.
+
+    Enqueues ``update_independent_lane_sizes``, which fans out size
+    updates for every lane *not* associated with a custom list (genre lanes,
+    language lanes, audience lanes, etc.) and fires
+    ``finalize_lane_size_update`` once all updates are complete.
+
+    The script returns as soon as the task is queued; execution happens
+    asynchronously on the Celery workers.
+    """
+
+    def do_run(self, *args: Any, **kwargs: Any) -> None:
+        update_independent_lane_sizes.delay()
+        self.log.info(
+            'The "update_independent_lane_sizes" task has been queued for execution. '
+            "See the Celery logs for details about task execution."
+        )
 
 
 class LaneSweeperScript(LibraryInputScript):

@@ -1,0 +1,12 @@
+#!/usr/bin/env python
+"""
+Manually kick off the update_independent_lane_sizes Celery task.
+
+Enqueues update_independent_lane_sizes, which fans out size updates
+for every lane not associated with a custom list (genre lanes, language
+lanes, audience lanes, etc.) and fires finalize_lane_size_update once all
+updates are complete.
+"""
+from palace.manager.scripts.lane import UpdateIndependentLaneSizesScript
+
+UpdateIndependentLaneSizesScript().run()
