@@ -8,25 +8,13 @@ import pytest
 from freezegun import freeze_time
 from sqlalchemy.exc import InvalidRequestError
 
-from palace.manager.scripts.customlist import (
-    CustomListUpdateEntriesScript,
-    UpdateCustomListSizeScript,
-)
+from palace.manager.scripts.customlist import CustomListUpdateEntriesScript
 from palace.manager.search.filter import Filter
 from palace.manager.sqlalchemy.model.customlist import CustomList
 from palace.manager.sqlalchemy.model.work import Work
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.search import EndToEndSearchFixture
 from tests.fixtures.services import ServicesFixture
-
-
-class TestUpdateCustomListSizeScript:
-    def test_do_run(self, db: DatabaseTransactionFixture):
-        customlist, ignore = db.customlist(num_entries=1)
-        customlist.library = db.default_library()
-        customlist.size = 100
-        UpdateCustomListSizeScript(db.session).do_run(cmd_args=[])
-        assert 1 == customlist.size
 
 
 class TestCustomListUpdateEntriesScriptData:

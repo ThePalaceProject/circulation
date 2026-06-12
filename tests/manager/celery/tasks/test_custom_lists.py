@@ -502,37 +502,6 @@ class TestUpdateCustomListEntries:
 
 
 # ---------------------------------------------------------------------------
-# Standalone size reconciliation
-# ---------------------------------------------------------------------------
-
-
-class TestUpdateCustomListSize:
-    def test_updates_size(
-        self,
-        db: DatabaseTransactionFixture,
-        redis_fixture: RedisFixture,
-        celery_fixture: CeleryFixture,
-    ):
-        """update_custom_list_size reconciles the size column."""
-        custom_list, _ = db.customlist(num_entries=2)
-
-        with patch.object(custom_list.__class__, "update_size") as mock_update_size:
-            custom_lists.update_custom_list_size.delay(custom_list.id).wait()
-            mock_update_size.assert_called_once()
-
-    def test_missing_list_logs_and_continues(
-        self,
-        db: DatabaseTransactionFixture,
-        redis_fixture: RedisFixture,
-        celery_fixture: CeleryFixture,
-    ):
-        """A nonexistent list ID causes the task to skip without raising."""
-        nonexistent_id = 999_999_999
-        # Should not raise.
-        custom_lists.update_custom_list_size.delay(nonexistent_id).wait()
-
-
-# ---------------------------------------------------------------------------
 # Stage 2 — Custom-list-based lane size sweep orchestrator
 # ---------------------------------------------------------------------------
 

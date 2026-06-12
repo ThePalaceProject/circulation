@@ -18,9 +18,6 @@ The generic lane-size primitives (``update_lane_size``,
 ``finalize_lane_size_update``) and the independent-lane sweep
 (``update_independent_lane_sizes``, which recounts lanes *not* tied to any
 custom list) live in :mod:`palace.manager.celery.tasks.lanes`.
-
-The standalone ``update_custom_list_size`` task is kept for the CLI /
-backward-compat path only; it is *not* a stage in the chord pipeline.
 """
 
 from __future__ import annotations
@@ -438,35 +435,6 @@ def update_custom_list_entries(
                 f"Custom list {custom_list_id} has a malformed auto_update_query; "
                 "skipping it so the rest of the sweep can proceed."
             )
-
-
-# ---------------------------------------------------------------------------
-# Standalone size reconciliation (CLI / backward-compat)
-# ---------------------------------------------------------------------------
-
-
-@shared_task(queue=QueueNames.default, bind=True)
-def update_custom_list_size(task: Task, custom_list_id: int) -> None:
-    """Reconcile the cached ``size`` column for a single custom list.
-
-    This task is the CLI / backward-compat entrypoint.  In the chord-based
-    pipeline the size is reconciled at the tail of ``update_custom_list_entries``
-    instead, so this task is **not** a stage in the automated sweep.
-
-    :param custom_list_id: ID of the custom list to reconcile.
-    """
-    try:
-        with task.transaction() as session:
-            custom_list = load_from_id(session, CustomList, custom_list_id)
-            custom_list.update_size(session)
-            task.log.info(
-                f"Custom list {custom_list.name!r} ({custom_list_id}): "
-                f"size updated to {custom_list.size}."
-            )
-    except ModelNotFoundError:
-        task.log.warning(
-            f"Custom list {custom_list_id} not found; it may have been deleted. Skipping."
-        )
 
 
 # ---------------------------------------------------------------------------
