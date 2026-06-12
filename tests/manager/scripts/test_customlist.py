@@ -8,13 +8,29 @@ import pytest
 from freezegun import freeze_time
 from sqlalchemy.exc import InvalidRequestError
 
-from palace.manager.scripts.customlist import CustomListUpdateEntriesScript
+from palace.manager.scripts.customlist import (
+    CustomListEntriesSweepScript,
+    CustomListUpdateEntriesScript,
+)
 from palace.manager.search.filter import Filter
 from palace.manager.sqlalchemy.model.customlist import CustomList
 from palace.manager.sqlalchemy.model.work import Work
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.search import EndToEndSearchFixture
 from tests.fixtures.services import ServicesFixture
+
+
+class TestCustomListEntriesSweepScript:
+    @patch("palace.manager.scripts.customlist.update_custom_list_entries_sweep")
+    def test_do_run_queues_task(
+        self,
+        mock_task: MagicMock,
+        db: DatabaseTransactionFixture,
+        services_fixture: ServicesFixture,
+    ):
+        """do_run dispatches the sweep task asynchronously and nothing else."""
+        CustomListEntriesSweepScript(db.session).do_run()
+        mock_task.delay.assert_called_once_with()
 
 
 class TestCustomListUpdateEntriesScriptData:

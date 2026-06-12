@@ -1,17 +1,46 @@
 from __future__ import annotations
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from palace.manager.api.lanes import create_default_lanes
 from palace.manager.feed.worklist.base import WorkList
 from palace.manager.scripts.lane import (
     DeleteInvisibleLanesScript,
     LaneSweeperScript,
+    UpdateCustomListBasedLaneSizesScript,
+    UpdateIndependentLaneSizesScript,
     UpdateLaneSizeScript,
 )
 from palace.manager.sqlalchemy.model.lane import Lane
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.search import EndToEndSearchFixture, ExternalSearchFixtureFake
+from tests.fixtures.services import ServicesFixture
+
+
+class TestUpdateCustomListBasedLaneSizesScript:
+    @patch("palace.manager.scripts.lane.update_custom_list_based_lane_sizes")
+    def test_do_run_queues_task(
+        self,
+        mock_task: MagicMock,
+        db: DatabaseTransactionFixture,
+        services_fixture: ServicesFixture,
+    ):
+        """do_run dispatches the custom-list lane size task asynchronously."""
+        UpdateCustomListBasedLaneSizesScript(db.session).do_run()
+        mock_task.delay.assert_called_once_with()
+
+
+class TestUpdateIndependentLaneSizesScript:
+    @patch("palace.manager.scripts.lane.update_independent_lane_sizes")
+    def test_do_run_queues_task(
+        self,
+        mock_task: MagicMock,
+        db: DatabaseTransactionFixture,
+        services_fixture: ServicesFixture,
+    ):
+        """do_run dispatches the independent lane size task asynchronously."""
+        UpdateIndependentLaneSizesScript(db.session).do_run()
+        mock_task.delay.assert_called_once_with()
 
 
 class TestLaneSweeperScript:

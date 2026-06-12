@@ -26,7 +26,7 @@ class UpdateCustomListBasedLaneSizesScript(Script):
     """Manually queue the ``update_custom_list_based_lane_sizes`` Celery task.
 
     Enqueues ``update_custom_list_based_lane_sizes``, which fans out size updates for
-    lanes associated with custom lists (see ``_custom_list_lane_ids_query``)
+    lanes associated with custom lists (see ``custom_list_lane_ids_query``)
     and fires ``finalize_lane_size_update`` once all updates are complete.
 
     This sweep covers only custom-list lanes. To recalculate the sizes of

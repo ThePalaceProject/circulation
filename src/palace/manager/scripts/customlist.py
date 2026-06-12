@@ -21,7 +21,7 @@ class CustomListEntriesSweepScript(Script):
     updates for every auto-updating custom list and then recalculates lane
     sizes once all updates are complete.
 
-    This is equivalent to waiting for the daily beat-schedule run but fires
+    This is equivalent to waiting for the hourly beat-schedule run but fires
     immediately.  The script returns as soon as the task is queued; actual
     execution happens asynchronously on the Celery workers.
     """
