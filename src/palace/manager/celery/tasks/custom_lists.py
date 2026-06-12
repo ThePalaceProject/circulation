@@ -61,10 +61,15 @@ from palace.manager.sqlalchemy.model.lane import Lane, lanes_customlists
 # large would not be operationally useful.
 _PAGES_PER_TASK: int = 5
 
-# Lock TTL for per-list entry-update workflows.  Must outlive a single
-# task invocation; short enough that a crashed worker doesn't block subsequent
-# runs for too long.
-_ENTRY_LOCK_TTL = datetime.timedelta(minutes=10)
+# Lock TTL for per-list entry-update workflows.  Sized to outlive a single task
+# invocation: it must be >= the Celery task_time_limit (1800s / 30 min) so a
+# slow-but-not-yet-killed batch can never run with an expired lock.  Each
+# task.replace() page hand-off re-acquires the same lock (keyed on the stable
+# task.request.id), so this only needs to span one batch, not the whole list.
+# Beyond that it is purely a crash-recovery backstop (a dead worker frees the
+# list after this window); concurrent *sweeps* are already serialized by the
+# 2h sweep lock below.
+_ENTRY_LOCK_TTL = datetime.timedelta(minutes=35)
 
 # Lock TTL for the sweep-level orchestrator.  Should cover the full chord
 # pipeline (entries → lane sizes) to prevent a second beat tick from launching
