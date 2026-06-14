@@ -2,7 +2,7 @@
 
 import json
 import logging
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import ANY, MagicMock, Mock, patch
 
 import jwt
 import pytest
@@ -297,6 +297,92 @@ class TestOIDCController:
             assert result.status_code == 302
             assert "code_challenge=" in result.location
             assert "code_challenge_method=S256" in result.location
+
+    @pytest.mark.parametrize(
+        "prompt",
+        [
+            pytest.param("select_account", id="select-account"),
+            pytest.param("login", id="login"),
+            pytest.param("consent", id="consent"),
+            pytest.param("none", id="none"),
+            pytest.param("select_account consent", id="select-account-consent"),
+            pytest.param("login consent", id="login-consent"),
+        ],
+    )
+    def test_oidc_authentication_redirect_with_valid_prompt(
+        self,
+        db: DatabaseTransactionFixture,
+        controller: OIDCController,
+        mock_authenticator: MagicMock,
+        oidc_provider: OIDCAuthenticationProvider,
+        prompt: str,
+    ):
+        """Test that valid OIDC prompt values are forwarded to build_authorization_url."""
+        library = db.default_library()
+        params = {
+            "provider": "OpenID Connect",
+            "redirect_uri": "https://app.example.com",
+            "prompt": prompt,
+        }
+
+        mock_auth_manager = MagicMock()
+        mock_auth_manager.build_authorization_url.return_value = (
+            f"https://idp.example.com/authorize?prompt={prompt}"
+        )
+
+        mock_authenticator.oidc_provider_lookup.return_value = oidc_provider
+        mock_authenticator.library_authenticators = {
+            library.short_name: MagicMock(bearer_token_signing_secret="test-secret")
+        }
+
+        with (
+            patch(
+                "palace.manager.integration.patron_auth.oidc.controller.url_for"
+            ) as mock_url_for,
+            patch.object(
+                oidc_provider,
+                "get_authentication_manager",
+                return_value=mock_auth_manager,
+            ),
+        ):
+            mock_url_for.return_value = "https://cm.example.com/oidc_callback"
+
+            result = controller.oidc_authentication_redirect(params, db.session)
+
+            assert result.status_code == 302
+            # `prompt` is the focus here. Using ANY for dynamic values.
+            mock_auth_manager.build_authorization_url.assert_called_once_with(
+                redirect_uri="https://cm.example.com/oidc_callback",
+                state=ANY,
+                nonce=ANY,
+                code_challenge=ANY,
+                prompt=prompt,
+            )
+
+    @pytest.mark.parametrize(
+        "prompt",
+        [
+            pytest.param("invalid_value", id="unknown-single"),
+            pytest.param("select_account invalid_value", id="unknown-token-in-multi"),
+            pytest.param("none login", id="none-combined"),
+            pytest.param("", id="empty-string"),
+            pytest.param("   ", id="whitespace-only"),
+        ],
+    )
+    def test_oidc_authentication_redirect_invalid_prompt(
+        self, controller: OIDCController, prompt: str
+    ):
+        """Test that invalid prompt values are redirected back with an encoded error."""
+        params = {
+            "provider": "OpenID Connect",
+            "redirect_uri": "https://app.example.com",
+            "prompt": prompt,
+        }
+
+        result = controller.oidc_authentication_redirect(params, MagicMock())
+
+        assert result.status_code == 302
+        assert "error=" in result.location
 
     @pytest.mark.parametrize(
         "params,expected_error_substring",

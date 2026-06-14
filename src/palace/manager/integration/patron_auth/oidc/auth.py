@@ -279,6 +279,7 @@ class OIDCAuthenticationManager(LoggerMixin):
         state: str,
         nonce: str,
         code_challenge: str | None = None,
+        prompt: str | None = None,
     ) -> str:
         """Build authorization URL with parameters.
 
@@ -286,6 +287,7 @@ class OIDCAuthenticationManager(LoggerMixin):
         :param state: State parameter for CSRF protection
         :param nonce: Nonce for ID token validation
         :param code_challenge: PKCE code challenge (if PKCE enabled)
+        :param prompt: OIDC prompt parameter to forward to the provider
         :return: Complete authorization URL
         """
         metadata = self.get_provider_metadata()
@@ -309,6 +311,9 @@ class OIDCAuthenticationManager(LoggerMixin):
         # Add access_type for refresh token support
         if self._settings.access_type:
             params["access_type"] = self._settings.access_type
+
+        if prompt:
+            params["prompt"] = prompt
 
         # Construct URL
         auth_url = f"{auth_endpoint}?{urlencode(params)}"
