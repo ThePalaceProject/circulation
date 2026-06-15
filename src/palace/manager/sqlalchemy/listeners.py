@@ -5,9 +5,9 @@ import logging
 from threading import RLock
 from typing import Any
 
-log = logging.getLogger(__name__)
-
 from sqlalchemy import event, select, text
+
+log = logging.getLogger(__name__)
 from sqlalchemy.engine import Connection
 from sqlalchemy.orm import Mapper, Session
 
