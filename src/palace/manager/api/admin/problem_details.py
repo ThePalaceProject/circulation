@@ -489,6 +489,13 @@ IMPORT_NOT_SUPPORTED = pd(
     detail=_("The collection's protocol does not support import."),
 )
 
+REAP_NOT_SUPPORTED = pd(
+    "http://palaceproject.io/terms/problem/reap-not-supported",
+    status_code=400,
+    title=_("Reap not supported"),
+    detail=_("The collection's protocol does not support reaping."),
+)
+
 COLLECTION_DOES_NOT_SUPPORT_REGISTRATION = pd(
     "http://librarysimplified.org/terms/problem/collection-does-not-support-registration",
     status_code=400,

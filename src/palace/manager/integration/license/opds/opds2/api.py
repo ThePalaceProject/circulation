@@ -12,7 +12,11 @@ from uritemplate import URITemplate
 
 from palace.util.datetime_helpers import utc_now
 
-from palace.manager.api.circulation.base import BaseCirculationAPI, SupportsImport
+from palace.manager.api.circulation.base import (
+    BaseCirculationAPI,
+    SupportsImport,
+    SupportsReaping,
+)
 from palace.manager.api.circulation.exceptions import CannotFulfill
 from palace.manager.api.circulation.fulfillment import RedirectFulfillment
 from palace.manager.integration.license.opds.base.api import BaseOPDSAPI
@@ -50,7 +54,9 @@ SUPPORTED_TEMPLATE_VARIABLES: frozenset[str] = frozenset(TemplateVariable)
 
 
 class OPDS2API(
-    BaseOPDSAPI[OPDS2APISettings, OPDS2ImporterLibrarySettings], SupportsImport
+    BaseOPDSAPI[OPDS2APISettings, OPDS2ImporterLibrarySettings],
+    SupportsImport,
+    SupportsReaping,
 ):
     TOKEN_AUTH_CONFIG_KEY = "token_auth_endpoint"
     LAST_REAP_TIME_KEY = "last_reap_time"
@@ -290,6 +296,14 @@ class OPDS2API(
         from palace.manager.celery.tasks.opds2 import import_collection
 
         return import_collection.s(collection_id, force=force)
+
+    @classmethod
+    def reap_task(cls, collection_id: int) -> Signature:
+        # Local import to avoid a circular import between this module and the
+        # opds2 celery tasks module, which imports OPDS2API.
+        from palace.manager.celery.tasks.opds2 import import_and_reap_not_found_chord
+
+        return import_and_reap_not_found_chord(collection_id)
 
     @classmethod
     def update_collection_token_auth_url(cls, collection: Collection, url: str) -> bool:

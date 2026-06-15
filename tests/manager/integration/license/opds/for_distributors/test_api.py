@@ -361,6 +361,16 @@ class TestOPDSForDistributorsAPI:
         mock_import.s.assert_called_once_with(collection_id, force=force)
         assert result == mock_import.s.return_value
 
+    def test_reap_task(self) -> None:
+        collection_id = MagicMock()
+        with patch.object(
+            opds_for_distributors, "import_and_reap_not_found_chord"
+        ) as mock_reap:
+            result = OPDSForDistributorsAPI.reap_task(collection_id)
+
+        mock_reap.assert_called_once_with(collection_id)
+        assert result == mock_reap.return_value
+
     @pytest.mark.parametrize(
         "url,token,expected",
         [

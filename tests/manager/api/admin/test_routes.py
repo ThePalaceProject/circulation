@@ -724,6 +724,28 @@ class TestAdminCollectionSettings:
         payload = json.loads(body)
         assert payload["type"] == INVALID_INPUT.uri
 
+    def test_process_reap(self, fixture: AdminRouteFixture):
+        url = "/admin/collection/123/reap"
+        fixture.assert_authenticated_request_calls(
+            url,
+            fixture.controller.process_reap,
+            123,
+            http_method="POST",
+        )
+        fixture.assert_supported_methods(url, "POST")
+
+    def test_process_reap_invalid_collection_id(self, fixture: AdminRouteFixture):
+        fixture.manager.admin_sign_in_controller.authenticated = True
+        try:
+            response = fixture.request("/admin/collection/not-a-number/reap", "POST")
+        finally:
+            fixture.manager.admin_sign_in_controller.authenticated = False
+
+        body, status_code, _ = response
+        assert status_code == INVALID_INPUT.status_code
+        payload = json.loads(body)
+        assert payload["type"] == INVALID_INPUT.uri
+
     def test_process_collection_self_tests(self, fixture: AdminRouteFixture):
         url = "/admin/collection_self_tests/<identifier>"
         fixture.assert_authenticated_request_calls(

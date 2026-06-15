@@ -218,6 +218,14 @@ class TestOpds2Api:
         mock_import.s.assert_called_once_with(collection_id, force=force)
         assert result == mock_import.s.return_value
 
+    def test_reap_task(self) -> None:
+        collection_id = MagicMock()
+        with patch.object(opds2_celery, "import_and_reap_not_found_chord") as mock_reap:
+            result = OPDS2API.reap_task(collection_id)
+
+        mock_reap.assert_called_once_with(collection_id)
+        assert result == mock_reap.return_value
+
     def test_get_authentication_token_with_saml_parameters(
         self, opds2_api_fixture: Opds2ApiFixture
     ):

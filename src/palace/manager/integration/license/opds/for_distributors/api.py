@@ -11,7 +11,11 @@ from sqlalchemy.orm import Session
 
 from palace.util.datetime_helpers import utc_now
 
-from palace.manager.api.circulation.base import BaseCirculationAPI, SupportsImport
+from palace.manager.api.circulation.base import (
+    BaseCirculationAPI,
+    SupportsImport,
+    SupportsReaping,
+)
 from palace.manager.api.circulation.data import HoldInfo, LoanInfo
 from palace.manager.api.circulation.exceptions import (
     CannotFulfill,
@@ -48,6 +52,7 @@ class OPDSForDistributorsAPI(
     BaseCirculationAPI[OPDSForDistributorsSettings, OPDSForDistributorsLibrarySettings],
     HasCollectionSelfTests,
     SupportsImport,
+    SupportsReaping,
 ):
     @classmethod
     def settings_class(cls) -> type[OPDSForDistributorsSettings]:
@@ -251,3 +256,14 @@ class OPDSForDistributorsAPI(
         from palace.manager.celery.tasks.opds_for_distributors import import_collection
 
         return import_collection.s(collection_id, force=force)
+
+    @classmethod
+    def reap_task(cls, collection_id: int) -> Signature:
+        # Local import to avoid a circular import between this module and the
+        # opds_for_distributors celery tasks module, which imports
+        # OPDSForDistributorsAPI.
+        from palace.manager.celery.tasks.opds_for_distributors import (
+            import_and_reap_not_found_chord,
+        )
+
+        return import_and_reap_not_found_chord(collection_id)
