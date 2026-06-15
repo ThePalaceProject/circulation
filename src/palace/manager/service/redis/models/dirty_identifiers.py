@@ -73,7 +73,6 @@ class DirtyIdentifierIds:
         total = 0
         for partition in session.execute(query).partitions():
             ids = [str(row.identifier_id) for row in partition]
-            self._client.sadd(self._key, *ids)
-            total += len(ids)
+            total += self._client.sadd(self._key, *ids)
 
         return total
