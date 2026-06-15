@@ -69,7 +69,7 @@ dependencies = [
     "jwcrypto>=1.4.2,<2",
     "levenshtein>=0.27,<0.28",
     "lxml[html-clean]==6.1.1",
-    "nameparser>=1.1,<2",  # nameparser is for author name manipulations
+    "nameparser>=1.2.0,<2",  # nameparser is for author name manipulations
     "openpyxl>=3.1,<4",
     "opensearch-py>=3.2.0,<4",
     "palace-opds",
