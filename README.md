@@ -767,6 +767,12 @@ provided database URL and create a new database for each test run. If the user d
 to create and drop databases, the tests will fail. You can disable this behavior by setting the
 `PALACE_TEST_DATABASE_CREATE_DATABASE` environment variable to `false`.
 
+Setting `PALACE_TEST_DATABASE_EXTERNAL_SCHEMA` to `true` tells the tests that the schema has already
+been applied to the provided database: the fixtures use it as-is, without creating or dropping the
+database (so, like disabling database creation, the tests must be run serially) and without dropping and
+recreating the schema from the current models. This is used by the backwards-compatibility CI check,
+which runs a previous release's tests against a schema built by the current code.
+
 ### Override `pytest` Arguments
 
 If you wish to pass additional arguments to `pytest`, you can do so through `tox`. Every argument passed after a `--` to
