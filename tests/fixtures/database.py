@@ -180,6 +180,13 @@ def function_test_id(worker_id: str) -> IdFixture:
 class DatabaseTestConfiguration(FixtureTestUrlConfiguration):
     url: PostgresDsn
     create_database: bool = True
+    # When set, the database schema (and seed data) is assumed to have been applied
+    # externally before the tests run, so the fixtures use the database as-is instead of
+    # dropping and recreating the schema from the current models. This is used by the
+    # backwards-compatibility CI check, which runs a previous release's test suite against a
+    # schema built by the current code. See ``DatabaseFixture.fixture`` for the schema
+    # handling and ``tests/conftest.py`` for the matching test-selection behavior.
+    external_schema: bool = False
     model_config = SettingsConfigDict(env_prefix="PALACE_TEST_DATABASE_")
 
     @classmethod
@@ -199,12 +206,15 @@ class DatabaseCreationFixture:
     def __init__(self, test_id: IdFixture):
         self.test_id = test_id
         config = DatabaseTestConfiguration.from_env()
-        if not config.create_database and self.test_id.parallel:
+        self.external_schema = config.external_schema
+        # An externally provided schema must be used as-is, so database creation/teardown is
+        # disabled in that mode (the schema is also left untouched, see DatabaseFixture).
+        self.create_database = config.create_database and not config.external_schema
+        if not self.create_database and self.test_id.parallel:
             raise BasePalaceException(
                 "Database creation is disabled, but tests are running in parallel mode. "
                 "This is not supported. Please enable database creation or run tests in serial mode."
             )
-        self.create_database = config.create_database
         self._config_url = make_url(config.url)
 
     @cached_property
@@ -392,9 +402,15 @@ class DatabaseFixture:
     @contextmanager
     def fixture(cls, database_name: DatabaseCreationFixture) -> Generator[Self]:
         db_fixture = cls(database_name)
-        db_fixture.drop_existing_schema()
+        # In external-schema mode the schema and seed data are applied externally (the
+        # backwards-compatibility CI check runs an older release's tests against a schema
+        # built by the current code), so we leave the database untouched instead of dropping
+        # and recreating it from the current models.
+        if not database_name.external_schema:
+            db_fixture.drop_existing_schema()
         db_fixture._load_model_classes()
-        db_fixture._initialize_database()
+        if not database_name.external_schema:
+            db_fixture._initialize_database()
         try:
             yield db_fixture
         finally:

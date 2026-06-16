@@ -1,3 +1,4 @@
+import pytest
 from freezegun.config import configure as fg_configure
 from pytest import register_assert_rewrite
 
@@ -34,3 +35,20 @@ pytest_plugins = [
 # running Celery tests.
 # See: https://github.com/spulec/freezegun#ignore-packages
 fg_configure(extend_ignore_list=["pyinstrument", "celery"])
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_collection_modifyitems(
+    config: pytest.Config, items: list[pytest.Item]
+) -> None:
+    """Automatically apply the ``db`` marker to tests that use the ``db`` fixture.
+
+    Database-backed tests are too numerous to mark by hand, so we derive the marker from
+    fixture usage at collection time. This lets a run include or exclude them with ``-m db``
+    or ``-m 'not db'`` (e.g. the backwards-compatibility CI check runs ``-m db`` against an
+    externally applied schema). Runs ``tryfirst`` so the marker is present before pytest
+    evaluates any ``-m`` expression.
+    """
+    for item in items:
+        if "db" in getattr(item, "fixturenames", ()):
+            item.add_marker("db")

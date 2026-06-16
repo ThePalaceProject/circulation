@@ -382,6 +382,7 @@ filterwarnings = [
     "ignore::DeprecationWarning:onelogin.saml2",
 ]
 markers = [
+    "db: mark test as using the database (applied automatically to tests using the db fixture)",
     "minio: mark test as requiring minio",
     "opensearch: mark test as requiring opensearch",
 ]
