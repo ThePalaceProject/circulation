@@ -206,9 +206,15 @@ class DatabaseCreationFixture:
         self.test_id = test_id
         config = DatabaseTestConfiguration.from_env()
         self.external_schema = config.external_schema
-        # An externally provided schema must be used as-is, so database creation/teardown is
-        # disabled in that mode (the schema is also left untouched, see DatabaseFixture).
-        self.create_database = config.create_database and not config.external_schema
+        self.create_database = config.create_database
+        # External-schema mode uses the provided database and its schema as-is, so it is
+        # incompatible with creating a fresh database. Require the two settings to agree
+        # explicitly rather than silently overriding create_database.
+        if self.external_schema and self.create_database:
+            raise BasePalaceException(
+                "External schema mode (PALACE_TEST_DATABASE_EXTERNAL_SCHEMA) cannot create a "
+                "database. Set PALACE_TEST_DATABASE_CREATE_DATABASE=false to use the database as-is."
+            )
         if not self.create_database and self.test_id.parallel:
             raise BasePalaceException(
                 "Database creation is disabled, but tests are running in parallel mode. "
