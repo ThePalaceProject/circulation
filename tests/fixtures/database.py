@@ -180,12 +180,11 @@ def function_test_id(worker_id: str) -> IdFixture:
 class DatabaseTestConfiguration(FixtureTestUrlConfiguration):
     url: PostgresDsn
     create_database: bool = True
-    # When set, the database schema (and seed data) is assumed to have been applied
+    # When set, the database schema is assumed to have been applied
     # externally before the tests run, so the fixtures use the database as-is instead of
     # dropping and recreating the schema from the current models. This is used by the
     # backwards-compatibility CI check, which runs a previous release's test suite against a
-    # schema built by the current code. See ``DatabaseFixture.fixture`` for the schema
-    # handling and ``tests/conftest.py`` for the matching test-selection behavior.
+    # schema built by the current code.
     external_schema: bool = False
     model_config = SettingsConfigDict(env_prefix="PALACE_TEST_DATABASE_")
 
@@ -402,10 +401,8 @@ class DatabaseFixture:
     @contextmanager
     def fixture(cls, database_name: DatabaseCreationFixture) -> Generator[Self]:
         db_fixture = cls(database_name)
-        # In external-schema mode the schema and seed data are applied externally (the
-        # backwards-compatibility CI check runs an older release's tests against a schema
-        # built by the current code), so we leave the database untouched instead of dropping
-        # and recreating it from the current models.
+        # In external-schema mode the schema is set up externally, so we leave the
+        # database untouched instead of dropping and recreating it from the current models.
         if not database_name.external_schema:
             db_fixture.drop_existing_schema()
         db_fixture._load_model_classes()
