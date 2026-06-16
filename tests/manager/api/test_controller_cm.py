@@ -14,6 +14,9 @@ from palace.manager.feed.annotator.circulation import (
 )
 from palace.manager.feed.facets.feed import Facets
 from palace.manager.feed.worklist.base import WorkList
+from palace.manager.integration.patron_auth.anonymous_authentication import (
+    AnonymousAuthenticationProvider,
+)
 from palace.manager.integration.patron_auth.saml.controller import SAMLController
 from palace.manager.sqlalchemy.model.discovery_service_registration import (
     DiscoveryServiceRegistration,
@@ -173,6 +176,8 @@ class TestCirculationManager:
         )
         assert "All Books" == annotator.top_level_title()
         assert True == annotator.identifies_patrons
+        # A library that identifies patrons does not allow anonymous access.
+        assert annotator.allows_anonymous_access is False
 
         # Try again using a library that has no patron authentication.
         library2 = circulation_fixture.db.library()
@@ -191,6 +196,33 @@ class TestCirculationManager:
         # implies it has any way of authenticating or differentiating
         # between patrons.
         assert False == annotator.identifies_patrons
+        # But a library with no authentication configured is not the same
+        # as one that is explicitly anonymous, so anonymous access is not
+        # allowed either.
+        assert annotator.allows_anonymous_access is False
+
+        # A library explicitly configured for anonymous access produces an
+        # annotator that knows anonymous access is allowed (and, as always
+        # for anonymous access, that it does not identify patrons).
+        library3 = circulation_fixture.db.library()
+        lane3 = circulation_fixture.db.lane(library=library3)
+        assert library3.short_name is not None
+        circulation_fixture.manager.circulation_apis[library3.id] = object()
+        anonymous_authenticator = LibraryAuthenticator(
+            _db=circulation_fixture.db.session, library=library3
+        )
+        anonymous_authenticator.register_anonymous_provider(
+            MagicMock(spec=AnonymousAuthenticationProvider)
+        )
+        circulation_fixture.manager.auth.library_authenticators[library3.short_name] = (
+            anonymous_authenticator
+        )
+
+        annotator = circulation_fixture.manager.annotator(lane3, facets)
+        assert isinstance(annotator, LibraryAnnotator)
+        assert library3 == annotator.library
+        assert annotator.identifies_patrons is False
+        assert annotator.allows_anonymous_access is True
 
         # Any extra positional or keyword arguments passed into annotator()
         # are propagated to the Annotator constructor.
