@@ -360,6 +360,16 @@ MULTIPLE_BASIC_AUTH_SERVICES = pd(
     ),
 )
 
+EXCLUSIVE_ANONYMOUS_AUTH_SERVICE = pd(
+    "http://librarysimplified.org/terms/problem/exclusive-anonymous-auth-service",
+    status_code=400,
+    title=_("Anonymous access cannot be combined with other authentication"),
+    detail=_(
+        "A library configured for anonymous access cannot have any other patron "
+        "authentication service."
+    ),
+)
+
 NO_SUCH_PATRON = pd(
     "http://librarysimplified.org/terms/problem/no-such-patron",
     status_code=404,
