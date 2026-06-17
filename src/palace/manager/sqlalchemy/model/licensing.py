@@ -1268,15 +1268,23 @@ class LicensePool(Base):
             # itself. All other LicensePools need to be kicked out and
             # associated with some other work.
             #
-            # This won't cause an infinite recursion because we're
-            # setting pool.work to None before calling
-            # pool.calculate_work(), and the recursive call only
-            # happens if self.work is set.
+            # We clear both pool.work *and* pool.presentation_edition.work
+            # before the recursive call. Clearing only pool.work is not
+            # enough: calculate_work() re-resolves a pool's work from its
+            # presentation edition (the ``elif presentation_edition.work``
+            # branch below), so if the edition still pointed at this Work the
+            # recursive call would re-adopt it and kick *self* back out,
+            # ping-ponging until the stack was exhausted (a RecursionError
+            # observed in production). This mirrors how
+            # Work.make_exclusive_open_access_for_permanent_work_id kicks
+            # pools out.
             for pool in list(work.license_pools):
                 if pool is self:
                     continue
                 if not (self.open_access and pool.open_access):
                     pool.work = None
+                    if pool.presentation_edition:
+                        pool.presentation_edition.work = None
                     pool.calculate_work(
                         exclude_search=exclude_search, even_if_no_title=even_if_no_title
                     )
