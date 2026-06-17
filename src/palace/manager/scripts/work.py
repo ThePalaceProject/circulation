@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import sys
 from collections.abc import Iterator, Sequence
 from typing import Any
@@ -8,13 +9,17 @@ from sqlalchemy.orm import Query, Session
 
 from palace.util.exceptions import PalaceValueError
 
-from palace.manager.celery.tasks.work import classify_unchecked_subjects
+from palace.manager.celery.tasks.work import (
+    classify_unchecked_subjects,
+    reclassify_null_audience_works,
+)
 from palace.manager.data_layer.policy.presentation import (
     PresentationCalculationPolicy,
 )
 from palace.manager.scripts.base import Script
 from palace.manager.scripts.input import IdentifierInputScript, SupportsReadlines
 from palace.manager.scripts.timestamp import TimestampScript
+from palace.manager.service.celery.celery import QueueNames
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import LicensePool
@@ -247,3 +252,167 @@ class WorkOPDSScript(WorkPresentationScript):
         choose_cover=False,
         update_search_index=True,
     )
+
+
+class ReclassifyNullAudienceWorksScript(Script):
+    """Manually (re)classify Works whose ``audience`` is ``NULL``.
+
+    This mirrors the one-time :func:`reclassify_null_audience_works` Celery task
+    (dispatched by the ``2026_05_12_reclassify_fb_misclassified_works`` startup
+    task) so the repair can be triggered on demand -- for example, to confirm on
+    a live instance that recalculating presentation actually clears the ``NULL``
+    audiences left behind by the FB BISAC mis-classification repair, or to finish
+    a repair run that did not complete.
+
+    Modes:
+
+    * (default) -- queue the ``reclassify_null_audience_works`` Celery task for a
+      worker to process.
+    * ``--inline`` -- recalculate synchronously in this process. This does not
+      depend on a worker consuming the queue, runs to completion before
+      returning, and reports which works were fixed and which stayed ``NULL``.
+    * ``--dry-run`` -- only report how many works have a ``NULL`` audience.
+
+    Note: like the Celery task, this uses the ``recalculate_classification``
+    policy, which updates the database but does **not** flag works for a search
+    index update -- a separate reindex is needed for the new audiences to appear
+    in patron-facing search.
+
+    TODO: Remove along with the rest of the one-time FB BISAC repair tooling
+    (see PP-4330).
+    """
+
+    name = "Reclassify works whose audience is NULL."
+
+    @classmethod
+    def arg_parser(cls, _db: Session) -> argparse.ArgumentParser:
+        parser = argparse.ArgumentParser(
+            description="Reclassify works whose audience is NULL."
+        )
+        parser.add_argument(
+            "--dry-run",
+            action="store_true",
+            help="Report how many works have a NULL audience, then exit without "
+            "changing anything or queuing the task.",
+        )
+        parser.add_argument(
+            "--inline",
+            action="store_true",
+            help="Recalculate presentation synchronously in this process instead "
+            "of queuing the Celery task. Useful for a controlled live test, since "
+            "it does not depend on a worker and reports its results.",
+        )
+        parser.add_argument(
+            "--limit",
+            type=int,
+            default=None,
+            help="In --inline mode, process at most this many works (useful for a "
+            "small sample test before a full run). Ignored without --inline.",
+        )
+        return parser
+
+    def do_run(self, *args: str) -> None:
+        parsed = self.parse_command_line(self._db, cmd_args=list(args) or None)
+
+        before = self._null_audience_count()
+        self.log.info("Works with a NULL audience: %d", before)
+        if before == 0:
+            self.log.info("Nothing to do.")
+            return
+
+        sample = [
+            work_id
+            for (work_id,) in (
+                self._db.query(Work.id)
+                .filter(Work.audience.is_(None))
+                .order_by(Work.id)
+                .limit(20)
+            )
+        ]
+        self.log.info(
+            "Sample of NULL-audience work ids (first %d): %s", len(sample), sample
+        )
+
+        if parsed.dry_run:
+            self.log.info(
+                "--dry-run: leaving works untouched and not queuing the task."
+            )
+            return
+
+        if parsed.inline:
+            self._run_inline(limit=parsed.limit)
+        else:
+            reclassify_null_audience_works.delay()
+            self.log.info(
+                'Queued the "reclassify_null_audience_works" task on the "%s" '
+                "queue. Make sure a worker is consuming that queue, then re-run "
+                "this script with --dry-run to watch the count fall. See the celery "
+                "logs for task execution details.",
+                QueueNames.default,
+            )
+
+    def _null_audience_count(self) -> int:
+        """Count the works whose audience is currently NULL."""
+        return self._db.query(Work).filter(Work.audience.is_(None)).count()
+
+    def _run_inline(self, *, limit: int | None) -> None:
+        """Recalculate presentation for NULL-audience works in this process.
+
+        Mirrors :func:`reclassify_null_audience_works`: walk works with a NULL
+        audience in ascending id order, calling ``calculate_presentation`` with
+        the classification policy and committing after each so progress survives
+        an interruption. The id cursor means a work that stays NULL (because it
+        has no usable audience classification) is visited once and then skipped;
+        such works are reported, since they indicate a different problem than the
+        one this repair addresses.
+        """
+        policy = PresentationCalculationPolicy.recalculate_classification()
+        processed = 0
+        fixed = 0
+        still_null: list[int] = []
+        last_id: int | None = None
+
+        while limit is None or processed < limit:
+            query = (
+                self._db.query(Work).filter(Work.audience.is_(None)).order_by(Work.id)
+            )
+            if last_id is not None:
+                query = query.filter(Work.id > last_id)
+            work = query.first()
+            if work is None:
+                break
+
+            last_id = work.id
+            work.calculate_presentation(policy=policy)
+            self._db.commit()
+
+            processed += 1
+            if work.audience is None:
+                still_null.append(work.id)
+            else:
+                fixed += 1
+
+            if processed % 100 == 0:
+                self.log.info(
+                    "Processed %d works (%d fixed, %d still NULL)...",
+                    processed,
+                    fixed,
+                    len(still_null),
+                )
+
+        self.log.info(
+            "Inline reclassification done. Processed %d work(s): %d now have an "
+            "audience, %d are still NULL.",
+            processed,
+            fixed,
+            len(still_null),
+        )
+        if still_null:
+            self.log.warning(
+                "%d processed work(s) are still NULL after reclassification. These "
+                "are NOT fixed by this repair -- they have no usable audience "
+                "classification, which points to a separate (import-time) issue. "
+                "First ids: %s",
+                len(still_null),
+                still_null[:50],
+            )
