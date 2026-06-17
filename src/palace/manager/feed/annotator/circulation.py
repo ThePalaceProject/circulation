@@ -545,8 +545,9 @@ class CirculationManagerAnnotator(Annotator):
 
         # If this is an open-access book, add an open-access link for
         # every delivery mechanism with an associated resource.
-        # But only if this library allows it, generally this is if
-        # a library has no patron authentication attached to it
+        # But only if the caller allows it (add_open_access_links); for
+        # a library this is true only when it is explicitly configured
+        # for anonymous access.
         if (
             add_open_access_links
             and active_license_pool
