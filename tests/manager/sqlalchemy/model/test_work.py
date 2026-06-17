@@ -18,6 +18,9 @@ from palace.manager.core.equivalents_coverage import (
     EquivalentIdentifiersCoverageProvider,
 )
 from palace.manager.core.exceptions import InconsistentLicensePoolState
+from palace.manager.data_layer.policy.presentation import (
+    PresentationCalculationPolicy,
+)
 from palace.manager.service.redis.models.search import WaitingForIndexing
 from palace.manager.sqlalchemy.model.classification import Genre, Subject
 from palace.manager.sqlalchemy.model.contributor import Contributor
@@ -352,6 +355,40 @@ class TestWork:
         work.calculate_presentation()
 
         assert default_audience == work.audience
+
+    def test_calculate_presentation_defaults_audience_to_adult_not_null(
+        self, db: DatabaseTransactionFixture
+    ):
+        # Regression (FB BISAC repair, PP-4204): recalculating an evidence-less
+        # Work that has no collection-level default audience must yield
+        # AUDIENCE_ADULT, never NULL. Recalculation must never *erase* a Work's
+        # audience -- the bug that made bulk reclassification turn non-null
+        # audiences into null.
+        work = db.work(with_license_pool=True)
+        assert not work.license_pools[0].collection.default_audience
+        work.audience = None
+        db.session.commit()
+
+        work.calculate_presentation(
+            policy=PresentationCalculationPolicy.recalculate_classification()
+        )
+
+        assert work.audience == Classifier.AUDIENCE_ADULT
+
+    def test_assign_genres_does_not_overwrite_audience_with_null(
+        self, db: DatabaseTransactionFixture
+    ):
+        # Defensive invariant: when a recalculation pass produces no audience
+        # (e.g. it gathered no usable classifications), a previously-determined
+        # audience must be kept rather than overwritten with NULL.
+        work = db.work(with_license_pool=True)
+        work.audience = Classifier.AUDIENCE_CHILDREN
+        db.session.commit()
+
+        # Force the no-evidence + null-default path directly.
+        work.assign_genres(work._direct_identifier_ids, default_audience=None)
+
+        assert work.audience == Classifier.AUDIENCE_CHILDREN
 
     def test__choose_summary(self, db: DatabaseTransactionFixture):
         # Test the _choose_summary helper method, called by
