@@ -480,8 +480,8 @@ class LoanController(CirculationManagerController):
         # The library is explicitly anonymous, so no individual patron can be
         # identified and no Loan can be created. Whether direct fulfillment is
         # acceptable is up to the CirculationAPI object. Most of them will say
-        # no. (This would indicate that the collection is improperly associated
-        # with a library that doesn't identify its patrons.)
+        # no, since most content requires a loan; typically only open-access
+        # titles can be fulfilled this way.
         return self.circulation.can_fulfill_without_loan(patron, pool, lpdm)
 
     def revoke(self, license_pool_id: int) -> OPDSEntryResponse | ProblemDetail:
