@@ -67,6 +67,9 @@ from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.core.exceptions import IntegrationException
 from palace.manager.core.user_profile import ProfileController
 from palace.manager.integration.goals import Goals
+from palace.manager.integration.patron_auth.anonymous_authentication import (
+    AnonymousAuthenticationProvider,
+)
 from palace.manager.integration.patron_auth.millenium_patron import (
     MilleniumPatronAPI,
     MilleniumPatronSettings,
@@ -877,6 +880,109 @@ class TestLibraryAuthenticator:
         with pytest.raises(CannotLoadConfiguration) as excinfo:
             authenticator.register_basic_auth_provider(basic2)
         assert "Two basic auth providers configured" in str(excinfo.value)
+
+    def test_allows_anonymous_access(self, db: DatabaseTransactionFixture):
+        # The mere absence of authentication providers does not grant
+        # anonymous access -- that requires an explicit anonymous provider.
+        authenticator = LibraryAuthenticator(
+            _db=db.session,
+            library=db.default_library(),
+        )
+        assert authenticator.allows_anonymous_access is False
+
+        # An anonymous provider does not count as "patron authentication"
+        # and is kept out of the providers iterator (so it contributes no
+        # auth-document flow), but it does flip allows_anonymous_access.
+        anonymous = MagicMock(spec=AnonymousAuthenticationProvider)
+        authenticator.register_anonymous_provider(anonymous)
+        assert authenticator.allows_anonymous_access is True
+        assert authenticator.supports_patron_authentication is False
+        assert authenticator.identifies_individuals is False
+        assert anonymous not in list(authenticator.providers)
+
+    def test_register_provider_anonymous(self, db: DatabaseTransactionFixture):
+        library = db.default_library()
+        integration = db.auth_integration(AnonymousAuthenticationProvider, library)
+        library_integration = integration.for_library(library)
+        assert isinstance(library_integration, IntegrationLibraryConfiguration)
+        auth = LibraryAuthenticator(_db=db.session, library=library)
+        auth.register_provider(library_integration)
+        assert isinstance(auth.anonymous_provider, AnonymousAuthenticationProvider)
+        assert auth.allows_anonymous_access is True
+
+    def test_anonymous_provider_registration_is_idempotent(
+        self, db: DatabaseTransactionFixture
+    ):
+        authenticator = LibraryAuthenticator(
+            _db=db.session,
+            library=db.default_library(),
+        )
+        anonymous1 = MagicMock(spec=AnonymousAuthenticationProvider)
+        anonymous2 = MagicMock(spec=AnonymousAuthenticationProvider)
+
+        # Registering the same anonymous provider twice is fine.
+        authenticator.register_anonymous_provider(anonymous1)
+        authenticator.register_anonymous_provider(anonymous1)
+
+        # But a second, different anonymous provider is rejected.
+        with pytest.raises(CannotLoadConfiguration) as excinfo:
+            authenticator.register_anonymous_provider(anonymous2)
+        assert "Two anonymous access providers configured" in str(excinfo.value)
+
+    @pytest.mark.parametrize("anonymous_first", [True, False])
+    def test_anonymous_and_identifying_providers_are_mutually_exclusive(
+        self,
+        db: DatabaseTransactionFixture,
+        mock_basic: MockBasicFixture,
+        anonymous_first: bool,
+    ):
+        # Anonymous access cannot coexist with any identifying provider,
+        # regardless of the order in which they are registered.
+        authenticator = LibraryAuthenticator(
+            _db=db.session,
+            library=db.default_library(),
+        )
+        anonymous = MagicMock(spec=AnonymousAuthenticationProvider)
+        basic = mock_basic()
+
+        with pytest.raises(CannotLoadConfiguration) as excinfo:
+            if anonymous_first:
+                authenticator.register_anonymous_provider(anonymous)
+                authenticator.register_basic_auth_provider(basic)
+            else:
+                authenticator.register_basic_auth_provider(basic)
+                authenticator.register_anonymous_provider(anonymous)
+        assert "Anonymous access cannot be combined" in str(excinfo.value)
+
+    @pytest.mark.parametrize(
+        "provider_spec, register_method",
+        [
+            (BaseSAMLAuthenticationProvider, "register_saml_provider"),
+            (BaseOIDCAuthenticationProvider, "register_oidc_provider"),
+        ],
+    )
+    def test_anonymous_provider_excludes_oauth_provider(
+        self,
+        db: DatabaseTransactionFixture,
+        provider_spec: type[
+            BaseSAMLAuthenticationProvider | BaseOIDCAuthenticationProvider
+        ],
+        register_method: str,
+    ):
+        # An already-registered anonymous provider blocks every identifying
+        # OAuth-style provider (SAML and OIDC), via the guard shared by their
+        # register_* methods.
+        authenticator = LibraryAuthenticator(
+            _db=db.session,
+            library=db.default_library(),
+        )
+        authenticator.register_anonymous_provider(
+            MagicMock(spec=AnonymousAuthenticationProvider)
+        )
+        provider = MagicMock(spec=provider_spec)
+        with pytest.raises(CannotLoadConfiguration) as excinfo:
+            getattr(authenticator, register_method)(provider)
+        assert "Anonymous access cannot be combined" in str(excinfo.value)
 
     def test_authenticated_patron_basic(
         self, db: DatabaseTransactionFixture, mock_basic: MockBasicFixture

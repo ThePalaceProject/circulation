@@ -467,19 +467,21 @@ class LoanController(CirculationManagerController):
         :param lpdm: A LicensePoolDeliveryMechanism.
         """
         authenticator = self.manager.auth.library_authenticators.get(library.short_name)
-        if authenticator and authenticator.identifies_individuals:
-            # This library identifies individual patrons, so there is
-            # no reason to fulfill books without a loan. Even if the
-            # books are free and the 'loans' are nominal, having a
-            # Loan object makes it possible for a patron to sync their
-            # collection across devices, so that's the way we do it.
+        if not (authenticator and authenticator.allows_anonymous_access):
+            # Unless the library is explicitly configured for anonymous
+            # access, we never fulfill without a loan. This covers libraries
+            # that identify individual patrons (for whom a Loan object is
+            # always worthwhile, since it lets a patron sync their collection
+            # across devices even when the books are free) as well as
+            # libraries that are unconfigured or being decommissioned, which
+            # should not be serving content at all.
             return False
 
-        # If the library doesn't require that individual patrons
-        # identify themselves, it's up to the CirculationAPI object.
-        # Most of them will say no. (This would indicate that the
-        # collection is improperly associated with a library that
-        # doesn't identify its patrons.)
+        # The library is explicitly anonymous, so no individual patron can be
+        # identified and no Loan can be created. Whether direct fulfillment is
+        # acceptable is up to the CirculationAPI object. Most of them will say
+        # no, since most content requires a loan; typically only open-access
+        # titles can be fulfilled this way.
         return self.circulation.can_fulfill_without_loan(patron, pool, lpdm)
 
     def revoke(self, license_pool_id: int) -> OPDSEntryResponse | ProblemDetail:

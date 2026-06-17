@@ -13,6 +13,7 @@ from palace.manager.api.admin.controller.integration_settings import (
 )
 from palace.manager.api.admin.form_data import ProcessFormData
 from palace.manager.api.admin.problem_details import (
+    EXCLUSIVE_ANONYMOUS_AUTH_SERVICE,
     FAILED_TO_RUN_SELF_TESTS,
     INVALID_CONFIGURATION_OPTION,
     MULTIPLE_BASIC_AUTH_SERVICES,
@@ -28,6 +29,9 @@ from palace.manager.api.authentication.patron_blocking_rules.rule_engine import 
     validate_rule_expression,
 )
 from palace.manager.integration.goals import Goals
+from palace.manager.integration.patron_auth.anonymous_authentication import (
+    AnonymousAuthenticationProvider,
+)
 from palace.manager.integration.settings import BaseSettings
 from palace.manager.sqlalchemy.listeners import site_configuration_has_changed
 from palace.manager.sqlalchemy.model.integration import (
@@ -48,6 +52,14 @@ class PatronAuthServicesController(
             name
             for name, api in self.registry
             if issubclass(api, BasicAuthenticationProvider)
+        }
+
+    @property
+    def anonymous_auth_protocols(self) -> set[str]:
+        return {
+            name
+            for name, api in self.registry
+            if issubclass(api, AnonymousAuthenticationProvider)
         }
 
     def process_patron_auth_services(self) -> Response | ProblemDetail:
@@ -103,24 +115,45 @@ class PatronAuthServicesController(
         """Validate a library integration after its settings have been saved.
 
         Ensures the library does not end up with more than one basic-auth
-        patron authentication service.
+        patron authentication service, and that anonymous access is not
+        combined with any other patron authentication service.
         """
         library = integration.library
-        basic_auth_integrations = (
+        patron_auth_query = (
             self._db.query(IntegrationConfiguration)
             .join(IntegrationLibraryConfiguration)
             .filter(
                 IntegrationLibraryConfiguration.library_id == library.id,
                 IntegrationConfiguration.goal == Goals.PATRON_AUTH_GOAL,
-                IntegrationConfiguration.protocol.in_(self.basic_auth_protocols),
             )
-            .count()
         )
+
+        basic_auth_integrations = patron_auth_query.filter(
+            IntegrationConfiguration.protocol.in_(self.basic_auth_protocols)
+        ).count()
         if basic_auth_integrations > 1:
             raise ProblemDetailException(
                 MULTIPLE_BASIC_AUTH_SERVICES.detailed(
                     "You tried to add a patron authentication service that uses basic auth "
                     f"to {library.short_name}, but it already has one."
+                )
+            )
+
+        # Anonymous access is mutually exclusive with every other kind of
+        # patron authentication. Reject the configuration here so it never
+        # reaches LibraryAuthenticator, where the conflict would otherwise be
+        # resolved unpredictably depending on integration load order.
+        anonymous_auth_integrations = patron_auth_query.filter(
+            IntegrationConfiguration.protocol.in_(self.anonymous_auth_protocols)
+        ).count()
+        total_patron_auth_integrations = patron_auth_query.count()
+        if anonymous_auth_integrations >= 1 and total_patron_auth_integrations > 1:
+            raise ProblemDetailException(
+                EXCLUSIVE_ANONYMOUS_AUTH_SERVICE.detailed(
+                    "You tried to configure anonymous access for "
+                    f"{library.short_name} alongside another patron authentication "
+                    "service. Anonymous access cannot be combined with any other "
+                    "authentication provider."
                 )
             )
 

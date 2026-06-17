@@ -16,6 +16,7 @@ from palace.manager.api.admin.controller.patron_auth_services import (
 from palace.manager.api.admin.exceptions import AdminNotAuthorized
 from palace.manager.api.admin.problem_details import (
     CANNOT_CHANGE_PROTOCOL,
+    EXCLUSIVE_ANONYMOUS_AUTH_SERVICE,
     FAILED_TO_RUN_SELF_TESTS,
     INCOMPLETE_CONFIGURATION,
     INTEGRATION_NAME_ALREADY_IN_USE,
@@ -42,6 +43,9 @@ from palace.manager.api.authentication.patron_blocking_rules.mixin import (
 from palace.manager.core.problem_details import INVALID_INPUT
 from palace.manager.core.selftest import HasSelfTests
 from palace.manager.integration.goals import Goals
+from palace.manager.integration.patron_auth.anonymous_authentication import (
+    AnonymousAuthenticationProvider,
+)
 from palace.manager.integration.patron_auth.millenium_patron import (
     AuthenticationMode,
     MilleniumPatronAPI,
@@ -315,7 +319,7 @@ class TestPatronAuth:
 
         protocols = response_data.get("protocols")
         assert isinstance(protocols, list)
-        assert len(protocols) == 8
+        assert len(protocols) == 9
         assert "settings" in protocols[0]
         assert "library_settings" in protocols[0]
 
@@ -717,6 +721,76 @@ class TestPatronAuth:
             response = controller.process_patron_auth_services()
         assert isinstance(response, ProblemDetail)
         assert response.uri == MULTIPLE_BASIC_AUTH_SERVICES.uri
+
+    def test_patron_auth_services_post_anonymous_alongside_existing_basic(
+        self,
+        controller_fixture: ControllerFixture,
+        flask_app_fixture: FlaskAppFixture,
+        db: DatabaseTransactionFixture,
+        default_library: Library,
+    ):
+        # Anonymous access cannot be added to a library that already has an
+        # identifying patron authentication service.
+        controller = controller_fixture.controller
+        db.simple_auth_integration(default_library)
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
+            flask.request.form = ImmutableMultiDict(
+                [
+                    ("name", "anonymous access"),
+                    (
+                        "protocol",
+                        controller_fixture.get_protocol(
+                            AnonymousAuthenticationProvider
+                        ),
+                    ),
+                    (
+                        "libraries",
+                        json.dumps([{"short_name": default_library.short_name}]),
+                    ),
+                ]
+            )
+            response = controller.process_patron_auth_services()
+        assert isinstance(response, ProblemDetail)
+        assert response.uri == EXCLUSIVE_ANONYMOUS_AUTH_SERVICE.uri
+
+    def test_patron_auth_services_post_basic_alongside_existing_anonymous(
+        self,
+        controller_fixture: ControllerFixture,
+        flask_app_fixture: FlaskAppFixture,
+        db: DatabaseTransactionFixture,
+        default_library: Library,
+        common_args: list[tuple[str, str]],
+    ):
+        # An identifying patron authentication service cannot be added to a
+        # library that is already configured for anonymous access.
+        controller = controller_fixture.controller
+        db.auth_integration(AnonymousAuthenticationProvider, default_library)
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
+            flask.request.form = ImmutableMultiDict(
+                [
+                    ("name", "testing auth name"),
+                    (
+                        "protocol",
+                        controller_fixture.get_protocol(SimpleAuthenticationProvider),
+                    ),
+                    (
+                        "libraries",
+                        json.dumps(
+                            [
+                                {
+                                    "short_name": default_library.short_name,
+                                    "library_identifier_restriction_type": LibraryIdentifierRestriction.NONE.value,
+                                    "library_identifier_field": "barcode",
+                                }
+                            ]
+                        ),
+                    ),
+                ]
+                + common_args
+            )
+            response = controller.process_patron_auth_services()
+        assert isinstance(response, ProblemDetail)
+        assert response.uri == EXCLUSIVE_ANONYMOUS_AUTH_SERVICE.uri
 
     def test_patron_auth_services_post_invalid_library_identifier_restriction_regex(
         self,

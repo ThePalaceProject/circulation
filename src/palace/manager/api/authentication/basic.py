@@ -38,6 +38,7 @@ from palace.manager.api.authentication.base import (
     PatronData,
     PatronLookupNotSupported,
 )
+from palace.manager.api.authentication.opds import OPDSAuthenticationFlow
 from palace.manager.api.authentication.patron_blocking_rules.mixin import (
     HasPatronBlockingRules,
 )
@@ -405,7 +406,11 @@ class BasicAuthProviderLibrarySettings(AuthProviderLibrarySettings):
 class BasicAuthenticationProvider[
     SettingsType: BasicAuthProviderSettings,
     LibrarySettingsType: BasicAuthProviderLibrarySettings,
-](AuthenticationProvider[SettingsType, LibrarySettingsType], ABC):
+](
+    AuthenticationProvider[SettingsType, LibrarySettingsType],
+    OPDSAuthenticationFlow,
+    ABC,
+):
     """Verify a username/password, obtained through HTTP Basic Auth, with
     a remote source of truth.
     """

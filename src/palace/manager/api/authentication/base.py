@@ -15,7 +15,6 @@ from palace.util.datetime_helpers import utc_now
 from palace.util.exceptions import BasePalaceException
 from palace.util.log import LoggerMixin
 
-from palace.manager.api.authentication.opds import OPDSAuthenticationFlow
 from palace.manager.core.selftest import HasSelfTests
 from palace.manager.integration.base import HasLibraryIntegrationConfiguration
 from palace.manager.integration.settings import BaseSettings
@@ -73,13 +72,19 @@ LibrarySettingsType = TypeVar(
 
 
 class AuthenticationProvider(
-    OPDSAuthenticationFlow,
     HasLibraryIntegrationConfiguration[SettingsType, LibrarySettingsType],
     HasSelfTests,
     LoggerMixin,
     ABC,
 ):
-    """Handle a specific patron authentication scheme."""
+    """Handle a specific patron authentication scheme.
+
+    Most providers also advertise themselves as an Authentication Flow in the
+    Authentication For OPDS document by additionally inheriting
+    :class:`~palace.manager.api.authentication.opds.OPDSAuthenticationFlow`.
+    That is a separate, opt-in capability: a provider that never advertises a
+    flow (such as anonymous access) simply does not inherit it.
+    """
 
     def __init__(
         self,
