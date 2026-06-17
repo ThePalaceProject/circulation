@@ -18,6 +18,7 @@ from palace.manager.api.authentication.base import (
     AuthProviderSettings,
 )
 from palace.manager.api.authentication.basic import BasicAuthenticationProvider
+from palace.manager.api.authentication.opds import OPDSAuthenticationFlow
 from palace.manager.core.selftest import SelfTestResult
 from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.sqlalchemy.util import get_one
@@ -28,7 +29,8 @@ if TYPE_CHECKING:
 
 
 class BasicTokenAuthenticationProvider(
-    AuthenticationProvider[AuthProviderSettings, AuthProviderLibrarySettings]
+    AuthenticationProvider[AuthProviderSettings, AuthProviderLibrarySettings],
+    OPDSAuthenticationFlow,
 ):
     """Patron Authentication based on a CM generated Access Token
     It is a companion to the basic authentication, and has no meaning without it.

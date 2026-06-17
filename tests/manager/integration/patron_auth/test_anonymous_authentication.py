@@ -2,12 +2,11 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-from palace.opds.authentication.document import PalaceAuthentication
-
 from palace.manager.api.authentication.base import (
     AuthProviderLibrarySettings,
     AuthProviderSettings,
 )
+from palace.manager.api.authentication.opds import OPDSAuthenticationFlow
 from palace.manager.integration.patron_auth.anonymous_authentication import (
     AnonymousAuthenticationProvider,
 )
@@ -51,11 +50,9 @@ class TestAnonymousAuthenticationProvider:
         # The provider has nothing to self-test.
         assert list(self._provider()._run_self_tests(MagicMock())) == []
 
-    def test_flow_document(self) -> None:
-        # The flow document exists only to satisfy the interface; anonymous
-        # access is never advertised as an authentication flow because the
-        # provider is excluded from LibraryAuthenticator.providers.
-        provider = self._provider()
-        flow = provider._authentication_flow_document(MagicMock())
-        assert isinstance(flow, PalaceAuthentication)
-        assert flow.type == provider.flow_type
+    def test_is_not_an_opds_authentication_flow(self) -> None:
+        # Anonymous access has no authentication flow to advertise, so unlike
+        # the identifying providers it is deliberately not an
+        # OPDSAuthenticationFlow and never appears in an Authentication For
+        # OPDS document.
+        assert not isinstance(self._provider(), OPDSAuthenticationFlow)

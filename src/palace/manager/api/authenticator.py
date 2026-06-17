@@ -34,6 +34,7 @@ from palace.manager.api.authentication.basic import BasicAuthenticationProvider
 from palace.manager.api.authentication.basic_token import (
     BasicTokenAuthenticationProvider,
 )
+from palace.manager.api.authentication.opds import OPDSAuthenticationFlow
 from palace.manager.api.config import Configuration
 from palace.manager.api.problem_details import (
     INVALID_SAML_BEARER_TOKEN,
@@ -891,6 +892,7 @@ class LibraryAuthenticator(LoggerMixin):
             authentication=[
                 provider.authentication_flow_document(self._db)
                 for provider in self.providers
+                if isinstance(provider, OPDSAuthenticationFlow)
             ],
             links=links,
             # The library's mobile color scheme, if it has one.
@@ -947,7 +949,11 @@ class LibraryAuthenticator(LoggerMixin):
 
 class BaseSAMLAuthenticationProvider[
     SettingsType: AuthProviderSettings, LibrarySettingsType: AuthProviderLibrarySettings
-](AuthenticationProvider[SettingsType, LibrarySettingsType], ABC):
+](
+    AuthenticationProvider[SettingsType, LibrarySettingsType],
+    OPDSAuthenticationFlow,
+    ABC,
+):
     """
     Base class for SAML authentication providers
     """
@@ -959,7 +965,11 @@ class BaseSAMLAuthenticationProvider[
 
 class BaseOIDCAuthenticationProvider[
     SettingsType: AuthProviderSettings, LibrarySettingsType: AuthProviderLibrarySettings
-](AuthenticationProvider[SettingsType, LibrarySettingsType], ABC):
+](
+    AuthenticationProvider[SettingsType, LibrarySettingsType],
+    OPDSAuthenticationFlow,
+    ABC,
+):
     """Base class for OIDC authentication providers."""
 
     @property

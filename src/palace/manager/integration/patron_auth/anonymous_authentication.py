@@ -6,8 +6,6 @@ from typing import Any
 from sqlalchemy.orm import Session
 from werkzeug.datastructures import Authorization
 
-from palace.opds.authentication.document import PalaceAuthentication
-
 from palace.manager.api.authentication.base import (
     AuthenticationProvider,
     AuthProviderLibrarySettings,
@@ -38,6 +36,11 @@ class AnonymousAuthenticationProvider(
     It cannot be combined with any other authentication provider; the
     :class:`~palace.manager.api.authenticator.LibraryAuthenticator` enforces
     that mutual exclusion at configuration-load time.
+
+    Unlike the identifying providers, this one is deliberately *not* an
+    :class:`~palace.manager.api.authentication.opds.OPDSAuthenticationFlow`: it
+    has no authentication flow to advertise, so it never appears in a library's
+    Authentication For OPDS document.
     """
 
     @classmethod
@@ -65,17 +68,6 @@ class AnonymousAuthenticationProvider(
     @property
     def identifies_individuals(self) -> bool:
         return False
-
-    @property
-    def flow_type(self) -> str:
-        return "http://palaceproject.io/authtype/anonymous"
-
-    def _authentication_flow_document(self, _db: Session) -> PalaceAuthentication:
-        # Anonymous access is never advertised as an authentication flow: the
-        # provider is excluded from ``LibraryAuthenticator.providers``, so this
-        # is never rendered into an Authentication For OPDS document. It exists
-        # only to satisfy the abstract interface.
-        return PalaceAuthentication(type=self.flow_type, description=self.label())
 
     def _run_self_tests(self, _db: Session) -> Generator[SelfTestResult]:
         # Anonymous access has nothing to test.
