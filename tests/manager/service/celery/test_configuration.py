@@ -87,15 +87,12 @@ class TestCeleryConfiguration:
         result = config.model_dump()
 
         broker_options = result["broker_transport_options"]
-        assert broker_options["socket_keepalive"] is True
         assert broker_options["health_check_interval"] == 30
-        assert "broker_transport_options_socket_keepalive" not in result
         assert "broker_transport_options_health_check_interval" not in result
 
         # These look superficially like transport-option keys but must stay
         # top-level; if extract_keys_by_prefix ever swallowed them (e.g. by
         # matching on "result_backend_") these lookups would KeyError.
-        assert result["redis_socket_keepalive"] is True
         assert result["redis_backend_health_check_interval"] == 30
         assert result["result_backend_always_retry"] is True
         assert result["result_backend_max_retries"] == 3

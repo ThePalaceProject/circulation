@@ -4,11 +4,10 @@ from palace.manager.service.redis.container import RedisContainer
 
 class TestRedisConfiguration:
     def test_connection_resilience_defaults(self) -> None:
-        # The connection-resilience knobs default on, with a 30s health-check
-        # interval. These defaults are what keep the connection pool from getting
-        # stuck handing out stale sockets after a Redis restart.
+        # health_check_interval defaults to 30s -- this is what keeps the
+        # connection pool from getting stuck handing out stale sockets after a
+        # Redis restart.
         config = RedisConfiguration(url="redis://localhost:6379/0")
-        assert config.socket_keepalive is True
         assert config.health_check_interval == 30
 
 
@@ -22,5 +21,4 @@ class TestRedisContainer:
             RedisConfiguration(url="redis://localhost:6379/0").model_dump()
         )
         pool = container.connection_pool()
-        assert pool.connection_kwargs["socket_keepalive"] is True
         assert pool.connection_kwargs["health_check_interval"] == 30
