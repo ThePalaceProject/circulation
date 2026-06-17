@@ -126,6 +126,16 @@ class TestOPDSFeedProtocol:
         assert response.status_code == 204
         assert dict(description="Test OPDS Message", urn="URN") == response.json
 
+        # A caller-supplied status (e.g. the 200/201 used for a successful
+        # borrow) must not collide with the message's own status code. The
+        # message's status code wins, since it represents an error condition.
+        response = BaseOPDSFeed.entry_as_response(
+            OPDSMessage("URN", 403, "Test OPDS Message"),
+            status=201,
+        )
+        assert isinstance(response, OPDSEntryResponse)
+        assert response.status_code == 403
+
 
 class MockAnnotator(CirculationManagerAnnotator):
     def __init__(self):

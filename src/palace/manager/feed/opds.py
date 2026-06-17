@@ -79,6 +79,12 @@ class BaseOPDSFeed(FeedInterface, LoggerMixin):
     ) -> OPDSEntryResponse:
         serializer = get_serializer(mime_types)
         if isinstance(entry, OPDSMessage):
+            # An OPDSMessage represents an error condition, so its own
+            # status code takes precedence over any status supplied by the
+            # caller (e.g. the 200/201 used for a successful borrow). Drop a
+            # caller-supplied status to avoid passing ``status`` twice to
+            # OPDSEntryResponse.
+            response_kwargs.pop("status", None)
             return OPDSEntryResponse(
                 response=serializer.to_string(serializer.serialize_opds_message(entry)),
                 status=entry.status_code,
