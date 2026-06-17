@@ -7,16 +7,13 @@ import pytest
 
 from palace.util.exceptions import PalaceValueError
 
-from palace.manager.core.classifier import Classifier
 from palace.manager.scripts.work import (
     ReclassifyNullAudienceWorksScript,
     ReclassifyWorksForUncheckedSubjectsScript,
     WorkProcessingScript,
 )
-from palace.manager.sqlalchemy.model.classification import Subject
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.identifier import Identifier
-from palace.manager.sqlalchemy.model.work import Work
 from tests.fixtures.database import DatabaseTransactionFixture
 
 
@@ -194,80 +191,10 @@ class TestReclassifyWorksForUncheckedSubjectsScript:
 
 
 class TestReclassifyNullAudienceWorksScript:
-    def test_run_queues_task(self, db: DatabaseTransactionFixture):
-        """By default the underlying Celery task is queued."""
-        work = db.work(with_license_pool=True)
-        work.audience = None
-        db.session.commit()
-
+    def test_run(self, db: DatabaseTransactionFixture):
+        """The script queues the reclassify_null_audience_works Celery task."""
         with patch(
             "palace.manager.scripts.work.reclassify_null_audience_works"
         ) as task:
-            ReclassifyNullAudienceWorksScript(db.session).do_run()
-
-        assert task.delay.call_count == 1
-
-    def test_dry_run_does_not_queue_or_modify(self, db: DatabaseTransactionFixture):
-        """--dry-run reports counts without queuing the task or touching works."""
-        work = db.work(with_license_pool=True)
-        work.audience = None
-        db.session.commit()
-
-        with patch(
-            "palace.manager.scripts.work.reclassify_null_audience_works"
-        ) as task:
-            ReclassifyNullAudienceWorksScript(db.session).do_run("--dry-run")
-
-        assert task.delay.call_count == 0
-        assert work.audience is None
-
-    def test_nothing_to_do_when_no_null_works(self, db: DatabaseTransactionFixture):
-        """With no NULL-audience works, nothing is queued."""
-        db.work(with_license_pool=True)  # audience defaults to "Adult"
-        db.session.commit()
-
-        with patch(
-            "palace.manager.scripts.work.reclassify_null_audience_works"
-        ) as task:
-            ReclassifyNullAudienceWorksScript(db.session).do_run()
-
-        assert task.delay.call_count == 0
-
-    def test_inline_clears_null_audience(self, db: DatabaseTransactionFixture):
-        """--inline recalculates in-process, turning a NULL audience into the
-        audience implied by the work's classifications (Children for FBJUV*)."""
-        work = db.work(with_license_pool=True)
-        work.audience = None
-        # FBJUV000000 scrubs to JUV000000 -> Juvenile Fiction -> Children.
-        subject = db.subject(Subject.BISAC, "FBJUV000000")
-        db.classification(
-            work.presentation_edition.primary_identifier,
-            subject,
-            work.license_pools[0].data_source,
-        )
-        db.session.commit()
-
-        with patch(
-            "palace.manager.scripts.work.reclassify_null_audience_works"
-        ) as task:
-            ReclassifyNullAudienceWorksScript(db.session).do_run("--inline")
-
-        # The task itself is never queued in --inline mode.
-        assert task.delay.call_count == 0
-        assert work.audience == Classifier.AUDIENCE_CHILDREN
-
-    def test_inline_limit_bounds_work_processed(self, db: DatabaseTransactionFixture):
-        """--limit caps how many works are processed in --inline mode."""
-        for _ in range(3):
-            work = db.work(with_license_pool=True)
-            work.audience = None
-        db.session.commit()
-
-        with patch.object(Work, "calculate_presentation") as calc_pres:
-            ReclassifyNullAudienceWorksScript(db.session).do_run(
-                "--inline", "--limit", "2"
-            )
-
-        assert calc_pres.call_count == 2
-        for call_obj in calc_pres.call_args_list:
-            assert call_obj[1]["policy"].classify is True
+            ReclassifyNullAudienceWorksScript(db.session).run()
+            assert task.delay.call_count == 1

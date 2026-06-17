@@ -1,10 +1,8 @@
 #!/usr/bin/env python
-"""(Re)classify works whose audience is NULL.
+"""Queue the reclassify_null_audience_works Celery task.
 
-Manually drives the FB BISAC audience repair (the `reclassify_null_audience_works`
-Celery task). Run with --dry-run to report how many works are affected, --inline
-to recalculate synchronously in this process (optionally with --limit N for a
-sample), or with no arguments to queue the Celery task for a worker.
+Convenience wrapper that manually dispatches the FB BISAC null-audience repair
+(the `reclassify_null_audience_works` Celery task) for a worker to process.
 """
 
 from palace.manager.scripts.work import ReclassifyNullAudienceWorksScript
